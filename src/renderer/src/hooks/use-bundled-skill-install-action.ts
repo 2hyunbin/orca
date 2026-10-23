@@ -19,6 +19,8 @@ import {
   INSTALLED_AGENT_SKILLS_REFRESHED_EVENT
 } from './installed-agent-skills-change-event'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
+import { useAppStore } from '@/store'
+import { getManagedOrcadSshTargetId } from '../../../shared/managed-orcad-execution-host'
 
 /** `unknown`: the owning host's check failed. */
 export type BundledSkillInstallActionState =
@@ -42,8 +44,19 @@ export function useBundledSkillInstallAction(
   const activeTarget = useActiveProjectSkillRuntime().bundledSkillTarget
   const target = options.target === undefined ? activeTarget : options.target
   const targetKey = target ? bundledSkillTargetKey(target) : null
+  const unavailable = useAppStore((state) => {
+    if (target?.kind !== 'environment') {
+      return null
+    }
+    const snapshot = state.runtimeStatusByEnvironmentId.get(target.environmentId)?.snapshot
+    if (!snapshot?.retired && snapshot?.transport !== 'disconnected') {
+      return null
+    }
+    const environment = state.runtimeEnvironments.find((entry) => entry.id === target.environmentId)
+    return environment && getManagedOrcadSshTargetId(environment) ? 'connect-host' : 'unknown'
+  })
   const namesKey = skillNames.join(',')
-  const planKey = options.enabled && targetKey ? `${targetKey}|${namesKey}` : null
+  const planKey = options.enabled && targetKey && !unavailable ? `${targetKey}|${namesKey}` : null
   const [answer, setAnswer] = useState<{ key: string; action: BundledSkillInstallActionState }>()
   const [revision, setRevision] = useState(0)
 
@@ -59,6 +72,7 @@ export function useBundledSkillInstallAction(
 
   useEffect(() => {
     if (!planKey || !target) {
+      setAnswer(undefined)
       return
     }
     let ignore = false
@@ -89,5 +103,10 @@ export function useBundledSkillInstallAction(
     }
   }, [planKey, namesKey, options.refreshKey, revision, target])
 
+  if (unavailable) {
+    return unavailable === 'connect-host'
+      ? { kind: 'unsupported', reason: 'connect-host' }
+      : UNKNOWN
+  }
   return planKey && answer?.key === planKey ? answer.action : LOADING
 }

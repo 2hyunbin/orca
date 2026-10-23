@@ -27,8 +27,6 @@ vi.mock('./AgentSkillSetupPanel', () => ({
       <section>
         <h3>{String(props.title)}</h3>
         <span>{props.installed ? 'Installed' : 'Not installed'}</span>
-        <code>{String(props.command)}</code>
-        <code>{String(props.installedCommand)}</code>
         <button type="button">{props.installed ? 'Update' : 'Install'}</button>
         <button type="button">Re-check</button>
         {props.actionHint}

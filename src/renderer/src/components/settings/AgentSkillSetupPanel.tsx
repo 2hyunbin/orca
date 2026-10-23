@@ -72,11 +72,7 @@ function BundledAgentSkillSetupPanel({
   const failed =
     !unsupported && (bundledSkillInstallNeedsAttention(state) || action.kind === 'attention')
   const installedButton: 'update' | 'replace' | null =
-    action.kind === 'run' || action.kind === 'unknown'
-      ? 'update'
-      : action.kind === 'replace'
-        ? 'replace'
-        : null
+    action.kind === 'run' ? 'update' : action.kind === 'replace' ? 'replace' : null
 
   const plan = 'plan' in action ? action.plan : undefined
   const freshnessPill = unsupported ? (
@@ -111,6 +107,7 @@ function BundledAgentSkillSetupPanel({
   const actionRow = (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {action.kind !== 'none' &&
+      action.kind !== 'unknown' &&
       !unsupported &&
       (!installed || (showInstallWhenInstalled && installedButton)) &&
       !failed ? (
@@ -181,7 +178,11 @@ function BundledAgentSkillSetupPanel({
           <>
             {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
             {/* hideHeader drops the title row; keep freshness so guided hubs still surface updates. */}
-            {(effectivelyInstalled || unsupported) && !failed ? (
+            {(effectivelyInstalled ||
+              unsupported ||
+              action.kind === 'loading' ||
+              action.kind === 'unknown') &&
+            !failed ? (
               <div className="mb-2">{freshnessPill}</div>
             ) : null}
           </>
@@ -198,7 +199,7 @@ function BundledAgentSkillSetupPanel({
             <div className="min-w-0 flex-1 self-center">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h3 className="text-[15px] font-semibold leading-tight text-foreground">{title}</h3>
-                {unsupported ? (
+                {unsupported || action.kind === 'loading' || action.kind === 'unknown' ? (
                   freshnessPill
                 ) : failed ? (
                   <IntegrationStatusPill tone="attention">

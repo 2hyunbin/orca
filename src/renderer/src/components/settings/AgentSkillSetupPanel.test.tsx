@@ -11,6 +11,8 @@ import { doneResult, planOf, sharedEntry } from '../skills/bundled-skill-plan-fi
 import { TooltipProvider } from '../ui/tooltip'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+
 const mocks = vi.hoisted(() => {
   const localTarget = (): BundledSkillTarget | null => ({ kind: 'local' })
   return {
@@ -368,12 +370,12 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('reports a known thrown install error in plain words', async () => {
+    await renderInteractivePanel()
     mocks.plan.mockRejectedValue(
       new Error(
         "Error invoking remote method 'skills:bundledPlan': Error: skill-install-wsl-unavailable"
       )
     )
-    await renderInteractivePanel()
 
     await clickButton('Install')
 
@@ -395,7 +397,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('shows Retry in place of Install after a failure', async () => {
-    mocks.plan.mockRejectedValue(new Error('skill-install-home-unavailable'))
+    mocks.execute.mockRejectedValue(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
 
     await clickButton('Install')
@@ -408,7 +410,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('keeps each host its own result', async () => {
-    mocks.plan.mockRejectedValue(new Error('skill-install-home-unavailable'))
+    mocks.execute.mockRejectedValue(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
     await clickButton('Install')
     expect(container?.textContent).toContain('Needs attention')
