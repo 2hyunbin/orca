@@ -692,6 +692,12 @@ describeEditor(
             // per-mount leak would move is the snapshot after one whole cycle, not before it.
             await page.evaluate(() => globalThis.__orcaEditor.set({ mounted: false }))
             await page.waitForFunction(() => document.querySelector('#first-surface') === null)
+            // DOM removal precedes the passive effect that disposes the editor's listeners.
+            await page.waitForFunction(
+              (keys) => keys.every((key) => !globalThis.__orcaListeners.snapshot()[key]),
+              Object.keys(firstOwned),
+              { timeout: 15_000 }
+            )
             const afterOneCycle = await listeners()
             expect(Object.keys(afterOneCycle).filter((key) => key.startsWith('element '))).toEqual(
               []
