@@ -6,8 +6,7 @@ import { join } from 'node:path'
 import { _internals as codexInternals } from '../codex/hook-service'
 import { buildPosixHookSpoolLines } from './hook-stdin-contract'
 
-/** Managed hooks are installed into the user's agent config, so they also run when the
- *  agent is launched from a plain terminal. There they must be inert and silent. */
+/** User-global hooks also run outside Orca, where they must stay inert and silent. */
 function runHook(dir: string, extraEnv: NodeJS.ProcessEnv = {}) {
   const script = join(dir, 'codex-hook.sh')
   writeFileSync(script, codexInternals.getManagedScript('posix'))
@@ -45,7 +44,6 @@ describe('managed hook outside an Orca terminal', () => {
     expect(res.status).toBe(0)
     expect(res.stdout).toBe('')
     expect(res.stderr).toBe('')
-    // a stale env var must not create a spool tree for an Orca that is not installed here
     expect(readdirSync(dir)).toEqual(['codex-hook.sh'])
   })
 
@@ -67,7 +65,6 @@ describe('antigravity out-of-band event name', () => {
     expect(lines).toContain('"hookEventName":"%s"')
     expect(lines).toContain('${ORCA_ANTIGRAVITY_EVENT:-}')
     expect(lines).toContain('in PreToolUse|PostToolUse|PostToolUseFailure) return 0')
-    // payload-based filtering stays the default for every other provider
     expect(buildPosixHookSpoolLines('codex').join('\n')).toContain('case "$payload" in')
   })
 })

@@ -188,15 +188,11 @@ describe('writeHooksJson', () => {
       hooks: { Stop: [{ hooks: [{ type: 'command', command: 'foo' }] }] }
     }
     writeHooksJson(configPath, config)
-    // First write had no prior file, so no .bak should exist.
     expect(existsSync(`${configPath}.bak`)).toBe(false)
 
-    // Writing identical content must not create or rotate the .bak file.
     writeHooksJson(configPath, config)
     expect(existsSync(`${configPath}.bak`)).toBe(false)
 
-    // A second distinct write must still produce a .bak from the prior content,
-    // proving the no-op only triggers on byte-identical content.
     const updated: HooksConfig = {
       hooks: { Stop: [{ hooks: [{ type: 'command', command: 'bar' }] }] }
     }
@@ -220,18 +216,13 @@ describe('writeHooksJson', () => {
     writeHooksJson(configPath, v2)
     writeHooksJson(configPath, v3)
 
-    // .bak should hold v2 (the version before v3)
     const bak = JSON.parse(readFileSync(`${configPath}.bak`, 'utf-8'))
     expect(bak).toEqual(v2)
-    // configPath should hold v3
     const current = JSON.parse(readFileSync(configPath, 'utf-8'))
     expect(current).toEqual(v3)
   })
 
   it('leaves no temp file behind if the rename fails', () => {
-    // Why: verifies the atomic cleanup — if the rename cannot complete (here,
-    // because the target is a directory that cannot be overwritten), the finally
-    // block must remove the temp file so ~/.claude is not littered with orphans.
     const blockingDir = configPath
     mkdirSync(blockingDir)
 
@@ -262,8 +253,7 @@ describe('createManagedCommandMatcher', () => {
     expect(match(undefined)).toBe(false)
     expect(match('')).toBe(false)
     expect(match('echo "user-authored hook"')).toBe(false)
-    // Same filename but not under an agent-hooks/ directory — treat as
-    // user-authored to avoid stomping on someone else's hook.
+    // A matching filename outside agent-hooks remains user-owned.
     expect(match('/bin/sh "/home/alice/scripts/claude-hook.sh"')).toBe(false)
   })
 
@@ -272,8 +262,6 @@ describe('createManagedCommandMatcher', () => {
   })
 
   it('matches the guarded launcher form so wrapped commands sweep correctly', () => {
-    // Why: older guarded launchers used a single `-x` check. The sweep must
-    // still recognize them or reinstalling would retain a stale duplicate.
     expect(
       match(
         'if [ -x "/Users/alice/Library/Application Support/Orca/agent-hooks/claude-hook.sh" ]; then /bin/sh "/Users/alice/Library/Application Support/Orca/agent-hooks/claude-hook.sh"; fi'
@@ -287,8 +275,6 @@ describe('createManagedCommandMatcher', () => {
   })
 
   it('matches the pre-default-form launcher so upgrades replace it instead of duplicating', () => {
-    // Why: installs before the ${VAR-} conversion emitted bare $HOME/$SYSTEMROOT. The sweep must
-    // still recognize them, or an upgrade would leave the stale entry beside the new one.
     expect(
       match(
         'if [ -z "$HOME" ]; then :; else if [ -f "$HOME/.orca/agent-hooks/claude-hook.sh" ]; then /bin/sh "$HOME/.orca/agent-hooks/claude-hook.sh"; fi; fi'
@@ -491,9 +477,6 @@ describe('wrapPosixHookCommand', () => {
   })
 
   it('escapes embedded single quotes so the wrapped command stays well-formed', () => {
-    // Why: POSIX single-quote escape renders ' as '\''. Verify a path with an
-    // embedded quote does not break out of the quoting and instead reaches
-    // /bin/sh as a single argument.
     const cmd = wrapPosixHookCommand("/path/with'quote/x.sh")
     expect(cmd).toBe(
       `if [ -f '/path/with'\\''quote/x.sh' ] && [ -r '/path/with'\\''quote/x.sh' ] && [ -x '/path/with'\\''quote/x.sh' ]; then /bin/sh '/path/with'\\''quote/x.sh'; else ${POSIX_HOOK_STDIN_DRAIN_COMMAND}; fi`
@@ -578,10 +561,6 @@ describe('wrapPosixHookCommand', () => {
     }
   )
 
-  // Why: commit 4d618795 explicitly switched from `&& ... || true` (which
-  // swallowed non-zero exits) to `if ... then ... fi` (which preserves the
-  // script's exit code). This test guards against a future regression that
-  // re-introduces the swallowing form.
   it.skipIf(process.platform === 'win32')(
     'propagates the script exit code when the script runs and fails',
     () => {
@@ -606,12 +585,7 @@ function decodeWindowsHookCommand(command: string): string {
 
 function expectedDecodedWindowsHookCommand(scriptPath: string): string {
   const quoted = `'${scriptPath.replaceAll("'", "''")}'`
-  // Why: the execution-policy bypass rides in the payload, not on the command
-  // line, so the launcher cannot spell the AV-blocked flag triple (#16003).
-  // Why: PowerShell progress CLIXML corrupts consumers that merge stderr into JSON stdout.
-  // Why the guard is spelled by import: the launcher owns stdin on the missing-script path,
-  // so it obeys the shared Windows rule (#11549), and re-typing it here would let the two
-  // drift back apart.
+  // Keep policy bypass off the command line, suppress progress CLIXML, and share the Windows stdin guard.
   return `$ProgressPreference='SilentlyContinue'; try { Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force -ErrorAction SilentlyContinue } catch {}; if (Test-Path -LiteralPath ${quoted} -PathType Leaf) { & ${quoted}; exit $LASTEXITCODE }; ${WINDOWS_POWERSHELL_HOOK_ENVIRONMENT_GUARD}; [Console]::In.ReadToEnd() | Out-Null; exit 0`
 }
 
@@ -643,9 +617,7 @@ describe('wrapWindowsHookCommand', () => {
     )
   })
 
-  // Why the ordering matters: a gate event reads silence as deny (#2426), and outside an
-  // Orca pane the guard exits before the read — so an answer placed after the drain never
-  // reaches the agent at all when the caller abandons the pipe (#11549).
+  // Gate events read silence as denial, so answer before a missing-context guard can exit.
   it('answers before it guards, and guards before it owns stdin', () => {
     const decoded = decodeWindowsHookCommand(
       wrapWindowsHookCommand(
@@ -700,8 +672,7 @@ describe('wrapRuntimeHomeHookCommand', () => {
     expect(command).not.toMatch(/[A-Z]:[\\/]|\/Users\/|\/home\//)
   })
 
-  // Why: a static hook precheck (Grok) rejects the whole command on any bare reference it cannot
-  // resolve, including one in a branch that platform never takes.
+  // Grok rejects unresolved bare variables even in untaken branches.
   it.each([
     ['default', undefined],
     ['neutral-json', { neutralJsonWhenMissing: true }]
@@ -716,10 +687,7 @@ describe('wrapRuntimeHomeHookCommand', () => {
   )
 
   it('hides the console on the Git Bash branch too, and still avoids the denied triple', () => {
-    // Why: this branch launches PowerShell from bash, where the parent has no
-    // console to inherit — Windows allocates a fresh one per hook event unless
-    // the switch says otherwise (#14815), and the AV verdict on the flag triple
-    // applies to the exact same string (#16003).
+    // Git Bash needs a hidden PowerShell console and must avoid the AV-blocked flag triple.
     const command = wrapRuntimeHomeHookCommand('claude-hook')
 
     expect(command).toContain('powershell.exe" -NoProfile -EncodedCommand ')
@@ -866,8 +834,6 @@ describe('buildWindowsAgentHookCurlPostCommand', () => {
   it('posts form fields via curl.exe and reads the payload from stdin', () => {
     const command = buildWindowsAgentHookCurlPostCommand('codex')
 
-    // Why: the fast path must not spawn a second PowerShell; that startup cost
-    // is the regression this replaces.
     expect(command).not.toMatch(/powershell/i)
     expect(command).toContain('%SystemRoot%\\System32\\curl.exe')
     expect(command).toContain('http://127.0.0.1:%ORCA_AGENT_HOOK_PORT%/hook/codex')
@@ -875,11 +841,8 @@ describe('buildWindowsAgentHookCurlPostCommand', () => {
     expect(command).toContain('-H "X-Orca-Agent-Hook-Token: %ORCA_AGENT_HOOK_TOKEN%"')
     expect(command).toContain('--data-urlencode "paneKey=%ORCA_PANE_KEY%"')
     expect(command).toContain('--data-urlencode "worktreeId=%ORCA_WORKTREE_ID%"')
-    // Why: `payload@-` makes curl read raw bytes from stdin and urlencode them,
-    // so UTF-8 prompts survive without a code-page conversion.
+    // payload@- preserves UTF-8 bytes without code-page conversion.
     expect(command).toContain('--data-urlencode "payload@-"')
-    // Why: same dead-listener bound as the POSIX hook so a stalled server can't
-    // hold up the agent.
     expect(command).toContain('--connect-timeout 0.5 --max-time 1.5')
   })
 })
