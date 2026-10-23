@@ -452,6 +452,7 @@ it.each([
         visits++
         yield record
       }
+      return undefined
     })
     const copies = vi.spyOn(store, 'listRecords')
     const maps = new WeakSet<object>(),
