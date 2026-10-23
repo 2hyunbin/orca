@@ -37,8 +37,6 @@ function harness(runs: AutomationRun[]) {
   // Runs in a workspace made for them; their sleep succeeds unless it declines.
   const ownWorkspace = new Set<string>()
   const sleepDeclines = new Set<string>()
-  // Runs whose PTY a sleep of their workspace stopped and still holds.
-  const sleepHeld = new Set<string>()
   const sleepAttempts: string[] = []
   const slept: string[] = []
   const lanes = new Map<string, Promise<void>>()
@@ -64,7 +62,6 @@ function harness(runs: AutomationRun[]) {
       run.terminalPtyId = null
       return true
     },
-    runSleepHeld: (run) => sleepHeld.has(run.id),
     forgetRunTerminal: async (run) => {
       forgotten.push(run)
     }
@@ -78,7 +75,6 @@ function harness(runs: AutomationRun[]) {
     dead,
     ownWorkspace,
     sleepDeclines,
-    sleepHeld,
     sleepAttempts,
     slept,
     lanes
@@ -331,7 +327,6 @@ describe('headless run terminal retention', () => {
       closeRunTerminal,
       runOwnsWorkspace: () => false,
       sleepRunWorkspace: async () => false,
-      runSleepHeld: () => false,
       forgetRunTerminal: async (run) => {
         h.forgotten.push(run)
       },
@@ -419,19 +414,5 @@ describe('headless run terminal retention', () => {
     h.sleepDeclines.delete('r0')
     await h.retention.sweep()
     expect(h.slept).toEqual(['r0'])
-  })
-
-  it('finishes a sleep that stopped the run PTY and then failed, but forgets a dead pane', async () => {
-    const runs = [0, 1].map((n) => makeRun(`r${n}`, n))
-    const h = harness(runs)
-    h.ownWorkspace.add('r0')
-    h.ownWorkspace.add('r1')
-    h.dead.add('r0')
-    h.dead.add('r1')
-    // Only r0's PTY was stopped by its workspace's sleep; r1's exited on its own.
-    h.sleepHeld.add('r0')
-    await h.retention.drain()
-    expect(h.slept).toEqual(['r0'])
-    expect(h.forgotten.map((run) => run.id)).toEqual(['r1'])
   })
 })

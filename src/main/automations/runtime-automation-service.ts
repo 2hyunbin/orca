@@ -127,18 +127,6 @@ function bindHeadlessRunTerminalRetention(
       await service.markDispatchResult({ runId: run.id, status: run.status, terminalPtyId: null })
       return true
     },
-    // The host's sleep state outlives a run record that failed to save, and a wake clears it.
-    runSleepHeld: (run) =>
-      runtime
-        .getTerminalSleepClientEventSnapshot()
-        .some(
-          (event) =>
-            event.type === 'worktreeTerminalSleepState' &&
-            event.phase === 'committed' &&
-            event.worktreeId === run.workspaceId &&
-            run.terminalPtyId !== null &&
-            event.ptyIds.includes(run.terminalPtyId)
-        ),
     inAutomationLane: (automationId, operation) =>
       service.runInAutomationLane(automationId, operation),
     forgetRunTerminal: async (run) => {

@@ -43,11 +43,6 @@ export type HeadlessRunTerminalRetentionDeps = {
    * PTY id. False, sleeping nothing, when another terminal there is live or the sleep failed.
    */
   sleepRunWorkspace: (run: AutomationRun) => Promise<boolean>
-  /**
-   * Whether a sleep of the run's workspace stopped the run's own PTY and still holds it: a sleep
-   * whose result was not recorded, to finish, not a dead or replaced pane to forget.
-   */
-  runSleepHeld: (run: AutomationRun) => boolean
   /** Drops the closed terminal from the run, keeping its status, error and output. */
   forgetRunTerminal: (run: AutomationRun) => Promise<void>
   /** The automation's dispatch lane; a sweep reads and closes its runs' terminals inside it. */
@@ -76,9 +71,6 @@ export function createHeadlessRunTerminalRetention(deps: HeadlessRunTerminalRete
     firstSeenAt.delete(run.id)
   }
 
-  const ownsSleepingWorkspace = (run: AutomationRun): boolean =>
-    run.status === 'completed' && deps.runOwnsWorkspace(run)
-
   const mayClose = async (run: AutomationRun, graceMs: number): Promise<boolean> => {
     if (now() - (firstSeenAt.get(run.id) ?? now()) < graceMs) {
       return false
@@ -97,12 +89,6 @@ export function createHeadlessRunTerminalRetention(deps: HeadlessRunTerminalRete
     let releasedCount = 0
     let kept = 0
     const ownedPaneKeys = new Set<string>()
-    const sleep = async (run: AutomationRun): Promise<void> => {
-      if (await deps.sleepRunWorkspace(run)) {
-        firstSeenAt.delete(run.id)
-        releasedCount += 1
-      }
-    }
     const runs = deps
       .listRuns()
       .filter(
@@ -121,9 +107,7 @@ export function createHeadlessRunTerminalRetention(deps: HeadlessRunTerminalRete
       try {
         // A terminal already gone holds no keep slot; only live ones stay viewable.
         if (!deps.runTerminalAlive(run)) {
-          if (ownsSleepingWorkspace(run) && deps.runSleepHeld(run)) {
-            await sleep(run)
-          } else if (isFinalAutomationRunStatus(run.status)) {
+          if (isFinalAutomationRunStatus(run.status)) {
             await forget(run)
           }
           continue
@@ -141,8 +125,11 @@ export function createHeadlessRunTerminalRetention(deps: HeadlessRunTerminalRete
           continue
         }
         // Why: as on the desktop, a run's own workspace sleeps or stays; closing it loses the session.
-        if (ownsSleepingWorkspace(run)) {
-          await sleep(run)
+        if (run.status === 'completed' && deps.runOwnsWorkspace(run)) {
+          if (await deps.sleepRunWorkspace(run)) {
+            firstSeenAt.delete(run.id)
+            releasedCount += 1
+          }
           continue
         }
         if (await deps.closeRunTerminal(run)) {
