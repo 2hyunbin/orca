@@ -1,6 +1,9 @@
-import { Session } from 'node:inspector/promises'
-import { afterEach, expect, it } from 'vitest'
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import { afterEach, expect, it, vi } from 'vitest'
+import {
+  agentJournalItemKey,
+  agentJournalSubmissionKey
+} from '../../shared/agent-session-journal-item-key'
+import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
 import { agentSessionFailureFact } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import {
@@ -11,11 +14,21 @@ import {
   openProviderTimelineRig,
   providerTurnItemId
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
+import { DISPATCH_DOUBT_PROVIDER_EXITED } from '../native-chat/agent-session-journal/journal-dispatch-doubt-reasons'
+import { isHistoricalProviderTimelineItem } from '../native-chat/agent-session-timeline/provider-timeline-history'
+import { settleObservedExitForTest } from '../native-chat/agent-session-wire/structured-agent-session-observed-exit.test-fixture'
+import { captureUnfinishedStructuredAgentSessionWork } from '../native-chat/agent-session-wire/structured-agent-session-unfinished-work'
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import {
   recordingStructuredAgentSessionLogger,
   testEventSinkLogging
 } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import {
+  hasArrayKey,
+  operationStack,
+  type ViewWork
+} from './acp-history-scaling-counts.test-fixture'
+import { work } from './acp-history-scaling-operations.test-fixture'
 import { catchUpAcpHistory } from './acp-history-catch-up'
 import {
   acpHistoryTurns,
@@ -111,7 +124,7 @@ async function repeat(rig: Rig, frames: AcpLoadHistoryFrame[]) {
   const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
   deferred.bind({ journal: reopened, fence: 1, publish: () => {} })
   try {
-    const counts = await work(() => catchUp({ eventSink: deferred.sink }, frames))
+    const counts = await measureCatchUp({ eventSink: deferred.sink }, frames, false)
     expect(reopened.snapshot().items).toEqual(before)
     return counts
   } finally {
@@ -120,224 +133,148 @@ async function repeat(rig: Rig, frames: AcpLoadHistoryFrame[]) {
   }
 }
 
-function hasArrayKey(array: unknown[], key: PropertyKey): key is keyof unknown[] {
-  return key in array
-}
-
-type CountedArrayFactory = (
-  this: ArrayConstructor,
-  input: Iterable<unknown> | ArrayLike<unknown>,
-  mapper?: (value: unknown, index: number) => unknown,
-  thisArg?: unknown
-) => unknown[]
-
-// Count executed production blocks and built-in indexed reads, without replacing any result.
-async function work(run: () => Promise<void>) {
-  const inspector = new Session()
-  inspector.connect()
-  const counts = {
-    native: 0,
-    suffix: 0,
-    membership: 0,
-    tree: 0,
-    matching: 0,
-    copies: 0,
-    adopted: 0
+async function measureCatchUp(
+  rig: Pick<Rig, 'eventSink'>,
+  frames: AcpLoadHistoryFrame[],
+  commit: boolean
+) {
+  const history = rig.eventSink.journalHistory?.()
+  const journal = rig.eventSink.journalItems?.()
+  const append = rig.eventSink.tryAppendTransition
+  if (!history || !journal || !append) {
+    throw new Error('expected bound real journal and transition sink')
   }
-  const sorted = Object.getOwnPropertyDescriptor(Array.prototype, 'toSorted')!
-  const slice = Object.getOwnPropertyDescriptor(Array.prototype, 'slice')!
-  const includes = Object.getOwnPropertyDescriptor(Array.prototype, 'includes')!
-  const some = Object.getOwnPropertyDescriptor(Array.prototype, 'some')!
-  const values = Object.getOwnPropertyDescriptor(Map.prototype, 'values')!
-  const from = Object.getOwnPropertyDescriptor(Array, 'from')!
-  const get = Object.getOwnPropertyDescriptor(Map.prototype, 'get')!
-  const set = Object.getOwnPropertyDescriptor(Map.prototype, 'set')!
-  const has = Object.getOwnPropertyDescriptor(Set.prototype, 'has')!
-  const sortArray = Array.prototype.toSorted
-  const sliceArray = Array.prototype.slice
-  const arrayIncludes = Array.prototype.includes
-  const arraySome = Array.prototype.some
-  const setHas = Set.prototype.has
-  const mapValues = Map.prototype.values
-  const arrayFrom: CountedArrayFactory = Array.from
-  const mapGet = Map.prototype.get
-  const mapSet = Map.prototype.set
-  const countedArray = (
-    array: unknown[],
-    counter: 'native' | 'suffix' | 'membership' | 'copies' | 'tree'
-  ) =>
-    new Proxy(array, {
+  // Both readers and the resolver receive the same journal; spying preserves identity and epoch.
+  expect(history).toBe(journal)
+  let retainedRows = 0
+  history.visitItems(() => retainedRows++)
+  const submissions = history.submissions().length
+  const sources = acpHistoryTurns(frames, scope.identity)
+  const counts = await work(async (count) => {
+    count.retainedRows = retainedRows
+    count.submissions = submissions
+    count.frames = frames.length
+    count.inputUtf8Bytes = Buffer.byteLength(JSON.stringify(frames), 'utf8')
+    count.candidates = sources.filter((source) => source.turn !== null).length
+    count.translationObservations = sources.reduce(
+      (sum, source) => sum + 1 + source.observations.length,
+      0
+    )
+    count.candidateKeyUtf8Bytes = sources.reduce(
+      (sum, source) => sum + Buffer.byteLength(source.turn ?? '', 'utf8'),
+      0
+    )
+    const visit = history.visitItems
+    const item = history.item
+    const sends = history.submissions
+    const canonical = journal.canonicalItemId
+    const spies = [
+      vi.spyOn(history, 'visitItems').mockImplementation((callback) => {
+        const view: ViewWork = {
+          visitedRows: 0,
+          itemReads: 0,
+          submissionReturns: 0,
+          submissionCopies: 0,
+          canonicalEntries: 0,
+          canonicalReads: 0
+        }
+        count.views.push(view)
+        visit.call(history, (...args) => {
+          view.visitedRows++
+          callback(...args)
+        })
+      }),
+      vi.spyOn(history, 'item').mockImplementation((key) => {
+        if (operationStack().includes('journalView')) {
+          count.views.at(-1)!.itemReads++
+        } else {
+          count.otherItemReads++
+        }
+        return item.call(history, key)
+      }),
+      vi.spyOn(history, 'submissions').mockImplementation(() => {
+        const result = sends.call(history)
+        if (operationStack().includes('journalView')) {
+          const view = count.views.at(-1)!
+          view.submissionReturns++
+          view.submissionCopies += result.length
+        } else {
+          count.otherSubmissionReturns++
+          count.otherSubmissionCopies += result.length
+        }
+        return result
+      }),
+      vi.spyOn(journal, 'canonicalItemId').mockImplementation((key) => {
+        const stack = operationStack()
+        count.canonicalKeyUtf8Bytes += Buffer.byteLength(key, 'utf8')
+        count.longestCanonicalKey = Math.max(count.longestCanonicalKey, key.length)
+        if (stack.includes('journalView')) {
+          count.views.at(-1)!.canonicalReads++
+        } else if (stack.includes('structured-agent-session-history-catch-up.ts')) {
+          count.resolverCanonicalReads++
+        } else {
+          count.otherCanonicalReads++
+        }
+        return canonical.call(journal, key)
+      })
+    ]
+    const countedFrames = new Proxy(frames, {
       get(target, key) {
-        if (typeof key === 'string' && /^\d+$/.test(key)) {
-          counts[counter]++
+        if (key === Symbol.iterator) {
+          return function* () {
+            for (const frame of target) {
+              count.frameVisits++
+              yield frame
+            }
+          }
         }
         return hasArrayKey(target, key) ? target[key] : undefined
-      },
-      set(target, key, value, receiver) {
-        if (counter === 'tree' && typeof key === 'string' && /^\d+$/.test(key)) {
-          counts.tree++
-        }
-        return Reflect.set(target, key, value, receiver)
       }
     })
-  await inspector.post('Profiler.enable')
-  await inspector.post('Debugger.enable')
-  await inspector.post('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
-  Object.defineProperty(Array.prototype, 'toSorted', {
-    ...sorted,
-    value: function (this: unknown[], compare?: (a: unknown, b: unknown) => number) {
-      const result: unknown[] = sortArray.call(this, compare)
-      return new Error('operation attribution').stack
-        ?.split('\n')[2]
-        ?.includes('acp-history-turn-matching.ts')
-        ? countedArray(result, 'native')
-        : result
-    }
-  })
-  Object.defineProperty(Array.prototype, 'slice', {
-    ...slice,
-    value: function (this: unknown[], start?: number, end?: number) {
-      const result: unknown[] = sliceArray.call(this, start, end)
-      return new Error('operation attribution').stack
-        ?.split('\n')[2]
-        ?.includes('acp-history-turn-matching.ts')
-        ? countedArray(result, 'suffix')
-        : result
-    }
-  })
-  Object.defineProperty(Array.prototype, 'includes', {
-    ...includes,
-    value: function (this: unknown[], value: unknown, start?: number) {
-      const array = new Error('operation attribution').stack
-        ?.split('\n')[2]
-        ?.includes('acp-history-replay.ts')
-        ? countedArray(this, 'membership')
-        : this
-      return arrayIncludes.call(array, value, start)
-    }
-  })
-  Object.defineProperty(Array.prototype, 'some', {
-    ...some,
-    value: function (
-      this: unknown[],
-      predicate: (value: unknown, index: number, array: unknown[]) => unknown,
-      thisArg?: unknown
-    ) {
-      const array = new Error('operation attribution').stack
-        ?.split('\n')[2]
-        ?.includes('structuredAgentSessionRejectedShownInPlace')
-        ? countedArray(this, 'copies')
-        : this
-      return arraySome.call(array, predicate, thisArg)
-    }
-  })
-  Object.defineProperty(Set.prototype, 'has', {
-    ...has,
-    value: function (this: Set<unknown>, value: unknown) {
-      if (
-        new Error('operation attribution').stack?.split('\n')[2]?.includes('acp-history-replay.ts')
-      ) {
-        counts.membership++
-      }
-      return setHas.call(this, value)
-    }
-  })
-  Object.defineProperty(Map.prototype, 'values', {
-    ...values,
-    value: function (this: Map<unknown, unknown>) {
-      const iterator: IterableIterator<unknown> = mapValues.call(this)
-      if (
-        !(new Error('operation attribution').stack ?? '').includes('acp-history-turn-matching.ts')
-      ) {
-        return iterator
-      }
-      return (function* () {
-        for (const value of iterator) {
-          if (typeof value === 'number') {
-            counts.adopted++
+    try {
+      await catchUp(
+        {
+          eventSink: {
+            ...rig.eventSink,
+            tryAppendTransition: (transition) =>
+              append.call(rig.eventSink, {
+                ...transition,
+                steps: transition.steps.map((step) =>
+                  step.kind !== 'settlement'
+                    ? step
+                    : {
+                        ...step,
+                        resolve: (current) => {
+                          const mutations = step.resolve(current)
+                          count.mutations += mutations.length
+                          return mutations
+                        }
+                      }
+                )
+              })
           }
-          yield value
-        }
-      })()
-    }
-  })
-  Object.defineProperty(Array, 'from', {
-    ...from,
-    value: function (
-      this: ArrayConstructor,
-      input: Iterable<unknown> | ArrayLike<unknown>,
-      mapper?: (value: unknown, index: number) => unknown,
-      thisArg?: unknown
-    ) {
-      const result = arrayFrom.call(this, input, mapper, thisArg)
-      return (new Error('operation attribution').stack ?? '').includes(
-        'acp-history-ordered-availability.ts'
+        },
+        countedFrames
       )
-        ? countedArray(result, 'tree')
-        : result
+    } finally {
+      for (const spy of spies) {
+        spy.mockRestore()
+      }
     }
   })
-  Object.defineProperty(Map.prototype, 'get', {
-    ...get,
-    value: function (this: Map<unknown, unknown>, key: unknown) {
-      if (
-        (new Error('operation attribution').stack ?? '').includes(
-          'structuredAgentSessionRejectedShownInPlace'
-        )
-      ) {
-        counts.copies++
-      }
-      return mapGet.call(this, key)
-    }
-  })
-  Object.defineProperty(Map.prototype, 'set', {
-    ...set,
-    value: function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
-      if (
-        (new Error('operation attribution').stack ?? '').includes(
-          'structuredAgentSessionRejectedShownInPlace'
-        )
-      ) {
-        counts.copies++
-      }
-      return mapSet.call(this, key, value)
-    }
-  })
-  try {
-    await run()
-    const coverage = await inspector.post('Profiler.takePreciseCoverage')
-    for (const script of coverage.result) {
-      const path = script.url.split('?')[0]
-      if (
-        !/acp-history-(ordered-availability|turn-matching)\.ts$|structured-agent-session-message-projection\.ts$/.test(
-          path
-        )
-      ) {
-        continue
-      }
-      for (const fn of script.functions) {
-        const total = fn.ranges.reduce((sum, block) => sum + block.count, 0)
-        if (path.endsWith('acp-history-turn-matching.ts')) {
-          counts.matching += total
-        }
-      }
-    }
-    console.info('ACP history underlying work', counts)
-    return counts
-  } finally {
-    Object.defineProperty(Array.prototype, 'toSorted', sorted)
-    Object.defineProperty(Array.prototype, 'slice', slice)
-    Object.defineProperty(Array.prototype, 'includes', includes)
-    Object.defineProperty(Array.prototype, 'some', some)
-    Object.defineProperty(Map.prototype, 'values', values)
-    Object.defineProperty(Array, 'from', from)
-    Object.defineProperty(Map.prototype, 'get', get)
-    Object.defineProperty(Map.prototype, 'set', set)
-    Object.defineProperty(Set.prototype, 'has', has)
-    await inspector.post('Profiler.disable')
-    await inspector.post('Debugger.disable')
-    inspector.disconnect()
+  expect(counts.frameVisits).toBe(frames.length)
+  expect(counts.views).toHaveLength(commit ? 2 : 1)
+  for (const view of counts.views) {
+    expect(view.visitedRows).toBe(retainedRows)
+    expect(view.itemReads).toBe(retainedRows)
+    expect(view.submissionReturns).toBe(1)
+    expect(view.submissionCopies).toBe(submissions)
+    expect(view.canonicalReads).toBe(view.canonicalEntries)
   }
+  // These fixtures create new keys or no plan, so there are no expected-revision entries.
+  expect(counts.resolverCanonicalReads).toBe(counts.mutations)
+  expect(counts.mutations > 0).toBe(commit)
+  return counts
 }
 
 it('bounds actual first/reopened search and repeated source activation at 20 and 200', async () => {
@@ -350,7 +287,7 @@ it('bounds actual first/reopened search and repeated source activation at 20 and
       }
       const before = structuredClone(await rig.rows())
       const frames = Array.from({ length: n }, (_, i) => user(`outside-${i}`, `outside-${i}`))
-      const first = await work(() => catchUp(rig, frames))
+      const first = await measureCatchUp(rig, frames, true)
       const after = await rig.rows()
       expect(after.slice(0, before.length)).toEqual(before)
       expect(
@@ -390,7 +327,7 @@ it('bounds actual first/reopened search and repeated source activation at 20 and
       user(`A-${i}`, `a-${i}`)
     ]).flat()
     frames.push(user('E', 'end'), answer('end-proof'))
-    const count = await work(() => catchUp(rig, frames))
+    const count = await measureCatchUp(rig, frames, true)
     const after = await rig.rows()
     expect(after.slice(0, before.length)).toEqual(before)
     expect(
@@ -421,7 +358,7 @@ it('bounds grouped IDs and rejected copies through real empty and committed view
       answer('proof'),
       ...Array.from({ length: n }, (_, i) => link(`part-${i}`))
     ]
-    const grouped = await work(() => catchUp(rig, frames))
+    const grouped = await measureCatchUp(rig, frames, false)
     expect(grouped.membership).toBeGreaterThanOrEqual(n)
     expect(grouped.membership).toBeLessThanOrEqual(n + 2)
     expect(await rig.rows()).toEqual(before)
@@ -450,9 +387,9 @@ it('bounds grouped IDs and rejected copies through real empty and committed view
     }
     const seeded = structuredClone(await rejected.rows())
     const submissions = structuredClone(rejected.journal.submissions())
-    const empty = await work(() => catchUp(rejected, []))
+    const empty = await measureCatchUp(rejected, [], false)
     expect(await rejected.rows()).toEqual(seeded)
-    const committed = await work(() => catchUp(rejected, [user('outside', 'new')]))
+    const committed = await measureCatchUp(rejected, [user('outside', 'new')], true)
     const after = await rejected.rows()
     expect(after.slice(0, seeded.length)).toEqual(seeded)
     expect(
@@ -586,3 +523,125 @@ it('keeps Grok timestamp adoption and never enumerates its unread adopted maximu
     ).toThrow('no-legacy-origin')
   }
 })
+
+it('counts observed-exit provenance passes while preserving imported history at 20 and 200', async () => {
+  for (const n of [20, 200]) {
+    const rig = await openProviderTimelineRig()
+    await catchUp(
+      rig,
+      Array.from({ length: n }, (_, i) => user(`archived-${i}`, 'past'))
+    )
+    const archival = structuredClone(await rig.rows())
+    expect(archival).toHaveLength(2 * n)
+    const archivedById = new Map(archival.map((row) => [row.itemId, row]))
+    expect(
+      archival.every((row) =>
+        isHistoricalProviderTimelineItem(row, (key) => archivedById.get(key) ?? null)
+      )
+    ).toBe(true)
+    await rig.journal.appendSubmission({
+      clientMessageId: 'live',
+      payloadFingerprint: 'live',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'working' }] },
+      fence: 1
+    })
+    rig.assembler.apply({
+      type: 'input.accepted',
+      clientMessageId: 'live',
+      requestedAt: 1000,
+      join: { turn: 'live' }
+    })
+    rig.assembler.apply({ type: 'turn.open', turn: 'live', at: 1000 })
+    const before = await rig.rows()
+    const unfinished = captureUnfinishedStructuredAgentSessionWork(rig.journal)
+    expect(unfinished.items.map((item) => item.itemId)).toEqual([providerTurnItemId('live')])
+    expect(unfinished.hadUnsettledSubmissions).toBe(true)
+    expect(
+      before.find((row) => row.itemId === agentJournalSubmissionKey('live'))?.turnScope
+    ).toEqual({
+      kind: 'turn',
+      turnItemId: archival.findLast((row) => readAgentJournalTurn(row.body))!.itemId
+    })
+    const snapshot = rig.journal.snapshot
+    const batch = rig.journal.appendPlannedLifecycleBatch
+    let batchCalls = 0
+    let settlement: Awaited<ReturnType<typeof settleObservedExitForTest>> | undefined
+    const submissionCount = rig.journal.submissions().length
+    const counts = await work(async (count) => {
+      count.retainedRows = before.length
+      count.submissions = submissionCount
+      rig.journal.observeCommits(() => count.commits++)
+      const spies = [
+        vi.spyOn(rig.journal, 'snapshot').mockImplementation(() => {
+          const result = snapshot.call(rig.journal)
+          const phase =
+            operationStack()
+              .split('\n')
+              .find((line) =>
+                /captureUnfinishedStructuredAgentSessionWork|planStructuredAgentSessionDeadGeneration|planStaleStructuredAgentSessionState/.test(
+                  line
+                )
+              ) ?? 'other'
+          count.snapshots.push({ phase: phase.trim(), rows: result.items.length })
+          return result
+        }),
+        vi.spyOn(rig.journal, 'appendPlannedLifecycleBatch').mockImplementation((input) => {
+          batchCalls++
+          return batch.call(rig.journal, input)
+        })
+      ]
+      try {
+        settlement = await settleObservedExitForTest({
+          journal: rig.journal,
+          sessionId: SESSION,
+          fence: 2,
+          ownerFence: 1,
+          settlementId: `observed-exit-${n}`,
+          pendingSubmissionReason: DISPATCH_DOUBT_PROVIDER_EXITED,
+          verdict: { state: 'interrupted', completedAt: 1200 },
+          exit: { ownerFence: 1, observedAt: 1200 }
+        })
+      } finally {
+        for (const spy of spies) {
+          spy.mockRestore()
+        }
+        rig.journal.observeCommits(() => {})
+      }
+    })
+    expect(settlement).toMatchObject({ ok: true })
+    expect(batchCalls).toBe(1)
+    expect(counts.commits).toBe(1)
+    expect(counts.execution.map((pass) => pass.phase.replace(/.*at (\w+).*/, '$1'))).toEqual([
+      'captureUnfinishedStructuredAgentSessionWork',
+      'planStructuredAgentSessionDeadGeneration',
+      'planStaleStructuredAgentSessionState'
+    ])
+    expect(counts.snapshots).toHaveLength(3)
+    for (const pass of counts.execution) {
+      expect(pass.construction).toBe(before.length)
+      expect(pass.predicates).toBe(before.length)
+      expect(pass.executionItemIds).toEqual([providerTurnItemId('live')])
+      expect(pass.reciprocalReads).toBeLessThanOrEqual(2 * before.length)
+    }
+    expect(counts.snapshots.map((entry) => entry.rows)).toEqual([
+      before.length,
+      before.length,
+      before.length
+    ])
+    const after = await rig.rows()
+    expect(after.filter((row) => archivedById.has(row.itemId))).toEqual(archival)
+    expect(
+      readAgentJournalTurn(rig.journal.itemBody(providerTurnItemId('live')) ?? undefined)
+    ).toMatchObject({ state: 'interrupted', completedAt: 1200 })
+    expect(rig.journal.submissions()).toMatchObject([
+      {
+        clientMessageId: 'live',
+        dispatchState: 'unknown',
+        reason: DISPATCH_DOUBT_PROVIDER_EXITED
+      }
+    ])
+    expect(
+      after.filter((row) => row.body.kind === 'status' && row.body.tone === 'error')
+    ).toHaveLength(1)
+  }
+}, 120000)
