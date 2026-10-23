@@ -4,28 +4,27 @@ import {
   type ExecutionHostId,
   type ExecutionHostScope
 } from '../../../shared/execution-host'
-import {
-  chooseReadyProjectHostSetup,
-  isReadyProjectHostSetup
-} from '../../../shared/project-host-setup-choice'
+import { isReadyProjectHostSetup } from '../../../shared/project-host-setup-choice'
 import {
   getProjectIdentityKey,
   projectHostSetupProjectionFromRepos
 } from '../../../shared/project-host-setup-projection'
 import type { ExecutionHostRegistryEntry } from '../../../shared/execution-host-registry'
-import { dedupeReadySetupRows } from './project-host-setup-row-dedupe'
 import type { Project, ProjectHostSetup } from '../../../shared/project-types'
 import type { Repo } from '../../../shared/repo-types'
 import { resolveComposerRepoId } from './new-workspace-composer-repo'
+import {
+  ambiguousResolution,
+  chooseReadyTarget,
+  createTarget,
+  type WorkspaceCreationTarget,
+  type WorkspaceCreationTargetResolution
+} from './workspace-creation-target-choice'
 
-export type WorkspaceCreationTarget = {
-  projectId: string
-  hostId: ExecutionHostId
-  projectHostSetupId: string
-  repoId: string
-  repo: Repo
-  setup: ProjectHostSetup
-}
+export type {
+  WorkspaceCreationTarget,
+  WorkspaceCreationTargetResolution
+} from './workspace-creation-target-choice'
 
 export type WorkspaceCreationTargetHint = Pick<WorkspaceCreationTarget, 'projectId' | 'hostId'> & {
   projectHostSetupId?: string | null
@@ -45,24 +44,6 @@ export function getRepoWorkspaceCreationTargetHint(
     ...(setup ? { projectHostSetupId: setup.id } : {})
   }
 }
-
-export type WorkspaceCreationTargetResolution =
-  | { status: 'ready'; target: WorkspaceCreationTarget }
-  | {
-      status: 'ambiguous'
-      projectId: string | null
-      candidates: readonly WorkspaceCreationTarget[]
-    }
-  | {
-      status: 'unavailable'
-      reason:
-        | 'no-eligible-repo'
-        | 'project-not-found'
-        | 'project-not-set-up-on-host'
-        | 'project-has-no-ready-setup'
-        | 'setup-not-found'
-        | 'setup-not-ready'
-    }
 
 type ProjectHostWorkspaceTargetInput = {
   eligibleRepos: readonly Repo[]
@@ -107,65 +88,6 @@ function getProjectSetupModel({
     projects: projection.projects,
     setups: projection.setups
   }
-}
-
-function createTarget(
-  setup: ProjectHostSetup,
-  reposById: ReadonlyMap<string, readonly Repo[]>
-): WorkspaceCreationTarget | null {
-  const candidates = reposById.get(setup.repoId) ?? []
-  const repo =
-    candidates.find((candidate) => getRepoExecutionHostId(candidate) === setup.hostId) ??
-    (candidates.length === 1 ? candidates[0] : null)
-  if (!repo) {
-    return null
-  }
-  return {
-    projectId: setup.projectId,
-    hostId: setup.hostId,
-    projectHostSetupId: setup.id,
-    repoId: setup.repoId,
-    repo,
-    setup
-  }
-}
-
-function chooseReadyTarget(
-  setups: readonly ProjectHostSetup[],
-  reposById: ReadonlyMap<string, readonly Repo[]>,
-  predicate: (setup: ProjectHostSetup) => boolean,
-  hosts: readonly ExecutionHostRegistryEntry[] = []
-) {
-  const targets: WorkspaceCreationTarget[] = []
-  for (const setup of setups) {
-    if (!isReadyProjectHostSetup(setup) || !predicate(setup)) {
-      continue
-    }
-    const target = createTarget(setup, reposById)
-    if (target) {
-      targets.push(target)
-    }
-  }
-  return chooseReadyProjectHostSetup(
-    dedupeReadySetupRows(
-      targets.map((target) => ({
-        ...target,
-        id: target.projectHostSetupId,
-        path: target.setup.path
-      })),
-      new Map(hosts.map((host) => [host.id, host]))
-    )
-  )
-}
-
-function ambiguousResolution(
-  candidates: readonly WorkspaceCreationTarget[]
-): WorkspaceCreationTargetResolution {
-  const [first] = candidates
-  const sharedProjectId = candidates.every((candidate) => candidate.projectId === first.projectId)
-    ? first.projectId
-    : null
-  return { status: 'ambiguous', projectId: sharedProjectId, candidates }
 }
 
 export function resolveWorkspaceCreationTarget(

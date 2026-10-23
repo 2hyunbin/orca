@@ -10,6 +10,7 @@ import { useFolderWorkspaceComposerPathStatus } from '@/components/sidebar/folde
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { resolveWorkspaceCreationTarget } from '@/lib/project-host-workspace-target'
+import { getWorkspaceCreationTargetChoice } from '@/lib/workspace-creation-target-choice'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { getLocalRepoProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
@@ -198,15 +199,8 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     settings?.terminalWindowsShell
   )
 
-  const selectedRepoProjectId =
-    selectedWorkspaceTarget.status === 'ready'
-      ? selectedWorkspaceTarget.target.projectId
-      : selectedWorkspaceTarget.status === 'ambiguous'
-        ? selectedWorkspaceTarget.projectId
-        : null
-
-  const runTargetChoiceCandidates =
-    selectedWorkspaceTarget.status === 'ambiguous' ? selectedWorkspaceTarget.candidates : null
+  const { projectId: selectedRepoProjectId, candidates: runTargetChoiceCandidates } =
+    getWorkspaceCreationTargetChoice(selectedWorkspaceTarget)
 
   const selectedProjectId = selectedProjectGroup
     ? `project-group:${selectedProjectGroup.id}`
