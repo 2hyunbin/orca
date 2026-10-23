@@ -154,6 +154,9 @@ export function selectStoppedHistory(
   owed: readonly OwedStoppedMessage[],
   send: AgentJournalMessageItem
 ): StoppedHistoryDelivery | null {
+  if (owed.length === 0) {
+    return null
+  }
   const messages: OwedStoppedMessage[] = []
   let room = MAX_PROMPT_BYTES - wordsBytes(messageWords(send))
   for (const entry of owed.toReversed()) {
