@@ -36,10 +36,13 @@ describe('selected source lifetime', () => {
     await flush()
     expect(payloads(h).at(-1)).not.toHaveProperty('session_file')
     const refused = async (reason: string, file?: string) => {
+      await flush()
+      const before = payloads(h).length
       const child = h.registerSession()
       await child.callHook('session_start', { reason }, context('unannounced', file))
       await child.callHook('agent_start', {}, context('unannounced', file))
       await flush()
+      expect(payloads(h)).toHaveLength(before)
       expect(payloads(h).at(-1)?.session_id).not.toBe('unannounced')
     }
     // A cancelled operation never shuts the selected runner down.
