@@ -1,6 +1,6 @@
 // What the journal answers about its Stops beyond the queue's pause: the latest Stop event, which
 // the turn-end rule reads (`journal-stop-turn-end.ts`), whether a person's still decides, and what
-// a person's Stop that named no turn binds while and after it settles.
+// a person's session-ending Stop binds while and after it settles.
 
 import type { JournalReducerState } from './journal-reducer'
 import {
@@ -44,8 +44,8 @@ export class JournalStopMarks {
   }
 
   /** `beginJournalStopSettle`: a turn that ends from here until `settled` is the Stop's. */
-  beginSettle(): JournalStopSettle | null {
-    const settle = beginJournalStopSettle(this.deps.state())
+  beginSettle(endsSession = false): JournalStopSettle | null {
+    const settle = beginJournalStopSettle(this.deps.state(), endsSession)
     if (settle) {
       this.edge()
     }

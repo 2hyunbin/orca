@@ -1,11 +1,11 @@
 // What a Stop decides about the turn it stopped: the one rule every turn-end write passes through.
 //
-// A turn a person's Stop or close of this chat named, or, when it named none, one that ended while
-// that Stop settled or that its settle bound, ending with no verdict of its own after that Stop's
+// A turn a person's Stop or close of this chat named, or one that ended while a session-ending
+// Stop settled or that its settle bound, ending with no verdict of its own after that Stop's
 // event, ends as their cancellation. A host stop, an eviction and no Stop at all leave the end as
 // written. It runs where each row is built, inside the journal's serialized write: the adapter's
 // end, the host's fallback and a relaunch's settle all write through it, and every client folds
-// the row it wrote. What an unnamed Stop binds is held in memory, so after a relaunch it binds none.
+// the row it wrote. A Stop's settle is held in memory, so after a relaunch it binds none.
 
 import {
   agentJournalSubmissionKey,
@@ -84,16 +84,12 @@ export function latestAcceptedSendUnopened(state: TurnEndState): boolean {
   return true
 }
 
-/** Whether `stop`, a person's, makes the end of turn `turnId` theirs: it named that turn, or named
- *  none and the turn ends while it settles, or its settle bound that turn. */
+/** A session-ending Stop owns every turn ending while it settles; a targeted Stop owns its turn. */
 function stopIsTurnCancellation(stop: JournalLatestStop, turnId: string): boolean {
   if (!stopIsAPersons(stop.event.reason)) {
     return false
   }
-  if (stop.event.turnId !== undefined) {
-    return stop.event.turnId === turnId
-  }
-  return stop.settle?.settling === true || stop.settle?.turnId === turnId
+  return stop.settle?.settling || stop.settle?.turnId === turnId || stop.event.turnId === turnId
 }
 
 /** THE rule: whether the latest Stop makes turn `turnId`, ending at `endedAt` with no verdict of its
@@ -128,18 +124,19 @@ export function personStopDecidesTurn(
     return false
   }
   if (turnId === null) {
-    return stop.event.turnId === undefined && stop.settle?.settling === true
+    return stop.settle?.settling === true
   }
   return stopEndsTurnAsCancellation(state, turnId, endedAt)
 }
 
-/** Opens the settle of the latest Stop, a person's that named no turn: until it closes, every turn
- *  that ends is that Stop's. Null when there is none, or it named its turn. */
+/** Until its child closes, a session-ending Stop owns all turns; other callers stay unnamed-only. */
 export function beginJournalStopSettle(
-  state: Pick<JournalReducerState, 'queuePauseMarks'>
+  state: Pick<JournalReducerState, 'queuePauseMarks'>,
+  endsSession = false
 ): JournalStopSettle | null {
   const stop = state.queuePauseMarks.latestStop
-  if (stop === null || stop.event.turnId !== undefined || !stopIsAPersons(stop.event.reason)) {
+  const targeted = !endsSession && stop?.event.turnId !== undefined
+  if (stop === null || targeted || !stopIsAPersons(stop.event.reason)) {
     return null
   }
   // A repeat press keeps the turn an earlier one bound.

@@ -19,7 +19,6 @@ import type { StructuredAgentSessionCaller } from './structured-agent-session-ho
 import type { MutationPlan } from './structured-agent-session-mutation-plans'
 import {
   captureChatStopTarget,
-  chatStopTargetStands,
   type ChatStopTarget
 } from './structured-agent-session-chat-stop-target'
 import {
@@ -128,10 +127,9 @@ export function mutateWithChatStop<TValue>(
     settled: boolean,
     acceptedStop: AcceptedChatStop
   ): Promise<ChatStopOutcome> => {
-    // Read again: what ran when it was accepted may have ended meanwhile, and a newer child or
-    // turn is not this Stop's.
+    // Turns may advance during acceptance; only a replacement child escapes this Stop.
     const current = context.sessions.get(ctx.sessionId)?.child
-    if (target.reach === 'withdraw' || !chatStopTargetStands(ctx, target, current)) {
+    if (target.reach === 'withdraw' || current !== target.child) {
       return { ok: true, value: { ...named, cancelled: settled } }
     }
     const { child } = target

@@ -78,24 +78,3 @@ export function captureChatStopTarget(
   // between the presses sends normally, as after one Stop.
   return { ...target, reach: 'interrupt', marks: queued || reached === 'unrecorded' }
 }
-
-/** After acceptance only identity can exclude a target; its work may already have ended. */
-export function chatStopTargetStands(
-  ctx: AgentSessionTurnContext,
-  target: ChatStopTarget,
-  currentChild: StructuredAgentSessionProviderChild | null | undefined
-): boolean {
-  if (currentChild !== target.child) {
-    return false
-  }
-  if (target.reach !== 'interrupt') {
-    return true
-  }
-  if (target.named) {
-    const live = contextStructuredAgentSessionCurrentWork(ctx).activeTurnId()
-    return live === null || live === target.turnId
-  }
-  // A Stop naming no turn stops whatever runs: hand-over runs only on the lane this Stop holds, so
-  // a turn that opened after it was captured is from a send made before it.
-  return true
-}

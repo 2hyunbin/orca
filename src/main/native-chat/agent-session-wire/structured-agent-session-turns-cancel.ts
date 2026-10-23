@@ -88,8 +88,10 @@ export async function performCancel(
       return answerCancelOfSettledPrompt(ctx, { ...input, prompt: input.prompt }, validated)
     }
   }
-  // A person's Stop that named no turn binds what ends while it settles (`beginJournalStopSettle`).
-  const settle = input.opensSettle ? ctx.journal.stopMarks.beginSettle() : null
+  // An accepted chat Stop owns every turn its captured child ends, whatever its event names.
+  const settle = input.opensSettle
+    ? ctx.journal.stopMarks.beginSettle(Boolean(input.acceptedStop && input.endSession))
+    : null
   const binding: StopSettleBinding = {}
   // A wind-down that failed with work running on marks that work's turn, as a failed Stop does.
   const close = (failedOn?: JournalStopFailedOn): void =>
