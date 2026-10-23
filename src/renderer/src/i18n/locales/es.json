@@ -3937,7 +3937,6 @@
             "runtime_reconnect_attempt": "Intento {{value0}}",
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
-            "connecting": "Conectando…",
             "searchSshHosts": "Buscar hosts SSH…",
             "noMatchingSshHosts": "Ningún host SSH coincide.",
             "moreSshHostMatches_one": "{{count}} coincidencia más. Sigue escribiendo para acotar.",

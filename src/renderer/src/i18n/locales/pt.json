@@ -2218,7 +2218,6 @@
             "runtime_workspace_window_closed": "Janela do espaço de trabalho fechada",
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
-            "connecting": "Conectando…",
             "searchSshHosts": "Buscar hosts SSH…",
             "noMatchingSshHosts": "Nenhum host SSH encontrado.",
             "moreSshHostMatches_one": "Mais {{count}} resultado. Continue digitando para refinar a busca.",

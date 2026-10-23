@@ -4082,7 +4082,6 @@
             "runtime_workspace_window_closed": "Fenêtre de l'espace de travail fermée",
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
-            "connecting": "Connexion…",
             "searchSshHosts": "Rechercher des hôtes SSH…",
             "noMatchingSshHosts": "Aucun hôte SSH ne correspond.",
             "moreSshHostMatches_one": "{{count}} autre résultat. Continuez à taper pour affiner.",

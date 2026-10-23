@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { PropsWithChildren } from 'react'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { RUNTIME_PROTOCOL_VERSION } from '../../../../shared/protocol-version'
@@ -9,6 +9,7 @@ import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-e
 import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
 import { SshStatusSegment } from './SshStatusSegment'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const mocks = vi.hoisted(() => ({
   disconnectRuntime: vi.fn(async () => undefined),
@@ -155,15 +156,21 @@ describe('the status menu for a managed SSH host', () => {
     { compact: false, iconOnly: false },
     { compact: true, iconOnly: false },
     { compact: true, iconOnly: true }
-  ])('keeps the summary steady during host retries (%j)', (density) => {
+  ])('keeps retries quiet and exposes blockers alongside the connected count (%j)', (density) => {
     state.runtimeStatusByEnvironmentId.delete('server-windows')
-    const { rerender } = render(<SshStatusSegment {...density} />)
+    const { rerender } = render(<SshStatusSegment {...density} />, { wrapper: TooltipProvider })
     const trigger = screen.getByRole('button', { name: 'Remote host connection status' })
-    const checkingSummary = trigger.innerHTML
-    expect(screen.getByText('Checking')).toBeTruthy()
-    if (!density.compact && !density.iconOnly) {
-      expect(screen.getByText('1 host', { selector: 'span:not([aria-hidden])' })).toBeTruthy()
+    const expectSummary = (blocked: boolean): void => {
+      expect(trigger.getAttribute('aria-description')).toBe(
+        blocked ? 'Connected hosts: 1. Hosts needing attention: 1.' : 'Connected hosts: 1.'
+      )
+      expect(
+        within(trigger).getByText('1 host', { selector: 'span:not([aria-hidden])' })
+      ).toBeTruthy()
+      expect(trigger.querySelector('.animate-spin')).toBeNull()
     }
+    expect(screen.getByText('Checking')).toBeTruthy()
+    expectSummary(false)
 
     const ready = readyStatus()
     state.runtimeStatusByEnvironmentId.set('server-windows', {
@@ -172,29 +179,36 @@ describe('the status menu for a managed SSH host', () => {
     })
     rerender(<SshStatusSegment {...density} />)
     expect(screen.getByText('Reconnecting')).toBeTruthy()
-    expect(trigger.innerHTML).toBe(checkingSummary)
+    expectSummary(false)
 
     state.runtimeStatusByEnvironmentId.set('server-windows', { status: null, checkedAt: 1 })
     rerender(<SshStatusSegment {...density} />)
     expect(screen.getByText('Disconnected')).toBeTruthy()
-    expect(trigger.innerHTML).toBe(checkingSummary)
+    expectSummary(false)
 
-    state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('access-revoked'))
-    rerender(<SshStatusSegment {...density} />)
-    expect(screen.getByText('Access revoked')).toBeTruthy()
-    expect(trigger.innerHTML).toBe(checkingSummary)
+    for (const reason of ['access-revoked', 'incompatible'] as const) {
+      const blocked = blockedStatus(reason)
+      state.runtimeStatusByEnvironmentId.set('server-windows', blocked)
+      rerender(<SshStatusSegment {...density} />)
+      expectSummary(true)
+      state.runtimeStatusByEnvironmentId.set('server-windows', {
+        ...blocked,
+        remoteControl: ready.remoteControl
+          ? { ...ready.remoteControl, state: 'reconnecting' }
+          : null
+      })
+      rerender(<SshStatusSegment {...density} />)
+      expectSummary(true)
+    }
 
     state.runtimeStatusByEnvironmentId.set('server-windows', ready)
     rerender(<SshStatusSegment {...density} />)
-    if (!density.compact && !density.iconOnly) {
-      expect(trigger.textContent).toContain('2 hosts')
-    } else {
-      expect(trigger.innerHTML).toBe(checkingSummary)
-    }
+    expect(trigger.getAttribute('aria-description')).toBe('Connected hosts: 2.')
+    expect(trigger.textContent).toContain('2 hosts')
   })
 
   it('shows and counts one row per machine and disconnects the managed server', async () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.queryByText('SSH Host')).toBeNull()
     expect(
@@ -212,7 +226,7 @@ describe('the status menu for a managed SSH host', () => {
       'ssh-openclaw',
       sshState({ kind: 'relay', reason: 'source_changed' })
     )
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.getByText('SSH Host')).toBeTruthy()
     expect(
@@ -241,7 +255,7 @@ describe('the status menu for a managed SSH host', () => {
         retired: true
       }
     })
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(
       screen.getByRole('button', { name: 'Remote host connection status' }).textContent
@@ -252,7 +266,7 @@ describe('the status menu for a managed SSH host', () => {
 
   it('does not merge an independently paired server just because its name matches', () => {
     state.runtimeEnvironments[0] = environment('server-openclaw', 'openclaw')
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(2)
     expect(
       screen.getByRole('button', { name: 'Remote host connection status' }).textContent
@@ -261,14 +275,14 @@ describe('the status menu for a managed SSH host', () => {
 
   it('keeps the SSH row until the managed server catalog has arrived', () => {
     state.runtimeEnvironments = [environment('server-windows', 'win-lowspec')]
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.getByText('SSH Host')).toBeTruthy()
   })
 
   it('names the managed row after its SSH host, honouring a rename saved on the SSH id', () => {
     state.runtimeEnvironments[0] = { ...state.runtimeEnvironments[0], name: 'orcad-ssh-openclaw' }
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.queryByText('orcad-ssh-openclaw')).toBeNull()
     cleanup()
@@ -276,13 +290,13 @@ describe('the status menu for a managed SSH host', () => {
       ...getDefaultSettings('/home/test'),
       hostSettingOverrides: { 'ssh:ssh-openclaw': { displayLabel: 'Claw box' } }
     }
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getAllByText('Claw box')).toHaveLength(1)
   })
 
   it('names a revoked server and offers Re-pair instead of a futile Connect', () => {
     state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('access-revoked'))
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getByText('Access revoked')).toBeTruthy()
     expect(screen.queryByText('Disconnected')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
@@ -292,7 +306,7 @@ describe('the status menu for a managed SSH host', () => {
 
   it('names an incompatible server as needing an update', () => {
     state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('incompatible'))
-    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
     expect(screen.getByText('Update required')).toBeTruthy()
     expect(screen.queryByText('Re-pair…')).toBeNull()
   })
