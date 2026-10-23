@@ -1,15 +1,10 @@
+/* oxlint-disable no-control-regex -- Terminal control bytes must be escaped. */
+const CONTROL_CHARACTERS = /[\x00-\x1f\x7f-\x9f]/g
+const CONTROL_CHARACTERS_EXCEPT_NEWLINE = /[\x00-\x09\x0b-\x1f\x7f-\x9f]/g
+
 export function escapeTerminalControlCharacters(value: string, escapeLineBreaks = false): string {
-  return [...value]
-    .map((character) => {
-      const code = character.charCodeAt(0)
-      if (
-        (!escapeLineBreaks && character === '\n') ||
-        (code >= 0x20 && code < 0x7f) ||
-        code > 0x9f
-      ) {
-        return character
-      }
-      return `\\x${code.toString(16).padStart(2, '0')}`
-    })
-    .join('')
+  return value.replace(
+    escapeLineBreaks ? CONTROL_CHARACTERS : CONTROL_CHARACTERS_EXCEPT_NEWLINE,
+    (character) => `\\x${character.charCodeAt(0).toString(16).padStart(2, '0')}`
+  )
 }
