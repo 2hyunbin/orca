@@ -7,7 +7,10 @@ import { assertEditorBufferInvariant } from './editor-buffer-record-lifecycle'
 import { getStructuredAgentSessionReadOwner } from '../components/native-chat/structured-agent-session-read-owner'
 import {
   findStructuredAgentSessionReadOwner,
-  resetStructuredAgentSessionReadOwnersForTests
+  resetStructuredAgentSessionReadOwnersForTests,
+  retireStructuredAgentSessionReadOwner,
+  forgetStructuredReadOwner,
+  structuredReadOwnerKey
 } from '../components/native-chat/structured-agent-session-read-owner-registry'
 import { makeOpenFile } from './slices/store-session-test-harness'
 import { makeWorktree, TEST_REPO } from './slices/worktrees-slice-test-fixtures'
@@ -161,6 +164,12 @@ describe('real AppStore status commit boundary', () => {
     expect(owner.getSnapshot()).toBe(statuses)
     expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
     expect(dispose).not.toHaveBeenCalled()
+    forgetStructuredReadOwner(structuredReadOwnerKey(session, target), reader)
+    const releaseAfterAbort = reader.subscribe(vi.fn())
+    expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
+    releaseAfterAbort()
+    const releaseIdleReplay = reader.subscribe(vi.fn())
+    expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
     const observed: unknown[] = []
     const app = vi.fn(() => {
       observed.push([
@@ -189,6 +198,7 @@ describe('real AppStore status commit boundary', () => {
     expect(owner.getSnapshot()).toBe(acceptedStatus)
     expect(app).toHaveBeenCalledTimes(1)
     expect(point).not.toHaveBeenCalled()
+    releaseIdleReplay()
   })
 
   it.each([false, true])(
@@ -243,6 +253,83 @@ describe('real AppStore status commit boundary', () => {
       expect(findStructuredAgentSessionReadOwner('reader-c', target)).toBe(unrelated)
       expect(disposeA).toHaveBeenCalledTimes(1)
       expect(disposeB).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it.each(['held-delivery', 'aba-accept', 'aba-abort', 'direct'] as const)(
+    'ends forced-retired reader lifetime: %s',
+    (trace) => {
+      const storeA = createStore(createAppState)
+      const storeB = createStore(createAppState)
+      const ownerA = getAgentStatusOwner(storeA)
+      const ownerB = getAgentStatusOwner(storeB)
+      const target = { kind: 'local' } as const
+      const session = 'terminal-reader-lifetime'
+      const reader = getStructuredAgentSessionReadOwner(session, target)
+      const disposed = vi.spyOn(reader, 'dispose')
+      const refused = vi.fn()
+      const delivered = vi.fn()
+      let fresh: typeof reader | undefined
+      let releaseFresh = (): void => {}
+      const reacquire = (): void => {
+        const release = reader.subscribe(refused)
+        expect(findStructuredAgentSessionReadOwner(session, target)).toBeUndefined()
+        const deactivate = reader.activate()
+        expect(findStructuredAgentSessionReadOwner(session, target)).toBeUndefined()
+        release()
+        deactivate()
+        fresh = getStructuredAgentSessionReadOwner(session, target)
+        expect(fresh).not.toBe(reader)
+        releaseFresh = fresh.subscribe(delivered)
+      }
+      if (trace === 'held-delivery') {
+        storeB.subscribe(reacquire)
+      }
+      if (trace === 'direct') {
+        retireStructuredAgentSessionReadOwner(session, target)
+        reacquire()
+      } else {
+        const run = (): void =>
+          ownerA.transact((transactionA) => {
+            transactionA.retireReadOwner(session, target)
+            ownerB.transact((transactionB) => {
+              transactionB.retireReadOwner(session, target)
+              if (trace === 'held-delivery') {
+                storeB.setState({ activeWorktreeId: 'retired-b' })
+              }
+            })
+            if (trace !== 'held-delivery') {
+              reacquire()
+            }
+            storeA.setState({ activeWorktreeId: 'retired-a' })
+            if (trace !== 'aba-accept') {
+              throw new Error('abort outer')
+            }
+          })
+        if (trace === 'aba-accept') {
+          run()
+        } else {
+          expect(run).toThrow('abort outer')
+        }
+      }
+      expect(disposed).toHaveBeenCalledTimes(1)
+      expect(findStructuredAgentSessionReadOwner(session, target)).toBe(fresh)
+      const cursor = { epoch: 'fresh-reader', sequence: 0 }
+      fresh?.publishCreated({
+        sessionId: session,
+        epoch: cursor.epoch,
+        direction: 'tail',
+        items: [],
+        removedItemIds: [],
+        submissions: [],
+        window: { oldest: null, newest: null, nextCursor: cursor },
+        liveCursor: cursor,
+        hasOlder: false,
+        hasNewer: false
+      })
+      expect(delivered).toHaveBeenCalledTimes(1)
+      expect(refused).not.toHaveBeenCalled()
+      releaseFresh()
     }
   )
 

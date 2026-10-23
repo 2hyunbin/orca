@@ -235,7 +235,9 @@ function createReadOwner(
     },
     activate: () => {
       // Remounts and StrictMode re-run setup on an owner whose cleanup just forgot it.
-      adoptStructuredReadOwner(key, owner)
+      if (!adoptStructuredReadOwner(key, owner)) {
+        return () => {}
+      }
       const token = Symbol(sessionId)
       activations.add(token)
       if (activations.size === 1) {
@@ -290,7 +292,9 @@ function createReadOwner(
       return page.promise
     },
     subscribe: (listener) => {
-      adoptStructuredReadOwner(key, owner)
+      if (!adoptStructuredReadOwner(key, owner)) {
+        return () => {}
+      }
       listeners.add(listener)
       return () => {
         listeners.delete(listener)
