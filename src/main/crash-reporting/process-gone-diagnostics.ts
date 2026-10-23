@@ -5,6 +5,7 @@ import {
 } from '../../shared/crash-reporting'
 import { getSystemMemoryDetails, memoryKBFieldMB } from './system-memory-details'
 import {
+  kernelOomKillsSincePreGoneDetails,
   PRE_GONE_SYSTEM_MEMORY_SAMPLE_INTERVAL_MS,
   preGoneSystemMemoryDetails,
   resetPreGoneSystemMemorySamplingForTest,
@@ -303,6 +304,10 @@ export function buildProcessGoneCrashDetails(
   if (preGoneSample) {
     Object.assign(crashDetails, preGoneSampleDetails(preGoneSample, nowMs))
   }
-  Object.assign(crashDetails, preGoneSystemMemoryDetails(nowMs))
+  Object.assign(
+    crashDetails,
+    preGoneSystemMemoryDetails(nowMs),
+    kernelOomKillsSincePreGoneDetails()
+  )
   return crashDetails
 }
