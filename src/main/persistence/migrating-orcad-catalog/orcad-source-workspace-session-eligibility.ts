@@ -8,6 +8,7 @@ import type {
 import {
   orcadMigrationOwnerMatchesScope,
   orcadMigrationOwnsRepoId,
+  orcadMigrationScopeOwnsWholeHost,
   unqualifyOrcadMigrationOwnerKey,
   type OrcadMigrationSourceScope
 } from './orcad-source-scope'
@@ -29,11 +30,13 @@ export function collectUnsupportedSessionItems(
   sourceTerminalTabIds: ReadonlySet<string>
 ): string[] {
   const owns = (ownerKey: string): boolean => orcadMigrationOwnerMatchesScope(ownerKey, scope)
-  const matches = (ownerKey: string): boolean =>
-    Boolean(ownerKey) && (sourceHostPartition || owns(ownerKey))
+  // A WSL move takes some of host `local`'s projects; the others, and rows a past move retained,
+  // stay on this desktop untouched, so only the selected projects' rows can refuse it.
+  const wholeHost = sourceHostPartition && orcadMigrationScopeOwnsWholeHost(scope)
+  const matches = (ownerKey: string): boolean => Boolean(ownerKey) && (wholeHost || owns(ownerKey))
   const items: string[] = []
   // Another project's rows in this host's copy stay behind; only an unsaved draft there is work.
-  if (sourceHostPartition) {
+  if (wholeHost) {
     for (const [ownerKey, files] of Object.entries(session.openFilesByWorktree ?? {})) {
       if (!owns(ownerKey)) {
         items.push(...unsavedDraftItems(files, ownerKey))

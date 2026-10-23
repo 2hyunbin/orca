@@ -234,6 +234,58 @@ describe('exportWslMoveManifest', () => {
     expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers.length).toBeGreaterThan(0)
   })
 
+  it("is not refused by another project's agent session or unsaved draft", () => {
+    // On awin, any agent or draft anywhere on this desktop refused every WSL move (D1b-10 run).
+    const state = sourceState()
+    const elsewhere: SleepingAgentSessionRecord = {
+      paneKey: 'windows-shell:missing-leaf',
+      tabId: 'windows-shell',
+      worktreeId: OTHER_WORKTREE,
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'session-2' },
+      prompt: 'Saved prompt',
+      state: 'done',
+      capturedAt: 1,
+      updatedAt: 1,
+      connectionId: null,
+      origin: 'quit'
+    }
+    state.workspaceSession.sleepingAgentSessionsByPaneKey = { [elsewhere.paneKey]: elsewhere }
+    state.workspaceSession.openFilesByWorktree = {
+      [OTHER_WORKTREE]: [
+        {
+          filePath: 'C:\\code\\win\\notes.md',
+          relativePath: 'notes.md',
+          worktreeId: OTHER_WORKTREE,
+          language: 'markdown',
+          dirtyDraftContent: 'unsaved'
+        }
+      ]
+    }
+    expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([])
+  })
+
+  it("is not refused by a project an earlier move retained, whose agent stays here", () => {
+    const state = sourceState()
+    const retainedWorktree = 'old::\\\\wsl.localhost\\Ubuntu\\home\\me\\old'
+    state.repos.push(repo('old', '\\\\wsl.localhost\\Ubuntu\\home\\me\\old'))
+    const record: SleepingAgentSessionRecord = {
+      paneKey: 'old-shell:missing-leaf',
+      tabId: 'old-shell',
+      worktreeId: retainedWorktree,
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'session-3' },
+      prompt: 'Saved prompt',
+      state: 'done',
+      capturedAt: 1,
+      updatedAt: 1,
+      connectionId: null,
+      origin: 'quit'
+    }
+    state.workspaceSession.sleepingAgentSessionsByPaneKey = { [record.paneKey]: record }
+    expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([])
+  })
+
   it('refuses to sign a scope naming a project that is no longer here', () => {
     expect(() =>
       exportWslMoveManifest(storeFor(sourceState()), { ...REQUEST, repoIds: ['app', 'gone'] })
