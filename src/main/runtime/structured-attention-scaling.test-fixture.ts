@@ -196,7 +196,10 @@ export async function structuredAttentionScaling(
     await h.host.flushStreamedEvents(SESSION)
   }
   const addCandidate = (operation: string, caller: string, matches: boolean) => {
-    const submission = journal.submission(operation)!
+    const submittedSequence = journal.submission(operation)?.submittedSequence
+    if (submittedSequence === undefined) {
+      throw new Error('Expected a submitted journal sequence for the receipt candidate')
+    }
     openTestJournalHostDatabase(h.root).transaction((db) => {
       expect(
         insertCommandReceiptIfAbsent(
@@ -213,7 +216,7 @@ export async function structuredAttentionScaling(
             result: {
               kind: 'journal-row',
               epoch: journal.cursor().epoch,
-              sequence: submission.submittedSequence + (matches ? 0 : 1)
+              sequence: submittedSequence + (matches ? 0 : 1)
             }
           }
         )

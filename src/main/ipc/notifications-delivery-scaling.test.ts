@@ -46,8 +46,8 @@ it.each([2, 20])(
   (windows) => {
     const destroyed = vi.fn(() => false)
     const visible = vi.fn(() => false)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the exported surface calls only these two methods on the native-window boundary.
     getAllWindowsMock.mockReturnValue(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the exported surface calls only these two methods on the native-window boundary.
       Array.from({ length: windows }, () => ({
         isDestroyed: destroyed,
         isVisible: visible
