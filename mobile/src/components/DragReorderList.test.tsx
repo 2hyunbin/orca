@@ -1,3 +1,4 @@
+import type * as ReactModule from 'react'
 import { createElement, type ReactNode } from 'react'
 import { act, create } from 'react-test-renderer'
 import Animated, { useAnimatedRef, useSharedValue } from 'react-native-reanimated'
@@ -34,7 +35,7 @@ const probe = vi.hoisted(
 )
 
 vi.mock('react', async (importOriginal) => {
-  const React = await importOriginal<typeof import('react')>()
+  const React = await importOriginal<typeof ReactModule>()
   return {
     ...React,
     useState: (initial: unknown) => {
