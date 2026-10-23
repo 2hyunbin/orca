@@ -23,13 +23,21 @@ function activityLine(text: string): string | null {
   return null
 }
 
-function recentToolActivityLabels(items: readonly AgentJournalRenderItem[]): Set<string> {
+function recentToolActivityLabels(
+  items: readonly AgentJournalRenderItem[],
+  turnId: string
+): Set<string> {
   const labels = new Set<string>()
   let foundRunning = false
   let foundSettled = false
   for (let index = items.length - 1; index >= 0 && (!foundRunning || !foundSettled); index -= 1) {
     const body = items[index]?.body
-    if (body?.kind !== 'tool-call') {
+    const turn = readAgentJournalTurn(body)
+    if (turn?.turnId === turnId && turn.state === 'running') {
+      break
+    }
+    // A subagent's tool label must not suppress the parent's own line.
+    if (body?.kind !== 'tool-call' || !isRootAgentJournalItem(items[index])) {
       continue
     }
     const isRunning = body.state === 'running'
@@ -88,13 +96,7 @@ export function selectStructuredAgentTurnActivity(
   if (!text) {
     return null
   }
-  const turnStartIndex = items.findLastIndex((item) => {
-    const turn = readAgentJournalTurn(item.body)
-    return turn?.turnId === turnId && turn.state === 'running'
-  })
-  // Root-scoped: a subagent's tool label must not suppress the parent's own line.
-  const turnItems = items.slice(Math.max(0, turnStartIndex)).filter(isRootAgentJournalItem)
-  return repeatsRecentToolLabel(text, recentToolActivityLabels(turnItems))
+  return repeatsRecentToolLabel(text, recentToolActivityLabels(items, turnId))
     ? null
     : { kind: 'description', text }
 }

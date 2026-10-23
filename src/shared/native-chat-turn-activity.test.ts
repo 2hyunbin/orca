@@ -166,6 +166,41 @@ describe('selectStructuredAgentTurnActivity', () => {
     expect(activity).toBeNull()
   })
 
+  it.each([
+    ['typed', { kind: 'turn', turnId: 'turn-1', state: 'running' }],
+    [
+      'legacy',
+      {
+        kind: 'status',
+        text: 'Working',
+        turnLifecycle: { turnId: 'turn-1', state: 'running' }
+      }
+    ]
+  ] satisfies [string, AgentJournalItemBody][])(
+    'limits tool labels to the latest %s turn boundary even when it names a child',
+    (_name, body) => {
+      const tool = item(2, {
+        kind: 'tool-call',
+        name: 'shell',
+        input: { command: 'pnpm test' },
+        state: 'completed'
+      })
+      const boundary: AgentJournalRenderItem = {
+        ...item(3, body),
+        agentId: 'child',
+        producerKind: 'agent'
+      }
+      const providerActivity = { turnId: 'turn-1', text: 'Running pnpm test' }
+
+      expect(
+        selectStructuredAgentTurnActivity([turnStart, tool, boundary], 'turn-1', providerActivity)
+      ).toEqual({ kind: 'description', text: 'Running pnpm test' })
+      expect(
+        selectStructuredAgentTurnActivity([turnStart, boundary, tool], 'turn-1', providerActivity)
+      ).toBeNull()
+    }
+  )
+
   it('ignores active and settled tools so the tail can use a broad fallback', () => {
     const activity = selectStructuredAgentTurnActivity(
       [
