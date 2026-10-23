@@ -184,7 +184,10 @@ export function agentSessionSendDeliversStoppedHistory(
 /** Whether this send can carry stopped messages: words only, so the carried words can never take
  *  it past an agent's limits, which its attachments' unread size could. */
 export function agentSessionSendCarriesStoppedHistory(body: AgentJournalMessageItem): boolean {
-  return body.blocks.every((block) => block.type === 'text') && messageWords(body).length > 0
+  return (
+    body.blocks.every((block) => block.type === 'text') &&
+    body.blocks.some((block) => block.text.length > 0)
+  )
 }
 
 /** A words-only send's body with the delivered stopped messages ahead of its own words, each
