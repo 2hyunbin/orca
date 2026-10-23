@@ -163,13 +163,14 @@ describe('local PTY view model', () => {
   })
 
   it.each(['ssh:host', 'runtime:host'] as const)(
-    'keeps saved %s bindings remote across canonical restore keys and missing remote rows',
+    'keeps saved %s bindings remote across canonical restore keys before catalogs load',
     (hostId) => {
       const inputs = base()
       expect(
         buildResourcePtyRows({
           ...inputs,
-          worktrees: [makeWorktree('wt-1', 'Notes', { hostId: 'local' })],
+          repos: [],
+          worktrees: [],
           sessions: [session('pty-tab', { worktreeId: 'wt-1' })],
           bindings: {
             ...inputs.bindings,
@@ -180,6 +181,18 @@ describe('local PTY view model', () => {
       ).toMatchObject({ binding: 'unbound', tabId: null, paneKey: null })
     }
   )
+
+  it('uses explicit SSH execution ownership when duplicate repos make persistence ambiguous', () => {
+    const inputs = base()
+    expect(
+      buildResourcePtyRows({
+        ...inputs,
+        repos: [makeRepo(), { ...makeRepo(), connectionId: 'box' }],
+        worktrees: [makeWorktree('wt-1', 'Remote', { hostId: 'ssh:box' })],
+        bindings: { ...inputs.bindings, ptyIdsByTabId: { tab: ['pty-tab'] } }
+      })[0]
+    ).toMatchObject({ binding: 'unbound', tabId: null, paneKey: null, workspaceId: null })
+  })
 
   it('keeps distinct process generations with the same terminal id as separate rows', () => {
     const rows = buildResourcePtyRows({

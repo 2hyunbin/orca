@@ -1,10 +1,18 @@
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
-import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../../shared/workspace-scope'
+import {
+  getRepoExecutionHostId,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../../../shared/execution-host'
+import {
+  folderWorkspaceKey,
+  normalizeWorkspaceSessionKeyToWorkspaceId,
+  parseWorkspaceKey
+} from '../../../../shared/workspace-scope'
 import { mayDestroyWithoutOwnerEvidence } from '../../../../shared/pty-listed-session'
 import type { DaemonSession } from './resource-usage-merge-types'
 import {
-  buildHostIdByWorktreeId,
+  buildHostSessionRouting,
   type HostPersistenceState
 } from '@/lib/workspace-session-host-persistence'
 
@@ -31,10 +39,39 @@ export type ResourceSessionBindingIndex = {
   tabsByIdByWorktree: Map<string, Map<string, { tab: TerminalTab; index: number }>>
 }
 
+function indexFolderResourceSessionHosts(
+  state: HostPersistenceState
+): Map<string, ReadonlySet<ExecutionHostId>[]> {
+  const groupHostsById = new Map<string, Set<ExecutionHostId>>()
+  for (const group of state.projectGroups ?? []) {
+    const id = group.id
+    const hosts = groupHostsById.get(id) ?? new Set<ExecutionHostId>()
+    hosts.add(getRepoExecutionHostId(group))
+    groupHostsById.set(id, hosts)
+  }
+  const folderHostsById = new Map<string, ReadonlySet<ExecutionHostId>[]>()
+  for (const folder of state.folderWorkspaces ?? []) {
+    const hostId =
+      parseExecutionHostId(folder.executionHostId)?.id ??
+      (folder.connectionId ? getRepoExecutionHostId(folder) : undefined)
+    const hosts = hostId ? new Set([hostId]) : groupHostsById.get(folder.projectGroupId)
+    if (!hosts) {
+      continue
+    }
+    const key = folderWorkspaceKey(folder.id)
+    const claims = folderHostsById.get(key) ?? []
+    // Keep group sets by reference so duplicate groups do not multiply folder lookup work.
+    claims.push(hosts)
+    folderHostsById.set(key, claims)
+  }
+  return folderHostsById
+}
+
 export function selectLocalResourceSessionTabs(
   state: HostPersistenceState & Pick<ResourceSessionBindingInputs, 'tabsByWorktree'>
 ): ResourceSessionBindingInputs['tabsByWorktree'] {
-  const hostIdByWorktreeId = buildHostIdByWorktreeId(state)
+  const { hostIdByWorktreeId, claims } = buildHostSessionRouting(state)
+  let folderHostsById: ReturnType<typeof indexFolderResourceSessionHosts> | undefined
   const restoredHostIdByWorkspaceId = new Map(
     Object.entries(state.contestedPrimaryHostBySessionKey ?? {}).map(([key, hostId]) => [
       normalizeWorkspaceSessionKeyToWorkspaceId(key),
@@ -43,10 +80,22 @@ export function selectLocalResourceSessionTabs(
   )
   return Object.fromEntries(
     Object.entries(state.tabsByWorktree).filter(([id]) => {
+      const workspaceId = normalizeWorkspaceSessionKeyToWorkspaceId(id)
       const restoredHostId =
-        state.contestedPrimaryHostBySessionKey?.[id] ??
-        restoredHostIdByWorkspaceId.get(normalizeWorkspaceSessionKeyToWorkspaceId(id))
-      return (restoredHostId ?? hostIdByWorktreeId(id)) === 'local'
+        state.contestedPrimaryHostBySessionKey?.[id] ?? restoredHostIdByWorkspaceId.get(workspaceId)
+      const worktreeHosts = claims.get(workspaceId)
+      if (parseWorkspaceKey(workspaceId)?.type === 'folder') {
+        folderHostsById ??= indexFolderResourceSessionHosts(state)
+      }
+      const folderHosts = folderHostsById?.get(workspaceId)
+      const catalogKnown = Boolean(worktreeHosts?.size || folderHosts?.length)
+      const catalogClaimsHost = (hostId: ExecutionHostId): boolean =>
+        Boolean(worktreeHosts?.has(hostId) || folderHosts?.some((hosts) => hosts.has(hostId)))
+      if (restoredHostId && (!catalogKnown || catalogClaimsHost(restoredHostId))) {
+        return restoredHostId === 'local'
+      }
+      // Persistence may fall back to local for ambiguous repos; execution claims do not.
+      return catalogKnown ? catalogClaimsHost('local') : hostIdByWorktreeId(id) === 'local'
     })
   )
 }
