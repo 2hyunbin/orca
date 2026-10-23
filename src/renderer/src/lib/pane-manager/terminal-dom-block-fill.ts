@@ -15,7 +15,8 @@ function gradient(axis: 'bottom' | 'right', solidPercent: number, fromStart: boo
 
 /** CSS background-image that fills the cell the way WebGL custom glyphs do. */
 export function backgroundImageForUniformBlockRun(text: string): string | null {
-  if (text.length === 0) {
+  const code = text.charCodeAt(0)
+  if (!(code >= 0x2580 && code <= 0x2595)) {
     return null
   }
   const ch = text[0]!
@@ -24,7 +25,6 @@ export function backgroundImageForUniformBlockRun(text: string): string | null {
       return null
     }
   }
-  const code = ch.codePointAt(0) ?? 0
   if (code === 0x2580) {
     return gradient('bottom', 50, true)
   }
