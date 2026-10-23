@@ -219,6 +219,19 @@ describe('orca skills install/update', () => {
     expect(await skillText(paths.shared)).toBe(OLD_TEXT)
   }, 20_000)
 
+  it('counts a skill with multiple skipped folders once in text and JSON summaries', async () => {
+    await writeCopy(paths.shared, EDITED_TEXT)
+    await writeCopy(paths.claude, EDITED_TEXT)
+
+    const args = ['update', '--skill', NAME, '--agent', 'claude']
+    const text = await run(args)
+    expect(text).toContain(`${NAME}: No change · 1 skipped: Skill edited outside Orca\n`)
+    expect(text).toContain(`  ${paths.shared}: Update skipped: Skill edited outside Orca`)
+    expect(text).toContain(`  ${paths.claude}: Update skipped: Skill edited outside Orca`)
+    const result = await runJson<RunJson>(args)
+    expect(result.summary).toMatchObject({ ok: true, changedCount: 0, leftAloneCount: 1 })
+  })
+
   it("accepts the skills CLI's agent keys and universal for the shared folder alone", async () => {
     await writeCopy(paths.shared, NEW_TEXT)
 

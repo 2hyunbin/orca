@@ -219,7 +219,7 @@ export function summarizeBundledSkillOutcome(
     name: outcome.name,
     text,
     leftAlone,
-    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} skipped: ${reasons}` : text
+    line: leftAlone.length > 0 ? `${text} \u00B7 1 skipped: ${reasons}` : text
   }
 }
 
@@ -243,7 +243,7 @@ export function summarizeBundledSkillOutcomes(
     exitCode: ok ? 0 : 1,
     changedCount: skills.filter((skill) => ['Updated', 'Installed', 'Linked'].includes(skill.text))
       .length,
-    leftAloneCount: skills.reduce((count, skill) => count + skill.leftAlone.length, 0),
+    leftAloneCount: skills.filter((skill) => skill.leftAlone.length > 0).length,
     skills
   }
 }

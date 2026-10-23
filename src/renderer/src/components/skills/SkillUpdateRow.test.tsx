@@ -122,6 +122,60 @@ describe('SkillUpdateRow', () => {
     expect(shown).not.toContain('No change')
   })
 
+  it.each(['plan', 'result'] as const)(
+    'shows identical skip reasons once per skill in the %s phase, retaining every folder',
+    async (phase) => {
+      const cursor = '/home/u/.cursor/skills/orca-cli'
+      const ops = [
+        planOp('leave', SHARED, { reason: 'edited' }),
+        planOp('leave', CLAUDE, { reason: 'shared-not-current' }),
+        planOp('leave', cursor, { reason: 'shared-not-current', agents: ['cursor'] })
+      ]
+      const view = await render(
+        <SkillUpdateRow
+          skill={skillOf(ops)}
+          phase={phase}
+          outcome={{
+            name: 'orca-cli',
+            status: 'ran',
+            ops: ops.map((op) => ({ ...op, status: 'done' }))
+          }}
+          showLocations
+        />
+      )
+
+      expect(row(view).split("Update skipped: The shared copy isn't Orca's")).toHaveLength(2)
+      expect(row(view).split('Update skipped: Skill edited outside Orca')).toHaveLength(2)
+      for (const path of [SHARED, CLAUDE, cursor]) {
+        expect(view.querySelector(`.font-mono[title="${path}"]`)).not.toBeNull()
+      }
+    }
+  )
+
+  it('keeps separate replacement choices for folders with the same skip reason', async () => {
+    const onReplaceChange = vi.fn()
+    const view = await render(
+      <SkillUpdateRow
+        skill={skillOf(
+          [SHARED, CLAUDE].map((path) =>
+            planOp('leave', path, { reason: 'edited', replaceable: true })
+          )
+        )}
+        phase="plan"
+        showLocations={false}
+        replace={{ isReplaced: () => false, onReplaceChange }}
+      />
+    )
+
+    expect(row(view).split('Update skipped: Skill edited outside Orca')).toHaveLength(2)
+    const checkboxes = view.querySelectorAll('[role="checkbox"]')
+    expect(checkboxes).toHaveLength(2)
+    await act(async () => {
+      checkboxes[1].dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(onReplaceChange).toHaveBeenCalledWith(CLAUDE, true)
+  })
+
   it('reports a copy skipped without an agent prefix and offers Replace only where it is allowed', async () => {
     const onReplaceChange = vi.fn()
     const view = await render(

@@ -23,16 +23,21 @@ export type SkillReplaceToggle = {
 /** A location Update leaves alone, or one the user chose to Replace. */
 function ChoiceLine({
   location,
+  reason,
   replace
 }: {
   location: BundledSkillLocation
+  reason: string | null
   replace?: SkillReplaceToggle
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (!reason && !(replace && location.replaceable)) {
+    return null
+  }
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      {location.state === 'leave' ? (
+      {reason ? (
         <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
-          {locationStateText(location)}
+          {reason}
         </span>
       ) : null}
       {replace && location.replaceable ? (
@@ -104,6 +109,7 @@ export function SkillUpdateRow({
   const choices = skill.locations.filter(
     (location) => location.state === 'leave' || (phase !== 'result' && location.state === 'replace')
   )
+  const seenReasons = new Set<string>()
   return (
     <div
       data-skill-row={skill.name}
@@ -115,9 +121,21 @@ export function SkillUpdateRow({
       </span>
       <div className="flex min-w-0 flex-col gap-1.5 text-foreground">
         {headline ? <span>{headline}</span> : null}
-        {choices.map((location) => (
-          <ChoiceLine key={location.path} location={location} {...(replace ? { replace } : {})} />
-        ))}
+        {choices.map((location) => {
+          const reason = location.state === 'leave' ? locationStateText(location) : null
+          const uniqueReason = reason && !seenReasons.has(reason) ? reason : null
+          if (reason) {
+            seenReasons.add(reason)
+          }
+          return (
+            <ChoiceLine
+              key={location.path}
+              location={location}
+              reason={uniqueReason}
+              {...(replace ? { replace } : {})}
+            />
+          )
+        })}
         {showLocations ? <LocationTable locations={skill.locations} /> : null}
       </div>
     </div>
