@@ -1,3 +1,9 @@
+import {
+  isStalledDaemonOwner,
+  isStalledDaemonRestartRequest,
+  reviewStalledDaemon,
+  restartStalledDaemon
+} from '../daemon/daemon-stalled-owner-recovery'
 import { ipcMain } from 'electron'
 import { DegradedDaemonPtyProvider } from '../daemon/degraded-daemon-pty-provider'
 import type { DaemonPtyAdapter } from '../daemon/daemon-pty-adapter'
@@ -79,8 +85,16 @@ export function registerDaemonManagementHandlers(): void {
   ipcMain.removeHandler('pty:management:severedDaemon')
   ipcMain.removeHandler('pty:management:restartSeveredDaemon')
   ipcMain.removeHandler('pty:management:asyncIoHealth')
+  ipcMain.removeHandler('pty:management:reviewStalledDaemon')
+  ipcMain.removeHandler('pty:management:restartStalledDaemon')
 
   ipcMain.handle('pty:management:asyncIoHealth', readDaemonProviderAsyncIoHealth)
+  ipcMain.handle('pty:management:reviewStalledDaemon', (_event, owner: unknown) =>
+    isStalledDaemonOwner(owner) ? reviewStalledDaemon(owner) : { status: 'refused' }
+  )
+  ipcMain.handle('pty:management:restartStalledDaemon', (_event, request: unknown) =>
+    isStalledDaemonRestartRequest(request) ? restartStalledDaemon(request) : { status: 'refused' }
+  )
 
   // Why: a Linux AppImage daemon kept for its live terminals after its files vanished; the
   // banner polls this and offers the verified restart below.

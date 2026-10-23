@@ -1,3 +1,4 @@
+import { DegradedDaemonPtyProvider } from '../daemon/degraded-daemon-pty-provider'
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
 
@@ -146,4 +147,25 @@ it('reports unsupported when none of the owners implement the probe', async () =
   adapter.getAsyncIoHealth.mockResolvedValue({ state: 'unsupported' })
   adapters.mockReturnValue([adapter, legacyAdapter({ state: 'unsupported' })])
   expect(await read()).toEqual({ state: 'unsupported' })
+})
+
+it('does not advertise recovery for a degraded current owner whose fallback terminals must survive', async () => {
+  provider.mockReturnValue(Object.create(DegradedDaemonPtyProvider.prototype))
+  adapter.getAsyncIoHealth.mockResolvedValue({
+    state: 'stalled',
+    pendingMs: 5000,
+    recoverySupported: true
+  })
+  expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000, recoverySupported: false })
+  expect(restart).not.toHaveBeenCalled()
+})
+
+it('keeps targeted recovery available for a legacy owner beside a degraded current owner', async () => {
+  provider.mockReturnValue(Object.create(DegradedDaemonPtyProvider.prototype))
+  adapter.getAsyncIoHealth.mockResolvedValue({ state: 'healthy', pendingMs: 0 })
+  adapters.mockReturnValue([
+    adapter,
+    legacyAdapter({ state: 'stalled', pendingMs: 5000, recoverySupported: true })
+  ])
+  expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000, recoverySupported: true })
 })

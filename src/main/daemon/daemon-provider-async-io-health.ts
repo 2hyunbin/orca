@@ -1,5 +1,6 @@
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
-import { getAllDaemonAdapters } from './daemon-provider-routing'
+import { DegradedDaemonPtyProvider } from './degraded-daemon-pty-provider'
+import { getAllDaemonAdapters, getCurrentDaemonAdapter } from './daemon-provider-routing'
 import { getDaemonProvider } from './daemon-provider-state'
 
 export async function readDaemonProviderAsyncIoHealth(): Promise<DaemonAsyncIoStatus> {
@@ -25,7 +26,27 @@ export async function readDaemonProviderAsyncIoHealth(): Promise<DaemonAsyncIoSt
     const result = results.get(adapter)
     // Removed owners cannot warn; new or replaced owners cannot inherit health evidence.
     return result?.identity && result.identity === adapter.getDaemonIdentity()
-      ? result.health
+      ? {
+          ...result.health,
+          ...(result.health.state === 'stalled' &&
+          provider instanceof DegradedDaemonPtyProvider &&
+          adapter === getCurrentDaemonAdapter(provider)
+            ? { recoverySupported: false }
+            : {}),
+          ...(result.health.state === 'stalled' &&
+          Number.isSafeInteger(adapter.protocolVersion) &&
+          Number.isFinite(result.identity.startedAtMs) &&
+          result.identity.launchNonce
+            ? {
+                owner: {
+                  protocolVersion: adapter.protocolVersion,
+                  pid: result.identity.pid,
+                  startedAtMs: result.identity.startedAtMs,
+                  launchNonce: result.identity.launchNonce
+                }
+              }
+            : {})
+        }
       : { state: 'unverifiable' }
   })
   const stalled = health.find((result) => result.state === 'stalled')

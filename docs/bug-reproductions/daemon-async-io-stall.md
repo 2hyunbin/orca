@@ -97,21 +97,36 @@ The daemon logs transitions as `async-io-stalled` and `async-io-recovered`.
 
 The desktop checks every 30 seconds while the sidebar is mounted and the document
 is visible, plus on focus/visibility changes. Checks coalesce and never enumerate
-sessions or start terminals. A notice directs the user to the existing Manage
-Sessions restart review, which requires confirmation before ending processes.
+sessions or start terminals. The notice reviews only the affected owner's live
+terminals before asking for destructive confirmation. Confirmation carries the
+owner's protocol, PID, start time and launch nonce, plus every reviewed session
+ID and incarnation. The daemon rechecks stalled state and the exact inventory,
+refuses in-flight terminal creation, and closes admission before ending sessions.
+An older owner is retired without restarting a healthy current owner. Current
+owner replacement waits for its endpoint to be proven dead under the shared
+restart barrier. Unknown replies, changed inventory and failed disposal never
+fall back to a generic restart.
 
 The new unary RPC is optional: old daemons return `unsupported`; lost contact or
 an invalid response is `unverifiable`. Neither proves a stall. An affected old
 daemon needs a deliberate restart onto a build with the probe before automatic
 detection is available. Updating only the client cannot add instrumentation to
-its already running daemon.
+its already running daemon. Owner-targeted recovery is a separate optional
+capability: a health-capable older daemon may still lack it. The notice explicitly
+declines recovery in that case, and for a degraded current owner whose fallback
+terminals cannot be included safely. Updating the client cannot retrofit the
+new recovery RPC into an already running daemon.
 
 ## Coverage and gaps
 
 The experimental gate covers stalled/completing work, recovery, deduplication,
 bounded timers/requests, old-peer compatibility, disconnected peers, notice
 behavior, visibility gating, and unmount cleanup. The production probe also
-identified this incident in the affected live daemon.
+identified this incident in the affected live daemon. Isolated real-socket tests
+exercise changed daemon/session incarnations, new sessions after review, recovered
+health, exact-inventory shutdown and failed native disposal. Hidden Electron CDP
+checks exercised the rendered review, cancel, confirmation, refusal and unsupported
+states using simulated health/recovery responses; no user daemon was restarted.
 
 Local/daemon macOS evidence is covered. The probe is platform-independent, but
 physical Linux, Windows, WSL and SSH deployments remain gaps. The notice describes
