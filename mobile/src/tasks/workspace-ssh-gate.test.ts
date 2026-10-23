@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { deriveWorkspaceSshGate, workspaceSshStatusLabel } from './workspace-ssh-gate'
+import {
+  deriveWorkspaceSshGate,
+  workspaceSshStatusLabel,
+  type WorkspaceSshRecord
+} from './workspace-ssh-gate'
 
 describe('workspace SSH gate', () => {
   it('does not gate local repositories', () => {
@@ -84,19 +88,21 @@ describe('workspace SSH gate', () => {
     })
   })
 
-  it('asks for the desktop recovery only when the start refusal names the command', () => {
-    const gate = (detail: string) =>
+  it('asks for the desktop recovery only for the refusal the desktop offers it on', () => {
+    const named = 'run `orcad --reclaim-stale-lock --data-root /home/dev/.orca` there'
+    const gate = (managedServer: WorkspaceSshRecord['managedServer']) =>
       deriveWorkspaceSshGate({
         connectionId: 'ssh-1',
-        state: {
-          targetId: 'ssh-1',
-          status: 'connected',
-          managedServer: { serving: { detail } }
-        },
+        state: { targetId: 'ssh-1', status: 'connected', managedServer },
         connecting: false
       }).needsDesktopServerRecovery
-    expect(gate('run `orcad --reclaim-stale-lock --data-root /home/dev/.orca` there')).toBe(true)
-    expect(gate('orcad did not answer')).toBe(false)
+    const refused = { kind: 'managed', serving: { state: 'unverifiable', detail: named } }
+    expect(gate(refused)).toBe(true)
+    expect(gate({ ...refused, serving: { ...refused.serving, detail: 'did not answer' } })).toBe(
+      false
+    )
+    expect(gate({ ...refused, kind: 'relay' })).toBe(false)
+    expect(gate({ ...refused, serving: { detail: named } })).toBe(false)
   })
 
   it('labels user-visible SSH states', () => {
