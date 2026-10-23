@@ -19867,14 +19867,6 @@
       "stepDownload": "下载",
       "stepUnpack": "解压",
       "stepCheck": "检查"
-    },
-    "WorkspaceEmptyState": {
-      "title": "您想做什么？",
-      "description": "这里没有打开任何选项卡。启动智能体或打开工具即可开始。",
-      "terminal": "打开终端",
-      "browser": "打开浏览器",
-      "openFile": "打开文件",
-      "startAgent": "启动智能体"
     }
   },
   "dashboardPopout": {

@@ -20390,14 +20390,6 @@
       "stepDownload": "Baixar",
       "stepUnpack": "Descompactar",
       "stepCheck": "Verificar"
-    },
-    "WorkspaceEmptyState": {
-      "title": "O que você gostaria de fazer?",
-      "description": "Não há abas abertas aqui. Inicie um agente ou abra uma ferramenta para começar.",
-      "terminal": "Abrir um terminal",
-      "startAgent": "Iniciar um agente",
-      "browser": "Abrir um navegador",
-      "openFile": "Abrir um arquivo"
     }
   },
   "csv": {

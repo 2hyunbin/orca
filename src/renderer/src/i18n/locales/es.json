@@ -19868,14 +19868,6 @@
       "stepDownload": "Descargar",
       "stepUnpack": "Descomprimir",
       "stepCheck": "Comprobar"
-    },
-    "WorkspaceEmptyState": {
-      "title": "¿Qué te gustaría hacer?",
-      "terminal": "Abrir una terminal",
-      "startAgent": "Iniciar un agente",
-      "description": "No hay pestañas abiertas aquí. Inicie un agente o abra una herramienta para comenzar.",
-      "browser": "Abrir un navegador",
-      "openFile": "Abrir un archivo"
     }
   },
   "dashboardPopout": {

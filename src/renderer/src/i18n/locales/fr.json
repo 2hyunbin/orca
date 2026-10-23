@@ -20008,14 +20008,6 @@
       "stepDownload": "Télécharger",
       "stepUnpack": "Décompresser",
       "stepCheck": "Vérifier"
-    },
-    "WorkspaceEmptyState": {
-      "title": "Qu'aimeriez-vous faire ?",
-      "description": "Aucun onglet n'est ouvert ici. Démarrez un agent ou ouvrez un outil pour commencer.",
-      "startAgent": "Démarrer un agent",
-      "openFile": "Ouvrir un fichier",
-      "browser": "Ouvrir un navigateur",
-      "terminal": "Ouvrir un terminal"
     }
   },
   "dashboardPopout": {

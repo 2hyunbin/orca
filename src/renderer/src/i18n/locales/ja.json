@@ -19867,14 +19867,6 @@
       "stepDownload": "ダウンロード",
       "stepUnpack": "展開",
       "stepCheck": "確認"
-    },
-    "WorkspaceEmptyState": {
-      "title": "何をしたいですか?",
-      "startAgent": "Agent を開始する",
-      "terminal": "ターミナルを開く",
-      "description": "ここではタブが開いていません。Agent を起動するか、ツールを開いて作業を始めてください。",
-      "openFile": "ファイルを開く",
-      "browser": "ブラウザを開く"
     }
   },
   "dashboardPopout": {

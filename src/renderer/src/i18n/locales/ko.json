@@ -19867,14 +19867,6 @@
       "stepDownload": "다운로드",
       "stepUnpack": "압축 해제",
       "stepCheck": "확인"
-    },
-    "WorkspaceEmptyState": {
-      "title": "무엇을 하고 싶나요?",
-      "terminal": "터미널 열기",
-      "startAgent": "에이전트 시작",
-      "description": "여기에는 열려 있는 탭이 없습니다. 에이전트를 시작하거나 도구를 열어 시작해 보세요.",
-      "openFile": "파일 열기",
-      "browser": "브라우저 열기"
     }
   },
   "dashboardPopout": {
