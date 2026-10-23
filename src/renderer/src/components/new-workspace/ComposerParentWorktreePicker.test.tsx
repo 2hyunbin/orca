@@ -38,7 +38,7 @@ const popoverMock = vi.hoisted(() => ({
   onOpenChange: undefined as ((open: boolean) => void) | undefined
 }))
 
-const virtualKeys = vi.hoisted(() => ({ current: [] as (string | number)[] }))
+const virtualKeys = vi.hoisted((): { current: (string | number)[] } => ({ current: [] }))
 
 const indexSpies = vi.hoisted(() => ({ getWorktreeLineageProjection: vi.fn() }))
 

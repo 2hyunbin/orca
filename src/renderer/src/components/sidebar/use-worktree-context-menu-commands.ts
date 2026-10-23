@@ -189,7 +189,7 @@ export function useWorktreeContextMenuCommands(args: {
     } catch {
       showWorkspaceListChangedToast()
     }
-  }, [args.validParent, args.getState])
+  }, [args])
   return {
     handleAssignWorkspaceStatus,
     handleCloseTerminals,

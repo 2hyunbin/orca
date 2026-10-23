@@ -90,14 +90,7 @@ export function useWorktreeCardWorkspaceActions({
         })
       }
     },
-    [
-      deleteFolderWorkspace,
-      folderWorkspaceId,
-      worktree,
-      setActiveWorktree,
-      showDeleteQuickAction,
-      worktree.id
-    ]
+    [deleteFolderWorkspace, folderWorkspaceId, worktree, setActiveWorktree, showDeleteQuickAction]
   )
   const handleOpenRenameErrorDialog = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {

@@ -47,7 +47,8 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
   const removeWorktree = useAppStore((s) => s.removeWorktree)
   const clearWorktreeDeleteState = useAppStore((s) => s.clearWorktreeDeleteState)
   const allWorktrees = useAllWorktrees()
-  const selectedInputs = useAppStore(getLineageInputs)
+  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const folderWorkspaces = useAppStore((s) => s.folderWorkspaces)
   const repos = useAppStore((s) => s.repos)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
@@ -86,7 +87,7 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
       : null
   const forceOnConfirm = modalData.forceOnConfirm !== false
   const worktrees = useMemo(() => {
-    const state = useAppStore.getState()
+    const state = { worktreesByRepo, folderWorkspaces }
     const requests = worktreeDeleteIdentities.length
       ? worktreeDeleteIdentities
       : worktreeIds.map((id) => ({ id, hostId: undefined }))
@@ -94,7 +95,7 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
       const row = getRegisteredWorktreeDeleteTarget(state, identity.id, identity.hostId, identity)
       return row ? [row] : []
     })
-  }, [selectedInputs, worktreeDeleteIdentities, worktreeIds])
+  }, [worktreesByRepo, folderWorkspaces, worktreeDeleteIdentities, worktreeIds])
   const worktree = worktrees.find((row) => row.id === worktreeId) ?? null
   const repoMap = useMemo(() => new Map(repos.map((repo) => [repo.id, repo])), [repos])
   const isBatchDelete = worktreeIds.length > 1

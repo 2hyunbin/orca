@@ -240,17 +240,21 @@ describe('parent picker keyboard input', () => {
   })
 })
 
-const picker = vi.hoisted(() => ({
-  state: {
-    worktreesByRepo: {} as Record<string, Worktree[]>,
-    worktreeLineageById: {},
-    workspaceLineageByChildKey: {},
-    activeWorktreeId: null,
-    assignWorktreeParent: vi.fn().mockResolvedValue(undefined)
-  },
-  enabled: false,
-  keys: [] as (string | number)[]
-}))
+const picker = vi.hoisted(() => {
+  const worktreesByRepo: Record<string, Worktree[]> = {}
+  const keys: (string | number)[] = []
+  return {
+    state: {
+      worktreesByRepo,
+      worktreeLineageById: {},
+      workspaceLineageByChildKey: {},
+      activeWorktreeId: null,
+      assignWorktreeParent: vi.fn().mockResolvedValue(undefined)
+    },
+    enabled: false,
+    keys
+  }
+})
 
 const { rejectAppStoreAccess } = vi.hoisted(() => ({
   rejectAppStoreAccess: vi.fn(() => {

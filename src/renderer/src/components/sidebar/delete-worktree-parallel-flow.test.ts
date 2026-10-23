@@ -1,5 +1,4 @@
-import type { Worktree } from '../../../../shared/worktree/types'
-import { makeFolderWorkspace } from '../worktree-jump-palette-test-fixtures'
+import { makeFolderWorkspace, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import {
   getRegisteredWorktreeDeleteTarget,
@@ -17,14 +16,14 @@ const mocks = vi.hoisted(() => {
     activeWorktreeId: null,
     setActiveWorktree: vi.fn(),
     get worktreesByRepo() {
-      // SAFETY: partial target fixtures provide the identity/path fields read by this flow.
       return {
-        'repo-1': (state.worktreeRows as Worktree[]).filter((row) => !row.id.startsWith('folder:'))
+        'repo-1': state.worktreeRows
+          .filter((row) => !row.id.startsWith('folder:'))
+          .map((row) => makeWorktree(row.id, row.displayName, row))
       }
     },
     get repos() {
-      // SAFETY: targets supplied to this suite carry repo/host identity.
-      return (state.worktreeRows as Worktree[]).map((row) => ({
+      return state.worktreeRows.map((row) => ({
         id: row.repoId,
         executionHostId: row.hostId ?? 'local'
       }))
@@ -32,7 +31,7 @@ const mocks = vi.hoisted(() => {
     projectGroups: [],
     runtimeEnvironments: [],
     worktreeMap: new Map<string, unknown>(),
-    worktreeRows: [] as unknown[],
+    worktreeRows: new Array<Parameters<typeof runWorktreeDeletesInParallel>[0][number]>(),
     activeWorkspaceExecutionHostId: null as string | null,
     clearWorktreeDeleteState: vi.fn((worktreeId: string) => {
       delete state.deleteStateByWorktreeId[worktreeId]
