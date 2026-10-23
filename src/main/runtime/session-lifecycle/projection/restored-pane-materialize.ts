@@ -109,22 +109,29 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId?.[tabId]
         ?.scrollbackRefsByLeafId?.[leafId]
     const read = this.store?.readTerminalScrollbackSnapshotAsync
-    if (!ref || !read) {
+    // Why only WSL-moved panes: an ordinary pane's snapshot is its own window's to restore.
+    if (!ref || !read || this.store?.isWorkspaceImportedByWslMove?.(worktreeId) !== true) {
       return undefined
     }
     try {
+      const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
+      // Why never over SSH: the remote would be asked to reattach a session it never had.
+      if (workspace.connectionId !== null) {
+        return undefined
+      }
       const scrollback = await read.call(this.store, ref)
       if (!scrollback) {
         return undefined
       }
-      // Why the workspace folder: a cold restore starts the shell where the record says it was.
-      const folder =
-        cwd ?? (await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)).path
       return seedSessionFromStoredScrollback({
         historyDir: getDaemonHistoryDir(),
         worktreeId,
+        tabId,
+        leafId,
+        ref,
         scrollback,
-        cwd: folder
+        // Why the workspace folder: a cold restore starts the shell where the record says it was.
+        cwd: cwd ?? workspace.path
       })
     } catch {
       // Why: history is best effort; the pane still starts, only without what it showed before.

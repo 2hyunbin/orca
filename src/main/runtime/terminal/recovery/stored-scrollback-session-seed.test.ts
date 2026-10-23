@@ -1,8 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { HistoryReader } from '../../../daemon/history-reader'
+import { getHistorySessionDirName } from '../../../daemon/history-paths'
 import { seedSessionFromStoredScrollback } from './stored-scrollback-session-seed'
 
 const roots: string[] = []
@@ -13,21 +14,43 @@ afterEach(() => {
   }
 })
 
+function historyDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'orca-stored-scrollback-seed-'))
+  roots.push(dir)
+  return dir
+}
+
+const seed = (dir: string, scrollback = 'built ok\r\n$ ') => ({
+  historyDir: dir,
+  worktreeId: 'repo::/home/me/project',
+  tabId: 'tab-1',
+  leafId: 'leaf-1',
+  ref: 'v1-00000000000000000000000000000001',
+  scrollback,
+  cwd: '/home/me/project'
+})
+
 describe('seedSessionFromStoredScrollback', () => {
+  // Why through HistoryReader: it pins the legacy scrollback.bin restore this seed relies on.
   it('mints a session of the worktree that cold-restores the stored history', async () => {
-    const historyDir = mkdtempSync(join(tmpdir(), 'orca-stored-scrollback-seed-'))
-    roots.push(historyDir)
-    const sessionId = seedSessionFromStoredScrollback({
-      historyDir,
-      worktreeId: 'repo::/home/me/project',
-      scrollback: 'built ok\r\n$ ',
-      cwd: '/home/me/project'
-    })
+    const dir = historyDir()
+    const sessionId = seedSessionFromStoredScrollback(seed(dir))
     expect(sessionId.startsWith('repo::/home/me/project@@')).toBe(true)
-    const detected = await new HistoryReader(historyDir).detectColdRestoreState(sessionId)
-    expect(detected).toMatchObject({
+    expect(await new HistoryReader(dir).detectColdRestoreState(sessionId)).toMatchObject({
       status: 'restored',
       restoreInfo: { scrollbackAnsi: 'built ok\r\n$ ', cwd: '/home/me/project' }
+    })
+  })
+
+  it('reuses the pane session on a later start instead of replaying the old snapshot', async () => {
+    const dir = historyDir()
+    const first = seedSessionFromStoredScrollback(seed(dir))
+    // What the pane printed after its first start replaced the seeded history.
+    writeFileSync(join(dir, getHistorySessionDirName(first), 'scrollback.bin'), 'newer output\r\n')
+    const second = seedSessionFromStoredScrollback(seed(dir, 'stale snapshot\r\n'))
+    expect(second).toBe(first)
+    expect(await new HistoryReader(dir).detectColdRestoreState(second)).toMatchObject({
+      restoreInfo: { scrollbackAnsi: 'newer output\r\n' }
     })
   })
 })

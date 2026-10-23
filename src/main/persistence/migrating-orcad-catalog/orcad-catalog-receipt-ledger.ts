@@ -47,6 +47,20 @@ export function findOrcadMigrationImportReceipt(
     : undefined
 }
 
+/** Whether a committed WSL move (never an SSH conversion) brought this workspace's project here. */
+export function receiptsImportWorkspaceByWslMove(
+  receipts: readonly OrcadMigrationImportReceipt[],
+  workspaceId: string
+): boolean {
+  const repoId = workspaceId.split('::')[0]
+  return receipts.some(
+    (receipt) =>
+      'kind' in receipt.source &&
+      receipt.source.kind === 'local-wsl' &&
+      (receipt.repositoryIds.includes(repoId) || receipt.folderWorkspaceIds.includes(workspaceId))
+  )
+}
+
 /** Appends a receipt; one that ages out of the bounded list keeps its commit as a compact record. */
 export function recordOrcadMigrationImportReceipt(
   state: PersistedState,

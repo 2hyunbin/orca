@@ -6,6 +6,7 @@ import {
   expireOrcadMigrationStages,
   findOrcadMigrationImportReceipt,
   ORCAD_MIGRATION_STAGE_TTL_MS,
+  receiptsImportWorkspaceByWslMove,
   recordOrcadMigrationImportReceipt
 } from './orcad-catalog-receipt-ledger'
 
@@ -49,5 +50,34 @@ describe('orcad migration receipt ledger', () => {
     expect(expireOrcadMigrationStages(state, start + ORCAD_MIGRATION_STAGE_TTL_MS - 1)).toBe(false)
     expect(expireOrcadMigrationStages(state, start + ORCAD_MIGRATION_STAGE_TTL_MS)).toBe(true)
     expect(state.orcadMigrationStagedCatalogs).toEqual([])
+  })
+})
+
+describe('receiptsImportWorkspaceByWslMove', () => {
+  const wslSource = {
+    kind: 'local-wsl' as const,
+    distro: 'Ubuntu',
+    scopeRepoIds: ['repo-a'],
+    scopeFolderWorkspaceIds: ['folder-a'],
+    generation: 1
+  }
+
+  it('names the projects a WSL move imported', () => {
+    const { receipt } = receiptFor('wsl-move')
+    const wsl = {
+      ...receipt,
+      source: wslSource,
+      repositoryIds: ['repo-a'],
+      folderWorkspaceIds: ['folder-a']
+    }
+    expect(receiptsImportWorkspaceByWslMove([wsl], 'repo-a::/home/me/a')).toBe(true)
+    expect(receiptsImportWorkspaceByWslMove([wsl], 'folder-a')).toBe(true)
+    expect(receiptsImportWorkspaceByWslMove([wsl], 'repo-b::/home/me/b')).toBe(false)
+  })
+
+  it('never names a project an SSH conversion imported', () => {
+    const { receipt } = receiptFor('ssh-conversion')
+    const ssh = { ...receipt, repositoryIds: ['repo-a'] }
+    expect(receiptsImportWorkspaceByWslMove([ssh], 'repo-a::/home/me/a')).toBe(false)
   })
 })

@@ -70,6 +70,7 @@ export type RuntimeStore = {
   installPendingOrcadMigrationReceivedBlobs?: Store['installPendingOrcadMigrationReceivedBlobs']
   installDeferredOrcadMigrationShellHistory?: Store['installDeferredOrcadMigrationShellHistory']
   hasPendingOrcadMigrationShellHistory?: Store['hasPendingOrcadMigrationShellHistory']
+  isWorkspaceImportedByWslMove?: Store['isWorkspaceImportedByWslMove']
   peekOrcadMigrationTerminalRestoreHint?: Store['peekOrcadMigrationTerminalRestoreHint']
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']

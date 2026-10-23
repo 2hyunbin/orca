@@ -6,7 +6,8 @@ import { getHistoryRoot } from '../../terminal-history-paths'
 import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import {
   findOrcadMigrationImportReceipt,
-  isOrcadMigrationCommitDurable
+  isOrcadMigrationCommitDurable,
+  receiptsImportWorkspaceByWslMove
 } from './orcad-catalog-receipt-ledger'
 import { installOrcadMigrationReceivedBlobs } from './orcad-migration-blob-installers'
 import { listOrcadMigrationReceivedBlobNames } from './orcad-migration-blob-staging'
@@ -104,6 +105,14 @@ export class OrcadMigrationBlobInstallPersistence {
     if (runtime.deferredShellHistoryWorktreeIds.has(worktreeId)) {
       this.installPendingOrcadMigrationReceivedBlobs(options)
     }
+  }
+
+  /** Whether a committed WSL move brought this workspace's project here; SSH conversions never do. */
+  isWorkspaceImportedByWslMove(workspaceId: string): boolean {
+    return receiptsImportWorkspaceByWslMove(
+      this[orcadMigrationBlobInstallContext].runtime.state.orcadMigrationImportReceipts ?? [],
+      workspaceId
+    )
   }
 
   /** The moved pane's last folder while its hint is installed for this worktree; never removes it. */
