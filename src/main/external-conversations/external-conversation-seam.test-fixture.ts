@@ -1,5 +1,6 @@
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { OrchestrationDb } from '../runtime/orchestration/db/orchestration-db'
+import { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import { ExternalConversationSeam } from './external-conversation-seam'
 import type { SessionRows } from './external-conversation-session-capture'
 import { fakeLinkStore } from './external-conversation.test-fixture'
@@ -19,7 +20,7 @@ export function harness(
     new ExternalConversationSeam({
       store: records.store,
       readSettings: () => settings,
-      receiptDb: () => db,
+      receipts: new DeliveryReceipts(() => db),
       sessionRows,
       onWorkspaceRemoved: (listener) => {
         removed.add(listener)
