@@ -153,6 +153,9 @@ export function findLandedImagePreviewEchoes(
   messages: readonly NativeChatMessage[],
   entries: readonly PendingImagePreviewEcho[]
 ): LandedImagePreviewEcho[] {
+  if (!entries.some((entry) => entry.images?.length)) {
+    return []
+  }
   const normalized = normalizeImageTranscriptMessages(messages)
   const messageIndexById = new Map(normalized.map((message, index) => [message.id, index]))
   // Keep provenance from the raw transcript: normalization removes image markers,
@@ -225,6 +228,9 @@ export function findLandedUnconfirmedSends(
   messages: readonly NativeChatMessage[],
   entries: readonly UnconfirmedSend[]
 ): UnconfirmedSend[] {
+  if (entries.length === 0) {
+    return []
+  }
   // Why: pagination prepends old equal text; only unclaimed matches after each
   // captured tail prove new echoes. User turns are keyed by text; an image echo
   // (`[Image: source: …]` or no text) keys under '' so an empty-text send can

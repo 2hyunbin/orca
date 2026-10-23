@@ -23,6 +23,30 @@ function pending(id: string, images: string[], expectedOccurrence = 1): PendingI
 }
 
 describe('mobile native chat image preview reconciliation', () => {
+  it('leaves transcript rows unread when there are no eligible pending echoes', () => {
+    const blocks = userText('message', 'ordinary prompt').blocks
+    let blockReads = 0
+    const messages = Array.from({ length: 1024 }, (_, index): NativeChatMessage => ({
+      id: `message-${index}`,
+      role: 'user',
+      timestamp: null,
+      source: 'transcript',
+      get blocks() {
+        blockReads += 1
+        return blocks
+      }
+    }))
+    expect(findLandedImagePreviewEchoes(messages, [])).toEqual([])
+    expect(
+      findLandedImagePreviewEchoes(messages, [
+        { text: 'continue', id: 'text-only', expectedOccurrence: 1, baselineTailMessageId: null },
+        pending('empty-images', [])
+      ])
+    ).toEqual([])
+    expect(findLandedUnconfirmedSends(messages, [])).toEqual([])
+    expect(blockReads).toBe(0)
+  })
+
   it('reconciles a trailing-marker echo and hands its preview to that echo', () => {
     const messages = [
       userText('source', '[Image: source: /tmp/a.png]'),
