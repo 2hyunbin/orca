@@ -48,12 +48,14 @@ export class JournalTextPruner {
           (error: unknown) => this.failed(error)
         )
     })
+    const timer: unknown = this.scheduled
     if (
-      typeof this.scheduled === 'object' &&
-      'unref' in this.scheduled &&
-      typeof this.scheduled.unref === 'function'
+      typeof timer === 'object' &&
+      timer !== null &&
+      'unref' in timer &&
+      typeof timer.unref === 'function'
     ) {
-      this.scheduled.unref()
+      timer.unref()
     }
   }
 

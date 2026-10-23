@@ -76,8 +76,14 @@ export type AgentSessionDeltaCoalescer = {
 
 function defaultSchedule(run: () => void, ms: number): () => void {
   const timer = setTimeout(run, ms)
-  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
-    timer.unref()
+  const unrefable: unknown = timer
+  if (
+    typeof unrefable === 'object' &&
+    unrefable !== null &&
+    'unref' in unrefable &&
+    typeof unrefable.unref === 'function'
+  ) {
+    unrefable.unref()
   }
   return () => clearTimeout(timer)
 }
