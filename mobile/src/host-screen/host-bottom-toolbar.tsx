@@ -53,7 +53,7 @@ export function HostBottomToolbar({
           <Defs>
             <LinearGradient id={FADE_ID} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={colors.bgBase} stopOpacity={0} />
-              <Stop offset="1" stopColor={colors.bgBase} stopOpacity={1} />
+              <Stop offset="0.55" stopColor={colors.bgBase} stopOpacity={1} />
             </LinearGradient>
           </Defs>
           <Rect width="100%" height="100%" fill={`url(#${FADE_ID})`} />
@@ -64,6 +64,7 @@ export function HostBottomToolbar({
           <View>
             <IconButton
               icon={SlidersHorizontal}
+              variant="floating"
               iconSize={18}
               accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
               selected={controller.activeFilterCount > 0}
@@ -82,6 +83,7 @@ export function HostBottomToolbar({
                 onSearchActiveChange(false)
               }
             }}
+            floating
             placeholder="Search workspaces"
             accessibilityLabel="Search workspaces"
           />
@@ -89,6 +91,7 @@ export function HostBottomToolbar({
         {searchActive ? (
           <IconButton
             icon={X}
+            variant="floating"
             iconSize={18}
             accessibilityLabel="Close search"
             onPress={closeSearch}
@@ -113,7 +116,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingTop: spacing.xl,
+    paddingTop: 44,
     paddingHorizontal: spacing.md
   },
   fade: { ...StyleSheet.absoluteFillObject },

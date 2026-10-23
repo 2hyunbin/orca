@@ -1,9 +1,9 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { LucideIcon } from 'lucide-react-native'
-import { colors, MIN_TOUCH_TARGET, motion } from '../../theme/mobile-theme'
+import { colors, floatingSurface, MIN_TOUCH_TARGET, motion } from '../../theme/mobile-theme'
 import { pressTransition } from './transition-styles'
 
-type IconButtonVariant = 'filled' | 'primary' | 'bare'
+type IconButtonVariant = 'filled' | 'primary' | 'bare' | 'floating'
 
 type IconButtonProps = {
   icon: LucideIcon
@@ -21,7 +21,17 @@ type IconButtonProps = {
 
 const CIRCLE = 36
 
-/** A 44 pt touch box around a 36 pt circle; the soft fill is what makes an icon read as a button. */
+const VARIANT_FILLS: Record<IconButtonVariant, { fill: string; pressedFill: string }> = {
+  filled: { fill: colors.fill, pressedFill: colors.fillPressed },
+  primary: { fill: colors.primary, pressedFill: colors.primaryPressed },
+  bare: { fill: 'transparent', pressedFill: colors.fill },
+  floating: { fill: colors.bgRaised, pressedFill: colors.raisedPressed }
+}
+
+/**
+ * A 44 pt touch box around a 36 pt circle; the soft fill is what makes an icon read as a button.
+ * `floating` is opaque with an edge and shadow, for controls over scrolling content.
+ */
 export function IconButton({
   icon: Icon,
   accessibilityLabel,
@@ -34,14 +44,7 @@ export function IconButton({
   testID,
   style
 }: IconButtonProps) {
-  const fill =
-    variant === 'primary' ? colors.primary : variant === 'filled' ? colors.fill : 'transparent'
-  const pressedFill =
-    variant === 'primary'
-      ? colors.primaryPressed
-      : variant === 'filled'
-        ? colors.fillPressed
-        : colors.fill
+  const { fill, pressedFill } = VARIANT_FILLS[variant]
   return (
     <Pressable
       onPress={onPress}
@@ -56,6 +59,7 @@ export function IconButton({
         <View
           style={[
             styles.circle,
+            variant === 'floating' ? floatingSurface : null,
             { backgroundColor: pressed ? pressedFill : fill },
             pressed ? styles.pressed : null,
             pressed ? pressTransition.pressed : pressTransition.rest

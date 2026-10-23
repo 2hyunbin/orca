@@ -85,7 +85,21 @@ export const colors = {
   // Tinted notice surfaces for warning and error banners.
   warningFill: 'rgba(245, 158, 11, 0.1)',
   errorFill: 'rgba(255, 107, 107, 0.1)',
-  onDanger: '#ffffff'
+  onDanger: '#ffffff',
+  // A floating control pressed: one step above `bgRaised`.
+  raisedPressed: '#303030'
+} as const
+
+/** An opaque control floating over scrolling content, such as a bottom toolbar's capsules. */
+export const floatingSurface = {
+  backgroundColor: colors.bgRaised,
+  borderWidth: 1,
+  borderColor: colors.separator,
+  shadowColor: '#000',
+  shadowOpacity: 0.5,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 6 },
+  elevation: 6
 } as const
 
 /** On your own message's fill (`colors.textPrimary`), where the dark palette's light text would

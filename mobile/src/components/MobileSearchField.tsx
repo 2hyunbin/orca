@@ -9,7 +9,7 @@ import {
   type TextInputProps
 } from 'react-native'
 import { Search, X } from 'lucide-react-native'
-import { colors, radii, spacing, textStyles } from '../theme/mobile-theme'
+import { colors, floatingSurface, radii, spacing, textStyles } from '../theme/mobile-theme'
 import { TEXT_INPUT_FONT_SIZE } from '../platform/text-input-font-size'
 
 // Why: toolbar/list chrome paints and settles after the open tap; native
@@ -33,6 +33,8 @@ type MobileSearchFieldProps = {
   onFocus?: TextInputProps['onFocus']
   editable?: boolean
   accessibilityLabel?: string
+  /** Opaque, with an edge and shadow, for a field floating over scrolling content. */
+  floating?: boolean
 }
 
 /**
@@ -53,7 +55,8 @@ export function MobileSearchField({
   onBlur,
   onFocus,
   editable = true,
-  accessibilityLabel
+  accessibilityLabel,
+  floating = false
 }: MobileSearchFieldProps) {
   const inputRef = useRef<TextInput>(null)
   const [focused, setFocused] = useState(false)
@@ -95,7 +98,14 @@ export function MobileSearchField({
   }
 
   return (
-    <View style={[styles.shell, focused && styles.shellFocused, !editable && styles.shellDisabled]}>
+    <View
+      style={[
+        styles.shell,
+        floating && floatingSurface,
+        focused && styles.shellFocused,
+        !editable && styles.shellDisabled
+      ]}
+    >
       <Search
         size={16}
         color={focused ? colors.textSecondary : colors.textMuted}
