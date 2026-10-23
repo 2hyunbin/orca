@@ -66,8 +66,8 @@ function harness() {
   return {
     store,
     service,
-    run,
     resolve,
+    run,
     update: (next: AgentModelCatalogSuccess) => {
       now += 120001
       installed = next
@@ -111,7 +111,16 @@ describe('independent installed CLI discovery', () => {
       h.read('b', { waitForListing: true })
     ])
     expect(h.run).toHaveBeenCalledTimes(1)
-    expect(h.resolve.mock.calls.every((call) => call.length === 4)).toBe(true)
+    expect(h.resolve).toHaveBeenCalledWith(
+      HOME,
+      '/project',
+      'snapshot',
+      expect.objectContaining({
+        deadline: expect.any(Number),
+        current: expect.any(Function),
+        signal: expect.any(AbortSignal)
+      })
+    )
     expect(h.service.peek('a', true)).toBe(h.service.peek('b', true))
     expect(await h.read('b')).toMatchObject({
       models: [{ id: 'old', isDefault: true, defaultEffort: 'high' }]
@@ -253,7 +262,7 @@ it('prepares hydrated Auto evidence without discovery and shares it with another
   expect(probe.resolve).toHaveBeenCalledWith(
     HOME,
     '/project',
-    true,
+    'saved',
     expect.objectContaining({
       current: expect.any(Function),
       signal: expect.any(AbortSignal),

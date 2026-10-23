@@ -26,7 +26,6 @@ export function reportedCodexSessionOptions(
   const effort =
     session.options.get('effort') ??
     (model === session.reportedOptions.model ? session.reportedOptions.effort : undefined)
-  // The saved tier, which the next turn sends as-is.
   const serviceTier = session.options.get('serviceTier')
   return {
     model,

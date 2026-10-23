@@ -76,7 +76,7 @@ export async function readHostKeyTrustSources(
 }
 
 /** What host key verification reads from its connection attempt. */
-export type Ssh2HostKeyVerificationHost = {
+type Ssh2HostKeyVerificationHost = {
   target: SshTarget
   hostKeyResolved: SshResolvedConfig | null
   loadTrustSources: (sshGSuppressedSiteConfig: boolean) => Promise<HostKeyTrustSources>
@@ -86,7 +86,7 @@ export type Ssh2HostKeyVerificationHost = {
 }
 
 /** The denial this attempt's verifier recorded; local to one attempt so a stale one cannot leak. */
-export type Ssh2HostKeyVerdict = { rejection: HostKeyVerificationError | null }
+type Ssh2HostKeyVerdict = { rejection: HostKeyVerificationError | null }
 
 /** Installs the host verifier and key-type order on `config` before ssh2 dials. */
 export async function installSsh2HostKeyVerification(
@@ -192,6 +192,7 @@ export async function installSsh2HostKeyVerification(
   if (serverHostKeyOrder) {
     config.algorithms = {
       ...config.algorithms,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every name is drawn from ssh2's runtime DEFAULT_SERVER_HOST_KEY list (a subset of what it supports), which the @types/ssh2 literal union lags.
       serverHostKey: serverHostKeyOrder as NonNullable<
         NonNullable<ConnectConfig['algorithms']>['serverHostKey']
       >

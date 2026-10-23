@@ -121,7 +121,6 @@ describe('structured Codex session options', () => {
     expect(Object.fromEntries(restoredCodexSessionOptions({ serviceTier: 'priority' }))).toEqual({
       serviceTier: 'priority'
     })
-    // Fast on/off saved before tiers is not carried over.
     expect(Object.fromEntries(restoredCodexSessionOptions({ fastMode: 'true' }))).toEqual({})
   })
 

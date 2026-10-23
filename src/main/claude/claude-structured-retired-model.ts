@@ -8,8 +8,7 @@ import type {
   ClaudeStructuredSessionAdapterDeps
 } from './claude-structured-session-state'
 
-/** The launched model, once, when a root reply says it does not exist and the chat still has it
- *  picked: the live session stops holding it. Saved picks remain the user's. */
+/** Retire only a still-selected launch model after a root model_not_found reply; preserve saved picks. */
 export function retireClaudeLaunchedModel(
   session: Pick<ClaudeSession, 'launchedModel' | 'options' | 'retiredModel'>,
   message: Record<string, unknown>
@@ -29,9 +28,7 @@ export function retireClaudeLaunchedModel(
   return launched
 }
 
-/** Moves the live child to the CLI's account default (`set_model` with no model), which unlike a
- *  fresh launch ignores ANTHROPIC_MODEL and a settings `model`. A user's pick made meanwhile owns
- *  the model; a refused or unanswered reset changes nothing but the log. */
+/** Reset to the CLI account default, ignoring env/settings model; newer picks outrank reset bookkeeping. */
 export function resetClaudeRetiredModel(
   session: ClaudeSession,
   deps: Pick<ClaudeStructuredSessionAdapterDeps, 'requestTimeoutMs' | 'logger'>,

@@ -25,6 +25,7 @@ import type { PiRpcResolvedLaunch } from './rpc-launch-resolution'
 import type { StructuredAgentSessionProviderOpenResult } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import { PiRpcSessionStartup } from './rpc-session-startup'
+import { PiHistoryCapture, type PiHistoryCaptureDeps } from './rpc-history-capture'
 
 export type PiRpcConnection = Pick<
   JsonlRpcAgentConnection,
@@ -40,7 +41,7 @@ export type PiRpcConnection = Pick<
   | 'lastCloseResult'
   | 'onExit'
 >
-export type PiRpcSessionDeps = {
+export type PiRpcSessionDeps = PiHistoryCaptureDeps & {
   openConnection?: (
     launch: ProviderProcessLaunch,
     handlers: JsonlRpcAgentConnectionOptions
@@ -73,6 +74,7 @@ export class PiRpcSession {
     () => !this.requestedClose && !this.failedCause && !this.connection.closed
   )
   readonly startup: PiRpcSessionStartup
+  readonly history = PiHistoryCapture.forSession(this, () => this.deps)
   openedLink: AgentSessionProviderHandleLink | null = null
   requestedClose = false
   private publishedExit = false
@@ -119,6 +121,7 @@ export class PiRpcSession {
         ),
       settled: (id, outcome) => this.settle(id, outcome),
       idle: () => this.dialogs.cancelAll(),
+      turnEnded: () => this.history.turnEnded(),
       failed: (error) => this.fail(error),
       diagnostic: (error) =>
         deps.logger.warn('Pi context usage could not be read', {
@@ -186,6 +189,7 @@ export class PiRpcSession {
   async open(signal: AbortSignal): Promise<StructuredAgentSessionProviderOpenResult> {
     const result = await this.startup.run(this.resolvedLaunch, signal)
     this.openedLink = result.link ?? null
+    this.history.start(this.startup.historyAnchor)
     this.startup.reportAfterOpen(this.generation, result.reportedOptions)
     return result
   }

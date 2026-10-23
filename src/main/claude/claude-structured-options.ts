@@ -28,7 +28,6 @@ export function restoredClaudeStructuredSessionOptions(
   )
 }
 
-/** The keys `setClaudeStructuredOption` writes; a pick made at rest is checked against these. */
 const CLAUDE_STRUCTURED_OPTION_KEYS = new Set(['model', 'effort', 'fastMode'])
 
 export function isClaudeStructuredOptionKey(key: string): boolean {
@@ -119,7 +118,7 @@ export async function setClaudeStructuredOption(
         delete session.fastModeDisabledMutation
       }
     }
-    // Ahead of the fence checks: the child applied this write even if a newer one supersedes its bookkeeping.
+    // Notify the translator even if a newer write superseded this applied control.
     if (input.key === 'model' && input.value !== held) {
       session.translator?.modelMayHaveChanged()
     }

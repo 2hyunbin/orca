@@ -7,6 +7,10 @@ export type AgentModelCatalogResolvedProbe = {
   run: (signal?: AbortSignal) => Promise<AgentModelCatalogSuccess>
 }
 
+/** The shell env a resolution reads: the saved capture only, the current snapshot, or (the
+ *  default) that snapshot reread by a fresh shell run when it finds no program. */
+export type AgentModelCatalogLookup = 'saved' | 'snapshot' | 'recover'
+
 export type AgentModelCatalogProbe = ((
   accountHome: AgentSessionAccountHome,
   options?: {
@@ -23,7 +27,7 @@ export type AgentModelCatalogProbe = ((
   resolve?: (
     home: AgentSessionAccountHome,
     cwd: string,
-    savedOnly?: boolean,
+    lookup?: AgentModelCatalogLookup,
     operation?: StructuredAgentResolutionOperation
   ) => Promise<AgentModelCatalogResolvedProbe>
 }

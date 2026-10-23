@@ -54,7 +54,7 @@ function isGitHubRestrictedShellProbeSuccess(
 }
 
 /** What the probe reads from its connection; getters so each read sees the live attempt. */
-export type SystemSshProbeHost = {
+type SystemSshProbeHost = {
   target: SshTarget
   resolvedConfig: () => SshResolvedConfig | null
   isCurrentAttempt: () => boolean

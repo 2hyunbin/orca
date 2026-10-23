@@ -12,6 +12,7 @@ import type {
 import { agentModelCatalogScopeFingerprint } from './agent-model-catalog-fingerprint'
 import {
   independentAgentModelCatalog,
+  type AgentModelCatalogLookup,
   type AgentModelCatalogResolvedProbe
 } from './agent-model-catalog-discovery'
 import { sessionWorkspacePath } from './agent-model-catalog-workspace'
@@ -43,15 +44,18 @@ export async function resolveAgentModelCatalogScope(
   }
   const probe = deps.probes?.[params.agent]
   if (params.legacy) {
-    const resolved = params.savedOnly
-      ? null
-      : await probe?.resolveLegacy?.(home, operation).catch(() => null)
+    const fingerprint = agentModelCatalogScopeFingerprint(base, 'legacy-account')
+    // Only a listing runs the resolution, and it may wait on a shell rerun.
+    const resolved =
+      params.savedOnly || !deps.store.probeDue(fingerprint)
+        ? null
+        : await probe?.resolveLegacy?.(home, operation).catch(() => null)
     if (!current()) {
       return null
     }
     return {
       base,
-      fingerprint: agentModelCatalogScopeFingerprint(base, 'legacy-account'),
+      fingerprint,
       exact: false,
       ...(resolved ? { resolved } : {})
     }
@@ -66,16 +70,24 @@ export async function resolveAgentModelCatalogScope(
   if (!cwd) {
     return { base, fingerprint: base, exact: false }
   }
-  const resolution = params.savedOnly
-    ? probe?.resolve?.(home, cwd, true, operation)
-    : probe?.resolve?.(home, cwd, false, operation)
-  const resolved = await resolution?.catch(() => null)
+  const resolve = (lookup: AgentModelCatalogLookup) =>
+    probe?.resolve?.(home, cwd, lookup, operation).catch(() => null)
+  const scopeKey = (resolved: AgentModelCatalogResolvedProbe | null | undefined) =>
+    agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity)
+  let resolved = await resolve(params.savedOnly ? 'saved' : 'snapshot')
+  if (!current()) {
+    return null
+  }
+  // Only a read that will list waits on a shell rerun to find a newly installed CLI, a new scope.
+  if (!params.savedOnly && (!resolved || deps.store.probeDue(scopeKey(resolved)))) {
+    resolved = await resolve('recover')
+  }
   if (!current() || (probe?.resolve && !resolved)) {
     return null
   }
   return {
     base,
-    fingerprint: agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity),
+    fingerprint: scopeKey(resolved),
     exact: true,
     cwd,
     ...(resolved ? { resolved } : {})

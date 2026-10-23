@@ -10,11 +10,14 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import type { ClaudeSession } from './claude-structured-session-state'
-import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+import {
+  isAbortSignalReason,
+  throwIfSignalAborted,
+  waitForPromiseWithSignal
+} from '../../shared/abort-signal-reason'
 
 const defaultLogger = createStructuredAgentSessionLogger()
 
-/** Applies the accepted message's choices while its prompt is still in the SDK input queue. */
 export async function applyClaudeMessageOptions(
   session: ClaudeSession,
   options: AgentSessionExecutionOptions,
@@ -82,12 +85,13 @@ export async function dispatchClaudeMessage(
           error
         }
       )
-      throw error instanceof AgentSessionOptionRejectedError
+      throw error instanceof AgentSessionOptionRejectedError ||
+        isAbortSignalReason(input.signal, error)
         ? error
         : new AgentSessionOptionRejectedError(error)
     }
   })
-  // Always, even empty: the settings effort the CLI reports is never evidence of a run.
+  // Keep an explicit snapshot, even empty, to prevent fallback to configured choices.
   return outcome.state === 'accepted' || outcome.state === 'admitted'
     ? { ...outcome, ranOptions }
     : outcome
