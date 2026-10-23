@@ -61,10 +61,13 @@ function StructuredAgentSessionOwnedAttention({
   target: RuntimeClientTarget
 }): null {
   const feed = useMemo(() => getStructuredAgentSessionTurnCompletionFeed(target), [target])
+  const owner = useMemo(
+    () => getStructuredAgentSessionReadOwner(tab.entityId, target),
+    [tab.entityId, target]
+  )
   useEffect(() => feed.activate(), [feed])
   const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
   useEffect(() => {
-    const owner = getStructuredAgentSessionReadOwner(tab.entityId, target)
     const owed = new Map<string, AgentJournalCursor>()
     const observe = (): void => {
       const snapshot = owner.getSnapshot()
@@ -123,7 +126,7 @@ function StructuredAgentSessionOwnedAttention({
       stopEdges()
       owed.clear()
     }
-  }, [feed, tab.entityId, target])
+  }, [feed, owner, tab.entityId, target])
   const readFrontier = useRef<StructuredSubjectRead | undefined>(undefined)
   // Where the newest edge this tab was handed sits in the journal: what lit its row.
   const surfaced = useRef<AgentJournalCursor | undefined>(undefined)
