@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AGENT_SESSION_OUTLINE_PREVIEW_MAX_CHARS } from '../../../shared/agent-session-conversation-outline'
 import type {
   AgentJournalRenderItem,
@@ -33,9 +33,16 @@ function replyBytes(value: unknown): number {
 describe('conversation outline read', () => {
   it('echoes the journal position it is current through and cuts previews on the host', () => {
     const long = 'word '.repeat(200)
-    const outline = readAgentSessionConversationOutline(
-      snapshot([prompt(3, 'short'), prompt(9, long)])
-    )
+    const stringify = vi.spyOn(JSON, 'stringify')
+    let outline: ReturnType<typeof readAgentSessionConversationOutline>
+    let measured: unknown[]
+    try {
+      outline = readAgentSessionConversationOutline(snapshot([prompt(3, 'short'), prompt(9, long)]))
+      measured = stringify.mock.calls.map(([value]) => value)
+    } finally {
+      stringify.mockRestore()
+    }
+    expect(measured).toEqual(outline.entries)
     expect(outline.cursor).toEqual({ epoch: 'epoch-1', sequence: 9 })
     expect(outline.sessionId).toBe('session-1')
     expect(outline.omittedEntries).toBe(0)

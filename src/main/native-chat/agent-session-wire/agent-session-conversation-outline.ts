@@ -49,17 +49,19 @@ export function readAgentSessionConversationOutline(
 ): AgentSessionConversationOutline {
   const projected = projectAgentSessionConversationOutline(snapshot.items, snapshot.submissions)
   let entries = withPreviewCap(projected, AGENT_SESSION_OUTLINE_PREVIEW_MAX_CHARS)
-  if (totalBytes(entries) > budgetBytes) {
+  let total = totalBytes(entries)
+  if (total > budgetBytes) {
     entries = withoutReplies(entries)
+    total = totalBytes(entries)
   }
   for (const maxChars of [DEGRADED_PREVIEW_MAX_CHARS, 0]) {
-    if (totalBytes(entries) <= budgetBytes) {
+    if (total <= budgetBytes) {
       break
     }
     entries = withPreviewCap(entries, maxChars)
+    total = totalBytes(entries)
   }
   // Newest entries are kept: they are the ones a reader is likeliest to jump back to.
-  let total = totalBytes(entries)
   let first = 0
   while (total > budgetBytes && first < entries.length) {
     total -= entryBytes(entries[first])
