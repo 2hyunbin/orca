@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStore } from 'zustand/vanilla'
 import { createAppState } from './index'
-import { getAgentStatusOwner } from './agent-status-commit'
+import { getAgentStatusOwner, type AgentStatusTransaction } from './agent-status-commit'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import { assertEditorBufferInvariant } from './editor-buffer-record-lifecycle'
+import { getStructuredAgentSessionReadOwner } from '../components/native-chat/structured-agent-session-read-owner'
+import {
+  findStructuredAgentSessionReadOwner,
+  resetStructuredAgentSessionReadOwnersForTests
+} from '../components/native-chat/structured-agent-session-read-owner-registry'
 import { makeOpenFile } from './slices/store-session-test-harness'
 import { makeWorktree, TEST_REPO } from './slices/worktrees-slice-test-fixtures'
-import type { AgentStatusTransition } from './agent-status-observers'
+import type { AgentStatusReadState, AgentStatusTransition } from './agent-status-observers'
 
 const row = (paneKey: string, state: AgentStatusEntry['state'] = 'working'): AgentStatusEntry => ({
   paneKey,
@@ -18,7 +23,10 @@ const row = (paneKey: string, state: AgentStatusEntry['state'] = 'working'): Age
   stateHistory: []
 })
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  resetStructuredAgentSessionReadOwnersForTests()
+  vi.restoreAllMocks()
+})
 
 describe('real AppStore status commit boundary', () => {
   it.each([10, 100])(
@@ -64,6 +72,124 @@ describe('real AppStore status commit boundary', () => {
       expect(getAgentStatusOwner(createStore(createAppState)).getSnapshot()).toEqual({})
     }
   )
+
+  it.each([10, 100])('materializes one staged app view for a %i-row fold', (n) => {
+    for (const paired of [false, true]) {
+      const store = createStore(createAppState)
+      const owner = getAgentStatusOwner(store)
+      owner.transact((transaction) => {
+        for (let key = 0; key < n; key++) {
+          transaction.setEntry(String(key), row(String(key)))
+        }
+      })
+      const materializations = vi.fn(() => null)
+      Object.defineProperty(store.getState(), 'activeWorktreeId', {
+        enumerable: true,
+        configurable: true,
+        get: materializations
+      })
+      const pairs: AgentStatusTransition[] = []
+      if (paired) {
+        owner.subscribeTransitions((transition) => pairs.push(transition))
+      }
+      const app = vi.fn()
+      store.subscribe(app)
+      const reads: AgentStatusReadState[] = []
+      owner.transact((transaction) => {
+        for (let key = 0; key < n; key++) {
+          const view = transaction.getState()
+          reads.push(view)
+          const current = view.agentStatusByPaneKey[String(key)]
+          transaction.setEntry(String(key), { ...current, prompt: 'folded' })
+        }
+      })
+      expect(materializations).toHaveBeenCalledTimes(paired ? 3 : 1)
+      expect(new Set(reads).size).toBe(1)
+      expect(app).not.toHaveBeenCalled()
+      if (paired) {
+        expect(pairs[0].previous.agentStatusByPaneKey['0'].prompt).toBe('task')
+        expect(pairs[0].next.agentStatusByPaneKey['0'].prompt).toBe('folded')
+      }
+      materializations.mockClear()
+      store.setState({ activeWorktreeId: 'next' })
+      expect(materializations).toHaveBeenCalledTimes(1)
+    }
+  })
+
+  it('installs prepared reader retirement before observers and disposes only captured readers', () => {
+    const store = createStore(createAppState)
+    const owner = getAgentStatusOwner(store)
+    const session = 'status-boundary-reader'
+    const target = { kind: 'local' } as const
+    const reader = getStructuredAgentSessionReadOwner(session, target)
+    const dispose = vi.spyOn(reader, 'dispose')
+    store.setState({
+      unifiedTabsByWorktree: {
+        wt: [
+          {
+            id: 'chat',
+            entityId: session,
+            groupId: 'g',
+            worktreeId: 'wt',
+            executionHostId: 'local',
+            contentType: 'agent-session',
+            label: 'Chat',
+            customLabel: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      }
+    })
+    owner.transact((transaction) => transaction.setEntry('p', row('p')))
+    const previous = store.getState()
+    const statuses = owner.getSnapshot()
+    const prepareRemoval = (transaction: AgentStatusTransaction): void => {
+      transaction.retireReadOwner(session, target)
+      transaction.setEntry('p', undefined)
+      store.setState({ unifiedTabsByWorktree: { wt: [] } })
+    }
+    expect(() =>
+      owner.transact((transaction) => {
+        prepareRemoval(transaction)
+        expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
+        throw new Error('abort retirement')
+      })
+    ).toThrow('abort retirement')
+    expect(store.getState()).toBe(previous)
+    expect(owner.getSnapshot()).toBe(statuses)
+    expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
+    expect(dispose).not.toHaveBeenCalled()
+    const observed: unknown[] = []
+    const app = vi.fn(() => {
+      observed.push([
+        store.getState().unifiedTabsByWorktree.wt,
+        owner.getEntry('p'),
+        findStructuredAgentSessionReadOwner(session, target),
+        dispose.mock.calls.length
+      ])
+      getStructuredAgentSessionReadOwner(session, target)
+    })
+    const stop = store.subscribe(app)
+    owner.transact(prepareRemoval)
+    expect(observed).toEqual([[[], undefined, undefined, 0]])
+    expect(dispose).toHaveBeenCalledTimes(1)
+    const replacement = findStructuredAgentSessionReadOwner(session, target)
+    expect(replacement).toBeDefined()
+    expect(replacement).not.toBe(reader)
+    stop()
+    const acceptedApp = store.getState()
+    const acceptedStatus = owner.getSnapshot()
+    const point = vi.fn()
+    owner.subscribeEntry('p', point)
+    owner.transact((transaction) => transaction.retireReadOwner(session, target))
+    expect(findStructuredAgentSessionReadOwner(session, target)).toBeUndefined()
+    expect(store.getState()).toBe(acceptedApp)
+    expect(owner.getSnapshot()).toBe(acceptedStatus)
+    expect(app).toHaveBeenCalledTimes(1)
+    expect(point).not.toHaveBeenCalled()
+  })
 
   it('keeps ordinary app recursion and captures completion before synchronous removal', () => {
     const store = createStore(createAppState)

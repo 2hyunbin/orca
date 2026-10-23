@@ -1,6 +1,11 @@
 import type { StateCreator, StoreApi } from 'zustand'
 import { shallow } from 'zustand/vanilla/shallow'
 import type { AppState } from './types'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import {
+  prepareStructuredReadRetirement,
+  installStructuredReadRetirement
+} from '../components/native-chat/structured-agent-session-read-owner-registry'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import type { StoreSetArgs } from './react-commit-cascade-write-probe'
 import {
@@ -16,9 +21,12 @@ type StatusStage = {
   draft: Record<string, AgentStatusEntry> | null
   dirty: Set<string>
   effects: (() => void)[]
+  readRetirement: ReturnType<typeof prepareStructuredReadRetirement> | null
+  read: { app: AppState; view: AgentStatusReadState } | null
 }
 export type AgentStatusTransaction = {
   getState: () => AgentStatusReadState
+  retireReadOwner: (sessionId: string, target: RuntimeClientTarget) => void
   setEntry: (paneKey: string, entry: AgentStatusEntry | undefined) => void
   afterCommit: (effect: () => void) => void
 }
@@ -50,10 +58,20 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
   let appDepth = 0
   let coordinatedDepth = 0
   let appFrame: { live: AgentStatusSnapshot } | null = null
-  const joined = (app: AppState, statuses: AgentStatusSnapshot): AgentStatusReadState => ({
-    ...app,
-    agentStatusByPaneKey: statuses
-  })
+  const views = new WeakMap<AppState, WeakMap<AgentStatusSnapshot, AgentStatusReadState>>()
+  const joined = (app: AppState, statuses: AgentStatusSnapshot): AgentStatusReadState => {
+    let byStatus = views.get(app)
+    if (!byStatus) {
+      byStatus = new WeakMap()
+      views.set(app, byStatus)
+    }
+    let view = byStatus.get(statuses)
+    if (!view) {
+      view = { ...app, agentStatusByPaneKey: statuses }
+      byStatus.set(statuses, view)
+    }
+    return view
+  }
   const afterCommit = (effect: () => void): void => {
     if (stage) {
       stage.effects.push(effect)
@@ -62,8 +80,35 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
     }
   }
   const transaction: AgentStatusTransaction = {
-    getState: () => joined(stage?.app ?? get(), stage?.draft ?? stage?.live ?? live),
+    getState: () => {
+      if (!stage) {
+        return joined(get(), live)
+      }
+      const prepared = stage
+      if (prepared.read?.app !== prepared.app) {
+        prepared.read = {
+          app: prepared.app,
+          view: {
+            ...prepared.app,
+            get agentStatusByPaneKey() {
+              return prepared.draft ?? prepared.live
+            }
+          }
+        }
+      }
+      return prepared.read.view
+    },
     afterCommit,
+    retireReadOwner(sessionId, target) {
+      if (!stage) {
+        throw new Error('Reader retirement requires a transaction')
+      }
+      stage.readRetirement = prepareStructuredReadRetirement(
+        stage.readRetirement,
+        sessionId,
+        target
+      )
+    },
     setEntry(paneKey, entry) {
       if (!stage) {
         throw new Error('Live status writes require a transaction')
@@ -125,9 +170,11 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       if (install?.app === app) {
         install.accept()
       } else {
+        const previousLive = appFrame?.live ?? live
+        const nextLive = live
         observers.prepare(
-          joined(previous, appFrame?.live ?? live),
-          joined(app, live),
+          () => joined(previous, previousLive),
+          () => joined(app, nextLive),
           new Set(),
           []
         )()
@@ -144,7 +191,9 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
         live,
         draft: null,
         dirty: new Set(),
-        effects: []
+        effects: [],
+        read: null,
+        readRetirement: null
       }
       stage = prepared
       let result: Result
@@ -159,19 +208,30 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
           }
         }
         const nextLive = prepared.dirty.size > 0 ? (prepared.draft ?? live) : live
-        const accept = observers.prepare(
-          joined(previous, previousLive),
-          joined(prepared.app, nextLive),
-          prepared.dirty,
-          prepared.effects
-        )
+        if (prepared.readRetirement) {
+          prepared.effects.push(...prepared.readRetirement.effects)
+        }
         stage = null
-        if (prepared.app !== previous || nextLive !== live || prepared.effects.length > 0) {
+        if (
+          prepared.app !== previous ||
+          nextLive !== live ||
+          prepared.readRetirement ||
+          prepared.effects.length > 0
+        ) {
+          const accept = observers.prepare(
+            () => joined(previous, previousLive),
+            () => joined(prepared.app, nextLive),
+            prepared.dirty,
+            prepared.effects
+          )
           coordinatedDepth++
           try {
             const install = prepared.app !== previous ? { app: prepared.app, accept } : null
             pending = install
             live = nextLive
+            if (prepared.readRetirement) {
+              installStructuredReadRetirement(prepared.readRetirement)
+            }
             if (install) {
               appDepth++
               try {

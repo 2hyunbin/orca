@@ -71,8 +71,8 @@ export function createAgentStatusObservers() {
       }
     },
     prepare(
-      previous: AgentStatusReadState,
-      next: AgentStatusReadState,
+      previous: () => AgentStatusReadState,
+      next: () => AgentStatusReadState,
       changedKeys: ReadonlySet<string>,
       effects: readonly (() => void)[]
     ): () => void {
@@ -82,7 +82,8 @@ export function createAgentStatusObservers() {
         (subscription) =>
           subscription.paneKey === undefined || changedKeys.has(subscription.paneKey)
       )
-      const transition: AgentStatusTransition = { sequence: 0, previous, next, changedKeys }
+      const transition: AgentStatusTransition | null =
+        paired.length > 0 ? { sequence: 0, previous: previous(), next: next(), changedKeys } : null
       const deliver = (): void => {
         for (const subscription of [...points, ...aggregate]) {
           if (subscription.active) {
@@ -90,7 +91,7 @@ export function createAgentStatusObservers() {
           }
         }
         for (const subscription of paired) {
-          if (subscription.active) {
+          if (subscription.active && transition) {
             call(() => subscription.listener(transition))
           }
         }
@@ -99,8 +100,13 @@ export function createAgentStatusObservers() {
         }
       }
       return () => {
-        transition.sequence = ++sequence
-        queue.push(deliver)
+        sequence++
+        if (transition) {
+          transition.sequence = sequence
+        }
+        if (points.length + aggregate.length + paired.length + effects.length > 0) {
+          queue.push(deliver)
+        }
       }
     },
     drain(): void {
