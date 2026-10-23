@@ -35,11 +35,6 @@ type ClickedFileLink = FileLinkTarget & {
   cachedExists: boolean | undefined
 }
 
-type ProbedFileLink = { link: ClickedFileLink } & (
-  | { exists: boolean }
-  | { exists?: undefined; error: unknown }
-)
-
 // Why: a slow probe from an earlier click must not open its file after a later click.
 let latestClickGesture = 0
 
@@ -78,10 +73,16 @@ export function openFilePathLinkAtBufferPosition(
 
   const open = (link: ClickedFileLink): void => {
     const { onOpenFailure } = deps
+    // Why: a bare dotted word (`console.log`, `example.com`) is not a claim that a file exists.
+    const reportsFailure =
+      onOpenFailure &&
+      (link.cachedExists === true || link.isKnownWorktreeRoot || /[\\/]/.test(link.pathText))
     openDetectedFilePath(link.absolutePath, link.line, link.column, {
       ...deps,
       openWithSystemDefault: deps.openWithSystemDefault === true,
-      onOpenFailure: onOpenFailure && ((failure) => onOpenFailure(link.absolutePath, failure))
+      onOpenFailure: reportsFailure
+        ? (failure) => onOpenFailure(link.absolutePath, failure)
+        : undefined
     })
   }
   const known =
@@ -106,42 +107,33 @@ export function openFilePathLinkAtBufferPosition(
 
   // Why: hard-wrap joining offers guesses like `a.txt/b.txt` that sort first; opening one
   // before its hover probe answers (a host round-trip) fails and hides the real path.
-  void probeClickedFileLinks(unprobed, deps).then((probed) => {
+  void probeClickedFileLinks(unprobed, deps).then((existing) => {
     if (gesture !== latestClickGesture) {
       return
     }
-    const existing = longestPath(probed.flatMap((row) => (row.exists ? [row.link] : [])))
-    if (existing) {
-      open(existing)
-      return
-    }
-    // Why the shortest: a joined guess is longer than the path the user actually sees.
-    const shown = probed.reduce((a, b) => (b.link.pathText.length < a.link.pathText.length ? b : a))
-    deps.onOpenFailure?.(
-      shown.link.absolutePath,
-      shown.exists === false
-        ? { verdict: 'missing', error: new Error(`${shown.link.absolutePath} was not found`) }
-        : { verdict: 'unverifiable', error: 'error' in shown ? shown.error : undefined }
+    // Why the shortest otherwise: it is the path the user sees, and opening it lets the open
+    // report the real failure instead of this probe guessing "missing" for a refusal.
+    open(
+      longestPath(existing) ??
+        unprobed.reduce((a, b) => (b.pathText.length < a.pathText.length ? b : a))
     )
   })
   return true
 }
 
-function probeClickedFileLinks(
+async function probeClickedFileLinks(
   links: ClickedFileLink[],
   deps: FileLinkHitTestDeps
-): Promise<ProbedFileLink[]> {
+): Promise<ClickedFileLink[]> {
   const pathExists = createTerminalPathExistenceBatch()
   const cache = deps.pathExistsCache ?? new Map<string, boolean>()
-  return Promise.all(
+  const exists = await Promise.all(
     links.map((link) =>
-      fileLinkTargetExists(link, cache, pathExists, deps.terminalHandle).then(
-        (exists): ProbedFileLink => ({ link, exists }),
-        // Why: a guess the host cannot answer (older hosts reject ENOTDIR) must not hide a sibling.
-        (error: unknown): ProbedFileLink => ({ link, error })
-      )
+      // Why: a guess the host cannot answer (older hosts reject ENOTDIR) must not hide a sibling.
+      fileLinkTargetExists(link, cache, pathExists, deps.terminalHandle).catch(() => false)
     )
   )
+  return links.filter((_, index) => exists[index])
 }
 
 function longestPath(links: ClickedFileLink[]): ClickedFileLink | undefined {

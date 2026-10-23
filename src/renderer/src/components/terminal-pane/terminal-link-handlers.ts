@@ -30,7 +30,7 @@ import { isTerminalLinkDirectActivation } from './terminal-link-activation'
 import { getTerminalBufferPositionForMouseEvent } from './terminal-mouse-buffer-position'
 import type { TerminalLinkActionContext } from './terminal-link-action-request'
 import { handleTerminalFileLink } from './terminal-file-link-actions'
-import { showFileLinkOpenFailureToast } from '@/components/native-chat/native-chat-file-link-toasts'
+import { showFileLinkOpenFailureToast } from '@/lib/file-link-open-failure-toast'
 
 export { openDetectedFilePath } from './terminal-file-open-routing'
 export { mapTerminalFilePath } from './terminal-file-open-routing'

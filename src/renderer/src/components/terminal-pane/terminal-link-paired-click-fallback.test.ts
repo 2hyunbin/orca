@@ -36,18 +36,27 @@ const BUFFER = makeBuffer([
   makeBufferLine('/srv/repo/c.txt')
 ])
 
-function hostAnswers(
-  answer: (relativePath: string) => { exists: boolean } | { error: string }
-): void {
-  runtimeEnvironmentCallMock.mockImplementation(async (args) => ({
-    id: 'rpc-1',
-    ok: true,
-    result:
-      args.method === 'files.pathsExist'
-        ? args.params.relativePaths.map(answer)
-        : { size: 1, isDirectory: false, mtime: 1 },
-    _meta: { runtimeId: 'remote-runtime' }
-  }))
+type HostAnswer = { exists: boolean } | { error: string }
+
+/** The host answers both the batched probe and the open's stat from one table. */
+function hostAnswers(answer: (relativePath: string) => HostAnswer): void {
+  runtimeEnvironmentCallMock.mockImplementation(async (args) => {
+    const meta = { runtimeId: 'remote-runtime' }
+    if (args.method === 'files.pathsExist') {
+      return { id: 'rpc-1', ok: true, result: args.params.relativePaths.map(answer), _meta: meta }
+    }
+    const row = answer(args.params.relativePath)
+    if ('exists' in row && row.exists) {
+      return {
+        id: 'rpc-1',
+        ok: true,
+        result: { size: 1, isDirectory: false, mtime: 1 },
+        _meta: meta
+      }
+    }
+    const message = 'error' in row ? row.error : 'ENOENT: no such file or directory'
+    return { id: 'rpc-1', ok: false, error: { code: 'runtime_error', message }, _meta: meta }
+  })
 }
 
 function clickFirstPath(onOpenFailure = vi.fn()): boolean {
@@ -132,5 +141,33 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
 
     expect(statMock).toHaveBeenCalledTimes(1)
     expect(statMock).toHaveBeenCalledWith({ filePath: '/repo/package.json' })
+  })
+
+  it('reports a missing path but stays quiet for a bare dotted word', async () => {
+    setPlatform('Macintosh')
+    statMock.mockRejectedValue(new Error('ENOENT: no such file'))
+    const onOpenFailure = vi.fn()
+    const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo', onOpenFailure }
+
+    openFilePathLinkAtBufferPosition(
+      makeBuffer([makeBufferLine('console.log')]),
+      { x: 4, y: 1 },
+      80,
+      deps
+    )
+    await flushAsyncWork()
+    expect(onOpenFailure).not.toHaveBeenCalled()
+
+    openFilePathLinkAtBufferPosition(
+      makeBuffer([makeBufferLine('src/gone.ts')]),
+      { x: 4, y: 1 },
+      80,
+      deps
+    )
+    await flushAsyncWork()
+    expect(onOpenFailure).toHaveBeenCalledWith(
+      '/repo/src/gone.ts',
+      expect.objectContaining({ verdict: 'missing' })
+    )
   })
 })
