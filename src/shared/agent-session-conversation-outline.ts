@@ -66,7 +66,7 @@ export function nativeChatUserMessagePreview(
   }
   const content = deriveNativeChatRowContent(blocks)
   const preview = {
-    text: content.markdown.replace(/\s+/g, ' ').trim(),
+    text: userMessagePreviewText(content.markdown),
     imageCount: content.prose.filter((block) => block.type === 'image-ref').length
   }
   previews.set(blocks, preview)
@@ -244,4 +244,38 @@ export function projectAgentSessionConversationOutline(
     })
   }
   return entries
+}
+
+function userMessagePreviewText(text: string): string {
+  if (text.length <= 64 * 1024) {
+    return text.replace(/\s+/g, ' ').trim()
+  }
+  const whitespace = /\s+/g
+  let match = whitespace.exec(text)
+  if (match === null) {
+    return text
+  }
+  let prefix = ''
+  let copiedThrough = 0
+  let count = 0
+  while (match !== null && count < 256) {
+    prefix += `${text.slice(copiedThrough, match.index)} `
+    copiedThrough = match.index + match[0].length
+    count += 1
+    match = whitespace.exec(text)
+  }
+  if (match === null) {
+    return (prefix + text.slice(copiedThrough)).trim()
+  }
+  const chunks: string[] = [prefix]
+  let endedWithSpace = true
+  for (let start = copiedThrough; start < text.length; start += 64 * 1024) {
+    const normalized = text
+      .slice(start, start + 64 * 1024)
+      .split(/\s+/)
+      .join(' ')
+    chunks.push(endedWithSpace && normalized.startsWith(' ') ? normalized.slice(1) : normalized)
+    endedWithSpace = normalized.endsWith(' ')
+  }
+  return chunks.join('').trim()
 }
