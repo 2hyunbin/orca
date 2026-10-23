@@ -71,7 +71,6 @@ describe('DaemonSessionOwnerResolver', () => {
       )
     }
 
-    await Promise.resolve()
     expect(fallbackInventory).toHaveBeenCalledOnce()
     expect(currentInventory).toHaveBeenCalledOnce()
     expect(legacyInventory).toHaveBeenCalledOnce()
@@ -236,7 +235,6 @@ describe('DaemonSessionOwnerResolver', () => {
     owner.killFenced = vi.fn(async () => ({ outcome: 'ended' as const }))
     const resolver = new DaemonSessionOwnerResolver([owner], new Map())
     const oldInventory = resolver.resolve('unrelated')
-    await Promise.resolve()
     resolver.recordRoute('new-session', owner, 'new')
     const request = {
       id: 'new-session',
@@ -266,7 +264,6 @@ describe('DaemonSessionOwnerResolver', () => {
     owner.killFenced = vi.fn(async () => ({ outcome: 'ended' as const }))
     const resolver = new DaemonSessionOwnerResolver([owner], new Map())
     const oldInventory = resolver.resolve('unrelated')
-    await Promise.resolve()
     resolver.recordRoute('new-session', owner)
     const request = {
       id: 'new-session',
@@ -732,7 +729,6 @@ describe('DaemonSessionOwnerResolver', () => {
     } as const
 
     const staleAttempt = resolver.spawnAttachOnly(attach)
-    await Promise.resolve()
     expect(currentInventory).toHaveBeenCalledOnce()
     expect(legacyInventory).toHaveBeenCalledOnce()
     resolver.invalidateProvider(current)

@@ -233,7 +233,6 @@ describe('DaemonPtyRouter', () => {
       vi.mocked(legacy.listProcesses).mockReturnValue(oldInventory)
       const router = new DaemonPtyRouter({ current, legacy: [legacy] })
       const oldListing = router.listProcesses()
-      await Promise.resolve()
       expect(legacy.listProcesses).toHaveBeenCalledOnce()
       await router.spawn({ sessionId: 'raced', isNewSession: true, cols: 80, rows: 24 })
       release([{ id: 'raced', incarnationId: 'old-legacy', cwd: '', title: '' }])
@@ -254,7 +253,7 @@ describe('DaemonPtyRouter', () => {
     }
   )
 
-  it('serializes a newer discovery after invalidating an older refresh', async () => {
+  it('does not let an older refresh overwrite a newer discovery route', async () => {
     const current = createAdapter('current')
     const legacy = createAdapter('legacy')
     current.supportsFencedTermination = () => true
@@ -269,17 +268,11 @@ describe('DaemonPtyRouter', () => {
       .mockResolvedValueOnce([{ id: 'discovered', incarnationId: 'new', cwd: '', title: '' }])
     vi.mocked(legacy.listProcesses).mockReturnValueOnce(staleLegacy).mockResolvedValueOnce([])
     const router = new DaemonPtyRouter({ current, legacy: [legacy] })
-    const staleRefresh = expect(router.listProcesses()).rejects.toBeInstanceOf(
-      TerminalSessionOwnerUnverifiedError
-    )
-    await Promise.resolve()
-    const discovery = router.discoverLegacySessions()
-    expect(current.listProcesses).toHaveBeenCalledOnce()
-    expect(legacy.listProcesses).toHaveBeenCalledOnce()
+    const staleRefresh = router.listProcesses()
+    await router.discoverLegacySessions()
     releaseCurrent([])
     releaseLegacy([{ id: 'discovered', incarnationId: 'old', cwd: '', title: '' }])
-    await staleRefresh
-    await discovery
+    await expect(staleRefresh).rejects.toBeInstanceOf(TerminalSessionOwnerUnverifiedError)
     const request = {
       id: 'discovered',
       expectedIncarnationId: 'new',

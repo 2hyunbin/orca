@@ -1,5 +1,3 @@
-export const DAEMON_DEFAULT_REQUEST_TIMEOUT_MS = 30_000
-
 export function remainingDaemonRequestTimeoutMs(
   deadlineMs: number | undefined
 ): number | undefined {

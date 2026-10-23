@@ -102,20 +102,6 @@ function selectInventoryOwner<T>(
     : undefined
 }
 
-export function findDaemonInventoryOwner<T extends IPtyProvider>(
-  inventory: OwnerInventory<T>,
-  sessionId: string,
-  expectedIncarnationId?: string,
-  expectedIncarnationIsAuthoritative = false
-): OwnerCandidate<T> | undefined {
-  return selectInventoryOwner(
-    inventory.candidatesBySessionId.get(sessionId) ?? [],
-    inventory.complete,
-    expectedIncarnationId,
-    expectedIncarnationIsAuthoritative
-  )
-}
-
 export function resolveDaemonInventoryOwner<T extends IPtyProvider>(
   inventory: OwnerInventory<T>,
   sessionId: string,
@@ -125,9 +111,9 @@ export function resolveDaemonInventoryOwner<T extends IPtyProvider>(
   expectedIncarnationIsAuthoritative = false
 ): DaemonSessionOwnerResolution<T> {
   const candidates = inventory.candidatesBySessionId.get(sessionId) ?? []
-  const owner = findDaemonInventoryOwner(
-    inventory,
-    sessionId,
+  const owner = selectInventoryOwner(
+    candidates,
+    inventory.complete,
     expectedIncarnationId,
     expectedIncarnationIsAuthoritative
   )
