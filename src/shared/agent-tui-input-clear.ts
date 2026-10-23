@@ -1,3 +1,5 @@
+import { countTextLines } from './text-line-count'
+
 // Clearing an agent TUI's input buffer when it may hold MORE THAN ONE line.
 //
 // Shared by desktop native chat and mobile: the law below is a property of the
@@ -36,7 +38,7 @@ export const AGENT_TUI_CLEAR_INPUT_MAX = buildAgentTuiClearInput(AGENT_TUI_CLEAR
 
 /** Logical lines in `text`. Visual wrapping is irrelevant to the clear cost. */
 export function countAgentTuiInputLines(text: string): number {
-  return text.split(/\r\n|\r|\n/).length
+  return countTextLines(text)
 }
 
 /** Clear bytes for a buffer believed to hold `text`, with slack for TUI-side edits. */

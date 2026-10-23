@@ -50,11 +50,15 @@ describe('buildAgentTuiClearInput', () => {
 
 describe('countAgentTuiInputLines', () => {
   it.each([
+    ['', 1],
     ['one line', 1],
     ['a\nb', 2],
     ['a\r\nb\r\nc', 3],
     ['a\rb', 2],
-    ['trailing\n', 2]
+    ['trailing\n', 2],
+    ['\r\r\n\n', 4],
+    ['a\u2028b\u2029c', 1],
+    ['😊\r\n\ud800', 2]
   ])('counts %j as %i logical lines', (text, expected) => {
     expect(countAgentTuiInputLines(text)).toBe(expected)
   })
