@@ -12,7 +12,6 @@ export async function reclaimWorktreeSpace({
   acquireLock = lock,
   commonDirectory,
   testsStopped = false,
-  worktreesStopped = false,
   generatedMinAgeDays = 30,
   excludeWorktree,
   releaseCacheMinAgeDays = 30
@@ -56,7 +55,7 @@ export async function reclaimWorktreeSpace({
     if (!automatic && testsStopped) {
       scripts.unshift('reclaim-release-test-caches.mjs')
     }
-    if (!automatic && worktreesStopped) {
+    if (!automatic) {
       scripts.push('reclaim-worktree-generated-files.mjs')
     }
     for (const script of scripts) {
@@ -75,7 +74,7 @@ export async function reclaimWorktreeSpace({
         }
       }
       if (script === 'reclaim-worktree-generated-files.mjs') {
-        args.push('--worktrees-stopped', '--generated-min-age-days', String(generatedMinAgeDays))
+        args.push('--generated-min-age-days', String(generatedMinAgeDays))
       }
       const result = await execute({
         program: process.execPath,

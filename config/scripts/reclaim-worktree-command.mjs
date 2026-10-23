@@ -12,8 +12,6 @@ export function parseReclaimArguments(args) {
       options.automatic = true
     } else if (argument === '--tests-stopped') {
       options.testsStopped = true
-    } else if (argument === '--worktrees-stopped') {
-      options.worktreesStopped = true
     } else if (argument === '--help' || argument === '-h') {
       options.help = true
     } else if (
@@ -52,7 +50,7 @@ export async function runReclaimCommand(
   const options = parseReclaimArguments(args)
   if (options.help) {
     output.write(
-      'Usage: pnpm reclaim-space [--apply] [--repo DIRECTORY] [--tests-stopped] [--release-cache-min-age-days 30] [--worktrees-stopped] [--generated-min-age-days 30]\n'
+      'Usage: pnpm reclaim-space [--apply] [--repo DIRECTORY] [--tests-stopped] [--release-cache-min-age-days 30] [--generated-min-age-days 30]\n'
     )
     output.write(
       'Shares Electron installs and removes idle dev bundles and Vite caches unused for 30 days across local Git worktrees.\n'
@@ -62,7 +60,7 @@ export async function runReclaimCommand(
       'Add --tests-stopped to include old test caches after stopping cross-version tests.\n'
     )
     output.write(
-      'Add --worktrees-stopped to remove old ignored dependencies and build output in sibling worktrees after stopping their apps, agents, builds and tests. Shared pnpm stores are retained.\n'
+      'Manual cleanup includes old ignored dependencies and build output in sibling worktrees. Stop their apps, agents, installs, builds and tests before applying. Shared pnpm stores are retained.\n'
     )
     return
   }
@@ -71,9 +69,9 @@ export async function runReclaimCommand(
       'Historical test caches retained. Add --tests-stopped after stopping cross-version tests to include them.\n'
     )
   }
-  if (!options.worktreesStopped && !options.automatic) {
+  if (!options.automatic) {
     output.write(
-      'Dependency installs and build output retained. Add --worktrees-stopped after stopping work in sibling worktrees to include old generated files.\n'
+      'Manual cleanup includes old dependency installs and build output in sibling worktrees. Stop their apps, agents, installs, builds and tests before applying.\n'
     )
   }
   await reclaim(options)

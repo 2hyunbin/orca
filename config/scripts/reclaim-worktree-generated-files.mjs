@@ -114,7 +114,6 @@ export async function reclaimWorktreeGeneratedFiles({
   repoRoot = process.cwd(),
   apply = false,
   automatic = false,
-  worktreesStopped = false,
   generatedMinAgeDays = 30,
   excludeWorktree,
   report = console.log
@@ -122,10 +121,8 @@ export async function reclaimWorktreeGeneratedFiles({
   if (!Number.isFinite(generatedMinAgeDays) || generatedMinAgeDays < 0) {
     throw new Error('--generated-min-age-days requires a non-negative number')
   }
-  if (automatic || (apply && !worktreesStopped)) {
-    throw new Error(
-      'Stop apps, agents, builds and tests in sibling worktrees; pass --worktrees-stopped'
-    )
+  if (automatic) {
+    throw new Error('Generated dependency cleanup is only available in the manual reclaim command')
   }
   const protectedPaths = await Promise.all(
     [repoRoot, process.cwd(), ...(excludeWorktree ? [excludeWorktree] : [])].map((p) => realpath(p))
