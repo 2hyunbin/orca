@@ -145,7 +145,7 @@ function OpenRecoverServerDialog({
   const approvedNonce = eligible ? check.evidence?.nonce : undefined
   return (
     <Dialog open onOpenChange={(next) => !next && !busy && onOpenChange(false)}>
-      <DialogContent showCloseButton={!busy}>
+      <DialogContent surface="security" showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>
             {translate('auto.components.settings.recoverServer.title', 'Recover Orca’s server')}
