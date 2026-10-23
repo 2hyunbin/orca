@@ -75,6 +75,7 @@ vi.mock('../components/inline-text-selection', () => ({ INLINE_TEXT_SELECTION: f
 
 import { openExternalLink } from '../platform/external-link'
 import { ToolRun } from './MobileNativeChatToolRun'
+import { MobileNativeChatToolLine } from './MobileNativeChatToolLine'
 import {
   MobileNativeChatDisclosureContext,
   useMobileNativeChatDisclosures
@@ -118,6 +119,29 @@ describe('ToolRun', () => {
       .map((text) => String(text.children.join('')))
 
   describe('tool rows, as desktop draws them', () => {
+    it.each([
+      ['short first line', 'first\r\nsecond', 'first\r'],
+      ['80 UTF-16 units', `${'x'.repeat(79)}😊rest\nsecond`, `${'x'.repeat(79)}\ud83d`],
+      ['a large orphan result', `first preview\n${'abc\n'.repeat(2_000_000)}tail`, 'first preview']
+    ])('preserves the orphan preview for %s', (_name, output, preview) => {
+      act(() => {
+        renderer = create(
+          createElement(MobileNativeChatToolLine, {
+            block: { type: 'tool-result', output },
+            fontScale: 1
+          })
+        )
+      })
+      expect(textIn(renderer!.root)).toContain(preview)
+      expect(textIn(renderer!.root)).not.toContain('tail')
+      if (output.length < 100) {
+        act(() => {
+          renderer!.root.findAll((node) => String(node.type) === 'Pressable')[0]!.props.onPress()
+        })
+        expect(textIn(renderer!.root)).toContain(output)
+      }
+    })
+
     // The last match: a lone command's run header reads as the command too.
     const pressable = (tree: ReactTestRenderer, label: string): ReactTestInstance =>
       tree.root

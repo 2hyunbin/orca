@@ -441,4 +441,14 @@ describe('tool sentence rows', () => {
       'text-chat-foreground'
     )
   })
+
+  it.each([
+    ['short first line', 'first\r\nsecond', 'first\r'],
+    ['80 UTF-16 units', `${'x'.repeat(79)}😊rest\nsecond`, `${'x'.repeat(79)}\ud83d`],
+    ['a large orphan result', `first preview\n${'abc\n'.repeat(2_000_000)}tail`, 'first preview']
+  ])('preserves the preview for %s', (_name, output, preview) => {
+    render(<NativeChatToolLine block={{ type: 'tool-result', output }} />)
+    expect(screen.getByTitle(preview, { normalizer: (value) => value }).textContent).toBe(preview)
+    expect(screen.queryByText('tail')).toBeNull()
+  })
 })
