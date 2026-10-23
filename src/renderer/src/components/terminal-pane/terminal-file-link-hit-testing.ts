@@ -16,6 +16,7 @@ import {
   type FileLinkTarget
 } from './terminal-file-link-target'
 import { createTerminalPathExistenceBatch } from './terminal-path-existence-batch'
+import { terminalLogicalLinkHasOscLink } from './terminal-osc-link-cells'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
 import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
 import {
@@ -43,6 +44,7 @@ type FileLinkHitTestDeps = {
 type ClickedFileLink = FileLinkTarget & {
   pathText: string
   cachedExists: boolean | undefined
+  hasOscLink: boolean
 }
 
 // Why: a slow probe from an earlier click must not open its file after a later click.
@@ -76,7 +78,13 @@ export function openFilePathLinkAtBufferPosition(
       links.push({
         ...target,
         pathText: parsed.pathText,
-        cachedExists: deps.pathExistsCache?.get(target.cacheKey)
+        cachedExists: deps.pathExistsCache?.get(target.cacheKey),
+        hasOscLink: terminalLogicalLinkHasOscLink(
+          buffer,
+          logicalLine,
+          parsed.startIndex,
+          parsed.endIndex
+        )
       })
     }
   }
@@ -88,7 +96,8 @@ export function openFilePathLinkAtBufferPosition(
     // Why: a bare dotted word (`console.log`, `example.com`) is not a claim that a file exists.
     const reportsFailure =
       onOpenFailure && (verified || link.isKnownWorktreeRoot || /[\\/]/.test(link.pathText))
-    const reportedPath = verified || !shown ? link.absolutePath : shown.absolutePath
+    const reportedPath =
+      verified || link.isKnownWorktreeRoot || !shown ? link.absolutePath : shown.absolutePath
     openDetectedFilePath(link.absolutePath, link.line, link.column, {
       ...deps,
       openWithSystemDefault: deps.openWithSystemDefault === true,
@@ -115,7 +124,10 @@ export function openFilePathLinkAtBufferPosition(
   )
   if (toProbe.length === 0 || (!best && toProbe.length === 1)) {
     // Why the visible path last: a click on a path already known missing still says so.
-    const link = best ?? toProbe[0] ?? (shown && /[\\/]/.test(shown.pathText) ? shown : undefined)
+    // An OSC 8 hyperlink there is xterm's to open.
+    const knownMissing =
+      shown && !shown.hasOscLink && /[\\/]/.test(shown.pathText) ? shown : undefined
+    const link = best ?? toProbe[0] ?? knownMissing
     if (link) {
       open(link)
     }

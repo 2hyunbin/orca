@@ -426,4 +426,26 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       expect.objectContaining({ verdict: 'missing' })
     )
   })
+
+  it('leaves an OSC 8 hyperlink to xterm when its label is a path known missing', () => {
+    setPlatform('Macintosh')
+    const label = makeBufferLine('nwparker/fix-123')
+    const linked = Object.assign(label, {
+      getCell: () => ({ hasExtendedAttrs: () => true, extended: { urlId: 1 } })
+    })
+    const pathExistsCache = new Map([
+      [getTerminalPathExistsCacheKey({ absolutePath: '/repo/nwparker/fix-123' }), false]
+    ])
+    const onOpenFailure = vi.fn()
+
+    expect(
+      openFilePathLinkAtBufferPosition(makeBuffer([linked]), { x: 4, y: 1 }, 80, {
+        startupCwd: '/repo',
+        worktreeId: 'wt-1',
+        worktreePath: '/repo',
+        pathExistsCache,
+        onOpenFailure
+      })
+    ).toBe(false)
+  })
 })
