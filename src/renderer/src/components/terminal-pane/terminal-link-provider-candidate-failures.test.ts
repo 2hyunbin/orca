@@ -165,7 +165,9 @@ describe('terminal link candidates fail independently', () => {
     )
     expect(fsPathExistsMock).not.toHaveBeenCalled()
     expect(window.api.shell.pathExists).not.toHaveBeenCalled()
-    expect([...cache.values()]).toEqual([true])
+    // Why: an ENOTDIR joined guess is answered missing, so only the real path is cached as present.
+    expect([...cache.values()].filter((exists) => exists)).toEqual([true])
+    expect(cache.size).toBeGreaterThan(1)
   })
 
   it('keeps host-granted files bound to their printing terminal when a neighboring candidate fails', async () => {

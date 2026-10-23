@@ -50,7 +50,11 @@ export async function statRuntimePath(
 export function isMissingRuntimePathError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase()
   return (
-    message.includes('enoent') || message.includes('not found') || message.includes('no such file')
+    message.includes('enoent') ||
+    message.includes('not found') ||
+    message.includes('no such file') ||
+    // Why: older hosts reject a path under a file (`a.txt/b.txt`) with ENOTDIR; it is just as absent.
+    message.includes('enotdir')
   )
 }
 

@@ -38,6 +38,17 @@ const BUFFER = makeBuffer([
   makeBufferLine('/srv/repo/c.txt')
 ])
 
+// What a host before the ENOTDIR fix returns for a path under a file.
+const OLD_HOST_ENOTDIR = "ENOTDIR: not a directory, stat '/srv/repo/a.txt/srv/repo/b.txt'"
+
+function runtimeKey(absolutePath: string): string {
+  return getTerminalPathExistsCacheKey({
+    absolutePath,
+    isRemoteRuntimePath: true,
+    runtimeEnvironmentId: 'env-1'
+  })
+}
+
 type HostAnswer = { exists: boolean } | { error: string }
 
 /** The host answers both the batched probe and the open's stat from one table. */
@@ -80,7 +91,7 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
   it('opens the clicked path, not the guess joining it to the rows below', async () => {
     setPlatform('Macintosh')
     // Why an error row: hosts before the ENOTDIR fix cannot answer for `a.txt/...`.
-    hostAnswers((path) => (path === 'a.txt' ? { exists: true } : { error: 'ENOTDIR' }))
+    hostAnswers((path) => (path === 'a.txt' ? { exists: true } : { error: OLD_HOST_ENOTDIR }))
     const onOpenFailure = vi.fn()
 
     expect(clickFirstPath(onOpenFailure)).toBe(true)
@@ -94,15 +105,14 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
     expect(onOpenFailure).not.toHaveBeenCalled()
   })
 
-  it('stops re-asking an older host about the joined guess it cannot answer', async () => {
+  it('remembers an older host ENOTDIR answer as missing, so the next click does not re-ask', async () => {
     setPlatform('Macintosh')
-    hostAnswers((path) => (path === 'a.txt' ? { exists: true } : { error: 'ENOTDIR' }))
-    const pathExistsCache = new Map<string, boolean>()
+    hostAnswers((path) => (path === 'a.txt' ? { exists: true } : { error: OLD_HOST_ENOTDIR }))
+    // Why: hovering underlined a.txt, so only the longer joined guesses are unchecked.
+    const pathExistsCache = new Map([[runtimeKey('/srv/repo/a.txt'), true]])
 
     clickFirstPath(vi.fn(), pathExistsCache)
     await flushDoubleRaf()
-    // Why: forget a.txt so the second click is as ambiguous as the first.
-    pathExistsCache.clear()
     runtimeEnvironmentCallMock.mockClear()
     clickFirstPath(vi.fn(), pathExistsCache)
     await flushDoubleRaf()
@@ -111,6 +121,25 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       expect.objectContaining({ method: 'files.pathsExist' })
     )
     expect(openFileMock).toHaveBeenCalledTimes(2)
+    expect(openFileMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filePath: '/srv/repo/a.txt' }),
+      { forceContentReload: true }
+    )
+  })
+
+  it('names the visible path when only a joined guess is left to try', async () => {
+    setPlatform('Macintosh')
+    hostAnswers(() => ({ error: 'host unreachable' }))
+    const onOpenFailure = vi.fn()
+    const pathExistsCache = new Map([
+      [runtimeKey('/srv/repo/a.txt'), false],
+      [runtimeKey('/srv/repo/a.txt/srv/repo/b.txt/srv/repo/c.txt'), false]
+    ])
+
+    clickFirstPath(onOpenFailure, pathExistsCache)
+    await flushDoubleRaf()
+
+    expect(onOpenFailure).toHaveBeenCalledWith('/srv/repo/a.txt', expect.anything())
   })
 
   it('says why when the clicked path is gone, naming it rather than a joined guess', async () => {
