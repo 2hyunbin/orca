@@ -23,46 +23,36 @@ type CombinedDiffCommitMessageBounds = {
   end: number
 }
 
-const TRIM_WHITESPACE_PATTERN = /\s/
-
 function findTrimBounds(
   message: string,
   start: number,
   end: number
 ): CombinedDiffCommitMessageBounds {
-  let trimStart = start
-  let trimEnd = end
-
-  while (trimStart < trimEnd && TRIM_WHITESPACE_PATTERN.test(message.charAt(trimStart))) {
-    trimStart += 1
-  }
-  while (trimEnd > trimStart && TRIM_WHITESPACE_PATTERN.test(message.charAt(trimEnd - 1))) {
-    trimEnd -= 1
-  }
-
-  return { start: trimStart, end: trimEnd }
+  const slice = message.slice(start, end)
+  const trimStart = end - slice.trimStart().length
+  const trimEnd = start + slice.trimEnd().length
+  return { start: trimStart, end: Math.max(trimStart, trimEnd) }
 }
 
 function normalizeCombinedDiffCommitMessageSlice(
   message: string,
   bounds: CombinedDiffCommitMessageBounds
 ): string {
+  const slice = message.slice(bounds.start, bounds.end)
+  const firstCrlf = slice.indexOf('\r\n')
+  if (firstCrlf === -1) {
+    return slice
+  }
   let normalized = ''
   let sliceStart = bounds.start
 
-  // Why: combined-diff commit messages can come from pasted text. Scan CRLF
-  // pairs directly instead of normalizing the whole message with a regex pass.
-  for (let index = bounds.start; index < bounds.end; index += 1) {
+  for (let index = bounds.start + firstCrlf; index < bounds.end; index += 1) {
     if (message.charCodeAt(index) !== 13 || message.charCodeAt(index + 1) !== 10) {
       continue
     }
     normalized += `${message.slice(sliceStart, index)}\n`
     index += 1
     sliceStart = index + 1
-  }
-
-  if (sliceStart === bounds.start) {
-    return message.slice(bounds.start, bounds.end)
   }
 
   return normalized + message.slice(sliceStart, bounds.end)
