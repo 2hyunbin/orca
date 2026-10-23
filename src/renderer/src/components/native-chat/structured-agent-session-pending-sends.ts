@@ -42,6 +42,18 @@ type SessionSends = {
 export const EMPTY_STRUCTURED_AGENT_SESSION_SENDS: readonly StructuredAgentSessionPendingSend[] = []
 const sessions = new Map<string, SessionSends>()
 
+function releaseEmptySessionSends(sessionId: string, state: SessionSends): void {
+  if (
+    state.listeners.size === 0 &&
+    state.entries.length === 0 &&
+    state.notice === null &&
+    state.holds === 0 &&
+    sessions.get(sessionId) === state
+  ) {
+    sessions.delete(sessionId)
+  }
+}
+
 function sessionSends(sessionId: string): SessionSends {
   let state = sessions.get(sessionId)
   if (!state) {
@@ -65,6 +77,7 @@ export function publishStructuredAgentSessionSends(
   for (const listener of state.listeners) {
     listener()
   }
+  releaseEmptySessionSends(sessionId, state)
 }
 
 export function updateStructuredAgentSessionPendingSend(
@@ -142,6 +155,7 @@ export function subscribeToStructuredAgentSessionPendingSends(
   state.listeners.add(listener)
   return () => {
     state.listeners.delete(listener)
+    releaseEmptySessionSends(sessionId, state)
   }
 }
 
@@ -153,9 +167,6 @@ export function clearStructuredAgentSessionPendingSends(sessionId: string): void
       entries: EMPTY_STRUCTURED_AGENT_SESSION_SENDS,
       notice: null
     })
-    if (state.listeners.size === 0 && state.holds === 0) {
-      sessions.delete(sessionId)
-    }
   }
 }
 
