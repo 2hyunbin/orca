@@ -79,6 +79,13 @@ describe('structuralValuesEqual', () => {
 })
 
 describe('structuralValuesEqualIgnoringUndefined', () => {
+  it('compares a non-enumerable value when the other record enumerates its key', () => {
+    const nonEnumerable = Object.defineProperty({}, 'value', { value: 1 })
+    expect(structuralValuesEqualIgnoringUndefined(nonEnumerable, { value: 1 })).toBe(true)
+    expect(structuralValuesEqualIgnoringUndefined(nonEnumerable, { value: 2 })).toBe(false)
+    expect(structuralValuesEqualIgnoringUndefined({ value: 2 }, nonEnumerable)).toBe(false)
+  })
+
   it('treats an absent key as equal to a key holding undefined', () => {
     // Why: locally built worktree rows carry explicit undefined fields the host omits.
     expect(structuralValuesEqualIgnoringUndefined({ a: 1 }, { a: 1, b: undefined })).toBe(true)

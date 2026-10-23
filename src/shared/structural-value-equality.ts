@@ -43,12 +43,13 @@ function valuesEqual(a: unknown, b: unknown, policy: ValueEqualityPolicy): boole
     return false
   }
   if (policy.absentKeyEqualsUndefined) {
-    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-      if (!valuesEqual(a[key], b[key], policy)) {
-        return false
-      }
-    }
-    return true
+    return (
+      Object.keys(a).every((key) => valuesEqual(a[key], b[key], policy)) &&
+      Object.keys(b).every(
+        (key) =>
+          Object.prototype.propertyIsEnumerable.call(a, key) || valuesEqual(a[key], b[key], policy)
+      )
+    )
   }
   const keys = Object.keys(a)
   if (keys.length !== Object.keys(b).length) {
