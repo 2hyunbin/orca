@@ -12,7 +12,10 @@ import {
   providerTurnItemId
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import {
+  recordingStructuredAgentSessionLogger,
+  testEventSinkLogging
+} from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { catchUpAcpHistory } from './acp-history-catch-up'
 import {
   acpHistoryTurns,
@@ -91,20 +94,15 @@ async function native(rig: Rig, id: string, text: string, proof?: string) {
 }
 
 async function catchUp(rig: Pick<Rig, 'eventSink'>, frames: AcpLoadHistoryFrame[]) {
-  const warnings: unknown[] = []
+  const { logger, entries } = recordingStructuredAgentSessionLogger()
   await catchUpAcpHistory({
     ...scope,
     frames,
     sink: rig.eventSink,
     assertCurrent: () => {},
-    logger: {
-      warn: (...args) => {
-        warnings.push(args)
-      },
-      error: () => {}
-    }
+    logger
   })
-  expect(warnings).toEqual([])
+  expect(entries).toEqual([])
 }
 
 async function repeat(rig: Rig, frames: AcpLoadHistoryFrame[]) {
@@ -121,6 +119,17 @@ async function repeat(rig: Rig, frames: AcpLoadHistoryFrame[]) {
     await reopened.close()
   }
 }
+
+function hasArrayKey(array: unknown[], key: PropertyKey): key is keyof unknown[] {
+  return key in array
+}
+
+type CountedArrayFactory = (
+  this: ArrayConstructor,
+  input: Iterable<unknown> | ArrayLike<unknown>,
+  mapper?: (value: unknown, index: number) => unknown,
+  thisArg?: unknown
+) => unknown[]
 
 // Count executed production blocks and built-in indexed reads, without replacing any result.
 async function work(run: () => Promise<void>) {
@@ -144,60 +153,84 @@ async function work(run: () => Promise<void>) {
   const get = Object.getOwnPropertyDescriptor(Map.prototype, 'get')!
   const set = Object.getOwnPropertyDescriptor(Map.prototype, 'set')!
   const has = Object.getOwnPropertyDescriptor(Set.prototype, 'has')!
+  const sortArray = Array.prototype.toSorted
+  const sliceArray = Array.prototype.slice
+  const arrayIncludes = Array.prototype.includes
+  const arraySome = Array.prototype.some
+  const setHas = Set.prototype.has
+  const mapValues = Map.prototype.values
+  const arrayFrom: CountedArrayFactory = Array.from
+  const mapGet = Map.prototype.get
+  const mapSet = Map.prototype.set
+  const countedArray = (
+    array: unknown[],
+    counter: 'native' | 'suffix' | 'membership' | 'copies' | 'tree'
+  ) =>
+    new Proxy(array, {
+      get(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) {
+          counts[counter]++
+        }
+        return hasArrayKey(target, key) ? target[key] : undefined
+      },
+      set(target, key, value, receiver) {
+        if (counter === 'tree' && typeof key === 'string' && /^\d+$/.test(key)) {
+          counts.tree++
+        }
+        return Reflect.set(target, key, value, receiver)
+      }
+    })
   await inspector.post('Profiler.enable')
   await inspector.post('Debugger.enable')
   await inspector.post('Profiler.startPreciseCoverage', { callCount: true, detailed: true })
-  for (const [name, descriptor, counter] of [
-    ['toSorted', sorted, 'native'],
-    ['slice', slice, 'suffix']
-  ] as const) {
-    Object.defineProperty(Array.prototype, name, {
-      ...descriptor,
-      value: function (this: unknown[], ...args: unknown[]) {
-        const result: unknown[] = Reflect.apply(descriptor.value, this, args)
-        if (
-          !new Error('operation attribution').stack
-            ?.split('\n')[2]
-            ?.includes('acp-history-turn-matching.ts')
-        ) {
-          return result
-        }
-        return new Proxy(result, {
-          get(target, key, receiver) {
-            if (typeof key === 'string' && /^\d+$/.test(key)) {
-              counts[counter]++
-            }
-            return Reflect.get(target, key, receiver)
-          }
-        })
-      }
-    })
-  }
-  for (const [name, descriptor, caller, counter] of [
-    ['includes', includes, 'acp-history-replay.ts', 'membership'],
-    ['some', some, 'structuredAgentSessionRejectedShownInPlace', 'copies']
-  ] as const) {
-    Object.defineProperty(Array.prototype, name, {
-      ...descriptor,
-      value: function (this: unknown[], ...args: unknown[]) {
-        if (!new Error('operation attribution').stack?.split('\n')[2]?.includes(caller)) {
-          return Reflect.apply(descriptor.value, this, args)
-        }
-        return Reflect.apply(
-          descriptor.value,
-          new Proxy(this, {
-            get(target, key, receiver) {
-              if (typeof key === 'string' && /^\d+$/.test(key)) {
-                counts[counter]++
-              }
-              return Reflect.get(target, key, receiver)
-            }
-          }),
-          args
-        )
-      }
-    })
-  }
+  Object.defineProperty(Array.prototype, 'toSorted', {
+    ...sorted,
+    value: function (this: unknown[], compare?: (a: unknown, b: unknown) => number) {
+      const result: unknown[] = sortArray.call(this, compare)
+      return new Error('operation attribution').stack
+        ?.split('\n')[2]
+        ?.includes('acp-history-turn-matching.ts')
+        ? countedArray(result, 'native')
+        : result
+    }
+  })
+  Object.defineProperty(Array.prototype, 'slice', {
+    ...slice,
+    value: function (this: unknown[], start?: number, end?: number) {
+      const result: unknown[] = sliceArray.call(this, start, end)
+      return new Error('operation attribution').stack
+        ?.split('\n')[2]
+        ?.includes('acp-history-turn-matching.ts')
+        ? countedArray(result, 'suffix')
+        : result
+    }
+  })
+  Object.defineProperty(Array.prototype, 'includes', {
+    ...includes,
+    value: function (this: unknown[], value: unknown, start?: number) {
+      const array = new Error('operation attribution').stack
+        ?.split('\n')[2]
+        ?.includes('acp-history-replay.ts')
+        ? countedArray(this, 'membership')
+        : this
+      return arrayIncludes.call(array, value, start)
+    }
+  })
+  Object.defineProperty(Array.prototype, 'some', {
+    ...some,
+    value: function (
+      this: unknown[],
+      predicate: (value: unknown, index: number, array: unknown[]) => unknown,
+      thisArg?: unknown
+    ) {
+      const array = new Error('operation attribution').stack
+        ?.split('\n')[2]
+        ?.includes('structuredAgentSessionRejectedShownInPlace')
+        ? countedArray(this, 'copies')
+        : this
+      return arraySome.call(array, predicate, thisArg)
+    }
+  })
   Object.defineProperty(Set.prototype, 'has', {
     ...has,
     value: function (this: Set<unknown>, value: unknown) {
@@ -206,13 +239,13 @@ async function work(run: () => Promise<void>) {
       ) {
         counts.membership++
       }
-      return Reflect.apply(has.value, this, [value])
+      return setHas.call(this, value)
     }
   })
   Object.defineProperty(Map.prototype, 'values', {
     ...values,
     value: function (this: Map<unknown, unknown>) {
-      const iterator: IterableIterator<unknown> = Reflect.apply(values.value, this, [])
+      const iterator: IterableIterator<unknown> = mapValues.call(this)
       if (
         !(new Error('operation attribution').stack ?? '').includes('acp-history-turn-matching.ts')
       ) {
@@ -230,49 +263,46 @@ async function work(run: () => Promise<void>) {
   })
   Object.defineProperty(Array, 'from', {
     ...from,
-    value: function (this: ArrayConstructor, ...args: unknown[]) {
-      const result: unknown[] = Reflect.apply(from.value, this, args)
-      if (
-        !(new Error('operation attribution').stack ?? '').includes(
-          'acp-history-ordered-availability.ts'
-        )
-      ) {
-        return result
-      }
-      return new Proxy(result, {
-        get(target, key, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
-            counts.tree++
-          }
-          return Reflect.get(target, key, receiver)
-        },
-        set(target, key, value, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
-            counts.tree++
-          }
-          return Reflect.set(target, key, value, receiver)
-        }
-      })
+    value: function (
+      this: ArrayConstructor,
+      input: Iterable<unknown> | ArrayLike<unknown>,
+      mapper?: (value: unknown, index: number) => unknown,
+      thisArg?: unknown
+    ) {
+      const result = arrayFrom.call(this, input, mapper, thisArg)
+      return (new Error('operation attribution').stack ?? '').includes(
+        'acp-history-ordered-availability.ts'
+      )
+        ? countedArray(result, 'tree')
+        : result
     }
   })
-  for (const [name, descriptor] of [
-    ['get', get],
-    ['set', set]
-  ] as const) {
-    Object.defineProperty(Map.prototype, name, {
-      ...descriptor,
-      value: function (this: Map<unknown, unknown>, ...args: unknown[]) {
-        if (
-          (new Error('operation attribution').stack ?? '').includes(
-            'structuredAgentSessionRejectedShownInPlace'
-          )
-        ) {
-          counts.copies++
-        }
-        return Reflect.apply(descriptor.value, this, args)
+  Object.defineProperty(Map.prototype, 'get', {
+    ...get,
+    value: function (this: Map<unknown, unknown>, key: unknown) {
+      if (
+        (new Error('operation attribution').stack ?? '').includes(
+          'structuredAgentSessionRejectedShownInPlace'
+        )
+      ) {
+        counts.copies++
       }
-    })
-  }
+      return mapGet.call(this, key)
+    }
+  })
+  Object.defineProperty(Map.prototype, 'set', {
+    ...set,
+    value: function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
+      if (
+        (new Error('operation attribution').stack ?? '').includes(
+          'structuredAgentSessionRejectedShownInPlace'
+        )
+      ) {
+        counts.copies++
+      }
+      return mapSet.call(this, key, value)
+    }
+  })
   try {
     await run()
     const coverage = await inspector.post('Profiler.takePreciseCoverage')
