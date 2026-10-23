@@ -82,12 +82,12 @@ function declarations(path, source) {
   }
   const patterns = {
     rs: /#\[(?:(?:\w+::)?test|rstest)(?:\([^\]]*\))?\][\s\S]*?\bfn\s+(\w+)/g,
-    py: /^\s*(?:async\s+)?def\s+(test_\w+)\s*\(/gm,
-    rb: /^\s*(?:def\s+(test_\w+)|test\s+['"]([^'"]+))/gm,
-    swift: /^\s*(?:func\s+(test\w+)\s*\(|@Test\b[^\n]*\n\s*(?:@\w+[^\n]*\n\s*)*func\s+(\w+))/gm,
+    py: /^[ \t]*(?:async\s+)?def\s+(test_\w+)\s*\(/gm,
+    rb: /^[ \t]*(?:def\s+(test_\w+)|test\s+['"]([^'"]+))/gm,
+    swift: /^[ \t]*(?:func\s+(test\w+)\s*\(|@Test\b[^\n]*\n\s*(?:@\w+[^\n]*\n\s*)*func\s+(\w+))/gm,
     kt: /@(?:Test|ParameterizedTest)\b[^\n]*\n\s*fun\s+(`[^`]+`|\w+)/g,
     go: /^func\s+(Test\w+)\s*\(/gm,
-    ps1: /^\s*It\s+['"]([^'"]+)/gim
+    ps1: /^[ \t]*It\s+['"]([^'"]+)/gim
   }
   const pattern = patterns[path.split('.').at(-1)]
   return pattern
@@ -110,7 +110,11 @@ for (const name of readdirSync(resolve(directory, 'reviews'))
     if (!review.rationale || !review.evidence?.length || !review.reviewer) {
       errors.push(`${label}: missing evidence`)
     }
-    if (!review.sha256 || !review.reviewed_sha256 || !review.source_commit) {
+    if (
+      !review.sha256 ||
+      (review.decision !== 'remove' && !review.reviewed_sha256) ||
+      !review.source_commit
+    ) {
       errors.push(`${label}: missing hash or source commit`)
     }
     if (!Array.isArray(review.cases)) {
@@ -150,7 +154,10 @@ for (const path of tracked) {
   if (path.startsWith('docs/audits/test-value/')) {
     continue
   }
-  if (!/\.(?:[cm]?[jt]sx?|rs|py|rb|swift|kt|go|ps1|sh|bash|zsh|fish|c|cc|cpp|h)$/.test(path)) {
+  if (
+    !/\.(?:[cm]?[jt]sx?|rs|py|rb|swift|kt|go|ps1|sh|bash|zsh|fish|c|cc|cpp|h)$/.test(path) &&
+    !reviews.has(path)
+  ) {
     continue
   }
   scanned++
@@ -166,7 +173,7 @@ for (const path of tracked) {
       path
     )
   const auxiliary =
-    /(?:^|\/)(?:tests?|__tests__|test-support|fixtures?|benches|benchmarks|repros?)(?:\/|[-.])|(?:^|[/.-])(?:repro\w*|regression\w*|benchmark\w*|bench|smoke)(?:[.-]|$)/i.test(
+    /(?:^|\/)(?:tests?|__tests__|__fixtures__|test-support|fixtures?|benches|benchmarks|repros?)(?:\/|[-.])|(?:^|[/.-])(?:test-fixtures?|repro\w*|regression\w*|benchmark\w*|bench|smoke)(?:[.-]|$)/i.test(
       path
     )
   const cases = declarations(path, source)
