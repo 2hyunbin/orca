@@ -1,4 +1,4 @@
-// Verbatim CREATE TABLE definitions from NousResearch/hermes-agent@0e427d788d253630d38a3a51cd76849e73cd6925 hermes_state_common.py.
+// Verbatim schema from NousResearch/hermes-agent@0e427d788d253630d38a3a51cd76849e73cd6925 hermes_state_common.py.
 export const HERMES_SCHEMA_31 = `
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
