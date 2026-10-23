@@ -1,3 +1,4 @@
+import type { PtyPaneOf } from './terminal/surface/pty-pane-query'
 import type { TerminalHandleRecord } from './runtime-terminal-contracts'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 import type { TerminalSurfaceCloseIdentity } from '../../shared/terminal-tab-close'
@@ -167,11 +168,12 @@ export function isOriginalTerminalHandle(args: {
   runtimeId: string
   record: TerminalHandleRecord | undefined
   currentPty: RuntimePtyWorktreeRecord | null | undefined
+  paneOfPty: PtyPaneOf
   leaf: RuntimeLeafRecord | undefined
   source: TerminalSurfaceCloseIdentity
   incarnation: string | undefined
 }): boolean {
-  const { runtimeId, record, currentPty, leaf, source, incarnation } = args
+  const { runtimeId, record, currentPty, paneOfPty, leaf, source, incarnation } = args
   return (
     !!incarnation &&
     !!source.ptyId &&
@@ -185,7 +187,7 @@ export function isOriginalTerminalHandle(args: {
     (!leaf ||
       (leaf.worktreeId === source.worktreeId && (!leaf.ptyId || leaf.ptyId === source.ptyId))) &&
     ((record.tabId === source.tabId && record.leafId === source.leafId) ||
-      currentPty?.paneKey === `${source.tabId}:${source.leafId}`)
+      (!!currentPty && paneOfPty(currentPty).paneKey === `${source.tabId}:${source.leafId}`))
   )
 }
 
@@ -194,6 +196,7 @@ export function captureAddressedTerminalPresentation(args: {
   runtimeId: string
   record: TerminalHandleRecord | undefined
   currentPty: RuntimePtyWorktreeRecord | null | undefined
+  paneOfPty: PtyPaneOf
   leaf: RuntimeLeafRecord | null | undefined
   row: TerminalSurfaceCloseIdentity | null | undefined
   address: { worktreeId: string; tabId: string; leafId: string }

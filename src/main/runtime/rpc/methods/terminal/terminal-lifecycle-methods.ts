@@ -234,11 +234,13 @@ export const TERMINAL_LIFECYCLE_METHODS = [
         'terminal',
         params.terminal,
         () =>
-          context.runtime.closeTerminal(
-            params.terminal,
-            params.expectedIncarnationId,
-            params.originalPresentation
-          )
+          params.originalPresentation
+            ? context.runtime.closeTerminal(
+                params.terminal,
+                params.expectedIncarnationId,
+                params.originalPresentation
+              )
+            : context.runtime.closeTerminal(params.terminal, params.expectedIncarnationId)
       )
     })
   }),

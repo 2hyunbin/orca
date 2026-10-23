@@ -89,11 +89,10 @@ export async function applyWindowLayoutCommand(
     // that asks main to refuse pinned tabs (the CLI, new phones) gets that refusal, not the force.
     // Read before the close drops the tab's record.
     const terminalTabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabIds[0])
-    const reply = await store.applyLayoutCommand(
-      { ...command, force: command.refusePinned ? command.force === true : true },
-      holders,
-      run
-    )
+    const close = { ...command, force: command.refusePinned ? command.force === true : true }
+    const reply = await (run
+      ? store.applyLayoutCommand(close, holders, run)
+      : store.applyLayoutCommand(close, holders))
     // Only a tab the close took: a refused (pinned) tab's launches still finish into it.
     if (
       command.recordClose === 'user' &&
@@ -152,11 +151,10 @@ export async function applyWindowLayoutCommand(
   if (!run?.originalPresentation) {
     markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
   }
-  return store.applyLayoutCommand(
-    { type: 'closePane', workspace, tabId, leafId, userPaneClose: true },
-    holders,
-    run
-  )
+  const close = { type: 'closePane' as const, workspace, tabId, leafId, userPaneClose: true }
+  return run
+    ? store.applyLayoutCommand(close, holders, run)
+    : store.applyLayoutCommand(close, holders)
 }
 
 /**

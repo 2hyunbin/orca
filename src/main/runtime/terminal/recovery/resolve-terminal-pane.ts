@@ -89,9 +89,7 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
             )
           }))
         : []
-    const routedHostId =
-      worktreeId && parsed ? this.getWorkspaceSessionHostIdForTab(worktreeId, parsed.tabId) : null
-    const rowIdentity = holders.find((holder) => holder.hostId === routedHostId)?.identity
+    const rowIdentity = holders[0]?.identity
     const executionPtyId = pty?.ptyId ?? record?.ptyId ?? leaf?.ptyId ?? null
     const retained = executionPtyId ? this.handleByPtyIncarnation.get(executionPtyId) : null
     const execution = this.getPtyExecutionHostMetadata(executionPtyId)
@@ -109,6 +107,7 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
             runtimeId: this.runtimeId,
             record,
             currentPty: pty,
+            paneOfPty: (current) => this.paneOfPty(current),
             leaf,
             row: rowIdentity,
             address: { worktreeId, ...parsed },

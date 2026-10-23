@@ -86,6 +86,7 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
           runtimeId: this.runtimeId,
           record,
           currentPty,
+          paneOfPty: (current) => this.paneOfPty(current),
           leaf,
           source,
           incarnation
