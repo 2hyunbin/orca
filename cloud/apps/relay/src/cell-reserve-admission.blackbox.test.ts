@@ -13,7 +13,6 @@ import type { RelayConfig } from './config.js'
 import { PostgresDatabase } from './database.js'
 import type { AppliedControlFlags } from './relay-control-flag-channel.js'
 import { createRelayServer, HOST_HELLO_SHED_OLDEST_WAIT_MS } from './relay-server.js'
-import { RELAY_WEBSOCKET_FORCE_CLOSE_MS } from './relay-websocket-close.js'
 
 // A step-5 cell whose database pool is wedged: every query waits forever and the hello shed
 // is armed. Booked and recently seated hosts must still connect; everything else must not.
@@ -387,36 +386,23 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
     expect(cell.relay.sessions.seatFeed(seq + 2)).toMatchObject({ changes: [] })
   })
 
-  // A drained session leaves the map at once, but its socket closes only after its release (up to
-  // 3 s) and the peer's close reply (up to the 1 s force-close). A desktop of the same identity
-  // dialling back in that window restarted at generation 1, so the old socket's late leave, at
-  // generation 1 too, removed the live seat from the feed.
-  it('keeps a session that reconnected while its drained predecessor was still closing', async () => {
+  // The root of an unbacked seat: a session that left the map while its socket was still closing
+  // keeps its seat listed, and the host's next session restarted at generation 1, so the feed
+  // dropped that session's join and went on listing the dead seat.
+  it('lists a new session above a seat the feed still holds for a session already gone', async () => {
     const cell = await startCell({ admitMode: 'reserve' })
     const identity = await cell.host()
+    const log = seatLogOf(cell.relay.sessions)
+    log.append({ kind: 'join', userId: 'user-1', relayHostId: identity.hostId, epoch: 8, generation: 5, at: 4_242 })
     cell.book(identity, 9)
-    const first = await cell.connect(identity, 9)
-    expect(first.ack).toMatchObject({ generation: 1 })
-    // A peer slow to answer the close frame: the cell's side closes only at its force-close.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ws keeps its net.Socket as `_socket`.
-    ;(first.socket as unknown as { _socket: { pause(): void } })._socket.pause()
-    expect(
-      cell.relay.sessions.drainHost({
-        attemptId: 'attempt-1',
-        userId: 'user-1',
-        relayHostId: identity.hostId,
-        sourceAssignmentEpoch: 9,
-        graceMs: 0
-      })
-    ).toBe('accepted')
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    cell.book(identity, 10)
-    expect((await cell.connect(identity, 10)).ack).toMatchObject({ type: 'host-hello-ack', generation: 2 })
-    // Past the force-close, so the old socket's leave has landed.
-    await new Promise((resolve) => setTimeout(resolve, RELAY_WEBSOCKET_FORCE_CLOSE_MS + 300))
+    expect((await cell.connect(identity, 9)).ack).toMatchObject({ type: 'host-hello-ack', generation: 6 })
     const page = cell.relay.sessions.seatFeed(null)
-    expect('full' in page && page.full.map((entry) => entry.epoch)).toEqual([10])
-  }, 10_000)
+    expect('full' in page && page.full.map((entry) => [entry.epoch, entry.generation])).toEqual([[9, 6]])
+    // The old socket's leave lands late, at its own generation: it no longer removes the live seat.
+    log.append({ kind: 'leave', userId: 'user-1', relayHostId: identity.hostId, epoch: 8, generation: 5, at: 4_243 })
+    const after = cell.relay.sessions.seatFeed(null)
+    expect('full' in after && after.full.map((entry) => entry.epoch)).toEqual([9])
+  })
 
   // Two desktops sharing one identity take turns on this cell. Each turn replaces the session and
   // the feed with it, so the seat a director names for the last turn is refused and needs no repair.
