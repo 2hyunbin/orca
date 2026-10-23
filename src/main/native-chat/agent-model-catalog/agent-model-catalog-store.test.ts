@@ -1,6 +1,15 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { rename, writeFile } from 'node:fs/promises'
-import type * as FileSystem from 'node:fs/promises'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import SyncDatabase from '../../sqlite/sync-database'
+import { NodeSqliteStatement } from '../../sqlite/node-sqlite-statement'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -12,21 +21,20 @@ import {
   agentModelCatalogFingerprintForRecord
 } from './agent-model-catalog-fingerprint'
 import { createAgentModelCatalogFilePersistence } from './agent-model-catalog-persistence'
+import { attachAgentModelCatalogPersistenceOnce } from '../../runtime/structured-agent-model-catalog-wiring'
 import {
   AGENT_MODEL_CATALOG_FAILURE_TTL_MS,
   AGENT_MODEL_CATALOG_FRESH_MS,
   AGENT_MODEL_CATALOG_MAX_ENTRIES,
   AGENT_MODEL_CATALOG_PICKER_WAIT_MS,
   AgentModelCatalogStore,
+  agentModelCatalogStore,
   type AgentModelCatalogProbe,
   type AgentModelCatalogSessionAccess,
   type AgentModelCatalogSuccess
 } from './agent-model-catalog-store'
 
-vi.mock('node:fs/promises', async (importOriginal) => {
-  const fs = await importOriginal<typeof FileSystem>()
-  return { ...fs, writeFile: vi.fn(fs.writeFile), rename: vi.fn(fs.rename) }
-})
+const sql = SyncDatabase.prototype
 
 function models(...ids: string[]): AgentSessionModelOption[] {
   return ids.map((id, index) => ({
@@ -475,180 +483,334 @@ describe('agent model catalog store', () => {
     expect(saved?.models[0]?.serviceTiers).toEqual(serviceTiers)
   })
 
+  it('imports complete schema3 sources only after hydration, with current entries and retention winning', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-import-'))
+    const seed = new AgentModelCatalogStore()
+    for (let i = 0; i < 253; i++) {
+      seed.recordSuccess(`fp-${i}`, 'grok', success('disk'), 'discovery')
+    }
+    seed.recordSuccess('fp-251', 'grok', success('live', 'chosen'), 'live')
+    seed.recordConfiguredDefault('fp-251', { modelId: 'chosen', effort: 'high' })
+    const rows = Array.from({ length: 253 }, (_, i) => seed.get(`fp-${i}`)!)
+    for (const agent of ['claude', 'codex']) {
+      seed.recordSuccess(agent, agent, { ...success('display'), complete: true }, 'discovery')
+      const entry = seed.get(agent)!
+      rows.push({ ...entry, discovered: null, live: entry.discovered })
+    }
+    const legacy = join(directory, 'agent-model-catalog.json')
+    const bytes = `{"version":2,"entries":[null],"padding":${JSON.stringify('🧭'.repeat(18_000))},"version":3,"entries":${JSON.stringify([...rows, { ...rows[0], live: rows[251]!.live }])}}`
+    writeFileSync(legacy, bytes)
+    const store = new AgentModelCatalogStore()
+    const persistence = createAgentModelCatalogFilePersistence(directory)
+    store.recordSuccess('fp-252', 'grok', success('current'), 'live')
+    const loading = store.attachPersistence(persistence)
+    store.recordSuccess('new', 'grok', success('during'), 'discovery')
+    const flushing = store.flushPersistence()
+    await Promise.all([loading, flushing])
+    const loaded = await persistence.load()
+    expect(loaded).toHaveLength(256)
+    expect(loaded.find((row) => row.fingerprint === 'fp-252')?.live?.models[0]?.id).toBe('current')
+    expect(loaded.find((row) => row.fingerprint === 'new')?.models[0]?.id).toBe('during')
+    for (const agent of ['claude', 'codex']) {
+      expect(loaded.find((row) => row.agent === agent)).toMatchObject({
+        live: null,
+        configured: null,
+        discovered: { models: [{ id: 'display' }] }
+      })
+    }
+    expect(loaded.find((row) => row.fingerprint === 'fp-0')?.live).toBeNull()
+    expect(loaded.find((row) => row.fingerprint === 'fp-251')).toMatchObject({
+      discovered: { models: [{ id: 'disk' }] },
+      live: { models: [{ id: 'live' }, { id: 'chosen' }] },
+      configured: { modelId: 'chosen', effort: 'high' }
+    })
+    expect(readFileSync(legacy, 'utf8')).toBe(bytes)
+    store.get('fp-252')
+    store.recordSuccess('extra', 'grok', success('extra'), 'live')
+    await store.flushPersistence()
+    expect(await persistence.load()).toHaveLength(256)
+    expect(store.get('new')).toBeNull()
+    const restored = new AgentModelCatalogStore()
+    await restored.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+    expect(restored.get('fp-251')?.configured?.modelId).toBe('chosen')
+    rmSync(directory, { recursive: true, force: true })
+  })
   it.each([10, 100])(
-    'paces %i changes and drains only the latest retained state',
+    'keyed %i-report bursts defer encoding, yield, reconcile age/recency and join latest flush',
     async (count) => {
-      const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-writer-'))
-      const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
-      const write = vi.mocked(writeFile).mockClear()
+      const directory = mkdtempSync(join(tmpdir(), 'catalog-keyed-'))
+      let at = 1_000
+      const store = new AgentModelCatalogStore({ now: () => at })
       const persistence = createAgentModelCatalogFilePersistence(directory)
-      let visits = 0
-      const capture = vi.fn(function* (source: Parameters<typeof persistence.save>[0]) {
-        for (const entry of source()) {
-          visits++
-          yield entry
-        }
-      })
-      const save = persistence.save
-      const notify = vi.spyOn(persistence, 'save').mockImplementation((source) => {
-        save(() => capture(source))
-      })
-      const store = new AgentModelCatalogStore()
       await store.attachPersistence(persistence)
-      vi.useFakeTimers()
-      try {
-        store.recordSuccess('fp-0', 'grok', success('initial'), 'discovery')
-        await vi.advanceTimersByTimeAsync(250)
-        for (let i = 1; i < count; i++) {
-          store.recordSuccess(`fp-${i}`, 'grok', success('initial'), 'discovery')
-        }
-        expect(capture).not.toHaveBeenCalled()
-        await vi.advanceTimersByTimeAsync(249)
-        expect(write).not.toHaveBeenCalled()
-        await vi.advanceTimersByTimeAsync(1)
-        await store.flushPersistence()
-        expect(capture).toHaveBeenCalledTimes(1)
-        expect(write).toHaveBeenCalledTimes(1)
-        expect(await persistence.load()).toHaveLength(count)
-
-        for (let i = count; i < AGENT_MODEL_CATALOG_MAX_ENTRIES; i++) {
-          store.recordSuccess(`fp-${i}`, 'grok', success('initial'), 'discovery')
-        }
-        const started = Promise.withResolvers<void>()
-        const release = Promise.withResolvers<void>()
-        write.mockImplementationOnce(async (...args) => {
-          started.resolve()
-          await release.promise
-          return fs.writeFile(...args)
-        })
-        await vi.advanceTimersByTimeAsync(499)
-        expect(capture).toHaveBeenCalledTimes(1)
-        await vi.advanceTimersByTimeAsync(1)
-        await started.promise
-        await vi.advanceTimersByTimeAsync(250)
-        for (let i = 0; i < count; i++) {
-          store.recordSuccess(`new-${i}`, 'grok', success(`latest-${i}`, 'chosen'), 'live')
-        }
-        expect(store.get('fp-0')).toBeNull()
-        expect(capture).toHaveBeenCalledTimes(2)
-        expect(write.mock.calls[1]?.[1]).not.toContain('latest-')
-        await vi.advanceTimersByTimeAsync(1_000)
-        expect(write).toHaveBeenCalledTimes(2)
-        const first = store.flushPersistence()
-        const second = store.flushPersistence()
-        expect(first).toBe(second)
-        store.recordSuccess(`new-${count - 1}`, 'grok', success('final', 'chosen'), 'live')
-        store.recordConfiguredDefault(`new-${count - 1}`, { modelId: 'chosen', effort: 'high' })
-        release.resolve()
-        await Promise.all([first, second])
-        expect(capture).toHaveBeenCalledTimes(3)
-        expect(visits).toBe(count + 2 * AGENT_MODEL_CATALOG_MAX_ENTRIES)
-        expect(write).toHaveBeenCalledTimes(3)
-        expect(new Set(notify.mock.calls.map(([source]) => source)).size).toBe(1)
-        const restarted = new AgentModelCatalogStore()
-        await restarted.attachPersistence(createAgentModelCatalogFilePersistence(directory))
-        expect(await persistence.load()).toHaveLength(AGENT_MODEL_CATALOG_MAX_ENTRIES)
-        expect(restarted.get('fp-0')).toBeNull()
-        expect(restarted.get(`new-${count - 1}`)?.configured).toMatchObject({ modelId: 'chosen' })
-        expect(restarted.get(`new-${count - 1}`)?.live?.models[0]?.id).toBe('final')
-        await vi.advanceTimersByTimeAsync(2_000)
-        expect(write).toHaveBeenCalledTimes(3)
-      } finally {
-        vi.useRealTimers()
-        rmSync(directory, { recursive: true, force: true })
+      const run = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+      const scans = vi.fn<Parameters<typeof persistence.save>[0]>()
+      const save = persistence.save
+      vi.spyOn(persistence, 'save').mockImplementation((source) => {
+        scans.mockImplementation(source)
+        save(scans)
+      })
+      for (let i = 0; i < count; i++) {
+        store.recordSuccess(`fp-${i}`, 'grok', success('model', 'chosen'), 'live')
       }
+      expect(run).not.toHaveBeenCalled()
+      expect(scans).not.toHaveBeenCalled()
+      const first = store.flushPersistence()
+      expect(store.flushPersistence()).toBe(first)
+      await first
+      expect(run.mock.calls.filter((args) => args.length === 4)).toHaveLength(count)
+      expect(scans).toHaveBeenCalledTimes(2)
+      at++
+      store.get('fp-0')
+      store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
+      store.recordConfiguredDefault('fp-0', { modelId: 'chosen' })
+      let changed = false
+      run.mockRestore()
+      const nativeRun = NodeSqliteStatement.prototype.run
+      const sparse = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+      sparse.mockImplementation(function (this: NodeSqliteStatement, ...args) {
+        const result = nativeRun.apply(this, args)
+        if (!changed && args.length === 4) {
+          changed = true
+          queueMicrotask(() => {
+            at++
+            store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
+            store.get('fp-0')
+          })
+        }
+        return result
+      })
+      await store.flushPersistence()
+      expect(sparse.mock.calls.filter((args) => args.length === 4)).toHaveLength(3)
+      sparse.mockRestore()
+      const loaded = await persistence.load()
+      expect(loaded.at(-1)?.fingerprint).toBe('fp-0')
+      expect(loaded.find((row) => row.fingerprint === 'fp-1')?.live?.at).toBe(at)
+      expect(loaded.at(-1)?.configured?.modelId).toBe('chosen')
+      rmSync(directory, { recursive: true, force: true })
     }
   )
-
-  it('keeps the first change during IO on its normal 500ms cadence', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-cadence-'))
-    const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
-    const started = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
-    const completed = Promise.withResolvers<void>()
-    const write = vi
-      .mocked(writeFile)
-      .mockClear()
-      .mockImplementationOnce(async (...args) => {
-        started.resolve()
-        await release.promise
-        return fs.writeFile(...args)
-      })
-    vi.mocked(rename).mockImplementationOnce(async (...args) => {
-      await fs.rename(...args)
-      completed.resolve()
-    })
+  it('paces normal starts at 500ms and keeps changes during an active write owed', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-cadence-'))
     const store = new AgentModelCatalogStore()
-    await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
-    vi.useFakeTimers()
+    const persistence = createAgentModelCatalogFilePersistence(directory)
+    await store.attachPersistence(persistence)
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    const started = Date.now()
+    const starts: number[] = []
+    const exec = sql.exec
+    let firstCommitted!: () => void
+    const committed = new Promise<void>((resolve) => {
+      firstCommitted = resolve
+    })
+    const writing = vi.spyOn(sql, 'exec').mockImplementation(function (this: SyncDatabase, sql) {
+      if (sql.includes('BEGIN IMMEDIATE')) {
+        starts.push(Date.now())
+      }
+      const result = exec.call(this, sql)
+      if (sql === 'COMMIT' && starts.length === 1) {
+        store.recordSuccess('newer', 'grok', success('newer'), 'live')
+        firstCommitted()
+      }
+      return result
+    })
     try {
-      store.recordSuccess('fp', 'grok', success('old'), 'live')
-      await vi.advanceTimersByTimeAsync(500)
-      await started.promise
-      await vi.advanceTimersByTimeAsync(250)
-      store.recordSuccess('fp', 'grok', success('new'), 'live')
-      release.resolve()
-      await completed.promise
+      store.recordSuccess('first', 'grok', success('first'), 'live')
       await vi.advanceTimersByTimeAsync(499)
-      expect(write).toHaveBeenCalledTimes(1)
+      expect(starts).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      await committed
+      // Join retirement without explicit flush bypassing the next normal deadline.
+      await persistence.load()
+      await vi.advanceTimersByTimeAsync(499)
+      expect(starts).toEqual([started + 500])
       await vi.advanceTimersByTimeAsync(1)
       await store.flushPersistence()
-      expect(write).toHaveBeenCalledTimes(2)
+      expect(starts).toEqual([started + 500, started + 1_000])
+      expect((await persistence.load()).map((row) => row.fingerprint)).toEqual(['first', 'newer'])
     } finally {
+      writing.mockRestore()
       vi.useRealTimers()
       rmSync(directory, { recursive: true, force: true })
     }
   })
-
-  it.each(['write', 'rename'] as const)(
-    'keeps failed %s dirty for an explicit retry',
+  it.each(['row', 'delete', 'commit', 'uncertain', 'first', 'rollback', 'close'] as const)(
+    'rolls back %s failure and retries explicitly without mutation or legacy replay',
     async (stage) => {
-      const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-retry-'))
-      const store = new AgentModelCatalogStore()
-      const persistence = createAgentModelCatalogFilePersistence(directory)
-      await store.attachPersistence(persistence)
-      store.recordSuccess('fp', 'grok', success('old'), 'discovery')
-      await store.flushPersistence()
-      const file = join(directory, 'agent-model-catalog.json')
-      const old = readFileSync(file, 'utf8')
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const operation = vi.mocked(stage === 'write' ? writeFile : rename)
-      const failed = Promise.withResolvers<void>()
-      operation.mockImplementationOnce(async () => {
-        await failed.promise
-        throw new Error('disk unavailable')
-      })
-      vi.useFakeTimers()
-      try {
-        store.recordSuccess('fp', 'grok', success('intermediate'), 'live')
-        const flushing = store.flushPersistence()
-        await vi.advanceTimersByTimeAsync(0)
-        store.recordSuccess('fp', 'grok', success('latest', 'chosen'), 'live')
-        store.recordConfiguredDefault('fp', { modelId: 'chosen' })
-        failed.resolve()
-        await flushing
-        expect(warn).toHaveBeenCalledTimes(1)
-        expect(readFileSync(file, 'utf8')).toBe(old)
-        expect(store.get('fp')?.live?.models[0]?.id).toBe('latest')
-        const attempts = operation.mock.calls.length
-        await vi.advanceTimersByTimeAsync(5_000)
-        expect(operation).toHaveBeenCalledTimes(attempts)
-        await store.flushPersistence()
-        const [loaded] = await persistence.load()
-        expect(loaded?.live?.models[0]?.id).toBe('latest')
-        expect(loaded?.configured?.modelId).toBe('chosen')
-        expect(operation).toHaveBeenCalledTimes(attempts + 1)
-      } finally {
-        vi.useRealTimers()
-        warn.mockRestore()
-        rmSync(directory, { recursive: true, force: true })
+      const directory = mkdtempSync(join(tmpdir(), 'catalog-transaction-'))
+      const legacy = join(directory, 'agent-model-catalog.json')
+      const seed = new AgentModelCatalogStore()
+      seed.recordSuccess('old', 'grok', success('old'), 'discovery')
+      writeFileSync(legacy, JSON.stringify({ version: 3, entries: [seed.get('old')] }))
+      if (stage === 'first') {
+        const child = spawnSync(process.execPath, [
+          '-e',
+          `const d=new(require('node:sqlite').DatabaseSync)(process.argv[1]);d.exec('BEGIN IMMEDIATE;CREATE TABLE unfinished(x);INSERT INTO unfinished VALUES(1)');process.exit(0)`,
+          join(directory, 'agent-model-catalog.db')
+        ])
+        expect(child.status).toBe(0)
       }
+      const source = new Map([['old', seed.get('old')!]])
+      const persistence = createAgentModelCatalogFilePersistence(directory)
+      await persistence.attach!(
+        () => source.values(),
+        () => {}
+      )
+      if (stage !== 'first' && stage !== 'uncertain') {
+        await persistence.flush()
+      }
+      const before = await persistence.load()
+      source.clear()
+      seed.recordSuccess('new', 'grok', success('new'), 'live')
+      source.set('new', seed.get('new')!)
+      persistence.save(() => source.values())
+      const exec = sql.exec
+      const run = NodeSqliteStatement.prototype.run
+      let failed = false
+      let retirementFailed = false
+      const close = sql.close
+      const closing = vi.spyOn(sql, 'close').mockImplementation(function (this: SyncDatabase) {
+        if (stage === 'close' && failed && !retirementFailed) {
+          retirementFailed = true
+          throw new Error('close')
+        }
+        return close.call(this)
+      })
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const fault = vi.spyOn(sql, 'exec').mockImplementation(function (this: SyncDatabase, sql) {
+        if (stage === 'rollback' && sql === 'ROLLBACK' && !retirementFailed) {
+          retirementFailed = true
+          throw new Error('rollback')
+        }
+        if (
+          !failed &&
+          (stage === 'commit' || stage === 'uncertain' || stage === 'first') &&
+          sql === 'COMMIT'
+        ) {
+          failed = true
+          if (stage === 'uncertain') {
+            exec.call(this, sql)
+          }
+          throw new Error(stage)
+        }
+        return exec.call(this, sql)
+      })
+      const rowFault = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+      rowFault.mockImplementation(function (this: NodeSqliteStatement, ...args) {
+        if (
+          !failed &&
+          ((['row', 'rollback', 'close'].includes(stage) && args.length === 4) ||
+            (stage === 'delete' && args.length === 1))
+        ) {
+          failed = true
+          throw new Error(stage)
+        }
+        return run.apply(this, args)
+      })
+      await persistence.flush()
+      expect(failed).toBe(true)
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect((await persistence.load()).map((row) => row.fingerprint)).toEqual(
+        stage === 'uncertain' ? ['new'] : before.map((row) => row.fingerprint)
+      )
+      if (stage === 'close') {
+        expect(closing.mock.contexts[0]).toBe(closing.mock.contexts[1])
+      }
+      if (stage === 'rollback') {
+        const contexts = fault.mock.contexts.filter(
+          (_, i) => fault.mock.calls[i]![0] === 'ROLLBACK'
+        )
+        expect(contexts).toHaveLength(2)
+        expect(contexts[0]).toBe(contexts[1])
+      }
+      const attempts = fault.mock.calls.length
+      await new Promise((resolve) => setTimeout(resolve, 550))
+      expect(fault).toHaveBeenCalledTimes(attempts)
+      rowFault.mockRestore()
+      fault.mockRestore()
+      closing.mockRestore()
+      warn.mockRestore()
+      await persistence.flush()
+      source.clear()
+      persistence.save(() => source.values())
+      await persistence.flush()
+      expect(await createAgentModelCatalogFilePersistence(directory).load()).toEqual([])
+      expect(readFileSync(legacy, 'utf8')).toContain('old')
+      rmSync(directory, { recursive: true, force: true })
     }
   )
-
-  it('loads nothing from a malformed persistence file', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-'))
+  it.each([
+    'PRAGMA user_version=99',
+    'CREATE TABLE foreign_data(x)',
+    "UPDATE catalog SET payload='{}'"
+  ])('retries transient initialization and preserves invalid authority: %s', async (corrupt) => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-authority-'))
+    const legacy = join(directory, 'agent-model-catalog.json')
+    const seed = new AgentModelCatalogStore()
+    seed.recordSuccess('disk', 'grok', success('disk'), 'discovery')
+    const bytes = JSON.stringify({ version: 3, entries: [seed.get('disk')] })
+    writeFileSync(legacy, bytes)
+    renameSync(legacy, `${legacy}.backup`)
+    mkdirSync(legacy)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const store = new AgentModelCatalogStore()
     const persistence = createAgentModelCatalogFilePersistence(directory)
-    expect(await persistence.load()).toEqual([])
+    await store.attachPersistence(persistence)
+    expect(store.get('disk')).toBeNull()
+    expect(existsSync(join(directory, 'agent-model-catalog.db'))).toBe(false)
+    rmSync(legacy, { recursive: true })
+    renameSync(`${legacy}.backup`, legacy)
+    await store.flushPersistence()
+    expect(store.get('disk')?.models[0]?.id).toBe('disk')
+    const db = new SyncDatabase(join(directory, 'agent-model-catalog.db'))
+    db.exec(corrupt)
+    db.close()
+    const prior = readFileSync(join(directory, 'agent-model-catalog.db'))
+    const later = new AgentModelCatalogStore()
+    await later.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+    expect(later.get('disk')).toBeNull()
+    later.recordSuccess('memory', 'grok', success('memory'), 'live')
+    await later.flushPersistence()
+    expect(later.get('memory')).not.toBeNull()
+    expect(readFileSync(join(directory, 'agent-model-catalog.db'))).toEqual(prior)
+    expect(readFileSync(legacy, 'utf8')).toBe(bytes)
+    warn.mockRestore()
+    rmSync(directory, { recursive: true, force: true })
+  })
+  it.each([
+    '{"version":3,"entries":[]} trailing',
+    '{"version":3,"entries":[]',
+    '{"version":4,"entries":[]}',
+    '{"version":3,"entries":[],"entries":{}}'
+  ])('preserves an invalid final legacy document: %s', async (bytes) => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-framing-'))
+    const legacy = join(directory, 'agent-model-catalog.json')
+    writeFileSync(legacy, bytes)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const store = new AgentModelCatalogStore()
+    await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+    store.recordSuccess('memory', 'grok', success('memory'), 'live')
+    await store.flushPersistence()
+    expect(store.get('memory')).not.toBeNull()
+    expect(readFileSync(legacy, 'utf8')).toBe(bytes)
+    expect(existsSync(join(directory, 'agent-model-catalog.db'))).toBe(false)
+    warn.mockRestore()
+    rmSync(directory, { recursive: true, force: true })
+  })
+  it('keeps the once-attached catalog usable after the runtime journal closes and reinstalls', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-runtime-'))
+    const journal = new SyncDatabase(join(directory, 'journal.db'))
+    await attachAgentModelCatalogPersistenceOnce(directory)
+    journal.close()
+    agentModelCatalogStore.recordSuccess('runtime', 'grok', success('first'), 'live')
+    await agentModelCatalogStore.flushPersistence()
+    await attachAgentModelCatalogPersistenceOnce(join(directory, 'unused'))
+    agentModelCatalogStore.recordSuccess('runtime', 'grok', success('reinstalled'), 'live')
+    await agentModelCatalogStore.flushPersistence()
+    expect((await createAgentModelCatalogFilePersistence(directory).load())[0]?.models[0]?.id).toBe(
+      'reinstalled'
+    )
+    expect(existsSync(join(directory, 'unused'))).toBe(false)
+    rmSync(directory, { recursive: true, force: true })
   })
 })

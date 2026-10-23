@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
@@ -74,11 +74,17 @@ it.each([
       const key = agentModelCatalogFingerprint({ agent, accountHome, wslDistro: null })
       const persistence = createAgentModelCatalogFilePersistence(directory)
       const previous = new AgentModelCatalogStore()
-      await previous.attachPersistence(persistence)
       const efforts = [{ value: 'high', label: 'High' }]
       const models = [{ id: 'provider/old', label: 'Old', isDefault: false, efforts }]
       previous.recordSuccess(key, agent, { origin: 'probe', models }, 'discovery')
-      await previous.flushPersistence()
+      const entry = previous.get(key)!
+      await writeFile(
+        join(directory, 'agent-model-catalog.json'),
+        JSON.stringify({
+          version: 3,
+          entries: [{ agent, fingerprint: key, discovered: entry.discovered, live: entry.live }]
+        })
+      )
       const store = new AgentModelCatalogStore()
       await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
       const oldEntry = store.get(key)

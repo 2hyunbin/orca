@@ -1,5 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { createAgentModelCatalogDatabase } from './agent-model-catalog-database'
 import type {
   AgentSessionModelOption,
   AgentSessionOptionChoice
@@ -16,6 +15,10 @@ const SCHEMA_VERSION = 3
 const SAVE_COALESCE_MS = 500
 
 export type AgentModelCatalogPersistence = {
+  attach?: (
+    source: () => Iterable<AgentModelCatalogEntry>,
+    hydrate: (entries: AgentModelCatalogEntry[]) => void
+  ) => Promise<void>
   load: () => Promise<AgentModelCatalogEntry[]>
   /** Fire-and-forget, coalesced; a failed write never surfaces to a caller. */
   save: (entries: () => Iterable<AgentModelCatalogEntry>) => void
@@ -159,13 +162,21 @@ function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   }
 }
 
-/** One JSON file of last-good entries. Success-only by construction: failures
- *  are never handed to `save`, and a malformed file loads as empty. */
+/** The adapter owns a private connection only for each sequential load or drain pass. */
 export function createAgentModelCatalogFilePersistence(
   directory: string
 ): AgentModelCatalogPersistence {
-  const filePath = join(directory, 'agent-model-catalog.json')
+  const database = createAgentModelCatalogDatabase(
+    directory,
+    parseEntry,
+    persistedEntry,
+    SCHEMA_VERSION
+  )
   let entries: () => Iterable<AgentModelCatalogEntry> = () => []
+  let hydrate = (_rows: AgentModelCatalogEntry[]): void => {}
+  let acknowledged = new Map<string, AgentModelCatalogEntry>()
+  let ready = false
+  let initializing: Promise<void> | null = null
   let accepted = 0
   let durable = 0
   let due = 0
@@ -173,7 +184,30 @@ export function createAgentModelCatalogFilePersistence(
   let timer: ReturnType<typeof setTimeout> | null = null
   let writing: Promise<void> | null = null
   let flushing = false
-
+  const diagnose = (error: unknown): void =>
+    console.warn('[agent-model-catalog] persistence failed:', error)
+  const initialize = (): Promise<void> => {
+    if (ready) {
+      return Promise.resolve()
+    }
+    initializing ??= database
+      .read()
+      .then((rows) => {
+        acknowledged = database.isCommitted()
+          ? new Map(rows.map((row) => [row.fingerprint, row]))
+          : new Map()
+        hydrate(rows)
+        ready = true
+      })
+      .finally(() => {
+        initializing = null
+      })
+    return initializing
+  }
+  const unchanged = (rows: AgentModelCatalogEntry[]): boolean => {
+    const current = [...entries()]
+    return current.length === rows.length && current.every((entry, index) => entry === rows[index])
+  }
   const schedule = (): void => {
     if (timer !== null || writing || accepted === durable) {
       return
@@ -190,23 +224,24 @@ export function createAgentModelCatalogFilePersistence(
   const drain = (): Promise<void> => {
     writing ??= Promise.resolve().then(async () => {
       try {
+        await initialize()
         do {
-          const revision = accepted
-          const payload = JSON.stringify({
-            version: SCHEMA_VERSION,
-            entries: Array.from(entries(), persistedEntry)
-          })
           lastStart = Date.now()
           due = 0
-          await mkdir(dirname(filePath), { recursive: true })
-          const tmpPath = `${filePath}.tmp`
-          await writeFile(tmpPath, payload, 'utf8')
-          await rename(tmpPath, filePath)
+          const revision = accepted
+          const rows = [...entries()]
+          await database.write(rows, acknowledged)
+          acknowledged = new Map(rows.map((row) => [row.fingerprint, row]))
           durable = revision
+          if (!unchanged(rows) && accepted === revision) {
+            accepted++
+            due ||= Date.now() + SAVE_COALESCE_MS
+          }
         } while (flushing && durable !== accepted)
       } catch (error) {
+        acknowledged.clear()
         due = 0
-        console.warn('[agent-model-catalog] could not persist model lists:', error)
+        diagnose(error)
       } finally {
         writing = null
         flushing = false
@@ -222,25 +257,32 @@ export function createAgentModelCatalogFilePersistence(
       clearTimeout(timer)
       timer = null
     }
+    if (
+      accepted === durable &&
+      (!ready || !database.isCommitted() || !unchanged([...acknowledged.values()]))
+    ) {
+      accepted++
+    }
     if (accepted === durable) {
       return writing ?? Promise.resolve()
     }
     flushing = true
     return drain()
   }
-
   return {
+    async attach(source, apply) {
+      entries = source
+      hydrate = apply
+      await initialize().catch(diagnose)
+    },
     async load() {
+      while (writing) {
+        await writing
+      }
       try {
-        const parsed: unknown = JSON.parse(await readFile(filePath, 'utf8'))
-        const root = asRecord(parsed)
-        if (!root || root.version !== SCHEMA_VERSION || !Array.isArray(root.entries)) {
-          return []
-        }
-        return root.entries
-          .map(parseEntry)
-          .filter((entry): entry is AgentModelCatalogEntry => entry !== null)
-      } catch {
+        return await database.read()
+      } catch (error) {
+        diagnose(error)
         return []
       }
     },
