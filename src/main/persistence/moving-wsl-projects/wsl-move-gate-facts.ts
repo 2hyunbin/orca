@@ -12,6 +12,7 @@ import { probePtyRunningWorkWithInspection } from '../../../shared/pty-running-w
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { TerminalProcessInspection } from '../../../shared/terminal-process-inspection'
 import type { WslMoveTerminalScope } from './wsl-move-driver-ports'
+import type { WslGuestPaneForeground } from './wsl-move-guest-foreground'
 import { WSL_MOVE_LIVE_WORKER_STATES } from './wsl-move-orchestration-history-rewrite'
 import type { WslMoveRestoreHintPane } from './wsl-move-restore-hints'
 import type { WslMoveGateInputs, WslMovePaneFacts } from './wsl-move-terminal-gate'
@@ -35,6 +36,14 @@ export type WslMoveGateFactSources = {
   scrollbackBytes: (tabId: string, leafId: string) => Promise<number>
   automationRuns: () => readonly AutomationRun[]
   dispatches: () => readonly WslMoveDispatchRow[]
+  /**
+   * Bridge WSL panes read inside their distro: on Windows the host sees only `wsl.exe`, which
+   * every live pane has. Absent off Windows. Never rejects into an idle verdict.
+   */
+  guestForegrounds?: (
+    distro: string,
+    paneKeys: readonly string[]
+  ) => Promise<ReadonlyMap<string, WslGuestPaneForeground>>
 }
 
 // The close-tab warning's budget; a probe that does not answer reads as unverifiable and blocks.
@@ -53,11 +62,17 @@ export async function collectWslMoveGateInputs(
     sources.inspect
   )
   const verdicts = new Map(probes.map((probe) => [probe.ptyId, probe.verdict]))
+  const guest = await readGuestForegrounds(sources, terminals)
   const panes: WslMovePaneFacts[] = []
   for (const terminal of terminals) {
     const verdict = verdicts.get(terminal.ptyId) ?? 'unverifiable'
     const foreground =
-      verdict === 'exited' ? 'shell-idle' : verdict === 'live' ? 'process-running' : 'unverifiable'
+      guest.get(terminal.ptyId) ??
+      (verdict === 'exited'
+        ? 'shell-idle'
+        : verdict === 'live'
+          ? 'process-running'
+          : 'unverifiable')
     const pane = terminal.paneKey ? parsePaneKey(terminal.paneKey) : null
     if (!terminal.paneKey || !pane) {
       // A terminal with no pane cannot be restored on the host, so it can never pass as idle.
@@ -88,6 +103,38 @@ export async function collectWslMoveGateInputs(
       .filter((row) => LIVE_WORKER_STATES.has(row.state) && inScope(row.worktreeId))
       .map((row) => row.dispatchId)
   }
+}
+
+async function readGuestForegrounds(
+  sources: WslMoveGateFactSources,
+  terminals: readonly WslMoveLiveTerminal[]
+): Promise<Map<string, WslGuestPaneForeground>> {
+  const byPty = new Map<string, WslGuestPaneForeground>()
+  const read = sources.guestForegrounds
+  if (!read) {
+    return byPty
+  }
+  const byDistro = new Map<string, WslMoveLiveTerminal[]>()
+  for (const terminal of terminals) {
+    if (terminal.wslDistro && terminal.paneKey) {
+      byDistro.set(terminal.wslDistro, [...(byDistro.get(terminal.wslDistro) ?? []), terminal])
+    }
+  }
+  await Promise.all(
+    [...byDistro].map(async ([distro, members]) => {
+      const answers = await read(
+        distro,
+        members.map((terminal) => terminal.paneKey ?? '')
+      ).catch(() => null)
+      for (const terminal of members) {
+        byPty.set(
+          terminal.ptyId,
+          (terminal.paneKey && answers?.get(terminal.paneKey)) || 'unverifiable'
+        )
+      }
+    })
+  )
+  return byPty
 }
 
 /** The panes the pause carries, read while their sessions still run. */
