@@ -21,6 +21,34 @@ afterEach(() => {
 })
 
 describe('normalizeMarkdownReferenceLinks', () => {
+  it.each([
+    {
+      name: 'adjacent definitions and an unterminated final definition',
+      markdown:
+        '[docs]: https://first.example\n[docs]: https://last.example\n[Docs]\n[unused]: https://unused.example',
+      expected: '[Docs](https://last.example)\n'
+    },
+    {
+      name: 'mixed line endings around removed definitions',
+      markdown: 'before\r[docs]: https://example.com\r\nmiddle\r\r\n[Docs]\r',
+      expected: 'before\rmiddle\r\r\n[Docs](https://example.com)\r'
+    },
+    {
+      name: 'escaped and unmatched links between replacements',
+      markdown:
+        '[Docs] \\[Docs] [missing] [Docs](inline) [label][docs]\n[docs]: https://example.com\n',
+      expected:
+        '[Docs](https://example.com) \\[Docs] [missing] [Docs](inline) [label](https://example.com)\n'
+    },
+    {
+      name: 'retained UTF-16 code units around a replacement',
+      markdown: '\ud800😀[Docs]\udc00\n[docs]: https://example.com\n',
+      expected: '\ud800😀[Docs](https://example.com)\udc00\n'
+    }
+  ])('preserves source spans with $name', ({ markdown, expected }) => {
+    expect(normalizeMarkdownReferenceLinks(markdown)).toBe(expected)
+  })
+
   it('inlines shortcut and full reference links', () => {
     expect(
       normalizeMarkdownReferenceLinks(

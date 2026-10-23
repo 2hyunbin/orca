@@ -73,24 +73,27 @@ function splitReferenceDefinitions(content: string): {
   const definitions = new Map<string, ReferenceLinkDefinition>()
   const fence = createMarkdownFenceTracker()
   let markdown = ''
+  let copyStart = 0
 
-  forEachReferenceDefinitionLine(content, (line, newline) => {
-    const isFenceLine = fence.consume(line)
-    const definition = isFenceLine || fence.insideFence ? null : parseReferenceDefinition(line)
+  forEachReferenceDefinitionLine(content, (lineStart, lineEnd, nextLineStart) => {
+    const isFenceLine = fence.consumeRange(content, lineStart, lineEnd)
+    const definition =
+      isFenceLine || fence.insideFence
+        ? null
+        : parseReferenceDefinition(content.slice(lineStart, lineEnd))
     if (definition) {
       definitions.set(definition.label, definition)
-      return
+      markdown += content.slice(copyStart, lineStart)
+      copyStart = nextLineStart
     }
-
-    markdown += line + newline
   })
 
-  return { definitions, markdown }
+  return { definitions, markdown: markdown + content.slice(copyStart) }
 }
 
 function forEachReferenceDefinitionLine(
   content: string,
-  visit: (line: string, newline: string) => void
+  visit: (lineStart: number, lineEnd: number, nextLineStart: number) => void
 ): void {
   let lineStart = 0
   for (let index = 0; index <= content.length; index += 1) {
@@ -98,10 +101,8 @@ function forEachReferenceDefinitionLine(
     if (index < content.length && codeUnit !== 10 && codeUnit !== 13) {
       continue
     }
-    const hasLineEnding = index < content.length
     const hasCrLf = codeUnit === 13 && content.charCodeAt(index + 1) === 10
-    const newline = hasLineEnding ? (hasCrLf ? '\r\n' : content[index]) : ''
-    visit(content.slice(lineStart, index), newline)
+    visit(lineStart, index, Math.min(content.length, index + (hasCrLf ? 2 : 1)))
     if (hasCrLf) {
       index += 1
     }
@@ -140,19 +141,18 @@ function replaceReferenceLinks(
   definitions: Map<string, ReferenceLinkDefinition>
 ): string {
   let result = ''
+  let copyStart = 0
   let index = 0
   const isInsideFence = createMarkdownFenceRangeCursor(getMarkdownFenceRanges(markdown))
 
   while (index < markdown.length) {
     if (isInsideFence(index) || markdown[index] !== '[' || isEscaped(markdown, index)) {
-      result += markdown[index]
       index += 1
       continue
     }
 
     const closingTextIndex = findClosingBracket(markdown, index + 1)
     if (closingTextIndex === -1) {
-      result += markdown[index]
       index += 1
       continue
     }
@@ -160,7 +160,6 @@ function replaceReferenceLinks(
     const text = markdown.slice(index + 1, closingTextIndex)
     const afterText = markdown[closingTextIndex + 1]
     if (afterText === '(') {
-      result += markdown[index]
       index += 1
       continue
     }
@@ -172,25 +171,26 @@ function replaceReferenceLinks(
         const label = normalizeReferenceLabel(rawLabel || text)
         const definition = definitions.get(label)
         if (definition) {
-          result += formatInlineReferenceLink(text, definition)
+          result += markdown.slice(copyStart, index) + formatInlineReferenceLink(text, definition)
           index = closingLabelIndex + 1
+          copyStart = index
           continue
         }
       }
     } else {
       const definition = definitions.get(normalizeReferenceLabel(text))
       if (definition) {
-        result += formatInlineReferenceLink(text, definition)
+        result += markdown.slice(copyStart, index) + formatInlineReferenceLink(text, definition)
         index = closingTextIndex + 1
+        copyStart = index
         continue
       }
     }
 
-    result += markdown[index]
     index += 1
   }
 
-  return result
+  return result + markdown.slice(copyStart)
 }
 
 export function normalizeMarkdownReferenceLinks(content: string): string {
