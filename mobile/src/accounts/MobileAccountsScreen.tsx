@@ -7,6 +7,7 @@ import { loadHosts } from '../transport/host-store'
 import { useHostClient } from '../transport/host-client-hooks'
 import { colors, spacing } from '../theme/mobile-theme'
 import { styles } from './mobile-accounts-screen-styles'
+import { MobileUsageRequestsSection } from './MobileUsageRequestsSection'
 import { useNow } from '../hooks/use-now'
 import { ClaudeIcon, OpenAIIcon } from '../components/AgentIcons'
 import {
@@ -18,7 +19,8 @@ import {
   getUsageBarState,
   getWindowResetLabel,
   hasActiveProviderUsage,
-  UsageBar
+  UsageBar,
+  UsageRequestsDisabledNotice
 } from '../components/AccountUsage'
 import {
   getActiveCodexAccountIdForRateLimitTarget,
@@ -207,8 +209,17 @@ export function MobileAccountsScreen() {
         ? getActiveCodexAccountIdForRateLimitTarget(snapshot)
         : state.activeAccountId
     const activeUsage = getActiveProviderRateLimits(snapshot, provider)
-    const activeSessionBar = getUsageBarState(activeUsage, 'session')
-    const activeWeeklyBar = getUsageBarState(activeUsage, 'weekly')
+    const requestsDisabled = snapshot.rateLimits.usageRequestPolicy?.enabled[provider] === false
+    const activeSessionBar = getUsageBarState(
+      activeUsage,
+      'session',
+      requestsDisabled ? false : undefined
+    )
+    const activeWeeklyBar = getUsageBarState(
+      activeUsage,
+      'weekly',
+      requestsDisabled ? false : undefined
+    )
     const resetCredit = provider === 'codex' ? getCodexResetCreditSummary(activeUsage, now) : null
     const Icon = provider === 'claude' ? ClaudeIcon : OpenAIIcon
     return (
@@ -218,6 +229,7 @@ export function MobileAccountsScreen() {
           <Text style={styles.sectionHeading}>{title}</Text>
         </View>
         <View style={styles.card}>
+          {requestsDisabled ? <UsageRequestsDisabledNotice limits={activeUsage} /> : null}
           {/* System default row */}
           <Pressable
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
@@ -265,8 +277,9 @@ export function MobileAccountsScreen() {
               : null
             const usage = isActive ? activeUsage : (inactiveEntry?.rateLimits ?? null)
             const isFetching =
-              (isActive && usage?.status === 'fetching') ||
-              (!isActive && inactiveEntry?.isFetching === true)
+              !requestsDisabled &&
+              ((isActive && usage?.status === 'fetching') ||
+                (!isActive && inactiveEntry?.isFetching === true))
             const sessionBar = getUsageBarState(usage, 'session', isFetching)
             const weeklyBar = getUsageBarState(usage, 'weekly', isFetching)
             return (
@@ -387,6 +400,13 @@ export function MobileAccountsScreen() {
           </View>
         ) : (
           <>
+            <MobileUsageRequestsSection
+              key={hostId}
+              client={client}
+              connected={connState === 'connected'}
+              hostName={hostName}
+              policyRevision={snapshot.rateLimits.usageRequestPolicy?.revision}
+            />
             {renderProviderSection('claude', 'Claude')}
             {renderProviderSection('codex', 'Codex')}
             <View style={styles.footerHint}>

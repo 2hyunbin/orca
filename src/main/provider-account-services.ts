@@ -3,6 +3,7 @@
  * the desktop and for orcad. Nothing here may import Electron: orcad bundles this module.
  */
 import type { Store } from './persistence'
+import { composeUsageRequestPolicyEnabled } from '../shared/usage-request-policy'
 import { RateLimitService } from './rate-limits/service'
 import { CodexRuntimeHomeService } from './codex-accounts/runtime-home-service'
 import { CodexAccountService } from './codex-accounts/service'
@@ -37,6 +38,13 @@ export function createProviderAccountServices(
   }
 ): ProviderAccountServices {
   const rateLimits = new RateLimitService()
+  rateLimits.setUsageRequestPolicyResolver(() =>
+    composeUsageRequestPolicyEnabled(
+      store.getSettings().usageRequestEnabled,
+      store.getUI().statusBarItems.includes('antigravity')
+    )
+  )
+  store.onUIChanged(() => rateLimits.reconcileUsageRequestPolicy())
   const codexRuntimeHome = new CodexRuntimeHomeService(store)
   const codexAccounts = new CodexAccountService(
     store,
@@ -48,21 +56,31 @@ export function createProviderAccountServices(
   const claudeAccounts = new ClaudeAccountService(store, rateLimits, claudeRuntimeAuth)
   // Why: quota polls are background work and must not boot a stopped distro; user-driven
   // resets call prepareForRateLimitFetch directly.
-  rateLimits.setCodexHomePathResolver(async (target) =>
-    target?.runtime === 'wsl' && !(await isWslDistroRunningForBackgroundWork(target.wslDistro))
-      ? { kind: 'skip' }
-      : codexRuntimeHome.prepareForRateLimitFetch(target)
-  )
+  rateLimits.setCodexHomePathResolver(async (target, signal) => {
+    if (signal?.aborted) {
+      return { kind: 'skip' }
+    }
+    if (
+      target?.runtime === 'wsl' &&
+      !(await isWslDistroRunningForBackgroundWork(target.wslDistro, signal))
+    ) {
+      return { kind: 'skip' }
+    }
+    return signal?.aborted ? { kind: 'skip' } : codexRuntimeHome.prepareForRateLimitFetch(target)
+  })
   rateLimits.setCodexFetchTarget(getInitialCodexRateLimitTarget(store.getSettings()))
   // Why: Kimi's CLI refreshes its OAuth token in whichever runtime it runs in, so the
   // usage fetch must read the WSL-side credentials when that's the configured runtime (#12370).
-  rateLimits.setKimiHomeResolver(() => resolveKimiHome(getKimiRuntimeTarget(store.getSettings())))
+  rateLimits.setKimiHomeResolver((signal) =>
+    resolveKimiHome(getKimiRuntimeTarget(store.getSettings()), process.platform, signal)
+  )
   rateLimits.setClaudeFetchTarget(getInitialClaudeRateLimitTarget(store.getSettings()))
   const syncAccountRuntimeTargets = createAccountRuntimeTargetSettingsSync(
     rateLimits,
     store.getSettings()
   )
   store.onSettingsChanged((updates, settings) => {
+    rateLimits.reconcileUsageRequestPolicy()
     // Why: auto is a live policy; retarget only providers whose settings-derived runtime changed.
     void syncAccountRuntimeTargets(updates, settings).catch((error) =>
       console.warn('[rate-limits] Failed to apply account runtime target:', error)
@@ -103,9 +121,13 @@ export function createProviderAccountServices(
       })
     }
   })
-  rateLimits.setClaudeAuthPreparationResolver((target) =>
-    claudeRuntimeAuth.prepareForRateLimitFetch(target)
+  rateLimits.setClaudeAuthPreparationResolver((target, signal) =>
+    claudeRuntimeAuth.prepareForRateLimitFetch(target, signal)
   )
+  rateLimits.setClaudeUsageAttributionResolver((target) =>
+    claudeRuntimeAuth.readUsageAttribution(target)
+  )
+  void rateLimits.refreshClaudeUsageAttribution()
   // Why: live Claude sessions stream usage windows through their statusLine command; feeding them here avoids OAuth usage-endpoint polling (and its 429s).
   options.setClaudeStatusLineListener((event) => {
     rateLimits.ingestLiveClaudeRateLimits(event)

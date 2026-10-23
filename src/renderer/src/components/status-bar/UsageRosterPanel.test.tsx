@@ -30,6 +30,8 @@ vi.mock('@/components/ui/dropdown-menu', () => ({
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UsageRosterPanel, UsageRow } from './UsageRosterPanel'
+import { UsageRequestPolicyContext } from './usage-request-policy-context'
+import { composeUsageRequestPolicyEnabled } from '../../../../shared/usage-request-policy'
 
 const signedOutCodex: ProviderRateLimits = {
   provider: 'codex',
@@ -40,7 +42,37 @@ const signedOutCodex: ProviderRateLimits = {
   status: 'error'
 }
 
+const disabledCodexPolicy = {
+  version: 1 as const,
+  revision: 2,
+  enabled: composeUsageRequestPolicyEnabled({ codex: false }, false)
+}
+
 describe('UsageRow', () => {
+  it('labels disabled cached data without presenting a fetching status or changing its timestamp', () => {
+    const provider: ProviderRateLimits = {
+      ...signedOutCodex,
+      status: 'fetching',
+      updatedAt: 123_456,
+      usageMetadata: { source: 'web' }
+    }
+    const markup = renderToStaticMarkup(
+      <UsageRequestPolicyContext.Provider value={disabledCodexPolicy}>
+        <UsageRow
+          p={provider}
+          display="used"
+          state={{ kind: 'loading', statusLabel: 'Fetching…' }}
+          showSignInAction={false}
+          now={mocks.now}
+        />
+      </UsageRequestPolicyContext.Provider>
+    )
+    expect(markup).toContain('Usage requests disabled')
+    expect(markup).toContain('cached and may be stale')
+    expect(markup).not.toContain('Fetching…')
+    expect(provider.updatedAt).toBe(123_456)
+  })
+
   beforeEach(() => {
     mocks.useResetCountdownClock.mockClear()
   })
