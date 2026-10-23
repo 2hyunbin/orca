@@ -67,7 +67,7 @@ export async function renameCreatedWorktreeOnFirstWork(
       getWorktreeMeta: () => meta,
       setWorktreeMeta: (_target, updates) => (meta = { ...meta, ...updates }),
       getFolderWorkspace: () => undefined,
-      updateFolderWorkspace: () => undefined,
+      updateFolderWorkspace: () => null,
       getWorktreeIdForTab: () => worktree.id
     },
     {
