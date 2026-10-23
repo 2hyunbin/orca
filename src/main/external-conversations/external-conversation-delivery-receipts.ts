@@ -39,7 +39,7 @@ export class DeliveryReceipts {
   run(
     key: ConversationKey,
     deliveryId: string,
-    method: 'connector.start' | 'connector.send',
+    method: 'connector.start' | 'connector.send' | 'connector.cancel',
     payload: unknown,
     execute: () => Promise<Delivery>
   ): Promise<Delivery> {

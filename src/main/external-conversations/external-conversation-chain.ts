@@ -48,15 +48,16 @@ export class ConversationChain {
 
   /**
    * Settles this conversation's running and queued work; later work starts a fresh lane. Given a
-   * lane's signal, only that lane is settled, never one opened after it.
+   * lane's signal, only that lane is settled, never one opened after it. True if one was.
    */
-  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): void {
+  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): boolean {
     const lane = this.lanes.get(id)
     if (!lane || (laneSignal && lane.signal !== laneSignal)) {
-      return
+      return false
     }
     this.lanes.delete(id)
     lane.controller.abort(reason)
+    return true
   }
 
   private openLane(id: string): Lane {

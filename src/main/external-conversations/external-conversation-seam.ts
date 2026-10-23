@@ -5,9 +5,10 @@ import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payloa
 import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { admitConnectorAgent } from './connector-agents'
+import { cancelConversation, type CancelTerminal } from './external-conversation-cancel'
 import { ConversationChain } from './external-conversation-chain'
 import { ConversationEvents, type ConversationWatchListener } from './external-conversation-events'
-import { ConversationPrompts, type PromptTerminal } from './external-conversation-prompts'
+import { ConversationPrompts } from './external-conversation-prompts'
 import type { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import {
   findLink,
@@ -40,7 +41,7 @@ export type ExternalConversationHost = {
   terminal: ConversationTerminal
 }
 
-export type ConversationTerminal = FollowUpTerminal & ReopenTerminal & PromptTerminal
+export type ConversationTerminal = FollowUpTerminal & ReopenTerminal & CancelTerminal
 
 export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalConversationHost {
   return { launcher: runtimeConversationLauncher(runtime), terminal: runtime }
@@ -141,6 +142,13 @@ export class ExternalConversationSeam {
       optionId,
       signal: this.abort.signal
     })
+  }
+
+  /** Receipted like a send, so a retried delivery never cancels twice. */
+  cancel(host: ExternalConversationHost, key: ConversationKey, id: string): Promise<Delivery> {
+    return this.deps.receipts.run(key, id, 'connector.cancel', [], () =>
+      cancelConversation(host.terminal, this.deps, this.prompts, this.chain, key, this.abort.signal)
+    )
   }
 
   /** A snapshot of every linked conversation first, then its events; returns the release. */
