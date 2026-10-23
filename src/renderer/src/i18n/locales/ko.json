@@ -5821,9 +5821,7 @@
           "automationCreated": "자동화로 생성됨",
           "branchIdentity": "브랜치",
           "branchFolderPathIdentity": "브랜치 또는 폴더 경로",
-          "ef18787206": "삭제 대기 중",
-          "showChildWorktrees": "하위 작업 트리 표시",
-          "hideChildWorktrees": "하위 작업 트리 숨기기"
+          "ef18787206": "삭제 대기 중"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "에이전트"

@@ -10786,9 +10786,7 @@
           "branchIdentity": "Branch",
           "branchFolderPathIdentity": "Branch ou caminho da pasta",
           "ef18787206": "Na fila para exclusão",
-          "deleteFailed": "Falha ao excluir",
-          "hideChildWorktrees": "Ocultar árvores de trabalho filhas",
-          "showChildWorktrees": "Mostrar árvores de trabalho filhas"
+          "deleteFailed": "Falha ao excluir"
         },
         "workspace": {
           "status": {

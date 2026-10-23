@@ -5855,9 +5855,7 @@
           "automationCreated": "Creado por automatización",
           "branchIdentity": "Rama",
           "branchFolderPathIdentity": "Rama o ruta de carpeta",
-          "ef18787206": "En cola para eliminación",
-          "hideChildWorktrees": "Ocultar árboles de trabajo secundarios",
-          "showChildWorktrees": "Mostrar árboles de trabajo secundarios"
+          "ef18787206": "En cola para eliminación"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "Agents"

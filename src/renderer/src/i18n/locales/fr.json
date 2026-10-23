@@ -6026,9 +6026,7 @@
           "automationCreated": "Créé par automatisation",
           "branchIdentity": "Branche",
           "branchFolderPathIdentity": "Branche ou chemin de dossier",
-          "ef18787206": "En attente de suppression",
-          "showChildWorktrees": "Afficher les arbres de travail enfants",
-          "hideChildWorktrees": "Masquer les arbres de travail enfants"
+          "ef18787206": "En attente de suppression"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "Agents"

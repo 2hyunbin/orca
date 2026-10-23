@@ -5821,9 +5821,7 @@
           "automationCreated": "オートメーションによって作成",
           "branchIdentity": "ブランチ",
           "branchFolderPathIdentity": "ブランチまたはフォルダーパス",
-          "ef18787206": "削除待ち",
-          "hideChildWorktrees": "子のワークツリーを非表示にする",
-          "showChildWorktrees": "子ワークツリーを表示"
+          "ef18787206": "削除待ち"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "Agent"
