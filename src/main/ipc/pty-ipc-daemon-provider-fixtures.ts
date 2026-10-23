@@ -76,7 +76,7 @@ export function createDaemonActiveProviderFixtures(ctx: {
   function makeProjectRuntimeStore(args: {
     projectRuntimePreference: LocalWindowsRuntimePreference
     settings?: Partial<GlobalSettings>
-  }) {
+  }): Store {
     const store = vi.mockObject(Store.prototype)
     const repo = { id: 'repo-1', path: 'C:\\repo', displayName: 'repo', badgeColor: '', addedAt: 0 }
     store.getRepo.mockImplementation((repoId) => (repoId === repo.id ? repo : undefined))
