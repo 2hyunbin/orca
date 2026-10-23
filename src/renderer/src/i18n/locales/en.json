@@ -13336,6 +13336,25 @@
           "attentionSharedNotCurrent": "Needs attention · The shared copy this folder uses is not Orca’s",
           "resultUpdateSkippedPlaces": "{{result}} · Update skipped in {{places}} places: {{reason}}",
           "resultUpdateSkippedAgent": "{{result}} · Update skipped in {{agent}}: {{reason}}"
+        },
+        "recoverServer": {
+          "title": "Recover Orca’s server",
+          "description": "Orca’s server on this host won’t start because a lock from an earlier run is still in place.",
+          "checking": "Checking the lock…",
+          "confirmCheck": "No other machine sharing this home is running Orca",
+          "cancel": "Cancel",
+          "confirm": "Clear lock and restart",
+          "eligible": "Nothing answers on this machine at its old address, but Orca can’t rule out another machine with the same name that shares this home folder.",
+          "host": "Host",
+          "lockBoot": "Written during boot",
+          "currentBoot": "Current boot",
+          "age": "Age",
+          "ageMinutes": "{{count}} minutes",
+          "warning": "Only continue if no other machine sharing this home runs Orca for this profile.",
+          "none": "There is no lock to clear any more. Reconnect to start this host’s Orca server.",
+          "manualCommand": "Run {{command}} on the host, or delete the lock file shown in Details.",
+          "manualDelete": "Delete the lock file shown in Details once you are sure no other machine uses it.",
+          "action": "Recover server…"
         }
       },
       "right": {

@@ -1,0 +1,123 @@
+// @vitest-environment happy-dom
+
+import { act, type ReactNode } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { OrcadManagedStaleLockReclaimResult } from '../../../../shared/orcad-managed-runtime'
+import type { SshManagedServerStatus } from '../../../../shared/ssh-types'
+import {
+  canRecoverSshHostServer,
+  SshHostRecoverServerDialog,
+  staleLockReclaimCommandFrom
+} from './SshHostRecoverServerAction'
+
+vi.mock('../ui/dialog', () => ({
+  Dialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
+    open ? <div>{children}</div> : null,
+  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
+  DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>
+}))
+
+const COMMAND = '/opt/bun /slot/orcad.js --reclaim-stale-lock --data-root /home/dev/.orca'
+const DETAIL = `orcad holds the data root. If it is not running anywhere, run \`${COMMAND}\` on the machine it ran on.`
+const refusedStart: SshManagedServerStatus = {
+  kind: 'managed',
+  environmentId: 'env-1',
+  serving: { state: 'unverifiable', detail: DETAIL }
+}
+
+const eligible: OrcadManagedStaleLockReclaimResult = {
+  status: 'eligible',
+  lockPath: '/home/dev/.orca/orcad.lock',
+  message: 'eligible',
+  evidence: { pid: 41, host: 'box', bootId: 'boot-old', currentBootId: 'boot-new', ageMinutes: 90 }
+}
+const reclaimStaleLock = vi.fn(
+  async (args: { yes: boolean }): Promise<OrcadManagedStaleLockReclaimResult> =>
+    args.yes
+      ? { status: 'reclaimed', environmentId: 'env-1', message: 'cleared', lockPath: '/l' }
+      : eligible
+)
+const roots: Root[] = []
+beforeEach(() => {
+  reclaimStaleLock.mockClear()
+  Object.assign(window, { api: { runtimeEnvironments: { managedOrcad: { reclaimStaleLock } } } })
+})
+afterEach(() => {
+  for (const root of roots.splice(0)) {
+    act(() => root.unmount())
+  }
+  document.body.innerHTML = ''
+})
+
+async function render(onOpenChange = vi.fn(), onChanged = vi.fn()) {
+  const container = document.createElement('div')
+  document.body.append(container)
+  const root = createRoot(container)
+  roots.push(root)
+  await act(async () => {
+    root.render(
+      <SshHostRecoverServerDialog
+        status={refusedStart}
+        open
+        onOpenChange={onOpenChange}
+        onChanged={onChanged}
+      />
+    )
+  })
+  return container
+}
+
+function button(container: HTMLElement, text: string): HTMLButtonElement {
+  return [...container.querySelectorAll('button')].find((entry) => entry.textContent === text)!
+}
+
+describe('Recover server', () => {
+  it('is offered only when the slot’s own refusal named the command', () => {
+    expect(canRecoverSshHostServer(refusedStart)).toBe(true)
+    expect(
+      canRecoverSshHostServer({
+        kind: 'managed',
+        environmentId: 'env-1',
+        serving: { state: 'unverifiable', detail: 'orcad holds the data root.' }
+      })
+    ).toBe(false)
+  })
+
+  it('is not offered on the web client, which has no managed-server API', () => {
+    Object.assign(window, { api: { runtimeEnvironments: {} } })
+    expect(canRecoverSshHostServer(refusedStart)).toBe(false)
+  })
+
+  it('names the refusal’s command for a manual recovery', () => {
+    expect(staleLockReclaimCommandFrom(DETAIL)).toBe(COMMAND)
+  })
+
+  it('clears the lock only after the user rules out another machine', async () => {
+    const onOpenChange = vi.fn()
+    const onChanged = vi.fn()
+    const container = await render(onOpenChange, onChanged)
+    expect(reclaimStaleLock).toHaveBeenCalledWith({ selector: 'env-1', yes: false })
+    expect(container.textContent).toContain('boot-old')
+    const confirm = button(container, 'Clear lock and restart')
+    expect(confirm.disabled).toBe(true)
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click())
+    expect(confirm.disabled).toBe(false)
+    expect(reclaimStaleLock).not.toHaveBeenCalledWith({ selector: 'env-1', yes: true })
+    await act(async () => confirm.click())
+    expect(reclaimStaleLock).toHaveBeenLastCalledWith({ selector: 'env-1', yes: true })
+    expect(onChanged).toHaveBeenCalled()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('points to the manual recovery when the host can’t run the check', async () => {
+    reclaimStaleLock.mockResolvedValueOnce({ status: 'unsupported', message: 'no answer' })
+    const container = await render()
+    expect(container.textContent).toContain('no answer')
+    expect(container.textContent).toContain(COMMAND)
+    expect(button(container, 'Clear lock and restart')).toBeUndefined()
+  })
+})
