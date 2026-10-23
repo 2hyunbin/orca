@@ -291,9 +291,9 @@ export class CodexJournalGenericFrames {
         this.bookkeepingBytes > MAX_CODEX_GENERIC_BOOKKEEPING_BYTES) &&
       this.bucketOrder.size > 1
     ) {
-      const oldest = [...this.bucketOrder.entries()]
-        .filter(([id]) => id !== OVERFLOW_BUCKET && id !== bucket)
-        .sort((a, b) => a[1] - b[1])[0]?.[0]
+      const oldest = [...this.bucketOrder.keys()].find(
+        (id) => id !== OVERFLOW_BUCKET && id !== bucket
+      )
       if (!oldest) {
         break
       }
