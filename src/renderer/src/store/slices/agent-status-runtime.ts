@@ -53,7 +53,7 @@ export function createAgentStatusRuntime(
           transaction.setEntry(key, agentStatusByPaneKey[key])
         }
       }
-      // SAFETY: Removing the live snapshot leaves only the typed AppState patch fields.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Rest removes the live snapshot; remaining own keys are the typed AppState patch keys.
       const fields = Object.keys(app) as (keyof AppState)[]
       if (fields.some((key) => !Object.is(state[key], app[key]))) {
         storeSet(app)

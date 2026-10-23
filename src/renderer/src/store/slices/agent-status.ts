@@ -80,26 +80,27 @@ export const createAgentStatusSlice: StateCreator<AppState, [], [], AgentStatusS
     }
     return composedActions
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The spread creators together supply every AgentStatusSlice action; state fields are added below.
   const owner = getAgentStatusOwner({ getState: storeGet })
+  const rawActions = {
+    ...createAgentStatusAuthorityActions(runtime),
+    ...createAgentStatusCleanupActions(runtime),
+    ...createAgentStatusDropActions(runtime),
+    ...createAgentStatusWorktreeDropActions(runtime),
+    ...createAgentStatusLaunchActions(runtime),
+    ...createAgentStatusLiveActions(runtime),
+    ...createAgentStatusOrchestrationActions(runtime),
+    ...createAgentStatusProviderSessionActions(runtime),
+    ...createAgentStatusProgramStatusActions(runtime),
+    ...createAgentStatusRecoveryActions(runtime),
+    ...createAgentStatusRetentionActions(runtime)
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Each reflected key keeps its original action's arguments and return value inside the transaction.
   const actions = Object.fromEntries(
-    Object.entries({
-      ...createAgentStatusAuthorityActions(runtime),
-      ...createAgentStatusCleanupActions(runtime),
-      ...createAgentStatusDropActions(runtime),
-      ...createAgentStatusWorktreeDropActions(runtime),
-      ...createAgentStatusLaunchActions(runtime),
-      ...createAgentStatusLiveActions(runtime),
-      ...createAgentStatusOrchestrationActions(runtime),
-      ...createAgentStatusProviderSessionActions(runtime),
-      ...createAgentStatusProgramStatusActions(runtime),
-      ...createAgentStatusRecoveryActions(runtime),
-      ...createAgentStatusRetentionActions(runtime)
-    }).map(([key, action]) => {
+    Object.entries(rawActions).map(([key, action]) => {
       const invoke: (...args: never[]) => unknown = action
       return [key, (...args: never[]) => owner.transact(() => invoke(...args))]
     })
-  ) as AgentStatusSlice
+  ) as typeof rawActions
   composedActions = {
     setAgentStatus: actions.setAgentStatus,
     recordAgentProviderSession: actions.recordAgentProviderSession,

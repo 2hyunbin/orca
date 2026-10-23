@@ -39,13 +39,17 @@ function noPublishedProjectSectionCatalog(): MobileProjectSectionCatalog | null 
 
 const NO_PUBLISHED_ACTIVE_GROUPS: Readonly<Record<string, string>> = {}
 
+function noStoreStateGetter(): (() => AgentStatusReadState) | null {
+  return null
+}
+
 export const graphState = {
   syncScheduled: false,
   syncInFlight: false,
   syncPendingAfterFlight: false,
   syncEnabled: false,
   syncTimer: null as ReturnType<typeof setTimeout> | null,
-  getStoreState: null as (() => AgentStatusReadState) | null,
+  getStoreState: noStoreStateGetter(),
   mobileSessionSnapshotCacheByWorktree: new Map<
     string,
     {
