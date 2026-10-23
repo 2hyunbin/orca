@@ -74,6 +74,8 @@ export class WslMoveScopeChangedError extends Error {
   }
 }
 
+const UNSIGNED_DIGEST = '0'.repeat(64)
+
 export type WslMoveManifestExportStore = Pick<
   Store,
   | 'getRepos'
@@ -155,8 +157,9 @@ export function exportWslMoveManifest(
     { ...catalog, ...(hasDormantState(dormantState) ? { dormantState } : {}) },
     rewriter
   )
-  // Sign the JSON the journal and the host read back: an in-memory Date (a row added this session)
-  // canonicalizes to "{}" here but to its string there, and the host refuses the digest.
+  // Sign what the journal and the host read back: the parsed form (the parser keeps only the fields
+  // it knows, so a session field it drops would break the digest) of the JSON (an in-memory value
+  // with toJSON serializes differently), never the live objects.
   const unsigned: Omit<OrcadMigrationManifest, 'manifestSha256'> = JSON.parse(
     JSON.stringify({
       version: ORCAD_MIGRATION_MANIFEST_VERSION,
@@ -167,10 +170,16 @@ export function exportWslMoveManifest(
       destinationEnvironmentId: request.destinationEnvironmentId
     })
   )
-  const manifest = parseOrcadMigrationManifest({
+  const { manifestSha256: _unsigned, ...normalized } = parseOrcadMigrationManifest({
     ...unsigned,
-    manifestSha256: computeOrcadMigrationManifestSha256(unsigned)
+    manifestSha256: UNSIGNED_DIGEST
   })
+  const manifestSha256 = computeOrcadMigrationManifestSha256(normalized)
+  if (manifestSha256 !== computeOrcadMigrationManifestSha256(unsigned)) {
+    // Not refused (the parsed form is what moves), but a field the parser drops does not move.
+    console.warn('[wsl-move] The manifest parser dropped fields of the exported state.')
+  }
+  const manifest: OrcadMigrationManifest = { ...normalized, manifestSha256 }
   const worktreeIds = scopedWorktreeIds(repos, { ...catalog, dormantState })
   const workspaceKeys = [
     ...worktreeIds,

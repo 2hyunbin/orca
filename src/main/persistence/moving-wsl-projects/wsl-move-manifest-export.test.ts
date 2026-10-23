@@ -391,6 +391,20 @@ describe('exportWslMoveManifest', () => {
     })
   })
 
+  it('signs the session as the host parses it, even with a field the parser drops', () => {
+    // The awin run: a move right after sleeping terminals reset with a digest mismatch, because the
+    // signature covered session fields the manifest parser does not keep.
+    const state = sourceState()
+    const sleptTab: Record<string, unknown> = { ...state.workspaceSession.tabsByWorktree[WORKTREE]![0] }
+    sleptTab.fieldNoParserKeeps = 1
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an extra field on a real tab.
+    state.workspaceSession.tabsByWorktree[WORKTREE] = [sleptTab as unknown as TerminalTab]
+    const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
+    expect(() =>
+      assertOrcadMigrationManifestDigest(JSON.parse(JSON.stringify(manifest)))
+    ).not.toThrow()
+  })
+
   it('refuses to sign a scope naming a project that is no longer here', () => {
     expect(() =>
       exportWslMoveManifest(storeFor(sourceState()), { ...REQUEST, repoIds: ['app', 'gone'] })
