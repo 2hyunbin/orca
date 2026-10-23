@@ -65,17 +65,19 @@ async function render(onOpenChange = vi.fn(), onChanged = vi.fn()) {
   document.body.append(container)
   const root = createRoot(container)
   roots.push(root)
-  await act(async () => {
-    root.render(
-      <SshHostRecoverServerDialog
-        status={refusedStart}
-        open
-        onOpenChange={onOpenChange}
-        onChanged={onChanged}
-      />
-    )
-  })
-  return container
+  const show = (status: SshManagedServerStatus) =>
+    act(async () => {
+      root.render(
+        <SshHostRecoverServerDialog
+          status={status}
+          open
+          onOpenChange={onOpenChange}
+          onChanged={onChanged}
+        />
+      )
+    })
+  await show(refusedStart)
+  return Object.assign(container, { show })
 }
 
 function button(container: HTMLElement, text: string): HTMLButtonElement {
@@ -122,6 +124,25 @@ describe('Recover server', () => {
     })
     expect(onChanged).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  // The reclaim clears the note that offered it, so the status no longer passes the gate.
+  it('stays open with its result once the status that offered it is gone', async () => {
+    reclaimStaleLock.mockResolvedValueOnce(eligible).mockResolvedValueOnce({
+      status: 'reclaimed',
+      environmentId: 'env-1',
+      message: 'cleared',
+      lockPath: '/l',
+      notRestarted: 'did not start'
+    })
+    const onOpenChange = vi.fn()
+    const container = await render(onOpenChange)
+    await container.show({ kind: 'managed', environmentId: 'env-1' })
+    expect(container.textContent).toContain('boot-old')
+    await act(async () => container.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click())
+    await act(async () => button(container, 'Clear lock and restart').click())
+    expect(container.textContent).toContain('did not start')
+    expect(onOpenChange).not.toHaveBeenCalled()
   })
 
   it('offers only a delete by hand when the host can’t run the check', async () => {

@@ -60,15 +60,14 @@ export function SshHostRecoverServerDialog({
   onChanged: () => void
 }): React.JSX.Element | null {
   const api = getManagedOrcadApi()
-  if (!api || !open || !canRecoverSshHostServer(status) || status?.kind !== 'managed') {
+  if (!api || !open) {
     return null
   }
   // Mounted per opening, so each one starts from a fresh check.
   return (
     <OpenRecoverServerDialog
       api={api}
-      environmentId={status.environmentId}
-      detail={status.serving?.detail ?? ''}
+      status={status}
       onOpenChange={onOpenChange}
       onChanged={onChanged}
     />
@@ -77,17 +76,22 @@ export function SshHostRecoverServerDialog({
 
 function OpenRecoverServerDialog({
   api,
-  environmentId,
-  detail,
+  status,
   onOpenChange,
   onChanged
 }: {
   api: ManagedOrcadPreloadApi
-  environmentId: string
-  detail: string
+  status: SshManagedServerStatus | undefined
   onOpenChange: (open: boolean) => void
   onChanged: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  // Frozen at opening: the reclaim itself clears the note that offered it, and a later status
+  // push must neither close the dialog nor hide the result the user is reading.
+  const [opened] = useState(() =>
+    status?.kind === 'managed'
+      ? { environmentId: status.environmentId, detail: status.serving?.detail ?? '' }
+      : null
+  )
   const mountedRef = useMountedRef()
   const [check, setCheck] = useState<OrcadManagedStaleLockReclaimResult | null>(null)
   const [confirmed, setConfirmed] = useState(false)
@@ -95,12 +99,19 @@ function OpenRecoverServerDialog({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.reclaimStaleLock({ selector: environmentId, yes: false }).then(
+    if (!opened) {
+      return
+    }
+    api.reclaimStaleLock({ selector: opened.environmentId, yes: false }).then(
       (next) => mountedRef.current && setCheck(next),
       (cause: unknown) => mountedRef.current && setError(messageOf(cause))
     )
-  }, [api, environmentId, mountedRef])
+  }, [api, mountedRef, opened])
 
+  if (!opened) {
+    return null
+  }
+  const { environmentId, detail } = opened
   const reclaim = async (expectNonce: string): Promise<void> => {
     setBusy(true)
     setError(null)
