@@ -1,3 +1,4 @@
+import { sortByUpdatedAtDescending } from '../../shared/updated-at-order'
 import type {
   AiVaultListResult,
   AiVaultScanIssue,
@@ -100,9 +101,10 @@ async function scanAiVaultSessionStores(options: AiVaultScanOptions): Promise<Ai
           settled: (candidate, parsed) => workload?.settle(candidate, 'global', parsed)
         })
 
-        const cappedSessions = dedupeScannedSessions(parsedSessions)
-          .sort((left, right) => sessionSortTime(right) - sessionSortTime(left))
-          .slice(0, limit)
+        const cappedSessions = sortByUpdatedAtDescending(
+          dedupeScannedSessions(parsedSessions),
+          sessionSortTime
+        ).slice(0, limit)
 
         const scopeSessions = await scanInScopeSessions({
           inventory,
@@ -163,7 +165,5 @@ function mergeSessions(
   for (const session of scopeSessions) {
     byId.set(session.id, session)
   }
-  return dedupeScannedSessions([...byId.values()]).sort(
-    (left, right) => sessionSortTime(right) - sessionSortTime(left)
-  )
+  return sortByUpdatedAtDescending(dedupeScannedSessions([...byId.values()]), sessionSortTime)
 }

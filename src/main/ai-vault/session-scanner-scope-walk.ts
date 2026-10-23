@@ -1,3 +1,4 @@
+import { sortByUpdatedAtDescending } from '../../shared/updated-at-order'
 import { SCAN_ISSUE_LIMIT } from './session-scan-issues'
 import { createAiVaultScopeCwdMatcher } from '../../shared/ai-vault-scope-cwd-match'
 import type { AiVaultScanIssue, AiVaultSession } from '../../shared/ai-vault-types'
@@ -126,9 +127,7 @@ async function walkInScopeSessions(
     selectCandidate: (candidate) => mayBeInScope(candidate, inScope, args.platform, signal),
     admitSession: (session) => inScope(session.cwd, session.filePath)
   })
-  return sessions
-    .sort((left, right) => sessionSortTime(right) - sessionSortTime(left))
-    .slice(0, args.limit)
+  return sortByUpdatedAtDescending(sessions, sessionSortTime).slice(0, args.limit)
 }
 
 /** Pure membership enumeration; pruning and ranking remain execution decisions. */

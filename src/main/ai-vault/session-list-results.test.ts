@@ -51,6 +51,28 @@ describe('mergeAiVaultListResults', () => {
     vi.useRealTimers()
   })
 
+  it('uses modified time for missing update times and preserves ties across hosts', () => {
+    const oldest = session(0)
+    const fallback = { ...session(1), updatedAt: null }
+    const equalInstant = { ...session(2), updatedAt: '2026-08-01T17:00:01-07:00' }
+    const newest = session(3)
+    const local = [oldest, fallback]
+    const remote = [equalInstant, newest]
+
+    const merged = mergeAiVaultListResults(
+      [
+        { ...listResult([]), sessions: local },
+        { ...listResult([]), sessions: remote }
+      ],
+      undefined
+    )
+
+    expect(merged.sessions).toEqual([newest, fallback, equalInstant, oldest])
+    expect(merged.sessions[1]).toBe(fallback)
+    expect(local).toEqual([oldest, fallback])
+    expect(remote).toEqual([equalInstant, newest])
+  })
+
   it('keeps the latest input scannedAt instead of restamping the merge', () => {
     const merged = mergeAiVaultListResults(
       [

@@ -1,3 +1,4 @@
+import { sortByUpdatedAtDescending } from '../../shared/updated-at-order'
 import type {
   AiVaultListResult,
   AiVaultScanIssue,
@@ -76,9 +77,7 @@ export function mergeAiVaultListResults(
   }
   return truncateAiVaultListResult(
     {
-      sessions: [...byId.values()].sort(
-        (left, right) => sessionSortTime(right) - sessionSortTime(left)
-      ),
+      sessions: sortByUpdatedAtDescending([...byId.values()], sessionSortTime),
       issues,
       // Why: a merge is not a new scan. Reminting here made every all-host cache
       // hit look fresh to the renderer, which only skipped apply when scannedAt

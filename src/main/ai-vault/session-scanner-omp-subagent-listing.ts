@@ -1,3 +1,4 @@
+import { sortByUpdatedAtDescending } from '../../shared/updated-at-order'
 import { basename, extname, join } from 'node:path'
 import type {
   AiVaultScanIssue,
@@ -72,9 +73,10 @@ export async function listOmpSubagentSessions(args: {
   }
 
   return {
-    sessions: parsed
-      .filter((session): session is AiVaultSession => session !== null)
-      .sort((left, right) => sessionSortTime(right) - sessionSortTime(left)),
+    sessions: sortByUpdatedAtDescending(
+      parsed.filter((session): session is AiVaultSession => session !== null),
+      sessionSortTime
+    ),
     issues
   }
 }
