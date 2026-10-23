@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { translate } from '@/i18n/i18n'
 import { requestSkillFreshnessUpdateDialog } from '../skills/skill-freshness-update-dialog'
 import { useLatestSkillUpdateRun } from '../skills/skill-update-run-store'
+import { updatedSkillsLabel } from '../skills/skill-plan-op-copy'
 
 // Why: always rendered (not gated by `statusBarItems`). The dialog can be closed
 // while the run continues, so this segment is the only surface left reporting it.
@@ -43,25 +44,14 @@ export function SkillUpdateStatusSegment({
         )
       }
     }
-    if (run.state === 'done' && run.summary.ok) {
+    if (run.state === 'done' && run.summary.ok && !run.needsAttention) {
       return {
         icon: <CheckCircle2 className="size-3 text-emerald-500" />,
         label: translate(
           'auto.components.status.bar.SkillUpdateStatusSegment.successLabel',
           'Skills updated'
         ),
-        tooltip:
-          run.names.length === 1
-            ? translate(
-                'auto.components.status.bar.SkillUpdateStatusSegment.successOne',
-                'Updated {{value0}}',
-                { value0: run.names[0] }
-              )
-            : translate(
-                'auto.components.status.bar.SkillUpdateStatusSegment.successMany',
-                'Updated {{value0}} skills',
-                { value0: run.names.length }
-              ),
+        tooltip: updatedSkillsLabel(run.summary),
         ariaLabel: translate(
           'auto.components.status.bar.SkillUpdateStatusSegment.successAria',
           'Skills updated. Click to open details.'
@@ -70,10 +60,13 @@ export function SkillUpdateStatusSegment({
     }
     return {
       icon: <AlertCircle className="size-3 text-yellow-500" />,
-      label: translate(
-        'auto.components.status.bar.SkillUpdateStatusSegment.attentionLabel',
-        'Skills need attention'
-      ),
+      label:
+        run.state === 'done' && run.summary.ok && run.needsAttention
+          ? translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+          : translate(
+              'auto.components.status.bar.SkillUpdateStatusSegment.attentionLabel',
+              'Skills need attention'
+            ),
       tooltip: translate(
         'auto.components.status.bar.SkillUpdateStatusSegment.attentionTooltip',
         'Some skill updates were skipped — click to see details'
