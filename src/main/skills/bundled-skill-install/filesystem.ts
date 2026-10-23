@@ -34,7 +34,8 @@ export type BundledSkillFilesystem = {
   realpath(path: string): Promise<string | null>
   /** `[]` for a missing directory, null when it cannot be listed. */
   listEntries(directory: string): Promise<SkillDirectoryEntry[] | null>
-  readFile(path: string): Promise<Buffer | null>
+  /** Returns null when the file exceeds maxBytes; bounded reads never load the whole file. */
+  readFile(path: string, maxBytes?: number): Promise<Buffer | null>
   /** Streaming digest when supported; adapters without it fall back to readFile. */
   hashFile?(path: string): Promise<string | null>
   /** Whether the nearest existing ancestor of `directory` accepts new entries. */
@@ -152,7 +153,28 @@ export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
     const listing = await nativeSkillInstallFilesystem.listEntries?.([directory]).catch(() => null)
     return listing?.get(directory) ?? null
   },
-  readFile: (path) => readFile(path).catch(() => null),
+  readFile: async (path, maxBytes) => {
+    if (maxBytes === undefined) {
+      return readFile(path).catch(() => null)
+    }
+    try {
+      const chunks: Buffer[] = []
+      let size = 0
+      for await (const chunk of createReadStream(path, { end: maxBytes })) {
+        if (!Buffer.isBuffer(chunk)) {
+          return null
+        }
+        size += chunk.length
+        if (size > maxBytes) {
+          return null
+        }
+        chunks.push(chunk)
+      }
+      return Buffer.concat(chunks)
+    } catch {
+      return null
+    }
+  },
   hashFile: async (path) => {
     try {
       const hash = createHash('sha256')

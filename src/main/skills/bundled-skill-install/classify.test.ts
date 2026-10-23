@@ -27,6 +27,55 @@ const classify = (path: string) =>
   classifyBundledSkillPath(nativeBundledSkillFilesystem, path, NEW_SOURCE, currentDigest)
 
 describe('classifyBundledSkillPath', () => {
+  it('bounds reads before classifying a 1 MiB pathological name line', async () => {
+    const home = await makeSkillHome()
+    await writeCopy(home.shared, `---\nname: x${' '.repeat(1024 * 1024)}y\n---\n`)
+    const filesystem = {
+      ...nativeBundledSkillFilesystem,
+      readFile: async (path: string, maxBytes?: number) => {
+        // Fail before running an unbounded pathological regex in the main test process.
+        expect(maxBytes).toBe(64 * 1024)
+        return nativeBundledSkillFilesystem.readFile(path, maxBytes)
+      }
+    }
+    const start = performance.now()
+    const result = await classifyBundledSkillPath(
+      filesystem,
+      home.shared,
+      NEW_SOURCE,
+      currentDigest
+    )
+    expect(result.folderClass).toBe('other')
+    expect(performance.now() - start).toBeLessThan(500)
+  })
+
+  it('parses a pathological name below the read limit without backtracking', async () => {
+    const home = await makeSkillHome()
+    await writeCopy(home.shared, `---\nname: x${' '.repeat(60_000)}y\n---\n`)
+    const start = performance.now()
+    expect((await classify(home.shared)).folderClass).toBe('other')
+    expect(performance.now() - start).toBeLessThan(500)
+  })
+
+  it.each([
+    [64 * 1024, 'edited'],
+    [64 * 1024 + 1, 'other']
+  ] as const)('classifies a %i byte skill as %s', async (size, folderClass) => {
+    const home = await makeSkillHome()
+    const header = `---\nname: ${NAME}\n---\n`
+    await writeCopy(home.shared, header.padEnd(size, 'x'))
+    expect((await classify(home.shared)).folderClass).toBe(folderClass)
+  })
+
+  it.each([NAME, `"${NAME}"`, `'${NAME}'`, `${NAME}  \t`, `  "${NAME}" \t`])(
+    'recognises the edited name %s',
+    async (name) => {
+      const home = await makeSkillHome()
+      await writeCopy(home.shared, `---\nname: ${name}\n---\nmine\n`)
+      expect((await classify(home.shared)).folderClass).toBe('edited')
+    }
+  )
+
   it('classifies by released bytes alone, whoever installed the copy', async () => {
     const { root } = await makeSkillHome()
     const at = (name: string) => join(root, name, NAME)
@@ -104,9 +153,9 @@ describe('plan digest', () => {
     const reads: string[] = []
     const filesystem = {
       ...nativeBundledSkillFilesystem,
-      readFile: async (path: string) => {
+      readFile: async (path: string, maxBytes?: number) => {
         reads.push(path)
-        return nativeBundledSkillFilesystem.readFile(path)
+        return nativeBundledSkillFilesystem.readFile(path, maxBytes)
       },
       hashFile: async (path: string) => {
         reads.push(path)
