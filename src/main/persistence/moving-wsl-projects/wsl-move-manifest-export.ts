@@ -47,6 +47,8 @@ export type WslMoveManifestExportRequest = {
   /** plan.repoIds: the exact scope. */
   repoIds: readonly string[]
   folderWorkspaceIds: readonly string[]
+  /** Slept panes' daemon history, keyed `tabId:leafId`: their only copy of the scrollback. */
+  sleptScrollback?: ReadonlyMap<string, Buffer>
 }
 
 export type WslMoveManifestExport = {
@@ -133,10 +135,12 @@ export function exportWslMoveManifest(
     scopeFolderWorkspaceIds: [...request.folderWorkspaceIds],
     generation: request.generation
   }
+  const slept = request.sleptScrollback
   const inspection = store.inspectOrcadMigrationSourceDormantState(
     source,
     catalog,
-    request.destinationEnvironmentId
+    request.destinationEnvironmentId,
+    slept ? (tabId, leafId) => slept.get(`${tabId}:${leafId}`) ?? null : undefined
   )
   blockers.push(...inspection.blockedSessionItems, ...inspection.leftBehindItems)
   for (const [kind, count] of Object.entries(inspection.blockedCounts)) {

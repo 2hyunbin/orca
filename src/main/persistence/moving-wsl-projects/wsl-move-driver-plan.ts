@@ -139,10 +139,12 @@ async function resetForUnregisteredDistro(
 export function exportRequestOf(
   prepared: Pick<WslMovePrepared, 'plan' | 'host'>,
   migrationId: string,
-  startedAt: Date
+  startedAt: Date,
+  sleptScrollback?: ReadonlyMap<string, Buffer>
 ): WslMoveManifestExportRequest {
   const { plan, host } = prepared
   return {
+    ...(sleptScrollback ? { sleptScrollback } : {}),
     migrationId,
     now: () => startedAt,
     distro: plan.distro,

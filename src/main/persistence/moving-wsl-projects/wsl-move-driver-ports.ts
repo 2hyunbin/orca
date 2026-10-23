@@ -84,6 +84,14 @@ export type WslMoveDriverDeps = {
     'sleepWorkspaces' | 'livePtyIds' | 'captureRestoreHints' | 'proveExited'
   >
   snapshots: OrcadMigrationSnapshotSource
+  /**
+   * After Sleep, each paused pane's daemon checkpoint as the buffer a terminal restores from, keyed
+   * `tabId:leafId`. A slept pane has no renderer snapshot, so this is its only scrollback.
+   */
+  sleptScrollback?: (
+    panes: readonly WslMoveRestoreHintPane[],
+    distro: string
+  ) => Promise<ReadonlyMap<string, Buffer>>
   shellHistory: (
     distro: string,
     worktrees: WslMoveManifestExport['worktrees']

@@ -23,6 +23,7 @@ import {
 } from './wsl-move-cutover-journal'
 import { journalWslMove } from './wsl-move-delta-plan'
 import type { WslMoveDriverDeps, WslMoveHost } from './wsl-move-driver-ports'
+import { readSleptScrollback, withSleptSnapshots } from './wsl-move-slept-scrollback'
 import {
   exportRequestOf,
   isWslMoveScopeChanged,
@@ -120,10 +121,13 @@ async function runMove(
     return paused
   }
   const { panes } = paused
+  const slept = await readSleptScrollback(deps, panes, distro)
   let journaled: WslMoveCutover
   try {
     // The slept state, which the session freeze then holds for the rest of the move.
-    const exported = deps.exportManifest(exportRequestOf(prepared, migrationId, startedAt))
+    const exported = deps.exportManifest(
+      exportRequestOf(prepared, migrationId, startedAt, slept)
+    )
     if (exported.blockers.length > 0) {
       return refusal('wsl_move_export_incomplete', { reasons: [...exported.blockers] })
     }
@@ -173,7 +177,7 @@ async function runMove(
       : refusal('wsl_move_pause_failed', { detail: pauseDetail(quiesced.reason, quiesced.detail) })
   }
   try {
-    return await moveQuiesced(deps, host, quiesced.cutover, prepared, running)
+    return await moveQuiesced(deps, host, quiesced.cutover, prepared, running, slept)
   } catch (error) {
     return putBack(deps, host, migrationId, describe(error))
   }
@@ -184,7 +188,8 @@ async function moveQuiesced(
   host: WslMoveHost,
   quiesced: WslMoveCutover,
   prepared: WslMovePrepared,
-  running: RunningWslMove
+  running: RunningWslMove,
+  slept: ReadonlyMap<string, Buffer>
 ): Promise<WslMoveResult> {
   const { signal } = running.controller
   const { distro } = prepared.plan
@@ -198,7 +203,7 @@ async function moveQuiesced(
   const startedAt = new Date(quiesced.startedAt)
   let again: ReturnType<WslMoveDriverDeps['exportManifest']>
   try {
-    again = deps.exportManifest(exportRequestOf(prepared, migrationId, startedAt))
+    again = deps.exportManifest(exportRequestOf(prepared, migrationId, startedAt, slept))
   } catch (error) {
     throw isWslMoveScopeChanged(error) ? new WslMoveStop('wsl_move_scope_changed') : error
   }
@@ -213,7 +218,11 @@ async function moveQuiesced(
   }
   stopIfCancelled()
   deps.progress({ distro, step: 'copying', migrationId, phase: quiesced.phase })
-  const staged = await stageWslMove(deps, host, quiesced)
+  const staged = await stageWslMove(
+    { ...deps, snapshots: withSleptSnapshots(deps.snapshots, slept) },
+    host,
+    quiesced
+  )
   stopIfCancelled()
   const blobs = await collectWslMoveBlobs(deps, quiesced, again.worktrees)
   const bytesTotal = blobs.descriptors.reduce((sum, blob) => sum + blob.byteLength, 0)

@@ -39,6 +39,7 @@ import {
   parseWslGuestPaneProcesses,
   WSL_GUEST_PANE_PROCESS_SCRIPT
 } from '../persistence/moving-wsl-projects/wsl-move-guest-foreground'
+import { readWslMoveSleptScrollbackFromHistory } from '../persistence/moving-wsl-projects/wsl-move-slept-scrollback'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
 import { captureWslMoveRestoreHints } from '../persistence/moving-wsl-projects/wsl-move-restore-hints'
 import {
@@ -151,6 +152,8 @@ export function createWslMoveDriverDeps(
       }
     },
     snapshots: store,
+    sleptScrollback: (panes, distro) =>
+      readWslMoveSleptScrollbackFromHistory(new HistoryReader(getDaemonHistoryDir()), panes, distro),
     shellHistory: (distro, worktrees) => buildWslMoveShellHistoryBlobs({ distro, worktrees }),
     // The window reload is the renderer's (`reloadRequired`), through restart preparation.
     finishOnDesktop: async () => {
