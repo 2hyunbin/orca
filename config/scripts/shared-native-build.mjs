@@ -16,7 +16,7 @@ import { disableMsbuildFileTrackingOnWindows } from './msbuild-file-tracking.mjs
 import { stageNodeAddonApi } from './orcad-prebuild-node-gyp.mjs'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { publishSharedTree, sharedTreeStagingPath } from './shared-tree-publish.mjs'
-import { nativeBuildEntryDir } from './native-build-entry.cjs'
+import { macBinaryArchProblem, nativeBuildEntryDir } from './native-build-entry.cjs'
 import {
   ensureWindowsProcessTreeCommandLinePatch,
   inspectWindowsProcessTreeAddon,
@@ -72,9 +72,11 @@ export function checkNativeBuildDirArtifacts(moduleName, dir, { platform, arch }
   const files =
     moduleName === '@vscode/windows-process-tree'
       ? ['windows_process_tree.node']
-      : platform === 'win32'
-        ? ['conpty.node', ...NODE_PTY_CONPTY_RUNTIME_FILES.map((name) => join('conpty', name))]
-        : ['pty.node', ...(platform === 'darwin' ? ['spawn-helper'] : [])]
+      : moduleName === '@parcel/watcher'
+        ? ['watcher.node']
+        : platform === 'win32'
+          ? ['conpty.node', ...NODE_PTY_CONPTY_RUNTIME_FILES.map((name) => join('conpty', name))]
+          : ['pty.node', ...(platform === 'darwin' ? ['spawn-helper'] : [])]
   const missing = files.find((file) => !existsSync(join(dir, file)))
   if (missing) {
     return `${join(dir, missing)} is missing`
@@ -82,6 +84,9 @@ export function checkNativeBuildDirArtifacts(moduleName, dir, { platform, arch }
   const machine = platform === 'win32' ? readPeMachine(join(dir, files[0])) : undefined
   if (machine !== undefined && machine !== PE_MACHINE[arch]) {
     return `${join(dir, files[0])} is ${describePeMachine(machine)}, not ${arch}`
+  }
+  if (platform === 'darwin' && process.platform === 'darwin' && moduleName === '@parcel/watcher') {
+    return macBinaryArchProblem(join(dir, files[0]), arch)
   }
   return null
 }
@@ -133,9 +138,9 @@ export function ensureSharedNativeBuild({
     mkdirSync(dirname(entryDir), { recursive: true })
     cpSync(releaseDir, stagingDir, {
       recursive: true,
-      // windows-process-tree leaves MSBuild intermediates beside its one runtime file.
+      // These leave build intermediates beside their one runtime file.
       filter: (path) =>
-        moduleName !== '@vscode/windows-process-tree' ||
+        (moduleName !== '@vscode/windows-process-tree' && moduleName !== '@parcel/watcher') ||
         path === releaseDir ||
         path.endsWith('.node')
     })
@@ -168,7 +173,7 @@ function compileInScratchCopy({ moduleName, physicalDir, sourceDir, arch, nodeGy
     dereference: true,
     filter: (path) => !SCRATCH_SKIPPED_TOP_LEVEL.has(relative(physicalDir, path))
   })
-  if (moduleName === 'node-pty') {
+  if (moduleName === 'node-pty' || moduleName === '@parcel/watcher') {
     stageNodeAddonApi(physicalDir, sourceDir)
     if (process.platform === 'win32') {
       assertNodePtySourceDeniesMsysBreakaway({ nodePtyDir: sourceDir })

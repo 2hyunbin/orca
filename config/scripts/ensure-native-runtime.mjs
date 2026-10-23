@@ -15,10 +15,12 @@ import {
 import { runProcessSync } from '@orca/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import {
+  assertParcelWatcherHonorsLatency,
   isSharedNativePackage,
   isSourceBuildDir,
   nodePtyBuildArtifactPaths,
   nodePtyNativeModuleName,
+  requiresParcelWatcherSourceBuild,
   resolveNativePackageDir
 } from './native-build-entry.cjs'
 import {
@@ -38,6 +40,7 @@ const forceRebuild = process.argv.includes('--force')
 
 const NATIVE_MODULES = [
   'node-pty',
+  ...(requiresParcelWatcherSourceBuild() ? ['@parcel/watcher'] : []),
   ...(process.platform === 'win32'
     ? ['@orca/windows-registry', '@orca/windows-security', '@vscode/windows-process-tree']
     : [])
@@ -307,6 +310,10 @@ function loadNativeModule(moduleName) {
   }
   if (moduleName === 'node-pty') {
     loadNodePtyNativeModule()
+    return
+  }
+  if (moduleName === '@parcel/watcher') {
+    assertParcelWatcherHonorsLatency(require(moduleName))
     return
   }
 

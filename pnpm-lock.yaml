@@ -173,6 +173,7 @@ packageExtensionsChecksum: sha256-TrarseUCmMKP0lVjkfyLP2TAvkGZMZzvzPxjKY48nrY=
 pnpmfileChecksum: sha256-6l6qdgUHKyTLYIQLx/UGfGRnEiFXxIaSlGMgK4mttEw=
 
 patchedDependencies:
+  '@parcel/watcher@2.5.6': cb4e094b9052f55f9c63c0b084e04e04442a1bc17f6fccf90137da63f307452e
   '@vscode/windows-process-tree@0.8.0': a09f2e8b2b4e73ef20c317af91f9e06c09abf62fa2c891d99b16f53047f596fd
   '@xterm/addon-image@0.10.0-beta.301': f088c9207dac42844a542b9da8078be52351cee60585725ef189b9fd30f33f34
   '@xterm/addon-ligatures@0.11.0-beta.301': 47405b9994b5acf1b4e90b49250358c1ca03649854d59560e7732b72fe336920
@@ -206,7 +207,7 @@ importers:
         version: link:src/packages/process-host
       '@parcel/watcher':
         specifier: ^2.5.6
-        version: 2.5.6
+        version: 2.5.6(patch_hash=cb4e094b9052f55f9c63c0b084e04e04442a1bc17f6fccf90137da63f307452e)
       '@xterm/addon-serialize':
         specifier: 0.15.0-beta.301
         version: 0.15.0-beta.301(patch_hash=b35533fe252e7e45433150170348889f4e08a6c17f7017ac34ea694d831fec7f)(@xterm/xterm@6.1.0-beta.304(patch_hash=87de83f62154c0f2c31eb17d14b881e139f3368f8be1e9e2951bfeba16d86156))
@@ -9122,7 +9123,7 @@ snapshots:
   '@parcel/watcher-win32-x64@2.5.6':
     optional: true
 
-  '@parcel/watcher@2.5.6':
+  '@parcel/watcher@2.5.6(patch_hash=cb4e094b9052f55f9c63c0b084e04e04442a1bc17f6fccf90137da63f307452e)':
     dependencies:
       detect-libc: 2.1.2
       is-glob: 4.0.3

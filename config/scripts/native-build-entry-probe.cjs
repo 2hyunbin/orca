@@ -7,7 +7,10 @@ const { accessSync, constants, existsSync } = require('node:fs')
 const { join } = require('node:path')
 const { assertNodePtyJobOwnership } = require('./node-pty-job-ownership.cjs')
 const { assertWindowsProcessTreeCreationTime } = require('./windows-process-tree-creation-time.cjs')
-const { nodePtyNativeModuleName } = require('./native-build-entry.cjs')
+const {
+  assertParcelWatcherHonorsLatency,
+  nodePtyNativeModuleName
+} = require('./native-build-entry.cjs')
 
 const NODE_PTY_CONPTY_RUNTIME_FILES = ['conpty.dll', 'OpenConsole.exe']
 
@@ -35,6 +38,10 @@ function probeNativeBuildDir(moduleName, dir) {
     assertWindowsProcessTreeCreationTime({
       module: require(join(dir, 'windows_process_tree.node'))
     })
+    return
+  }
+  if (moduleName === '@parcel/watcher') {
+    assertParcelWatcherHonorsLatency(require(join(dir, 'watcher.node')))
     return
   }
   throw new Error(`no probe for ${moduleName}`)

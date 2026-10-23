@@ -10,10 +10,7 @@ import {
   isWatcherProcessFailure,
   type WatcherProcessFailure
 } from '../ipc/parcel-watcher-process-failure'
-import {
-  WATCHER_IGNORE_DIRS,
-  buildParcelWatcherIgnoreOptions
-} from '../ipc/filesystem-watcher-ignore'
+import { interactiveRootWatchOptions } from '../ipc/parcel-watcher-stream-latency'
 import { createRuntimeRootOwnershipReleaser } from './runtime-root-watch-ownership'
 import { closeRuntimeRootWatch } from './runtime-root-watch-teardown'
 import {
@@ -22,7 +19,7 @@ import {
 } from '../../shared/runtime-file-watch-limits'
 import { PromiseSettlementWaiters } from '../../shared/promise-settlement-waiters'
 
-const RUNTIME_FILE_WATCH_IGNORE_OPTIONS = buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS)
+const RUNTIME_FILE_WATCH_OPTIONS = interactiveRootWatchOptions()
 const RUNTIME_FILE_WATCH_EVENT_LIMIT = 200
 
 type RuntimeFileWatchSubscriber = {
@@ -130,7 +127,7 @@ function subscribeRuntimeRootWatch(root: RuntimeRootWatch): Promise<void> {
       }
       emitToSubscribers(root, mapWatcherEvents(events))
     },
-    RUNTIME_FILE_WATCH_IGNORE_OPTIONS,
+    RUNTIME_FILE_WATCH_OPTIONS,
     {
       delivery: {
         includeDirectoryMetadata: true,

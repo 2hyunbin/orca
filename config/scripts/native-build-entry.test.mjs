@@ -80,6 +80,24 @@ describe('nativeBuildEntryName', () => {
     }
   })
 
+  it('matches the dir the patched watcher loader tries first', () => {
+    const line = addedPatchLine('@parcel__watcher@2.5.6.patch', /const orcaDirs = \[/)
+    const firstDir = /\[([^,]+),/.exec(line)[1]
+    const evaluate = new Function('process', `return ${firstDir}`)
+    for (const arch of ['x64', 'arm64']) {
+      expect(evaluate({ platform: 'darwin', arch })).toBe(
+        `build/${nativeBuildEntryName('@parcel/watcher', { platform: 'darwin', arch })}`
+      )
+    }
+  })
+
+  it('pins the watcher deployment target to the prebuild floor, not the header default', () => {
+    // node-gyp otherwise takes MACOSX_DEPLOYMENT_TARGET from whichever headers built it (13.5 for Node).
+    expect(addedPatchLine('@parcel__watcher@2.5.6.patch', /MACOSX_DEPLOYMENT_TARGET/)).toContain(
+      '"11.0"'
+    )
+  })
+
   it('matches the dir the patched windows-process-tree loader prefers', () => {
     const line = addedPatchLine('@vscode__windows-process-tree@0.8.0.patch', /orcaNativeBuild = /)
     const template = /= `(.*)`;/.exec(line)[1]

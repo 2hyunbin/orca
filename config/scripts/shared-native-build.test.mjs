@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createRequire } from 'node:module'
 import { checkNativeBuildDirArtifacts, ensureSharedNativeBuild } from './shared-native-build.mjs'
+
+const { macBinaryArchProblem } = createRequire(import.meta.url)('./native-build-entry.cjs')
 
 const roots = []
 
@@ -93,5 +96,30 @@ describe('checkNativeBuildDirArtifacts', () => {
     expect(
       checkNativeBuildDirArtifacts('node-pty', dir, { platform: 'win32', arch: 'arm64' })
     ).toMatch(/not arm64/)
+  })
+
+  it('requires the watcher addon', () => {
+    const dir = makePackage()
+    expect(
+      checkNativeBuildDirArtifacts('@parcel/watcher', dir, { platform: 'linux', arch: 'x64' })
+    ).toMatch(/watcher\.node is missing/)
+  })
+})
+
+describe('macBinaryArchProblem', () => {
+  it('asks for the Mach-O name of the arch', () => {
+    const calls = []
+    const verify = (binary, lipoArch) => {
+      calls.push([binary, lipoArch])
+      if (lipoArch === 'x86_64') {
+        throw new Error('no slice')
+      }
+    }
+    expect(macBinaryArchProblem('/w.node', 'arm64', verify)).toBe(null)
+    expect(macBinaryArchProblem('/w.node', 'x64', verify)).toBe('/w.node has no x86_64 slice')
+    expect(calls).toEqual([
+      ['/w.node', 'arm64'],
+      ['/w.node', 'x86_64']
+    ])
   })
 })

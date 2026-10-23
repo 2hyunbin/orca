@@ -10,6 +10,8 @@ export type WatcherProcessSubscribeOptions = {
   backend?: string
   mode?: 'recursive' | 'shallow'
   include?: string[]
+  /** FSEvents stream latency in seconds; see parcel-watcher-stream-latency.ts. */
+  latency?: number
 }
 
 export type WatcherProcessDeliveryOptions = {

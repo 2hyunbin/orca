@@ -32,9 +32,11 @@ import {
 } from './windows-process-tree-gyp-rebuild.mjs'
 import { disableMsbuildFileTrackingOnWindows } from './msbuild-file-tracking.mjs'
 import { warnAboutNodeModulesAboveSharedStore } from './store-ancestor-node-modules.mjs'
+import { readNativeRebuildCliOptions } from './native-rebuild-cli-options.mjs'
 import {
   isSharedNativePackage,
   nodePtyBuildArtifactPaths,
+  requiresParcelWatcherSourceBuild,
   resolveNativePackageDir
 } from './native-build-entry.cjs'
 import {
@@ -55,7 +57,7 @@ const requireLocal = createRequire(import.meta.url)
 const projectDir = process.cwd()
 let cliOptions
 try {
-  cliOptions = readCliOptions(process.argv.slice(2))
+  cliOptions = readNativeRebuildCliOptions(process.argv.slice(2))
 } catch (error) {
   console.error(`[rebuild] ${formatError(error)}`)
   process.exit(2)
@@ -90,6 +92,7 @@ if (ignoreModules.length > 0) {
 const NATIVE_MODULES = [
   'node-pty',
   'cpu-features',
+  ...(requiresParcelWatcherSourceBuild(rebuildPlatform) ? ['@parcel/watcher'] : []),
   ...(rebuildPlatform === 'win32'
     ? ['@orca/windows-registry', '@orca/windows-security', '@vscode/windows-process-tree']
     : [])
@@ -514,51 +517,6 @@ function getElectronPlatformPath() {
   }
 }
 
-function readCliOptions(args) {
-  const options = { force: false }
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]
-    if (arg === '--force') {
-      options.force = true
-      continue
-    }
-    if (arg === '--platform') {
-      options.platform = readRequiredArgValue(args, (index += 1), '--platform')
-      continue
-    }
-    if (arg.startsWith('--platform=')) {
-      options.platform = readInlineArgValue(arg, '--platform')
-      continue
-    }
-    if (arg === '--arch') {
-      options.arch = readRequiredArgValue(args, (index += 1), '--arch')
-      continue
-    }
-    if (arg.startsWith('--arch=')) {
-      options.arch = readInlineArgValue(arg, '--arch')
-      continue
-    }
-    throw new Error(`Unknown argument: ${arg}`)
-  }
-  return options
-}
-
-function readRequiredArgValue(args, index, flag) {
-  const value = args[index]
-  if (!value || value.startsWith('--')) {
-    throw new Error(`Missing value for ${flag}`)
-  }
-  return value
-}
-
-function readInlineArgValue(arg, flag) {
-  const value = arg.slice(`${flag}=`.length)
-  if (!value) {
-    throw new Error(`Missing value for ${flag}`)
-  }
-  return value
-}
-
 function getElectronExecutablePath() {
   const platformPath = getElectronPlatformPath()
   return process.env.ELECTRON_OVERRIDE_DIST_PATH
@@ -613,9 +571,11 @@ const { createRequire } = require('node:module')
 const { existsSync } = require('node:fs')
 const { resolve } = require('node:path')
 const projectRequire = createRequire(resolve(process.cwd(), 'package.json'))
-const { isSourceBuildDir, nodePtyNativeModuleName: getNodePtyNativeModuleName } = projectRequire(
-  './config/scripts/native-build-entry.cjs'
-)
+const {
+  assertParcelWatcherHonorsLatency,
+  isSourceBuildDir,
+  nodePtyNativeModuleName: getNodePtyNativeModuleName
+} = projectRequire('./config/scripts/native-build-entry.cjs')
 const moduleNames = ${JSON.stringify(moduleNames)}
 const requirePatchedNodePtySourceBuild = ${JSON.stringify(requiresPatchedNodePtySourceBuild())}
 const failures = []
@@ -676,6 +636,10 @@ function loadNativeModule(moduleName) {
       './config/scripts/windows-process-tree-creation-time.cjs'
     )
     assertWindowsProcessTreeCreationTime({ module: projectRequire(moduleName) })
+    return
+  }
+  if (moduleName === '@parcel/watcher') {
+    assertParcelWatcherHonorsLatency(projectRequire(moduleName))
     return
   }
   projectRequire(moduleName)

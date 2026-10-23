@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import type * as ParcelWatcher from '@parcel/watcher'
 import { loadParcelWatcher } from './parcel-watcher-module-loader'
 import { startShallowWatcher } from './parcel-watcher-shallow-subscription'
+import { CANARY_WATCH_LATENCY_SECONDS } from './parcel-watcher-stream-latency'
 import { detectShallowWatchDelivery } from './shallow-watch-delivery-probe'
 import {
   createWatcherProcessEventDeliveryQueue,
@@ -47,9 +48,10 @@ async function startCanary(getStableActivityRevision: () => number | null): Prom
     const watcher = await loadParcelWatcher()
     // Why: pin the Windows backend like the main subscriptions do, so the
     // canary never probes for Watchman.
-    const opts = (
-      process.platform === 'win32' ? { backend: 'windows' } : {}
-    ) as ParcelWatcher.Options
+    const opts: ParcelWatcher.Options = {
+      latency: CANARY_WATCH_LATENCY_SECONDS,
+      ...(process.platform === 'win32' ? { backend: 'windows' as const } : {})
+    }
     await watcher.subscribe(
       canaryDir,
       (err) => {

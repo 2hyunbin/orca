@@ -121,7 +121,19 @@ export function mkTempProject() {
     sourceWindowsProcessTreeGypRebuildPath,
     join(projectDir, 'config', 'scripts', 'windows-process-tree-gyp-rebuild.mjs')
   )
+  writeFakePatchedParcelWatcher(projectDir)
   return projectDir
+}
+
+/** A loaded patched watcher, so macOS hosts reach the node-pty behaviour these fixtures test. */
+export function writeFakePatchedParcelWatcher(projectDir) {
+  const watcherDir = join(projectDir, 'node_modules', '@parcel', 'watcher')
+  mkdirSync(watcherDir, { recursive: true })
+  writeFileSync(
+    join(watcherDir, 'package.json'),
+    JSON.stringify({ name: '@parcel/watcher', version: '0.0.0', main: 'index.js' })
+  )
+  writeFileSync(join(watcherDir, 'index.js'), 'exports.supportsLatency = true\n')
 }
 
 export function runRebuildScript(projectDir, extraEnv = {}, args = []) {

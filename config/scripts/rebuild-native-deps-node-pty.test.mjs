@@ -389,7 +389,11 @@ describe('rebuild-native-deps patched node-pty rebuild', () => {
         )
 
         const rebuildCall = JSON.parse(readFileSync(rebuildLogPath, 'utf8').trim())
-        expect(rebuildCall.onlyModules).toEqual(['node-pty'])
+        // The patched-source rebuild covers every patched native, and macOS builds the watcher too.
+        expect(rebuildCall.onlyModules).toEqual([
+          'node-pty',
+          ...(process.platform === 'darwin' ? ['@parcel/watcher'] : [])
+        ])
         expect(rebuildCall.ignoreModules).toEqual(['cpu-features'])
         expect(rebuildCall.force).toBe(true)
       } finally {

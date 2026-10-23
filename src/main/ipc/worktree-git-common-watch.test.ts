@@ -200,7 +200,7 @@ describe('worktree git-common narrow watch (local native platforms)', () => {
       ([dir]) => dir === join(commonDir, 'worktrees')
     )
     expect(narrowCall?.[0]).toBe(join(commonDir, 'worktrees'))
-    expect(narrowCall?.[2]).toEqual({})
+    expect(narrowCall?.[2]).toEqual({ latency: 0.5 })
 
     const entryPath = join(commonDir, 'worktrees', 'wt-a')
     narrowSubscription().callback(null, [{ type: 'create', path: entryPath }])
@@ -217,7 +217,10 @@ describe('worktree git-common narrow watch (local native platforms)', () => {
 
       expect(subscribeMock).toHaveBeenCalledTimes(2)
       const narrowCall = subscribeMock.mock.calls.find(([dir]) => dir.endsWith('worktrees'))
-      expect(narrowCall?.[2]).toEqual(platform === 'win32' ? { backend: 'windows' } : {})
+      expect(narrowCall?.[2]).toEqual({
+        latency: 0.5,
+        ...(platform === 'win32' ? { backend: 'windows' } : {})
+      })
       const entryPath = join(commonDir, 'worktrees', `${platform}-entry`)
       narrowSubscription().callback(null, [{ type: 'create', path: entryPath }])
       expect(received.flat()).toContainEqual({ type: 'create', path: entryPath })

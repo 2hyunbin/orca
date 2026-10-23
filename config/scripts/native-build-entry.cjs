@@ -1,5 +1,6 @@
 'use strict'
 
+const { execFileSync } = require('node:child_process')
 const { existsSync, realpathSync } = require('node:fs')
 const { release } = require('node:os')
 const { join, relative, isAbsolute } = require('node:path')
@@ -10,18 +11,51 @@ const { join, relative, isAbsolute } = require('node:path')
  * pnpm's global virtual store gives every worktree the same physical package dir, so an
  * in-place `build/Release` rebuild in one worktree replaces the binary another is running.
  * A shared package instead gets one immutable `build/<entry>` per ABI, published atomically
- * and never rebuilt. The patched loaders (config/patches/node-pty@1.1.0.patch and
- * @vscode__windows-process-tree@0.8.0.patch) try that dir before build/Release, and must
- * compute the same name -- `native-build-entry.test.mjs` holds them to it.
+ * and never rebuilt. The patched loaders (config/patches/node-pty@1.1.0.patch,
+ * @vscode__windows-process-tree@0.8.0.patch and @parcel__watcher@2.5.6.patch) try that dir
+ * before build/Release, and must compute the same name -- `native-build-entry.test.mjs` holds
+ * them to it.
  */
 
 const ENTRY_PREFIX = 'orca-'
 
 /** How each shared native package is built and which runtime its binary is tied to. */
 const NATIVE_BUILD_PACKAGES = {
-  // Both are node-addon-api (N-API): one binary loads in Node and Electron alike.
+  // All are node-addon-api (N-API): one binary loads in Node and Electron alike.
   'node-pty': { abi: 'napi' },
-  '@vscode/windows-process-tree': { abi: 'napi' }
+  '@vscode/windows-process-tree': { abi: 'napi' },
+  // Source-built on macOS only (configurable FSEvents latency); elsewhere the prebuild loads.
+  '@parcel/watcher': { abi: 'napi' }
+}
+
+/** Whether Orca builds @parcel/watcher from its patched source for `platform`. */
+function requiresParcelWatcherSourceBuild(platform = process.platform) {
+  return platform === 'darwin'
+}
+
+/** Why `binary` has no Mach-O slice for `arch`, or null. A cross-arch build cannot be loaded to prove it. */
+function macBinaryArchProblem(binary, arch, verify = verifyMacBinaryArchWithLipo) {
+  const lipoArch = arch === 'x64' ? 'x86_64' : arch
+  try {
+    verify(binary, lipoArch)
+    return null
+  } catch {
+    return `${binary} has no ${lipoArch} slice`
+  }
+}
+
+function verifyMacBinaryArchWithLipo(binary, lipoArch) {
+  execFileSync('/usr/bin/lipo', [binary, '-verify_arch', lipoArch], { stdio: 'ignore' })
+}
+
+/** The upstream prebuild loads too (N-API), so only the patch's marker proves which one did. */
+function assertParcelWatcherHonorsLatency(binding) {
+  if (binding?.supportsLatency !== true) {
+    throw new Error(
+      'the loaded watcher addon ignores `latency`, so it is the upstream prebuild rather than ' +
+        "Orca's patched source build. Rebuild it (pnpm run rebuild:electron)."
+    )
+  }
 }
 
 /**
@@ -127,15 +161,18 @@ function isSourceBuildDir(nativeDir) {
 
 module.exports = {
   NATIVE_BUILD_PACKAGES,
+  assertParcelWatcherHonorsLatency,
   TRANSIENT_NATIVE_BUILD_ENTRY_FILTER,
   isNativeBuildEntryName,
   isSharedNativePackage,
   isSharedPackageDir,
   isSourceBuildDir,
   loadedNativeBuildDir,
+  macBinaryArchProblem,
   nativeBuildEntryDir,
   nativeBuildEntryName,
   nodePtyBuildArtifactPaths,
   nodePtyNativeModuleName,
+  requiresParcelWatcherSourceBuild,
   resolveNativePackageDir
 }

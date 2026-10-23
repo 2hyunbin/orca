@@ -4,9 +4,9 @@ import type { FsChangeEvent, FsChangedPayload } from '../../shared/filesystem-en
 import { watchBatchFlushDelayMs } from '../../shared/filesystem-watch-batch-window'
 import { MAX_BATCHED_WATCHER_EVENTS, queueWatcherEvents } from './filesystem-watcher-event-batch'
 // Why: suppress high-churn dirs at the watcher level (separate from the File Explorer display filter, which only hides rows).
-import { WATCHER_IGNORE_DIRS, buildParcelWatcherIgnoreOptions } from './filesystem-watcher-ignore'
 import type { WatchedRoot } from './filesystem-watcher-wsl'
 import { subscribeViaWatcherProcess } from './parcel-watcher-process'
+import { interactiveRootWatchOptions } from './parcel-watcher-stream-latency'
 import { normalizeWatcherEventPath } from './filesystem-watcher-paths'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import {
@@ -226,7 +226,7 @@ export async function createLocalWatcher(
     let errorCleanedUp = false
 
     const watcherOptions = {
-      ...buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS),
+      ...interactiveRootWatchOptions(),
       // Why: Parcel probes Watchman first, which prints a shell-level "watchman not recognized" error on Windows; pin the backend to suppress it.
       ...(process.platform === 'win32' ? { backend: 'windows' as const } : {})
     }

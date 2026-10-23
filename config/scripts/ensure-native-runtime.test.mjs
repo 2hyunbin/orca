@@ -19,6 +19,7 @@ import { resolveCliCommand } from '../../src/shared/node-cli-command-resolution.
 import { removeTreeSync } from '../../src/shared/windows-transient-lock-removal.ts'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
 import { copyScriptWithLocalModules } from './script-module-dependencies.mjs'
+import { writeFakePatchedParcelWatcher } from './rebuild-native-deps-test-fixtures.mjs'
 import {
   nodeGypRebuildInvocation,
   nodeGypRebuildTimeoutMs
@@ -298,6 +299,7 @@ export function runProcessSync(options) {
       join(projectDir, 'config', 'scripts', name)
     )
   }
+  writeFakePatchedParcelWatcher(projectDir)
   return projectDir
 }
 

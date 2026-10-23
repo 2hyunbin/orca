@@ -93,7 +93,7 @@ describe('watchFileExplorerInWatcherProcess', () => {
     expect(subscribeViaRuntimeWatcherProcessMock).toHaveBeenCalledWith(
       '/repo',
       expect.any(Function),
-      buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS),
+      { ...buildParcelWatcherIgnoreOptions(WATCHER_IGNORE_DIRS), latency: 0.25 },
       expect.objectContaining({
         delivery: { includeDirectoryMetadata: true, maxEventsPerBatch: 200 },
         onInterruption: expect.any(Function),

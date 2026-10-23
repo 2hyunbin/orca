@@ -1,0 +1,224 @@
+diff --git a/binding.gyp b/binding.gyp
+index 3c12d52322e448cb9e978cdb8eb485cead35f5ae..60c7b1135d57bd6c87f6a0571e1fb97b97c7fe5a 100644
+--- a/binding.gyp
++++ b/binding.gyp
+@@ -28,7 +28,8 @@
+             "KQUEUE"
+           ],
+           "xcode_settings": {
+-            "GCC_ENABLE_CPP_EXCEPTIONS": "YES"
++            "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
++            "MACOSX_DEPLOYMENT_TARGET": "11.0"
+           }
+         }],
+         ['OS=="mac" and target_arch=="arm64"', {
+diff --git a/index.d.ts b/index.d.ts
+index 07ce9b58812b177f4bdf3d29291f202ff8791a46..edb63f7aed76bb5084324803f79d438fd2d59148 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -12,6 +12,8 @@ declare namespace ParcelWatcher {
+   export interface Options {
+     ignore?: (FilePath|GlobPattern)[];
+     backend?: BackendType;
++    /** Orca: FSEvents stream latency in seconds (macOS source build only). */
++    latency?: number;
+   }
+   export type SubscribeCallback = (
+     err: Error | null,
+@@ -39,6 +41,8 @@ declare namespace ParcelWatcher {
+     fn: SubscribeCallback,
+     opts?: Options
+   ): Promise<void>;
++  /** Orca: whether the loaded binding honors `latency`. */
++  export const supportsLatency: boolean;
+   export function writeSnapshot(
+     dir: FilePath,
+     snapshot: FilePath,
+diff --git a/index.js b/index.js
+index 31aba4f9a6cb2637342fe745c5a452be25cd79f8..e6c16820eb90e4a535ebf584f4c8a547f3222346 100644
+--- a/index.js
++++ b/index.js
+@@ -12,6 +12,20 @@ if (process.platform === 'linux') {
+ }
+ 
+ let binding;
++// Orca: on macOS prefer Orca's source build (it honors `latency`); any failure keeps the prebuild.
++if (process.platform === 'darwin') {
++  const orcaDirs = [`build/orca-napi-${process.platform}-${process.arch}`, 'build/Release'];
++  for (const dir of orcaDirs) {
++    try {
++      const candidate = require(require('path').join(__dirname, dir, 'watcher.node'));
++      if (candidate.supportsLatency === true) {
++        binding = candidate;
++        break;
++      }
++    } catch {}
++  }
++}
++if (!binding) {
+ try {
+   binding = require(name);
+ } catch (err) {
+@@ -28,6 +42,7 @@ try {
+     }
+   }
+ }
++}
+ 
+ function handleError(err) {
+   if (err?.code !== 'MODULE_NOT_FOUND') {
+@@ -40,3 +55,4 @@ exports.writeSnapshot = wrapper.writeSnapshot;
+ exports.getEventsSince = wrapper.getEventsSince;
+ exports.subscribe = wrapper.subscribe;
+ exports.unsubscribe = wrapper.unsubscribe;
++exports.supportsLatency = binding.supportsLatency === true;
+diff --git a/src/Watcher.cc b/src/Watcher.cc
+index a58ff3722d0d4a85dbef822f7cd4a078cb4278ff..7fe30db91fff226ac0b2ef494c60e75b6adc72be 100644
+--- a/src/Watcher.cc
++++ b/src/Watcher.cc
+@@ -21,8 +21,8 @@ static std::unordered_set<WatcherRef , WatcherHash, WatcherCompare>& getSharedWa
+   return *sharedWatchers;
+ }
+ 
+-WatcherRef Watcher::getShared(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs) {
+-  WatcherRef watcher = std::make_shared<Watcher>(dir, ignorePaths, ignoreGlobs);
++WatcherRef Watcher::getShared(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs, double latency) {
++  WatcherRef watcher = std::make_shared<Watcher>(dir, ignorePaths, ignoreGlobs, latency);
+   auto found = getSharedWatchers().find(watcher);
+   if (found != getSharedWatchers().end()) {
+     return *found;
+@@ -46,10 +46,11 @@ void removeShared(Watcher *watcher) {
+   }
+ }
+ 
+-Watcher::Watcher(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs)
++Watcher::Watcher(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs, double latency)
+   : mDir(dir),
+     mIgnorePaths(ignorePaths),
+-    mIgnoreGlobs(ignoreGlobs) {
++    mIgnoreGlobs(ignoreGlobs),
++    mLatency(latency) {
+       mDebounce = Debounce::getShared();
+       mDebounce->add(this, [this] () {
+         triggerCallbacks();
+diff --git a/src/Watcher.hh b/src/Watcher.hh
+index f89e9f5dca4531b5c7cdf524252973dc2c568d6a..6f9fcfbc392ae343c88a295e4b52ac6428773afa 100644
+--- a/src/Watcher.hh
++++ b/src/Watcher.hh
+@@ -31,14 +31,16 @@ struct Watcher {
+   std::string mDir;
+   std::unordered_set<std::string> mIgnorePaths;
+   std::unordered_set<Glob> mIgnoreGlobs;
++  // Orca: FSEvents stream latency in seconds; other backends ignore it.
++  double mLatency;
+   EventList mEvents;
+   std::shared_ptr<WatcherState> state;
+ 
+-  Watcher(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs);
++  Watcher(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs, double latency);
+   ~Watcher();
+ 
+   bool operator==(const Watcher &other) const {
+-    return mDir == other.mDir && mIgnorePaths == other.mIgnorePaths && mIgnoreGlobs == other.mIgnoreGlobs;
++    return mDir == other.mDir && mIgnorePaths == other.mIgnorePaths && mIgnoreGlobs == other.mIgnoreGlobs && mLatency == other.mLatency;
+   }
+ 
+   void wait();
+@@ -50,7 +52,7 @@ struct Watcher {
+   bool isIgnored(std::string path);
+   void destroy();
+ 
+-  static WatcherRef getShared(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs);
++  static WatcherRef getShared(std::string dir, std::unordered_set<std::string> ignorePaths, std::unordered_set<Glob> ignoreGlobs, double latency);
+ 
+ private:
+   std::mutex mMutex;
+diff --git a/src/binding.cc b/src/binding.cc
+index 057b61b83385793a2f13c7adc8c2e983bef67538..47d690311e3048fab7851a8714d6c1ce5be7fe58 100644
+--- a/src/binding.cc
++++ b/src/binding.cc
+@@ -53,6 +53,20 @@ std::unordered_set<Glob> getIgnoreGlobs(Env env, Value opts) {
+   return result;
+ }
+ 
++// Orca: upstream's fixed 1 ms FSEvents latency defeats fseventsd coalescing.
++double getLatency(Env env, Value opts) {
++  if (opts.IsObject()) {
++    Value v = opts.As<Object>().Get(String::New(env, "latency"));
++    if (v.IsNumber()) {
++      double latency = v.As<Number>().DoubleValue();
++      if (latency >= 0.001 && latency <= 10) {
++        return latency;
++      }
++    }
++  }
++  return 0.001;
++}
++
+ std::shared_ptr<Backend> getBackend(Env env, Value opts) {
+   Value b = opts.As<Object>().Get(String::New(env, "backend"));
+   std::string backendName;
+@@ -71,7 +85,8 @@ public:
+     watcher = Watcher::getShared(
+       std::string(dir.As<String>().Utf8Value().c_str()),
+       getIgnorePaths(env, opts),
+-      getIgnoreGlobs(env, opts)
++      getIgnoreGlobs(env, opts),
++      getLatency(env, opts)
+     );
+ 
+     backend = getBackend(env, opts);
+@@ -99,7 +114,8 @@ public:
+     watcher = std::make_shared<Watcher>(
+       std::string(dir.As<String>().Utf8Value().c_str()),
+       getIgnorePaths(env, opts),
+-      getIgnoreGlobs(env, opts)
++      getIgnoreGlobs(env, opts),
++      getLatency(env, opts)
+     );
+ 
+     backend = getBackend(env, opts);
+@@ -168,7 +184,8 @@ public:
+     watcher = Watcher::getShared(
+       std::string(dir.As<String>().Utf8Value().c_str()),
+       getIgnorePaths(env, opts),
+-      getIgnoreGlobs(env, opts)
++      getIgnoreGlobs(env, opts),
++      getLatency(env, opts)
+     );
+ 
+     backend = getBackend(env, opts);
+@@ -196,7 +213,8 @@ public:
+     watcher = Watcher::getShared(
+       std::string(dir.As<String>().Utf8Value().c_str()),
+       getIgnorePaths(env, opts),
+-      getIgnoreGlobs(env, opts)
++      getIgnoreGlobs(env, opts),
++      getLatency(env, opts)
+     );
+ 
+     backend = getBackend(env, opts);
+@@ -262,6 +280,10 @@ Object Init(Env env, Object exports) {
+     String::New(env, "unsubscribe"),
+     Function::New(env, unsubscribe)
+   );
++  exports.Set(
++    String::New(env, "supportsLatency"),
++    Boolean::New(env, true)
++  );
+   return exports;
+ }
+ 
+diff --git a/src/macos/FSEventsBackend.cc b/src/macos/FSEventsBackend.cc
+index cfda9625fc7d9beb00a0014d87333bf97c130c84..0335a050564219b84b671adb723b15c2c2e32489 100644
+--- a/src/macos/FSEventsBackend.cc
++++ b/src/macos/FSEventsBackend.cc
+@@ -206,7 +206,7 @@ void checkWatcher(WatcherRef watcher) {
+ void FSEventsBackend::startStream(WatcherRef watcher, FSEventStreamEventId id) {
+   checkWatcher(watcher);
+ 
+-  CFAbsoluteTime latency = 0.001;
++  CFAbsoluteTime latency = watcher->mLatency;
+   CFStringRef fileWatchPath = CFStringCreateWithCString(
+     NULL,
+     watcher->mDir.c_str(),

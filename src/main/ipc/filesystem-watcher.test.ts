@@ -72,7 +72,7 @@ describe('registerFilesystemWatcherHandlers', () => {
     expect(subscribeParcelWatcher).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(Function),
-      expect.objectContaining({ backend: 'windows' })
+      expect.objectContaining({ backend: 'windows', latency: 0.25 })
     )
 
     await closeAllWatchers()

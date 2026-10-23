@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { subscribeViaWatcherProcess } from './parcel-watcher-process'
+import { GIT_METADATA_WATCH_LATENCY_SECONDS } from './parcel-watcher-stream-latency'
 import { isWatcherProcessFailure } from './parcel-watcher-process-failure'
 import type { WorktreeBaseWatchTarget } from './worktree-base-directory-event-filter'
 import type {
@@ -32,7 +33,10 @@ export async function startGitCommonNarrowWatch(
   onOverflow?: () => void
 ): Promise<WorktreeBaseSubscription> {
   const worktreesDir = join(target.path, 'worktrees')
-  const watcherOptions = platform === 'win32' ? { backend: 'windows' as const } : {}
+  const watcherOptions = {
+    latency: GIT_METADATA_WATCH_LATENCY_SECONDS,
+    ...(platform === 'win32' ? { backend: 'windows' as const } : {})
+  }
   let disposed = false
   let subscription: WorktreeBaseSubscription | null = null
   let existenceTimer: ReturnType<typeof setInterval> | null = null

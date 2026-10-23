@@ -11,6 +11,7 @@ const { dirname, join, resolve } = require('node:path')
 const { builtinModules, createRequire } = require('node:module')
 const { PE_MACHINE, readPeMachine } = require('./scripts/windows-pe-machine.cjs')
 const { adoptPackagedNativeBuildEntries } = require('./packaged-native-build-entries.cjs')
+const { finalizePackagedParcelWatcherBuild } = require('./packaged-parcel-watcher-build.cjs')
 const { runtimePackageExcludeFilter } = require('./packaged-windows-only-runtime-files.cjs')
 const {
   NATIVE_BUILD_PACKAGES,
@@ -675,6 +676,7 @@ function prunePackagedRuntimeNodeModules(resourcesDir, electronPlatformName, ele
   adoptPackagedNativeBuildEntries(resourcesDir, electronPlatformName, architecture)
   prunePackagedNodePty(resourcesDir, electronPlatformName, architecture)
   prunePackagedParcelWatcher(resourcesDir, electronPlatformName, architecture)
+  finalizePackagedParcelWatcherBuild(resourcesDir, electronPlatformName, architecture)
   // Why before the filename walk: zod/src is deleted wholesale, so walking it first is wasted work.
   prunePackagedZodSources(resourcesDir)
   prunePackagedRuntimeTypeAndSourceMapArtifacts(resourcesDir)
