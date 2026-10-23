@@ -152,22 +152,20 @@ function groupRow(groupId: string, members: readonly NativeChatMessage[]): Nativ
  *  collides with a sibling the provider itself named `Audit 2`. */
 function labelledEntries(blocks: readonly NativeChatSubagentBlock[]): NativeChatSubagentEntry[] {
   const taken = new Set<string>()
-  const repeated = new Set<string>()
   for (const block of blocks) {
-    if (taken.has(block.label)) {
-      repeated.add(block.label)
-    }
     taken.add(block.label)
   }
-  const claimed = new Set<string>()
+  const nextOrdinalByLabel = new Map<string, number>()
   return blocks.map((block) => {
     let label = block.label
-    if (repeated.has(label) && claimed.has(label)) {
-      for (let ordinal = 2; taken.has(label) || claimed.has(label); ordinal++) {
+    let ordinal = nextOrdinalByLabel.get(label)
+    if (ordinal !== undefined) {
+      do {
         label = `${block.label} ${ordinal}`
-      }
+        ordinal += 1
+      } while (taken.has(label))
     }
-    claimed.add(label)
+    nextOrdinalByLabel.set(block.label, ordinal ?? 2)
     const held = foldedEntries.get(block)
     if (held?.label === label) {
       return held

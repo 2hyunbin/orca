@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   foldSubagentItems,
   namedSubagents,
@@ -97,6 +97,32 @@ describe('a turn’s subagents drawn as one row', () => {
       'Audit 3',
       'Audit 2'
     ])
+  })
+
+  it('numbers repeated siblings without probing earlier ordinals again', () => {
+    const repeated = Array.from({ length: 256 }, (_, index) =>
+      item(index + 1, subagent(`a-${index}`, { label: 'Audit' }))
+    )
+    const reserved = Array.from({ length: 32 }, (_, index) =>
+      item(index + 257, subagent(`b-${index}`, { label: `Audit ${index + 2}` }))
+    )
+    const messages = [...repeated, ...reserved]
+    const has = vi.spyOn(Set.prototype, 'has')
+    let rows: readonly NativeChatMessage[]
+    let probes: number
+    try {
+      rows = foldSubagentItems(messages)
+      probes = has.mock.calls.length
+    } finally {
+      has.mockRestore()
+    }
+
+    expect(groupOf(rows[0]).agents.map((agent) => agent.label)).toEqual([
+      'Audit',
+      ...Array.from({ length: 255 }, (_, index) => `Audit ${index + 34}`),
+      ...Array.from({ length: 32 }, (_, index) => `Audit ${index + 2}`)
+    ])
+    expect(probes).toBeLessThan(messages.length * 3)
   })
 
   it('hands back the same row while no sibling changed, and a new one when one did', () => {
