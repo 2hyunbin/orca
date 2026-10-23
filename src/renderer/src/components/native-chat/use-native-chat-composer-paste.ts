@@ -50,7 +50,7 @@ export function useNativeChatComposerPaste({
     startClipboardImageChip,
     startClipboardCandidateChips,
     dropImagePaste,
-    keepStoreUploadAfterUnmount
+    keepStoreUploadAfterUnmount: retainUpload
   } = useNativeChatPasteLifetime({
     destinationIsLive,
     targetKey,
@@ -107,7 +107,7 @@ export function useNativeChatComposerPaste({
         canNotify: () => !disabledRef.current,
         setNotice
       })
-      if (keepStoreUploadAfterUnmount(pendingId, saved)) {
+      if (retainUpload(pendingId, saved)) {
         return false
       }
       if (!canPaste() || saved.status !== 'saved') {
@@ -117,7 +117,7 @@ export function useNativeChatComposerPaste({
       settleImagePaste(pendingId, saved.tempPath, owner)
       return true
     },
-    [canPaste, dropImagePaste, keepStoreUploadAfterUnmount, setNotice, settleImagePaste]
+    [canPaste, disabledRef, dropImagePaste, retainUpload, setNotice, settleImagePaste]
   )
 
   const handlePaste = useCallback(

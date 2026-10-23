@@ -50,7 +50,7 @@ export function useNativeChatComposerAttachmentPreviews(
         previewsRef.current = NO_PREVIEWS
       }
     }
-  }, [identity])
+  }, [identity, previewsRef])
   const updatePreviews = useCallback(
     (next: ReadonlyMap<string, string>) => {
       if (previewsRef.retired) {
@@ -63,7 +63,7 @@ export function useNativeChatComposerAttachmentPreviews(
       }
       setPreviews(next)
     },
-    [identity, setPreviews]
+    [identity, previewsRef, setPreviews]
   )
   useEffect(() => {
     const current = previewsRef.current
@@ -79,7 +79,7 @@ export function useNativeChatComposerAttachmentPreviews(
       next.delete(id)
     }
     updatePreviews(next)
-  }, [pending, settled, updatePreviews])
+  }, [pending, previewsRef, settled, updatePreviews])
 
   const setPreview = useCallback(
     (id: string, previewUrl: string | undefined) => {
@@ -87,7 +87,7 @@ export function useNativeChatComposerAttachmentPreviews(
         updatePreviews(new Map(previewsRef.current).set(id, previewUrl))
       }
     },
-    [identity, updatePreviews]
+    [previewsRef, updatePreviews]
   )
 
   const releasePreview = useCallback(
@@ -101,13 +101,13 @@ export function useNativeChatComposerAttachmentPreviews(
       next.delete(id)
       updatePreviews(next)
     },
-    [updatePreviews]
+    [previewsRef, updatePreviews]
   )
 
   const releaseAllPreviews = useCallback(() => {
     previewsRef.current.forEach(releasePreviewUrl)
     updatePreviews(NO_PREVIEWS)
-  }, [updatePreviews])
+  }, [previewsRef, updatePreviews])
 
   return { previews, setPreview, releasePreview, releaseAllPreviews }
 }

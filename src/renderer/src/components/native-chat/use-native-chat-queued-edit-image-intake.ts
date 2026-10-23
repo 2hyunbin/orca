@@ -56,9 +56,11 @@ export function useNativeChatQueuedEditImageIntake(
   const editable = Boolean(intake && transport && transport.acceptsImages !== false)
   const { change, saving, acquiring } = editor
   const range = useRef({ from: editor.text.length, to: editor.text.length })
-  if (field.current) {
-    range.current = { from: field.current.selectionStart, to: field.current.selectionEnd }
-  }
+  useLayoutEffect(() => {
+    if (field.current) {
+      range.current = { from: field.current.selectionStart, to: field.current.selectionEnd }
+    }
+  })
   // Nothing joins an edit until its lease is held, nor while a Save sends the images it read.
   const busy = saving || acquiring
   const [isDragActive, setIsDragActive] = useState(false)

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useEffectEvent, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Pencil, Plus, X } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -34,12 +34,8 @@ export function NativeChatQueuedMessageEditor({
   const intake = useNativeChatQueuedEditImageIntake(editor, attachTo, field)
   const chips = editor.images?.chips ?? []
   const empty = editor.images?.empty === true
-  useLayoutEffect(() => {
-    if (editor.acquiring) {
-      return
-    }
+  const restoreSelection = useEffectEvent(() => {
     const textarea = field.current
-    textarea?.focus({ preventScroll: true })
     const selection = editor.selection
     if (textarea && selection) {
       textarea.setSelectionRange(
@@ -48,6 +44,14 @@ export function NativeChatQueuedMessageEditor({
         selection.direction
       )
     }
+  })
+  useLayoutEffect(() => {
+    if (editor.acquiring) {
+      return
+    }
+    const textarea = field.current
+    textarea?.focus({ preventScroll: true })
+    restoreSelection()
     const list = textarea?.closest('ul')
     const row = textarea?.closest('li')
     if (list && row) {

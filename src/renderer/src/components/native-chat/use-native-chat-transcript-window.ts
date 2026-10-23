@@ -64,7 +64,8 @@ export function useNativeChatTranscriptWindow(
   options: NativeChatTranscriptWindowOptions
 ): NativeChatTranscriptWindow {
   const { scrollRef, slots, isVisible, revealIndex, typography = DEFAULT_ROW_TYPOGRAPHY } = options
-  const reader = useNativeChatTranscriptReading(options)
+  const { pinned, reading, restore, setRestoring, reconcile, captureReadingPosition } =
+    useNativeChatTranscriptReading(options)
   const sizerElementRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
   const [programmaticScrollMarks] = useState(createProgrammaticScrollMarks)
@@ -87,8 +88,8 @@ export function useNativeChatTranscriptWindow(
   // expensive is rebuilt by changing it.
   const rangeExtractor = useCallback(
     (range: { startIndex: number; endIndex: number; overscan: number; count: number }) =>
-      nativeChatTranscriptRange(range, reader.pinned),
-    [reader.pinned]
+      nativeChatTranscriptRange(range, pinned),
+    [pinned]
   )
 
   const scaledGapPx = NATIVE_CHAT_ROW_GAP_PX * typography.spacingScale
@@ -121,11 +122,8 @@ export function useNativeChatTranscriptWindow(
       }
     }
   })
-  useLayoutEffect(
-    () => reader.reconcile(virtualizer),
-    [isVisible, reader.restoreIndex, scrollRef, virtualizer]
-  )
-  useLayoutEffect(() => reader.captureReadingPosition(reader.reading.current.followingEnd))
+  useLayoutEffect(() => reconcile(virtualizer), [reconcile, virtualizer])
+  useLayoutEffect(() => captureReadingPosition(reading.current.followingEnd))
 
   const finishReaderTakeover = useCallback(() => {
     if (readerTakeoverFrameRef.current !== null) {
@@ -306,9 +304,9 @@ export function useNativeChatTranscriptWindow(
 
   const reconcileReaderScroll = useCallback(
     (isTakingOver: boolean) => {
-      if (isTakingOver && reader.restore.current) {
-        reader.restore.current = null
-        reader.setRestoring(false)
+      if (isTakingOver && restore.current) {
+        restore.current = null
+        setRestoring(false)
       }
       const container = scrollRef.current
       if (
@@ -329,7 +327,7 @@ export function useNativeChatTranscriptWindow(
         readerTakeoverFrameRef.current = null
       })
     },
-    [endAlign, scrollRef, virtualizer]
+    [endAlign, restore, scrollRef, setRestoring, virtualizer]
   )
 
   // The virtualizer still holds the jump's row as its target, and would write it
@@ -341,7 +339,7 @@ export function useNativeChatTranscriptWindow(
   }, [isAlignHeld, reconcileReaderScroll])
 
   return {
-    captureReadingPosition: reader.captureReadingPosition,
+    captureReadingPosition,
     virtualItems: virtualizer.getVirtualItems(),
     totalSize: virtualizer.getTotalSize(),
     scrollMargin,

@@ -106,7 +106,7 @@ export function useNativeChatTranscriptScroll({
     detachedScrollTopRef.current = followingRef.current ? null : geometry.scrollTop
     setShowJump(shouldShowJumpToLatest(followingRef.current, geometry))
     return geometry
-  }, [captureReadingPosition, scrollRef])
+  }, [captureReadingPosition, followingRef, scrollRef])
 
   const readerLeavesEnd = useCallback(() => {
     clearForwardedScroll()

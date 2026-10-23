@@ -1,4 +1,4 @@
-import { holdNativeChatInput } from '../native-chat/native-chat-view-parking-owner'
+import { holdNativeChatInput as holdInput } from '../native-chat/native-chat-view-parking-owner'
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store'
 import { useAudioCapture } from '@/hooks/use-audio-capture'
@@ -37,7 +37,7 @@ export function DictationController() {
   dictationStateRef.current = dictationState
   const dictationRunRef = useRef(0)
   const holdGestureActiveRef = useRef(false)
-  const releaseChatInput = useDictationChatInputLease(dictationState)
+  const releaseInput = useDictationChatInputLease(dictationState)
   const insertionTargetRef = useRef<DictationInsertionTarget | null>(null)
   const activeSessionIdRef = useRef<string | null>(null)
   const stoppedSessionIdsRef = useRef(new Set<string>())
@@ -130,9 +130,8 @@ export function DictationController() {
       return
     }
     const target = insertionTargetRef.current
-    releaseChatInput.current?.()
-    releaseChatInput.current =
-      target && target.kind !== 'terminal' ? holdNativeChatInput(target.element) : null
+    releaseInput.current?.()
+    releaseInput.current = target && target.kind !== 'terminal' ? holdInput(target.element) : null
     stopRequestedDuringStartRef.current = false
     finalTranscriptReceivedRef.current = false
     erroredSessionIdsRef.current.clear()
@@ -253,6 +252,7 @@ export function DictationController() {
     }
   }, [
     settings,
+    releaseInput,
     setDictationState,
     startCapture,
     flushBufferedAudio,

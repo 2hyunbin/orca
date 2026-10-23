@@ -1,6 +1,6 @@
 import type { NativeChatRowTypography } from './native-chat-row-height-estimate'
 import { nativeChatPinnedRowIndexes } from './native-chat-pinned-rows'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Virtualizer } from '@tanstack/react-virtual'
 import type { NativeChatSubagentSections } from './native-chat-subagent-sections'
 import { nativeChatSlotKey, type NativeChatTranscriptSlot } from './native-chat-transcript-slots'
@@ -16,10 +16,7 @@ export type NativeChatTranscriptWindowOptions = {
   typography?: NativeChatRowTypography
   isVisible: boolean
 }
-type ReadingVirtualizer = Pick<
-  Virtualizer<HTMLDivElement, Element>,
-  'scrollToIndex' | 'scrollToOffset'
->
+type ReadingScroll = Pick<Virtualizer<HTMLDivElement, Element>, 'scrollToIndex' | 'scrollToOffset'>
 
 export function useNativeChatTranscriptReading({
   scrollRef,
@@ -32,13 +29,6 @@ export function useNativeChatTranscriptReading({
   newRowsMarkerIndex
 }: NativeChatTranscriptWindowOptions) {
   const reading = useNativeChatReadingPosition()
-  if (
-    journalEpoch &&
-    reading.current.anchor?.epoch &&
-    reading.current.anchor.epoch !== journalEpoch
-  ) {
-    reading.current = { followingEnd: true, anchor: null }
-  }
   const restore = useRef(
     reading.current.anchor && !reading.current.followingEnd ? reading.current.anchor : null
   )
@@ -46,10 +36,15 @@ export function useNativeChatTranscriptReading({
   const restoreIndex = restore.current
     ? slots.findIndex((slot) => nativeChatSlotKey(slot) === restore.current?.rowKey)
     : -1
-  if (restore.current && readCurrent && restoreIndex < 0) {
-    restore.current = null
-    reading.current = { ...reading.current, followingEnd: true }
-  }
+  useLayoutEffect(() => {
+    const changedEpoch =
+      journalEpoch && reading.current.anchor?.epoch && reading.current.anchor.epoch !== journalEpoch
+    if (changedEpoch || (restore.current && readCurrent && restoreIndex < 0)) {
+      restore.current = null
+      reading.current = { followingEnd: true, anchor: changedEpoch ? null : reading.current.anchor }
+      setRestoring(false)
+    }
+  }, [journalEpoch, reading, readCurrent, restoreIndex])
   const pinned = useMemo(() => {
     const indexes = new Set(
       nativeChatPinnedRowIndexes({ count: slots.length, revealIndex, newRowsMarkerIndex })
@@ -59,50 +54,53 @@ export function useNativeChatTranscriptReading({
     }
     return indexes
   }, [slots.length, revealIndex, newRowsMarkerIndex, restoring, restoreIndex])
-  const reconcile = (virtualizer: ReadingVirtualizer) => {
-    const saved = restore.current
-    const container = scrollRef.current
-    if (!isVisible || !saved || restoreIndex < 0 || !container) {
-      return
-    }
-    let frame = 0
-    let stable = 0
-    const deadline = performance.now() + 1000
-    virtualizer.scrollToIndex(restoreIndex, { align: 'start', behavior: 'auto' })
-    const reconcile = () => {
-      if (restore.current !== saved) {
+  const reconcile = useCallback(
+    (virtualizer: ReadingScroll) => {
+      const saved = restore.current
+      const container = scrollRef.current
+      if (!isVisible || !saved || restoreIndex < 0 || !container) {
         return
       }
-      const row = Array.from(
-        container.querySelectorAll<HTMLElement>('[data-native-chat-row-key]')
-      ).find((element) => element.dataset.nativeChatRowKey === saved.rowKey)
-      if (row) {
-        const within = Math.min(
-          saved.offsetWithinRow,
-          Math.max(0, row.getBoundingClientRect().height - 1)
-        )
-        const delta =
-          row.getBoundingClientRect().top - container.getBoundingClientRect().top + within
-        if (Math.abs(delta) <= 1) {
-          stable += 1
-        } else {
-          stable = 0
-          virtualizer.scrollToOffset(container.scrollTop + delta, { behavior: 'auto' })
-        }
-        if (stable >= 2) {
-          restore.current = null
-          setRestoring(false)
+      let frame = 0
+      let stable = 0
+      const deadline = performance.now() + 1000
+      virtualizer.scrollToIndex(restoreIndex, { align: 'start', behavior: 'auto' })
+      const reconcile = () => {
+        if (restore.current !== saved) {
           return
         }
+        const row = Array.from(
+          container.querySelectorAll<HTMLElement>('[data-native-chat-row-key]')
+        ).find((element) => element.dataset.nativeChatRowKey === saved.rowKey)
+        if (row) {
+          const within = Math.min(
+            saved.offsetWithinRow,
+            Math.max(0, row.getBoundingClientRect().height - 1)
+          )
+          const delta =
+            row.getBoundingClientRect().top - container.getBoundingClientRect().top + within
+          if (Math.abs(delta) <= 1) {
+            stable += 1
+          } else {
+            stable = 0
+            virtualizer.scrollToOffset(container.scrollTop + delta, { behavior: 'auto' })
+          }
+          if (stable >= 2) {
+            restore.current = null
+            setRestoring(false)
+            return
+          }
+        }
+        if (performance.now() < deadline) {
+          frame = requestAnimationFrame(reconcile)
+        }
+        // A missed layout deadline keeps the compact anchor for a later authoritative reveal.
       }
-      if (performance.now() < deadline) {
-        frame = requestAnimationFrame(reconcile)
-      }
-      // A missed layout deadline keeps the compact anchor for a later authoritative reveal.
-    }
-    frame = requestAnimationFrame(reconcile)
-    return () => cancelAnimationFrame(frame)
-  }
+      frame = requestAnimationFrame(reconcile)
+      return () => cancelAnimationFrame(frame)
+    },
+    [isVisible, restoreIndex, scrollRef]
+  )
   const captureReadingPosition = useCallback(
     (followingEnd: boolean) => {
       const container = scrollRef.current
@@ -148,14 +146,5 @@ export function useNativeChatTranscriptReading({
     [isVisible, journalEpoch, reading, scrollRef, slots, subagentSections]
   )
 
-  return {
-    pinned,
-    reading,
-    restore,
-    restoring,
-    setRestoring,
-    restoreIndex,
-    reconcile,
-    captureReadingPosition
-  }
+  return { pinned, reading, restore, setRestoring, reconcile, captureReadingPosition }
 }

@@ -121,5 +121,5 @@ export function useNativeChatTranscriptEpoch(
       setExpandedTurnIds(new Set())
     }
     previousEpoch.current = journalEpoch
-  }, [journalEpoch, previousEpoch, disclosures.reset, resetChoices, setExpandedTurnIds])
+  }, [journalEpoch, previousEpoch, disclosures, resetChoices, setExpandedTurnIds])
 }

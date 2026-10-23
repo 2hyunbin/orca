@@ -216,7 +216,7 @@ export function useStructuredAgentSessionMutate(args: {
         release()
       }
     },
-    [send, sessionId, stateRef, target]
+    [acquireLease, send, sessionId, stateRef, target]
   )
 
   const mutate = useCallback(

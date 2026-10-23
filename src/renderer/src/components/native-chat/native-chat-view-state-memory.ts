@@ -1,10 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
-
 type Cell<T> = { current: T; listeners: Set<() => void>; retired: boolean }
 export const nativeChatViewRetirements = new Set<(key: string) => void>()
 export const NativeChatViewIdentity = createContext<string | null>(null)
-
 /** A typed field owns data only; mounted readers alone own its listeners. */
 export function createNativeChatReturnField<T>() {
   const records = new Map<string, Cell<T>>()
@@ -41,10 +39,14 @@ export function useNativeChatReturnRef<T>(
   scope = ''
 ): Cell<T> {
   const key = useContext(NativeChatViewIdentity)
-  return useMemo(
-    () => field(key === null ? null : `${key}\0${scope}`, initial),
-    [field, key, scope]
-  )
+  const read = useMemo(() => {
+    let cell: Cell<T> | undefined
+    return (initial: () => T) => (cell ??= field(key === null ? null : `${key}\0${scope}`, initial))
+  }, [field, key, scope])
+  return read(initial)
+}
+function isUpdater<T>(next: SetStateAction<T>): next is (value: T) => T {
+  return typeof next === 'function'
 }
 
 export function useNativeChatReturnState<T>(
@@ -67,11 +69,7 @@ export function useNativeChatReturnState<T>(
       if (cell.retired) {
         return
       }
-      cell.current =
-        typeof next === 'function'
-          ? // SAFETY: return fields hold data, never function values; the function is React's updater.
-            (next as (value: T) => T)(cell.current)
-          : next
+      cell.current = isUpdater(next) ? next(cell.current) : next
       for (const listener of cell.listeners) {
         listener()
       }

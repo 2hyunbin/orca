@@ -213,7 +213,7 @@ export function NativeChatPromptEditor({
       from: promptTextPosition(doc, changed ? length : Math.min(saved.anchor, length)),
       to: promptTextPosition(doc, changed ? length : Math.min(saved.head, length))
     })
-  }, [editor, selection])
+  }, [editor, scopeKey, selection])
 
   useLayoutEffect(() => {
     if (!editor || !scopeKey) {

@@ -39,7 +39,7 @@ export function NativeChatStructuredQuestionCard({
       retireNativeChatViewState(previous.current)
     }
     previous.current = identity
-  }, [identity])
+  }, [identity, previous])
   return (
     <NativeChatViewIdentity.Provider value={identity}>
       <NativeChatQuestionCard

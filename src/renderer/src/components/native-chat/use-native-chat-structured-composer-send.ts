@@ -162,6 +162,7 @@ export function useNativeChatStructuredComposerSend({
       clearSkillOrigin,
       draftScopeKey,
       imageAttachments,
+      acquireLease,
       isComposing,
       setCaret,
       setDraft,

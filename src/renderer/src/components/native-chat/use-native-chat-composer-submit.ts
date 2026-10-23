@@ -125,6 +125,7 @@ export function useNativeChatComposerSubmit(args: {
     draftScopeKey,
     imageAttachments.length,
     setCaret,
+    setEntered,
     structuredTransport,
     threadGoal
   ])
