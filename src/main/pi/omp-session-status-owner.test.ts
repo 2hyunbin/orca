@@ -16,15 +16,17 @@ describe('session selection without declared roles', () => {
       await harness.callHook('agent_start', {}, root)
       const helper = harness.registerSession()
       await helper.callHook('session_start', {}, child)
-      await helper.callHook('tool_call', { toolName: 'ask', input: { question: 'choose' } }, child)
+      const toolName = kind === 'pi' ? 'ask_user_question' : 'ask'
+      await helper.callHook('tool_call', { toolName, input: { question: 'choose' } }, child)
       await vi.waitFor(() =>
         expect(
           JSON.parse(String(harness.fetchMock.mock.calls.at(-1)?.[1]?.body)).payload.tool_name
-        ).toBe('ask')
+        ).toBe(toolName)
       )
       expect(
         JSON.parse(String(harness.fetchMock.mock.calls.at(-1)?.[1]?.body)).payload.session_id
       ).toBe('lead')
+      await helper.callHook('tool_execution_end', { toolName }, child)
       if (kind === 'pi') {
         await helper.callHook('ui_prompt_start', {}, child)
         await vi.waitFor(() =>

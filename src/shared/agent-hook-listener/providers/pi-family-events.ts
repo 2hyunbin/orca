@@ -92,7 +92,12 @@ export function normalizePiCompatibleEvent(
   if (isPiUiPrompt) {
     // Why: waiting uses the same orange question icon as Claude/Codex input prompts.
     stateName = 'waiting'
-  } else if (isPiUiPromptEnd || isOmpPlanReviewEnd) {
+  } else if (
+    isPiUiPromptEnd ||
+    isOmpPlanReviewEnd ||
+    ((eventName === 'tool_execution_end' || eventName === 'tool_approval_resolved') &&
+      typeof hookPayload.is_idle === 'boolean')
+  ) {
     stateName = hookPayload.is_idle === true ? 'done' : 'working'
   }
 

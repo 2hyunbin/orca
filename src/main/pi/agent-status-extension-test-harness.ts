@@ -5,41 +5,16 @@ import ts from 'typescript-api'
 import { vi } from 'vitest'
 
 import { getPiAgentStatusExtensionSource } from './agent-status-extension-source'
-
-export type HookContext = {
-  agent?: { kind: 'main' | 'sub' }
-  hasUI?: boolean
-  ui?: {
-    setEditorText?: (text: string) => void
-    notify?: (message: string, level: string) => void
-    onTerminalInput?: (handler: (data: string) => { consume?: boolean } | undefined) => () => void
-  }
-  isIdle?: () => boolean
-  resolvePlanReview?: (reviewId: string, choice: string) => boolean
-  model?: { provider?: unknown; id?: unknown } | null
-  modelRegistry?: { getAvailable: () => { provider: string; id: string }[] }
-  sessionManager?: {
-    getSessionId?: () => unknown
-    getSessionFile?: () => unknown
-    getHeader?: () => unknown
-  }
-}
+import { getPiTitlebarExtensionSource } from './titlebar-extension-source'
+import { createCountingMap } from './agent-status-extension-test-context'
+import type { FakeCurlChild, HookContext } from './agent-status-extension-test-context'
+export type { HookContext } from './agent-status-extension-test-context'
 
 type PiEventBus = {
   on: (name: string, listener: (event: unknown) => void) => unknown
 }
 
 export type HookHandler = (event?: unknown, context?: HookContext) => Promise<void> | void
-
-type FakeCurlChild = {
-  kill: ReturnType<typeof vi.fn>
-  emit: (event: string, ...args: unknown[]) => boolean
-  on: ReturnType<typeof vi.fn>
-  stdin: {
-    on: ReturnType<typeof vi.fn>
-    end: ReturnType<typeof vi.fn>
-  }
-}
 
 export type AgentStatusExtensionHarness = {
   setModelMock: ReturnType<typeof vi.fn>
@@ -120,6 +95,8 @@ export function createAgentStatusExtensionHarness(args: {
   fetchImpl?: (...params: Parameters<typeof fetch>) => Promise<unknown>
   seedEventBus?: (bus: EventEmitter) => void
   sharedEventBus?: boolean
+  titlebar?: 'first' | 'last' | 'only'
+  onMapEntry?: () => void
 }): AgentStatusExtensionHarness {
   const fetchMock = vi.fn(
     args.fetchImpl ??
@@ -171,6 +148,7 @@ export function createAgentStatusExtensionHarness(args: {
           name: string,
           command: { handler: (args: string, context: HookContext) => Promise<void> }
         ) => void
+        getSessionName: () => string
         setModel: (model: unknown) => Promise<boolean>
         events?: PiEventBus
       }) => void
@@ -194,6 +172,7 @@ export function createAgentStatusExtensionHarness(args: {
       ...(args.kind === 'prime-agent' ? { PRIME_AGENT_INTERNAL_DAEMON_WORKER: '1' } : {}),
       ...args.env
     },
+    cwd: () => '/repo',
     pid: args.pid ?? AGENT_STATUS_EXTENSION_SELF_PID,
     title: args.title ?? 'node',
     argv: args.argv ?? ['node', '/usr/bin/orca']
@@ -214,6 +193,9 @@ export function createAgentStatusExtensionHarness(args: {
     Buffer,
     URL,
     AbortController,
+    setInterval,
+    clearInterval,
+    Map: createCountingMap(args.onMapEntry),
     setTimeout,
     clearTimeout
   } as Record<string, unknown>
@@ -222,8 +204,8 @@ export function createAgentStatusExtensionHarness(args: {
   const source = getPiAgentStatusExtensionSource(args.kind)
   const output = transpileExtensionSource(source)
   createContext(context)
-  const evaluateModule = (): NonNullable<typeof module.exports.default> => {
-    runInContext(`(function () {\n${output}\n})()`, context)
+  const evaluateModule = (compiled = output): NonNullable<typeof module.exports.default> => {
+    runInContext(`(function () {\n${compiled}\n})()`, context)
     const factory = module.exports.default
     if (!factory) {
       throw new Error('expected default export from generated source')
@@ -231,6 +213,10 @@ export function createAgentStatusExtensionHarness(args: {
     return factory
   }
   let register = evaluateModule()
+  const titleOutput = args.titlebar
+    ? transpileExtensionSource(getPiTitlebarExtensionSource(args.kind))
+    : undefined
+  let registerTitle = titleOutput ? evaluateModule(titleOutput) : undefined
 
   const handlers: Record<string, HookHandler> = {}
   let piEvents = new EventEmitter()
@@ -241,22 +227,31 @@ export function createAgentStatusExtensionHarness(args: {
     target: Record<string, HookHandler>,
     events: PiEventBus = piEvents
   ): void => {
-    register({
-      registerCommand: (name, command) => {
-        commands[name] = command
-      },
-      setModel: setModelMock,
-      events,
-      on(name: string, handler: HookHandler) {
-        const previous = target[name]
-        target[name] = previous
-          ? async (event, ctx) => {
-              await previous(event, ctx)
-              await handler(event, ctx)
-            }
-          : handler
-      }
-    })
+    const factories =
+      args.titlebar === 'only'
+        ? [registerTitle]
+        : args.titlebar === 'first'
+          ? [registerTitle, register]
+          : [register, registerTitle]
+    for (const factory of factories) {
+      factory?.({
+        getSessionName: () => 'selected title',
+        registerCommand: (name, command) => {
+          commands[name] = command
+        },
+        setModel: setModelMock,
+        events,
+        on(name: string, handler: HookHandler) {
+          const previous = target[name]
+          target[name] = previous
+            ? async (event, ctx) => {
+                await previous(event, ctx)
+                await handler(event, ctx)
+              }
+            : handler
+        }
+      })
+    }
   }
   const callHook: AgentStatusExtensionHarness['callHook'] = async (name, event, hookContext) => {
     await handlers[name]?.(event, hookContext)
@@ -321,6 +316,9 @@ export function createAgentStatusExtensionHarness(args: {
     reloadPi: async () => {
       await callHook('session_shutdown', { reason: 'reload' })
       register = evaluateModule()
+      if (titleOutput) {
+        registerTitle = evaluateModule(titleOutput)
+      }
       registerLikePi()
     }
   }

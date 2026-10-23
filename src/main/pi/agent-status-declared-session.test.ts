@@ -85,21 +85,6 @@ describe('declared session authority', () => {
     expect(accepted.every((event) => event?.providerSession?.id === 'lead')).toBe(true)
     const saved = sink.savedRow()?.providerSession
     expect(saved).toMatchObject({ id: 'lead', transcriptPath: '/sessions/lead.jsonl' })
-    for (const id of ['new', 'fork', 'former-helper', 'reload']) {
-      const manager = root.sessionManager
-      if (manager) {
-        manager.getSessionId = () => id
-        manager.getSessionFile = () => `/sessions/${id}.jsonl`
-      }
-      await harness.callHook(
-        'session_switch',
-        { reason: id === 'new' ? 'new' : id === 'fork' ? 'fork' : 'resume' },
-        root
-      )
-      await harness.callHook('agent_start', {}, root)
-      await settle()
-      await vi.waitFor(() => expect(accepted.at(-1)?.providerSession?.id).toBe(id))
-    }
   })
 
   it('relays early child attention without sharing model, prompt, roster or callbacks', async () => {
@@ -266,6 +251,9 @@ describe('declared session authority', () => {
           expect(accepted.at(-1)?.providerSession?.id).toBe(next.sessionManager?.getSessionId?.())
         )
         current = next
+      }
+      if (child.sessionManager) {
+        child.sessionManager.getHeader = () => ({ parentSession: '/sessions/lead.jsonl' })
       }
       // A fresh process can select a former helper, regardless of its saved parent header.
       const restarted = createAgentStatusExtensionHarness({ kind, existsSync: () => true })

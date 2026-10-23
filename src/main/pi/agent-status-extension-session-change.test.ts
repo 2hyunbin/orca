@@ -616,7 +616,6 @@ describe('OMP session switches', () => {
     expect(posts(harness).at(-1)).toMatchObject({ hook_event_name: 'agent_end', session_id: 'A' })
     expect(posts(harness).at(-1)?.subagents).toBeUndefined()
 
-    await harness.callHook('session_start', {}, context)
     await harness.callHook('agent_start', {}, context)
     await vi.advanceTimersByTimeAsync(0)
     expect(posts(harness).at(-1)).toMatchObject({ hook_event_name: 'agent_start', session_id: 'B' })
@@ -708,7 +707,6 @@ describe('OMP session switches', () => {
       { reason: 'new', previousSessionFile: '/sessions/A.jsonl' },
       context
     )
-    await harness.callHook('session_start', {}, context)
     await harness.callHook('agent_start', {}, context)
 
     while (releases.length > 0) {
