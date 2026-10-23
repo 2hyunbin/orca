@@ -1,7 +1,7 @@
 import { FileText, Globe, Terminal } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
-import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { getWorkspaceClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
 import { showClientCreationActionError } from '@/lib/client-creation-action-error'
 import { openDocumentInFloatingWorkspace } from '@/lib/open-document-in-floating-workspace'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
@@ -21,7 +21,8 @@ export function WorkspaceEmptyState({
   const focusGroup = useAppStore((state) => state.focusGroup)
   const browserEnabled = useAppStore(
     (state) =>
-      getClientCreationActionPolicy(state, worktreeId)['managed-browser'].state === 'enabled'
+      getWorkspaceClientCreationActionPolicy(state, worktreeId)['managed-browser'].state ===
+      'enabled'
   )
   const openFile = async (): Promise<void> => {
     focusGroup(worktreeId, groupId)
