@@ -1,4 +1,5 @@
 import type { AppState } from './types'
+import type { AgentStatusReadState } from './agent-status-observers'
 import type { TerminalStoreGet, TerminalStoreSet } from './terminals/terminal-state'
 const sources = [
   'tabsByWorktree',
@@ -7,13 +8,23 @@ const sources = [
   'paneForegroundAgentByPaneKey'
 ] as const
 export type TerminalFactSource = (typeof sources)[number]
-type Hint = { before: object; after: object; keys: readonly string[]; token: object }
-const publications = new WeakMap<object, Partial<Record<TerminalFactSource, Hint>>>()
+type TerminalFactRoot = AppState[TerminalFactSource]
+type TerminalFactOwner = { getState: () => AgentStatusReadState }
+type Hint = {
+  before: TerminalFactRoot
+  after: TerminalFactRoot
+  keys: readonly string[]
+  token: object
+}
+const publications = new WeakMap<
+  TerminalFactOwner | TerminalStoreGet,
+  Partial<Record<TerminalFactSource, Hint>>
+>()
 export function terminalFactKeys(
   get: TerminalStoreGet,
   source: TerminalFactSource,
-  before: object,
-  after: object
+  before: TerminalFactRoot,
+  after: TerminalFactRoot
 ): readonly string[] | undefined {
   const hint = publications.get(publicationKey(get))?.[source]
   return hint?.before === before && hint.after === after ? hint.keys : undefined
@@ -51,11 +62,14 @@ export function terminalFactSetter(
   }
 }
 
-const getterKeys = new WeakMap<TerminalStoreGet, object>()
-function publicationKey(get: TerminalStoreGet): object {
+const getterKeys = new WeakMap<TerminalStoreGet, TerminalFactOwner>()
+function publicationKey(get: TerminalStoreGet): TerminalFactOwner | TerminalStoreGet {
   return getterKeys.get(get) ?? get
 }
-export function bindTerminalFactGetters(key: object, ...getters: TerminalStoreGet[]): void {
+export function bindTerminalFactGetters(
+  key: TerminalFactOwner,
+  ...getters: TerminalStoreGet[]
+): void {
   for (const get of getters) {
     getterKeys.set(get, key)
   }
