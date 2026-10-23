@@ -11,10 +11,6 @@ import {
   findProjectHostSetup,
   type ProjectHostSetupTarget
 } from '../../../shared/project-host-setup-target'
-import {
-  hasReleasedWslMoveSessionHolds,
-  isReleasedWslMoveSessionHeld
-} from './wsl-move-release-session-hold'
 
 export type WslMoveProjectRef = { repoId: string } | { folderWorkspaceId: string }
 
@@ -262,9 +258,6 @@ export function isWslMoveCwdFenced(cwd: string): boolean {
 }
 
 export function isWslMoveProjectSessionFrozen(ref: WslMoveProjectRef | null): boolean {
-  if (ref && isReleasedWslMoveSessionHeld(ref)) {
-    return true
-  }
   const fence = loaded?.view
   return !!ref && !!fence?.readable && inScope(fence.state.sessionFrozen, ref)
 }
@@ -275,9 +268,6 @@ export function isWslMoveWorkspaceSessionFrozen(workspaceId: string): boolean {
 
 /** Unreadable journals must not silently discard session writes; their visible edit fence already blocks moves. */
 export function hasWslMoveFrozenSessions(): boolean {
-  if (hasReleasedWslMoveSessionHolds()) {
-    return true
-  }
   const fence = loaded?.view
   if (!fence?.readable) {
     return false

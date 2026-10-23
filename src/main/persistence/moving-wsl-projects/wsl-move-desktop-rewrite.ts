@@ -19,6 +19,7 @@ import {
 } from './wsl-move-desktop-rewrite-stores'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
 import { wslMoveScopeRootPaths } from './wsl-move-scope-roots'
+import { reloadWslMoveWindowWithWritesHeld } from './wsl-move-window-write-hold'
 
 // One hung store would stall every serialized pass.
 export const WSL_MOVE_REWRITE_STORE_TIMEOUT_MS = 30_000
@@ -169,6 +170,8 @@ async function runPass(options: WslMoveDesktopRewritePassOptions): Promise<void>
       warn(`[wsl-move] Desktop rewrite of move ${migrationId} paused: ${describe(error)}`)
     }
   }
+  // A store that rewrote window-owned state held the window; it reads the result from disk now.
+  reloadWslMoveWindowWithWritesHeld()
 }
 
 let passQueue: Promise<void> = Promise.resolve()
@@ -182,10 +185,7 @@ export function runWslMoveDesktopRewritePass(
   return next
 }
 
-/**
- * After a move commits: a no-op unless the internal WSL hosts gate is open. Its caller must run it
- * with no window open, or after the renderer stores (7d) stop writing the old routing back.
- */
+/** After a move commits: a no-op unless the internal WSL hosts gate is open. */
 export function runGatedWslMoveDesktopRewritePass(
   options: WslMoveDesktopRewritePassOptions
 ): Promise<void> {

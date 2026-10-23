@@ -2,14 +2,12 @@
  * The WSL mover's part of main-process startup: registers the desktop rewrite stores, resets or
  * finishes interrupted moves, then keeps retained rows marked and retries a failed host step.
  */
-import { BrowserWindow } from 'electron'
 import type { Store } from '../loading-store/store'
 import { recoverInterruptedWslMoves } from './wsl-move-reset'
 import { isWslDistroRegistered } from '../../wsl/wsl-distro-registry-id'
 import { runWslMoveStartupRewrite } from './wsl-move-startup-rewrite'
 import { installWslMoveRetention } from './wsl-move-retention'
 import { registerWslMoveDesktopRewriteRegistry } from './wsl-move-desktop-rewrite-registry'
-import { reapplyWslMoveFocusRewrites } from './wsl-move-stale-window-reapply'
 import { sweepOrphanedWslMoveSleptSpools } from './wsl-move-slept-spool-sweep'
 import { enableWslHostAutomations } from '../../ipc/wsl-host-automation-enable'
 import { scheduleWslMoveRewriteRetry } from './wsl-move-rewrite-retry'
@@ -20,15 +18,14 @@ import { productionWslMoveBrowserCookieCopyDependencies } from './wsl-move-brows
 export function startWslMoveStartup(userDataPath: string, store: Store): Promise<void> {
   registerWslMoveDesktopRewriteRegistry({
     profile: store,
-    windowOpen: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
     orchestrationDatabasePath: orchestrationDbFile(userDataPath),
     hostAutomations: {
       enable: (environmentId, ids) => enableWslHostAutomations(userDataPath, environmentId, ids)
     },
     browserCookies: productionWslMoveBrowserCookieCopyDependencies(userDataPath)
   })
-  // Resets a move interrupted before commit, corrects stale focus on finished ones, then finishes
-  // one that committed. Gated off, none runs.
+  // Resets a move interrupted before commit, then finishes one that committed. Gated off,
+  // neither runs.
   const ready = runWslMoveStartupRewrite(
     { userDataPath },
     {
@@ -37,9 +34,6 @@ export function startWslMoveStartup(userDataPath: string, store: Store): Promise
           isWslDistroRegistered(distro, distroGuid)
         )
         sweepOrphanedWslMoveSleptSpools(userDataPath)
-      },
-      reapply: () => {
-        reapplyWslMoveFocusRewrites(userDataPath, store)
       }
     }
   )
