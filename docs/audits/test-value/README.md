@@ -25,10 +25,10 @@ Completion requires no unreviewed or stale test files, no unresolved support/scr
 | Area                                                       | Reviewer       | Next batch                       |
 | ---------------------------------------------------------- | -------------- | -------------------------------- |
 | `cloud/`                                                   | `audit_cloud`  | Reconciled at batch 6 checkpoint |
-| `src/main/acp/`                                            | `audit_cloud`  | Continue after `main-0001`       |
-| `config/`                                                  | `audit_config` | Continue after `config-0007`     |
-| `mobile/`                                                  | `audit_mobile` | Continue after `mobile-0006`     |
-| Remaining `src/`, `native/`, `tests/`, `.github/`, `docs/` | root           | Continue after `root-0071`       |
+| `src/main/acp/`                                            | `audit_cloud`  | Continue after `main-0002`       |
+| `config/`                                                  | `audit_config` | Continue after `config-0008`     |
+| `mobile/`                                                  | `audit_mobile` | Continue after `mobile-0007`     |
+| Remaining `src/`, `native/`, `tests/`, `.github/`, `docs/` | root           | Continue after `root-0078`       |
 
 Ownership is disjoint. Within an area, continue in tracked path order after the last batch; explicitly include nonstandard/inline cases and support candidates before closing the area.
 
@@ -52,9 +52,11 @@ Batch validation lives in `reviews/<area>-<batch>-validation.json`. Local log pa
 
 [PR #32576](https://github.com/stablyai/orca/pull/32576) merged another 150 original files and 1,228 case records, plus two Cloud manifest re-reviews and two upstream CI re-reviews with 20 case records and 93 explicit parameter inputs. Its 82 changed test/support files removed 625 net lines, including four obsolete benchmarks and two private mobile suites whose distinct controls transferred into passing actual-host/public-reader cases. Mobile separately records 315 domain rows and 15 runtime traversal policies; config records 182 explicit controls and 536 input occurrences. Its full PR aggregate and all applicable checks passed; squash commit `633da07af5f82659641870677753d378c1ee5c65`.
 
-The current batch adds 117 original files and 767 case records: 16 CLI files, 51 ACP test/support files and 50 config files. It checks actual CLI receipts, retry deadlines and headless recovery admission; ACP lifecycle, child cleanup and recorded-response boundaries; mobile web actions and CI admission conditions. Duplicate or redundant assertions are removed while distinct controls transfer to retained cases. Upstream re-reviews preserve the existing process-host and CLI controls and repair cache admission and exact capped-output assertions. Source review counts are not runtime test totals.
+[PR #32681](https://github.com/stablyai/orca/pull/32681) merged another 117 original files and 767 case records, plus upstream re-reviews. Its full PR aggregate and all applicable checks passed; squash commit `9b6a2e8ff1fe97701a40995cd26e019da3af3f2c`.
 
-At this checkpoint, 1,137 present files are reviewed, 15 are removed, none are stale and 15,832 candidates remain pending. The 47 superseding records cover 46 distinct files, including a second cache review after Windows 2025 warming changed upstream. Cloud runner/workflow mapping is reconciled at its pinned checkpoint; repository-wide reconciliation and the remaining candidates are still required.
+The current batch adds 171 original files and 1,256 case records: 21 CLI files, 50 main-process test/support files, 50 config files and 50 mobile files. The decisions retain 1,140 cases, fix 96, consolidate 16 and remove four, leaving 1,236 declarations. Repairs observe exact CLI errors and request identities, ACP lifecycle and cleanup, actual mobile root-detach and bundle activation, and build/workflow admission. Duplicate controls transfer into retained cases before removal. Source review counts are not runtime test totals.
+
+The tracker remains authoritative for current counts after upstream reconciliation. Cloud runner/workflow mapping is reconciled at its pinned checkpoint; repository-wide reconciliation and the remaining candidates are still required.
 
 Further completed review records:
 
@@ -124,6 +126,10 @@ Further completed review records:
 | `main-0001`            |                51 |          311 | Exercise ACP lifecycle and cleanup boundaries; transfer duplicate recording controls and independently check response data.    |
 | `config-0007`          |                50 |          310 | Observe actual mobile web actions, evaluate CI admission conditions and retain independent asset and serializer oracles.       |
 | `upstream-0001–0005`   |  46 + 1 re-review |          483 | Recheck comment-only CLI changes; evaluate cache admission, require named Windows build steps and observe exact capped output. |
+| `root-0072–0078`       |                21 |          163 | Require structured CLI errors and exact request identities; observe actual host replies before acknowledgement.                |
+| `main-0002`            |                50 |          337 | Exercise ACP replay and lifecycle, child cleanup, hook delivery and independent observer timing.                               |
+| `config-0008`          |                50 |          257 | Evaluate workflow gates, reseal failures and all compiler-key inputs; trim redundant inventory checks.                         |
+| `mobile-0007`          |                50 |          499 | Exercise actual root detach, byte-window flow, bundle staging/activation and cache-independent failure retention.              |
 
 Two production findings are recorded in `reviews/cloud-0005-validation.json`: audit rows added after `stop()` can still persist at the batch threshold, and queue overflow during an in-flight reserve-ledger insert can lose a queued identity. That batch reproduced and recorded them without changing production behavior. Cloud-only relay test/typecheck/lint build the unchanged process-host package before resolving its compiled exports; this prerequisite was validated with generated outputs absent.
 
