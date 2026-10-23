@@ -168,19 +168,16 @@ describe('orca claude-teams CLI handler', () => {
     const spawnEnv = spawnMock.mock.calls.at(-1)?.[2].env as SpawnEnv
     expect(spawnEnv.ANTHROPIC_API_KEY).toBe('sk-ant-system')
   })
-})
 
-describe('orca serve --reclaim-stale-lock', () => {
   // #32177: an empty --data-root must never fall back to the default profile's lock.
-  it('refuses a --data-root with no directory instead of using the default profile', async () => {
+  it('refuses `orca serve --reclaim-stale-lock` with a --data-root that names no directory', async () => {
     const ctx: HandlerContext = {
       flags: new Map<string, string | boolean>([
         ['reclaim-stale-lock', true],
         ['data-root', true],
         ['yes', true]
       ]),
-      // SAFETY: this mode never calls the runtime client; the refusal happens before any use.
-      client: {} as unknown as RuntimeClient,
+      client,
       cwd: '/tmp',
       json: true,
       rawArgs: []
