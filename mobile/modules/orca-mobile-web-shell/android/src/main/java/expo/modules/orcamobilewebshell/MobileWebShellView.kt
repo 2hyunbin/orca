@@ -22,10 +22,11 @@ internal class OrcaMobileWebShellView(
   private var page: MobileWebShellPage? = null
 
   private val sink = object : MobileWebShellPageSink {
-    override fun onLoadState(payload: Map<String, Any>) = this@OrcaMobileWebShellView.onLoadState(payload)
-    override fun onBridgeMessage(json: String) =
+    override fun pageLoadState(payload: Map<String, Any>) =
+      this@OrcaMobileWebShellView.onLoadState(payload)
+    override fun pageBridgeMessage(json: String) =
       this@OrcaMobileWebShellView.onBridgeMessage(mapOf("json" to json))
-    override fun onExternalNavigation(url: String) =
+    override fun pageExternalNavigation(url: String) =
       this@OrcaMobileWebShellView.onExternalNavigation(mapOf("url" to url))
   }
 
