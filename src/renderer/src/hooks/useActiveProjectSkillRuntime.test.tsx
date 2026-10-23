@@ -4,6 +4,7 @@ import { renderHook } from '@testing-library/react'
 import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shared/constants'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { useAppStore } from '@/store'
+import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import {
   hasLocalSkillRuntimeAuthority,
   shouldUseSkillFreshness,
@@ -147,6 +148,30 @@ describe('useActiveProjectSkillRuntime', () => {
 
     expect(result.current.bundledSkillTarget).toEqual({ kind: 'local' })
     expect(result.current.canUseSkillFreshness).toBe(true)
+  })
+
+  it('keeps proven local workspace ownership ahead of a focused paired transport', () => {
+    const worktree = makeWorktree({ id: 'repo::/local', repoId: 'repo', hostId: 'local' })
+    useAppStore.setState({
+      activeWorktreeId: worktree.id,
+      activeWorkspaceExecutionHostId: 'local',
+      worktreesByRepo: { repo: [worktree] },
+      settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: 'paired' },
+      runtimeEnvironments: [
+        {
+          id: 'paired',
+          name: 'Paired',
+          createdAt: 1,
+          updatedAt: 1,
+          lastUsedAt: null,
+          runtimeId: null,
+          endpoints: [],
+          preferredEndpointId: 'endpoint'
+        }
+      ]
+    })
+    const { result } = renderHook(() => useActiveProjectSkillRuntime())
+    expect(result.current.bundledSkillTarget).toEqual({ kind: 'local' })
   })
 
   it('limits freshness pills to this machine and paired hosts', () => {

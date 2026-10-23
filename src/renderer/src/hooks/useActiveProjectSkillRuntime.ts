@@ -4,6 +4,7 @@ import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-
 import type { SkillDiscoveryTarget } from '../../../shared/skills'
 import { useActiveSkillDiscoveryRuntimeTarget } from './use-active-skill-discovery-runtime-target'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import {
   getGlobalWindowsExecutionRuntimeContext,
   getLocalProjectExecutionRuntimeContext
@@ -35,6 +36,8 @@ type ActiveProjectSkillRuntime = {
   /** Where Update skills plans Orca's skills; null while that host is unknown. */
   bundledSkillTarget: BundledSkillTarget | null
 }
+
+const LOCAL_RUNTIME_TARGET = { kind: 'local' } as const
 
 /** Whether setup surfaces show the plan's pill: this machine or a paired host, not WSL yet. */
 export function shouldUseSkillFreshness(
@@ -98,6 +101,10 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       wslAvailable: windowsCapabilities.isLoading ? undefined : windowsCapabilities.wslAvailable,
       availableWslDistros: windowsCapabilities.isLoading ? null : windowsCapabilities.wslDistros
     }
+    const ownerRuntimeTarget =
+      runtimeState.activeWorktreeId && activeWorkspaceHostId === LOCAL_EXECUTION_HOST_ID
+        ? LOCAL_RUNTIME_TARGET
+        : runtimeTarget
     const projectRuntime =
       getLocalProjectExecutionRuntimeContext(
         runtimeState,
@@ -106,7 +113,7 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
         wslContext
       ) ??
       // Global WSL is the only no-project default that changes the install target (#12103).
-      (hasLocalSkillRuntimeAuthority(runtimeTarget)
+      (hasLocalSkillRuntimeAuthority(ownerRuntimeTarget)
         ? wslOnly(
             getGlobalWindowsExecutionRuntimeContext(
               runtimeState,
@@ -117,14 +124,14 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined)
     const bundledSkillTarget = resolveBundledSkillTarget(
-      runtimeTarget,
+      ownerRuntimeTarget,
       projectRuntime,
       runtimeState.activeWorktreeId ? activeWorkspaceHostId : undefined
     )
     if (!projectRuntime) {
       // Why: buildSkillCommandForRuntime still builds a Windows host command
       // without a project runtime, so the terminal has to match that shell.
-      const terminalShellOverride = hasLocalSkillRuntimeAuthority(runtimeTarget)
+      const terminalShellOverride = hasLocalSkillRuntimeAuthority(ownerRuntimeTarget)
         ? getProjectAgentSkillTerminalShellOverride(
             currentPlatform,
             runtimeState.settings,
@@ -132,7 +139,7 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined
       const canUseSkillFreshness =
-        bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget)
+        bundledSkillTarget !== null && shouldUseSkillFreshness(ownerRuntimeTarget)
       return {
         installDisabledReason: null,
         ...(terminalShellOverride ? { terminalShellOverride } : {}),
@@ -153,7 +160,7 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
       canUseSkillFreshness:
-        bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget, agentRuntime),
+        bundledSkillTarget !== null && shouldUseSkillFreshness(ownerRuntimeTarget, agentRuntime),
       bundledSkillTarget
     }
   }, [activeWorkspaceHostId, currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
