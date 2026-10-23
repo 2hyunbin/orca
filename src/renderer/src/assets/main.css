@@ -3392,12 +3392,12 @@ html.native-shell .app-layout {
 }
 
 .workspace-reference-stack-count {
+  position: absolute;
   top: -8px;
   right: -5px;
 }
 
 .icon-superscript-count {
-  position: absolute;
   z-index: 3;
   font-size: 11px;
   font-weight: 600;

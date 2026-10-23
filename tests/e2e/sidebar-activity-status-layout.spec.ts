@@ -84,7 +84,7 @@ async function expectActivityGeometry(
     const status = statusSlot?.firstElementChild
     const countSlot = description?.lastElementChild
     const countText = countSlot?.firstElementChild ?? countSlot
-    if (!bell || !status || !countText) {
+    if (!bell || !status || !countSlot || !countText) {
       throw new Error('Activity glyphs are missing')
     }
     const textRange = document.createRange()
@@ -104,6 +104,7 @@ async function expectActivityGeometry(
       bell: rect(bell.getBoundingClientRect()),
       status: rect(status.getBoundingClientRect()),
       count: rect(textRange.getBoundingClientRect()),
+      countSlot: rect(countSlot.getBoundingClientRect()),
       countLineBox: rect(countText.getBoundingClientRect()),
       countTypography: {
         fontFamily: style.fontFamily,
@@ -120,21 +121,29 @@ async function expectActivityGeometry(
 
   expect(geometry.button.width, 'The control must keep its existing width').toBe(24)
   expect(geometry.button.height, 'The control must keep its existing height').toBe(24)
-  expect(geometry.status.right, 'The status must not overlap the superscript').toBeLessThanOrEqual(
-    geometry.count.left + 0.25
-  )
   expect(
-    Math.abs(geometry.bell.centerX - geometry.button.centerX),
-    'The bell must stay horizontally centered'
+    Math.abs(geometry.status.centerX - geometry.count.centerX),
+    'The status and actual count text must share a vertical axis'
   ).toBeLessThanOrEqual(0.25)
-  expect(geometry.status.top, 'The status must sit above the bell').toBeLessThan(geometry.bell.top)
-  expect(geometry.countLineBox.top, 'The count must sit above the bell').toBeLessThan(
-    geometry.bell.top
+  expect(geometry.status.bottom, 'The status must clear the count').toBeLessThanOrEqual(
+    geometry.countLineBox.top + 0.25
   )
-  expect(
-    Math.abs(geometry.count.right - geometry.button.right),
-    'The superscript must keep the same right anchor across digit widths'
-  ).toBeLessThanOrEqual(0.25)
+  expect(geometry.bell.left, 'The bell must retain its left anchor').toBe(geometry.button.left)
+  expect(geometry.bell.top, 'The bell must retain its vertical position').toBe(
+    geometry.button.top + 6
+  )
+  expect(geometry.bell.width, 'The bell must retain its existing size').toBe(12)
+  expect(geometry.bell.height, 'The bell must retain its existing size').toBe(12)
+  expect(geometry.countSlot.centerX, 'The count slot must retain its side column').toBe(
+    geometry.button.right - 6
+  )
+  expect(geometry.count.width, 'The count text must be rendered').toBeGreaterThan(0)
+  expect(geometry.count.width, 'Keep wider digits within a slight overhang').toBeLessThanOrEqual(
+    geometry.countSlot.width + 2
+  )
+  expect(geometry.count.right, 'Keep text overhang within one pixel').toBeLessThanOrEqual(
+    geometry.button.right + 1
+  )
   expect(geometry.countTypography, 'Use the same count styling as worktree references').toEqual(
     referenceTypography
   )
@@ -146,7 +155,7 @@ async function expectActivityGeometry(
   for (const [name, glyph] of Object.entries({
     bell: geometry.bell,
     status: geometry.status,
-    count: geometry.count
+    countSlot: geometry.countSlot
   })) {
     expect(glyph.width, `${name} must be rendered`).toBeGreaterThan(0)
     expect(glyph.left, `${name} must fit the left edge`).toBeGreaterThanOrEqual(
@@ -155,19 +164,20 @@ async function expectActivityGeometry(
     expect(glyph.right, `${name} must fit the right edge`).toBeLessThanOrEqual(
       geometry.button.right + 0.25
     )
-    // Range height includes unpainted font ascent; the line box owns vertical layout.
-    const verticalBounds = name === 'count' ? geometry.countLineBox : glyph
-    expect(verticalBounds.top, `${name} must fit the top edge`).toBeGreaterThanOrEqual(
+    expect(glyph.top, `${name} must fit the top edge`).toBeGreaterThanOrEqual(
       geometry.button.top - 0.25
     )
-    expect(verticalBounds.bottom, `${name} must fit the bottom edge`).toBeLessThanOrEqual(
+    expect(glyph.bottom, `${name} must fit the bottom edge`).toBeLessThanOrEqual(
       geometry.button.bottom + 0.25
     )
   }
+  // Range height includes unpainted font ascent; the line box owns vertical layout.
+  expect(geometry.countLineBox.top).toBeGreaterThanOrEqual(geometry.button.top - 0.25)
+  expect(geometry.countLineBox.bottom).toBeLessThanOrEqual(geometry.button.bottom + 0.25)
 }
 
 for (const theme of ['dark', 'light'] as const) {
-  test(`activity superscripts fit beside their status without changing the control size (${theme})`, async ({
+  test(`activity side-column counts align with their status and preserve the control size (${theme})`, async ({
     orcaPage
   }) => {
     await waitForSessionReady(orcaPage)
