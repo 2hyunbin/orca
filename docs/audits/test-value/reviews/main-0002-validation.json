@@ -18,98 +18,11 @@
     "src/main/agent-hooks/claude-cancel-capture.test-fixture.ts",
     "src/main/agent-hooks/claude-terminal-interrupt-capture.test-fixture.ts"
   ],
-  "draft_source_files": 24,
-  "draft_source_edits": 68,
   "supporting_snapshots": 75,
   "resolver_snapshots": 76,
   "source_reconciliation_all_unchanged": false,
   "repo_test_suites_run": 51,
   "typechecks_run": 1,
-  "checks": {
-    "status": "passed",
-    "kind": "isolated immutable-loader counterexamples and source syntax only",
-    "checkout_mutations": false,
-    "repo_test_suites_run": 0,
-    "typechecks_run": 0,
-    "counterexamples": [
-      {
-        "name": "OSC0-ST then repeated OSC0-BEL title",
-        "original_error": "Captured OSC title frame missing from transcript",
-        "proposed_exact_chunks": true
-      },
-      {
-        "name": "OSC2-BEL then repeated OSC0-BEL title",
-        "original_error": "Captured OSC title frame missing from transcript",
-        "proposed_exact_chunks": true
-      },
-      {
-        "name": "OSC1 recognized by production scanner",
-        "original_error": "Captured OSC title frame missing from transcript",
-        "proposed_exact_chunks": true
-      },
-      {
-        "name": "ordinary repeated same-encoding frames",
-        "original_error": null,
-        "original_chunks": [
-          "\u001b]0;Same\u0007",
-          "\u001b]0;Same\u0007"
-        ],
-        "proposed_exact_chunks": true
-      }
-    ],
-    "source_syntax_files": [
-      "src/main/acp/acp-structured-opencode-recordings.test.ts",
-      "src/main/acp/acp-structured-private-temp.test.ts",
-      "src/main/acp/acp-structured-request-admission.test.ts",
-      "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
-      "src/main/acp/acp-structured-session-adapter-recordings.test.ts",
-      "src/main/acp/acp-structured-session-adapter-resume.test.ts",
-      "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
-      "src/main/acp/acp-structured-session-adapter.test.ts",
-      "src/main/acp/acp-structured-steer.test.ts",
-      "src/main/acp/acp-timeline-background-task-words.test.ts",
-      "src/main/acp/acp-timeline-generic.test.ts",
-      "src/main/acp/acp-timeline-opencode-dialect.test.ts",
-      "src/main/acp/acp-timeline-recovery.test.ts",
-      "src/main/active-view-preference-sync-flush-veto.test.ts",
-      "src/main/agent-auth-restart-preservation.test.ts",
-      "src/main/agent-awake-service-platform-assertions.test.ts",
-      "src/main/agent-awake-service.test.ts",
-      "src/main/agent-cli-version-probe.test.ts",
-      "src/main/agent-hooks/agent-home-login-shell.test.ts",
-      "src/main/agent-hooks/claude-cancel-capture.test-fixture.ts",
-      "src/main/agent-hooks/claude-terminal-interrupt-capture.test-fixture.ts",
-      "src/main/agent-hooks/ended-process-reconciliation.test.ts",
-      "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
-      "src/main/agent-hooks/first-work-branch-rename.test.ts"
-    ]
-  },
-  "schema_check": {
-    "status": "passed",
-    "purpose": "Actual immutable capture rows satisfy the proposed discriminated field schema.",
-    "captures": [
-      {
-        "capture": "claude-cancel-shell-hooks",
-        "records": 32,
-        "kinds": [
-          "hook",
-          "cancel",
-          "kill"
-        ]
-      },
-      {
-        "capture": "claude-cancel-subagent-hooks",
-        "records": 14,
-        "kinds": [
-          "hook",
-          "cancel"
-        ]
-      }
-    ],
-    "tests_of_production_interrupt_settlement": false,
-    "repo_test_suites_run": 0,
-    "notes": "The interrupt settle constant is a stub because only loader parsing is under examination."
-  },
   "controls": {
     "files": 50,
     "parameter_groups": 37,
@@ -127,7 +40,6 @@
     "Audit 8 PR aggregate and platform CI after the PR is opened."
   ],
   "phase": "implemented-and-validated",
-  "implementation_commit": "f1157821ce03d7c59323f95a4bac521f13bb841e",
   "original_declarations": 337,
   "final_declarations": 335,
   "baseline_runtime_cases": 437,
@@ -322,7 +234,10 @@
       "proposed_titles": [
         "an approved shell command lands with its exit code, and \"always\" keeps OpenCode's own name"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        70
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -336,7 +251,10 @@
       "proposed_titles": [
         "a rejected permission fails its tool and the turn still ends"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        91
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -350,7 +268,10 @@
       "proposed_titles": [
         "a subagent's approval never arrives (a known OpenCode bug); Stop still ends the turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        99
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -364,7 +285,10 @@
       "proposed_titles": [
         "OpenCode's stray file write after an approved edit is refused without breaking the turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        111
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -378,7 +302,10 @@
       "proposed_titles": [
         "a provider error fails the turn in OpenCode's own words"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        123
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -392,7 +319,10 @@
       "proposed_titles": [
         "an approved shell command completes with its output and exit code"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        133
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -406,7 +336,10 @@
       "proposed_titles": [
         "a rejected permission fails its tool and OpenCode ends the turn as cancelled"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        156
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-opencode-recordings.test.ts",
@@ -420,7 +353,10 @@
       "proposed_titles": [
         "Stop during an approved command cancels it and ends the turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        166
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -434,7 +370,10 @@
       "proposed_titles": [
         "keeps the session\u2019s picks out of the catalog facts"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        32
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -448,7 +387,10 @@
       "proposed_titles": [
         "reads each model\u2019s own menu where the agent advertises one"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        52
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -462,7 +404,10 @@
       "proposed_titles": [
         "keeps the session\u2019s effort menu for the running model when its advertised one is empty"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        101
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -476,7 +421,10 @@
       "proposed_titles": [
         "is the model and effort the agent chose for itself"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        124
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -490,7 +438,10 @@
       "proposed_titles": [
         "says nothing of a loaded session, which keeps the model it ran"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        130
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -504,7 +455,10 @@
       "proposed_titles": [
         "says nothing once the chat holds a model pick, even one the session already runs"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        136
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -518,7 +472,10 @@
       "proposed_titles": [
         "keeps the model but not an effort the chat picked"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        143
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -532,7 +489,10 @@
       "proposed_titles": [
         "says nothing when the agent reports no model, so no empty default is saved"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        150
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-options.test.ts",
@@ -546,7 +506,10 @@
       "proposed_titles": [
         "retires a saved default when the session runs a model it does not list"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        161
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-private-temp.test.ts",
@@ -560,7 +523,10 @@
       "proposed_titles": [
         "gives each process its own temp folder, removed at exit, and clears an earlier run at the first start"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        22
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-prompt-failure.test.ts",
@@ -574,7 +540,10 @@
       "proposed_titles": [
         "shows the agent words from %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        65
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-prompt-failure.test.ts",
@@ -588,7 +557,10 @@
       "proposed_titles": [
         "quotes data.details after the sign-in sentence"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        77
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-prompt-failure.test.ts",
@@ -602,7 +574,10 @@
       "proposed_titles": [
         "quotes the agent words: %j"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        94
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -616,7 +591,10 @@
       "proposed_titles": [
         "opens without writing saved message choices to the provider"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        19
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -630,7 +608,10 @@
       "proposed_titles": [
         "lets %s stop the starting process without a late start"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        73
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -644,7 +625,10 @@
       "proposed_titles": [
         "reports a startup exit with initialize answered = %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        113
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -658,7 +642,10 @@
       "proposed_titles": [
         "reports signed-out startup as a notSignedIn fact and proves the process ended"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        139
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -672,7 +659,10 @@
       "proposed_titles": [
         "waits until message input to try a saved choice the provider will refuse"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        158
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-publish-at-spawn.test.ts",
@@ -686,7 +676,10 @@
       "proposed_titles": [
         "reports the session it loaded as the resumed link"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        184
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -700,7 +693,10 @@
       "proposed_titles": [
         "shows a question while its turn runs, and withdraws it on Stop with Grok own reply"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        48
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -714,7 +710,10 @@
       "proposed_titles": [
         "withdraws an open question when a steer cancels its turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        61
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -728,7 +727,10 @@
       "proposed_titles": [
         "refuses a question that arrives after a Stop, opening no card"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        74
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -742,7 +744,10 @@
       "proposed_titles": [
         "refuses a permission or a question that arrives while a steer cuts the turn short"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        82
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -756,7 +761,10 @@
       "proposed_titles": [
         "refuses a question during a turn Grok began itself, opening no card, yet shows its plan"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        96
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-request-admission.test.ts",
@@ -770,7 +778,10 @@
       "proposed_titles": [
         "refuses a question when no turn is open"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        120
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -784,7 +795,10 @@
       "proposed_titles": [
         "a Stop naming a turn that has ended stops nothing running now"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        32
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -798,7 +812,10 @@
       "proposed_titles": [
         "a Stop naming a turn with no journal row, in the gap before the next prompt opens, stops that prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        63
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -812,7 +829,10 @@
       "proposed_titles": [
         "a Stop naming the turn running now stops it and withdraws the steer waiting on its cancel"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        86
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -826,7 +846,10 @@
       "proposed_titles": [
         "cancels a turn opened by a background completion; the Stop waits for it to end"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        124
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -840,7 +863,10 @@
       "proposed_titles": [
         "ends the Stop's wait at its grace when Grok never ends its own turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        151
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -854,7 +880,10 @@
       "proposed_titles": [
         "settles a send the agent never took as unknown when its stdin breaks, stops the child and tells the host"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        176
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -868,7 +897,10 @@
       "proposed_titles": [
         "ends a crash whose stdout closed before its exit at that exit, with Grok's last words"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        201
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -882,7 +914,10 @@
       "proposed_titles": [
         "keeps a crash a crash when a stop Orca asks for lands before its unproven exit"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        218
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -896,7 +931,10 @@
       "proposed_titles": [
         "leaves a running turn unverifiable, never completed, when its stdin breaks mid-turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        253
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -910,7 +948,10 @@
       "proposed_titles": [
         "ends the turn as failed on an answer Orca cannot read, and sends the next message"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        267
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -924,7 +965,10 @@
       "proposed_titles": [
         "leaves Grok running when it ends its stdout but can still be written to"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        294
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -938,7 +982,10 @@
       "proposed_titles": [
         "rejects a send the agent refused before starting its turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        312
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -952,7 +999,10 @@
       "proposed_titles": [
         "ends a started turn as failed when the agent answers its prompt with an error"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        331
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -966,7 +1016,10 @@
       "proposed_titles": [
         "lets a close stop the published child while initialize is unanswered"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        351
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -980,7 +1033,10 @@
       "proposed_titles": [
         "leaves a published child alone when the acquisition signal aborts later"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        369
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -994,7 +1050,10 @@
       "proposed_titles": [
         "does not time out a published handshake, and closes it through the session"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        379
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1008,7 +1067,10 @@
       "proposed_titles": [
         "keeps a failed startup child until its exit is proven, and spawns no other meanwhile"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        403
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1022,7 +1084,10 @@
       "proposed_titles": [
         "spawns nothing for a start a close reached before its spawn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        432
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1036,7 +1101,10 @@
       "proposed_titles": [
         "refuses a floating chat whose folder is gone with the reason the person reads"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        462
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1050,7 +1118,10 @@
       "proposed_titles": [
         "stops nothing for a chat it never started, as one an earlier Orca left"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        479
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1064,7 +1135,10 @@
       "proposed_titles": [
         "keeps nothing of a chat once its child is proven closed"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        486
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
@@ -1078,7 +1152,10 @@
       "proposed_titles": [
         "keeps nothing of a chat whose child exited on its own"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        496
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-recordings.test.ts",
@@ -1092,7 +1169,10 @@
       "proposed_titles": [
         "s1: a read-only turn lands as one completed turn with its tools and reply"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        49
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-recordings.test.ts",
@@ -1106,7 +1186,10 @@
       "proposed_titles": [
         "s2: an allowed and then a rejected permission keep their recorded replies"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        69
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-recordings.test.ts",
@@ -1120,7 +1203,10 @@
       "proposed_titles": [
         "s3: a Stop mid-tool ends the turn interrupted and the session takes the next prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        103
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1134,7 +1220,10 @@
       "proposed_titles": [
         "writes nothing Grok sends while it loads, even unmarked as replay"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        113
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1148,7 +1237,10 @@
       "proposed_titles": [
         "leaves no turn from the window for a later Stop to find"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        120
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1162,7 +1254,10 @@
       "proposed_titles": [
         "keeps the last reading the journal holds; the load only refreshes the window"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        141
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1176,7 +1271,10 @@
       "proposed_titles": [
         "starts in the chat's own permission mode, asks when none is named, and fails an unconfirmed one"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        181
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1190,7 +1288,10 @@
       "proposed_titles": [
         "loads with session/load though Grok also resumes, and writes nothing it replays"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        219
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1204,7 +1305,10 @@
       "proposed_titles": [
         "loads an agent that only loads, writing none of what it replays"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        246
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1218,7 +1322,10 @@
       "proposed_titles": [
         "leaves a reply cut off mid-turn as it was cut, never completed from what Grok saved"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        266
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1232,7 +1339,10 @@
       "proposed_titles": [
         "writes nothing of the reattach into a sink the host binds only after the start"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        287
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1246,7 +1356,10 @@
       "proposed_titles": [
         "starts a new session in place of a created one that session/load reports missing"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        334
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1260,7 +1373,10 @@
       "proposed_titles": [
         "continues %s it cannot reopen in a new one, says so once, and keeps working"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        361
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1274,7 +1390,10 @@
       "proposed_titles": [
         "refuses a signed-out agent at reopen rather than replacing its session"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        397
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1288,7 +1407,10 @@
       "proposed_titles": [
         "fails a start closed while the agent reopens rather than opening a new session"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        416
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-resume.test.ts",
@@ -1302,7 +1424,10 @@
       "proposed_titles": [
         "keeps the slash commands Grok reports while it loads"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        444
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1316,7 +1441,10 @@
       "proposed_titles": [
         "a close cancels the turn first and ends the child once the agent ends it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        55
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1330,7 +1458,10 @@
       "proposed_titles": [
         "a dispose ends the child at the grace when the agent never ends its turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        71
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1344,7 +1475,10 @@
       "proposed_titles": [
         "a quit cancels the running turn before ending its child at the grace"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        86
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1358,7 +1492,10 @@
       "proposed_titles": [
         "a close still ends the child when the cancel cannot be written"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        100
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1372,7 +1509,10 @@
       "proposed_titles": [
         "a close after a Stop asks no second cancel and waits only what is left of its grace"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        114
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1386,7 +1526,10 @@
       "proposed_titles": [
         "an idle close writes no cancel and ends the child at once"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        133
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1400,7 +1543,10 @@
       "proposed_titles": [
         "a close after the connection broke writes no cancel and waits for nothing"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        141
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
@@ -1414,7 +1560,10 @@
       "proposed_titles": [
         "cancels the turn before ending the process, and the turn ends interrupted"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        162
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1428,7 +1577,10 @@
       "proposed_titles": [
         "records the child before the handshake and starts a new session with client fs and terminals off"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        44
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1442,7 +1594,10 @@
       "proposed_titles": [
         "launches without any pane identity, so the agent own status hooks stay silent"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        63
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1456,7 +1611,10 @@
       "proposed_titles": [
         "replaces a created session the agent never saved with a new one"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        121
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1470,7 +1628,10 @@
       "proposed_titles": [
         "refuses a signed-out agent through the existing start-failure surface and stops its child"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        138
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1484,7 +1645,10 @@
       "proposed_titles": [
         "reports an agent that exits while starting with its own last words"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        150
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1498,7 +1662,10 @@
       "proposed_titles": [
         "reads those last words when the agent ends its stdout before its exit is seen"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        165
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1512,7 +1679,10 @@
       "proposed_titles": [
         "applies a sent message\u2019s model and effort before its prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        188
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1526,7 +1696,10 @@
       "proposed_titles": [
         "sends model-only choices away from the opening model, back, and away again"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        210
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1540,7 +1713,10 @@
       "proposed_titles": [
         "sends Grok's prompt identity only to an agent whose dialect echoes it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        239
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1554,7 +1730,10 @@
       "proposed_titles": [
         "sends a prompt under an injected id and settles it on the agent first event"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        249
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1568,7 +1747,10 @@
       "proposed_titles": [
         "stops a running turn: open permissions answer cancelled, session/cancel goes out"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        275
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1582,7 +1764,10 @@
       "proposed_titles": [
         "answers a Stop with no turn running as one the agent was not running"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        299
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1596,7 +1781,10 @@
       "proposed_titles": [
         "commits the journal answer before replying with the option the person chose"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        310
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1610,7 +1798,10 @@
       "proposed_titles": [
         "answers cancelled a permission Grok asks during a turn it began itself, with no card"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        362
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1624,7 +1815,10 @@
       "proposed_titles": [
         "answers an open question with Grok's own cancelled reply once a Stop cancels it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        379
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1638,7 +1832,10 @@
       "proposed_titles": [
         "shows Grok's plan in the plan row and answers its plan-mode exit at once, with no card"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        401
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1652,7 +1849,10 @@
       "proposed_titles": [
         "sends a permission answer whose save was under way when the Stop landed"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        425
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1666,7 +1866,10 @@
       "proposed_titles": [
         "reads the agent own models and effort and writes a pick through set_config_option"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        461
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1680,7 +1883,10 @@
       "proposed_titles": [
         "reports the agent own slash commands"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        481
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1694,7 +1900,10 @@
       "proposed_titles": [
         "reports a close whose root exited but whose process tree was not proven gone"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        505
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1708,7 +1917,10 @@
       "proposed_titles": [
         "closes with proof and reports a requested close"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        515
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1722,7 +1934,10 @@
       "proposed_titles": [
         "ends the session on an unexpected exit: held sends rejected, the running one unknown"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        526
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
@@ -1736,7 +1951,10 @@
       "proposed_titles": [
         "runs `grok agent stdio`, asking for always-approve only with full access"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        555
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1750,7 +1968,10 @@
       "proposed_titles": [
         "classifies $agent before and after acceptance"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        19
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1764,7 +1985,10 @@
       "proposed_titles": [
         "ends a running turn signed out when the connection closes for sign-in"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        79
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1778,7 +2002,10 @@
       "proposed_titles": [
         "starts signed out without Orca words when the connection closes for sign-in"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        100
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1792,7 +2019,10 @@
       "proposed_titles": [
         "preserves $agent startup auth classification and its detail"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        114
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1806,7 +2036,10 @@
       "proposed_titles": [
         "keeps $agent's sign-in words over log lines it wrote before refusing its start"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        133
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-sign-in.test.ts",
@@ -1820,7 +2053,10 @@
       "proposed_titles": [
         "reads OMP internal-error detail without guessing auth: %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        151
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1834,7 +2070,10 @@
       "proposed_titles": [
         "cancels the running prompt, then sends as the next one"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        62
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1848,7 +2087,10 @@
       "proposed_titles": [
         "runs the last of two quick steers; the one between is sent and cancelled"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        85
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1862,7 +2104,10 @@
       "proposed_titles": [
         "asks again on the next steer when the first cancel was never written"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        109
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1876,7 +2121,10 @@
       "proposed_titles": [
         "withdraws a steer a Stop reaches before its cancel lands"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        135
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1890,7 +2138,10 @@
       "proposed_titles": [
         "waits as long as Grok takes to answer a steer cancel, and a Stop then still ends it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        158
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1904,7 +2155,10 @@
       "proposed_titles": [
         "goes to Grok at once, with no cancel of that turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        191
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1918,7 +2172,10 @@
       "proposed_titles": [
         "cuts Grok's turn on a second send and runs both messages, never ending Grok"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        214
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1932,7 +2189,10 @@
       "proposed_titles": [
         "leaves the card in the host queue while the turn runs, and cancels then sends it on Steer"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        301
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1946,7 +2206,10 @@
       "proposed_titles": [
         "steers an older client's send the same way"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        322
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1960,7 +2223,10 @@
       "proposed_titles": [
         "brings the card back paused when a Stop reaches it before the cancel lands"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        339
+      ]
     },
     {
       "path": "src/main/acp/acp-structured-steer.test.ts",
@@ -1974,7 +2240,10 @@
       "proposed_titles": [
         "sends the card at once on Steer during a turn Grok began itself, with no cancel"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        362
+      ]
     },
     {
       "path": "src/main/acp/acp-text-message-ownership.test.ts",
@@ -1988,7 +2257,10 @@
       "proposed_titles": [
         "refuses a late answer after $stopReason (next prompt: $nextPrompt)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        18
+      ]
     },
     {
       "path": "src/main/acp/acp-text-stream-identity.test.ts",
@@ -2002,7 +2274,10 @@
       "proposed_titles": [
         "keeps interleaved reasoning and answers separate for %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        17
+      ]
     },
     {
       "path": "src/main/acp/acp-text-stream-identity.test.ts",
@@ -2016,7 +2291,10 @@
       "proposed_titles": [
         "diagnoses stream rejection without blocking settlement (logger throws: %s)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        56
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2030,7 +2308,10 @@
       "proposed_titles": [
         "SF1 keeps multiline stdout out of the task sentence and preserves the description across frames"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        63
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2044,7 +2325,10 @@
       "proposed_titles": [
         "uses the command when the provider never gives a description"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        103
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2058,7 +2342,10 @@
       "proposed_titles": [
         "joins the captured task and queue notices into one completed row beside its launch tool"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        113
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2072,7 +2359,10 @@
       "proposed_titles": [
         "SF2 settles named tasks on a completed kill call after %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        132
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2086,7 +2376,10 @@
       "proposed_titles": [
         "does not infer a stop from a %s kill call"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        183
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-evidence.test.ts",
@@ -2100,7 +2393,10 @@
       "proposed_titles": [
         "SF3 drops replayed %s evidence during load and accepts a later completion"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        198
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-results.test.ts",
@@ -2114,7 +2410,10 @@
       "proposed_titles": [
         "settles a task from a TaskOutput result with status %s and exit code %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        9
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-results.test.ts",
@@ -2128,7 +2427,10 @@
       "proposed_titles": [
         "uses each structured kill result rather than inferring a stop for unsuccessful targets"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        60
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-words.test.ts",
@@ -2142,7 +2444,10 @@
       "proposed_titles": [
         "describes a running recorded command by its description, not the start summary"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        26
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-words.test.ts",
@@ -2156,7 +2461,10 @@
       "proposed_titles": [
         "keeps a monitor a monitor when the agent reads its output"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        46
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-task-words.test.ts",
@@ -2170,7 +2478,10 @@
       "proposed_titles": [
         "reads a monitor from its output command alone, and a named kind still wins"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        79
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2184,7 +2495,10 @@
       "proposed_titles": [
         "renders the recorded task outside turn settlement and marks it unverifiable when the session ends"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        58
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2198,7 +2512,10 @@
       "proposed_titles": [
         "joins %s task notifications and the tool result into one row that keeps its origin"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        93
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2212,7 +2529,10 @@
       "proposed_titles": [
         "preserves explicit task completion and the provider outcome %j"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        128
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2226,7 +2546,10 @@
       "proposed_titles": [
         "keeps the label and placement of a running task beside 130 other running tasks"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        144
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2240,7 +2563,10 @@
       "proposed_titles": [
         "places a first task notice beside its original tool after its turn ended and another began"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        166
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-background-tasks.test.ts",
@@ -2254,7 +2580,10 @@
       "proposed_titles": [
         "ignores malformed, other-session and replay-only task notifications without opening turns"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        204
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-dialect.test.ts",
@@ -2268,7 +2597,10 @@
       "proposed_titles": [
         "preserves provider permission labels, validates selected ids, and cancels unanswered rows on turn end"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        42
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-dialect.test.ts",
@@ -2282,7 +2614,10 @@
       "proposed_titles": [
         "encodes labels and free text under the question text, validates grouped choices, and settles a plan without a gate"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        85
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-dialect.test.ts",
@@ -2296,7 +2631,10 @@
       "proposed_titles": [
         "keeps client prompt settlement on the response, and never gives an autonomous turn invented success"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        150
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-dialect.test.ts",
@@ -2310,7 +2648,10 @@
       "proposed_titles": [
         "keeps live autonomous output while suppressing marked replay during load"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        185
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2324,7 +2665,10 @@
       "proposed_titles": [
         "keeps named text across non-text barriers, splits anonymous text, and assembles reasoning"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        29
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2338,7 +2682,10 @@
       "proposed_titles": [
         "merges tool snapshots, settles input and output whole and keys a valid diff"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        70
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2352,7 +2699,10 @@
       "proposed_titles": [
         "keeps context occupancy from usage_update instead of aggregate prompt usage"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        119
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2366,7 +2716,10 @@
       "proposed_titles": [
         "records %s as provider failure without an extra status row"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        156
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2380,7 +2733,10 @@
       "proposed_titles": [
         "writes a failed turn row in the agent's words, or names the agent (%s) without any"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        172
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2394,7 +2750,10 @@
       "proposed_titles": [
         "bounds unknown frames without opening a turn and leaves unknown stop outcomes unset"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        198
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2408,7 +2767,10 @@
       "proposed_titles": [
         "ignores live user echoes and options metadata, and rejects cross-session requests"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        228
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2422,7 +2784,10 @@
       "proposed_titles": [
         "drops unmarked load history, except context usage"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        251
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2436,7 +2801,10 @@
       "proposed_titles": [
         "drops marked replay outside a load and uses typed standard events"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        267
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2450,7 +2818,10 @@
       "proposed_titles": [
         "preserves active tool input during long turns with many completed snapshots"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        302
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-generic.test.ts",
@@ -2464,7 +2835,10 @@
       "proposed_titles": [
         "keeps a valid replacement patch when a diff exceeds the edit-search budget"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        343
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagent-retention.test.ts",
@@ -2478,7 +2852,10 @@
       "proposed_titles": [
         "finishes the original child and files its reply under its spawn turn when 33 later turns settled=%s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        118
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagent-retention.test.ts",
@@ -2492,7 +2869,10 @@
       "proposed_titles": [
         "a known-only %s still reaches the original child"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        164
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagent-retention.test.ts",
@@ -2506,7 +2886,10 @@
       "proposed_titles": [
         "keeps a stopped child stopped through late progress, a repeated spawn and a finish"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        187
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagent-retention.test.ts",
@@ -2520,7 +2903,10 @@
       "proposed_titles": [
         "lane disposal ends observation: the host hears the session end, and nothing after it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        211
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2534,7 +2920,10 @@
       "proposed_titles": [
         "a foreground subagent is one record that completes, with its reply filed under it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        53
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2548,7 +2937,10 @@
       "proposed_titles": [
         "a background subagent completes from Grok, and reading its output adds no background task"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        78
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2562,7 +2954,10 @@
       "proposed_titles": [
         "Stop ends a foreground and a background subagent as stopped, and a later read keeps them so"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        94
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2576,7 +2971,10 @@
       "proposed_titles": [
         "a kill stops a running subagent without a background-task row, and nothing relights it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        110
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2590,7 +2988,10 @@
       "proposed_titles": [
         "an output read naming a subagent this run never saw adds no entry"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        156
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-grok-subagents.test.ts",
@@ -2604,7 +3005,10 @@
       "proposed_titles": [
         "a subagent still running when the session ends reads unverifiable"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        185
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-joins.test.ts",
@@ -2618,7 +3022,10 @@
       "proposed_titles": [
         "keeps provider message and tool ids apart across ACP sessions"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        14
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-joins.test.ts",
@@ -2632,7 +3039,10 @@
       "proposed_titles": [
         "keeps a request id a new child reuses apart from the old child"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        50
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-open-enums.test.ts",
@@ -2646,7 +3056,10 @@
       "proposed_titles": [
         "keeps a tool with a newer kind or status as a tool row in its last known state"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        26
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-open-enums.test.ts",
@@ -2660,7 +3073,10 @@
       "proposed_titles": [
         "reads a plan entry with a newer status or priority as not done"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        47
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-open-enums.test.ts",
@@ -2674,7 +3090,10 @@
       "proposed_titles": [
         "ends a turn with a newer stop reason without inventing an outcome"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        60
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-open-enums.test.ts",
@@ -2688,7 +3107,10 @@
       "proposed_titles": [
         "shows a permission the runtime could only partly read, with what it could read"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        70
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-opencode-dialect.test.ts",
@@ -2702,7 +3124,10 @@
       "proposed_titles": [
         "keeps shell result semantics through the journal: $label"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-opencode-dialect.test.ts",
@@ -2716,7 +3141,10 @@
       "proposed_titles": [
         "keeps shell result semantics through the journal: $label"
       ],
-      "mapping": "transferred to parameter table"
+      "mapping": "transferred to parameter table",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-opencode-dialect.test.ts",
@@ -2730,7 +3158,10 @@
       "proposed_titles": [
         "keeps shell result semantics through the journal: $label"
       ],
-      "mapping": "transferred to parameter table"
+      "mapping": "transferred to parameter table",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-opencode-dialect.test.ts",
@@ -2744,7 +3175,10 @@
       "proposed_titles": [
         "shows OpenCode's own permission option names"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        79
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2758,7 +3192,10 @@
       "proposed_titles": [
         "assembles basic chunks and partial tool calls with stable identities and usage"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        13
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2772,7 +3209,10 @@
       "proposed_titles": [
         "shows permission options verbatim and keeps allow and reject answers after turn settlement"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        39
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2786,7 +3226,10 @@
       "proposed_titles": [
         "settles the abandoned in_progress tool on cancel and accepts the next prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        63
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2800,7 +3243,10 @@
       "proposed_titles": [
         "drops load history, except its context usage"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        76
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2814,7 +3260,10 @@
       "proposed_titles": [
         "keeps an OpenCode 2 chat's history once across a reopen, and adds the follow-up turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        111
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2828,7 +3277,10 @@
       "proposed_titles": [
         "answers questions with the recorded reply shape and shows the plan as a plan, not a gate"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        137
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recordings.test.ts",
@@ -2842,7 +3294,10 @@
       "proposed_titles": [
         "opens and ends the background completion turn without a client prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        154
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recovery.test.ts",
@@ -2856,7 +3311,10 @@
       "proposed_titles": [
         "replays every notification in the full recording without extension status rows or persisted signatures"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        11
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recovery.test.ts",
@@ -2870,7 +3328,10 @@
       "proposed_titles": [
         "uses the last of nine model calls instead of the aggregate turn usage"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        27
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recovery.test.ts",
@@ -2884,7 +3345,10 @@
       "proposed_titles": [
         "accepts an empty plan request: placeholder plan row, answered at once without approving (%s)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        34
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recovery.test.ts",
@@ -2898,7 +3362,10 @@
       "proposed_titles": [
         "degrades tool snapshots under forty large concurrent tools without throwing or losing later updates"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        58
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-recovery.test.ts",
@@ -2912,7 +3379,10 @@
       "proposed_titles": [
         "ignores stray replay and both extension method aliases by default"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        98
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-routing.test.ts",
@@ -2926,7 +3396,10 @@
       "proposed_titles": [
         "opens %s independently of a queued user prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        21
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-routing.test.ts",
@@ -2940,7 +3413,10 @@
       "proposed_titles": [
         "keeps a streaming background turn open when the user sends and scopes its permission to the tool"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-routing.test.ts",
@@ -2954,7 +3430,10 @@
       "proposed_titles": [
         "reports %s before an RPC rejection and accepts the next prompt"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        95
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-routing.test.ts",
@@ -2968,7 +3447,10 @@
       "proposed_titles": [
         "settles an RPC-only failure even if the provider never streamed a frame"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        115
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -2982,7 +3464,10 @@
       "proposed_titles": [
         "writes the reason once when Grok sends it four times, in the failed turn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        49
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -2996,7 +3481,10 @@
       "proposed_titles": [
         "takes the reason from the prompt error answer when no frame carried it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        101
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -3010,7 +3498,10 @@
       "proposed_titles": [
         "reads the reason when only the %s carries it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        119
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -3024,7 +3515,10 @@
       "proposed_titles": [
         "keeps the reason when a later copy carries none"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        156
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -3038,7 +3532,10 @@
       "proposed_titles": [
         "upgrades an early diagnostic to a usage failure without a later downgrade"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        168
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -3052,7 +3549,10 @@
       "proposed_titles": [
         "writes no failure row for a turn the provider ended on purpose"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        197
+      ]
     },
     {
       "path": "src/main/acp/acp-timeline-turn-failures.test.ts",
@@ -3066,7 +3566,10 @@
       "proposed_titles": [
         "does not reopen or retarget an ended prompt for its late frame"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        209
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3080,7 +3583,10 @@
       "proposed_titles": [
         "names the plugin folder only on a release known to take --plugin-dir"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        22
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3094,7 +3600,10 @@
       "proposed_titles": [
         "adds the skills root as the only inline config when the user has none"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        35
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3108,7 +3617,10 @@
       "proposed_titles": [
         "keeps the user's own inline config and skill paths"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3122,7 +3634,10 @@
       "proposed_titles": [
         "leaves a config it cannot extend safely alone"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        55
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3136,7 +3651,10 @@
       "proposed_titles": [
         "skips 1.x, where the inline list would replace the user's own skill paths"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        66
+      ]
     },
     {
       "path": "src/main/acp/acp-visuals-skill.test.ts",
@@ -3150,7 +3668,10 @@
       "proposed_titles": [
         "names the plugin folder and leaves the user's own config files alone"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        73
+      ]
     },
     {
       "path": "src/main/acp/acp-write-queue-retention.test.ts",
@@ -3164,7 +3685,10 @@
       "proposed_titles": [
         "releases the completed last drain closure while the peer remains usable (backpressure=%s)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        59
+      ]
     },
     {
       "path": "src/main/acp/acp-write-queue-retention.test.ts",
@@ -3178,7 +3702,10 @@
       "proposed_titles": [
         "keeps the active write until stream completion then releases its drain closure"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        77
+      ]
     },
     {
       "path": "src/main/acp/acp-write-queue-retention.test.ts",
@@ -3192,7 +3719,10 @@
       "proposed_titles": [
         "retires a closed peer drain closure after its late stream completion"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        98
+      ]
     },
     {
       "path": "src/main/active-view-persistence-boundary.test.ts",
@@ -3206,7 +3736,10 @@
       "proposed_titles": [
         "persists a view switch without changing the global durable snapshot"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        41
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3220,7 +3753,10 @@
       "proposed_titles": [
         "a write parked on its rename cannot overwrite a later flushOrThrow"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        79
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3234,7 +3770,10 @@
       "proposed_titles": [
         "an unlink veto failure queues a newest-value correction"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        102
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3248,7 +3787,10 @@
       "proposed_titles": [
         "a completed stale rename cannot regress the persisted marker"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        124
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3262,7 +3804,10 @@
       "proposed_titles": [
         "a pending flush drains a view changed during its rename"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        147
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3276,7 +3821,10 @@
       "proposed_titles": [
         "coalesces concurrent pending flushes while draining the newest view"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        166
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3290,7 +3838,10 @@
       "proposed_titles": [
         "keeps an unabortable shared drain alive when an attached signal aborts"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        187
+      ]
     },
     {
       "path": "src/main/active-view-preference-sync-flush-veto.test.ts",
@@ -3304,7 +3855,10 @@
       "proposed_titles": [
         "stops an abortable-only drain after its signal aborts"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        208
+      ]
     },
     {
       "path": "src/main/active-view-preference.test.ts",
@@ -3318,7 +3872,10 @@
       "proposed_titles": [
         "migrates the legacy durable-state value into the profile sidecar"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        21
+      ]
     },
     {
       "path": "src/main/active-view-preference.test.ts",
@@ -3332,7 +3889,10 @@
       "proposed_titles": [
         "coalesces rapid switches into one tiny preference write"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        37
+      ]
     },
     {
       "path": "src/main/active-view-preference.test.ts",
@@ -3346,7 +3906,10 @@
       "proposed_titles": [
         "flushes synchronously for an immediate graceful exit"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        55
+      ]
     },
     {
       "path": "src/main/active-view-preference.test.ts",
@@ -3360,7 +3923,10 @@
       "proposed_titles": [
         "ignores an invalid sidecar and invalid updates"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        71
+      ]
     },
     {
       "path": "src/main/active-view-preference.test.ts",
@@ -3374,7 +3940,10 @@
       "proposed_titles": [
         "rejects inherited object keys from a corrupt sidecar"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        80
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3388,7 +3957,10 @@
       "proposed_titles": [
         "syncs Codex and flushes the store"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        11
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3402,7 +3974,10 @@
       "proposed_titles": [
         "drains retained WSL Codex auth before flushing the store"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        30
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3416,7 +3991,10 @@
       "proposed_titles": [
         "does not release restart while the bounded WSL drain is still running"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        52
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3430,7 +4008,10 @@
       "proposed_titles": [
         "continues after the bounded WSL drain fails without logging secrets"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        83
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3444,7 +4025,10 @@
       "proposed_titles": [
         "checkpoints admitted state without waiting for ongoing edits when auth services are missing"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        104
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3458,7 +4042,10 @@
       "proposed_titles": [
         "logs secret-free warnings and does not throw when sync fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        114
+      ]
     },
     {
       "path": "src/main/agent-auth-restart-preservation.test.ts",
@@ -3472,7 +4059,10 @@
       "proposed_titles": [
         "bounds a store flush that never settles"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        134
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3486,7 +4076,10 @@
       "proposed_titles": [
         "does not observe rows appended to the caller array after setStatuses"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        27
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3500,7 +4093,10 @@
       "proposed_titles": [
         "uses caffeinate without Electron display blocking on macOS"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        100
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3514,7 +4110,10 @@
       "proposed_titles": [
         "keeps Electron blocker active when macOS assertion start fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        112
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3528,7 +4127,10 @@
       "proposed_titles": [
         "drops the display-blocking fallback after caffeinate recovers"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        132
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3542,7 +4144,10 @@
       "proposed_titles": [
         "keeps Electron blocker active when Linux assertion start fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        146
+      ]
     },
     {
       "path": "src/main/agent-awake-service-platform-assertions.test.ts",
@@ -3556,7 +4161,10 @@
       "proposed_titles": [
         "starts platform assertions when Electron blocker start fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        166
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3570,7 +4178,10 @@
       "proposed_titles": [
         "does not start when disabled even with a running status"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        115
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3584,7 +4195,10 @@
       "proposed_titles": [
         "starts Electron and platform assertions when enabled with a fresh working status"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        124
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3598,7 +4212,10 @@
       "proposed_titles": [
         "stays awake in On mode without a working agent"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        139
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3612,7 +4229,10 @@
       "proposed_titles": [
         "publishes Auto activity changes to status subscribers"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        149
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3626,7 +4246,10 @@
       "proposed_titles": [
         "starts and stops from settings flips around an already-running status"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        175
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3640,7 +4263,10 @@
       "proposed_titles": [
         "ignores startup-hydrated working statuses that were not observed in this runtime"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        193
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3654,7 +4280,10 @@
       "proposed_titles": [
         "does not start for blocked, waiting, or done statuses"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        203
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3668,7 +4297,10 @@
       "proposed_titles": [
         "does not start a second blocker when one working status replaces another"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        217
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3682,7 +4314,10 @@
       "proposed_titles": [
         "stops when the last running status is dropped"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        228
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3696,7 +4331,10 @@
       "proposed_titles": [
         "does not start for a stale working status"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        243
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3710,7 +4348,10 @@
       "proposed_titles": [
         "stops when the only running status becomes stale without another event"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        253
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3724,7 +4365,10 @@
       "proposed_titles": [
         "reschedules stale expiry for a newer running status"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        272
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3738,7 +4382,10 @@
       "proposed_titles": [
         "renews a working lease across two hours without semantic status churn"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        295
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3752,7 +4399,10 @@
       "proposed_titles": [
         "keeps the blocker id when stop fails and Electron reports it is still started"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        324
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3766,7 +4416,10 @@
       "proposed_titles": [
         "disposes by clearing timers and stopping an active blocker once"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        340
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3780,7 +4433,10 @@
       "proposed_titles": [
         "reconciles assertions on power resume while work is still eligible"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        358
+      ]
     },
     {
       "path": "src/main/agent-awake-service.test.ts",
@@ -3794,7 +4450,10 @@
       "proposed_titles": [
         "unsubscribes the resume listener on dispose"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        375
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3808,7 +4467,10 @@
       "proposed_titles": [
         "asks the program for its version, bounded, where and as the launch would run it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        25
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3822,7 +4484,10 @@
       "proposed_titles": [
         "reads a version printed with a name, prefix or slash: %j"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        40
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3836,7 +4501,10 @@
       "proposed_titles": [
         "holds OpenCode %s to its minimum (too old for %s)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        48
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3850,7 +4518,10 @@
       "proposed_titles": [
         "reads a version printed only on stderr, as Pi 0.73 does"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        64
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3864,7 +4535,10 @@
       "proposed_titles": [
         "cannot tell after %s"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        73
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3878,7 +4552,10 @@
       "proposed_titles": [
         "calls a program that does not start missing"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        86
+      ]
     },
     {
       "path": "src/main/agent-cli-version-probe.test.ts",
@@ -3892,7 +4569,10 @@
       "proposed_titles": [
         "says why it refused, with what the binary printed"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        96
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3906,7 +4586,10 @@
       "proposed_titles": [
         "uses the login-shell GROK_HOME and normalizes trailing separators"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        45
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3920,7 +4603,10 @@
       "proposed_titles": [
         "passes -lc to a login shell that supports it"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        57
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3934,7 +4620,10 @@
       "proposed_titles": [
         "falls back when the login-shell GROK_HOME is not an absolute POSIX path"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        68
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3948,7 +4637,10 @@
       "proposed_titles": [
         "falls back when the probe fails or times out: %s"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        77
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3962,7 +4654,10 @@
       "proposed_titles": [
         "reads KIRO_HOME from the login shell"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        89
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3976,7 +4671,10 @@
       "proposed_titles": [
         "falls back to ~/.kiro when KIRO_HOME is unset or the probe fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        97
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -3990,7 +4688,10 @@
       "proposed_titles": [
         "adopts profile-only agent homes and keeps ones already set"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        108
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-home-login-shell.test.ts",
@@ -4004,7 +4705,10 @@
       "proposed_titles": [
         "leaves the environment alone when the login shell has no override"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        119
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4018,7 +4722,10 @@
       "proposed_titles": [
         "$name"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        59
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4032,7 +4739,10 @@
       "proposed_titles": [
         "moves a pane to done at a session boundary without naming a finish"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        72
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4046,7 +4756,10 @@
       "proposed_titles": [
         "names the pane and its host-qualified workspace: local, SSH host, folder"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        88
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4060,7 +4773,10 @@
       "proposed_titles": [
         "seeds a status present at attach, never as a transition"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        125
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4074,7 +4790,10 @@
       "proposed_titles": [
         "seeds rows hydrated without a mutation once asked, and only those"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        144
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4088,7 +4807,10 @@
       "proposed_titles": [
         "rests a pane whose row goes"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        163
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4102,7 +4824,10 @@
       "proposed_titles": [
         "still tells every reader when one throws"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        176
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4116,7 +4841,10 @@
       "proposed_titles": [
         "reports every live look at a pane, changed or not, with or without a workspace"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        199
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4130,7 +4858,10 @@
       "proposed_titles": [
         "stops observing once detached"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        219
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4144,7 +4875,10 @@
       "proposed_titles": [
         "seeds a first title, then names its turns, and rests the pane with its terminal"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        231
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4158,7 +4892,10 @@
       "proposed_titles": [
         "rests a pane where it was before seeding it in the workspace of a row present at attach"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        250
+      ]
     },
     {
       "path": "src/main/agent-hooks/agent-transition-detector.test.ts",
@@ -4172,7 +4909,10 @@
       "proposed_titles": [
         "finishes a title-tracked turn when the first hook row reports done"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        262
+      ]
     },
     {
       "path": "src/main/agent-hooks/branch-rename-failure-output.test.ts",
@@ -4186,7 +4926,10 @@
       "proposed_titles": [
         "returns the formatted capture for a remembered worktree"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        20
+      ]
     },
     {
       "path": "src/main/agent-hooks/branch-rename-failure-output.test.ts",
@@ -4200,7 +4943,10 @@
       "proposed_titles": [
         "returns null for unknown worktrees and after clearing"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        27
+      ]
     },
     {
       "path": "src/main/agent-hooks/branch-rename-failure-output.test.ts",
@@ -4214,7 +4960,10 @@
       "proposed_titles": [
         "evicts the least recently recorded worktree beyond the cap"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        34
+      ]
     },
     {
       "path": "src/main/agent-hooks/branch-rename-failure-output.test.ts",
@@ -4228,7 +4977,10 @@
       "proposed_titles": [
         "re-recording refreshes recency so the entry survives eviction"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        42
+      ]
     },
     {
       "path": "src/main/agent-hooks/cursor-replay-guard.test.ts",
@@ -4242,7 +4994,10 @@
       "proposed_titles": [
         "drops imported Claude events while preserving the hook protocol response"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        68
+      ]
     },
     {
       "path": "src/main/agent-hooks/cursor-replay-guard.test.ts",
@@ -4256,7 +5011,10 @@
       "proposed_titles": [
         "still delivers Claude hooks when only part of the Cursor environment is present: %j"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        74
+      ]
     },
     {
       "path": "src/main/agent-hooks/cursor-replay-guard.test.ts",
@@ -4270,7 +5028,10 @@
       "proposed_titles": [
         "keeps Cursor native hooks reporting in the same environment"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        83
+      ]
     },
     {
       "path": "src/main/agent-hooks/cursor-replay-guard.test.ts",
@@ -4284,7 +5045,10 @@
       "proposed_titles": [
         "does not suppress a hook service that did not opt in to the Claude import guard"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        87
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4298,7 +5062,10 @@
       "proposed_titles": [
         "retires a working row whose process is certifiably dead"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        69
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4312,7 +5079,10 @@
       "proposed_titles": [
         "clears Claude latches even when the stored row already reads done"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        83
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4326,7 +5096,10 @@
       "proposed_titles": [
         "is a no-op for a pane with nothing to retire"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        105
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4340,7 +5113,10 @@
       "proposed_titles": [
         "keeps the resume identity a paired dismissal minted when the shell outlived the agent"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        114
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4354,7 +5130,10 @@
       "proposed_titles": [
         "takes the resume identity too on a certified PTY exit, where no pane is left to resume into"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        150
+      ]
     },
     {
       "path": "src/main/agent-hooks/ended-process-reconciliation.test.ts",
@@ -4368,7 +5147,10 @@
       "proposed_titles": [
         "drops the session owner so a rebound pane is not read as a session replacement"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        164
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4382,7 +5164,10 @@
       "proposed_titles": [
         "backs off before any git command and keeps the rename pending"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        82
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4396,7 +5181,10 @@
       "proposed_titles": [
         "backs off when the move starts during generation"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        102
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4410,7 +5198,10 @@
       "proposed_titles": [
         "backs off when the move starts after generation but before git branch -m"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        122
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4424,7 +5215,10 @@
       "proposed_titles": [
         "settles the rename but leaves the folder in place when the move starts during git branch -m"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        160
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4438,7 +5232,10 @@
       "proposed_titles": [
         "renames a project the move is not taking"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        192
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4452,7 +5249,10 @@
       "proposed_titles": [
         "leaves the same repo id on another host to its own host"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        202
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
@@ -4466,7 +5266,10 @@
       "proposed_titles": [
         "keeps a moving folder workspace title pending"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        218
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4480,7 +5283,10 @@
       "proposed_titles": [
         "renames %s workspace %s on live work without a subscriber, preserving replay, dedupe and retries"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        89
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4494,7 +5300,10 @@
       "proposed_titles": [
         "does not probe git for a folder-project structured session with a synthetic worktree id"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        192
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4508,7 +5317,10 @@
       "proposed_titles": [
         "keeps incidental work-item markers from overriding the generated display name"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        249
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4522,7 +5334,10 @@
       "proposed_titles": [
         "asks to align the on-disk folder with the generated slug after renaming"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        266
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4536,7 +5351,10 @@
       "proposed_titles": [
         "keeps branch and display rename working when folder rename is disabled"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        272
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4550,7 +5368,10 @@
       "proposed_titles": [
         "skips the redundant branch-rename notify when the folder rename succeeded"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        283
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4564,7 +5385,10 @@
       "proposed_titles": [
         "survives a folder-rename failure without undoing the branch/display rename"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        291
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4578,7 +5402,10 @@
       "proposed_titles": [
         "strips a prefix the model leaked into the slug from both branch and display name"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        306
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4592,7 +5419,10 @@
       "proposed_titles": [
         "skips the rename when the model echoes only the configured prefix"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        320
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4606,7 +5436,10 @@
       "proposed_titles": [
         "leaves a user-customized display name untouched while still renaming the branch"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        335
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4620,7 +5453,10 @@
       "proposed_titles": [
         "runs Git against the backing folder for a folder-workspace instance id"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        345
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4634,7 +5470,10 @@
       "proposed_titles": [
         "skips when no worktree can be resolved for the tab"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        358
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4648,7 +5487,10 @@
       "proposed_titles": [
         "does nothing when the setting is off"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        364
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4662,7 +5504,10 @@
       "proposed_titles": [
         "renames a pending folder workspace title without touching git"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        371
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4676,7 +5521,10 @@
       "proposed_titles": [
         "preserves a manual folder name during generation (pending=%s)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        392
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4690,7 +5538,10 @@
       "proposed_titles": [
         "does not rename folder workspace titles without the pending marker"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        416
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4704,7 +5555,10 @@
       "proposed_titles": [
         "ignores replayed events and non-working states"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        430
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4718,7 +5572,10 @@
       "proposed_titles": [
         "does not re-attempt after a successful rename"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        438
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4732,7 +5589,10 @@
       "proposed_titles": [
         "bounds settled worktree dedupe while keeping recent entries"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        446
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4746,7 +5606,10 @@
       "proposed_titles": [
         "retries on a later event after a transient failure (does not poison the worktree)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        485
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4760,7 +5623,10 @@
       "proposed_titles": [
         "records a user-facing error and the full CLI output when generation fails"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        501
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4774,7 +5640,10 @@
       "proposed_titles": [
         "records a user-facing error when no generation agent is configured"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        513
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4788,7 +5657,10 @@
       "proposed_titles": [
         "clears any stale error after a successful rename"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        523
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4802,7 +5674,10 @@
       "proposed_titles": [
         "leaves a user-named branch untouched"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        529
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4816,7 +5691,10 @@
       "proposed_titles": [
         "clears a stale error when a retryable worktree later reaches a benign stop"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        542
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4830,7 +5708,10 @@
       "proposed_titles": [
         "does not raise the failure badge when generation is canceled by the user"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        558
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4844,7 +5725,10 @@
       "proposed_titles": [
         "refuses to rename a branch that already has an upstream"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        573
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4858,7 +5742,10 @@
       "proposed_titles": [
         "surfaces a failed upstream probe and retries instead of settling silently (issue #7808)"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        583
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4872,7 +5759,10 @@
       "proposed_titles": [
         "leaves ineligible branches untouched even when their leaf is a creature name"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        617
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4886,7 +5776,10 @@
       "proposed_titles": [
         "suffixes the branch, display name, and folder together on collision"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        624
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4900,7 +5793,10 @@
       "proposed_titles": [
         "does not rename when the branch changes while generation is running"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        644
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4914,7 +5810,10 @@
       "proposed_titles": [
         "does not rename when the branch gains an upstream while generation is running"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        673
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4928,7 +5827,10 @@
       "proposed_titles": [
         "skips local generation and git for a row naming its SSH owner by %s"
       ],
-      "mapping": "renamed; behavior retained"
+      "mapping": "renamed; behavior retained",
+      "final_lines": [
+        705
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-branch-rename.test.ts",
@@ -4942,7 +5844,10 @@
       "proposed_titles": [
         "never dials a paired server's nested SSH target from this client"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        721
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -4956,7 +5861,10 @@
       "proposed_titles": [
         "moves the folder and migrates identity on the happy path"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        36
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -4970,7 +5878,10 @@
       "proposed_titles": [
         "preserves the folder-workspace instance suffix in the migrated identity"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        61
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -4984,7 +5895,10 @@
       "proposed_titles": [
         "skips (no move) when the destination already exists"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        80
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -4998,7 +5912,10 @@
       "proposed_titles": [
         "skips remote worktrees without moving"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        87
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -5012,7 +5929,10 @@
       "proposed_titles": [
         "skips runtime-owned worktrees without moving"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        93
+      ]
     },
     {
       "path": "src/main/agent-hooks/first-work-folder-rename.test.ts",
@@ -5026,11 +5946,14 @@
       "proposed_titles": [
         "returns false when the repo is unknown"
       ],
-      "mapping": "same title"
+      "mapping": "same title",
+      "final_lines": [
+        101
+      ]
     }
   ],
   "integration_corrections": {
-    "mode": "static controls only; no runtime executed",
+    "mode": "Static source controls for the integrated corrections; runtime suite validation is recorded in commands and timer counterexamples in clock_controls.",
     "env": {
       "path": "src/main/acp/acp-structured-session-adapter.test.ts",
       "expected_literals": [
@@ -5115,7 +6038,9 @@
           "--reporter=default",
           "--reporter=json",
           "--outputFile=/tmp/orca-audit8-main-late-clock-timer-mutant.json"
-        ]
+        ],
+        "report_sha256": "6c358e387622dc2ec1792207366cc867929e7222ed66079fc18b49cb17d34695",
+        "log_sha256": "d849134325b06b15128357d283ef3290c8f2b81df7dc54f39c6553f004dee273"
       },
       {
         "variant": "timer-mutant",
@@ -5139,7 +6064,9 @@
           "--reporter=default",
           "--reporter=json",
           "--outputFile=/tmp/orca-audit8-main-timer-mutant.json"
-        ]
+        ],
+        "report_sha256": "f5da8d3960eca128b357737d936f6c61cb80c817dc9af64629d60273cf7d6546",
+        "log_sha256": "ab4a41f30e0007d6a3fed8203fd3ce36fe133d7903b69fa4f91eee6aae017aff"
       }
     ],
     "reviewed_source_restored": true,
@@ -5151,5 +6078,104 @@
     "Clock counterexamples inject a 30-second close at the controlled child.cancel port; this is a test-port defect demonstration, not production code mutation.",
     "Initial lint failed on three unbraced cleanup loops; root added braces and lint/format passed. No behavior was changed by that lint correction.",
     "Archived source snapshots remain pinned; upstream source changes in six reviewed scopes were comments only and were independently reread."
-  ]
+  ],
+  "integration_base_commit": "f1157821ce03d7c59323f95a4bac521f13bb841e",
+  "proposal_source_files": 24,
+  "proposal_source_edits": 68,
+  "proposal_counts_scope": "Counts from the immutable 68-edit, 24-file proposal before integration corrections and formatting; final source bytes are identified by reviewed_source_hashes.",
+  "historical_proposal_checks": {
+    "status": "passed",
+    "kind": "isolated immutable-loader counterexamples and source syntax only",
+    "checkout_mutations": false,
+    "repo_test_suites_run": 0,
+    "typechecks_run": 0,
+    "counterexamples": [
+      {
+        "name": "OSC0-ST then repeated OSC0-BEL title",
+        "original_error": "Captured OSC title frame missing from transcript",
+        "proposed_exact_chunks": true
+      },
+      {
+        "name": "OSC2-BEL then repeated OSC0-BEL title",
+        "original_error": "Captured OSC title frame missing from transcript",
+        "proposed_exact_chunks": true
+      },
+      {
+        "name": "OSC1 recognized by production scanner",
+        "original_error": "Captured OSC title frame missing from transcript",
+        "proposed_exact_chunks": true
+      },
+      {
+        "name": "ordinary repeated same-encoding frames",
+        "original_error": null,
+        "original_chunks": [
+          "\u001b]0;Same\u0007",
+          "\u001b]0;Same\u0007"
+        ],
+        "proposed_exact_chunks": true
+      }
+    ],
+    "source_syntax_files": [
+      "src/main/acp/acp-structured-opencode-recordings.test.ts",
+      "src/main/acp/acp-structured-private-temp.test.ts",
+      "src/main/acp/acp-structured-request-admission.test.ts",
+      "src/main/acp/acp-structured-session-adapter-lifecycle.test.ts",
+      "src/main/acp/acp-structured-session-adapter-recordings.test.ts",
+      "src/main/acp/acp-structured-session-adapter-resume.test.ts",
+      "src/main/acp/acp-structured-session-adapter-teardown.test.ts",
+      "src/main/acp/acp-structured-session-adapter.test.ts",
+      "src/main/acp/acp-structured-steer.test.ts",
+      "src/main/acp/acp-timeline-background-task-words.test.ts",
+      "src/main/acp/acp-timeline-generic.test.ts",
+      "src/main/acp/acp-timeline-opencode-dialect.test.ts",
+      "src/main/acp/acp-timeline-recovery.test.ts",
+      "src/main/active-view-preference-sync-flush-veto.test.ts",
+      "src/main/agent-auth-restart-preservation.test.ts",
+      "src/main/agent-awake-service-platform-assertions.test.ts",
+      "src/main/agent-awake-service.test.ts",
+      "src/main/agent-cli-version-probe.test.ts",
+      "src/main/agent-hooks/agent-home-login-shell.test.ts",
+      "src/main/agent-hooks/claude-cancel-capture.test-fixture.ts",
+      "src/main/agent-hooks/claude-terminal-interrupt-capture.test-fixture.ts",
+      "src/main/agent-hooks/ended-process-reconciliation.test.ts",
+      "src/main/agent-hooks/first-work-branch-rename-wsl-move.test.ts",
+      "src/main/agent-hooks/first-work-branch-rename.test.ts"
+    ],
+    "phase": "pre-integration static validation",
+    "scope": "Historical proposal checks only. Runtime implementation validation is recorded in commands and clock_controls."
+  },
+  "historical_proposal_schema_check": {
+    "status": "passed",
+    "purpose": "At proposal time, 46 immutable capture rows satisfied the field schema subsequently integrated.",
+    "captures": [
+      {
+        "capture": "claude-cancel-shell-hooks",
+        "records": 32,
+        "kinds": [
+          "hook",
+          "cancel",
+          "kill"
+        ]
+      },
+      {
+        "capture": "claude-cancel-subagent-hooks",
+        "records": 14,
+        "kinds": [
+          "hook",
+          "cancel"
+        ]
+      }
+    ],
+    "tests_of_production_interrupt_settlement": false,
+    "repo_test_suites_run": 0,
+    "notes": "This isolated proposal check stubbed the interrupt settle constant to examine loader parsing. Final fixture-consumer suite validation is recorded in commands.",
+    "phase": "pre-integration isolated loader validation"
+  },
+  "case_line_reconciliation_scope": {
+    "original_line": "Immutable source_commit declaration line.",
+    "current_line": "Declaration line at integration_base_commit before implementation.",
+    "proposed_lines": "Archived revised-draft lines before final integration and formatting.",
+    "final_lines": "Committed declaration lines in the implemented source at d514d6155256aa3a65b499023f20b5d88e0c2b92; source hashes are recorded in reviewed_source_hashes.",
+    "proposed_titles": "Draft destination titles, retained unchanged in the final source."
+  }
 }
