@@ -10,6 +10,10 @@ import {
   ORCAD_STALE_LOCK_DATA_ROOT_FLAG
 } from '../../../shared/orcad-stale-lock-reclaim'
 import type { OrcadManagedStaleLockReclaimResult } from '../../../shared/orcad-managed-runtime'
+import {
+  ORCAD_LAUNCHER_FILENAME,
+  ORCAD_SERVER_ENTRY_FILENAME
+} from '../../../shared/orcad-artifacts'
 import { withOrcadActivationLock } from '../activation/orcad-activation-lock'
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
 import { withManagedOrcadLifecycle } from '../../ssh/orcad-runtime-maintenance'
@@ -36,6 +40,8 @@ const ReclaimAnswerSchema = z.object({
     })
     .optional()
 })
+
+const RECLAIM_UNSUPPORTED_SENTINEL = 'ORCA_STALE_LOCK_RECLAIM_UNSUPPORTED'
 
 type ReclaimAnswer = z.infer<typeof ReclaimAnswerSchema>
 
@@ -100,11 +106,15 @@ async function runOnActiveSlot(slot: OrcadSlotOptions, yes: boolean): Promise<Sl
     return { status: 'unsupported', message: 'This host has no activated Orca server.' }
   }
   const slotDir = orcadSlotDir(slot, active)
-  const entry = joinRemotePath(slot.host, slotDir, 'orcad.js')
+  const entry = joinRemotePath(slot.host, slotDir, ORCAD_LAUNCHER_FILENAME)
+  const bundle = joinRemotePath(slot.host, slotDir, ORCAD_SERVER_ENTRY_FILENAME)
+  // Why first: an orcad without the flag would ignore it and start serving in the foreground.
   const command =
+    `if grep -qF -- ${quotePosixShell(ORCAD_RECLAIM_STALE_LOCK_FLAG)} ${quotePosixShell(bundle)} 2>/dev/null; then ` +
     `${selectOrcadSlotRuntimeCommand(slot.host, slotDir, '')} && ` +
     `"$orcad_runtime" ${quotePosixShell(entry)} ${ORCAD_RECLAIM_STALE_LOCK_FLAG} ` +
-    `${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} ${quotePosixShell(slot.userDataDir)} --json${yes ? ' --yes' : ''}`
+    `${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} ${quotePosixShell(slot.userDataDir)} --json${yes ? ' --yes' : ''}; ` +
+    `else echo ${RECLAIM_UNSUPPORTED_SENTINEL}; fi`
   let output: string
   try {
     output = await execOrcadRemote(slot, command)
@@ -114,6 +124,9 @@ async function runOnActiveSlot(slot: OrcadSlotOptions, yes: boolean): Promise<Sl
       throw error
     }
     output = error.stdout
+  }
+  if (output.split('\n').some((line) => line.trim() === RECLAIM_UNSUPPORTED_SENTINEL)) {
+    return unsupported('This host’s Orca server predates the stale-lock recovery.')
   }
   const answer = parseReclaimAnswer(output)
   return answer
