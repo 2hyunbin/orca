@@ -1,0 +1,316 @@
+{
+  "baseline": "6d473f4bea1d190cb3649af97e04f1cdde170c5f",
+  "capturedAt": "2026-10-23T08:39:49.744Z",
+  "sourcePattern": "\\.(?:[cm]?[jt]sx?|css|scss|html|swift|kt|kts|sh|bash|ps1|cmd|bat|rs|py|rb|podspec|[chm]|cc|cpp|hpp|gradle|toml|ya?ml|jsonc|nsh|nsi|gyp)$",
+  "scope": "Tracked source, tests, scripts, styles, markup, workflow and comment-capable configuration files; extensionless build files and Husky hooks. Generated or vendored boundaries remain to be assessed before editing.",
+  "totalFiles": 37236,
+  "parsedCommentCount": 217090,
+  "groups": {
+    ".github": {
+      "files": 111,
+      "parsedWithoutComments": 2,
+      "filesWithComments": 12,
+      "comments": 59,
+      "needsOtherLanguageReview": 97,
+      "parseFailures": 0
+    },
+    ".husky": {
+      "files": 1,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 0,
+      "comments": 0,
+      "needsOtherLanguageReview": 1,
+      "parseFailures": 0
+    },
+    "(root)": {
+      "files": 5,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 2,
+      "comments": 52,
+      "needsOtherLanguageReview": 3,
+      "parseFailures": 0
+    },
+    "Casks": {
+      "files": 2,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 0,
+      "comments": 0,
+      "needsOtherLanguageReview": 2,
+      "parseFailures": 0
+    },
+    "cloud": {
+      "files": 394,
+      "parsedWithoutComments": 109,
+      "filesWithComments": 279,
+      "comments": 3838,
+      "needsOtherLanguageReview": 6,
+      "parseFailures": 0
+    },
+    "config": {
+      "files": 1083,
+      "parsedWithoutComments": 366,
+      "filesWithComments": 687,
+      "comments": 7117,
+      "needsOtherLanguageReview": 30,
+      "parseFailures": 0
+    },
+    "docs": {
+      "files": 140,
+      "parsedWithoutComments": 116,
+      "filesWithComments": 21,
+      "comments": 32,
+      "needsOtherLanguageReview": 3,
+      "parseFailures": 0
+    },
+    "examples": {
+      "files": 3,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 1,
+      "comments": 4,
+      "needsOtherLanguageReview": 2,
+      "parseFailures": 0
+    },
+    "mobile": {
+      "files": 3123,
+      "parsedWithoutComments": 680,
+      "filesWithComments": 2370,
+      "comments": 18840,
+      "needsOtherLanguageReview": 73,
+      "parseFailures": 0
+    },
+    "native": {
+      "files": 65,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 4,
+      "comments": 18,
+      "needsOtherLanguageReview": 61,
+      "parseFailures": 0
+    },
+    "resources": {
+      "files": 5,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 0,
+      "comments": 0,
+      "needsOtherLanguageReview": 5,
+      "parseFailures": 0
+    },
+    "src/cli": {
+      "files": 435,
+      "parsedWithoutComments": 174,
+      "filesWithComments": 261,
+      "comments": 1579,
+      "needsOtherLanguageReview": 0,
+      "parseFailures": 0
+    },
+    "src/main": {
+      "files": 13676,
+      "parsedWithoutComments": 3201,
+      "filesWithComments": 10474,
+      "comments": 89659,
+      "needsOtherLanguageReview": 1,
+      "parseFailures": 0
+    },
+    "src/packages": {
+      "files": 36,
+      "parsedWithoutComments": 12,
+      "filesWithComments": 24,
+      "comments": 310,
+      "needsOtherLanguageReview": 0,
+      "parseFailures": 0
+    },
+    "src/preload": {
+      "files": 182,
+      "parsedWithoutComments": 109,
+      "filesWithComments": 73,
+      "comments": 346,
+      "needsOtherLanguageReview": 0,
+      "parseFailures": 0
+    },
+    "src/renderer": {
+      "files": 13078,
+      "parsedWithoutComments": 3397,
+      "filesWithComments": 9668,
+      "comments": 64910,
+      "needsOtherLanguageReview": 13,
+      "parseFailures": 0
+    },
+    "src/shared": {
+      "files": 3656,
+      "parsedWithoutComments": 1048,
+      "filesWithComments": 2607,
+      "comments": 20959,
+      "needsOtherLanguageReview": 1,
+      "parseFailures": 0
+    },
+    "src/types": {
+      "files": 1,
+      "parsedWithoutComments": 0,
+      "filesWithComments": 1,
+      "comments": 20,
+      "needsOtherLanguageReview": 0,
+      "parseFailures": 0
+    },
+    "src/wsl-guest": {
+      "files": 95,
+      "parsedWithoutComments": 35,
+      "filesWithComments": 60,
+      "comments": 663,
+      "needsOtherLanguageReview": 0,
+      "parseFailures": 0
+    },
+    "tests": {
+      "files": 1145,
+      "parsedWithoutComments": 275,
+      "filesWithComments": 850,
+      "comments": 8684,
+      "needsOtherLanguageReview": 20,
+      "parseFailures": 0
+    }
+  },
+  "parseFailures": [],
+  "reviewedBatches": [
+    {
+      "id": "preload-root",
+      "scope": "src/preload/*.ts (not api/)",
+      "status": "reviewed",
+      "files": [
+        {
+          "path": "src/preload/api-types.ts",
+          "sha256": "b9fdb9c2e819714310a91f7461d56f0e6601e67737002ccf69b3e8758c7ae793"
+        },
+        {
+          "path": "src/preload/app-restart-checkpoint-routing.test.ts",
+          "sha256": "0c3979ca8128f72b626c5a59f31a509b9c082186326e6a6f01a9e7ca295b4180"
+        },
+        {
+          "path": "src/preload/browser-client-page-renderer-requests.test.ts",
+          "sha256": "718106c6a98ba6d140444ff64cfa8b040e8013553b0407a34317f147a233307c"
+        },
+        {
+          "path": "src/preload/browser-client-page-renderer-requests.ts",
+          "sha256": "3b78cb6fbadf02a404948808a57258278b387e073155a2d7f834d370c300d1a3"
+        },
+        {
+          "path": "src/preload/browser-find-subscriptions.test.ts",
+          "sha256": "3ce27d29a5fe35c4ee657734bf0ed11a2f1572a10b6c1ea654f4a017c2028fea"
+        },
+        {
+          "path": "src/preload/browser-find-subscriptions.ts",
+          "sha256": "4c48c03df2a714a27d0eac3fbbe58e35e6fc46099d44c21271e3380340502244"
+        },
+        {
+          "path": "src/preload/browser-window-close-installation.ts",
+          "sha256": "fdd0ce5f4416d1d9d8e517ae33b7bc6b429479e851ec70c9f87c66c8f2b53720"
+        },
+        {
+          "path": "src/preload/browser-window-close.test.ts",
+          "sha256": "845030ace67f72f009ddda1ff89365075c2506c4fd5588d629e233a06dcfc59d"
+        },
+        {
+          "path": "src/preload/browser-window-close.ts",
+          "sha256": "e392793c9e24739beb5fc9f8002eff568c8ff0cba3fa4ee77607d08288e53215"
+        },
+        {
+          "path": "src/preload/close-active-tab-payload-admission.test.ts",
+          "sha256": "e42939244be46cea70ac2a0164114b70e1d127e6853b7dec9a418e75039f3708"
+        },
+        {
+          "path": "src/preload/close-active-tab-payload-admission.ts",
+          "sha256": "6a604e2b7e089645e1c4db026d79ca30701a8d137ce6b653ac741b601c68749f"
+        },
+        {
+          "path": "src/preload/doc-preview-link-interception.test.ts",
+          "sha256": "3619f90d22a37aa33b46d4db7b237a04db8fb326269a8468a13ed456fc7bbc0e"
+        },
+        {
+          "path": "src/preload/doc-preview-link-interception.ts",
+          "sha256": "b54197032fec27b8c6967a8b0fbb33b2ec20e4479582f2bbddd3df0fa38d6c27"
+        },
+        {
+          "path": "src/preload/doc-preview-link.ts",
+          "sha256": "9c4bb200f9de067d0892ecc861bf5783b2af24c5c50d30a4aafcdfd954d09a44"
+        },
+        {
+          "path": "src/preload/e2e-config.ts",
+          "sha256": "caa07b6c5a65f0d24a823fa7c79248df401ab4586a7d20738dd7ebfec85a5af3"
+        },
+        {
+          "path": "src/preload/gitlab-work-item-details.test.ts",
+          "sha256": "c42acddcbdfb2b6f7007f243353e69ca74ae39902fa4e43fd35fc4e32a3db3fa"
+        },
+        {
+          "path": "src/preload/gitlab.ts",
+          "sha256": "eabdeb92579926dbbb118fb324e183ce4e2e6e0018982da02633d405627b7c4e"
+        },
+        {
+          "path": "src/preload/index.ts",
+          "sha256": "ec9227323df00ccbb09612726c61fb429fd5c08cc0f714a61be329f675c17857"
+        },
+        {
+          "path": "src/preload/opencode-go-credentials.test.ts",
+          "sha256": "0e92dbaa243ea52cbffb5f52186f3ad04a060ddbcf887a2613a6fe000dbd0cef"
+        },
+        {
+          "path": "src/preload/preload-file-drop-absence.test.ts",
+          "sha256": "02e6e092193b66f4e7b7fe2431dac658ef262685c61c9c8fd117c14cb6e6fdd8"
+        },
+        {
+          "path": "src/preload/preload-runtime-support.ts",
+          "sha256": "d780eccbb95a725e6e2381f9d8f07e343154de7c2a5899f7d52e4050000d01e7"
+        },
+        {
+          "path": "src/preload/pty-snapshot-capability-ipc.test.ts",
+          "sha256": "cce81a596aeb5b7f346140d4a1aafa11e5cd14d7bfa67a8ed9073bf951c4fd1a"
+        },
+        {
+          "path": "src/preload/renderer-heap-statistics-reader.test.ts",
+          "sha256": "e6b8a3182c3919ccbfecc56c44980231032f26acb1cb1309196dedbc12b1bee2"
+        },
+        {
+          "path": "src/preload/renderer-heap-statistics-reader.ts",
+          "sha256": "64f273fe185345cff01bf8e5239065aed2cecb216cd2eadd6dfb6a93e4a0d864"
+        },
+        {
+          "path": "src/preload/renderer-process-memory-reader.test.ts",
+          "sha256": "b2761e182662b7d5c782fbad8cc29321b8b5476dd72e43c8f046607e3fc2cdb2"
+        },
+        {
+          "path": "src/preload/renderer-process-memory-reader.ts",
+          "sha256": "74c1aa3634e56d4fc4cd1724ea021bb5b7af33c7d19b4d6cf3bf8e78c06f49b8"
+        },
+        {
+          "path": "src/preload/renderer-restart-wiring.test.ts",
+          "sha256": "a9144723473b8d64ae1c42839f892827d69d0da96f7e964cc468dd3477b23616"
+        },
+        {
+          "path": "src/preload/renderer-restart-wiring.ts",
+          "sha256": "0c7e659e4904559dc6ea89bb1d72130fbc9fd92d33f7d401fa605b0b7551161e"
+        },
+        {
+          "path": "src/preload/runtime-environment-subscriptions.test.ts",
+          "sha256": "6fd5e27b28b3aed0a76448363be8653d97d5c885b410e622fd0691fe587f5e23"
+        },
+        {
+          "path": "src/preload/runtime-environment-subscriptions.ts",
+          "sha256": "9283d730d4de4a4f8b4902c7d153edbe80d41f2ba3b49593f8c7aad40293cb02"
+        },
+        {
+          "path": "src/preload/ssh-authority-forwarding.test.ts",
+          "sha256": "78d4881218b9f5e98b681c5d909b0c6f66dd6d17dbd38398c5467a30a172ed63"
+        },
+        {
+          "path": "src/preload/updater-package-recovery.test.ts",
+          "sha256": "a0386bdb0b50e55db90b96d423e4154753b2cd275b6ceb32bc8e36ead56a5462"
+        },
+        {
+          "path": "src/preload/usage-provider-api.test.ts",
+          "sha256": "3755d7659099def622f85053f1cf3e377cbde6452c5f90dd6e293f3dfc19cb34"
+        },
+        {
+          "path": "src/preload/usage-provider-api.ts",
+          "sha256": "1a82ddd9e1b935f13df0bd8ab0251312a34a48222722b23602f52fc0421fea47"
+        }
+      ]
+    }
+  ]
+}
