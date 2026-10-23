@@ -89,7 +89,6 @@ describe('first-work rename while a WSL move takes the project', () => {
     expect(setDisplayName).not.toHaveBeenCalled()
     expect(setRenameError).not.toHaveBeenCalled()
 
-    // A transient bail, not a settled verdict: once the move settles the next event renames.
     resetWslMoveFenceForTests()
     await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['branch', '-m', 'you/fix-auth'], {
@@ -148,7 +147,6 @@ describe('first-work rename while a WSL move takes the project', () => {
     expect(setDisplayName).not.toHaveBeenCalled()
     expect(setRenameError).not.toHaveBeenCalled()
 
-    // Still pending: once the move settles the next event renames.
     resetWslMoveFenceForTests()
     await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
     expect(gitExecFileAsyncMock).toHaveBeenCalledWith(['branch', '-m', 'you/fix-auth'], {
@@ -180,7 +178,6 @@ describe('first-work rename while a WSL move takes the project', () => {
     })
     expect(renameWorktreeFolder).not.toHaveBeenCalled()
 
-    // The branch already has its new name, so the rename is settled: a later event never renames again.
     await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
     const branchRenames = gitExecFileAsyncMock.mock.calls.filter(
       ([args]) => args[0] === 'branch' && args[1] === '-m'

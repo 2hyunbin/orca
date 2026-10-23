@@ -34,7 +34,6 @@ function claudeRow(server: AgentHookServer, state: 'working' | 'waiting' | 'done
   })
 }
 
-/** A row carrying a resumable provider session — the only shape `dropStatusEntry` retains. */
 function resumableClaudeRow(server: AgentHookServer): void {
   server.ingestRemote(
     {
@@ -55,9 +54,7 @@ function paneState(server: AgentHookServer): string {
   return server.getStatusSnapshotForPane(PANE)[0]?.state ?? 'missing'
 }
 
-// The teardown that normally clears a dead pane depends on the spawn-time ptyPaneKey mapping, which
-// a restored PTY may never rebuild — leaving the row and its latches with nothing left to retire
-// them. See PLAN-STA-4612 §4.2.
+// Restored PTYs may lack spawn-time mappings, so ordinary teardown cannot retire their stale rows.
 describe('reconcileEndedProcessForPaneKeys', () => {
   it('retires a working row whose process is certifiably dead', async () => {
     const server = await startServer()
@@ -74,9 +71,7 @@ describe('reconcileEndedProcessForPaneKeys', () => {
   })
 
   it('clears Claude latches even when the stored row already reads done', async () => {
-    // A latch can outlive the row it gated (a restored row, or one written before the inventory
-    // arrived), so a row can read `done` with a latch that would re-gate `working` on the pane's
-    // very next event.
+    // Stale latches can re-gate a done row on the next event.
     const server = await startServer()
     try {
       claudeRow(server, 'done')
@@ -102,10 +97,7 @@ describe('reconcileEndedProcessForPaneKeys', () => {
   })
 
   it('keeps the resume identity a paired dismissal minted when the shell outlived the agent', async () => {
-    // The renderer's confirmed-shell route calls agentStatus:drop FIRST, which deliberately mints a
-    // providerSessionOnly remnant, then this. That remnant carries no state claim — it cannot gate a
-    // pane `working` — and the pane's PTY is still there to resume into, so retiring the pane's live
-    // claims must not take it. Without the option it goes with everything else.
+    // Paired dismissal preserves resume identity; retire live claims without discarding that remnant.
     const server = await startServer()
     try {
       resumableClaudeRow(server)
@@ -122,10 +114,9 @@ describe('reconcileEndedProcessForPaneKeys', () => {
       expect(kept?.providerSessionOnly).toBe(true)
       expect(kept?.providerSession?.id).toBe('resume-me')
       expect(kept?.launchToken).toBeUndefined()
-      // The live claims still went: a latch left behind would re-gate the pane on its next event.
       expect(server._getStateForTests().claudeRunningNonAgentTaskPaneKeys.has(PANE)).toBe(false)
 
-      // The retained identity must not recreate dead launch authority after restart.
+      // Resume identity must not restore dead process authority.
       server.flushStatusPersistSync()
       server.stop()
       const restarted = await startServer()

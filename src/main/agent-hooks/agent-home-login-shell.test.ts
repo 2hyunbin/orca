@@ -3,9 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 type ProbeResult = { code: number | null; stdout: string; timedOut: boolean }
 type RunProcessStub = (spec: { program: string; args: string[] }) => Promise<ProbeResult>
 
-// Why: the probe spawns a real login shell and swallows every spawn failure into its fallback.
-// Left unmocked this asserts the runner's scheduling latency, not the parser: on a loaded CI box
-// the 8s timeout expires and the first case silently flips to the fallback path.
+// Mock shell probes so CI scheduling and profile failures cannot silently exercise the fallback.
 const probe = vi.hoisted(() => ({ runProcess: vi.fn<RunProcessStub>() }))
 vi.mock('@orca/process-host', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -50,7 +48,6 @@ describe.runIf(process.platform !== 'win32')('resolveLoginShellGrokHome', () => 
 
     const { program: shell, args } = probeMock.mock.calls[0]?.[0] ?? {}
     expect(shell).toBe('/bin/sh')
-    // `sh`/`dash` reject `-lc`, so the mode choice is part of the contract under test.
     expect(args?.[0]).toBe('-c')
   })
 
@@ -72,8 +69,6 @@ describe.runIf(process.platform !== 'win32')('resolveLoginShellGrokHome', () => 
     await expect(resolveLoginShellGrokHome('/home/orca')).resolves.toBe('/home/orca/.grok')
   })
 
-  // Why: this is the branch that made the old test flaky — pin it so a probe failure is
-  // an asserted fallback rather than an invisible substitution for a real answer.
   it('falls back when the probe fails or times out', async () => {
     vi.stubEnv('SHELL', '/bin/sh')
     stubProbeFailure(Object.assign(new Error('spawn timed out'), { killed: true }))
