@@ -1,13 +1,12 @@
 import * as sharedControlProtocol from './remote-runtime-shared-control-protocol'
 import * as sharedControlState from './remote-runtime-shared-control-state'
-import { closeSharedControlConnectionSubscription } from './remote-runtime/requests/remote-runtime-shared-control-subscription-close'
-import * as sharedControlSubscriptions from './remote-runtime/requests/remote-runtime-shared-control-subscriptions'
+
+import * as sharedControlSubscriptions from '../requests/remote-runtime-shared-control-subscriptions'
 import * as sharedControlSend from './remote-runtime-shared-control-send'
 import type {
   SharedControlLogicalSubscription,
   SharedControlPendingRequest
 } from './remote-runtime-shared-control-types'
-import type { SharedControlRetiredRequestIds } from './remote-runtime/requests/remote-runtime-shared-control-retired-request-ids'
 
 export function sendSharedControlRequest(args: {
   pendingRequests: Map<string, SharedControlPendingRequest<unknown>>
@@ -33,15 +32,6 @@ export function sendSharedControlRequest(args: {
   })
 }
 
-export function sendSharedControlSubscription(args: {
-  subscriptions: Map<string, SharedControlLogicalSubscription<unknown>>
-  subscription: SharedControlLogicalSubscription<unknown>
-  deviceToken: string
-  send: (payload: unknown) => boolean
-}): void {
-  sharedControlSend.sendSharedControlSubscription(args)
-}
-
 export function replaySharedControlSubscriptions(args: {
   subscriptions: Map<string, SharedControlLogicalSubscription<unknown>>
   send: (subscription: SharedControlLogicalSubscription<unknown>) => void
@@ -60,7 +50,7 @@ export function replayRuntimeControlSubscriptions(args: {
   return replaySharedControlSubscriptions({
     subscriptions: args.subscriptions,
     send: (subscription) =>
-      sendSharedControlSubscription({
+      sharedControlSend.sendSharedControlSubscription({
         subscriptions: args.subscriptions,
         subscription,
         deviceToken: args.deviceToken,
@@ -68,14 +58,4 @@ export function replayRuntimeControlSubscriptions(args: {
       }),
     tagReplayedResponses: args.tagReplayedResponses
   })
-}
-
-export function closeSharedControlSubscription(args: {
-  subscriptions: Map<string, SharedControlLogicalSubscription<unknown>>
-  retiredRequestIds: SharedControlRetiredRequestIds
-  requestId: string
-  deviceToken: string
-  send: (payload: unknown) => boolean
-}): void {
-  closeSharedControlConnectionSubscription(args)
 }

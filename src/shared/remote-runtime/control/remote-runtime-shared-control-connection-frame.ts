@@ -1,16 +1,16 @@
 import type WebSocket from 'ws'
-import { sendRemoteRuntimeTokenAuth } from './remote-runtime-client-handshake'
+import { sendRemoteRuntimeTokenAuth } from '../../remote-runtime-client-handshake'
 import { toRemoteRuntimeClientError } from './remote-runtime-shared-control-protocol'
-import type { PairedE2EEClientHandshake } from './paired-e2ee-client-handshake'
+import type { PairedE2EEClientHandshake } from '../../paired-e2ee-client-handshake'
 import { handleSharedControlTextFrame } from './remote-runtime-shared-control-frame-handler'
-import type { RemoteRuntimeClientError } from './remote-runtime-client-error'
+import type { RemoteRuntimeClientError } from '../../remote-runtime-client-error'
 import type {
   SharedControlConnectionState,
   SharedControlLogicalSubscription,
   SharedControlPendingRequest,
   SharedControlReadyWaiter
 } from './remote-runtime-shared-control-types'
-import type { SharedControlRetiredRequestIds } from './remote-runtime/requests/remote-runtime-shared-control-retired-request-ids'
+import type { SharedControlRetiredRequestIds } from '../requests/remote-runtime-shared-control-retired-request-ids'
 
 export function handleRuntimeControlTextFrame(args: {
   frame: string

@@ -1,18 +1,18 @@
-import { pairedRuntimeConnectionFromOffer } from './paired-runtime-connection'
-import type { PairedE2EEClientHandshake } from './paired-e2ee-client-handshake'
-import { createFixedKeyLegacyHandshakeForTest } from './paired-e2ee-fixed-key-test-fixture'
+import { pairedRuntimeConnectionFromOffer } from '../../paired-runtime-connection'
+import type { PairedE2EEClientHandshake } from '../../paired-e2ee-client-handshake'
+import { createFixedKeyLegacyHandshakeForTest } from '../../paired-e2ee-fixed-key-test-fixture'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   REMOTE_RUNTIME_MAX_PENDING_RPC_BYTES,
   retainedRemoteRuntimeJsonStringBytes,
   serializeRemoteRuntimeRpcRequest
-} from './remote-runtime-memory-limits'
-import { getRemoteRuntimeRequestAdmissionEvidence } from './remote-runtime/requests/remote-runtime-prepared-request-admission'
-import { remoteRuntimeClientCapabilities } from './remote-runtime-client-capabilities'
+} from '../../remote-runtime-memory-limits'
+import { getRemoteRuntimeRequestAdmissionEvidence } from '../requests/remote-runtime-prepared-request-admission'
+import { remoteRuntimeClientCapabilities } from '../../remote-runtime-client-capabilities'
 import { RemoteRuntimeSharedControlConnection } from './remote-runtime-shared-control-connection'
 import * as sharedControlProtocol from './remote-runtime-shared-control-protocol'
-import { isRuntimeSubscriptionReplayResponse } from './runtime-subscription-replay'
+import { isRuntimeSubscriptionReplayResponse } from '../../runtime-subscription-replay'
 import {
   closeSharedControlTestServers,
   createSharedControlTestServer as createServer

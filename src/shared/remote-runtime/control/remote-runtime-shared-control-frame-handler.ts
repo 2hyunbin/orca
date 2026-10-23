@@ -1,13 +1,13 @@
-import type { PairedE2EEClientHandshake } from './paired-e2ee-client-handshake'
+import type { PairedE2EEClientHandshake } from '../../paired-e2ee-client-handshake'
 import {
   remoteRuntimeAuthReplyError,
   remoteRuntimeReadyError,
   remoteRuntimeUnavailableError
-} from './remote-runtime/requests/remote-runtime-request-frames'
-import type { RemoteRuntimeClientError } from './remote-runtime-client-error'
+} from '../requests/remote-runtime-request-frames'
+import type { RemoteRuntimeClientError } from '../../remote-runtime-client-error'
 import { dispatchSharedControlFrame } from './remote-runtime-shared-control-frame-dispatch'
 import { parseSharedControlFrame } from './remote-runtime-shared-control-protocol'
-import type { SharedControlRetiredRequestIds } from './remote-runtime/requests/remote-runtime-shared-control-retired-request-ids'
+import type { SharedControlRetiredRequestIds } from '../requests/remote-runtime-shared-control-retired-request-ids'
 import { resolveSharedControlReadyWaiters } from './remote-runtime-shared-control-state'
 import type {
   SharedControlConnectionState,
