@@ -90,7 +90,8 @@ export function queuedCardFromChange(
     returnedRejection: null,
     consumedAs: null,
     queuedAt: readQueuedAt(change.queuedAt),
-    ...(options ? { options } : {})
+    ...(options ? { options } : {}),
+    ...(typeof change.recovers === 'string' ? { recovers: change.recovers } : {})
   }
   const attempt =
     typeof change.attempt === 'string' && change.attempt.length > 0 ? change.attempt : null

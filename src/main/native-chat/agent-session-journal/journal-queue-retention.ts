@@ -47,13 +47,14 @@ export function retainedQueueFacts(
 
 /** A card's own fields as a `queued` change: its text, place, time and options. */
 export function queuedChangeOf(
-  card: Pick<QueuedMessageRow, 'body' | 'position' | 'queuedAt' | 'options'>
+  card: Pick<QueuedMessageRow, 'body' | 'position' | 'queuedAt' | 'options' | 'recovers'>
 ): JournalQueuedChange {
   return {
     op: 'queued',
     body: card.body,
     position: card.position,
     queuedAt: card.queuedAt,
-    ...(card.options ? { options: card.options } : {})
+    ...(card.options ? { options: card.options } : {}),
+    ...(card.recovers ? { recovers: card.recovers } : {})
   }
 }

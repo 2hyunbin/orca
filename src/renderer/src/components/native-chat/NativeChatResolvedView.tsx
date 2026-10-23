@@ -140,7 +140,7 @@ export function NativeChatResolvedView({
     () => ({ paneKey, agent, sessionId }),
     [paneKey, agent, sessionId]
   )
-  const delivery = useNativeChatPendingDelivery({ paneKey, agent, session })
+  const delivery = useNativeChatPendingDelivery({ paneKey, agent, session, composerRef })
   const { pending, record, clear } = delivery
   // Slash commands aren't chat turns, so they get a small local "Ran /clear"
   // system line instead of a user bubble. Capped + cached per conversation.

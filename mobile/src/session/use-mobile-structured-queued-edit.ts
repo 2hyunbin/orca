@@ -169,6 +169,9 @@ export function useMobileStructuredQueuedEdit(args: {
         return true
       }
       if (result.value.status === 'gone') {
+        if (edit.text.trim() !== '' && !args.appendComposerText?.(edit.text)) {
+          return false
+        }
         close()
         return false
       }

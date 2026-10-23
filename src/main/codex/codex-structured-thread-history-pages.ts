@@ -88,7 +88,7 @@ export async function discoverCodexHistory(
         throw new Error('repeated-turn')
       }
       seen.add(id)
-      if (anchor.known.has(id)) {
+      if (anchor.known.has(id) && !anchor.needsReceipts) {
         continue
       }
       if (anchor.importedAt !== null) {

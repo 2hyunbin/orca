@@ -22,6 +22,10 @@ import {
   continuedOutsideRecordId,
   createHistoryCatchUpBatch
 } from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
+import {
+  codexRestoreFits,
+  CODEX_RESTORE_MAX_BYTES
+} from './codex-structured-journal-translation-restore'
 import { createCodexJournalTranslator } from './codex-structured-journal-translation'
 
 /** Invocation-local shared translation: nothing reaches the live sink until this plan is whole. */
@@ -36,6 +40,43 @@ export function createCodexHistoryImportPlan(input: {
   const batch = createHistoryCatchUpBatch()
   const encoded = new Map<string, string>()
   const turnIds: string[] = []
+  const receipts: { clientMessageId: string; providerIdentity: AgentJournalItemIdentity }[] = []
+  let receiptBytes = 0
+  const confirmReceipts = (turn: Record<string, unknown>) => {
+    input.check()
+    if (!codexRestoreFits([turn], receipts.length + batch.size)) {
+      throw new Error('too-large')
+    }
+    if (typeof turn.id !== 'string') {
+      return
+    }
+    const ordinals = new CodexTurnOrdinals()
+    for (const value of Array.isArray(turn.items) ? turn.items : []) {
+      const item = readCodexThreadItem(value)
+      if (!item) {
+        continue
+      }
+      const providerIdentity = codexItemIdentity({
+        threadId: input.threadId,
+        turnId: turn.id,
+        item,
+        ordinals,
+        historyImport: true
+      })
+      if (
+        item.type === 'userMessage' &&
+        typeof item.clientId === 'string' &&
+        input.nativePromptKeys.has(agentJournalSubmissionKey(item.clientId))
+      ) {
+        const receipt = { clientMessageId: item.clientId, providerIdentity }
+        receiptBytes += Buffer.byteLength(JSON.stringify(receipt), 'utf8')
+        if (receiptBytes > CODEX_RESTORE_MAX_BYTES) {
+          throw new Error('too-large')
+        }
+        receipts.push(receipt)
+      }
+    }
+  }
   let outsideNoted = false
   let omitted = new Map<string, string>()
   const append = (
@@ -92,11 +133,13 @@ export function createCodexHistoryImportPlan(input: {
   })
   return {
     append,
+    confirmReceipts,
     restore: (turn: Record<string, unknown>) => {
       input.check()
       if (typeof turn.id !== 'string') {
         throw new Error('invalid-turn')
       }
+      confirmReceipts(turn)
       omitted = new Map<string, string>()
       const ordinals = new CodexTurnOrdinals()
       let native = false
@@ -152,9 +195,10 @@ export function createCodexHistoryImportPlan(input: {
         input.journal.epoch,
         input.threadId,
         turnIds,
-        keys
+        keys,
+        receipts
       ])
-      return { ...plan, turnIds }
+      return { ...plan, turnIds, receipts }
     },
     dispose: () => translator.dispose()
   }

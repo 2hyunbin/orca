@@ -1,3 +1,5 @@
+import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
+import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import {
@@ -28,8 +30,15 @@ export async function catchUpCodexThread(input: {
   assertCurrent?: () => void
   timeoutMs?: number
   logger?: StructuredAgentSessionLogger
+  onReceipt?: (
+    clientMessageId: string,
+    providerIdentity: AgentJournalItemIdentity
+  ) => void | Promise<void>
 }): Promise<void> {
-  await runHistoryCatchUp({
+  const deadline = Date.now() + (input.timeoutMs ?? DEFAULT_CODEX_REQUEST_TIMEOUT_MS)
+  let receipts: ReturnType<ReturnType<typeof createCodexHistoryImportPlan>['finish']>['receipts'] =
+    []
+  const outcome = await runHistoryCatchUp({
     agentName: 'Codex',
     scope: 'codex-thread-catch-up',
     sessionId: input.sessionId,
@@ -64,13 +73,43 @@ export async function catchUpCodexThread(input: {
       try {
         for await (const turn of loadCodexHistory(read, missing.pages)) {
           check()
-          staging.restore(turn)
+          if (typeof turn.id === 'string' && view.known.has(turn.id)) {
+            staging.confirmReceipts(turn)
+          } else {
+            staging.restore(turn)
+          }
           await yieldTurn()
         }
-        return staging.finish()
+        const plan = staging.finish()
+        receipts = plan.receipts
+        return plan
       } finally {
         staging.dispose()
       }
     }
   })
+  if (outcome === 'committed' || outcome === 'checked') {
+    const signal = AbortSignal.any([
+      ...(input.signal ? [input.signal] : []),
+      AbortSignal.timeout(Math.max(1, deadline - Date.now()))
+    ])
+    try {
+      signal.throwIfAborted()
+      input.assertCurrent?.()
+      await waitForPromiseWithSignal(
+        Promise.all(
+          receipts.map((receipt) =>
+            input.onReceipt?.(receipt.clientMessageId, receipt.providerIdentity)
+          )
+        ),
+        signal
+      )
+    } catch (error) {
+      input.logger?.warn('Codex replay receipt settlement did not finish within open', {
+        scope: 'codex-thread-catch-up',
+        sessionId: input.sessionId,
+        error
+      })
+    }
+  }
 }

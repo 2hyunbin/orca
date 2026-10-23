@@ -149,6 +149,23 @@ export class StructuredAgentSessionCurrentWork {
     private readonly heldSends?: () => ReadonlySet<string> | undefined
   ) {}
 
+  allowsRecovery(): boolean {
+    return !this.ownerUnverifiable
+  }
+
+  generationEnded(submission: AgentJournalSubmission): boolean {
+    if (this.ownerUnverifiable) {
+      return false
+    }
+    const fence = submission.fence
+    return (
+      (this.liveFence !== null && fence < this.liveFence) ||
+      this.liveFence === null ||
+      (this.replaced !== undefined && fence <= this.replaced.fence) ||
+      (this.ended?.rootGone === true && fence === this.ended.fence)
+    )
+  }
+
   /** What a reader that published this answer compares to learn it changed with no row: the live
    *  generation, since every answer here is the journal read through it. Not the revision, which
    *  moves on every generation-end signal: an end that changed nothing is published once. */

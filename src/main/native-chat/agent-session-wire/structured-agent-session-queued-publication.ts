@@ -141,7 +141,12 @@ export function readQueuePublication(
   const resumable = silent ? null : resumableQueuePause(pauses, journal.queuedMessages.list())
   // The submissions are read only while a pause would show, never while the queue runs freely.
   const pause =
-    resumable && !queuePauseLiftOnItsWay(resumable, journal.submissions()) ? resumable : null
+    resumable &&
+    !queuePauseLiftOnItsWay(resumable, journal.submissions(), (submission) =>
+      gate(journal).work.owesSend(submission)
+    )
+      ? resumable
+      : null
   // The test narrows the type.
   const queuePause = pause?.reason === 'stopped' ? { reason: pause.reason } : null
   const nextQueuedMessageId =

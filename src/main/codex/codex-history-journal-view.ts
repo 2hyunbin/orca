@@ -17,6 +17,7 @@ const TURN_LIFECYCLE_RECORD_PREFIX = 'turn-lifecycle:'
 export type CodexHistoryJournalView = {
   epoch: string
   nativePromptKeys: ReadonlySet<string>
+  needsReceipts?: boolean
   /** Provider turns represented by saved rows or native receipts. */
   known: ReadonlySet<string>
   /** Latest represented turn by journal position, including within a batch. */
@@ -98,6 +99,9 @@ export function readCodexHistoryJournalView(
   return {
     epoch: journal.epoch,
     nativePromptKeys,
+    needsReceipts: journal
+      .submissions()
+      .some((send) => send.dispatchState === 'unknown' || send.dispatchState === 'pending'),
     known,
     latest,
     latestPosition,
@@ -138,6 +142,7 @@ export function sameCodexHistoryJournalView(
 ): boolean {
   return (
     a.epoch === b.epoch &&
+    a.needsReceipts === b.needsReceipts &&
     a.unresolvedOrigin === b.unresolvedOrigin &&
     a.importedAt === b.importedAt &&
     a.hasRows === b.hasRows &&

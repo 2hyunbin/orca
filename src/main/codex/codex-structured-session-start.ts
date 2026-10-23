@@ -126,6 +126,8 @@ export async function openCodexStructuredSession(
         threadId: opened.threadId,
         sessionId,
         sink: input.events,
+        onReceipt: (clientMessageId, providerIdentity) =>
+          deps.onDispatchSettledLate?.({ sessionId, clientMessageId, providerIdentity }),
         signal: openInput.signal,
         assertCurrent: current,
         ...(deps.requestTimeoutMs !== undefined ? { timeoutMs: deps.requestTimeoutMs } : {}),

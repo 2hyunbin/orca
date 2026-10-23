@@ -1,4 +1,6 @@
+import type { NativeChatComposerHandle } from './native-chat-composer-types'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { returnMessageToComposer } from './structured-agent-session-message-hand-back'
 import { translate } from '@/i18n/i18n'
 import type { AgentType, NativeChatMessage } from '../../../../shared/native-chat-types'
 import {
@@ -23,6 +25,7 @@ const NO_NOTICES: ReadonlyMap<string, NativeChatDeliveryNotice> = new Map()
 export function useNativeChatPendingDelivery(args: {
   paneKey: string
   agent: AgentType
+  composerRef?: { current: NativeChatComposerHandle | null }
   /** `readPhase` 'ready' with a `sessionId` means an empty `messages` was a real read. */
   session: {
     messages: NativeChatMessage[]
@@ -30,7 +33,7 @@ export function useNativeChatPendingDelivery(args: {
     sessionId?: string | null
   }
 }) {
-  const { paneKey, agent } = args
+  const { paneKey, agent, composerRef } = args
   const { messages } = args.session
   const sessionId = args.session.sessionId ?? null
   // Why sessionId too: with none, 'ready' is a placeholder that read nothing.
@@ -165,12 +168,31 @@ export function useNativeChatPendingDelivery(args: {
             ? translate('components.native-chat.messageNotSent', 'Message not sent')
             : translate(
                 'components.native-chat.deliveryUnconfirmed',
-                'Delivery unconfirmed — check chat before retrying'
+                "Couldn't confirm whether this was sent. It hasn't been resent."
               ),
+        ...(composerRef
+          ? {
+              onSend: () => {
+                if (composerRef.current?.resend?.(entry.text, entry.imagePaths)) {
+                  cancel(entry.id)
+                }
+              }
+            }
+          : {}),
+        onEdit: () => {
+          if (
+            returnMessageToComposer(paneKey, `pending-${entry.id}`, [
+              { type: 'text', text: entry.text },
+              ...(entry.imagePaths ?? []).map((path) => ({ type: 'image-ref' as const, path }))
+            ])
+          ) {
+            cancel(entry.id)
+          }
+        },
         onDismiss: () => cancel(entry.id)
       })
     }
     return result
-  }, [pending, cancel])
+  }, [pending, cancel, paneKey, composerRef])
   return { pending, record, cancel, reject, holdUnconfirmed, clear, notices }
 }

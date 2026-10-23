@@ -28,6 +28,7 @@ export function createCodexSessionJournalTranslator(input: {
         acquisitionId,
         ...(deps.now ? { now: deps.now } : {}),
         primaryThreadId: input.primaryThreadId,
+        dispatchEchoes,
         dispatchRequestOrigin: (clientMessageId) => dispatchEchoes.requestOrigin(clientMessageId),
         subagentExecutions: input.subagentExecutions,
         bindPromptItemId: (journalItemId, threadId, promptKey, turnId) =>

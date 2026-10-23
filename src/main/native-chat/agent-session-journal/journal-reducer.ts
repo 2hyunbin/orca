@@ -1,3 +1,4 @@
+import { journalRecoveryEndSequence } from './journal-unconfirmed-recovery'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
 // the live append path and replay call it — a live-only shortcut is how a
@@ -54,6 +55,8 @@ export type JournalReducerState = {
   sessionId: string
   epoch: string
   lastSequence: number
+  /** Latest saved turn end or provider error, rebuilt from journal row order. */
+  recoveryEndSequence: number
   lastActivityAt: number
   /** Lowest sequence still individually replayable; rows below it were compacted. */
   oldestSequence: number
@@ -102,6 +105,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     sessionId,
     epoch,
     lastSequence: 0,
+    recoveryEndSequence: 0,
     lastActivityAt: 0,
     oldestSequence: 1,
     highestFence: 0,
@@ -132,6 +136,7 @@ export function applyJournalRow(
   savedAt = row.ts
 ): void {
   applyJournalRowFacts(state, row, savedAt)
+  state.recoveryEndSequence = Math.max(state.recoveryEndSequence, journalRecoveryEndSequence(row))
   foldJournalQueueRow(state, row)
 }
 

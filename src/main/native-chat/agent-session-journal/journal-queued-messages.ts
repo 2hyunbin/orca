@@ -30,6 +30,12 @@ import {
 import { QueuedMessageNotConsumableError } from './queued-message-consume-error'
 import { QueuedMessageEditLeases } from './queued-message-edit-leases'
 import { queuedMessageUpdateDecision, type QueuedMessageUpdate } from './queued-message-update'
+import { queuedChangeOf } from './journal-queue-retention'
+import {
+  adoptUnconfirmedRecovery,
+  unconfirmedRecoveryCards,
+  type JournalRecoveryWork
+} from './journal-unconfirmed-recovery'
 import type { JournalReducerState } from './journal-reducer'
 
 /** Card rows to write in one transaction, with what must commit beside them. */
@@ -47,6 +53,7 @@ export type JournalQueueRestatement = {
 export class JournalQueuedMessages {
   readonly editLeases = new QueuedMessageEditLeases(() => this.list())
   private readonly legacy: LegacyQueuedCards
+  recoveryWork: () => JournalRecoveryWork | null = () => null
   private viewed: { key: string; cards: readonly QueuedMessageRow[] } | null = null
 
   constructor(private readonly deps: JournalQueuedMessagesDeps) {
@@ -64,7 +71,7 @@ export class JournalQueuedMessages {
   /** Moves with every card change, so publication memos recompute only when they must. */
   revision(): string {
     const { epoch, queue } = this.deps.state()
-    return `${epoch}:${queue.revision}:${this.legacy.key()}`
+    return `${epoch}:${queue.revision}:${this.legacy.key()}:${this.deps.state().lastSequence}:${this.recoveryWork()?.workViewKey() ?? ''}`
   }
 
   /** The cards every reader sees, in queue order: the fold's, and any an earlier build wrote that
@@ -73,17 +80,14 @@ export class JournalQueuedMessages {
     const key = this.revision()
     if (this.viewed?.key !== key) {
       const cards = [...this.deps.state().queue.cards.values(), ...this.legacy.cards()]
+      cards.push(...unconfirmedRecoveryCards(this.deps.state(), cards, this.recoveryWork()))
       this.viewed = { key, cards: cards.sort((a, b) => a.position - b.position) }
     }
     return this.viewed.cards
   }
 
   get(messageId: string): QueuedMessageRow | null {
-    return (
-      this.deps.state().queue.cards.get(messageId) ??
-      this.legacy.cards().find((card) => card.messageId === messageId) ??
-      null
-    )
+    return this.list().find((card) => card.messageId === messageId) ?? null
   }
 
   /** Attachments and the send receipt commit with the card. */
@@ -146,18 +150,27 @@ export class JournalQueuedMessages {
     }
     return this.write<AgentSessionQueuedMessageUpdateResult>(() => {
       edit = undefined
-      const decision = queuedMessageUpdateDecision(
-        this.get(input.messageId),
-        this.deps.sessionId,
-        input
-      )
+      const card = this.get(input.messageId)
+      const decision = queuedMessageUpdateDecision(card, this.deps.sessionId, input)
+      const derived = card?.recovers && !this.deps.state().queue.cards.has(card.messageId)
       if (decision.status !== 'ready') {
-        return { changes: [], result: decision }
+        const result =
+          decision.status === 'unchanged' && derived
+            ? { ...decision, status: 'updated' as const }
+            : decision
+        return { changes: [], result }
       }
       edit = { body: decision.body, previous: decision.previous }
       const { messageId } = input
       return {
-        changes: [{ messageId, change: { op: 'edited', body: decision.body } }],
+        changes: [
+          {
+            messageId,
+            change: derived
+              ? { ...queuedChangeOf(card), body: decision.body }
+              : { op: 'edited', body: decision.body }
+          }
+        ],
         result: { status: 'updated', messageId, fingerprint: decision.fingerprint }
       }
     }, receipt)
@@ -207,7 +220,10 @@ export class JournalQueuedMessages {
     const adopted: string[] = []
     for (const { messageId, change } of changes) {
       const own = this.deps.state().queue.cards.has(messageId) || adopted.includes(messageId)
-      const adoption = own ? null : this.legacy.adoption(messageId)
+      const adoption = own
+        ? null
+        : (this.legacy.adoption(messageId) ??
+          adoptUnconfirmedRecovery(this.list(), messageId, change))
       if (adoption) {
         rows.push(journalQueueRowBuilder(this.deps.state, messageId, adoption))
         adopted.push(messageId)
@@ -246,7 +262,10 @@ export class JournalQueuedMessages {
   /** What a new epoch restates, with every legacy card: their rows go in the same transaction. */
   restatement(): JournalQueueRestatement {
     return {
-      cards: retainedQueueFacts(this.list(), this.deps.state().submissions),
+      cards: retainedQueueFacts(
+        [...this.deps.state().queue.cards.values(), ...this.legacy.cards()],
+        this.deps.state().submissions
+      ),
       receipt: this.legacy.deletionOfAll()
     }
   }

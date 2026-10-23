@@ -55,3 +55,17 @@ export function heldStructuredAgentSessionCurrentWork(
     revision: session?.operationalRevision ?? 0
   })
 }
+
+/** A start publishes recovery only after its bounded history replay attempt. */
+export function bindStructuredAgentSessionRecoveryWork(
+  store: StructuredAgentSessionCurrentWorkHost['store'],
+  sessionId: string,
+  session: StructuredAgentSessionHostSession | undefined
+): void {
+  if (session) {
+    session.journal.queuedMessages.recoveryWork = () =>
+      session.child?.phase === 'starting'
+        ? null
+        : heldStructuredAgentSessionCurrentWork(store, sessionId, session.journal, session)
+  }
+}
