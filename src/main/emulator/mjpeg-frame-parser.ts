@@ -58,6 +58,9 @@ export class MjpegFrameAccumulator {
   constructor(private readonly maxPendingBytes = DEFAULT_MAX_PENDING_BYTES) {}
 
   push(chunk: Buffer<ArrayBufferLike>): Buffer<ArrayBufferLike>[] {
+    if (chunk.length === 0) {
+      return []
+    }
     const head = this.parts[0]
     if (
       head?.[0] === 0xff &&
