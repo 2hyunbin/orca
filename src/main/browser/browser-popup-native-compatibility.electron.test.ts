@@ -455,7 +455,6 @@ describe('hidden Chromium native popup request compatibility', () => {
     const oauthPath = `/authorize-scripted?client_id=synthetic&redirect_uri=${origin}/callback&response_type=code`
     for (const [modifier, path, disposition] of [
       ['Shift', '/scripted-native', 'new-window'],
-      // A Cmd/Ctrl-opened OAuth child keeps its opener instead of becoming an Orca tab.
       ['ControlOrMeta', oauthPath, 'background-tab']
     ] as const) {
       const before = receipts.length
@@ -518,7 +517,6 @@ describe('hidden Chromium native popup request compatibility', () => {
         firstNavigationOwner: expect.any(Number)
       })
     }
-    // Four live native children fill the route popup cap.
     await page.locator('#blank').click()
     expect(await page.locator('body').getAttribute('data-handle')).toBe('false')
     expect(status().native.windows.slice(-4)).toEqual(

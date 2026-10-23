@@ -95,7 +95,7 @@ describe('generic ACP translation', () => {
         { type: 'diff', path: 'file.ts', oldText, newText }
       ]
     })
-    // A settled journal row refuses a late provider update that says it is running again.
+    // Settled journal rows reject late updates that try to reopen them.
     update({ sessionUpdate: 'tool_call_update', toolCallId: 'tool-1', status: 'in_progress' })
     apply(translator.promptResult('send-1', { stopReason: 'end_turn' }, 1200))
     const body = (await rig.rows()).find(
@@ -104,7 +104,7 @@ describe('generic ACP translation', () => {
     expect(body).toMatchObject({
       name: 'edit_file',
       state: 'completed',
-      // The input came only while the call ran; the settled row still keeps it whole.
+      // Preserve full input supplied only during the running state.
       input: { text: 'x'.repeat(40000) },
       output: { head: 'y'.repeat(40000), truncated: false, byteLength: 40000 }
     })
