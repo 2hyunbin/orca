@@ -24,11 +24,11 @@ const scope = (index: number) => `agent-session:session-${index}`
 function counted<T extends object>(map: T, kind: keyof typeof reads): T {
   return new Proxy(map, { ownKeys: (target) => (reads[kind]++, Reflect.ownKeys(target)) })
 }
-function tab(index: number): Tab {
+function tab(index: number, workspaces: number): Tab {
   return {
     id: `chat-${index}`,
     entityId: `session-${index}`,
-    worktreeId: workspace(index % 60),
+    worktreeId: workspace(index % workspaces),
     groupId: 'group',
     contentType: 'agent-session',
     executionHostId: 'local',
@@ -39,13 +39,13 @@ function tab(index: number): Tab {
     createdAt: 0
   }
 }
-function seed() {
+function seed(chats: number, workspaces: number, terminalsPerWorkspace: number) {
   const tabsByWorktree: Record<string, TerminalTab[]> = {}
   const unifiedTabsByWorktree: Record<string, Tab[]> = {}
   const folderWorkspaces: FolderWorkspace[] = []
-  for (let index = 0; index < 60; index++) {
+  for (let index = 0; index < workspaces; index++) {
     const id = workspace(index)
-    tabsByWorktree[id] = Array.from({ length: 16 }, (_, slot) => ({
+    tabsByWorktree[id] = Array.from({ length: terminalsPerWorkspace }, (_, slot) => ({
       id: `terminal-${index}-${slot}`,
       worktreeId: id,
       ptyId: null,
@@ -73,8 +73,8 @@ function seed() {
       updatedAt: 0
     })
   }
-  for (let index = 0; index < 100; index++) {
-    unifiedTabsByWorktree[workspace(index % 60)].push(tab(index))
+  for (let index = 0; index < chats; index++) {
+    unifiedTabsByWorktree[workspace(index % workspaces)].push(tab(index, workspaces))
   }
   useAppStore.setState(
     {
@@ -87,7 +87,9 @@ function seed() {
   )
 }
 
-function Sender({ index }: { index: number }) {
+type Population = { chats: number; workspaces: number; terminalsPerWorkspace: number }
+type SubscriberProps = { index: number; population: Population }
+function Sender({ index, population: { workspaces } }: SubscriberProps) {
   renders++
   const name = useAgentMessageSenderLabel(
     {
@@ -98,17 +100,17 @@ function Sender({ index }: { index: number }) {
       },
       name: 'Recorded'
     },
-    workspace(index % 60),
+    workspace(index % workspaces),
     { kind: 'local' }
   )
   return <output data-index={index}>{name}</output>
 }
-function FileLink({ index }: { index: number }) {
+function FileLink({ index }: SubscriberProps) {
   renders++
   const context = useNativeChatFileLinkContext(`chat-${index}`)
   return <output data-index={index}>{context?.worktreeId}</output>
 }
-function Composer({ index }: { index: number }) {
+function Composer({ index }: SubscriberProps) {
   renders++
   const subscribe = useCallback(
     (listener: () => void) => drafts.subscribeToNativeChatComposerDraft(scope(index), listener),
@@ -126,12 +128,18 @@ afterEach(() => {
   Object.assign(window, { api: originalApi })
 })
 
-it.each([
-  { name: 'sender', Subscriber: Sender },
-  { name: 'file link', Subscriber: FileLink },
-  { name: 'composer', Subscriber: Composer }
-])('$name subscribers share the tab-map scan budget at 100 chats', async ({ name, Subscriber }) => {
-  seed()
+it.each(
+  [
+    { chats: 10, workspaces: 6, terminalsPerWorkspace: 16 },
+    { chats: 100, workspaces: 60, terminalsPerWorkspace: 16 }
+  ].flatMap((population) => [
+    { name: 'sender', Subscriber: Sender, population },
+    { name: 'file link', Subscriber: FileLink, population },
+    { name: 'composer', Subscriber: Composer, population }
+  ])
+)('$name scan budget at $population.chats chats', async (testCase) => {
+  const { name, Subscriber, population } = testCase
+  seed(population.chats, population.workspaces, population.terminalsPerWorkspace)
   const resolveOwner = vi.fn((key: string) =>
     resolveNativeChatDraftOwner(useAppStore.getState(), key)
   )
@@ -150,8 +158,8 @@ it.each([
   await drafts.hydrateNativeChatComposerDrafts()
   const view = render(
     <>
-      {Array.from({ length: 100 }, (_, index) => (
-        <Subscriber key={index} index={index} />
+      {Array.from({ length: population.chats }, (_, index) => (
+        <Subscriber key={index} index={index} population={population} />
       ))}
     </>
   )
@@ -172,7 +180,11 @@ it.each([
 
   // Build the focus/relabel publication before counting subscriber work on the new snapshot.
   const state = useAppStore.getState()
-  const moved = { ...tab(0), worktreeId: workspace(1), customLabel: 'Renamed' }
+  const moved = {
+    ...tab(0, population.workspaces),
+    worktreeId: workspace(1),
+    customLabel: 'Renamed'
+  }
   const replacement = counted(
     {
       ...state.unifiedTabsByWorktree,

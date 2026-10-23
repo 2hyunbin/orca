@@ -10,8 +10,6 @@ function lintSources(sources) {
     pluginPath,
     sources,
     rules: {
-      'app-store-performance/no-state-ignoring-selector': 'warn',
-      'app-store-performance/no-tab-map-scan-in-selector': 'warn',
       'app-store-performance/require-selector': 'warn',
       'app-store-performance/no-identity-selector': 'warn',
       'app-store-performance/no-fresh-selector-result': 'warn',
@@ -77,112 +75,36 @@ const sources = {
       const Delegating = () => useAppStore((state) => buildRows(state))
       const NestedDelegating = () => useAppStore(useShallow((state) => ({ ids: buildRows(state) })))
     `,
-  ignoringState: `
-    import { useAppStore } from '@/store'
-    import { useShallow } from 'zustand/react/shallow'
-    const selectConstant = (state) => constant
-    const Zero = () => useAppStore(() => readCurrent())
-    const Unused = () => useAppStore(useShallow((state) => constant))
-    const Named = () => useAppStore(selectConstant)
-  `,
-  scanningMaps: `
-    import { useAppStore } from '@/store'
-    const findChatTab = (state, sessionId, owner) => {
-      const tabsByWorktree = state.unifiedTabsByWorktree
-      for (const worktreeId in tabsByWorktree) {
-        const tab = structuredChatTabBySessionId(tabsByWorktree, worktreeId, sessionId)
-        if (tab && ownerForTab(state, tab) === owner) return tab
-        const qualified = tab && tabsByWorktree[worktreeId]?.find(candidate => ownerForTab(state, candidate) === owner)
-        if (qualified) return qualified
+  lexicalBindings: `
+      import { useAppStore } from '@/store'
+      const select = s => ({ active: s.active })
+      const build = s => s.rows.map(row => row.id)
+      function View() {
+        const select = s => s.active, build = s => s.rows
+        useAppStore(select)
+        return useAppStore(s => build(s))
       }
-      return undefined
-    }
-    const Sender = () => useAppStore(state => local && sessionId ? findChatTab(state, sessionId, owner) : undefined)
-    const Direct = () => useAppStore(state => Object.values(state.tabsByWorktree))
-    const Keys = () => useAppStore(state => Object.keys(state.worktreesByRepo).length)
-    const Aliased = () => useAppStore(state => {
-      const m = state.groupsByWorktree
-      if (enabled) for (const key in m) inspect(key)
-      return state.activeId
-    })
-  `,
-  cachedMaps: `
-    import { useAppStore } from '@/store'
-    const cache = new WeakMap()
-    const cached = state => {
-      const map = state.unifiedTabsByWorktree
-      const hit = cache.get(map)
-      if (hit) return hit
-      const value = Object.values(map)
-      cache.set(map, value)
-      return value
-    }
-    let previous, value
-    const identityCached = state => {
-      const { tabsByWorktree: tabs } = state
-      if (previous !== state.tabsByWorktree) {
-        value = Object.entries(tabs)
-        previous = state.tabsByWorktree
+    `,
+  shadowedImports: `
+      import { useAppStore, useAppStore as useStore } from '@/store'
+      import { usePluginPanelsStore as usePanels } from '@/store/plugin-panels'
+      import { useShallow as shallow } from 'zustand/react/shallow'
+      function View(useStore, usePanels, shallow) {
+        useStore(); usePanels()
+        return useAppStore(shallow(s => ({ ids: s.rows.map(row => row.id) })))
       }
-      return value
-    }
-    const Weak = () => useAppStore(state => cached(state))
-    const Identity = () => useAppStore(state => identityCached(state))
-    const Snapshot = () => useAppStore(({ active }) => active)
-    const Callback = () => useAppStore(state => lookup(() => state.active))
-    const External = () => useAppStore(state => importedIndex(state))
-  `,
+    `,
   cachedHelpers: `
       import { useAppStore } from '@/store'
       import { useShallow } from 'zustand/react/shallow'
       // The identity-caching shape: fresh only on a miss, cached otherwise.
+      const cache = new WeakMap()
       const selectCachedRows = (state) => cache.get(state.key) ?? state.rows.filter(Boolean)
       const Cached = () => useAppStore((state) => selectCachedRows(state))
       const CachedNested = () => useAppStore(useShallow((state) => ({ rows: selectCachedRows(state) })))
       // An unknown helper cannot be resolved, so it must not be guessed at.
       const External = () => useAppStore((state) => externalBuild(state))
-    `,
-  lexicalBindings: `
-    import { useAppStore } from '@/store'
-    const select = () => 42
-    function lookup(s) { return Object.keys(s.tabsByWorktree).length }
-    function View() {
-      const select = s => s.activeId
-      const lookup = s => s.activeId
-      useAppStore(select)
-      return useAppStore(s => lookup(s))
-    }
-    const Shadowed = () => useAppStore(s => fixedRows.some(s => s.enabled))
-    const Captured = () => useAppStore(s => fixedRows.some(row => row.id === s.activeId))
-  `,
-  unrelatedCaches: `
-    import { useAppStore } from '@/store'
-    const cache = new WeakMap()
-    const other = readOtherSnapshot()
-    let previous
-    const identity = s => {
-      if (previous !== s.tabsByWorktree) {
-        previous = s.tabsByWorktree
-        inspect(Object.keys(s.tabsByWorktree))
-      }
-      return Object.keys(s.unifiedTabsByWorktree).length
-    }
-    const weak = s => {
-      const hit = cache.get(other.tabsByWorktree)
-      if (hit) return hit
-      return Object.keys(s.tabsByWorktree).length
-    }
-    const Identity = () => useAppStore(identity)
-    const Weak = () => useAppStore(weak)
-  `,
-  destructuredMaps: `
-    import { useAppStore } from '@/store'
-    const Parameter = () => useAppStore(({ tabsByWorktree }) => Object.keys(tabsByWorktree).length)
-    const Local = () => useAppStore(s => {
-      const { unifiedTabsByWorktree: tabs } = s
-      return Object.keys(tabs).length
-    })
-  `
+    `
 }
 
 const diagnosticsBySource = new Map()
@@ -194,6 +116,10 @@ beforeAll(() => {
 })
 
 describe('app store performance Oxlint plugin', () => {
+  it.each(['lexicalBindings', 'shadowedImports'])('respects lexical bindings in %s', (name) => {
+    expect(diagnosticsBySource.get(sources[name])).toEqual([])
+  })
+
   it('reports whole-store and fresh-reference subscriptions', () => {
     const diagnostics = diagnosticsBySource.get(sources.subscriptions)
 
@@ -257,46 +183,5 @@ describe('app store performance Oxlint plugin', () => {
     const diagnostics = diagnosticsBySource.get(sources.cachedHelpers)
 
     expect(diagnostics).toEqual([])
-  })
-})
-
-describe('per-write selector work', () => {
-  it('reports inline, shallow, and named state-ignoring selectors', () => {
-    expect(diagnosticsBySource.get(sources.ignoringState).map(({ code }) => code)).toEqual([
-      'app-store-performance(no-state-ignoring-selector)',
-      'app-store-performance(no-state-ignoring-selector)',
-      'app-store-performance(no-state-ignoring-selector)'
-    ])
-  })
-  it('follows conditional sender helpers and local collection aliases', () => {
-    expect(
-      diagnosticsBySource
-        .get(sources.scanningMaps)
-        .filter(({ code }) => code === 'app-store-performance(no-tab-map-scan-in-selector)')
-    ).toHaveLength(4)
-  })
-  it('allows same-file WeakMap and identity-guard caches', () => {
-    expect(diagnosticsBySource.get(sources.cachedMaps)).toEqual([])
-  })
-  it('resolves lexical bindings and distinguishes shadowed callback parameters from captures', () => {
-    const diagnostics = diagnosticsBySource.get(sources.lexicalBindings)
-    expect(diagnostics.map(({ code }) => code)).toEqual([
-      'app-store-performance(no-state-ignoring-selector)'
-    ])
-    expect(diagnostics[0].labels[0].span.offset).toBe(
-      sources.lexicalBindings.indexOf('s => fixedRows.some(s => s.enabled)')
-    )
-  })
-  it('does not exempt scans of a different map from a recognized cache', () => {
-    expect(diagnosticsBySource.get(sources.unrelatedCaches).map(({ code }) => code)).toEqual([
-      'app-store-performance(no-tab-map-scan-in-selector)',
-      'app-store-performance(no-tab-map-scan-in-selector)'
-    ])
-  })
-  it('recognizes listed maps destructured from parameters or local snapshots', () => {
-    expect(diagnosticsBySource.get(sources.destructuredMaps).map(({ code }) => code)).toEqual([
-      'app-store-performance(no-tab-map-scan-in-selector)',
-      'app-store-performance(no-tab-map-scan-in-selector)'
-    ])
   })
 })

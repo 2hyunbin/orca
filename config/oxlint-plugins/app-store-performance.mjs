@@ -78,11 +78,11 @@ function returnedExpressions(selector) {
   return expressions
 }
 
-function unwrapShallowSelector(selector, shallowHooks) {
+function unwrapShallowSelector(selector, state) {
   if (
     selector?.type === 'CallExpression' &&
     selector.callee.type === 'Identifier' &&
-    shallowHooks.has(selector.callee.name)
+    state.shallowHooks.has(variableFor(selector.callee, state))
   ) {
     return { selector: selector.arguments[0], shallow: true }
   }
@@ -204,7 +204,6 @@ function createRuleState(sourceCode) {
     appStoreHooks: new Set(),
     shallowHooks: new Set(),
     sourceCode,
-    weakMaps: new Set(),
     deferredCalls: []
   }
 }
@@ -216,12 +215,12 @@ function recordImports(node, state) {
       continue
     }
     const imported = identifierName(specifier.imported)
-    const localName = identifierName(specifier.local)
-    if (!imported || !localName) {
+    const variable = variableFor(specifier.local, state)
+    if (!imported || !variable) {
       continue
     }
     if (source === 'zustand/react/shallow' && imported === 'useShallow') {
-      state.shallowHooks.add(localName)
+      state.shallowHooks.add(variable)
     }
     // useAppStore is the app store wherever it is re-exported from; sibling
     // stores are trusted by naming convention only when they come from this codebase.
@@ -230,7 +229,7 @@ function recordImports(node, state) {
       !NON_STORE_HOOKS.has(imported) &&
       (imported === 'useAppStore' || isLocalModuleSource(source))
     ) {
-      state.appStoreHooks.add(localName)
+      state.appStoreHooks.add(variable)
     }
   }
 }
@@ -238,13 +237,13 @@ function recordImports(node, state) {
 function isAppStoreCall(node, state) {
   return (
     node.callee.type === 'Identifier' &&
-    state.appStoreHooks.has(node.callee.name) &&
+    state.appStoreHooks.has(variableFor(node.callee, state)) &&
     node.optional !== true
   )
 }
 
-function requireSelectorRule() {
-  const state = createRuleState()
+function requireSelectorRule(sourceCode) {
+  const state = createRuleState(sourceCode)
   return {
     ImportDeclaration(node) {
       recordImports(node, state)
@@ -271,20 +270,6 @@ function deferredSelectorRule(sourceCode, inspect) {
     ImportDeclaration(node) {
       recordImports(node, state)
     },
-    VariableDeclaration(node) {
-      if (isModuleScope(node)) {
-        for (const entry of node.declarations) {
-          const variable = variableFor(entry.id, state)
-          if (
-            variable &&
-            entry.init?.type === 'NewExpression' &&
-            identifierName(entry.init.callee) === 'WeakMap'
-          ) {
-            state.weakMaps.add(variable)
-          }
-        }
-      }
-    },
     CallExpression(node) {
       if (isAppStoreCall(node, state)) {
         state.deferredCalls.push(node)
@@ -292,10 +277,7 @@ function deferredSelectorRule(sourceCode, inspect) {
     },
     'Program:exit'() {
       for (const node of state.deferredCalls) {
-        const { selector: argument, shallow } = unwrapShallowSelector(
-          node.arguments[0],
-          state.shallowHooks
-        )
+        const { selector: argument, shallow } = unwrapShallowSelector(node.arguments[0], state)
         const report = inspect({
           selector: resolveSelector(argument, state),
           shallow,
@@ -372,161 +354,6 @@ function noNestedFreshUnderShallowRule(sourceCode) {
   })
 }
 
-/** Small state maps and imported helpers are deliberately outside this rule's scope. */
-const SCANNED_MAPS = new Set([
-  'tabsByWorktree',
-  'unifiedTabsByWorktree',
-  'groupsByWorktree',
-  'browserTabsByWorktree',
-  'browserPagesByWorkspace',
-  'layoutByWorktree',
-  'terminalLayoutsByTabId',
-  'worktreesByRepo'
-])
-
-/** Walk one function body, including conditional branches, without descending into closures. */
-function walkBody(node, visit) {
-  if (!node || typeof node !== 'object' || FUNCTION_NODES.has(node.type)) {
-    return
-  }
-  visit(node)
-  for (const [key, child] of Object.entries(node)) {
-    if (key === 'parent') {
-      continue
-    }
-    if (Array.isArray(child)) {
-      child.forEach((entry) => walkBody(entry, visit))
-    } else {
-      walkBody(child, visit)
-    }
-  }
-}
-
-function noStateIgnoringSelectorRule(sourceCode) {
-  return deferredSelectorRule(sourceCode, ({ selector }) => {
-    if (!selector) {
-      return null
-    }
-    const parameter = selector.params[0]
-    const referenced = sourceCode
-      .getDeclaredVariables(selector)
-      .some(
-        (variable) =>
-          variable.defs.some(
-            (definition) =>
-              definition.type === 'Parameter' &&
-              definition.name.start >= parameter.start &&
-              definition.name.end <= parameter.end
-          ) &&
-          variable.references.some(
-            (reference) => reference.isRead() && reference.identifier.start >= selector.body.start
-          )
-      )
-    return referenced
-      ? null
-      : {
-          node: selector,
-          message:
-            'This store selector ignores its state; read the supplied snapshot instead of doing state-independent work on every write.'
-        }
-  })
-}
-
-function scansTabMap(selector, state, depth = 0) {
-  const aliases = new Map()
-  // A map is identified by the receiver's binding and the listed property, not its spelling alone.
-  const mapSource = (node) => {
-    if (node?.type === 'Identifier') {
-      return aliases.get(variableFor(node, state))
-    }
-    const owner = node?.type === 'MemberExpression' && variableFor(node.object, state)
-    return owner && SCANNED_MAPS.has(propertyName(node)) ? [owner, propertyName(node)] : null
-  }
-  const recordPattern = (pattern, owner) => {
-    for (const property of pattern?.type === 'ObjectPattern' ? pattern.properties : []) {
-      const name = !property.computed && (identifierName(property.key) ?? property.key?.value)
-      const variable = variableFor(property.value, state)
-      if (variable && SCANNED_MAPS.has(name)) {
-        aliases.set(variable, [owner ?? variable, name])
-      }
-    }
-  }
-  recordPattern(selector.params[0])
-  const scans = []
-  const cached = []
-  const helpers = []
-  walkBody(selector.body, (node) => {
-    if (node.type === 'VariableDeclarator') {
-      const map = mapSource(node.init)
-      const variable = variableFor(node.id, state)
-      if (map && variable) {
-        aliases.set(variable, map)
-      }
-      recordPattern(node.id, variableFor(node.init, state))
-    }
-    if (node.type === 'BinaryExpression' && ['===', '!=='].includes(node.operator)) {
-      const map = mapSource(node.left) ?? mapSource(node.right)
-      if (map) {
-        cached.push(map)
-      }
-    }
-    if (node.type === 'CallExpression') {
-      const method = propertyName(node.callee)
-      if (method === 'get' && state.weakMaps.has(variableFor(node.callee.object, state))) {
-        const map = mapSource(node.arguments[0])
-        if (map) {
-          cached.push(map)
-        }
-      }
-      if (
-        identifierName(node.callee.object) === 'Object' &&
-        ['keys', 'values', 'entries'].includes(method)
-      ) {
-        const map = mapSource(node.arguments[0])
-        if (map) {
-          scans.push({ node, map })
-        }
-      }
-      const helper = node.callee.type === 'Identifier' && resolveSelector(node.callee, state)
-      if (helper) {
-        helpers.push(helper)
-      }
-    }
-    if (node.type === 'ForInStatement') {
-      const map = mapSource(node.right)
-      if (map) {
-        scans.push({ node, map })
-      }
-    }
-  })
-  const scan = scans.find(
-    ({ map }) => !cached.some(([owner, name]) => owner === map[0] && name === map[1])
-  )
-  if (scan || depth === 1) {
-    return scan?.node ?? null
-  }
-  for (const helper of helpers) {
-    const found = scansTabMap(helper, state, depth + 1)
-    if (found) {
-      return found
-    }
-  }
-  return null
-}
-
-function noTabMapScanInSelectorRule(sourceCode) {
-  return deferredSelectorRule(sourceCode, ({ selector, state }) => {
-    const scan = selector && scansTabMap(selector, state)
-    return scan
-      ? {
-          node: scan,
-          message:
-            'Do not enumerate tabsByWorktree, unifiedTabsByWorktree, groupsByWorktree, browserTabsByWorktree, browserPagesByWorkspace, layoutByWorktree, terminalLayoutsByTabId, or worktreesByRepo on every selector run; cache an index by map identity.'
-        }
-      : null
-  })
-}
-
 function bindContext(createVisitors) {
   return (context) => {
     const visitors = createVisitors(context.sourceCode)
@@ -540,8 +367,6 @@ function bindContext(createVisitors) {
 export default {
   meta: { name: 'app-store-performance' },
   rules: {
-    'no-state-ignoring-selector': { create: bindContext(noStateIgnoringSelectorRule) },
-    'no-tab-map-scan-in-selector': { create: bindContext(noTabMapScanInSelectorRule) },
     'require-selector': { create: bindContext(requireSelectorRule) },
     'no-identity-selector': { create: bindContext(noIdentitySelectorRule) },
     'no-fresh-selector-result': { create: bindContext(noFreshSelectorResultRule) },
