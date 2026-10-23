@@ -82,7 +82,12 @@ export function recordHostModelCatalogSnapshot(
     if (worktree === null) {
       snapshots.delete(key)
     } else {
-      snapshots.get(key)?.byWorktree.delete(worktree)
+      const entry = snapshots.get(key)
+      const retired = entry?.byWorktree.get(worktree)
+      if (entry && retired && entry.account === retired) {
+        entry.account = null
+      }
+      entry?.byWorktree.delete(worktree)
     }
     return
   }

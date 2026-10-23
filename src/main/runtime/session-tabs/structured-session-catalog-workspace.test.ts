@@ -441,3 +441,35 @@ it('releases removed scans and makes old owners and joiners use a re-registered 
   expect(h.runtime.worktreeScanCache.size).toBe(0)
   expect(h.runtime.worktreeScanInFlight.size).toBe(0)
 })
+
+it('shares one failed SSH stored-row refresh at N and 10N callers without caching failure', async () => {
+  for (const callers of [5, 50]) {
+    const h = rig()
+    const repo = h.repos[0]
+    repo.executionHostId = 'ssh:fixture'
+    h.metadata['r1::/private-fixture/w1'].hostId = 'ssh:fixture'
+    Object.defineProperty(
+      h.runtime,
+      'refreshRepoWorktreeScan',
+      Object.getOwnPropertyDescriptor(
+        RuntimeWorkspaceRepoScanRefresh.prototype,
+        'refreshRepoWorktreeScan'
+      )!
+    )
+    const refresh = vi.spyOn(h.runtime, 'refreshRepoWorktreeScan')
+    const results = await Promise.all(
+      Array.from({ length: callers }, () => h.runtime.listRepoWorktreesForResolution(repo))
+    )
+    expect(results).toEqual(
+      Array.from({ length: callers }, () => ({
+        ok: false,
+        worktrees: [{ path: repo.path, head: '', branch: '', isMainWorktree: true, isBare: false }]
+      }))
+    )
+    expect.soft(refresh, `${callers} concurrent callers`).toHaveBeenCalledTimes(1)
+    expect(h.runtime.worktreeScanCache.size).toBe(0)
+    expect(h.runtime.worktreeScanInFlight.size).toBe(0)
+    await h.runtime.listRepoWorktreesForResolution(repo)
+    expect.soft(refresh, `${callers} callers then a new request`).toHaveBeenCalledTimes(2)
+  }
+})

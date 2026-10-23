@@ -426,6 +426,16 @@ describe('Claude structured option write under the request deadline', () => {
   it('completes successful literal effort writes without optional settings confirmation', async () => {
     const { session, applyFlagSettings } = fastModeSession(true)
     session.connection.getSettings = () => new Promise(() => {})
+    const held = [...session.options]
+    const applied = [...session.appliedInputOptions]
+    const sequence = session.optionMutationSequence
+    await expect(
+      setClaudeStructuredOption(session, { key: 'effort', value: 'banana' }, undefined)
+    ).rejects.toThrow('Claude effort must be low, medium, high, xhigh, or max.')
+    expect(applyFlagSettings).not.toHaveBeenCalled()
+    expect([...session.options]).toEqual(held)
+    expect([...session.appliedInputOptions]).toEqual(applied)
+    expect(session.optionMutationSequence).toBe(sequence)
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'high' }, undefined)
     ).resolves.toMatchObject({ effort: 'high' })

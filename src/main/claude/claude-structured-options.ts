@@ -74,6 +74,11 @@ export async function setClaudeStructuredOption(
       ? decodeStructuredAgentSessionOptionValue('fastMode', input.value)
       : null
   const effort = EFFORT_LEVELS.find((value) => value === input.value)
+  if (input.key === 'effort' && effort === undefined) {
+    throw new AgentSessionOptionRejectedError(
+      'Claude effort must be low, medium, high, xhigh, or max.'
+    )
+  }
   const apply =
     input.key === 'model'
       ? () => session.connection.setModel(input.value, { timeoutMs })

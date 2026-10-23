@@ -279,48 +279,39 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     }
     const inFlight = this.worktreeScanInFlight.get(scanScopeKey)
     if (inFlight?.generation === generation && inFlight.runtimeKey === runtimeKey) {
-      const refresh = await inFlight.promise
-      if (
-        this.worktreeScanCache.get(scanScopeKey)?.result !== refresh.result &&
-        this.worktreeScanInFlight.get(scanScopeKey) !== inFlight
-      ) {
-        return retryCurrent()
-      }
-      return refresh.result
+      return (await inFlight.promise).result
     }
     const reusableCached =
       cached?.generation === generation && cached.runtimeKey === runtimeKey ? cached : null
     const promise = this.refreshRepoWorktreeScan(repo, projectRuntime, reusableCached)
-    this.worktreeScanInFlight.set(scanScopeKey, { generation, runtimeKey, promise })
-    try {
-      const refresh = await promise
-      if (this.worktreeScanInFlight.get(scanScopeKey)?.promise !== promise) {
-        return retryCurrent()
-      }
-      if (
-        (refresh.result.ok || !sshConnectionId) &&
-        this.worktreeScanInFlight.get(scanScopeKey)?.promise === promise
-      ) {
-        const entry: RuntimeWorktreeScanCache = {
-          generation,
-          runtimeKey,
-          result: refresh.result,
-          expiresAt: Date.now() + resolveWorktreeScanCacheTtlMs(repo),
-          adminFingerprint: refresh.adminFingerprint,
-          scannedAt: refresh.scannedAt
+      .then(async (refresh) => {
+        if (this.worktreeScanInFlight.get(scanScopeKey)?.promise !== promise) {
+          return { ...refresh, result: await retryCurrent() }
         }
-        this.worktreeScanCache.set(scanScopeKey, entry)
-        void refresh.adminFingerprintProbe?.then((fingerprint) => {
-          if (this.worktreeScanCache.get(scanScopeKey) === entry) {
-            entry.adminFingerprint = fingerprint
+        if (refresh.result.ok || !sshConnectionId) {
+          const entry: RuntimeWorktreeScanCache = {
+            generation,
+            runtimeKey,
+            result: refresh.result,
+            expiresAt: Date.now() + resolveWorktreeScanCacheTtlMs(repo),
+            adminFingerprint: refresh.adminFingerprint,
+            scannedAt: refresh.scannedAt
           }
-        })
-      }
-      return refresh.result
-    } finally {
-      if (this.worktreeScanInFlight.get(scanScopeKey)?.promise === promise) {
-        this.worktreeScanInFlight.delete(scanScopeKey)
-      }
-    }
+          this.worktreeScanCache.set(scanScopeKey, entry)
+          void refresh.adminFingerprintProbe?.then((fingerprint) => {
+            if (this.worktreeScanCache.get(scanScopeKey) === entry) {
+              entry.adminFingerprint = fingerprint
+            }
+          })
+        }
+        return refresh
+      })
+      .finally(() => {
+        if (this.worktreeScanInFlight.get(scanScopeKey)?.promise === promise) {
+          this.worktreeScanInFlight.delete(scanScopeKey)
+        }
+      })
+    this.worktreeScanInFlight.set(scanScopeKey, { generation, runtimeKey, promise })
+    return (await promise).result
   }
 }
