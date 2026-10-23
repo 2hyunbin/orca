@@ -3,15 +3,19 @@
  * the snapshot a rollback depends on, its comparison and restore, and owner admission.
  */
 import {
+  closeSync,
   existsSync,
+  ftruncateSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   statSync,
   symlinkSync,
   utimesSync,
-  writeFileSync
+  writeFileSync,
+  writeSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -74,6 +78,50 @@ describe('Windows snapshot ops', () => {
     mkdirSync(empty)
     expect(await op('snapshot-capture', empty, snapshot)).toBe('EMPTY')
     expect(await op('snapshot-probe', snapshot)).toBe('ABSENT')
+  })
+
+  it('compares every byte across chunk boundaries and the final partial chunk', async () => {
+    const file = join(root, 'profiles', 'p1', 'profile-state.db')
+    const bytes = Buffer.alloc(2 * 64 * 1024 + 3, 0xa5)
+    writeFileSync(file, bytes)
+    expect(await op('snapshot-capture', root, snapshot)).toBe('CAPTURED')
+    expect(await op('snapshot-compare', root, snapshot)).toBe('UNCHANGED')
+
+    const fd = openSync(file, 'r+')
+    try {
+      for (const offset of [0, 64 * 1024, bytes.length - 1]) {
+        writeSync(fd, Buffer.from([0x5a]), 0, 1, offset)
+        expect(await op('snapshot-compare', root, snapshot)).toBe('CHANGED')
+        writeSync(fd, bytes, offset, 1, offset)
+      }
+    } finally {
+      closeSync(fd)
+    }
+    expect(await op('snapshot-compare', root, snapshot)).toBe('UNCHANGED')
+  })
+
+  it('compares a large profile file without retaining both complete copies', async () => {
+    const file = join(root, 'profiles', 'p1', 'profile-state.db')
+    const fd = openSync(file, 'w')
+    try {
+      ftruncateSync(fd, 256 * 1024 * 1024)
+    } finally {
+      closeSync(fd)
+    }
+    expect(await op('snapshot-capture', root, snapshot)).toBe('CAPTURED')
+    writeFileSync(
+      script,
+      `${ORCAD_WINDOWS_HOST_SCRIPT}\nprocess.on('exit', () => process.stderr.write(JSON.stringify({ rss: process.memoryUsage().rss })))`
+    )
+    const result = await runProcess({
+      program: process.execPath,
+      args: [script, 'snapshot-compare', root, snapshot],
+      env: { ...process.env, NODE_OPTIONS: undefined, ORCA_BACKGROUND_LAUNCH: '1' }
+    })
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toBe('UNCHANGED')
+    const memory: { rss: number } = JSON.parse(result.stderr)
+    expect(memory.rss).toBeLessThan(192 * 1024 * 1024)
   })
 
   it('fails closed on a link inside captured state', async () => {

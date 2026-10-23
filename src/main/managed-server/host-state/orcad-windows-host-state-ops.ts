@@ -146,13 +146,40 @@ function treeHasLink(target) {
   return fs.readdirSync(target).some((name) => treeHasLink(path.join(target, name)))
 }
 
+function readComparisonChunk(fd, buffer) {
+  let length = 0
+  while (length < buffer.length) {
+    const count = fs.readSync(fd, buffer, length, buffer.length - length, null)
+    if (count === 0) break
+    length += count
+  }
+  return length
+}
+
+function filesEqual(left, right) {
+  const leftFd = fs.openSync(left, 'r')
+  try {
+    const rightFd = fs.openSync(right, 'r')
+    try {
+      const a = Buffer.allocUnsafe(64 * 1024)
+      const b = Buffer.allocUnsafe(a.length)
+      while (true) {
+        const length = readComparisonChunk(leftFd, a)
+        if (length !== readComparisonChunk(rightFd, b)) return false
+        if (length === 0) return true
+        if (!a.subarray(0, length).equals(b.subarray(0, length))) return false
+      }
+    } finally { fs.closeSync(rightFd) }
+  } finally { fs.closeSync(leftFd) }
+}
+
 function treesEqual(left, right) {
   const a = lstatOrNull(left)
   const b = lstatOrNull(right)
   if (!a || !b) return !a && !b
   if (a.isSymbolicLink() || b.isSymbolicLink()) throw new Error('link in state')
   if (a.isDirectory() !== b.isDirectory()) return false
-  if (!a.isDirectory()) return a.size === b.size && fs.readFileSync(left).equals(fs.readFileSync(right))
+  if (!a.isDirectory()) return a.size === b.size && filesEqual(left, right)
   const names = fs.readdirSync(left).sort()
   const other = fs.readdirSync(right).sort()
   return names.length === other.length && names.every((name, index) => name === other[index] && treesEqual(path.join(left, name), path.join(right, name)))
