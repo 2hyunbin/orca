@@ -136,15 +136,9 @@ function normalizeMultilineField(value: unknown, maxLength: number): string {
 }
 
 function getTrimmedStringBounds(value: string): { start: number; end: number } {
-  let start = 0
-  let end = value.length
-  while (start < end && isEcmaTrimWhitespace(value.charCodeAt(start))) {
-    start++
-  }
-  while (end > start && isEcmaTrimWhitespace(value.charCodeAt(end - 1))) {
-    end--
-  }
-  return { start, end }
+  const withoutLeading = value.trimStart()
+  const start = value.length - withoutLeading.length
+  return { start, end: start + withoutLeading.trimEnd().length }
 }
 
 function trimTrailingWhitespace(value: string): string {
