@@ -3,6 +3,15 @@ import { expect, test } from './helpers/orca-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 type ActivityState = 'idle' | 'working' | 'blocked'
+type CountTypography = {
+  fontFamily: string
+  fontSize: string
+  fontWeight: string
+  lineHeight: string
+  color: string
+  textShadow: string
+  fontVariantNumeric: string
+}
 
 const CASES = [
   { state: 'idle', count: 0 },
@@ -13,7 +22,8 @@ const CASES = [
   { state: 'working', count: 100 },
   { state: 'blocked', count: 1 },
   { state: 'blocked', count: 12 },
-  { state: 'blocked', count: 99 }
+  { state: 'blocked', count: 99 },
+  { state: 'blocked', count: 100 }
 ] as const
 
 async function seedActivity(
@@ -55,7 +65,13 @@ async function seedActivity(
   )
 }
 
-async function expectActivityGeometry(button: Locator, state: ActivityState, count: number) {
+async function expectActivityGeometry(
+  button: Locator,
+  state: ActivityState,
+  count: number,
+  referenceTypography: CountTypography,
+  referenceLetterSpacing: string
+) {
   const label = state === 'blocked' ? 'Needs You' : state === 'working' ? 'Working' : 'Idle'
   const description = button.locator(`[aria-label="${label}: ${count}"]`)
   await expect(description).toHaveText(count > 99 ? '99+' : String(count))
@@ -73,6 +89,7 @@ async function expectActivityGeometry(button: Locator, state: ActivityState, cou
     }
     const textRange = document.createRange()
     textRange.selectNodeContents(countText)
+    const style = getComputedStyle(countText)
     const rect = (value: DOMRect) => ({
       left: value.left,
       right: value.right,
@@ -86,22 +103,46 @@ async function expectActivityGeometry(button: Locator, state: ActivityState, cou
       button: rect(element.getBoundingClientRect()),
       bell: rect(bell.getBoundingClientRect()),
       status: rect(status.getBoundingClientRect()),
-      count: rect(textRange.getBoundingClientRect())
+      count: rect(textRange.getBoundingClientRect()),
+      countLineBox: rect(countText.getBoundingClientRect()),
+      countTypography: {
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        color: style.color,
+        textShadow: style.textShadow,
+        fontVariantNumeric: style.fontVariantNumeric
+      },
+      letterSpacing: style.letterSpacing
     }
   })
 
   expect(geometry.button.width, 'The control must keep its existing width').toBe(24)
   expect(geometry.button.height, 'The control must keep its existing height').toBe(24)
-  expect(geometry.bell.right, 'The count must not overlap the bell').toBeLessThanOrEqual(
+  expect(geometry.status.right, 'The status must not overlap the superscript').toBeLessThanOrEqual(
     geometry.count.left + 0.25
   )
   expect(
-    Math.abs(geometry.status.centerX - geometry.count.centerX),
-    'The status and count must share a vertical axis'
+    Math.abs(geometry.bell.centerX - geometry.button.centerX),
+    'The bell must stay horizontally centered'
   ).toBeLessThanOrEqual(0.25)
-  expect(geometry.status.bottom, 'The status must clear the count').toBeLessThanOrEqual(
-    geometry.count.top + 0.25
+  expect(geometry.status.top, 'The status must sit above the bell').toBeLessThan(geometry.bell.top)
+  expect(geometry.countLineBox.top, 'The count must sit above the bell').toBeLessThan(
+    geometry.bell.top
   )
+  expect(
+    Math.abs(geometry.count.right - geometry.button.right),
+    'The superscript must keep the same right anchor across digit widths'
+  ).toBeLessThanOrEqual(0.25)
+  expect(geometry.countTypography, 'Use the same count styling as worktree references').toEqual(
+    referenceTypography
+  )
+  if (count > 9) {
+    expect(geometry.letterSpacing, 'Keep the established spacing for multiple digits').toBe(
+      referenceLetterSpacing
+    )
+  }
   for (const [name, glyph] of Object.entries({
     bell: geometry.bell,
     status: geometry.status,
@@ -114,30 +155,74 @@ async function expectActivityGeometry(button: Locator, state: ActivityState, cou
     expect(glyph.right, `${name} must fit the right edge`).toBeLessThanOrEqual(
       geometry.button.right + 0.25
     )
-    expect(glyph.top, `${name} must fit the top edge`).toBeGreaterThanOrEqual(
+    // Range height includes unpainted font ascent; the line box owns vertical layout.
+    const verticalBounds = name === 'count' ? geometry.countLineBox : glyph
+    expect(verticalBounds.top, `${name} must fit the top edge`).toBeGreaterThanOrEqual(
       geometry.button.top - 0.25
     )
-    expect(glyph.bottom, `${name} must fit the bottom edge`).toBeLessThanOrEqual(
+    expect(verticalBounds.bottom, `${name} must fit the bottom edge`).toBeLessThanOrEqual(
       geometry.button.bottom + 0.25
     )
   }
 }
 
 for (const theme of ['dark', 'light'] as const) {
-  test(`activity counts clear the bell and align with their status (${theme})`, async ({
+  test(`activity superscripts fit beside their status without changing the control size (${theme})`, async ({
     orcaPage
   }) => {
     await waitForSessionReady(orcaPage)
     const worktreeId = await waitForActiveWorktree(orcaPage)
-    await orcaPage.evaluate(async (theme) => {
-      const store = window.__store
-      if (!store) {
-        throw new Error('window.__store is unavailable')
-      }
-      await store.getState().updateSettings({ theme, agentsSidebarIntroShown: true })
-      store.getState().setSidebarBody('workspaces')
-    }, theme)
+    await orcaPage.evaluate(
+      async ({ theme, worktreeId }) => {
+        const store = window.__store
+        if (!store) {
+          throw new Error('window.__store is unavailable')
+        }
+        await store.getState().updateSettings({ theme, agentsSidebarIntroShown: true })
+        store.getState().setSidebarBody('workspaces')
+        store.setState({
+          worktreesByRepo: Object.fromEntries(
+            Object.entries(store.getState().worktreesByRepo).map(([repoId, worktrees]) => [
+              repoId,
+              worktrees.map((worktree) =>
+                worktree.id === worktreeId
+                  ? {
+                      ...worktree,
+                      linkedItems: Array.from({ length: 12 }, (_, index) => ({
+                        provider: 'github' as const,
+                        type: 'pr' as const,
+                        number: index + 1
+                      }))
+                    }
+                  : worktree
+              )
+            ])
+          )
+        })
+        await document.fonts.ready
+      },
+      { theme, worktreeId }
+    )
     await expect(orcaPage.locator('html')).toHaveClass(theme === 'dark' ? /\bdark\b/ : /\blight\b/)
+    const referenceCount = orcaPage.locator('[data-reference-count]').first()
+    await expect(referenceCount).toHaveText('12')
+    const { referenceTypography, referenceLetterSpacing } = await referenceCount.evaluate(
+      (element) => {
+        const style = getComputedStyle(element)
+        return {
+          referenceTypography: {
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            lineHeight: style.lineHeight,
+            color: style.color,
+            textShadow: style.textShadow,
+            fontVariantNumeric: style.fontVariantNumeric
+          },
+          referenceLetterSpacing: style.letterSpacing
+        }
+      }
+    )
 
     for (const sidebarBody of ['workspaces', 'agents'] as const) {
       if (sidebarBody === 'agents') {
@@ -150,7 +235,13 @@ for (const theme of ['dark', 'light'] as const) {
       for (const { state, count } of CASES) {
         await test.step(`${sidebarBody}: ${state} ${count}`, async () => {
           await seedActivity(orcaPage, worktreeId, state, count)
-          await expectActivityGeometry(button, state, count)
+          await expectActivityGeometry(
+            button,
+            state,
+            count,
+            referenceTypography,
+            referenceLetterSpacing
+          )
         })
       }
     }

@@ -94,13 +94,13 @@ const SidebarHeader = React.memo(function SidebarHeader({
                     onClick={() => setSidebarBody?.(agentsViewActive ? 'workspaces' : 'agents')}
                   >
                     <span className="relative size-6 shrink-0">
-                      <Bell className="absolute left-0 top-1.5 size-3" />
+                      <Bell className="absolute left-[5px] top-2 size-3.5" />
                       <span
                         className="pointer-events-none absolute inset-0"
                         id={activityBadgeId}
                         aria-label={`${activityStatusLabel}: ${activityCount}`}
                       >
-                        <span className="absolute right-0 top-px flex h-2 w-3 items-center justify-center">
+                        <span className="absolute left-px top-px flex size-2 items-center justify-center">
                           {counts.attention > 0 ? (
                             <AgentQuestionIcon className="size-2" />
                           ) : (
@@ -112,15 +112,14 @@ const SidebarHeader = React.memo(function SidebarHeader({
                             />
                           )}
                         </span>
-                        <span className="absolute right-0 top-3 flex h-2.5 w-3 items-center justify-center text-center text-[9px] font-medium leading-[10px] tabular-nums">
-                          <span
-                            className={cn(
-                              'shrink-0',
-                              activityCount > 99 && 'origin-center scale-x-65'
-                            )}
-                          >
-                            {activityCount > 99 ? '99+' : activityCount}
-                          </span>
+                        <span
+                          className={cn(
+                            'icon-superscript-count right-0 top-0',
+                            activityCount > 99 && 'origin-right scale-x-65'
+                          )}
+                          data-multiple-digits={activityCount > 9}
+                        >
+                          {activityCount > 99 ? '99+' : activityCount}
                         </span>
                       </span>
                     </span>
