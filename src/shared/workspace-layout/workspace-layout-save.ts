@@ -50,7 +50,8 @@ function saveWorkspace(
   }
   // Rows and tab-bar entries follow the one tab order, as the rules and older readers expect.
   const ordered = tabsInOrder(workspace)
-  const tabs = [...ordered, ...workspace.tabs.filter((tab) => !ordered.includes(tab))]
+  const orderedTabs = new Set(ordered)
+  const tabs = [...ordered, ...workspace.tabs.filter((tab) => !orderedTabs.has(tab))]
   const rows = tabs
     .flatMap((tab) => (tab.kind === 'terminal' ? [tab] : []))
     .map((tab, index) => saveTerminalRow(tab, index, scope))
@@ -76,14 +77,15 @@ function saveWorkspace(
     .map((group) => {
       const selection = view.groups[key]?.[group.id]
       const activeTabId = selection?.activeTabId
+      const tabIds = new Set(group.tabOrder)
       return {
         id: group.id,
         worktreeId,
-        activeTabId: activeTabId && group.tabOrder.includes(activeTabId) ? activeTabId : null,
+        activeTabId: activeTabId && tabIds.has(activeTabId) ? activeTabId : null,
         tabOrder: group.tabOrder,
         ...(selection?.recentTabIds
           ? {
-              recentTabIds: selection.recentTabIds.filter((tabId) => group.tabOrder.includes(tabId))
+              recentTabIds: selection.recentTabIds.filter((tabId) => tabIds.has(tabId))
             }
           : {})
       }

@@ -52,8 +52,8 @@ function keepHeldIds<T>(
   return Object.fromEntries(
     Object.entries(byWorkspace).map(([key, byId]) => {
       const workspace = workspaces[key]
-      const held = workspace ? ids(workspace) : null
-      return [key, held ? (filterRecord(byId, (id) => held.includes(id)) ?? {}) : byId]
+      const held = workspace ? new Set(ids(workspace)) : null
+      return [key, held ? (filterRecord(byId, (id) => held.has(id)) ?? {}) : byId]
     })
   )
 }
@@ -83,11 +83,10 @@ export function pruneViewRecord(
       const selection = byGroup[group.id]
       if (selection) {
         const { activeTabId, recentTabIds } = selection
+        const tabIds = new Set(group.tabOrder)
         byGroup[group.id] = {
-          activeTabId: activeTabId && group.tabOrder.includes(activeTabId) ? activeTabId : null,
-          ...(recentTabIds
-            ? { recentTabIds: recentTabIds.filter((id) => group.tabOrder.includes(id)) }
-            : {})
+          activeTabId: activeTabId && tabIds.has(activeTabId) ? activeTabId : null,
+          ...(recentTabIds ? { recentTabIds: recentTabIds.filter((id) => tabIds.has(id)) } : {})
         }
       }
     }
