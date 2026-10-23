@@ -234,8 +234,8 @@ it('keeps new-source lead provenance/content and surviving-request relays on an 
   vi.useFakeTimers()
   const current = listenerState.createHookListenerState()
   const old = listenerState.createHookListenerState()
-  let accepted: ReturnType<typeof normalizeHookPayload>
-  let oldPayload: ReturnType<typeof oldFold>
+  let accepted: ReturnType<typeof normalizeHookPayload> | undefined
+  let oldPayload: ReturnType<typeof oldFold> | undefined
   const paneKey = makePaneKey('mixed-receiver', '44444444-4444-4444-8444-444444444444')
   const h = createAgentStatusExtensionHarness({
     kind: 'pi',

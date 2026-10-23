@@ -386,7 +386,7 @@ describe('selected source lifetime', () => {
     const measure = async (n: number) => {
       let visits = 0
       const state = createHookListenerState()
-      let admitted: ReturnType<typeof normalizeHookPayload>
+      let admitted: ReturnType<typeof normalizeHookPayload> | undefined
       const h = createAgentStatusExtensionHarness({
         kind: 'omp',
         env: receiverEnv,
@@ -466,7 +466,7 @@ describe('selected source lifetime', () => {
 
   it('clears coalesced approval/plan closes through admitted metadata and keeps source-local answers', async () => {
     const state = createHookListenerState()
-    let row: ReturnType<typeof normalizeHookPayload>
+    let row: ReturnType<typeof normalizeHookPayload> | undefined
     let release: (() => void) | undefined
     let hold = false
     const h = createAgentStatusExtensionHarness({
