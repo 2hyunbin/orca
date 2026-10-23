@@ -113,7 +113,13 @@ describe('createIncrementalSyntaxTokenizer', () => {
     expect(text(progress, code)).toBe(code)
 
     while (progress.highlightedLength < code.length) {
-      progress = tokenize(code, 1)
+      const previous = progress
+      const previousColors = colors(previous)
+      Object.freeze(previous.lines)
+      progress = tokenize(code, 3)
+      expect(colors(previous)).toEqual(previousColors)
+      expect(text(previous, code)).toBe(code)
+      expect(progress.lines[0]).toBe(previous.lines[0])
     }
     expect(colors(progress)).toEqual(
       colors(createIncrementalSyntaxTokenizer(tokenizer)(code, Infinity))

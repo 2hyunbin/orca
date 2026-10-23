@@ -48,6 +48,7 @@ export function createIncrementalSyntaxTokenizer(
       lines = []
       degraded = false
     }
+    let copiedLines = false
     const deadline = performance.now() + budgetMs
     // Why: markdown ends a fence still being written with a newline, so the last line can grow.
     const lastBreak = code.lastIndexOf('\n', code.length - 2) + 1
@@ -75,7 +76,11 @@ export function createIncrementalSyntaxTokenizer(
         start = lineEnd + ending.length
         return line
       })
-      lines = [...lines, ...batch]
+      if (!copiedLines) {
+        lines = [...lines]
+        copiedLines = true
+      }
+      lines.push(...batch)
       completed = code.slice(0, end)
     }
     const last = code.slice(completed.length)
