@@ -6,6 +6,7 @@ import {
   type OrcadStaleLockEvidence
 } from '../../../../shared/orcad-stale-lock-reclaim'
 import type { SshManagedServerStatus } from '../../../../shared/ssh-types'
+import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
@@ -57,31 +58,47 @@ export function SshHostRecoverServerDialog({
   onChanged: () => void
 }): React.JSX.Element | null {
   const api = getManagedOrcadApi()
+  if (!api || !open || !canRecoverSshHostServer(status) || status?.kind !== 'managed') {
+    return null
+  }
+  // Mounted per opening, so each one starts from a fresh check.
+  return (
+    <OpenRecoverServerDialog
+      api={api}
+      environmentId={status.environmentId}
+      detail={status.serving?.detail ?? ''}
+      onOpenChange={onOpenChange}
+      onChanged={onChanged}
+    />
+  )
+}
+
+function OpenRecoverServerDialog({
+  api,
+  environmentId,
+  detail,
+  onOpenChange,
+  onChanged
+}: {
+  api: ManagedOrcadPreloadApi
+  environmentId: string
+  detail: string
+  onOpenChange: (open: boolean) => void
+  onChanged: () => void
+}): React.JSX.Element {
   const mountedRef = useMountedRef()
   const [check, setCheck] = useState<OrcadManagedStaleLockReclaimResult | null>(null)
   const [confirmed, setConfirmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const recoverable = canRecoverSshHostServer(status) && status?.kind === 'managed'
-  const environmentId = recoverable ? status.environmentId : null
-  const detail = recoverable ? (status.serving?.detail ?? '') : ''
 
   useEffect(() => {
-    if (!api || !open || !environmentId) {
-      return
-    }
-    setCheck(null)
-    setConfirmed(false)
-    setError(null)
     api.reclaimStaleLock({ selector: environmentId, yes: false }).then(
       (next) => mountedRef.current && setCheck(next),
       (cause: unknown) => mountedRef.current && setError(messageOf(cause))
     )
-  }, [api, environmentId, mountedRef, open])
+  }, [api, environmentId, mountedRef])
 
-  if (!api || !environmentId) {
-    return null
-  }
   const reclaim = async (): Promise<void> => {
     setBusy(true)
     setError(null)
@@ -112,7 +129,7 @@ export function SshHostRecoverServerDialog({
   }
   const eligible = check?.status === 'eligible'
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && !busy && onOpenChange(false)}>
+    <Dialog open onOpenChange={(next) => !next && !busy && onOpenChange(false)}>
       <DialogContent showCloseButton={!busy}>
         <DialogHeader>
           <DialogTitle>
