@@ -1,56 +1,68 @@
-import { describe, expect, it, vi } from 'vitest'
+// @vitest-environment happy-dom
 
-const CATALOG: Record<string, string> = {
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.agent': '智能体',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.notStarted': '无法启动 {{agent}}。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.unconfirmed':
-    '无法确认 {{agent}} 已启动。请先检查其终端，再重试。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.exitedDuringStart':
-    '{{agent}} 在启动时退出了。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.workspaceGone':
-    '{{agent}} 的工作区已不可用，无法启动。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.restoreWorkspace':
-    '请恢复工作区文件夹或打开可用的工作区，然后重试。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.tryInTerminal':
-    '请在此文件夹的终端中运行它以查看原因，然后重试。'
-}
-vi.mock('@/i18n/i18n', () => ({
-  translate: (key: string, fallback: string, options?: { agent?: string }) =>
-    (CATALOG[key] ?? fallback).replaceAll('{{agent}}', options?.agent ?? '')
-}))
+import React from 'react'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { i18n, setRendererUiLanguage } from '@/i18n/i18n'
+import { AgentLaunchPaneNotice } from './AgentLaunchPaneNotice'
+import { TerminalErrorToast } from './TerminalErrorToast'
+import { agentLaunchPaneOutcomeForLeaf } from './agent-launch-pane-notice-text'
 
-const { agentLaunchErrorText, agentLaunchPaneNoticeText, agentLaunchPaneOutcomeForLeaf } =
-  await import('./agent-launch-pane-notice-text')
+afterEach(async () => {
+  cleanup()
+  await i18n.changeLanguage('en')
+})
 
-describe("the pane of a launch whose agent isn't running", () => {
-  it("says it couldn't start, in the viewer's language, with a reason they can act on", () => {
-    expect(
-      agentLaunchPaneNoticeText(
-        { kind: 'not-started', code: 'agent_session_exited_during_start' },
-        'claude'
+describe('localized startup failure surfaces', () => {
+  it.each([
+    {
+      language: 'en',
+      exit: 'Codex exited while starting. Run it in a terminal in this folder to see why, then try again.',
+      workspace:
+        "Codex couldn't start because its workspace is no longer available. Restore the workspace folder or open an available workspace, then try again.",
+      unknown: "Couldn't confirm Codex started. Check its terminal before trying again."
+    },
+    {
+      language: 'zh',
+      exit: 'Codex 在启动时退出了。 请在此文件夹的终端中运行它以查看原因，然后重试。',
+      workspace:
+        '无法启动 Codex，因为其工作区已不可用。 请恢复工作区文件夹或打开可用的工作区，然后重试。',
+      unknown: '无法确认 Codex 已启动。请先检查其终端，再重试。'
+    }
+  ] as const)('renders both real mappings with the shipped $language catalog', async (copy) => {
+    await setRendererUiLanguage(copy.language)
+    for (const [code, expected, refusal] of [
+      [
+        'agent_session_exited_during_start',
+        copy.exit,
+        { kind: 'not-started', code: 'agent_session_exited_during_start' }
+      ],
+      ['worktree_not_found', copy.workspace, { kind: 'not-started', code: 'worktree_not_found' }],
+      ['agent_session_operation_unknown', copy.unknown, { kind: 'unconfirmed' }]
+    ] as const) {
+      const toast = render(
+        React.createElement(TerminalErrorToast, {
+          error: `Error invoking remote method 'pty:spawn': Error: ${code}`,
+          agentId: 'codex',
+          paneOnClient: false,
+          onDismiss: vi.fn()
+        })
       )
-    ).toBe('Claude 在启动时退出了。 请在此文件夹的终端中运行它以查看原因，然后重试。')
-  })
-
-  it('offers a possible workspace remedy on both startup surfaces when the folder is missing', () => {
-    const expected =
-      'Codex 的工作区已不可用，无法启动。 请恢复工作区文件夹或打开可用的工作区，然后重试。'
-    expect(
-      agentLaunchPaneNoticeText({ kind: 'not-started', code: 'worktree_not_found' }, 'codex')
-    ).toBe(expected)
-    expect(agentLaunchErrorText('worktree_not_found', 'codex')).toBe(expected)
-  })
-
-  it('never shows a host error code', () => {
-    expect(
-      agentLaunchPaneNoticeText({ kind: 'not-started', code: 'agent_launch_pane_already_live' })
-    ).toBe('无法启动 智能体。 请在此文件夹的终端中运行它以查看原因，然后重试。')
-  })
-
-  it("says it can't confirm, never that it failed, when nobody knows", () => {
-    expect(agentLaunchPaneNoticeText({ kind: 'unconfirmed' })).toBe(
-      '无法确认 智能体 已启动。请先检查其终端，再重试。'
-    )
+      const pane = render(
+        React.createElement(AgentLaunchPaneNotice, {
+          refusal,
+          agentId: 'codex',
+          tabId: 'localized-startup-failure'
+        })
+      )
+      expect(toast.container.querySelector('span')?.textContent).toBe(expected)
+      expect(pane.container.querySelector('span')?.textContent).toBe(expected)
+      expect(toast.container.querySelector('a')).toBeNull()
+      expect(toast.container.textContent).not.toContain(code)
+      expect(pane.container.textContent).not.toContain(code)
+      toast.unmount()
+      pane.unmount()
+    }
   })
 })
 
