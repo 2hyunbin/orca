@@ -14,6 +14,8 @@ import {
   type FileLinkTarget
 } from './terminal-file-link-target'
 import { createTerminalPathExistenceBatch } from './terminal-path-existence-batch'
+import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
+import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-revision'
 import {
   buildHardWrappedPathLogicalLineCandidates,
   buildWrappedLogicalLine,
@@ -91,25 +93,26 @@ export function openFilePathLinkAtBufferPosition(
       onOpenFailure: reportsFailure ? (failure) => onOpenFailure(reportedPath, failure) : undefined
     })
   }
-  const known = longestPath(
-    links.filter((link) => link.cachedExists === true || link.isKnownWorktreeRoot)
-  )
-  // Why longer only: a cached `foo.ts` must not win over an unchecked hard-wrapped `foo.ts.map`.
-  const unprobed = links.filter(
-    (link, index) =>
-      link.cachedExists === undefined &&
-      !link.isKnownWorktreeRoot &&
-      (!known || link.pathText.length > known.pathText.length) &&
-      links.findIndex((other) => other.cacheKey === link.cacheKey) === index
-  )
-  // Why: a share outside the workspace is never stat'ed unprompted, so its click opens the
-  // longest guess as before and lets the host resolve it.
   const host: FileLinkHost = { ...deps, cwd: deps.startupCwd, homePath: deps.terminalHomePath }
-  const uncheckable = unprobed.filter((link) => !mayCheckFileLinkTargetUnprompted(link, host))
-  const checkable = unprobed.filter((link) => !uncheckable.includes(link))
-  const guess = longestPath(uncheckable)
-  if (checkable.length === 0 || (!known && !guess && checkable.length === 1)) {
-    const link = known ?? guess ?? checkable[0]
+  // Why: a share outside the workspace is never stat'ed unprompted; like a verified path, its
+  // guess opens as is and the host resolves it.
+  const settled = (link: ClickedFileLink): boolean =>
+    link.cachedExists === true ||
+    link.isKnownWorktreeRoot ||
+    (link.cachedExists === undefined && !mayCheckFileLinkTargetUnprompted(link, host))
+  const unique = links.filter(
+    (link, index) => links.findIndex((other) => other.cacheKey === link.cacheKey) === index
+  )
+  const best = longestPath(unique.filter(settled))
+  // Why longer only: a cached `foo.ts` must not win over an unchecked hard-wrapped `foo.ts.map`.
+  const toProbe = unique.filter(
+    (link) =>
+      link.cachedExists === undefined &&
+      !settled(link) &&
+      (!best || link.pathText.length > best.pathText.length)
+  )
+  if (toProbe.length === 0 || (!best && toProbe.length === 1)) {
+    const link = best ?? toProbe[0]
     if (link) {
       open(link)
     }
@@ -119,16 +122,20 @@ export function openFilePathLinkAtBufferPosition(
   // Why: hard-wrap joining offers guesses like `a.txt/b.txt` that sort first; opening one
   // before its hover probe answers (a host round-trip) fails and hides the real path.
   const isLatestOpen = reserveDetectedFilePathOpenTurn()
-  void probeClickedFileLinks(checkable, deps).then((existing) => {
-    if (gesture !== latestClickGesture || !isLatestOpen()) {
+  const environmentId = runtimeTargetEnvironmentId(toProbe[0].fileContext.target)
+  const pairing = environmentId ? getRuntimeEnvironmentRevision(environmentId) : undefined
+  void probeClickedFileLinks(toProbe, deps).then((existing) => {
+    const repaired = environmentId && getRuntimeEnvironmentRevision(environmentId) !== pairing
+    // Why: a re-paired server may be another machine; its same-named file is not the one clicked.
+    if (gesture !== latestClickGesture || !isLatestOpen() || repaired) {
       return
     }
     const found = longestPath(existing)
     // Why the shortest otherwise: opening it lets the open report the real failure instead of
     // a probe guessing "missing" for a refusal.
-    const link = found ?? known ?? guess ?? shortestPath(checkable)
+    const link = found ?? best ?? shortestPath(toProbe)
     if (link) {
-      open(link, found !== undefined)
+      open(link, link === found || link.cachedExists === true)
     }
   })
   return true
