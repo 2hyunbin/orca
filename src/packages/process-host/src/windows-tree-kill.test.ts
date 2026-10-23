@@ -70,7 +70,6 @@ describe('windows tree kill tracker', () => {
     launched[0].emit('close', 0)
     await expect(secondWait).resolves.toBe(true)
     expect(inFlightWindowsTreeKill(child)).toBeUndefined()
-    // A proven kill stays proven: no second taskkill against a pid Windows may reissue.
     expect(startWindowsTreeKill(child, 1234, vi.fn())).toBe(first)
     expect(launch).toHaveBeenCalledOnce()
   })
@@ -121,7 +120,6 @@ describe('windows tree kill tracker', () => {
     await expect(kill.settled).resolves.toBe('unverifiable')
     expect(launched[0].kill).toHaveBeenCalledOnce()
     expect(killRoot).toHaveBeenCalledOnce()
-    // A late success after abandonment does not rewrite the verdict.
     launched[0].emit('close', 0)
     expect(kill.verdict()).toBe('unverifiable')
   })
