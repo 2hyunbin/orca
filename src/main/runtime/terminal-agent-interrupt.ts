@@ -38,7 +38,7 @@ export async function interruptWorkingAgent(
       throw new Error('agent_not_reachable')
     }
     const row = readHookRow(paneKey)
-    // Escape reaches only the main agent's turn; with it done, background work leaves an idle composer.
+    // Escape stops only the main agent's turn; background work alone leaves an idle composer.
     const turnRuns = row?.mainAgent
       ? row.mainAgent.state === 'working'
       : row && hookRowAgentPhase(row) === 'working'
