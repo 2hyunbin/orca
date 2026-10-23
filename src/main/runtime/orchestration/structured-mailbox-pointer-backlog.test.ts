@@ -35,7 +35,7 @@ it('rechecks ownership and consumed rows before each handoff', async () => {
       readSessionFacts: async () => ({ submissions: [] }),
       currentFence: () => 1,
       currentContextClearOperationId: () => undefined,
-      hasActionablePromptNow: () => false,
+      takesMailNow: () => true,
       send: async () => {
         sends++
         if (sends === (mode === 'page' ? 50 : 1)) {
@@ -78,7 +78,7 @@ it('visits all reports in order across pending, accepted and failed prefixes wit
         readSessionFacts: async () => ({ submissions: [...submissions.values()] }),
         currentFence: () => 1,
         currentContextClearOperationId: () => undefined,
-        hasActionablePromptNow: () => false,
+        takesMailNow: () => true,
         send: (input) => {
           const source = input.body.from?.orchestration
           const messageId =

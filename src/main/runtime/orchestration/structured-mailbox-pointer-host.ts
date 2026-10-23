@@ -118,8 +118,9 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
       return readPointerSessionFacts(sessionId)
     },
 
-    hasActionablePromptNow(sessionId) {
-      return getStructuredAgentSessionHost()?.currentWork(sessionId)?.hasActionablePrompt() ?? null
+    takesMailNow(sessionId) {
+      const work = getStructuredAgentSessionHost()?.currentWork(sessionId)
+      return work ? !holdsMail(work) : null
     },
 
     currentFence(sessionId) {
@@ -151,14 +152,16 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
             input.onAnswered?.(refusal?.code !== AGENT_SESSION_NOT_ATTACHED.code),
           turn: {
             body: input.body,
-            // A person's plain send: every agent takes it the way it takes their own mid-turn message.
+            // Admitted only into an idle chat (beforeRun), so no agent's turn is steered or cut off.
             delivery: 'now',
             operationId: input.operationId,
             expectedRuntimeFence: input.expectedRuntimeFence,
             beforeRun: () => {
+              const work = host.currentWork(input.sessionId)
               if (
                 input.body.from?.orchestration?.message === 'mail-notice' &&
-                host.currentWork(input.sessionId)?.hasActionablePrompt()
+                work &&
+                holdsMail(work)
               ) {
                 throw new StructuredMailHeldError()
               }
@@ -193,3 +196,9 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
 }
 
 class StructuredMailHeldError extends Error {}
+
+/** Mail waits for the turn to end, as terminal mail does: an agent that cannot take a message
+ *  mid-turn would cancel its turn for it, and one waiting on the person would lose the answer. */
+function holdsMail(work: { working(): boolean; hasActionablePrompt(): boolean }): boolean {
+  return work.working() || work.hasActionablePrompt()
+}

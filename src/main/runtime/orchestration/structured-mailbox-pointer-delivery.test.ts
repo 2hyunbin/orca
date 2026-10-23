@@ -34,7 +34,7 @@ function harness(options: {
   const mailbox = options.mailbox ?? 'dispatch:d1'
   const dispatchId = options.dispatchId === undefined ? 'd1' : options.dispatchId
   let attached = options.attached ?? true
-  let promptWaiting = false
+  let busy = false
   // The session's recorded sends, as its journal reports them.
   let submissions: StructuredMailSubmission[] = []
   // The mailbox's unread mail; a message the chat received is no longer selected.
@@ -46,7 +46,7 @@ function harness(options: {
     }
   })
   const send: StructuredMailboxPointerHost['send'] = vi.fn(async () =>
-    promptWaiting
+    busy
       ? { kind: 'held' as const }
       : options.queued
         ? { kind: 'queued' as const }
@@ -87,7 +87,7 @@ function harness(options: {
       readSessionFacts: async () => (attached ? { submissions } : null),
       currentFence: () => 4,
       currentContextClearOperationId: readContext,
-      hasActionablePromptNow: () => promptWaiting,
+      takesMailNow: () => !busy,
       send
     }
   })
@@ -105,8 +105,8 @@ function harness(options: {
     setSubmissions: (next: StructuredMailSubmission[]) => {
       submissions = next
     },
-    setPromptWaiting: (next: boolean) => {
-      promptWaiting = next
+    setBusy: (next: boolean) => {
+      busy = next
     }
   }
 }
@@ -244,19 +244,32 @@ describe('structured mail delivery', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
-  it('holds mail while a prompt waits on the person, keeps later mail behind it, then sends both in order', async () => {
-    const { delivery, send, markAsRead, receive, setPromptWaiting } = harness({})
+  it('holds mail while the chat is busy, then sends one message per idle turn, oldest first', async () => {
+    const { delivery, send, markAsRead, receive, setBusy } = harness({})
     receive('m2', 4)
-    setPromptWaiting(true)
+    setBusy(true)
     delivery.deliverForHandle('dispatch:d1')
     await flush()
     expect(send).toHaveBeenCalledTimes(1)
     expect(markAsRead).not.toHaveBeenCalled()
-    setPromptWaiting(false)
+    // An admitted message starts the agent's turn, so the next one waits for that turn to end.
+    const admit = vi.mocked(send).getMockImplementation()!
+    vi.mocked(send).mockImplementation(async (input) => {
+      const outcome = await admit(input)
+      if (outcome.kind !== 'held') {
+        setBusy(true)
+      }
+      return outcome
+    })
+    setBusy(false)
+    delivery.onJournalActivity('session-1')
+    await vi.waitFor(() => expect(markAsRead.mock.calls).toEqual([[['m1']]]))
+    await flush()
+    expect(markAsRead.mock.calls).toEqual([[['m1']]])
+    setBusy(false)
     delivery.onJournalActivity('session-1')
     await vi.waitFor(() => expect(markAsRead.mock.calls).toEqual([[['m1']], [['m2']]]))
     const sentIds = send.mock.calls.map(([input]) => input.body.from?.orchestration)
-    expect(sentIds.at(-2)).toMatchObject({ messages: [{ messageId: 'm1' }] })
     expect(sentIds.at(-1)).toMatchObject({ messages: [{ messageId: 'm2' }] })
   })
 
@@ -534,7 +547,7 @@ describe('forgetting one settled worker', () => {
         readSessionFacts: async () => (attached ? { submissions: [] } : null),
         currentFence: () => 4,
         currentContextClearOperationId: () => undefined,
-        hasActionablePromptNow: () => false,
+        takesMailNow: () => true,
         send
       }
     })
@@ -635,7 +648,7 @@ describe('a mailbox a /clear moves while its send is in flight', () => {
         readSessionFacts: async () => ({ submissions: [] }),
         currentFence: () => 4,
         currentContextClearOperationId: () => contextClearOperationId,
-        hasActionablePromptNow: () => false,
+        takesMailNow: () => true,
         send
       }
     })

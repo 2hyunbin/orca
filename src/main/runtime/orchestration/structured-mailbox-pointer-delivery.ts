@@ -59,7 +59,7 @@ export type StructuredPointerSendOutcome =
   /** The chat's queue took it, as it takes a person's message. */
   | { kind: 'queued' }
   | { kind: 'unattached' }
-  /** Refused at admission: a prompt waits on the person. */
+  /** Refused at admission: the agent is working or a prompt waits on the person. */
   | { kind: 'held' }
 
 export type StructuredPointerSessionFacts = {
@@ -83,8 +83,9 @@ export type StructuredMailboxPointerHost = {
   /** Current lease fence; `null` when no record backs the session any more. */
   currentFence: (sessionId: string) => number | null
   currentContextClearOperationId: (sessionId: string) => string | undefined
-  /** Whether a prompt waits on the person right now; null when the session cannot be read. */
-  hasActionablePromptNow: (sessionId: string) => boolean | null
+  /** Whether the chat would take mail now (idle, nothing waiting on the person); null when the
+   *  session cannot be read. */
+  takesMailNow: (sessionId: string) => boolean | null
 }
 
 type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageWaiter> = {

@@ -19,7 +19,7 @@ import { structuredMailBody } from './structured-mail-source'
 import type { StructuredMailOperationOwner } from './structured-mail-operation-owners'
 
 /** Sends one message, or replays its send; false when the pass must stop here (the session cannot
- *  take any, or a prompt waits on the person and later mail must not overtake this one). */
+ *  take any, or the chat is busy and later mail must not overtake this one). */
 export async function sendStructuredMailboxMessage(
   db: OrchestrationDb,
   mailboxHandle: string,
@@ -80,7 +80,7 @@ export async function sendStructuredMailboxMessage(
         onAnswered: attempt.answered
       })
     let outcome = await send()
-    // Nothing is recorded for a held send, so the same id is safe to retry once the prompt clears.
+    // Nothing is recorded for a held send, so the same id is safe to retry once the chat is idle.
     while (outcome.kind === 'held') {
       if (!attempt.isCurrent()) {
         return false
@@ -88,7 +88,7 @@ export async function sendStructuredMailboxMessage(
       if (!attempt.isEligible(message)) {
         return true
       }
-      if (deps.host.hasActionablePromptNow(target.sessionId) !== false) {
+      if (deps.host.takesMailNow(target.sessionId) !== true) {
         break
       }
       outcome = await send()
@@ -150,7 +150,7 @@ export async function sendStructuredMailboxPage(input: {
   const sessionId = target.sessionId
   // Oldest first, each its own send. The next is issued once the host has answered this one,
   // never after the agent takes it in; one in doubt does not hold back the ones after it, but one
-  // held for a waiting prompt stops the pass so later mail cannot overtake it.
+  // held while the chat is busy stops the pass so later mail cannot overtake it.
   for (const message of unread) {
     if (!isCurrent()) {
       return false
