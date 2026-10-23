@@ -78,4 +78,14 @@ describe('inspecting a session that survived a relaunch unattached', () => {
       ).then(([result]) => result?.verdict)
     await vi.waitFor(async () => expect(await probe()).toBe('unverifiable'))
   })
+
+  // Loss of contact is never evidence of exit.
+  it('reads an unreachable daemon as unverifiable, never exited', async () => {
+    const { provider, id } = await relaunchWithSession()
+    await server.shutdown()
+    const [result] = await probePtyRunningWorkWithInspection([id], { timeoutMs: 3_000 }, (ptyId) =>
+      inspectPtyProviderProcessForRenderer(provider, ptyId, { includeUnattached: true })
+    )
+    expect(result?.verdict).toBe('unverifiable')
+  })
 })
