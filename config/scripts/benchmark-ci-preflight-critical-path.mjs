@@ -1,3 +1,4 @@
+import { readPinnedBunVersion } from './pinned-bun-executable.mjs'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { availableParallelism, totalmem } from 'node:os'
 import path from 'node:path'
@@ -65,8 +66,8 @@ try {
     report.host.bun = (
       await command('bun', ['--version'], 'critical-path-bun-version')
     ).stdout.trim()
-    if (report.host.bun !== '1.4.3') {
-      throw new Error('Pin Bun 1.4.3')
+    if (report.host.bun !== readPinnedBunVersion(root)) {
+      throw new Error(`Pin Bun ${readPinnedBunVersion(root)}`)
     }
   }
   if (comparison === 'sync-spawn') {
