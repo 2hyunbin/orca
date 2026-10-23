@@ -41,7 +41,7 @@ vi.mock('node:fs/promises', async () => {
   return { ...actual, stat: vi.fn(actual.stat) }
 })
 
-import { startShallowWatcher } from './parcel-watcher-shallow-subscription'
+import { startShallowDirectoryWatcher } from './parcel-watcher-shallow-subscription'
 
 function emit(path: string, fileName: string): void {
   watcherState.get(path)?.callback('change', fileName)
@@ -60,7 +60,7 @@ describe('shallow watcher subscription', () => {
       await mkdir(join(root, 'logs'))
       const events: string[] = []
       const { promise, resolve } = Promise.withResolvers<void>()
-      const subscription = startShallowWatcher(
+      const subscription = startShallowDirectoryWatcher(
         root,
         ['HEAD', 'config', 'logs/HEAD'],
         (nextEvents) => {
@@ -94,7 +94,7 @@ describe('shallow watcher subscription', () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
     try {
       const events: string[] = []
-      const subscription = startShallowWatcher(
+      const subscription = startShallowDirectoryWatcher(
         root,
         ['HEAD'],
         (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -118,7 +118,7 @@ describe('shallow watcher subscription', () => {
     async () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
       const events: string[] = []
-      const subscription = startShallowWatcher(
+      const subscription = startShallowDirectoryWatcher(
         root,
         ['plugin\\name'],
         (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -141,7 +141,7 @@ describe('shallow watcher subscription', () => {
     try {
       await mkdir(join(root, 'logs'))
       const events: string[] = []
-      const subscription = startShallowWatcher(
+      const subscription = startShallowDirectoryWatcher(
         root,
         ['HEAD', 'logs/HEAD'],
         (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -169,7 +169,7 @@ describe('shallow watcher subscription', () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
     try {
       await mkdir(join(root, 'logs'))
-      const subscription = startShallowWatcher(
+      const subscription = startShallowDirectoryWatcher(
         root,
         ['logs/HEAD'],
         () => {},
@@ -190,11 +190,11 @@ describe('shallow watcher subscription', () => {
     vi.useFakeTimers()
     const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
     const logs = join(root, 'logs')
-    let subscription: ReturnType<typeof startShallowWatcher> | undefined
+    let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
     try {
       await mkdir(logs)
       const events: string[] = []
-      subscription = startShallowWatcher(
+      subscription = startShallowDirectoryWatcher(
         root,
         ['HEAD', 'logs/HEAD'],
         (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -237,7 +237,7 @@ describe('shallow watcher subscription', () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-shallow-large-identity-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
-      let subscription: ReturnType<typeof startShallowWatcher> | undefined
+      let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
       try {
         if (parent) {
           await mkdir(directory)
@@ -276,7 +276,7 @@ describe('shallow watcher subscription', () => {
             options?.bigint ? nextBigInt : nextNumeric
           )
         const events: string[] = []
-        subscription = startShallowWatcher(
+        subscription = startShallowDirectoryWatcher(
           root,
           [join(parent, 'HEAD')],
           (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -321,7 +321,7 @@ describe('shallow watcher subscription', () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-shallow-inode-less-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
-      let subscription: ReturnType<typeof startShallowWatcher> | undefined
+      let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
       try {
         if (parent) {
           await mkdir(directory)
@@ -352,7 +352,7 @@ describe('shallow watcher subscription', () => {
           .mockResolvedValueOnce(replacement)
           .mockResolvedValueOnce(healthyReplacement)
         const events: string[] = []
-        subscription = startShallowWatcher(
+        subscription = startShallowDirectoryWatcher(
           root,
           [join(parent, 'HEAD')],
           (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -402,7 +402,7 @@ describe('shallow watcher subscription', () => {
       vi.useFakeTimers()
       const root = await mkdtemp(join(tmpdir(), 'orca-shallow-unavailable-identity-'))
       const directory = join(root, parent)
-      let subscription: ReturnType<typeof startShallowWatcher> | undefined
+      let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
       try {
         if (parent) {
           await mkdir(directory)
@@ -425,7 +425,7 @@ describe('shallow watcher subscription', () => {
         }
         const events: string[] = []
         const onError = vi.fn()
-        subscription = startShallowWatcher(
+        subscription = startShallowDirectoryWatcher(
           root,
           [join(parent, 'HEAD')],
           (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -471,7 +471,7 @@ describe('shallow watcher subscription', () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-shallow-known-identity-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
-      let subscription: ReturnType<typeof startShallowWatcher> | undefined
+      let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
       try {
         if (parent) {
           await mkdir(directory)
@@ -494,7 +494,7 @@ describe('shallow watcher subscription', () => {
         vi.mocked(stat).mockResolvedValue(unknown)
         const events: string[] = []
         const onError = vi.fn()
-        subscription = startShallowWatcher(
+        subscription = startShallowDirectoryWatcher(
           root,
           [join(parent, 'HEAD')],
           (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
@@ -545,7 +545,7 @@ describe('shallow watcher subscription', () => {
   it('resyncs included files when an initially missing directory becomes watchable', async () => {
     vi.useFakeTimers()
     const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
-    let subscription: ReturnType<typeof startShallowWatcher> | undefined
+    let subscription: ReturnType<typeof startShallowDirectoryWatcher> | undefined
     try {
       const defaultWatch = vi.mocked(watch).getMockImplementation()
       if (!defaultWatch) {
@@ -557,7 +557,7 @@ describe('shallow watcher subscription', () => {
           throw new Error('ENOENT: logs directory does not exist')
         })
       const events: string[] = []
-      subscription = startShallowWatcher(
+      subscription = startShallowDirectoryWatcher(
         root,
         ['HEAD', 'logs/HEAD'],
         (nextEvents) => events.push(...nextEvents.map((event) => event.path)),
