@@ -54,21 +54,21 @@ beforeEach(() => {
     feedback.push({ ...receipt.work, text: args[1] })
     return receipt.value
   })
-  for (const key of ['parseAgentDefaultEnvDraft', 'stringifyAgentDefaultEnvDraft'] as const) {
-    const original = envDraftModule[key]
-    vi.spyOn(envDraftModule, key).mockImplementation((input) => {
-      const receipt = measureSettingsWork(() => Reflect.apply(original, undefined, [input]))
-      const bytes = typeof input === 'string' ? input.length : JSON.stringify(input).length
-      // Parse reads/writes each pair; stringify maps and joins each output entry.
-      const pairs =
-        typeof input === 'string'
-          ? Object.keys(receipt.value.env).length
-          : Object.keys(input).length
-      uiWork.entries += receipt.work.entries + 3 * pairs
-      uiWork.bytes += receipt.work.bytes + 4 * bytes
-      return receipt.value
-    })
-  }
+  const parse = envDraftModule.parseAgentDefaultEnvDraft
+  vi.spyOn(envDraftModule, 'parseAgentDefaultEnvDraft').mockImplementation((input) => {
+    const receipt = measureSettingsWork(() => parse(input))
+    // Parse reads/writes each pair; stringify maps and joins each output entry.
+    uiWork.entries += receipt.work.entries + 3 * Object.keys(receipt.value.env).length
+    uiWork.bytes += receipt.work.bytes + 4 * input.length
+    return receipt.value
+  })
+  const stringify = envDraftModule.stringifyAgentDefaultEnvDraft
+  vi.spyOn(envDraftModule, 'stringifyAgentDefaultEnvDraft').mockImplementation((input) => {
+    const receipt = measureSettingsWork(() => stringify(input))
+    uiWork.entries += receipt.work.entries + 3 * Object.keys(input).length
+    uiWork.bytes += receipt.work.bytes + 4 * JSON.stringify(input).length
+    return receipt.value
+  })
   Object.assign(window.api, { platform: { get: () => ({ platform: 'darwin' }) } })
   const settings = useAppStore.getState().settings
   if (!settings) {

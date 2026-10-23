@@ -445,16 +445,22 @@ describe('permission carrier ownership across save, reload and consumers', () =>
         initial
       )
       let outer = 0
-      const observe = <T extends object>(target: T) =>
+      type AgentSettingsMap = Record<
+        string,
+        | Record<string, string>
+        | NonNullable<AgentLaunchSettingsSource['agentPermissionDefault']>
+        | undefined
+      >
+      const observe = <T extends AgentSettingsMap>(target: T) =>
         new Proxy(target, {
           ownKeys(value) {
             const keys = Reflect.ownKeys(value)
             outer += 2 * keys.length
             return keys
           },
-          get(value, key, receiver) {
+          get(value, key) {
             outer++
-            return Reflect.get(value, key, receiver)
+            return typeof key === 'string' ? value[key] : undefined
           }
         })
       initial.agentDefaultEnv = observe(initial.agentDefaultEnv!)

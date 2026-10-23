@@ -58,47 +58,134 @@ export function measureSettingsWork<T>(call: () => T) {
     return parsed
   })
   const restores: (() => void)[] = []
-  for (const [target, names] of [
-    [Object, ['entries', 'keys', 'fromEntries', 'hasOwn', 'assign']],
-    [Map.prototype, ['get', 'set', 'delete']],
-    [Set.prototype, ['add', 'has']],
-    [Array.prototype, ['sort', 'slice']],
-    [String.prototype, ['slice', 'toLowerCase']]
-  ] as const) {
-    for (const name of names) {
-      const original = Reflect.get(target, name)
-      Reflect.set(target, name, function (this: object, ...args: unknown[]) {
-        if (name === 'sort') {
-          const compare = args[0]
-          args[0] = (a: unknown, b: unknown) => {
-            work.comparisons++
-            return typeof compare === 'function'
-              ? Reflect.apply(compare, undefined, [a, b])
-              : +(String(a) > String(b)) - +(String(a) < String(b))
-          }
-        }
-        const result = Reflect.apply(original, this, args)
-        if (target === String.prototype) {
-          work.bytes += result.length
-        } else if (name === 'slice') {
-          work.visits += 2 * result.length
-        } else if (name === 'assign') {
-          work.assignments++
-          for (let i = 1; i < args.length; i++) {
-            work.entries += 2 * Reflect.ownKeys(Object(args[i])).length
-          }
-        } else if (name === 'fromEntries') {
-          work.entries += Reflect.ownKeys(result).length
-        } else if (target === Object && name !== 'hasOwn') {
-          work.entries += 2 * result.length
-        } else if (name !== 'sort') {
-          work.entries++
-        }
-        return result
-      })
-      restores.push(Reflect.set.bind(Reflect, target, name, original))
-    }
+  function replace<T, K extends keyof T>(target: T, name: K, wrap: (original: T[K]) => T[K]) {
+    const original = target[name]
+    target[name] = wrap(original)
+    restores.push(() => {
+      target[name] = original
+    })
   }
+  replace(Object, 'entries', (original) => (value) => {
+    const result = original(value)
+    work.entries += 2 * result.length
+    return result
+  })
+  replace(Object, 'keys', (original) => (value) => {
+    const result = original(value)
+    work.entries += 2 * result.length
+    return result
+  })
+  replace(Object, 'fromEntries', (original) => (value) => {
+    const result = original(value)
+    work.entries += Reflect.ownKeys(result).length
+    return result
+  })
+  replace(Object, 'hasOwn', (original) => (value, key) => {
+    const result = original(value, key)
+    work.entries++
+    return result
+  })
+  replace(Object, 'assign', (original) => (target, ...sources) => {
+    const result = original(target, ...sources)
+    work.assignments++
+    for (const source of sources) {
+      work.entries += 2 * Reflect.ownKeys(Object(source)).length
+    }
+    return result
+  })
+  replace(
+    Map.prototype,
+    'get',
+    (original) =>
+      function (this: Map<unknown, unknown>, key: unknown) {
+        const result: unknown = original.call(this, key)
+        work.entries++
+        return result
+      }
+  )
+  replace(
+    Map.prototype,
+    'set',
+    (original) =>
+      function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
+        const result = original.call(this, key, value)
+        work.entries++
+        return result
+      }
+  )
+  replace(
+    Map.prototype,
+    'delete',
+    (original) =>
+      function (this: Map<unknown, unknown>, key: unknown) {
+        const result = original.call(this, key)
+        work.entries++
+        return result
+      }
+  )
+  replace(
+    Set.prototype,
+    'add',
+    (original) =>
+      function (this: Set<unknown>, value: unknown) {
+        const result = original.call(this, value)
+        work.entries++
+        return result
+      }
+  )
+  replace(
+    Set.prototype,
+    'has',
+    (original) =>
+      function (this: Set<unknown>, value: unknown) {
+        const result = original.call(this, value)
+        work.entries++
+        return result
+      }
+  )
+  replace(
+    Array.prototype,
+    'sort',
+    (original) =>
+      function (this: unknown[], compare?: (a: unknown, b: unknown) => number) {
+        return original.call(this, (a, b) => {
+          work.comparisons++
+          return typeof compare === 'function'
+            ? compare(a, b)
+            : +(String(a) > String(b)) - +(String(a) < String(b))
+        })
+      }
+  )
+  replace(
+    Array.prototype,
+    'slice',
+    (original) =>
+      function (this: unknown[], start?: number, end?: number) {
+        const result = original.call(this, start, end)
+        work.visits += 2 * result.length
+        return result
+      }
+  )
+  replace(
+    String.prototype,
+    'slice',
+    (original) =>
+      function (this: string, start?: number, end?: number) {
+        const result = original.call(this, start, end)
+        work.bytes += result.length
+        return result
+      }
+  )
+  replace(
+    String.prototype,
+    'toLowerCase',
+    (original) =>
+      function (this: string) {
+        const result = original.call(this)
+        work.bytes += result.length
+        return result
+      }
+  )
   work.entries = 0
   const restore = () => {
     restores.toReversed().forEach((reset) => reset())

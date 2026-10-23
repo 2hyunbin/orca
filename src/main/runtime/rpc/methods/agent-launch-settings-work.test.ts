@@ -42,25 +42,26 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
       claude: Object.fromEntries(Array.from({ length: n }, (_, i) => [`K${i}`, 'private']))
     }
   })
-  let ingressWork: ReturnType<typeof measureSettingsWork>['work'] | undefined
+  const ingressReceipts: ReturnType<typeof measureSettingsWork>['work'][] = []
   const legacy = updatesModule.legacyLaunchTextUpdates
   vi.spyOn(updatesModule, 'legacyLaunchTextUpdates').mockImplementation((...args) => {
     const receipt = measureSettingsWork(() => legacy(...args))
-    ingressWork = receipt.work
+    ingressReceipts.push(receipt.work)
     return receipt.value
   })
   const composed = vi.spyOn(launchProfile, 'composeAgentLaunchProfile')
   const tokenized = vi.spyOn(shell, 'tokenizeStartupCommand')
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these settings and offline-label paths use only the supplied store methods.
-  const host = new OrcaRuntimeService({
+  const store: Pick<RuntimeStore, 'getSettings' | 'updateSettings' | 'runDurableMutation'> = {
     getSettings: () => settings,
     updateSettings: (updates) => Object.assign(settings, updates),
     runDurableMutation: async (mutate) => mutate().value
-  } as RuntimeStore)
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these settings and offline-label paths use only the supplied store methods.
+  const host = new OrcaRuntimeService(store as unknown as RuntimeStore)
   vi.spyOn(host, 'configureNotificationDismissalStore').mockImplementation(() => {})
   vi.spyOn(host.pairedServerRows!, 'attach').mockReturnValue(() => {})
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: invoking captured label callbacks; only relay retirement subscribes, no transport is used.
-  const relayHosts = { onEnvironmentRetired: () => () => {} } as NonNullable<
+  const relayHosts = { onEnvironmentRetired: () => () => {} } as unknown as NonNullable<
     Parameters<RuntimeRpcPairing['setMobileDesktopRelayHosts']>[0]
   >
   const labels = new RuntimeRpcPairing({
@@ -79,6 +80,9 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
     Array.from({ length: n }, (_, i) => ({
       id: `repo-${i}`,
       path: '/repo',
+      displayName: `Repo ${i}`,
+      badgeColor: 'gray',
+      addedAt: 0,
       externalWorktreeVisibilityLegacy: false
     }))
   )
@@ -119,6 +123,10 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
   ).toMatchObject({ ok: true, result: { state: 'installed' } })
   expect(composed).not.toHaveBeenCalled()
   expect(tokenized).not.toHaveBeenCalled()
+  const originalArgs = settings.agentDefaultArgs?.claude
+  if (originalArgs === undefined) {
+    throw new Error('Missing Claude Arguments fixture')
+  }
   const published = launchProfile.composeAgentLaunchProfile(settings)
   for (const [row, params] of Object.entries({
     'settings.get': undefined,
@@ -129,7 +137,7 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
     'settings.update legacy': {
       agentDefaultArgs: {
         ...published.agentDefaultArgs,
-        claude: `--permission-mode auto ${settings.agentDefaultArgs.claude}`
+        claude: `--permission-mode auto ${originalArgs}`
       },
       agentDefaultEnv: { ...published.agentDefaultEnv, goose: { KEEP: 'new' } }
     }
@@ -137,18 +145,23 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
     const [method, ingress] = row.split(' ')
     composed.mockClear()
     tokenized.mockClear()
-    ingressWork = undefined
+    ingressReceipts.length = 0
     const { value, work } = measureSettingsWork(() =>
       dispatcher.dispatch(makeRequest(method, params))
     )
     const response = await value
+    const ingressWork = ingressReceipts.at(-1)
+    const currentArgs = settings.agentDefaultArgs?.claude
+    if (currentArgs === undefined) {
+      throw new Error('Missing Claude Arguments after dispatch')
+    }
     expect(response.ok).toBe(true)
     const text = JSON.stringify(response)
     expect(text).toContain(ingress ? '--permission-mode auto' : '--permission-mode default')
     expect(composed).toHaveBeenCalledTimes(ingress ? 2 : 1)
     expect(
       tokenized.mock.calls.reduce((bytes, [text]) => bytes + text.length, 0)
-    ).toBeLessThanOrEqual((ingress ? 60 : 6) * settings.agentDefaultArgs.claude!.length + 12000)
+    ).toBeLessThanOrEqual((ingress ? 60 : 6) * currentArgs.length + 12000)
     // Each profile gets14n; three recipes with W<=6 get2(W+1)B construction bytes each.
     const bytes =
         text.length +
@@ -167,16 +180,18 @@ it.each([20, 200])('projects %s repos without launch work', async (n) => {
     expect(comparisons).toBeLessThanOrEqual(4 * (n + 1) * Math.ceil(Math.log2(n + 1)))
     expectSettingsWorkScale(`response-${method}-${!!ingress}`, n, [visits, bytes])
     const namesOnly = method.includes('AgentLaunch')
+    const env = settings.agentDefaultEnv
+    if (!env?.claude) {
+      throw new Error('Missing Claude Environment after dispatch')
+    }
     const result = JSON.parse(text).result.settings
     expect(result[namesOnly ? 'environmentNames' : 'agentDefaultEnv'].claude).toEqual(
-      namesOnly
-        ? Object.keys(settings.agentDefaultEnv.claude!).sort()
-        : settings.agentDefaultEnv.claude
+      namesOnly ? Object.keys(env.claude).sort() : env.claude
     )
     expect(text.includes('private')).toBe(!namesOnly)
     if (ingress) {
       expect(settings.agentPermissionOverrides?.claude).toBe('auto')
-      expect(settings.agentDefaultEnv.goose).toEqual({ KEEP: 'new' })
+      expect(env.goose).toEqual({ KEEP: 'new' })
     }
   }
   expect(JSON.parse(currentReplies[0]!).result.repos[0].externalWorktreeVisibility).toBeUndefined()
