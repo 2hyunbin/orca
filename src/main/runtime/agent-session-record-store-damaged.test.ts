@@ -195,12 +195,13 @@ describe('damaged saved conversation observations', () => {
         fence: 1,
         handoverRecorded: true
       })
-      await original.session.journal.queuedMessages.insert({
+      const savedCard = {
         messageId: 'kept-card',
         fingerprint: 'card',
         body: hostTestMessage('waiting message'),
         hostInstance: 'earlier-runtime'
-      })
+      }
+      await original.session.journal.queuedMessages.insert(savedCard)
       await original.session.journal.close()
       await editPersistedTestAgentSessionStore(directory, (persisted) => {
         Object.assign(persisted.records['session-alpha'].lease, { minimumNextFence })
@@ -263,6 +264,13 @@ describe('damaged saved conversation observations', () => {
         expect(next?.messageId ?? null).toBe(minimumNextFence === 'bad' ? null : card.messageId)
         // Direct receipt admission: publication is not authoritative proof.
 
+        const consume = {
+          messageId: card.messageId,
+          expect: 'waiting' as const,
+          settledByOp: null,
+          hostInstance: 'current-runtime',
+          yieldsToPause: true as const
+        }
         const fresh = journal.appendSubmission(
           {
             clientMessageId: operationId(),
@@ -272,13 +280,7 @@ describe('damaged saved conversation observations', () => {
             fence: 1,
             handoverRecorded: true
           },
-          {
-            messageId: card.messageId,
-            expect: 'waiting',
-            settledByOp: null,
-            hostInstance: 'current-runtime',
-            yieldsToPause: true
-          },
+          consume,
           store.submissionReceipt('session-alpha')
         )
         if (minimumNextFence === 'bad') {

@@ -1,6 +1,6 @@
 import { isAgentSessionSurfaceTabId } from '../../shared/agent-session-surface-tab-id'
 import type { AgentSessionReserveRequest } from './agent-session-reservation-admission'
-import { getAgentSessionConversation } from './agent-session-store-state'
+import { hasAgentSessionConversation } from './agent-session-store-state'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 import type { AgentSessionStoreState } from './agent-session-store-state'
@@ -90,7 +90,7 @@ export class AgentSessionTabTable {
 /** The sessions whose chat tab is shown, in tab order, skipping any without a record. */
 export function listVisibleAgentSessionIds(state: AgentSessionStoreState): string[] {
   return (state.sessionTabs?.sessionIds() ?? []).filter((sessionId) =>
-    getAgentSessionConversation(state, sessionId)
+    hasAgentSessionConversation(state, sessionId)
   )
 }
 
@@ -107,7 +107,7 @@ export function setAgentSessionTabVisibility(
   visible: boolean,
   tabId?: string
 ): void {
-  if (visible && !getAgentSessionConversation(state, sessionId)) {
+  if (visible && !hasAgentSessionConversation(state, sessionId)) {
     throw agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
   }
   state.sessionTabs ??= new AgentSessionTabTable()
@@ -123,7 +123,7 @@ export function showAgentSessionTabs(
   sessionIds: readonly string[]
 ): void {
   for (const sessionId of sessionIds) {
-    if (getAgentSessionConversation(state, sessionId)) {
+    if (hasAgentSessionConversation(state, sessionId)) {
       setAgentSessionTabVisibility(state, sessionId, true)
     }
   }

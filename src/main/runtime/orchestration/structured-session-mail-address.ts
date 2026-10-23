@@ -53,7 +53,8 @@ export type StructuredSessionMailReach =
 export function structuredSessionMailReach(
   store: AgentSessionRecordReader,
   record: AgentSessionConversationView,
-  db: OrchestrationDb | null | undefined
+  db: OrchestrationDb | null | undefined,
+  canonicalStore?: Pick<AgentSessionRecordReader, 'listRecords'> | null
 ): StructuredSessionMailReach {
   const running = resolveLineageRunningSession(store, record.sessionId)
   if (running.kind === 'unverifiable') {
@@ -63,7 +64,10 @@ export function structuredSessionMailReach(
     return { kind: 'other-host' }
   }
   const live = running.record
-  if (isOrcaSessionId(live.sessionId) && !addressableSessionParty(live.sessionId, db)) {
+  if (
+    isOrcaSessionId(live.sessionId) &&
+    !addressableSessionParty(live.sessionId, db, canonicalStore)
+  ) {
     // Why: it can no longer act (the caller resolver refuses it), so mail to it could never be read.
     return { kind: 'ended', reason: 'worker-identity-lost' }
   }
@@ -81,10 +85,11 @@ export function structuredSessionMailReach(
  */
 export function addressableSessionParty(
   sessionId: OrcaSessionId,
-  db: OrchestrationDb | null | undefined
+  db: OrchestrationDb | null | undefined,
+  store?: Pick<AgentSessionRecordReader, 'listRecords'> | null
 ): OrchestrationSessionParty | null {
   try {
-    return resolveOrcaSessionParty(sessionId, db)
+    return resolveOrcaSessionParty(sessionId, db, store)
   } catch (error) {
     if (error instanceof OrchestrationError && error.code === CODES.notLive) {
       return null

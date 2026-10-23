@@ -44,6 +44,10 @@ export function getAgentSessionConversation(
     : (state.unreadableRecords.get(id)?.conversation ?? null)
 }
 
+export function hasAgentSessionConversation(state: AgentSessionStoreState, id: string): boolean {
+  return state.records.has(id) || !!state.unreadableRecords.get(id)?.conversation
+}
+
 export function listAgentSessionConversations(
   state: AgentSessionStoreState
 ): AgentSessionConversationView[] {

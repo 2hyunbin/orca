@@ -65,6 +65,10 @@ export function createReferenceAgentIndex(
     index.set(key, entries)
   }
   const visible = sessions?.getVisibleSessionTabIndex?.()
+  let canonicalRecords: ReturnType<AgentSessionRecordReader['listRecords']> | undefined
+  const canonicalStore = {
+    listRecords: () => (canonicalRecords ??= readAgentSessionRecordStore()?.listRecords() ?? [])
+  }
   for (const record of sessions?.listRecords() ?? []) {
     if (
       clearedInto(record) ||
@@ -85,7 +89,7 @@ export function createReferenceAgentIndex(
     const local = structuredWorkerHostScope(record.location) !== null
     const reachable =
       local && sessions
-        ? structuredSessionMailReach(sessions, record, db).kind === 'reachable'
+        ? structuredSessionMailReach(sessions, record, db, canonicalStore).kind === 'reachable'
         : false
     append(record.location.workspaceId, {
       hostId: record.location.executionHostId,

@@ -10,6 +10,7 @@ import { agentSessionConversationView } from '../../shared/agent-session-convers
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import type { RepoHostTarget } from '../../shared/repo-host-identity'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
 
 const hostRef: { current: unknown } = { current: null }
@@ -21,7 +22,11 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
 const { TEST_REPO_ID, TEST_WORKTREE_ID, store } = await import('./orca-runtime-test-fixtures.spec')
 
-function record(sessionId: string, workspaceId: string, executionHostId = 'local') {
+function record(
+  sessionId: string,
+  workspaceId: string,
+  executionHostId: ExecutionHostId = 'local'
+) {
   const record = agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId }))
   return { ...record, location: { ...record.location, executionHostId, workspaceId } }
 }
