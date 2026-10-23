@@ -36,8 +36,6 @@ import { invalidateAiVaultHostLegCache } from './ai-vault-host-leg-cache'
 import { registerRuntimeEnvironmentSubscriptionHandlers } from './runtime-environments/runtime-environment-subscription-handlers'
 import { advanceRuntimeEnvironmentTransportGeneration } from './runtime-environments/runtime-environment-transport-generation'
 import type { subscribeRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
-import { aiVaultSearchHitToSession } from '../../renderer/src/components/right-sidebar/ai-vault-search-session'
-import { searchHit } from '../../shared/ai-vault-search-test-fixture'
 vi.mock('../wsl', () => ({
   listRunningWslHomeDirsAsync: vi.fn().mockResolvedValue([]),
   hasCachedWslDistros: vi.fn(() => false)
@@ -240,7 +238,25 @@ it('orders forwarded association edges before new remote/All admissions and fenc
     fingerprint: detached ? 'detached' : 'owned',
     sessions: [
       {
-        ...aiVaultSearchHitToSession(searchHit(), `runtime:${host}`),
+        id: `runtime:${host}:codex:host-session:/host/transcript.jsonl`,
+        executionHostId: `runtime:${host}`,
+        agent: 'codex',
+        sessionId: 'host-session',
+        cwd: '/host/folder',
+        branch: null,
+        model: null,
+        filePath: '/host/transcript.jsonl',
+        codexHome: '/host/codex',
+        createdAt: null,
+        updatedAt: null,
+        modifiedAt: '',
+        messageCount: 2,
+        totalTokens: 0,
+        previewMessages: [],
+        queuedMessageCount: 0,
+        subagentTranscriptCount: 0,
+        resumeCommand: 'host-resume-command',
+        subagent: null,
         title: detached ? 'Provider title' : 'Manual name',
         ...(detached
           ? {}

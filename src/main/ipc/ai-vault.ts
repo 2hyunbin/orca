@@ -36,7 +36,7 @@ import {
   parseRoutableExecutionHostId,
   requestedExecutionHostScope,
   toRuntimeExecutionHostId,
-  type ExecutionHostScope
+  type ExecutionHostId
 } from '../../shared/execution-host'
 import { createSenderScopedRequestCancellations } from './sender-scoped-request-cancellation'
 import { discoverAiVaultHosts, type AiVaultHostDiscoveryResult } from './ai-vault-host-discovery'
@@ -74,6 +74,10 @@ type AiVaultHandlerOptions = AiVaultSessionSources &
     resolveRuntimeAiVaultSessionTitles?: RuntimeAiVaultSessionTitleResolver
   }
 
+type AiVaultScanHostScope =
+  | { scope: ExecutionHostId }
+  | { scope: 'all'; runtimeHosts: AiVaultHostDiscoveryResult<RuntimeAiVaultHostInfo> }
+
 let scanCoordinator = new AiVaultScanCoordinator()
 let handlerOptions: AiVaultHandlerOptions = {}
 const listCancellations = createSenderScopedRequestCancellations()
@@ -93,12 +97,17 @@ async function listAiVaultSessions(
   options: { signal?: AbortSignal } = {}
 ): Promise<AiVaultListResult> {
   const executionHostScope = requestedExecutionHostScope(args?.executionHostScope)
-  const runtimeHosts =
-    executionHostScope === 'all' ? getActiveRuntimeAiVaultHostInfosResult() : undefined
+  const hostScope: AiVaultScanHostScope =
+    executionHostScope === 'all'
+      ? { scope: executionHostScope, runtimeHosts: getActiveRuntimeAiVaultHostInfosResult() }
+      : { scope: executionHostScope }
   const parsedHost = parseRoutableExecutionHostId(executionHostScope)
   const dependency = captureRuntimeAiVaultProjectionDependency(
-    runtimeHosts?.hostInfos.map((host) => host.environmentId) ??
-      (parsedHost?.kind === 'runtime' ? [parsedHost.environmentId] : []),
+    hostScope.scope === 'all'
+      ? hostScope.runtimeHosts.hostInfos.map((host) => host.environmentId)
+      : parsedHost?.kind === 'runtime'
+        ? [parsedHost.environmentId]
+        : [],
     handlerOptions.getUserDataPath
   )
   // Canonicalize bounded workspace sets so equivalent scopes share a scan.
@@ -126,14 +135,7 @@ async function listAiVaultSessions(
       signal: options.signal,
       start: (scanSignal) => {
         const scan = () =>
-          scanAiVaultSessionsByHostScope(
-            args,
-            executionHostScope,
-            scanSignal,
-            key,
-            runtimeHosts,
-            dependency
-          )
+          scanAiVaultSessionsByHostScope(args, hostScope, scanSignal, key, dependency)
         if (executionHostScope === LOCAL_EXECUTION_HOST_ID) {
           return scan()
         }
@@ -153,18 +155,18 @@ async function listAiVaultSessions(
 
 async function scanAiVaultSessionsByHostScope(
   args: AiVaultListArgs | undefined,
-  executionHostScope: ExecutionHostScope,
+  hostScope: AiVaultScanHostScope,
   signal?: AbortSignal,
   cacheKey = '',
-  runtimeHosts?: AiVaultHostDiscoveryResult<RuntimeAiVaultHostInfo>,
   dependency?: AiVaultProjectionDependency
 ): Promise<AiVaultListResult> {
   const depth = requestedAiVaultSessionDepth(args)
   const scopePaths = args?.scopePaths ?? []
-  if (executionHostScope === LOCAL_EXECUTION_HOST_ID) {
+  if (hostScope.scope === LOCAL_EXECUTION_HOST_ID) {
     return scanLocalAiVaultSessionsAsIssue(args, signal)
   }
-  if (executionHostScope === 'all' && runtimeHosts) {
+  if (hostScope.scope === 'all') {
+    const { runtimeHosts } = hostScope
     const runtimeResults = runtimeHosts.issue ? [runtimeHosts.issue] : []
     const scannedResults = await Promise.all([
       scanLocalAiVaultSessionsAsIssue(args, signal),
@@ -196,6 +198,7 @@ async function scanAiVaultSessionsByHostScope(
     )
   }
 
+  const executionHostScope = hostScope.scope
   const parsed = parseRoutableExecutionHostId(executionHostScope)
   if (parsed?.kind === 'runtime') {
     return scanRuntimeAiVaultSessions({

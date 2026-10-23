@@ -5,34 +5,35 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { createElement, Fragment } from 'react'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
-} from '../../../../shared/agent-session-record.test-fixture'
-import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../../shared/agent-session-journal-types'
-import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-session-mutation-envelope'
-import type { AiVaultListResult, AiVaultSession } from '../../../../shared/ai-vault-types'
+} from '../../src/shared/agent-session-record.test-fixture'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../src/shared/agent-session-journal-types'
+import { computeAgentSessionPayloadFingerprint } from '../../src/shared/agent-session-mutation-envelope'
+import type { AiVaultListResult, AiVaultSession } from '../../src/shared/ai-vault-types'
 import {
   projectStructuredAiVaultSessions,
   OPENS_EVERY_STRUCTURED_CHAT
-} from '../../../../main/ai-vault/structured-session-ownership'
+} from '../../src/main/ai-vault/structured-session-ownership'
 import {
   openTestAgentSessionRecordStore,
   seedTestAgentSessionRecordStore,
   readPersistedTestAgentSessionStore
-} from '../../../../main/runtime/agent-session-record-store-test-harness'
-import { AgentSessionJournal } from '../../../../main/native-chat/agent-session-journal/journal-store'
+} from '../../src/main/runtime/agent-session-record-store-test-harness'
+import { AgentSessionJournal } from '../../src/main/native-chat/agent-session-journal/journal-store'
 import {
   openTestJournalHostDatabase,
   closeTestJournalHostDatabases
-} from '../../../../main/native-chat/agent-session-journal/journal-host-database-test-support'
-import { StructuredAgentSessionHost } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-host'
-import { setStructuredAgentSessionHost } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-registry'
-import { structuredAgentsDeclaringNothing } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
-import { recordingStructuredAgentSessionLogger } from '../../../../main/native-chat/agent-session-wire/structured-agent-session-logger-test-support'
-import { createStructuredChatNamingHandler } from '../../../../main/native-chat/structured-chat-naming'
-import { PI_RPC_AGENT } from '../../../../main/pi/rpc-agent-definition'
-import type { AgentSessionStatusEvent } from '../../../../shared/agent-session-wire'
+} from '../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
+import { StructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-host'
+import { setStructuredAgentSessionHost } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-registry'
+import { structuredAgentsDeclaringNothing } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
+import { recordingStructuredAgentSessionLogger } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import { createStructuredChatNamingHandler } from '../../src/main/native-chat/structured-chat-naming'
+import { PI_RPC_AGENT } from '../../src/main/pi/rpc-agent-definition'
+import type { AgentSessionStatusEvent } from '../../src/shared/agent-session-wire'
 import { useAppStore } from '@/store'
 import {
   getStructuredAgentSessionStatusFeed,
@@ -41,9 +42,9 @@ import {
 import {
   resetAiVaultForcedRescanThrottleForTest,
   useAiVaultSessionRefresh
-} from './ai-vault-session-refresh'
-import { aiVaultSessionRowResumeGating } from './ai-vault-session-resume'
-import { useAiVaultSessionDisplayTitle } from './use-ai-vault-session-display-title'
+} from '../../src/renderer/src/components/right-sidebar/ai-vault-session-refresh'
+import { aiVaultSessionRowResumeGating } from '../../src/renderer/src/components/right-sidebar/ai-vault-session-resume'
+import { useAiVaultSessionDisplayTitle } from '../../src/renderer/src/components/right-sidebar/use-ai-vault-session-display-title'
 
 const mocks = vi.hoisted(() => ({ subscribe: vi.fn() }))
 vi.mock('@/store', async () => {
@@ -66,27 +67,24 @@ let host: StructuredAgentSessionHost | null = null
 
 function HistoryRow({ session }: { session: AiVaultSession }) {
   const title = useAiVaultSessionDisplayTitle(session)
-  return (
-    <div
-      data-testid="history-row"
-      data-owner={session.structuredSession?.sessionId}
-      data-copy-resume={
-        aiVaultSessionRowResumeGating(session, { blocked: false }).canCopyResumeCommand
-      }
-      data-resume={session.resumeCommand}
-    >
-      {title}
-    </div>
+  return createElement(
+    'div',
+    {
+      'data-testid': 'history-row',
+      'data-owner': session.structuredSession?.sessionId,
+      'data-copy-resume': aiVaultSessionRowResumeGating(session, { blocked: false })
+        .canCopyResumeCommand,
+      'data-resume': session.resumeCommand
+    },
+    title
   )
 }
 function History() {
   const { sessions } = useAiVaultSessionRefresh(PATHS, 'local', 250)
-  return (
-    <>
-      {sessions.map((session) => (
-        <HistoryRow key={session.id} session={session} />
-      ))}
-    </>
+  return createElement(
+    Fragment,
+    null,
+    sessions.map((session) => createElement(HistoryRow, { key: session.id, session }))
   )
 }
 
@@ -240,7 +238,7 @@ it('detaches a mounted provider History row after clear without losing the nativ
       }
     })
     // History owns its feed even when no chat tab or pane projector exists.
-    let view = render(<History />)
+    let view = render(createElement(History))
     await waitFor(() => expect(screen.getByTestId('history-row').textContent).toBe(NAME))
     expect(screen.getByTestId('history-row').getAttribute('data-owner')).toBe(SESSION)
     expect(screen.getByTestId('history-row').getAttribute('data-copy-resume')).toBe('false')
@@ -301,7 +299,7 @@ it('detaches a mounted provider History row after clear without losing the nativ
         }
       )
       if (remount) {
-        view = render(<History />)
+        view = render(createElement(History))
       }
       expect(await clearing).toMatchObject({
         ok: true,
