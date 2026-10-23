@@ -26,6 +26,7 @@ import {
   agentStatusEvidenceObservedAt
 } from './agent-status-freshness'
 import type { AgentStatusEntry, AgentSubagentSnapshot } from './agent-status-types'
+import { groupedBy } from './grouped-by'
 
 /** What a child row says beside its name. Surfaces format it; they never decide it. */
 export type AgentChildRowDetail =
@@ -207,12 +208,12 @@ function viewName(view: AgentChildWorkView): string {
 function rowFromView(
   view: AgentChildWorkView,
   views: readonly AgentChildWorkView[],
-  ownedByOwner: ReadonlyMap<string, AgentChildWorkView[]>,
+  ownedByOwner: ReadonlyMap<string | undefined, AgentChildWorkView[]>,
   context: AgentChildRowContext,
   path: ReadonlySet<string>
 ): AgentChildRowModel {
   const displayState = withFreshness(
-    deriveAgentChildDisplayState(view, agentChildWorkOwnedLiveness(views, view.id)),
+    deriveAgentChildDisplayState(view, agentChildWorkOwnedLiveness(views, view.id, ownedByOwner)),
     context
   )
   const settled = view.membership === 'settled'
@@ -260,15 +261,7 @@ export function buildAgentChildRowModels(
   views: readonly AgentChildWorkView[],
   context: AgentChildRowContext
 ): AgentChildRowModel[] {
-  const ownedByOwner = new Map<string, AgentChildWorkView[]>()
-  for (const view of views) {
-    if (view.parentChildWorkId !== undefined) {
-      ownedByOwner.set(view.parentChildWorkId, [
-        ...(ownedByOwner.get(view.parentChildWorkId) ?? []),
-        view
-      ])
-    }
-  }
+  const ownedByOwner = groupedBy(views, (view) => view.parentChildWorkId)
   return views
     .filter((view) => view.parentChildWorkId === undefined)
     .map((view) => rowFromView(view, views, ownedByOwner, context, new Set()))

@@ -21,9 +21,12 @@ type AgentChildWorkOwnershipView = Pick<
 /** Liveness of all live work beneath a child, at any depth — the same input a parent row folds. */
 export function agentChildWorkOwnedLiveness(
   views: readonly AgentChildWorkOwnershipView[],
-  ownerId: AgentChildWorkId
+  ownerId: AgentChildWorkId,
+  owned: ReadonlyMap<
+    AgentChildWorkId | undefined,
+    readonly AgentChildWorkOwnershipView[]
+  > = groupedBy(views, (view) => view.parentChildWorkId)
 ): AgentChildWorkLiveness {
-  const owned = groupedBy(views, (view) => view.parentChildWorkId)
   const seen = new Set<AgentChildWorkId>([ownerId])
   const frontier = [ownerId]
   const liveDescendants: AgentChildWorkOwnershipView[] = []
