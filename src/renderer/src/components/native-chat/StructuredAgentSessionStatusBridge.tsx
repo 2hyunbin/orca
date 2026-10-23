@@ -54,8 +54,7 @@ type Member = {
   group: HostGroup | null
   status?: ProjectionInput
 }
-const ownerInputs: readonly (keyof WorktreeRuntimeOwnerState | 'unifiedTabsByWorktree')[] = [
-  'unifiedTabsByWorktree',
+const ownerInputs: readonly (keyof WorktreeRuntimeOwnerState)[] = [
   'repos',
   'settings',
   'worktreesByRepo',
@@ -291,7 +290,11 @@ function installStatusProjection(): () => void {
     capture(members.values(), removed)
   }
   const unsubscribeApp = useAppStore.subscribe((state: AppState, previous: AppState) => {
-    if (!disposed && ownerInputs.some((key) => state[key] !== previous[key])) {
+    if (
+      !disposed &&
+      (state.unifiedTabsByWorktree !== previous.unifiedTabsByWorktree ||
+        ownerInputs.some((key) => state[key] !== previous[key]))
+    ) {
       boundary(reconcile)
     }
   })
