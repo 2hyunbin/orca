@@ -297,6 +297,9 @@ const NO_REJOIN_CLOSE_CODES: ReadonlySet<number> = new Set([
 ])
 // A demoted duplicate keeps its splices this long, then closes so the desktop re-assigns.
 export const DEMOTION_CLOSE_MS = 60_000
+// Hosts whose highest generation is remembered; insertion order is age order. A host evicted
+// here is long gone, so its successor restarting low meets no late leave.
+const GENERATION_FLOOR_MAX_HOSTS = 100_000
 // A flip back registers memory-admitted controls with at most this share of the pool in
 // flight (US 10 -> 3, Asia 16 -> 5), so DB-path hellos and renewals keep the rest.
 export const REREGISTER_POOL_SHARE = 1 / 3
@@ -336,6 +339,8 @@ export class HostSessionRegistry {
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
   private readonly seatDrift = new SeatDriftConfirmation()
+  // The highest generation each host has had on this cell, kept after its session leaves the map.
+  private readonly generationFloors = new Map<string, number>()
   private reregistration: {
     queue: ReregistrationEntry[]
     // Sessions already queued, given up on, or done in this pass: the rescan skips them.
@@ -1691,11 +1696,11 @@ export class HostSessionRegistry {
       (existing.state === 'orphaned' || existing.state === 'active') &&
       sameHostIdentity(existing.identity, identity)
     )
-    // Above any seat the feed still lists: a session dropped from the map while its socket is still
-    // closing (drain, regional deadline, idle rehome) keeps its seat listed until that close lands,
-    // and a successor restarting at generation 1 had its seat removed by that late leave.
-    const listed = this.seatLog.seatOf(identity.sub, identity.relayHostId)?.generation ?? 0
-    const generation = rebind ? existing!.generation : Math.max(existing?.generation ?? 0, listed) + 1
+    // Above every generation this host has had here, not only the one in the map: a session
+    // dropped from the map while its socket is still closing (drain, regional deadline, idle
+    // rehome) leaves later, and a successor reusing its generation had its seat removed by that leave.
+    const floor = this.generationFloors.get(key) ?? 0
+    const generation = rebind ? existing!.generation : Math.max(existing?.generation ?? 0, floor) + 1
     const ephemeral = nacl.box.keyPair()
     const challengeNonce = randomBytes(nacl.box.nonceLength)
     const challengeSecret = randomBytes(32)
@@ -1925,6 +1930,24 @@ export class HostSessionRegistry {
       }
       return
     }
+    // The awaits above can outlive what this hello was proven against: an orphan grace expiring
+    // or a drain removes `existing` from the map, and another activation may take this generation.
+    // Rebinding a removed session revived it outside the map: connected, still in the feed, and
+    // unreachable by phones or demotion for as long as the host stayed up. Redial instead.
+    const key = this.key(identity.sub, identity.relayHostId)
+    if (
+      (this.sessions.get(key) ?? null) !== existing ||
+      (!rebind && generation <= (this.generationFloors.get(key) ?? 0))
+    ) {
+      if (controlActivityId) {
+        this.releaseActivityBestEffort(
+          { userId: identity.sub, relayHostId: identity.relayHostId },
+          controlActivityId
+        )
+      }
+      this.refuseProvenControl(socket, refused, RELAY_CLOSE_CODE.PEER_DROPPED, 'control activation superseded')
+      return
+    }
     if (existing) this.observer.recordReconnect()
     if (rebind && existing) {
       const previousSocket = existing.socket
@@ -2018,6 +2041,7 @@ export class HostSessionRegistry {
     // A host that proved itself again is not signed out, whatever it said last.
     this.hostCloseReasons.forget(sessionKey)
     this.sessions.set(sessionKey, session)
+    this.recordGenerationFloor(sessionKey, generation)
     this.demotedSeats.delete(sessionKey)
     this.wireActiveControl(session)
     this.sendHelloAck(session)
@@ -2100,6 +2124,15 @@ export class HostSessionRegistry {
         : {}),
       relisted
     })
+  }
+
+  private recordGenerationFloor(key: string, generation: number): void {
+    this.generationFloors.delete(key)
+    this.generationFloors.set(key, generation)
+    if (this.generationFloors.size > GENERATION_FLOOR_MAX_HOSTS) {
+      const oldest = this.generationFloors.keys().next().value
+      if (oldest !== undefined) this.generationFloors.delete(oldest)
+    }
   }
 
   private logSeatDrift(relayHostId: string, detail: Record<string, unknown>): void {

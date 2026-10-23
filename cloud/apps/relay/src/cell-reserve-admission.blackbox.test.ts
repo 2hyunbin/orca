@@ -425,19 +425,28 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
       expect(warned('orca_relay_cell_seat_log_drift')).toMatchObject([{ kind: 'unlisted-session', sessionEpoch: 9 }])
     })
 
-    it('repairs nothing for a seat that is gone by the next sweep', async () => {
+    // A drained session's seat stays listed, with no session, until its socket's close lands.
+    it('repairs nothing for a seat that one sweep finds unbacked and is gone by the next', async () => {
       const cell = await startCell({ admitMode: 'reserve' })
       const identity = await cell.host()
       cell.book(identity, 9)
       const live = await cell.connect(identity, 9)
-      seatEpochs(cell)
-      // The host leaves between sweeps: its own leave lands, as a drained session's does.
-      live.socket!.close()
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ws keeps its net.Socket as `_socket`.
+      ;(live.socket as unknown as { _socket: { pause(): void } })._socket.pause()
+      cell.relay.sessions.drainHost({
+        attemptId: 'attempt-1',
+        userId: 'user-1',
+        relayHostId: identity.hostId,
+        sourceAssignmentEpoch: 9,
+        graceMs: 0
+      })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(seatEpochs(cell)).toEqual([9])
+      await new Promise((resolve) => setTimeout(resolve, RELAY_WEBSOCKET_FORCE_CLOSE_MS + 300))
       cell.advance(CELL_SEAT_DRIFT_SWEEP_MS)
       expect(seatEpochs(cell)).toEqual([])
       expect(warned('orca_relay_cell_seat_log_drift')).toEqual([])
-    })
+    }, 10_000)
 
     // A drained session leaves the map at once, but its socket closes only after its release (up
     // to 3 s) and the peer's close reply (up to the 1 s force-close). A desktop of the same
@@ -469,9 +478,9 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
       expect(seatEpochs(cell)).toEqual([10])
     }, 10_000)
 
-    // Two desktops sharing one identity take turns on this cell: each turn replaces the session
-    // and its seat together, so no sweep finds anything to repair.
-    it('stays on the live desktop of a duplicate-identity pair taking turns', async () => {
+    // The same identity connecting afresh at each turn, as desktops sharing one identity do: each
+    // turn replaces the session and its seat together, so no sweep finds anything to repair.
+    it('stays on the live session when the same identity connects afresh each turn', async () => {
       const cell = await startCell({ admitMode: 'reserve' })
       const identity = await cell.host()
       for (const epoch of [9, 10, 11]) {
