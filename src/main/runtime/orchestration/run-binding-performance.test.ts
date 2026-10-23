@@ -48,6 +48,62 @@ function historyWork(db: OrchestrationDb) {
 }
 
 describe('Run binding scaling contracts', () => {
+  it('confirms the current Task owner without materializing prior attempts at N and 10N', () => {
+    const counts: number[] = []
+    for (const history of [4, 40]) {
+      const db = openDatabase()
+      const parent = db.createRun({
+        objective: 'parent',
+        coordinatorHandle: 'root',
+        coordinatorPaneKey: null
+      })
+      const task = db.createTask({ runId: parent.id, spec: 'retained Task' })
+      const insert = db.db.prepare(`INSERT INTO dispatch_contexts
+        (id, task_id, run_id, assignee_handle, creator_handle, status)
+        VALUES (?, ?, ?, ?, 'root', 'completed')`)
+      for (let row = 0; row < history; row++) {
+        insert.run(`history_${row}`, task.id, parent.id, `old_${row}`)
+      }
+      createRootDispatch(db, task.id, 'worker', 'pane-worker', undefined, 'process-worker')
+      const child = db.createRun({
+        objective: 'child',
+        coordinatorHandle: 'worker',
+        coordinatorPaneKey: 'pane-worker',
+        processIncarnation: 'process-worker'
+      })
+      const before = db.getRunRaw(child.id)
+      let rows = 0
+      const observed = new WeakSet<object>()
+      const originalPrepare = db.db.prepare.bind(db.db)
+      const prepare = vi.spyOn(db.db, 'prepare').mockImplementation((sql) => {
+        const statement = originalPrepare(sql)
+        if (sql.includes('FROM dispatch_contexts') && !observed.has(statement)) {
+          observed.add(statement)
+          const all = statement.all.bind(statement)
+          vi.spyOn(statement, 'all').mockImplementation((...params) => {
+            const result = all(...params)
+            rows += result.length
+            return result
+          })
+        }
+        return statement
+      })
+      expect(
+        db.bindRun({
+          runId: child.id,
+          coordinatorHandle: 'worker',
+          coordinatorPaneKey: 'pane-worker',
+          processIncarnation: 'process-worker'
+        })
+      ).toMatchObject({ id: child.id })
+      expect(rows).toBe(1)
+      counts.push(prepare.mock.calls.length)
+      expect(db.getRunRaw(child.id)).toEqual(before)
+      prepare.mockRestore()
+    }
+    expect(counts[1]).toBe(counts[0])
+  })
+
   it('walks to the root with one indexed ancestor read per link at N and 10N', () => {
     for (const depth of [4, 40]) {
       const db = openDatabase()

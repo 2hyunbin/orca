@@ -68,7 +68,7 @@ export function authorizeRunBinding(
     refuseRunAuthority('This Run belongs to a different Task. Ask its coordinator for a hand-over.')
   }
   let priorAttempt = false
-  if (taskOwner && actor.kind === 'local' && authority) {
+  if (!unchanged && taskOwner && actor.kind === 'local' && authority) {
     const key = lastRunCaller(authority)
     const seat = runCoordinatorKey(run)
     if (sameExactCaller(key, { ...seat, processIncarnation: key.processIncarnation })) {
