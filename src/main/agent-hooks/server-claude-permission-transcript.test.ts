@@ -15,7 +15,7 @@ import { createProgramStatusProjector } from '../../shared/program-status/agent-
 import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import type { AgentHookRelayEnvelope } from '../../shared/agent-hook-relay'
 import { AgentHookServer } from './server'
-import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
+import { buildBody, PANE, GOOD_PANE, postHookEvent } from './server.test-fixtures'
 
 const SESSION = '00000000-0000-4000-8000-000000000000'
 const directories: string[] = []
@@ -294,6 +294,21 @@ describe('Claude permission result observation', () => {
     appendFileSync(pane.transcript, `${lines.slice(1).join('\n')}\n`)
     await pane.tick()
     expect(pane.row()?.state).toBe('waiting')
+  })
+
+  it('keeps the exact observation when a live terminal moves to another pane', async () => {
+    const pane = await setup()
+    const { lines, tool } = capture('escape')
+    writeFileSync(pane.transcript, `${lines[0]}\n`)
+    await permission(pane, tool)
+    pane.desktop.transferPaneAuthority(PANE, GOOD_PANE, 'moving-pty')
+    appendFileSync(pane.transcript, `${lines.slice(1).join('\n')}\n`)
+    await pane.tick()
+    expect(pane.desktop.getStatusSnapshotForPane(GOOD_PANE)[0]).toMatchObject({
+      state: 'done',
+      interrupted: true
+    })
+    expect(pane.desktop.getStatusSnapshotForPane(PANE)).toHaveLength(0)
   })
 
   it('re-anchors after file replacement and never combines evidence across a missing record', async () => {
