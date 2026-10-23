@@ -1,4 +1,4 @@
-// The one place that decides a chat's permission mode: what a start launches, a restart compares, a read shows.
+// Launch and restart require support; display retains saved intent until support is known.
 
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -7,6 +7,7 @@ import {
   chatModelSupportsAutoMode,
   chatPermissionModeNeedsModelSupport,
   effectiveChatPermissionMode,
+  savedChatPermissionMode,
   type AgentChatPermissionMode
 } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
@@ -27,6 +28,17 @@ export function structuredAgentSessionPermissionFromCatalog(
     listing.origin !== 'unknown' &&
     chatModelSupportsAutoMode(listing.models, record.options?.model)
   return effectiveChatPermissionMode(support, record.permissionMode, autoSupported)
+}
+
+export function structuredAgentSessionDisplayPermission(
+  deps: Pick<StructuredAgentSessionHostDeps, 'agents'>,
+  record: AgentSessionRecord,
+  listing: AgentSessionModelCatalogResult
+): AgentChatPermissionMode | null {
+  const support = agentChatPermissionModes(record.provider)
+  return listing.origin === 'unknown' && support && deps.agents.definition(record.provider)
+    ? savedChatPermissionMode(support, record.permissionMode)
+    : structuredAgentSessionPermissionFromCatalog(deps, record, listing)
 }
 
 /** Null for an agent whose chats offer no modes, or one this runtime did not register. */

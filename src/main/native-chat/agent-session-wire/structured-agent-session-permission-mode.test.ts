@@ -28,6 +28,12 @@ import {
 } from '../agent-model-catalog/agent-model-catalog-fingerprint'
 import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { retireAtRestCommandContext } from './at-rest-command-context'
+import {
+  applyStructuredAgentSessionOptions,
+  createStructuredAgentSessionOptionState
+} from '../../../shared/structured-agent-session-options'
+import { getAgentSessionOptionCatalog } from '../../../shared/agent-session-option-catalog'
+import { structuredAgentSessionPermissionDescriptor } from '../../../shared/structured-agent-session-permission-option'
 
 describe('a chat permission mode', () => {
   let rig: RestTestRig
@@ -65,6 +71,127 @@ describe('a chat permission mode', () => {
     )
     expect((await rig.host.readOptions(SESSION)).current.permissionMode).toBe('ask')
   })
+
+  it.each([true, false, undefined])(
+    'projects cold saved Auto without work, then prepares start/outgrown support=%s',
+    async (supportsAutoMode) => {
+      const home = { variable: 'CLAUDE_CONFIG_DIR', path: '/saved-auto-account' }
+      const key = agentModelCatalogScopeFingerprint(
+        agentModelCatalogFingerprint({ agent: 'claude', accountHome: home, wslDistro: null }),
+        '/project',
+        'saved-launch'
+      )
+      const seed = new AgentModelCatalogStore()
+      const saved = seed.recordSuccess(
+        key,
+        'claude',
+        {
+          origin: 'probe',
+          models: [{ id: 'opus', label: 'Opus', isDefault: true, efforts: [], supportsAutoMode }]
+        },
+        'discovery'
+      )!
+      const store = new AgentModelCatalogStore()
+      const persist = vi.fn()
+      await store.attachPersistence({
+        load: async () => (supportsAutoMode === undefined ? [] : [saved]),
+        save: persist,
+        flush: async () => {}
+      })
+      const run = vi.fn(async () => {
+        throw new Error('options display must not list models')
+      })
+      const resolve = vi.fn(async () => ({ identity: 'saved-launch', run }))
+      const workspace = vi.fn(async () => '/project')
+      const account = vi.fn(async () => home)
+      const catalog = createAgentModelCatalogService({
+        store,
+        getRecord: (id) => rig.store.getRecord(id) ?? undefined,
+        drivesRecord: () => true,
+        recordWorkspacePath: workspace,
+        resolveAccountHome: account,
+        probes: { claude: Object.assign(vi.fn(run), { resolve }) }
+      })
+      const prepare = vi.spyOn(catalog, 'prepareSaved')
+      const ingest = vi.spyOn(store, 'recordSuccess')
+      const defaults = vi.spyOn(store, 'recordConfiguredDefault')
+      const acquire = rig.adapter.acquire.getMockImplementation()!
+      rig.adapter.acquire.mockImplementation(async (input) => {
+        const acquired = await acquire(input)
+        return {
+          ...acquired,
+          ...(acquired.link
+            ? { link: { ...acquired.link, handle: claudeProviderHandle(HOST_TEST_THREAD, null) } }
+            : {})
+        }
+      })
+      rig.adapter.dispatch.mockResolvedValue({
+        state: 'accepted',
+        providerIdentity: { provider: 'claude', sessionId: HOST_TEST_THREAD, uuid: 'reply' }
+      })
+      const seedCatalog = getAgentSessionOptionCatalog('claude')!
+      const read = async (mode: 'auto' | 'ask') => {
+        const answer = await rig.host.readOptions(SESSION, { readsWithoutModel: true })
+        expect(answer.current.permissionMode).toBe(mode)
+        const state = applyStructuredAgentSessionOptions(
+          createStructuredAgentSessionOptionState('claude'),
+          seedCatalog,
+          answer
+        )
+        expect(structuredAgentSessionPermissionDescriptor(state)?.kind).toMatchObject({
+          type: 'select',
+          currentValue: mode
+        })
+      }
+      try {
+        const attached = await rig.host.attach(
+          CALLER,
+          hostTestAttachParams(null, {
+            provider: 'claude',
+            agent: 'claude',
+            accountHome: home,
+            providerHandle: { kind: 'claude', sessionId: HOST_TEST_THREAD, leafUuid: null },
+            options: { model: 'opus', permissionMode: 'auto' }
+          })
+        )
+        expect(attached.ok, JSON.stringify(attached)).toBe(true)
+        expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+          expect.objectContaining({ permissionMode: 'ask' })
+        )
+        await rig.restart({ modelCatalog: catalog })
+        await read('auto')
+        await read('auto')
+        for (const work of [prepare, resolve, workspace, account, run, ingest, defaults, persist]) {
+          expect(work).not.toHaveBeenCalled()
+        }
+        expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+        const fence = () => rig.store.getRecord(SESSION)!.lease.runtimeFence
+        expect((await rig.host.send(CALLER, restTestSend('prepared start', fence()))).ok).toBe(true)
+        await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(1))
+        const launchMode = supportsAutoMode === true ? 'auto' : 'ask'
+        expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+          expect.objectContaining({ permissionMode: launchMode })
+        )
+        expect(prepare).toHaveBeenCalled()
+        expect(resolve).toHaveBeenCalledOnce()
+        prepare.mockClear()
+        await read(supportsAutoMode === undefined ? 'auto' : launchMode)
+        expect(prepare).not.toHaveBeenCalled()
+        rig.adapter.closeSession.mockClear()
+        expect((await rig.host.send(CALLER, restTestSend('outgrown comparison', fence()))).ok).toBe(
+          true
+        )
+        await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
+        expect(prepare).toHaveBeenCalled()
+        expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
+        expect(rig.adapter.closeSession).not.toHaveBeenCalled()
+        expect(run).not.toHaveBeenCalled()
+        expect(rig.store.getRecord(SESSION)?.permissionMode).toBe('auto')
+      } finally {
+        catalog.stop()
+      }
+    }
+  )
 
   it('acquires cold saved Auto and keeps that child after an unrelated folder retires', async () => {
     const home = { variable: 'CLAUDE_CONFIG_DIR', path: '/saved-auto-account' }
