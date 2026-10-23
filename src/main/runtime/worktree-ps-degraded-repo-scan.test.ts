@@ -75,7 +75,7 @@ function makeLineage() {
 type StoreOptions = {
   connectionId?: string
   metaById?: Record<string, ReturnType<typeof makeMeta>>
-  removeWorktreeLineage?: ReturnType<typeof vi.fn>
+  removeWorktreeLineage?: (target: HostWorktreeTarget) => void
   /** Extra `getRepos()` rows appended after the primary one, for same-id-on-two-hosts coverage. */
   coHostedRepos?: { id: string; path: string; connectionId?: string }[]
 }
