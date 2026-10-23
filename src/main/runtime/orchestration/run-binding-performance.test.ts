@@ -13,6 +13,7 @@ import {
 import { closeTestJournalHostDatabases } from '../../native-chat/agent-session-journal/journal-host-database-test-support'
 import { canonicalOrcaSessionId } from './canonical-orca-session-id'
 import { sameExactCaller } from './db/runs/run-actor'
+import { findCallerWorkerDispatches } from './db/runs/worker-run-binding'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from './db'
 import { createRootDispatch } from './db/root-dispatch-test-fixture'
@@ -535,10 +536,31 @@ it.each([
           'dispatched'
         )
       }
+      db.db
+        .prepare(`UPDATE dispatch_contexts SET creator_orca_session_id = ?, assignee_handle = 'worker'
+          WHERE id LIKE 'ambiguous_%'`)
+        .run(ids[length])
+      const candidateWork = edgeWork
       candidates = 0
       expect(bind).toThrow(expect.objectContaining({ code: 'run_ownership_required' }))
       expect(candidates).toBe(count)
+      expect(edgeWork - candidateWork).toBeLessThanOrEqual(8 * count + 20)
       expect(db.getRunRaw(child.id)?.coordinator_handle).toBe('worker')
+      db.db
+        .prepare(`UPDATE dispatch_contexts SET assignee_orca_session_id = ?
+          WHERE id LIKE 'ambiguous_%'`)
+        .run(ids[1])
+      const selfContextWork = edgeWork
+      candidates = 0
+      expect(
+        findCallerWorkerDispatches(db, {
+          terminalHandle: 'worker',
+          paneKey: 'pane',
+          orcaSessionId: ids[length + 2]
+        }).map((row) => row.id)
+      ).toEqual([current.id])
+      expect(candidates).toBe(count)
+      expect(edgeWork - selfContextWork).toBeLessThanOrEqual(4 * count)
     }
     expect(visits).toBe(size)
     expect(copies).not.toHaveBeenCalled()
