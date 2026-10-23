@@ -1,4 +1,3 @@
-import { clearImmediate, setImmediate } from 'node:timers'
 import type { JournalStoreHost } from './journal-store-collaborators'
 import type { JournalRowWriter } from './journal-row-writer'
 import type { JournalRow } from './journal-row-schema'
@@ -49,7 +48,13 @@ export class JournalTextPruner {
           (error: unknown) => this.failed(error)
         )
     })
-    this.scheduled.unref()
+    if (
+      typeof this.scheduled === 'object' &&
+      'unref' in this.scheduled &&
+      typeof this.scheduled.unref === 'function'
+    ) {
+      this.scheduled.unref()
+    }
   }
 
   close(): void {

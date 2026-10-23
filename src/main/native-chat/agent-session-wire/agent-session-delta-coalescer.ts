@@ -1,4 +1,3 @@
-import { clearTimeout, setTimeout } from 'node:timers'
 import { appendWithinUtf8ByteLimit } from './agent-session-streamed-text-bounds'
 // Server-side coalescing for streamed assistant text.
 //
@@ -77,7 +76,9 @@ export type AgentSessionDeltaCoalescer = {
 
 function defaultSchedule(run: () => void, ms: number): () => void {
   const timer = setTimeout(run, ms)
-  timer.unref?.()
+  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
+    timer.unref()
+  }
   return () => clearTimeout(timer)
 }
 
