@@ -295,4 +295,31 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       { forceContentReload: true }
     )
   })
+
+  it('opens a wrapped network-share path whole, without stat-ing guesses unprompted', async () => {
+    setPlatform('Windows')
+    runtimeEnvironmentCallMock.mockResolvedValue({
+      id: 'rpc-1',
+      ok: true,
+      result: { worktree: 'wt-1', relativePath: null, absolutePath: null, exists: false },
+      _meta: { runtimeId: 'remote-runtime' }
+    })
+    const buffer = makeBuffer([
+      makeBufferLine('//server/share/other/rep'),
+      makeBufferLine('ort.txt')
+    ])
+
+    openFilePathLinkAtBufferPosition(buffer, { x: 4, y: 1 }, 80, {
+      startupCwd: '/srv/repo',
+      worktreeId: 'wt-1',
+      worktreePath: '/srv/repo',
+      runtimeEnvironmentId: 'env-1',
+      terminalHandle: 'term-1',
+      pathExistsCache: new Map()
+    })
+    await flushDoubleRaf()
+
+    const asked = runtimeEnvironmentCallMock.mock.calls.map(([args]) => args.params?.pathText)
+    expect(asked).toEqual(['//server/share/other/report.txt'])
+  })
 })

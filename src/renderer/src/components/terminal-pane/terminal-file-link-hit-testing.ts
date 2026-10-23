@@ -8,7 +8,9 @@ import {
 } from './terminal-file-open-routing'
 import {
   fileLinkTargetExists,
+  mayCheckFileLinkTargetUnprompted,
   resolveFileLinkTarget,
+  type FileLinkHost,
   type FileLinkTarget
 } from './terminal-file-link-target'
 import { createTerminalPathExistenceBatch } from './terminal-path-existence-batch'
@@ -100,8 +102,14 @@ export function openFilePathLinkAtBufferPosition(
       (!known || link.pathText.length > known.pathText.length) &&
       links.findIndex((other) => other.cacheKey === link.cacheKey) === index
   )
-  if (unprobed.length === 0 || (!known && unprobed.length === 1)) {
-    const link = known ?? unprobed[0]
+  // Why: a share outside the workspace is never stat'ed unprompted, so its click opens the
+  // longest guess as before and lets the host resolve it.
+  const host: FileLinkHost = { ...deps, cwd: deps.startupCwd, homePath: deps.terminalHomePath }
+  const uncheckable = unprobed.filter((link) => !mayCheckFileLinkTargetUnprompted(link, host))
+  const checkable = unprobed.filter((link) => !uncheckable.includes(link))
+  const guess = longestPath(uncheckable)
+  if (checkable.length === 0 || (!known && !guess && checkable.length === 1)) {
+    const link = known ?? guess ?? checkable[0]
     if (link) {
       open(link)
     }
@@ -111,14 +119,14 @@ export function openFilePathLinkAtBufferPosition(
   // Why: hard-wrap joining offers guesses like `a.txt/b.txt` that sort first; opening one
   // before its hover probe answers (a host round-trip) fails and hides the real path.
   const isLatestOpen = reserveDetectedFilePathOpenTurn()
-  void probeClickedFileLinks(unprobed, deps).then((existing) => {
+  void probeClickedFileLinks(checkable, deps).then((existing) => {
     if (gesture !== latestClickGesture || !isLatestOpen()) {
       return
     }
     const found = longestPath(existing)
     // Why the shortest otherwise: opening it lets the open report the real failure instead of
     // a probe guessing "missing" for a refusal.
-    const link = found ?? known ?? shortestPath(unprobed)
+    const link = found ?? known ?? guess ?? shortestPath(checkable)
     if (link) {
       open(link, found !== undefined)
     }
