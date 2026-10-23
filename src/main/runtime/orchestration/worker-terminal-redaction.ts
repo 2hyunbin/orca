@@ -43,7 +43,7 @@ type RowSpan = { row: number; start: number; end: number }
 type RowEdit = { start: number; end: number; replacement: string }
 
 function redactLogicalRows(lines: readonly string[], rows: readonly RuntimeTerminalRowMetadata[]) {
-  const edits: RowEdit[][] = lines.map(() => [])
+  const edits: RowEdit[][] = []
   const parts: string[] = []
   const spans: RowSpan[] = []
   let offset = 0
@@ -66,7 +66,8 @@ function redactLogicalRows(lines: readonly string[], rows: readonly RuntimeTermi
         const from = Math.max(start, span.start)
         const to = Math.min(end, span.end)
         if (from < to) {
-          edits[span.row].push({
+          const rowEdits = (edits[span.row] ??= [])
+          rowEdits.push({
             start: from - span.start,
             end: to - span.start,
             replacement: start >= span.start ? DISPATCH_CAPABILITY_REDACTION : ''
@@ -95,9 +96,13 @@ function redactLogicalRows(lines: readonly string[], rows: readonly RuntimeTermi
   flush()
   return {
     lines: lines.map((line, row) => {
+      const rowEdits = edits[row]
+      if (!rowEdits?.length) {
+        return line
+      }
       const pieces: string[] = []
       let cursor = 0
-      for (const edit of edits[row]) {
+      for (const edit of rowEdits) {
         pieces.push(line.slice(cursor, edit.start), edit.replacement)
         cursor = edit.end
       }
