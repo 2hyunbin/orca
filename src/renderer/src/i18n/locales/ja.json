@@ -9715,6 +9715,11 @@
               "invert": "反転",
               "opposite": "逆"
             },
+            "linkRoutingBackground": {
+              "background": "バックグラウンド",
+              "focus": "フォーカス",
+              "tab": "タブ"
+            },
             "72c58f7792": "ウェブビュー",
             "82ba1c80ea": "ローカルホスト",
             "bea27bac4b": "リンク",
@@ -11888,6 +11893,10 @@
           "titleOrca": "Shift を押しながらクリックすると Orca で開きます",
           "descriptionSystem": "リンクは Orca で開きます。{{chord}}+クリックすると、システムのブラウザで開きます。",
           "descriptionOrca": "リンクはシステムのブラウザで開きます。有効にすると、{{chord}}+クリックで Orca 内蔵のブラウザで開きます。"
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "リンクをバックグラウンドで開く",
+          "description": "ターミナル、チャット、Markdown のリンクを、クリックした場所からフォーカスを移さずにブラウザーで開きます。"
         },
         "PluginConsentDialog": {
           "workerTrust": "バックグラウンドワーカー — 自身のプロセスを実行",

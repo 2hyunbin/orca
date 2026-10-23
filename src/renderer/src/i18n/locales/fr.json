@@ -9895,6 +9895,11 @@
               "invert": "inverser",
               "opposite": "opposé"
             },
+            "linkRoutingBackground": {
+              "background": "arrière-plan",
+              "focus": "focus",
+              "tab": "onglet"
+            },
             "terminalLinkActions": {
               "terminal": "terminal",
               "click": "clic",
@@ -12026,6 +12031,10 @@
           "titleOrca": "Maintenez Shift pour ouvrir dans Orca",
           "descriptionSystem": "Les liens s'ouvrent dans Orca ; {{chord}}+clic les envoie plutôt à votre navigateur système.",
           "descriptionOrca": "Les liens s'ouvrent dans votre navigateur système. Une fois activé, {{chord}}+clic en ouvre un dans le navigateur intégré d'Orca."
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "Ouvrir les liens en arrière-plan",
+          "description": "Les liens du terminal, du chat et du markdown s'ouvrent dans le navigateur sans retirer le focus de l'endroit où vous avez cliqué."
         },
         "BrowserTerminalLinkActionsSetting": {
           "title": "Afficher les actions de lien du terminal",

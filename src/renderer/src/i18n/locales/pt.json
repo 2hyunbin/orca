@@ -3660,6 +3660,11 @@
               "invert": "inverter",
               "opposite": "oposto"
             },
+            "linkRoutingBackground": {
+              "background": "segundo plano",
+              "focus": "foco",
+              "tab": "aba"
+            },
             "terminalLinkActions": {
               "terminal": "terminal",
               "chat": "chat",
@@ -8188,6 +8193,10 @@
           "titleOrca": "Mantenha Shift pressionado para abrir no Orca",
           "descriptionSystem": "Os links abrem no Orca, então {{chord}}+clique envia um para o seu navegador do sistema.",
           "descriptionOrca": "Os links abrem no seu navegador do sistema. Quando ativado, {{chord}}+clique abre um no navegador integrado do Orca."
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "Abrir links em segundo plano",
+          "description": "Links do terminal, do chat e do markdown abrem no navegador sem tirar o foco de onde você clicou."
         },
         "PluginKeybindingConsentPreview": {
           "heading": "Atalhos de teclado",
