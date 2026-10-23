@@ -167,20 +167,17 @@ export function subscribeTerminalParkingInputs(runtime: TerminalParkingInputOwne
         affected.add(id)
       }
     }
-    for (const field of [
-      'ptyIdsByTabId',
-      'terminalLayoutsByTabId',
-      'pendingStartupByTabId',
-      'runtimePaneTitlesByTabId'
+    for (const [values, before, titleOnly] of [
+      [state.ptyIdsByTabId, previous.ptyIdsByTabId, false],
+      [state.terminalLayoutsByTabId, previous.terminalLayoutsByTabId, false],
+      [state.pendingStartupByTabId, previous.pendingStartupByTabId, false],
+      [state.runtimePaneTitlesByTabId, previous.runtimePaneTitlesByTabId, true]
     ] as const) {
-      if (state[field] === previous[field]) {
+      if (values === before) {
         continue
       }
-      for (const tabId of new Set([
-        ...Object.keys(state[field]),
-        ...Object.keys(previous[field])
-      ])) {
-        if (state[field][tabId] === previous[field][tabId]) {
+      for (const tabId of new Set([...Object.keys(values), ...Object.keys(before)])) {
+        if (values[tabId] === before[tabId]) {
           continue
         }
         const id = tabWorkspaces.get(tabId)
@@ -192,7 +189,7 @@ export function subscribeTerminalParkingInputs(runtime: TerminalParkingInputOwne
           }
           continue
         }
-        if (field === 'runtimePaneTitlesByTabId') {
+        if (titleOnly) {
           queuePolicy(policy)
         } else {
           affected.add(policy.input.worktreeId)

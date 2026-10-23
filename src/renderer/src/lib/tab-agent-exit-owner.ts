@@ -1,4 +1,5 @@
 import { useAppStore, type AppState } from '@/store'
+import * as workspace from '@/store/workspace-record-selectors'
 import {
   isTerminalLeafId,
   makePaneKey,
@@ -141,34 +142,33 @@ export function startTabAgentExitOwner(): () => void {
         }
       }
     }
-    for (const field of [
-      'terminalLayoutsByTabId',
-      'ptyIdsByTabId',
-      'agentStatusByPaneKey',
-      'retainedAgentsByPaneKey',
-      'paneForegroundAgentByPaneKey'
+    for (const [values, before, paneKeys] of [
+      [state.terminalLayoutsByTabId, previous.terminalLayoutsByTabId, false],
+      [state.ptyIdsByTabId, previous.ptyIdsByTabId, false],
+      [state.agentStatusByPaneKey, previous.agentStatusByPaneKey, true],
+      [state.retainedAgentsByPaneKey, previous.retainedAgentsByPaneKey, true],
+      [state.paneForegroundAgentByPaneKey, previous.paneForegroundAgentByPaneKey, true]
     ] as const) {
-      if (state[field] === previous[field]) {
+      if (values === before) {
         continue
       }
-      for (const key of new Set([...Object.keys(state[field]), ...Object.keys(previous[field])])) {
-        if (state[field][key] === previous[field][key]) {
+      for (const key of new Set([...Object.keys(values), ...Object.keys(before)])) {
+        if (values[key] === before[key]) {
           continue
         }
-        const tabId =
-          field === 'terminalLayoutsByTabId' || field === 'ptyIdsByTabId'
-            ? key
-            : (parsePaneKey(key)?.tabId ?? parseLegacyNumericPaneKey(key)?.tabId)
+        const tabId = paneKeys
+          ? (parsePaneKey(key)?.tabId ?? parseLegacyNumericPaneKey(key)?.tabId)
+          : key
         if (tabId) {
           affected.add(tabId)
         }
       }
     }
     if (
-      state.folderWorkspaces !== previous.folderWorkspaces ||
+      workspace.selectFolderWorkspaces(state) !== workspace.selectFolderWorkspaces(previous) ||
       state.projectGroups !== previous.projectGroups ||
       state.repos !== previous.repos ||
-      state.worktreesByRepo !== previous.worktreesByRepo
+      workspace.selectWorktreesByRepo(state) !== workspace.selectWorktreesByRepo(previous)
     ) {
       for (const id of tabs.keys()) {
         affected.add(id)
