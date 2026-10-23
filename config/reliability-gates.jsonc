@@ -21087,7 +21087,7 @@
       "coverageNotes": "Deterministic probe, adapter and rendered notice tests; the production probe also returned stalled in the affected macOS daemon. Physical Linux/Windows/WSL/SSH and remote notices remain gaps.",
       "motivatingLinks": ["docs/bug-reproductions/daemon-async-io-stall.md"],
       "invariant": "An authenticated responsive daemon must not pass its full spawn health check while asynchronous I/O is stalled. Detection owns at most one unfinished probe and never infers exit, replays input or restarts processes.",
-      "oracle": "An uncompleted operation yields stalled while timers keep running; repeated checks add no work; completion restores healthy. The notice explains restart consequences and opens the existing review. A stalled preserved owner is reported beside a healthy current daemon; recovery requires every retained owner to answer healthy. Removed, replaced and newly adopted owners cannot inherit stale health. Old and unreachable peers never yield a stalled verdict.",
+      "oracle": "An uncompleted operation yields stalled while timers keep running; repeated checks add no work; completion restores healthy. The notice explains restart consequences and opens the existing review. A stalled preserved owner is reported beside a healthy current daemon; recovery requires all supported retained owners to answer healthy, while unreachable owners prevent a healthy verdict. Known unsupported old peers do not pin a recovered warning. Removed, replaced and newly adopted owners cannot inherit stale health. Old and unreachable peers never yield a stalled verdict.",
       "commands": [
         "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/daemon-async-io-probe.test.ts src/main/daemon/daemon-async-io-spawn-health.test.ts src/main/daemon/daemon-pty-adapter-async-io-health.test.ts src/renderer/src/components/sidebar/StalledTerminalDaemonBanner.test.tsx src/main/ipc/pty-management-async-io-health.test.ts --maxWorkers=2"
       ],
@@ -21136,8 +21136,8 @@
           "platform": "macos",
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/daemon-async-io-probe.test.ts src/main/daemon/daemon-async-io-spawn-health.test.ts src/main/daemon/daemon-pty-adapter-async-io-health.test.ts src/renderer/src/components/sidebar/StalledTerminalDaemonBanner.test.tsx src/main/ipc/pty-management-async-io-health.test.ts --maxWorkers=2",
           "result": "passed",
-          "durationSeconds": 2.43,
-          "summary": "35 focused tests pass. The original current-only handler fails five of the added assertions, including missed legacy stalls and incorrect healthy verdicts with an unknown or newly adopted owner. The revised handler passes without session enumeration or restart."
+          "durationSeconds": 1.91,
+          "summary": "36 focused tests pass. The original current-only handler fails added assertions for missed legacy stalls and incorrect healthy verdicts with an unknown or newly adopted owner. The revised handler passes without session enumeration or restart. A further red/green assertion prevents an unsupported old peer from pinning a recovered warning."
         },
         {
           "date": "2026-10-15",

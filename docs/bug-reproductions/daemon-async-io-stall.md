@@ -36,8 +36,9 @@ The desktop health check previously inspected only the current spawn adapter.
 It now checks every already-adopted local daemon generation concurrently through
 the same optional RPC, without listing sessions or opening connections. Any
 identity-verified stalled owner can raise the existing restart-review notice,
-even when another peer is healthy, unsupported or unreachable. Only a complete
-healthy snapshot clears the notice. Removed adapters contribute no evidence;
+even when another peer is healthy, unsupported or unreachable. A healthy snapshot of all supported owners clears the notice; known unsupported
+old peers cannot pin the warning after a supported owner recovers. An unreachable
+owner still prevents a healthy verdict. Removed adapters contribute no evidence;
 new adapters, changed endpoint identities and provider replacement cannot inherit
 an earlier owner's health. Unsupported and unverifiable results remain explicit.
 

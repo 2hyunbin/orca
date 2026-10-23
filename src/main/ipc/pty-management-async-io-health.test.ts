@@ -89,14 +89,11 @@ it('does not hide a proven stall behind an unreachable peer', async () => {
   expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000 })
 })
 
-it.each(['unsupported', 'unverifiable'] as const)(
-  'does not certify every owner healthy when one is %s',
-  async (state) => {
-    adapter.getAsyncIoHealth.mockResolvedValue({ state: 'healthy', pendingMs: 0 })
-    adapters.mockReturnValue([adapter, legacyAdapter({ state })])
-    expect(await read()).toEqual({ state })
-  }
-)
+it('does not certify recovery when a retained owner is unreachable', async () => {
+  adapter.getAsyncIoHealth.mockResolvedValue({ state: 'healthy', pendingMs: 0 })
+  adapters.mockReturnValue([adapter, legacyAdapter({ state: 'unverifiable' })])
+  expect(await read()).toEqual({ state: 'unverifiable' })
+})
 
 it('reports recovery only after every owner answers healthy', async () => {
   adapter.getAsyncIoHealth.mockResolvedValue({ state: 'healthy', pendingMs: 0 })
@@ -135,4 +132,18 @@ it('discards the snapshot when its provider is replaced', async () => {
     return { state: 'stalled', pendingMs: 5000 }
   })
   expect(await read()).toEqual({ state: 'unverifiable' })
+})
+
+it('clears a recovered supported owner beside an older peer without the probe', async () => {
+  const legacy = legacyAdapter({ state: 'unsupported' })
+  adapters.mockReturnValue([adapter, legacy])
+  expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000 })
+  adapter.getAsyncIoHealth.mockResolvedValue({ state: 'healthy', pendingMs: 0 })
+  expect(await read()).toEqual({ state: 'healthy', pendingMs: 0 })
+})
+
+it('reports unsupported when none of the owners implement the probe', async () => {
+  adapter.getAsyncIoHealth.mockResolvedValue({ state: 'unsupported' })
+  adapters.mockReturnValue([adapter, legacyAdapter({ state: 'unsupported' })])
+  expect(await read()).toEqual({ state: 'unsupported' })
 })
