@@ -80,18 +80,8 @@ export function trimPathBoundaryPunctuation(
 }
 
 export function hasSeparatorAfterWhitespace(text: string) {
-  let sawWhitespace = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text.charAt(i)
-    if (/\s/.test(ch)) {
-      sawWhitespace = true
-      continue
-    }
-    if (sawWhitespace && (ch === '/' || ch === '\\')) {
-      return true
-    }
-  }
-  return false
+  const whitespaceIndex = text.search(/\s/)
+  return whitespaceIndex !== -1 && /[\\/]/.test(text.slice(whitespaceIndex + 1))
 }
 
 export function trimSpacedPathTrailingProse(

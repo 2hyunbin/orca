@@ -67,17 +67,8 @@ function hasPathSeparator(text: string): boolean {
 }
 
 function hasSeparatorAfterWhitespace(text: string): boolean {
-  let sawWhitespace = false
-  for (const char of text) {
-    if (/\s/.test(char)) {
-      sawWhitespace = true
-      continue
-    }
-    if (sawWhitespace && (char === '/' || char === '\\')) {
-      return true
-    }
-  }
-  return false
+  const whitespaceIndex = text.search(/\s/)
+  return whitespaceIndex !== -1 && /[\\/]/.test(text.slice(whitespaceIndex + 1))
 }
 
 function hasInternalWhitespaceBeforeTrimmedEnd(text: string): boolean {
