@@ -1,9 +1,15 @@
-// The host sends terminal news while no window owns delivery.
+// The execution host's own phone push for hook-reported terminal agents, while no desktop window
+// runs on it: a turn that finished (or failed) and an agent that needs input.
+//
+// WHY ONLY WITHOUT A WINDOW: a window runs its own detection and pushes this host's phones through
+// main, as it always has. A host with no window (`orca serve`, `orcad`, a desktop whose window is
+// closed) had nobody to make the call, so the phones heard nothing. Here the host makes it with the
+// window's own rules, timing and wording; while a window owns the host, it stays silent.
+//
+// The phone suppresses an alert for what it is showing itself, so the host never guesses who looks.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
-import { createHookOnlyCompletionObserver } from '../../renderer/src/components/terminal-pane/agent-completion-hook-observer'
 import { selectHookNotificationTimestamp } from '../../renderer/src/components/terminal-pane/agent-completion-notification-controller'
 import type { AgentCompletionStatusSnapshot } from '../../renderer/src/components/terminal-pane/agent-completion-coordinator-types'
-import { createAgentHookNotificationRetirement } from '../../renderer/src/hooks/agent-hook-notification-retirement'
 import {
   agentMainAgentVerdict,
   agentTurnEndedOnPurpose
@@ -18,15 +24,9 @@ import type {
 } from '../../shared/notification-settings-types'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
+import { TerminalAgentTurnNews, type TerminalAgentTurnNewsItem } from './terminal-agent-turn-news'
 
 export type TerminalAgentWorkspaceLabels = { repoLabel?: string; worktreeLabel?: string }
-
-type PaneNews = {
-  worktreeId: string
-  source: string
-  observer: ReturnType<typeof createHookOnlyCompletionObserver>
-  retirement: ReturnType<typeof createAgentHookNotificationRetirement>
-}
 
 export type TerminalAgentPhonePushDeps = {
   /** A desktop window owns this host and pushes its phones itself. */
@@ -44,102 +44,24 @@ export type TerminalAgentPhonePushDeps = {
 }
 
 export class TerminalAgentPhonePush {
-  private readonly newsByPane = new Map<string, PaneNews>()
   private readonly recentDispatches = new Map<string, number>()
-  private readonly titleWorking = new Set<string>()
 
-  constructor(private readonly deps: TerminalAgentPhonePushDeps) {}
+  private readonly turnNews: TerminalAgentTurnNews
 
-  observe(change: AgentPaneChange): void {
-    const { paneKey } = change
-    const row = this.deps.readHookRow(paneKey)
-    if (change.kind === 'moved' || !row) {
-      if (
-        !row &&
-        ((change.kind === 'moved' && change.to === 'working') ||
-          (change.kind === 'seeded' && change.phase === 'working'))
-      ) {
-        this.titleWorking.add(paneKey)
-      }
-      if (change.kind === 'moved' && change.to === 'rest') {
-        this.titleWorking.delete(paneKey)
-        this.forget(paneKey)
-      }
-      if (!row && change.kind === 'observed') {
-        this.forget(paneKey)
-      }
-      return
-    }
-    if (!change.workspace || row.structuredHost) {
-      this.forget(paneKey)
-      return
-    }
-    if (row.providerSessionOnly || row.programStatusOnly) {
-      return
-    }
-    const worktreeId = change.workspace.worktreeId
-    const source = JSON.stringify([
-      worktreeId,
-      row.connectionId,
-      row.terminalHandle,
-      row.runId,
-      row.executionId,
-      row.authorityRestartId,
-      row.agentType
-    ])
-    let news = this.newsByPane.get(paneKey)
-    if (news?.source !== source) {
-      this.forget(paneKey)
-      const workingObserved = this.titleWorking.delete(paneKey)
-      const retirement = createAgentHookNotificationRetirement(
-        () => row.terminalHandle ?? null,
-        this.deps.retire
-      )
-      const entry: PaneNews = {
-        source,
-        worktreeId,
-        retirement,
-        observer: createHookOnlyCompletionObserver({
-          paneKey,
-          workingObserved,
-          isLive: () =>
-            this.newsByPane.get(paneKey) === entry && this.deps.readHookRow(paneKey) !== null,
-          dispatch: (snapshot) => this.send(paneKey, entry, snapshot)
-        })
-      }
-      this.newsByPane.set(paneKey, entry)
-      news = entry
-      if (
-        change.kind === 'observed' &&
-        row.state === 'done' &&
-        row.turnEndDisposition === undefined &&
-        !workingObserved
-      ) {
-        news.observer.seedHookStatus(row)
-        return
-      }
-    }
-    if (change.kind === 'seeded' || row.isReplay || row.restoredUnconfirmed) {
-      news.retirement.clear()
-      news.observer.seedHookStatus(row)
-    } else {
-      news.retirement.observe(row)
-      news.observer.observeHookStatus(row)
-    }
+  constructor(private readonly deps: TerminalAgentPhonePushDeps) {
+    this.turnNews = new TerminalAgentTurnNews({
+      readHookRow: (paneKey) => deps.readHookRow(paneKey),
+      deliver: (news) => this.send(news),
+      retire: (alerts) => deps.retire(alerts)
+    })
   }
 
-  private forget(paneKey: string): void {
-    const news = this.newsByPane.get(paneKey)
-    news?.observer.dispose()
-    news?.retirement.clear()
-    this.newsByPane.delete(paneKey)
+  observe(change: AgentPaneChange): void {
+    this.turnNews.observe(change)
   }
 
   dispose(): void {
-    for (const paneKey of this.newsByPane.keys()) {
-      this.forget(paneKey)
-    }
-    this.titleWorking.clear()
+    this.turnNews.dispose()
   }
 
   private buildEvent(
@@ -178,23 +100,25 @@ export class TerminalAgentPhonePush {
     }
   }
 
-  private send(paneKey: string, news: PaneNews, snapshot: AgentCompletionStatusSnapshot): void {
+  private send({ paneKey, worktreeId, row }: TerminalAgentTurnNewsItem): string | undefined {
+    // Decided when the alert would go out: a window that took over by then announces it itself.
     if (
       this.deps.hasWindow() ||
-      this.deps.isWorkspaceMuted(news.worktreeId) ||
-      agentTurnEndedOnPurpose(snapshot)
+      this.deps.isWorkspaceMuted(worktreeId) ||
+      agentTurnEndedOnPurpose(row)
     ) {
       return
     }
-    const event = this.buildEvent(news.worktreeId, paneKey, snapshot)
+    const event = this.buildEvent(worktreeId, paneKey, row)
     const settings = this.deps.readNotificationSettings()
     // The window's own fan-out gates the phone on these same preferences.
     const desktopAllowed = settings?.enabled !== false && settings?.agentTaskComplete !== false
     const now = this.deps.now()
-    const burstKey = JSON.stringify([desktopAllowed, event.agentState, news.worktreeId])
+    const burstKey = JSON.stringify([desktopAllowed, event.agentState, worktreeId])
     if (!reserveNotificationCooldown(this.recentDispatches, burstKey, now)) {
       return
     }
+    // No attention key: later cooldowns then key on the workspace, as the window's request does.
     this.deps.dispatch({
       ...event,
       emittedAt: now,
@@ -202,8 +126,8 @@ export class TerminalAgentPhonePush {
     })
     if (event.notificationId) {
       this.deps.recordAnnounced(paneKey, event.notificationId)
-      news.retirement.record({ notificationId: event.notificationId }, snapshot)
     }
+    return event.notificationId
   }
 
   private readLabels(worktreeId: string, paneKey: string): TerminalAgentWorkspaceLabels {

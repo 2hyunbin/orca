@@ -50,7 +50,7 @@ it('keeps targeted sender reads constant at P=10/100 and disposes every owned qu
       if (
         new Error('Trace sender-owned work').stack
           ?.replaceAll('\\', '/')
-          .includes('/terminal-agent-phone-push.ts:')
+          .match(/\/terminal-agent-(?:phone-push|turn-news)\.ts:/)
       ) {
         reads += 1
       }

@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process'
+import { constants, getPriority, setPriority } from 'node:os'
 import { windowsSystem32Binary } from './windows-system-binary'
 
 /**
@@ -117,6 +118,16 @@ export function startWindowsTreeKill(
   } catch {
     finish('unverifiable')
     return kill
+  }
+  if (process.platform === 'win32' && killer.pid !== undefined) {
+    try {
+      // Tree termination must not inherit a background caller's scheduling penalty.
+      if (getPriority(killer.pid) > constants.priority.PRIORITY_NORMAL) {
+        setPriority(killer.pid, constants.priority.PRIORITY_NORMAL)
+      }
+    } catch {
+      /* Priority changes are best effort; keep tracking the original termination. */
+    }
   }
   killer.once('error', () => finish('unverifiable'))
   killer.once('close', (code) => finish(code === 0 ? 'exited' : 'unverifiable'))

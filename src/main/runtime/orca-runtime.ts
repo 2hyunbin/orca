@@ -26,7 +26,7 @@ import type { RemoteLayoutSnapshot } from '../../shared/remote-layout-snapshot'
 import { registerDetectedWorktreeScanInvalidation } from '../ipc/worktrees/listing/register-detected-worktree-scan-invalidation'
 import {
   listReferenceWorkspaces,
-  selectReferenceWorkspace,
+  selectWarmedReferenceWorkspace,
   listWorkspaceReferences
 } from './runtime-reference-catalog'
 import { findWorkspaceReferences } from './runtime-reference-find'
@@ -120,24 +120,16 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
       )
     : null
 
-  private async selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
-    const catalog = listReferenceWorkspaces(
+  private selectReferenceCatalogWorkspace(selector: string, cwd?: string) {
+    return selectWarmedReferenceWorkspace(
       this.requireStore(),
-      this.resolvedWorktrees.peek()?.worktrees
+      {
+        cached: () => this.resolvedWorktrees.peek()?.worktrees,
+        scan: () => this.listResolvedWorktrees()
+      },
+      selector,
+      cwd
     )
-    try {
-      return selectReferenceWorkspace(catalog, selector, cwd)
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== 'selector_not_found') {
-        throw error
-      }
-      // Why: unsaved worktrees and cold-cache branches only resolve after a worktree scan.
-      const warmed = listReferenceWorkspaces(
-        this.requireStore(),
-        await this.listResolvedWorktrees()
-      )
-      return selectReferenceWorkspace(warmed, selector, cwd)
-    }
   }
 
   async listWorkspaceReferences(selector: string, cwd?: string) {
