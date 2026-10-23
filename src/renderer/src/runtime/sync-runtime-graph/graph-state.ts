@@ -1,5 +1,4 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
-import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
+import type { AgentStatusReadState, AgentStatusSnapshot } from '@/store/agent-status-observers'
 import type { MobileProjectSectionCatalog } from '../../../../shared/mobile-project-sections-contract'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { AppState } from '@/store/types'

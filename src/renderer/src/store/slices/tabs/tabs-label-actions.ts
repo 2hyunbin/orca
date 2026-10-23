@@ -1,3 +1,4 @@
+import type { TuiAgent } from '../../../../../shared/tui-agent'
 import { launchAgentOf } from './tabs-toggle-telemetry'
 import { terminalFactSetter } from '../../terminal-fact-publication'
 import { emitNativeChatToggled } from '@/lib/native-chat-telemetry'

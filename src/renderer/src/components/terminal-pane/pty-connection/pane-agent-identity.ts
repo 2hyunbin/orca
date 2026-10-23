@@ -1,5 +1,4 @@
-import { getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { dismissRetainedProgramResult } from '@/lib/program-status/result-retention'
 import { isRetainedProgramResult } from '@/lib/program-status/row'

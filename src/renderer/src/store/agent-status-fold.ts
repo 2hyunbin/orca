@@ -58,3 +58,20 @@ export function writeAgentStatusFold(stage: StatusStage, ...args: StoreSetArgs<A
   }
   stage.appRevision++
 }
+
+export function createAgentStatusReadViews() {
+  const views = new WeakMap<AppState, WeakMap<AgentStatusSnapshot, AgentStatusReadState>>()
+  return (app: AppState, statuses: AgentStatusSnapshot): AgentStatusReadState => {
+    let byStatus = views.get(app)
+    if (!byStatus) {
+      byStatus = new WeakMap()
+      views.set(app, byStatus)
+    }
+    let view = byStatus.get(statuses)
+    if (!view) {
+      view = { ...app, agentStatusByPaneKey: statuses }
+      byStatus.set(statuses, view)
+    }
+    return view
+  }
+}

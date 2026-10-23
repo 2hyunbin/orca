@@ -1,5 +1,10 @@
-import { readAgentStatusFold, writeAgentStatusFold, type StatusStage } from './agent-status-fold'
-import type { AgentStatusTransaction } from './agent-status-fold'
+import {
+  createAgentStatusReadViews,
+  readAgentStatusFold,
+  writeAgentStatusFold,
+  type StatusStage,
+  type AgentStatusTransaction
+} from './agent-status-fold'
 import {
   countLiveAgentStatuses,
   noteLiveAgentStatusCount
@@ -18,7 +23,6 @@ import type { StoreSetArgs } from './react-commit-cascade-write-probe'
 import {
   createAgentStatusObservers,
   reportAgentStatusObserverError,
-  type AgentStatusReadState,
   type AgentStatusSnapshot
 } from './agent-status-observers'
 
@@ -51,20 +55,7 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
   let appDepth = 0
   let coordinatedDepth = 0
   let appFrame: { live: AgentStatusSnapshot } | null = null
-  const views = new WeakMap<AppState, WeakMap<AgentStatusSnapshot, AgentStatusReadState>>()
-  const joined = (app: AppState, statuses: AgentStatusSnapshot): AgentStatusReadState => {
-    let byStatus = views.get(app)
-    if (!byStatus) {
-      byStatus = new WeakMap()
-      views.set(app, byStatus)
-    }
-    let view = byStatus.get(statuses)
-    if (!view) {
-      view = { ...app, agentStatusByPaneKey: statuses }
-      byStatus.set(statuses, view)
-    }
-    return view
-  }
+  const joined = createAgentStatusReadViews()
   const afterCommit = (effect: () => void): void => {
     if (stage) {
       stage.effects.push(effect)
