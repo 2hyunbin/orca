@@ -117,7 +117,7 @@ export async function reclaimStaleOrcadInstanceLock(
     return result(
       'eligible',
       `${found}\nMake sure no other machine sharing this home runs Orca for this profile, then ` +
-        `re-run with ${ORCAD_RECLAIM_STALE_LOCK_FLAG} --yes.`,
+        'run the same command again with --yes added.',
       evidence
     )
   }
