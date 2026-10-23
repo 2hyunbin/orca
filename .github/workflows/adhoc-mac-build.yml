@@ -1,47 +1,55 @@
-name: Terminal runtime macOS 14 package qualification
+name: Verified recovery self-exit platform qualification
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  signed-package:
-    runs-on: macos-14
-    timeout-minutes: 15
+  self-exit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
     steps:
-      - name: Verify older macOS host
-        run: |
-          sw_vers
-          uname -m
-          test "$(sw_vers -productVersion | cut -d. -f1)" = 14
-      - name: Verify untouched signed packages
+      - uses: actions/checkout@v6
+        with:
+          ref: 496fba759b4481104d2938c961b67f63fa6100d9
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+        with:
+          native-runtime: none
+      - name: Exercise actual exported shutdown function in owned children
         shell: bash
         run: |
-          python3 - <<'PYTHON'
-          import base64,hashlib,pathlib,subprocess,urllib.request
-          root=pathlib.Path.cwd()/'qualification'
-          root.mkdir()
-          assets={
-            'arm64':('Orca-1.4.238-adhoc.20261023102547-arm64-mac.zip','7cfR7jWGfVOHjj3VC9z5tOTkAQRpKkIUIsqpa6YT/0D04SgRmvrAjubcamTU885Afb31ugqEPXY6U8A0FLTiOw=='),
-            'x64':('Orca-1.4.238-adhoc.20261023102547-mac.zip','LRx/1497AJWT0I3Gm5oYn8QH7sQQfia8E5+szclvBhQJjVkH9BjsqWQRAut3M7gk17agO/xKdXUN3MS/SQKnhA==')
+          cat > qualification-exit.mjs <<'JAVASCRIPT'
+          import assert from 'node:assert/strict'
+          import { createRequire } from 'node:module'
+          import { pathToFileURL } from 'node:url'
+          import { resolve } from 'node:path'
+          const require = createRequire(import.meta.url)
+          const { runProcess } = require('@orca/process-host')
+          const source = pathToFileURL(resolve('src/main/daemon/daemon-rpc-process-exit.ts')).href
+          const results = []
+          for (const mode of [undefined, 'verified-stalled-owner']) {
+            const code = `import { exitDaemonAfterRpcShutdown } from ${JSON.stringify(source)}; exitDaemonAfterRpcShutdown(${JSON.stringify(mode)});`
+            const result = await runProcess({
+              program: process.execPath,
+              args: ['--input-type=module', '--eval', code],
+              timeoutMs: 10000,
+              env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+            })
+            assert.equal(result.timedOut, false, JSON.stringify(result))
+            if (mode === undefined) {
+              assert.equal(result.code, 0, JSON.stringify(result))
+              assert.equal(result.signal, null)
+            } else {
+              assert(result.signal === 'SIGKILL' || (process.platform === 'win32' && result.code === 1), JSON.stringify(result))
+            }
+            results.push({ mode: mode ?? 'normal', code: result.code, signal: result.signal })
           }
-          host=subprocess.check_output(['uname','-m'],text=True).strip()
-          targets=['arm64','x64'] if host=='arm64' else ['x64']
-          probe=root/'probe.cjs'
-          probe.write_text("""const assert=require('node:assert/strict');const fs=require('node:fs/promises');const dns=require('node:dns/promises');const crypto=require('node:crypto');const {setTimeout:delay}=require('node:timers/promises');const pty=require(process.argv[2]);const watchdog=setTimeout(()=>process.exit(2),60000);async function io(){await Promise.all([fs.stat(process.execPath),dns.lookup('localhost'),new Promise((resolve,reject)=>crypto.randomBytes(32,e=>e?reject(e):resolve()))]);}async function echo(){const terminal=pty.spawn('/bin/sh',['-c','read line; printf ECHO:%s "$line"'],{cwd:process.argv[3],env:process.env});let output='';terminal.onData(s=>output+=s);const exit=new Promise((resolve,reject)=>terminal.onExit(({exitCode})=>exitCode===0?resolve():reject(Error('PTY exit '+exitCode))));terminal.write('OLDER_MAC_PTY_OK'+String.fromCharCode(13));await exit;assert(output.includes('ECHO:OLDER_MAC_PTY_OK'));}(async()=>{assert.equal(process.version,'v24.22.1');assert.equal(process.arch,process.argv[4]);await io();await echo();await delay(32000);await io();await echo();clearTimeout(watchdog);console.log(JSON.stringify({node:process.version,uv:process.versions.uv,arch:process.arch,fsDnsCrypto:'passed',ptyBeforeAfterIdle:'passed'}));})().catch(e=>{console.error(e);process.exit(1)});""")
-          for arch in targets:
-            name,digest=assets[arch]
-            archive=root/name
-            urllib.request.urlretrieve('https://github.com/stablyai/orca-adhoc/releases/download/v1.4.238-adhoc.20261023102547/'+name,archive)
-            assert base64.b64encode(hashlib.sha512(archive.read_bytes()).digest()).decode()==digest
-            folder=root/arch
-            subprocess.run(['ditto','-x','-k',str(archive),str(folder)],check=True)
-            app=folder/'Orca.app'
-            subprocess.run(['codesign','--verify','--deep','--strict',str(app)],check=True)
-            subprocess.run(['xcrun','stapler','validate',str(app)],check=True)
-            helper=app/'Contents/Helpers/Orca Terminal Host.app/Contents'
-            executable=helper/'MacOS/orca-terminal-host'
-            subprocess.run(['codesign','-d','--verbose=4',str(executable)],check=True)
-            subprocess.run([str(executable),str(probe),str(helper/'Resources/daemon/node_modules/node-pty'),str(root),arch],check=True,timeout=90)
-          PYTHON
+          console.log(JSON.stringify({ platform: process.platform, arch: process.arch, node: process.version, source: '496fba759b4481104d2938c961b67f63fa6100d9', results }))
+          JAVASCRIPT
+          node qualification-exit.mjs
