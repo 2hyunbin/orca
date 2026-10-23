@@ -23,6 +23,9 @@ export function isRemovedFolderWorkspaceInstance(
   worktreeId: string,
   executionHostId?: ExecutionHostId
 ): boolean {
+  if (!worktreeId.includes(FOLDER_WORKSPACE_INSTANCE_SEPARATOR)) {
+    return false
+  }
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   // Same-id owners can sit at different paths on different hosts, so match any folder owner.
   const isFolderInstance = store
