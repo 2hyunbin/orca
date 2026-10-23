@@ -664,7 +664,8 @@ describe('reserve assignment on a director', () => {
       await fresh.warm()
       // A fresh ask is placed as today (the share draw), not rehomed.
       expect(await fresh.assignment.plan(HOST, { ...ask, reconnect: false })).toMatchObject({ lane: 'placement' })
-      expect(await fresh.assignment.plan(OTHER, ask)).not.toMatchObject({ lane: 'rehome' })
+      // Never seen: placed fresh in its own region by the share draw, not rehomed.
+      expect(await fresh.assignment.plan(OTHER, ask)).toMatchObject({ kind: 'answer', lane: 'placement' })
       const onDatabase = setup({
         cells: [...cellList(['us-db']), ...cellList(['asia-r'], ASIA)],
         feeds: [feed('us-db', { admitMode: 'db', ...usCounts, full: [seated(5, 1_000)] }), feed('asia-r', asiaFull(0.5))],
@@ -692,11 +693,13 @@ describe('reserve assignment on a director', () => {
     })
 
     it('falls through to the sticky answer on a pace, never a 503', async () => {
-      const { assignment, warm } = setupRehome({
+      const { assignment, reserved, warm } = setupRehome({
         reserve: (cellId) => (cellId === 'asia-r' ? { outcome: 'intake' } : { outcome: 'ok' })
       })
       await warm()
       expect(await assignment.plan(HOST, ask)).toMatchObject({ kind: 'answer', lane: 'sticky' })
+      // The booking was asked for and refused on intake: the pace path ran.
+      expect(reserved.map((call) => call.cellId)).toEqual(['asia-r'])
     })
 
     it('leaves a host another install keeps dropping', async () => {
