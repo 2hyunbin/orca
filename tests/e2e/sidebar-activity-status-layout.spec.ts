@@ -47,6 +47,9 @@ async function seedActivity(
         retainedAgentsByPaneKey: {},
         acknowledgedAgentsByPaneKey: {}
       })
+      if (state === 'idle') {
+        return
+      }
       const now = Date.now()
       for (let index = 0; index < count; index += 1) {
         const leafId = `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`
