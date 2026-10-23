@@ -185,8 +185,8 @@ function rankingForCandidate(
   query: string,
   queryTokens: readonly string[],
   candidate: CmdJMiddleResult,
-  actionVerbKeywords: readonly string[],
-  settingsConfigKeywords: readonly string[]
+  hasActionVerbPrefix: boolean,
+  hasSettingsConfigSuffix: boolean
 ): RankedResult | null {
   if (!query) {
     return null
@@ -216,7 +216,7 @@ function rankingForCandidate(
 
   if (
     candidate.kind === 'settings' &&
-    actionVerbKeywords.some((keyword) => query.startsWith(keyword)) &&
+    hasActionVerbPrefix &&
     candidate.configKeywords.some((keyword) => query.endsWith(keyword))
   ) {
     return { result: candidate, rule: 3, score: 0 }
@@ -225,7 +225,7 @@ function rankingForCandidate(
   if (
     candidate.kind === 'action' &&
     candidate.verbKeywords.some((keyword) => startsOrIsStartedBy(query, keyword)) &&
-    !settingsConfigKeywords.some((keyword) => query.endsWith(keyword))
+    !hasSettingsConfigSuffix
   ) {
     return { result: candidate, rule: 4, score: 0 }
   }
@@ -275,8 +275,12 @@ export function rankCmdJMiddleResults({
   const queryTokens = uniqueCmdJPaletteQueryTokens(normalizedQuery)
   const settings = settingsResults
   const actions = actionResults
-  const actionVerbKeywords = actions.flatMap((action) => action.verbKeywords)
-  const settingsConfigKeywords = settings.flatMap((setting) => setting.configKeywords)
+  const hasActionVerbPrefix = actions.some((action) =>
+    action.verbKeywords.some((keyword) => normalizedQuery.startsWith(keyword))
+  )
+  const hasSettingsConfigSuffix = settings.some((setting) =>
+    setting.configKeywords.some((keyword) => normalizedQuery.endsWith(keyword))
+  )
 
   return [...settings, ...actions]
     .map((candidate) =>
@@ -284,8 +288,8 @@ export function rankCmdJMiddleResults({
         normalizedQuery,
         queryTokens,
         candidate,
-        actionVerbKeywords,
-        settingsConfigKeywords
+        hasActionVerbPrefix,
+        hasSettingsConfigSuffix
       )
     )
     .filter((entry): entry is RankedResult => entry !== null)
