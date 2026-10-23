@@ -13,7 +13,8 @@ describe('workspace SSH gate', () => {
       status: null,
       requiresConnection: false,
       connectInProgress: false,
-      error: null
+      error: null,
+      needsDesktopServerRecovery: false
     })
   })
 
@@ -46,7 +47,8 @@ describe('workspace SSH gate', () => {
       status: null,
       requiresConnection: true,
       connectInProgress: false,
-      error: null
+      error: null,
+      needsDesktopServerRecovery: false
     })
   })
 
@@ -80,6 +82,21 @@ describe('workspace SSH gate', () => {
       connectInProgress: false,
       error: 'Permission denied'
     })
+  })
+
+  it('asks for the desktop recovery only when the start refusal names the command', () => {
+    const gate = (detail: string) =>
+      deriveWorkspaceSshGate({
+        connectionId: 'ssh-1',
+        state: {
+          targetId: 'ssh-1',
+          status: 'connected',
+          managedServer: { serving: { detail } }
+        },
+        connecting: false
+      }).needsDesktopServerRecovery
+    expect(gate('run `orcad --reclaim-stale-lock --data-root /home/dev/.orca` there')).toBe(true)
+    expect(gate('orcad did not answer')).toBe(false)
   })
 
   it('labels user-visible SSH states', () => {
