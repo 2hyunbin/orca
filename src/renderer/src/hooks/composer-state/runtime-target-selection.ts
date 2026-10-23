@@ -106,6 +106,7 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
         eligibleRepos,
         projects,
         projectHostSetups,
+        hosts: hostOptions,
         draftRepoId: requestedRepoId,
         projectId: pendingInitialWorkspaceTarget?.projectId,
         hostId: pendingInitialWorkspaceTarget?.hostId,
@@ -120,6 +121,7 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     [
       actionableHostIds,
       eligibleRepos,
+      hostOptions,
       pendingInitialWorkspaceTarget,
       projectHostSetups,
       projects,
@@ -197,7 +199,14 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
   )
 
   const selectedRepoProjectId =
-    selectedWorkspaceTarget.status === 'ready' ? selectedWorkspaceTarget.target.projectId : null
+    selectedWorkspaceTarget.status === 'ready'
+      ? selectedWorkspaceTarget.target.projectId
+      : selectedWorkspaceTarget.status === 'ambiguous'
+        ? selectedWorkspaceTarget.projectId
+        : null
+
+  const runTargetChoiceCandidates =
+    selectedWorkspaceTarget.status === 'ambiguous' ? selectedWorkspaceTarget.candidates : null
 
   const selectedProjectId = selectedProjectGroup
     ? `project-group:${selectedProjectGroup.id}`
@@ -308,6 +317,7 @@ export function useComposerRuntimeTargetSelection(input: ComposerRuntimeTargetSe
     folderDetectedIds,
     folderDetectedAgentIds,
     selectedWorkspaceTarget,
+    runTargetChoiceCandidates,
     resolvedRepoId,
     selectedRepo,
     selectedRepoIsGit,
