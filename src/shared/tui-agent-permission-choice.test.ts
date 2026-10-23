@@ -1,5 +1,11 @@
-import { legacyLaunchTextUpdates } from './agent-launch-permission-updates'
-import { describe, expect, it } from 'vitest'
+import * as permissionArgs from './agent-permission-args'
+import { measureSettingsWork, expectSettingsWorkScale } from './global-settings-test-fixture'
+import { buildAgentStartupPlan, buildAgentResumeStartupPlan } from './tui-agent-startup'
+import {
+  wholeAgentEnvironmentUpdates,
+  legacyLaunchTextUpdates
+} from './agent-launch-permission-updates'
+import { describe, expect, it, vi } from 'vitest'
 import {
   agentLaunchSettingsMutationUpdates,
   projectAgentLaunchSettings,
@@ -156,7 +162,9 @@ describe('older clients against a host with the stored choice', () => {
 })
 
 describe('permission carrier ownership across save, reload and consumers', () => {
-  it.each([
+  const disagreement = '--model op\\ us --permission-mode auto'
+  const repeated = '--dangerously-skip-permissions '.repeat(20).trim()
+  const ownershipCases = [
     [
       'claude',
       '--model opus --permission-mode auto',
@@ -298,20 +306,49 @@ describe('permission carrier ownership across save, reload and consumers', () =>
       'auto',
       false
     ],
+    ['claude', repeated, repeated, repeated, 'auto', true],
+    ['claude', disagreement, disagreement, disagreement, 'auto', true],
     ['grok', '--yolo', '--yolo', '--yolo', 'ask', true]
-  ] as const)('%s preserves ownership for %s', (agent, value, raw, launch, chat, carrier) => {
+  ] as const
+  it.each(
+    ownershipCases.flatMap(([agent, value, raw, launch, chat, carrier]) =>
+      (value.includes('--model opus') || value === repeated ? [20, 200] : [1]).map((n) => {
+        const scale = (text: string) =>
+          text === repeated
+            ? '--dangerously-skip-permissions '.repeat(n).trim()
+            : text.replace('--model opus', '--model opus '.repeat(n).trim())
+        return [agent, scale(value), scale(raw), scale(launch), chat, carrier, n] as const
+      })
+    )
+  )('%s preserves ownership for %s', (agent, value, raw, launch, chat, carrier, n) => {
     const before: AgentLaunchSettingsSource = {
       agentPermissionDefault: agent === 'grok' ? 'ask' : 'auto'
     }
+    const start = [importWork.chars, importWork.visits]
+    expect(
+      migrateAgentPermissionChoice({ agentDefaultArgs: { [agent]: value } }, 'linux')
+        .agentDefaultArgs[agent]
+    ).toBe(raw)
     const updates = agentLaunchSettingsMutationUpdates(
       before,
       { type: 'user-arguments', agent, value },
       'linux'
     )
+    const beforeReload = importWork.chars
     const loaded = migrateAgentPermissionChoice(
       JSON.parse(JSON.stringify({ ...before, ...updates })),
       'linux'
     )
+    expect(importWork.chars).toBe(beforeReload)
+    if (value.length > 100) {
+      const key = value.startsWith('--permission-mode')
+        ? 'leading'
+        : raw === value
+          ? 'rejected'
+          : 'tail'
+      const size = [importWork.chars - start[0], importWork.visits - start[1]]
+      expectSettingsWorkScale(`import-${key}`, n, size)
+    }
     expect(loaded.agentDefaultArgs[agent]).toBe(raw)
     expect(resolveTuiAgentLaunchArgs(agent, loaded)).toBe(launch)
     expect(projectAgentLaunchSettings(loaded).agentDefaultArgs[agent]).toBe(launch)
@@ -341,53 +378,128 @@ describe('permission carrier ownership across save, reload and consumers', () =>
     }
   )
 
-  it.each(['linux', 'win32'] as const)(
-    'keeps Goose edits on their actual carrier on %s',
-    (platform) => {
+  it.each(
+    (['linux', 'win32'] as const).flatMap((platform) =>
+      [20, 200].map((n) => [platform, n] as const)
+    )
+  )('prepares Goose with ordered semantics on %s (%i)', (platform, n) => {
+    const carrierName = (key: string) =>
+      (platform === 'win32' ? key.toUpperCase() : key) === 'GOOSE_MODE'
+    const aliases = Object.fromEntries(
+      Array.from({ length: n }, (_, i) => {
+        let bit = 0
+        return [
+          'GOOSE_MODE'.replace(/[A-Z]/g, (c) => (i & (1 << bit++) ? c.toLowerCase() : c)),
+          'custom'
+        ]
+      })
+    )
+    const ordinary = Object.fromEntries(
+      Array.from({ length: n }, (_, i) => [
+        [...'ORDINARYKEY'].map((c, bit) => (i & (1 << bit) ? c.toLowerCase() : c)).join(''),
+        'old'
+      ])
+    )
+    const changed = Object.fromEntries(Object.keys(ordinary).map((k) => [k, 'new']))
+    const proto = (value: string) => Object.fromEntries([['__proto__', value]])
+    for (const [row, [raw, requested, mode = 'full-access']] of (
+      [
+        [{}, { goose_mode: 'auto' }],
+        [
+          { GOOSE_MODE: 'a', goose_mode: 'b' },
+          { GOOSE_MODE: 'a', goose_mode: 'b', X: 'c' }
+        ],
+        [{ GOOSE_MODE: 'custom', goose_mode: 'auto', OTHER: 'keep' }, {}],
+        [proto('own'), proto('next')],
+        [aliases, { ...aliases, X: 'new' }],
+        [aliases, {}],
+        [aliases, aliases],
+        [ordinary, changed, 'ask'],
+        [ordinary, { ...changed, GOOSE_MODE: 'auto' }]
+      ] as const
+    ).entries()) {
+      const extras = Object.fromEntries(Array.from({ length: n }, (_, i) => [`Other${i}`, {}]))
       const initial: AgentLaunchSettingsSource = {
-        agentPermissionDefault: 'full-access',
-        agentDefaultEnv: { goose: { OTHER: '1' } }
-      }
-      let host = {
-        ...initial,
-        ...agentLaunchSettingsMutationUpdates(
-          initial,
-          { type: 'arguments', agent: 'goose', value: '--model foo' },
-          platform
+        agentPermissionDefault: mode === 'ask' ? 'ask' : 'full-access',
+        agentDefaultEnv: { ...extras, goose: raw, gemini: { LATEST: 'keep' } },
+        agentPermissionOverrides: Object.fromEntries(
+          Object.keys(extras).map((k) => [k, 'own' as const])
         )
       }
-      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({
-        GOOSE_MODE: 'auto',
-        OTHER: '1'
-      })
-      host = {
-        ...host,
-        ...agentLaunchSettingsMutationUpdates(
-          host,
-          { type: 'environment-set', agent: 'goose', name: 'OTHER', value: '2' },
-          platform
-        )
-      }
-      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({
-        GOOSE_MODE: 'auto',
-        OTHER: '2'
-      })
-      host = {
-        ...host,
-        ...agentLaunchSettingsMutationUpdates(
-          host,
-          {
-            type: 'environment-remove',
-            agent: 'goose',
-            name: platform === 'win32' ? 'goose_mode' : 'GOOSE_MODE'
+      const previous = resolveTuiAgentLaunchEnv('goose', initial, platform)
+      const changedNames = [
+        ...new Set([...Object.keys(previous), ...Object.keys(requested)])
+      ].filter((name) => previous[name] !== requested[name])
+      const expectedActions = changedNames.filter(carrierName).length
+      const sequential = changedNames.reduce<AgentLaunchSettingsSource>(
+        (state, name) => ({
+          ...state,
+          ...agentLaunchSettingsMutationUpdates(
+            state,
+            Object.hasOwn(requested, name)
+              ? { type: 'environment-set', agent: 'goose', name, value: requested[name] }
+              : { type: 'environment-remove', agent: 'goose', name },
+            platform
+          )
+        }),
+        initial
+      )
+      let outer = 0
+      const observe = <T extends object>(target: T) =>
+        new Proxy(target, {
+          ownKeys(value) {
+            const keys = Reflect.ownKeys(value)
+            outer += 2 * keys.length
+            return keys
           },
-          platform
-        )
+          get(value, key, receiver) {
+            outer++
+            return Reflect.get(value, key, receiver)
+          }
+        })
+      initial.agentDefaultEnv = observe(initial.agentDefaultEnv!)
+      initial.agentPermissionOverrides = observe(initial.agentPermissionOverrides!)
+      const receipt = measureSettingsWork(() =>
+        wholeAgentEnvironmentUpdates(initial, 'goose', requested, platform)
+      )
+      const d = Object.keys(raw).filter(carrierName).length
+      expect(outer).toBeLessThanOrEqual(4 * (2 * n + 2))
+      const ordinary =
+        Object.keys(raw).filter((k) => !carrierName(k)).length +
+        Object.keys(requested).filter((k) => !carrierName(k)).length
+      expect(receipt.work.assignments).toBe(expectedActions)
+      // Removal/rename rows empty the raw carrier group on the first action; later raw groups stay empty.
+      const complete =
+        row >= 7
+          ? 13 * n + 1 + (row === 8 ? 3 * n + 24 : 0)
+          : (expectedActions ? 20 * (d + 2 * expectedActions) : 0) + 12 * (d + ordinary + 1)
+      const entries = receipt.work.entries + complete
+      expect(entries).toBeLessThanOrEqual(
+        row >= 7
+          ? 36 * (n + (row === 8 ? 1 : 0)) + 64
+          : 64 * (d + expectedActions + 1) + 36 * ordinary
+      )
+      if (row >= 7 && platform === 'win32') {
+        expect(receipt.value.agentDefaultEnv?.goose).toEqual({
+          [Object.keys(changed).at(-1)!]: 'new'
+        })
       }
-      expect(resolveAgentPermission('goose', host).choice).toBe('own')
-      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({ OTHER: '2' })
+      const key = `env-${platform}-${row}`,
+        counts = [entries + outer, receipt.work.bytes]
+      expectSettingsWorkScale(key, n, counts)
+      if (row === 6) {
+        expect(receipt.value).toEqual({})
+      }
+      expect(receipt.work.comparisons).toBeLessThanOrEqual(
+        16 * (d + 1) * Math.ceil(Math.log2(d + 1))
+      )
+      const prepared = { ...initial, ...receipt.value }
+      expect(prepared).toEqual(sequential)
+      expect(Object.keys(prepared.agentDefaultEnv?.goose ?? {})).toEqual(
+        Object.keys(sequential.agentDefaultEnv?.goose ?? {})
+      )
     }
-  )
+  })
 
   it('applies combined old-client carrier edits against the original projection', () => {
     const host: AgentLaunchSettingsSource = {
@@ -475,4 +587,52 @@ describe('permission carrier ownership across save, reload and consumers', () =>
       expect(newChatPermissionModeForSettings(agent, auto)).toBe('ask')
     }
   })
+})
+
+const importWork = { chars: 0, visits: 0 }
+const cut = permissionArgs.permissionRecipeCut
+vi.spyOn(permissionArgs, 'permissionRecipeCut').mockImplementation((agent, text, recipe) => {
+  const { value, work } = measureSettingsWork(() => cut(agent, text, recipe))
+  importWork.chars += work.chars
+  importWork.visits += work.visits
+  if (text.length < 100) {
+    return value
+  }
+  const calls = work.inputs,
+    w = recipe.split(' ').length,
+    t = text.split(' ').length
+  expect(calls.filter((v) => v === text)).toHaveLength(3)
+  // Fixed token/span/owner allowance plus native slices and two B construction passes per candidate.
+  for (const [actual, bound] of [
+    [calls.filter((v) => v.length > 100 && v !== text).length, 3 * (w + 1)],
+    [work.chars, 3 * (w + 2) * text.length + 4096],
+    [work.entries + work.visits, 3 * (2 + 10 * (w + 1)) * (t + w) + 4096],
+    [work.bytes + 2 * (w + 1) * text.length, 12 * (w + 1) * text.length + 4096]
+  ]) {
+    expect(actual).toBeLessThanOrEqual(bound)
+  }
+  return value
+})
+it.each([false, true])('bounds actual startup/raw resume (%s)', (resume) => {
+  for (const n of [20, 200]) {
+    const models = '--model opus '.repeat(n).trim(),
+      raw = Array(n).fill("'--model' 'opus'").join(' ')
+    const { value: plan, work } = measureSettingsWork(() =>
+      (resume ? buildAgentResumeStartupPlan : buildAgentStartupPlan)({
+        agent: 'claude',
+        cmdOverrides: {},
+        platform: 'linux',
+        agentArgs: models,
+        sessionOptions: { model: 'opus' },
+        sessionOptionsOverrideAgentArgs: resume,
+        prompt: '',
+        allowEmptyPromptLaunch: true,
+        providerSession: { key: 'session_id', id: 's' }
+      })
+    )
+    expect(plan?.launchConfig.agentCommand).toBe(`claude ${raw}`)
+    expect(plan?.launchCommand).toBe(`claude ${resume ? "'--model' 'opus' '--resume' 's'" : raw}`)
+    expect(work.visits).toBeLessThanOrEqual(40 * (2 * n + 1))
+    expectSettingsWorkScale(`startup-${resume}`, n, [work.visits])
+  }
 })
