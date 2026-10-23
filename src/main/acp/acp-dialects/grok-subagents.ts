@@ -72,7 +72,7 @@ function replyText(output: string | null | undefined): string | undefined {
 }
 
 function promptLabel(prompt: string | undefined): string | undefined {
-  const line = prompt?.trim().split('\n')[0]?.trim()
+  const line = prompt?.trim().split('\n', 1)[0]?.trim()
   return line && line.length > MAX_PROMPT_LABEL_CHARS
     ? `${line.slice(0, MAX_PROMPT_LABEL_CHARS - 1)}…`
     : line || undefined

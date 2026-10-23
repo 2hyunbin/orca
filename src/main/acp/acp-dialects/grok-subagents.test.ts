@@ -131,6 +131,22 @@ describe('Grok subagent tool calls', () => {
     ).toEqual([])
   })
 
+  it.each([
+    [' \n\t\nRead notes\r\nIgnore this', 'Read notes'],
+    ['First\rsecond\nIgnore this', 'First\rsecond'],
+    ['First\u2028second\nIgnore this', 'First\u2028second'],
+    ['a'.repeat(80), 'a'.repeat(80)],
+    ['a'.repeat(81), `${'a'.repeat(79)}…`],
+    [' \n\r\n\t', undefined]
+  ] as const)('preserves prompt label selection for %j', (prompt, label) => {
+    expect(
+      grokToolSubagents(
+        finished({ rawOutput: { type: 'Text', text: 'subagent_id: subagent-1' } }),
+        tool('spawn_subagent', { prompt })
+      )
+    ).toEqual([{ id: 'subagent-1', state: 'working', ...(label ? { label } : {}) }])
+  })
+
   it('settles known subagents from an output read, and leaves its shell tasks alone', () => {
     const update = finished({
       rawOutput: {
