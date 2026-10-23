@@ -65,6 +65,13 @@ describe('sanitizeGeneratedJiraIssueSummary', () => {
     )
   })
 
+  it('skips whitespace-only leading lines without treating bare returns as line breaks', () => {
+    expect(
+      sanitizeGeneratedJiraIssueSummary('\ufeff \r\n\u2028\u2029\n\tFix\rlogin\r\nLater title')
+    ).toBe('Fix login')
+    expect(sanitizeGeneratedJiraIssueSummary('\n "" \nLater title')).toBe('')
+  })
+
   it('strips wrapping quotes, markdown headings, and repeated whitespace', () => {
     expect(sanitizeGeneratedJiraIssueSummary('## "Fix   login retry crash"')).toBe(
       'Fix login retry crash'

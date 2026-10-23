@@ -53,10 +53,7 @@ export function buildJiraIssueSummaryPrompt(context: JiraIssueSummaryGenerationC
 }
 
 export function sanitizeGeneratedJiraIssueSummary(raw: string): string {
-  const line = raw
-    .split('\n')
-    .map((candidate) => candidate.trim())
-    .find(Boolean)
+  const line = raw.trimStart().split('\n', 1)[0]?.trim()
   if (!line) {
     return ''
   }
