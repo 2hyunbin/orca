@@ -1,15 +1,10 @@
-import {
-  agentJournalSubmissionKey,
-  parseAgentJournalItemKey
-} from '../../../shared/agent-session-journal-item-key'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalSubmission,
   AgentJournalStatusItem
 } from '../../../shared/agent-session-journal-types'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { readCodexErrorWillRetry } from '../../codex/codex-structured-thread-facts'
-import { applyJournalRow } from './journal-reducer'
-import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import type { JournalReducerState } from './journal-reducer'
 import type {
   JournalRow,
@@ -24,7 +19,7 @@ export function createJournalInputObligations() {
   return {
     sources: new Map<string, JournalSubmissionRow>(),
     handovers: new Map<string, JournalDispatchRow>(),
-    outcomes: new Map<string, JournalDispatchRow>(),
+    echoes: new Set<string>(),
     candidates: new Map<string, AgentJournalSubmission>(),
     ends: new Map<string, JournalItemRow | JournalTombstoneRow>(),
     ended: new Map<string, JournalItemRow | JournalTombstoneRow>(),
@@ -45,8 +40,8 @@ export function foldJournalInputObligations(
   if (row.kind === 'dispatch' && !dispatchApplies) {
     return
   }
-  if (row.kind === 'dispatch') {
-    const target = row.state === 'pending' ? input.handovers : input.outcomes
+  if (row.kind === 'dispatch' && row.state === 'pending') {
+    const target = input.handovers
     const source = input.sources.get(row.clientMessageId)
     const scope = source && state.derivedTurnScope.scopeFor(source.body)
     target.set(
@@ -60,14 +55,18 @@ export function foldJournalInputObligations(
     )
   }
   if (row.kind === 'submission' || row.kind === 'dispatch') {
-    const send = state.submissions.get(row.clientMessageId)
-    if (send && (send.dispatchState === 'pending' || send.dispatchState === 'unknown')) {
-      input.candidates.set(row.clientMessageId, send)
-    } else {
-      input.candidates.delete(row.clientMessageId)
-    }
-    input.revision++
+    refreshJournalInputCandidate(state, row.clientMessageId)
   }
+  if (row.kind === 'queue' && row.change.op === 'queued') {
+    if (row.change.recovers) {
+      input.candidates.delete(row.change.recovers)
+      input.revision++
+    }
+    if (row.change.attempt) {
+      refreshJournalInputCandidate(state, row.change.attempt)
+    }
+  }
+
   const items =
     row.kind === 'item'
       ? [row]
@@ -197,66 +196,12 @@ export function journalInputAttemptEnded(
   return state.inputs.ended.has(send.clientMessageId)
 }
 
-/** Restate original causal rows, including resolutions, without manufacturing a handover. */
-export function retainedJournalInputRows(previous: JournalReducerState): JournalRow[] {
-  const input = previous.inputs
-  const retained = new Set(
-    [...input.sources.keys()].filter(
-      (id) =>
-        previous.submissions.get(id)?.dispatchState !== 'accepted' ||
-        input.handovers.get(id)?.carries?.length
-    )
-  )
-  const rows: JournalRow[] = [
-    ...[...input.sources.values(), ...input.handovers.values(), ...input.outcomes.values()].filter(
-      (row) => retained.has(row.clientMessageId)
-    ),
-    ...new Set([
-      ...input.ended.values(),
-      ...[...input.handovers.values()].flatMap((row) => {
-        const end =
-          row.turnScope?.kind === 'turn' ? input.ends.get(row.turnScope.turnItemId) : undefined
-        return end && retained.has(row.clientMessageId) ? [end] : []
-      })
-    ])
-  ]
-  return rows.sort((a, b) => a.seq - b.seq)
-}
-
-export function restateJournalInputs(
-  previous: JournalReducerState | undefined,
-  state: JournalReducerState,
-  rows: JournalRow[],
-  visible: ReadonlySet<string>
-): void {
-  if (!previous) {
-    return
+export function refreshJournalInputCandidate(state: JournalReducerState, id: string): void {
+  const send = state.submissions.get(id)
+  if (send && (send.dispatchState === 'pending' || send.dispatchState === 'unknown')) {
+    state.inputs.candidates.set(id, send)
+  } else {
+    state.inputs.candidates.delete(id)
   }
-  for (const original of retainedJournalInputRows(previous)) {
-    const row = { ...original, epoch: state.epoch, seq: state.lastSequence + 1 }
-    applyJournalRow(state, row)
-    rows.push(row)
-  }
-  for (const item of state.items.values()) {
-    const identity = parseAgentJournalItemKey(item.itemId)
-    const send =
-      identity?.provider === 'orca'
-        ? state.inputs.candidates.get(identity.clientMessageId)
-        : undefined
-    if (visible.has(item.itemId) || (send && isQueuedAgentJournalSubmission(send))) {
-      continue
-    }
-    const row: JournalRow = {
-      kind: 'tombstone',
-      itemId: item.itemId,
-      revision: item.revision + 1,
-      v: 1,
-      epoch: state.epoch,
-      seq: state.lastSequence + 1,
-      fence: state.highestFence,
-      ts: item.observedAt
-    }
-    applyJournalRow(state, row)
-    rows.push(row)
-  }
+  state.inputs.revision++
 }

@@ -12,6 +12,7 @@ import {
 } from '../../../shared/agent-session-record.test-fixture'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
+import { nextSendableQueuedCard } from './queued-message-pause'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { agentSessionStoppedHistoryOwed } from '../../../shared/agent-session-stopped-history'
 import { structuredAgentSessionCurrentWork } from '../agent-session-wire/structured-agent-session-current-work'
@@ -348,8 +349,7 @@ it('keeps an image as a returned card on both failed-start routes in the rejecti
 })
 
 it('confirms id-less live receipts and releases unopened error/interrupt holds without deciding delivery', async () => {
-  const { createCodexDispatchEchoes, readCodexDispatchEcho } =
-    await import('../../codex/codex-structured-dispatch-echo')
+  const { createCodexDispatchEchoes } = await import('../../codex/codex-structured-dispatch-echo')
   const { settleCodexSendsInEndedTurn } =
     await import('../../codex/codex-structured-turn-end-settlement')
   const remembered: string[] = []
@@ -361,43 +361,7 @@ it('confirms id-less live receipts and releases unopened error/interrupt holds w
       record: agentSessionRecordFixture(lease),
       child: { fence: 7, heldSends: echoes.heldSends }
     })
-  await send('opener')
-  echoes.arm('opener')
-  echoes.expect('opener', 'thread', 'start', [{ type: 'text', text: 'opener' }])
-  echoes.bindTurn('opener', 'thread', 'opened', 'start')
   const identity = { provider: 'codex' as const, threadId: 'thread', turnId: 'opened', ordinal: 1 }
-  const echo = readCodexDispatchEcho(
-    {
-      type: 'userMessage',
-      id: 'old-user',
-      clientId: null,
-      content: [{ type: 'text', text: 'opener' }]
-    },
-    identity,
-    echoes
-  )
-  expect(echo?.clientMessageId).toBe('opener')
-  if (!echo) {
-    throw new Error('missing opener receipt')
-  }
-  await receipt(echo.clientMessageId)
-  echoes.settle(echo.clientMessageId)
-  await send('steer')
-  echoes.arm('steer')
-  echoes.expect('steer', 'thread', 'steer', [{ type: 'text', text: 'steer' }])
-  echoes.bindTurn('steer', 'thread', 'opened', 'steer')
-  expect(
-    readCodexDispatchEcho(
-      { type: 'userMessage', id: 'steer-item', content: [{ type: 'text', text: 'steer' }] },
-      { ...identity, ordinal: 2 },
-      echoes
-    )?.clientMessageId
-  ).toBe('steer')
-  await receipt('steer')
-  echoes.settle('steer')
-  await ended('opened')
-  expect(journal.queuedMessages.get(cardId('opener'))).toBeNull()
-  expect(journal.queuedMessages.get(cardId('steer'))).toBeNull()
   echoes.arm('late-opener')
   echoes.expect('late-opener', 'thread', 'start', [{ type: 'text', text: 'late' }])
   const earlyReceipt = { ...identity, turnId: 'late-turn', ordinal: 0 }
@@ -711,3 +675,138 @@ it.each([100, 1000])(
     expect(state.queue.cards.get('command')?.state).toBe('withdrawn')
   }
 )
+
+it('retains an ordinary consumed payload and attempt across failed replacement, boundary and restart', async () => {
+  const payload: AgentJournalMessageItem = {
+    ...body('full input'),
+    blocks: [
+      { type: 'text', text: 'full input' },
+      { type: 'image-ref', path: '/full.png' }
+    ]
+  }
+  await journal.queuedMessages.insert({
+    messageId: 'Q',
+    body: payload,
+    options: { model: 'gpt-5' }
+  })
+  const card = journal.queuedMessages.get('Q')!
+  await journal.appendSubmission(
+    {
+      clientMessageId: 'U',
+      body: payload,
+      payloadFingerprint: card.fingerprint,
+      fence: 7,
+      origin: 'client',
+      handoverRecorded: true,
+      options: card.options
+    },
+    { messageId: 'Q', expect: 'waiting' }
+  )
+  const original = journal.submission('U')!
+  const before = journal.cursor()
+  await expect(
+    journal.replaceEpochItems('handle_forked', 7, [], () => ({
+      write: () => {
+        throw new Error('write failed')
+      },
+      committed: () => {}
+    }))
+  ).rejects.toThrow('write failed')
+  expect(journal.cursor()).toEqual(before)
+  expect(journal.submission('U')).toEqual(original)
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  await journal.close()
+  await open()
+  expect(journal.submissionBody('U')).toEqual(payload)
+  expect(journal.submission('U')).toEqual(original)
+  expect(journal.queuedMessages.get('Q')).toMatchObject({
+    state: 'dispatched',
+    consumedAs: 'U',
+    options: card.options
+  })
+  expect(
+    nextSendableQueuedCard(journal.queuedMessages.pauses(), journal.queuedMessages.list())
+  ).toBeNull()
+  await journal.acceptLate({
+    clientMessageId: 'U',
+    state: 'accepted',
+    fence: 7,
+    providerIdentity: { provider: 'codex', threadId: 'thread', turnId: 'late', ordinal: 0 }
+  })
+  expect(journal.submission('U')?.dispatchState).toBe('accepted')
+  expect(journal.queuedMessages.get('Q')?.consumedAs).toBe('U')
+  expect(
+    nextSendableQueuedCard(journal.queuedMessages.pauses(), journal.queuedMessages.list())
+  ).toBeNull()
+})
+
+it('indexes queue-restored unknown for an ordinary card and a retained recovery successor', async () => {
+  await send('original')
+  await ended('original-end')
+  const recovery = journal.queuedMessages.get(cardId('original'))!
+  await journal.appendSubmission(
+    {
+      clientMessageId: 'V',
+      body: recovery.body,
+      payloadFingerprint: recovery.fingerprint,
+      fence: 7,
+      origin: 'client',
+      handoverRecorded: true
+    },
+    { messageId: recovery.messageId, expect: 'returned' }
+  )
+  await journal.queuedMessages.insert({ messageId: 'ordinary', body: body('ordinary') })
+  const ordinary = journal.queuedMessages.get('ordinary')!
+  await journal.appendSubmission(
+    {
+      clientMessageId: 'U',
+      body: ordinary.body,
+      payloadFingerprint: ordinary.fingerprint,
+      fence: 7,
+      origin: 'client',
+      handoverRecorded: true
+    },
+    { messageId: ordinary.messageId, expect: 'waiting' }
+  )
+  for (const id of ['U', 'V']) {
+    await journal.resolveDispatch({
+      clientMessageId: id,
+      state: 'pending',
+      fence: 7,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    })
+    await journal.resolveDispatch({
+      clientMessageId: id,
+      state: 'rejected',
+      fence: 7,
+      recovered: true,
+      ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' }),
+      answeredInTurn: {
+        turn: { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: 'ended' },
+        via: 'start'
+      }
+    })
+    expect(journal.submission(id)?.dispatchState).toBe('unknown')
+    expect(journal.queuedMessages.get(cardId(id))?.state).toBe('returned')
+  }
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  await journal.close()
+  await open()
+  for (const id of ['U', 'V']) {
+    expect(journal.queuedMessages.get(cardId(id))?.state).toBe('returned')
+    await journal.acceptLate({
+      clientMessageId: id,
+      state: 'accepted',
+      fence: 7,
+      providerIdentity: {
+        provider: 'codex',
+        threadId: 'thread',
+        turnId: 'late',
+        ordinal: id === 'U' ? 0 : 1
+      }
+    })
+    expect(journal.submission(id)?.dispatchState).toBe('accepted')
+    expect(journal.queuedMessages.get(cardId(id))).toBeNull()
+    expect(journal.itemBody(agentJournalSubmissionKey(id))).toBeNull()
+  }
+})

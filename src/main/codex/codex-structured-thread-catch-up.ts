@@ -104,6 +104,9 @@ export async function catchUpCodexThread(input: {
             unresolved.delete(item.clientId)
           ) {
             await settle(item.clientId, providerIdentity)
+            if (!unresolved.size) {
+              return
+            }
           }
         }
       }

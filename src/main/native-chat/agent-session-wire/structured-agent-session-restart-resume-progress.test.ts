@@ -7,11 +7,13 @@ import {
   continuationCannotFold,
   startAgent
 } from './structured-agent-session-restart-interruption-test-harness'
-import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'
+import {
+  HOST_TEST_SESSION as SESSION,
+  HOST_TEST_THREAD as THREAD
+} from './structured-agent-session-host-test-data'
 import { createRestartResumeProgress } from './structured-agent-session-restart-resume-progress'
 import { journal } from './structured-agent-session-restart-resume-test-harness'
 import type { StructuredAgentSessionRestartOfferSession } from './structured-agent-session-restart-offer-withdrawal'
-import { HOST_TEST_THREAD as THREAD } from './structured-agent-session-host-test-data'
 
 afterEach(() => vi.restoreAllMocks())
 

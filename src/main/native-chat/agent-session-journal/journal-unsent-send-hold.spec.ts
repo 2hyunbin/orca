@@ -463,7 +463,7 @@ export function registerJournalUnsentSendHoldTests(): void {
       const reopened = await open()
       await hold(reopened)
 
-      expect(reopened.queuedMessages.get('A')?.queuedAt?.epoch).not.toBe(
+      expect(reopened.queuedMessages.get('A')?.queuedAt?.epoch).toBe(
         reopened.queuedMessages.get('B')?.queuedAt?.epoch
       )
       expect(cardOrder(reopened)).toEqual(['A', 'B'])

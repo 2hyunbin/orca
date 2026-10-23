@@ -129,7 +129,16 @@ export async function* loadCodexHistory(
       throw new Error('changed-page')
     }
     for (const turn of page.turns.toReversed()) {
+      input.check()
+      if (turn.itemsView !== 'full' || !Array.isArray(turn.items)) {
+        throw new Error('summary-turn')
+      }
+    }
+    for (const turn of page.turns.toReversed()) {
+      input.check()
       await onReadTurn(turn)
+    }
+    for (const turn of page.turns.toReversed()) {
       if (!descriptor.selected.has(turnId(turn))) {
         continue
       }

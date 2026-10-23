@@ -1,3 +1,4 @@
+import { journalContextCursor } from './journal-context-cursor'
 import { journalDispatchRowApplies } from './journal-dispatch-settlement'
 import {
   createJournalInputObligations,
@@ -58,6 +59,7 @@ export const MAX_JOURNAL_APPLIED_SETTLEMENT_IDS = 4_096
 export type JournalReducerState = {
   sessionId: string
   epoch: string
+  contextBoundary: number
   lastSequence: number
   lastActivityAt: number
   /** Lowest sequence still individually replayable; rows below it were compacted. */
@@ -107,6 +109,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
   return {
     sessionId,
     epoch,
+    contextBoundary: 1,
     lastSequence: 0,
     lastActivityAt: 0,
     oldestSequence: 1,
@@ -149,6 +152,8 @@ function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, saved
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
   if (row.kind === 'epoch') {
+    state.contextBoundary = row.seq
+    state.derivedTurnScope = new JournalDerivedTurnScope()
     state.historyOrigin = journalHistoryOrigin(row)
     return
   }
@@ -305,7 +310,8 @@ export function journalEchoClaimant(
         candidate.dispatchState !== 'rejected' &&
         !isWriteFailureSubmission(candidate) &&
         candidate.payloadFingerprint === fingerprint &&
-        state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0
+        !state.inputs.echoes.has(agentJournalSubmissionKey(candidate.clientMessageId)) &&
+        state.items.has(agentJournalSubmissionKey(candidate.clientMessageId))
     )
   return submission ? agentJournalSubmissionKey(submission.clientMessageId) : null
 }
@@ -323,7 +329,7 @@ export function renderJournalState(state: JournalReducerState): AgentJournalSnap
     .sort(compareAgentJournalItems)
   return {
     sessionId: state.sessionId,
-    cursor: { epoch: state.epoch, sequence: state.lastSequence },
+    cursor: journalContextCursor(state),
     items,
     submissions: [...state.submissions.values()].sort((a, b) => a.submittedAt - b.submittedAt)
   }

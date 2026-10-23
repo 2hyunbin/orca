@@ -200,3 +200,16 @@ export function useNativeChatPendingDelivery(args: {
   }, [pending, cancel, paneKey, composerRef])
   return { pending, record, cancel, reject, holdUnconfirmed, clear, notices }
 }
+
+export function useNativeChatOptimisticSend(
+  record: ReturnType<typeof useNativeChatPendingDelivery>['record'],
+  setWorkingInterrupted: (value: boolean) => void
+) {
+  return useCallback(
+    (...input: Parameters<typeof record>) => {
+      setWorkingInterrupted(false)
+      return record(...input)
+    },
+    [record, setWorkingInterrupted]
+  )
+}

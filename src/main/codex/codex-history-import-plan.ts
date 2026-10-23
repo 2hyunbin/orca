@@ -23,6 +23,7 @@ import {
   createHistoryCatchUpBatch
 } from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
 import { createCodexJournalTranslator } from './codex-structured-journal-translation'
+import { codexTurnLifecycleIdentity } from './codex-structured-journal-translation-turns'
 
 /** Invocation-local shared translation: nothing reaches the live sink until this plan is whole. */
 export function createCodexHistoryImportPlan(input: {
@@ -45,7 +46,7 @@ export function createCodexHistoryImportPlan(input: {
   ) => {
     input.check()
     const key = agentJournalItemKey(identity)
-    if (omitted.has(key)) {
+    if (omitted.has(key) || input.journal.presentationRemoved(key)) {
       return { accepted: true } as const
     }
     // The saved relation is display-only: name the original prompt without accepting its send.
@@ -97,9 +98,17 @@ export function createCodexHistoryImportPlan(input: {
       if (typeof turn.id !== 'string') {
         throw new Error('invalid-turn')
       }
+      if (
+        input.journal.presentationRemoved(
+          agentJournalItemKey(codexTurnLifecycleIdentity(input.sessionId, turn.id))
+        )
+      ) {
+        return
+      }
       omitted = new Map<string, string>()
       const ordinals = new CodexTurnOrdinals()
       let native = false
+      let hidden = false
       let outsideUser = false
       for (const value of Array.isArray(turn.items) ? turn.items : []) {
         const item = readCodexThreadItem(value)
@@ -120,11 +129,15 @@ export function createCodexHistoryImportPlan(input: {
             input.nativePromptKeys.has(agentJournalSubmissionKey(item.clientId))
           ) {
             native = true
+            hidden ||= input.journal.presentationRemoved(agentJournalSubmissionKey(item.clientId))
             omitted.set(agentJournalItemKey(identity), agentJournalSubmissionKey(item.clientId))
           } else {
             outsideUser = true
           }
         }
+      }
+      if (hidden) {
+        return
       }
       if ((!native || outsideUser) && !outsideNoted && input.outsideNotice) {
         append(

@@ -3,6 +3,7 @@ import { act, renderHook, cleanup } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   useNativeChatPendingDelivery,
+  useNativeChatOptimisticSend,
   NATIVE_CHAT_UNCONFIRMED_SEND_HOLD_MS
 } from './use-native-chat-pending-delivery'
 import { useNativeChatPtyComposerSend } from './use-native-chat-pty-composer-send'
@@ -61,6 +62,7 @@ it.each(['before-body', 'between-body-enter', 'transport-unknown', 'submitted'] 
           session: { messages },
           composerRef
         })
+        const onOptimisticSend = useNativeChatOptimisticSend(pending.record, () => {})
         const lifecycle = useNativeChatSendLifecycle('tab', 'pty', pending.cancel, {
           inputOwnedByCard: false,
           onPendingSendRetired: pending.reject
@@ -75,7 +77,7 @@ it.each(['before-body', 'between-body-enter', 'transport-unknown', 'submitted'] 
           launchDraftResolved: true,
           resolveTarget: () => ({ ptyId: 'pty', settings: null }),
           classifySend: () => 'chat',
-          onOptimisticSend: pending.record,
+          onOptimisticSend,
           optimisticSendOutcome: pending,
           sessionOptionsSurface: null,
           terminalTabId: 'tab',

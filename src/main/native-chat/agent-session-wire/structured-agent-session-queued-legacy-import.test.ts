@@ -70,7 +70,8 @@ async function handOff(
   card: string,
   text: string,
   as: 'providerRejected' | 'cancelled' | 'accepted',
-  fence = 0
+  fence = 0,
+  answered = false
 ): Promise<void> {
   const body = message(text)
   const payloadFingerprint = agentSessionSendBodyFingerprint(journal.queuedMessages.sessionId, body)
@@ -80,7 +81,8 @@ async function handOff(
     body,
     fence,
     handoverRecorded: true,
-    queuedMessageId: card
+    queuedMessageId: card,
+    ...(answered ? { origin: 'client' as const } : {})
   })
   await journal.resolveDispatch({
     clientMessageId: attempt,
@@ -91,7 +93,25 @@ async function handOff(
   await journal.resolveDispatch(
     as === 'accepted'
       ? { clientMessageId: attempt, state: 'accepted', providerIdentity: null, fence }
-      : { clientMessageId: attempt, state: 'rejected', ...words(as), fence }
+      : {
+          clientMessageId: attempt,
+          state: 'rejected',
+          ...words(as),
+          fence,
+          ...(answered
+            ? {
+                answeredInTurn: {
+                  turn: {
+                    provider: 'legacy' as const,
+                    agent: 'codex',
+                    sessionId: 'thread',
+                    recordId: 'ended'
+                  },
+                  via: 'start' as const
+                }
+              }
+            : {})
+        }
   )
 }
 
@@ -310,7 +330,7 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   await reopened.close()
 })
 
-it('a rewind while the import has failed moves the legacy cards first: a refused one stays returned', async () => {
+it('a rewind while import fails preserves canonical refusals and leaves legacy cleanup optional', async () => {
   // Made before the clear, which leaves the chat no provider handle to read.
   const earlier = journalFor(SESSION)
   const clear = { command: 'clear' as const }
@@ -362,8 +382,116 @@ it('a rewind while the import has failed moves the legacy cards first: a refused
     })
   ).toMatchObject({ ok: true })
   expect(live.epoch).toBe(rewound.expectedEpoch)
-  expect(live.submission('att-refused')).toBeUndefined()
+  expect(live.submission('att-refused')?.dispatchState).toBe('rejected')
   expect(await rig.drafts()).toEqual(held)
   await nothingSentTo('edited')
-  expect(legacyIds()).toEqual([])
+  expect(legacyIds()).toEqual(['disp-refused', 'edited'])
 })
+
+it.each([false, true])(
+  'keeps legacy effective actions and exact proof durable while cleanup fails=%s',
+  async (failed) => {
+    const session = `legacy-action-${failed}`
+    let journal = journalFor(session)
+    await journal.open()
+    const ids = ['proof', 'deleted', 'edited', 'sent']
+    for (const id of ids) {
+      await handOff(journal, `U-${id}`, `Q-${id}`, id, 'cancelled', 0, true)
+    }
+    await journal.close()
+    seedLegacy(
+      session,
+      ids.map((id) => [`Q-${id}`, 'waiting', id])
+    )
+    if (failed) {
+      db().exec(
+        `CREATE TEMP TRIGGER fail_import BEFORE DELETE ON queued_messages BEGIN SELECT RAISE(ABORT, 'cleanup unavailable'); END`
+      )
+    }
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const open = async () => {
+      journal = journalFor(session)
+      await journal.open()
+      journal.queuedMessages.recoveryWork = () => ({
+        allowsRecovery: () => true,
+        owesSend: () => false,
+        generationEnded: () => true,
+        activeTurnId: () => null,
+        recoveryViewKey: () => ''
+      })
+    }
+    await open()
+    for (const id of ids) {
+      expect(journal.submission(`U-${id}`)?.dispatchState).toBe('unknown')
+      expect(journal.queuedMessages.get(`recovery:U-${id}`)?.state).toBe('returned')
+    }
+    if (failed) {
+      db().exec(
+        `CREATE TEMP TRIGGER fail_action BEFORE INSERT ON journal_rows BEGIN SELECT RAISE(ABORT, 'action unavailable'); END`
+      )
+      await expect(journal.queuedMessages.withdraw(['recovery:U-deleted'])).rejects.toThrow(
+        'action unavailable'
+      )
+      expect(journal.queuedMessages.get('recovery:U-deleted')?.state).toBe('returned')
+      expect(legacyIds(session)).toHaveLength(4)
+      db().exec('DROP TRIGGER fail_action')
+    }
+    await journal.acceptLate({
+      clientMessageId: 'U-proof',
+      state: 'accepted',
+      fence: 0,
+      providerIdentity: { provider: 'codex', threadId: 'thread', turnId: 'late', ordinal: 0 }
+    })
+    await journal.queuedMessages.withdraw(['recovery:U-deleted'])
+    const edit = journal.queuedMessages.get('recovery:U-edited')!
+    expect(
+      await journal.queuedMessages.update({
+        messageId: edit.messageId,
+        expectedBodyFingerprint: edit.fingerprint,
+        text: 'changed'
+      })
+    ).toMatchObject({ status: 'updated' })
+    const send = journal.queuedMessages.get('recovery:U-sent')!
+    await journal.appendSubmission(
+      {
+        clientMessageId: 'V',
+        body: send.body,
+        payloadFingerprint: send.fingerprint,
+        fence: 0,
+        origin: 'client',
+        handoverRecorded: true
+      },
+      { messageId: send.messageId, expect: 'returned' }
+    )
+    if (failed) {
+      expect(legacyIds(session)).toHaveLength(4)
+    }
+    await journal.replaceEpochItems('handle_forked', 0, [])
+    await journal.close()
+    await open()
+    expect(journal.submission('U-proof')?.dispatchState).toBe('accepted')
+    expect(journal.queuedMessages.get('recovery:U-proof')).toBeNull()
+    expect(journal.queuedMessages.get('recovery:U-deleted')?.state).toBe('withdrawn')
+    expect(journal.queuedMessages.get('recovery:U-edited')).toMatchObject({
+      state: 'waiting',
+      body: message('changed')
+    })
+    expect(journal.queuedMessages.get('recovery:U-sent')).toMatchObject({
+      state: 'dispatched',
+      consumedAs: 'V'
+    })
+    expect(
+      journal.queuedMessages
+        .list()
+        .filter((card) => card.messageId.startsWith('Q-'))
+        .every((card) => card.state === 'dispatched')
+    ).toBe(true)
+    expect(journal.submission('V')?.dispatchState).toBe('pending')
+    if (failed) {
+      expect(legacyIds(session)).toHaveLength(4)
+      db().exec('DROP TRIGGER fail_import')
+    }
+    warned.mockRestore()
+    await journal.close()
+  }
+)

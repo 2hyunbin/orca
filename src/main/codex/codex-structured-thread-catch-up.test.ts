@@ -249,7 +249,18 @@ describe('Codex chat catch-up', () => {
       })
     }
     const olderTurns = [
-      { ...proof('old-gap'), id: 'old-gap-turn' },
+      {
+        ...proof('old-gap'),
+        id: 'old-gap-turn',
+        items: [
+          ...proof('old-gap').items,
+          ...Array.from({ length: 1_100 }, (_, n) => ({
+            type: 'agentMessage',
+            id: `oversized-${n}`,
+            text: 'answer'
+          }))
+        ]
+      },
       { ...proof('fetched-known'), id: 'turn-0' },
       { ...turn(0), id: 'failing-gap' },
       ...history.slice(1)
@@ -282,6 +293,53 @@ describe('Codex chat catch-up', () => {
     expect(c.journal.submission('old-gap')?.dispatchState).toBe('accepted')
     expect(c.journal.submission('fetched-known')?.dispatchState).toBe('accepted')
     expect(c.journal.submission('V')?.dispatchState).toBe('pending')
+
+    for (const n of [100, 1_000]) {
+      for (const id of [`tail-${n}`, `second-${n}`]) {
+        await c.journal.appendSubmission({
+          clientMessageId: id,
+          body: { kind: 'message', role: 'user', blocks: [] },
+          payloadFingerprint: id,
+          fence: 1
+        })
+      }
+      let visits = 0
+      const tail = Array.from({ length: n }, (_, i) => ({
+        get type() {
+          visits++
+          return 'agentMessage'
+        },
+        id: `tail-${i}`,
+        text: 'old answer'
+      }))
+      const exact = (id: string) => ({ type: 'userMessage', id, clientId: id, content: [] })
+      const ordinals: number[] = []
+      await c.open([], {
+        onReceipt: async (id, identity) => {
+          if (identity.provider === 'codex') {
+            ordinals.push(identity.ordinal)
+          }
+          await onReceipt(id, identity)
+        },
+        connection: {
+          request: async (_method, params) => ({
+            data:
+              params?.itemsView === 'summary'
+                ? []
+                : [
+                    {
+                      ...turn(0),
+                      items: [exact(`tail-${n}`), ...tail, exact(`second-${n}`), ...tail]
+                    }
+                  ],
+            nextCursor: null
+          })
+        }
+      })
+      // Other unresolved controls remain in this session, so all tail must still be inspected.
+      expect(ordinals).toEqual([0, n + 1])
+      expect(visits).toBeGreaterThanOrEqual(n)
+    }
 
     for (const fence of ['abort', 'owner']) {
       const abort = new AbortController()
@@ -344,6 +402,49 @@ describe('Codex chat catch-up', () => {
         }
       })
       expect(settled).not.toContain(next)
+    }
+  })
+
+  it('does zero proof-only item work after its final target at N and 10N', async () => {
+    for (const n of [100, 1_000]) {
+      const c = await chat({ now: 1_000 })
+      await c.journal.appendSubmission({
+        clientMessageId: 'last',
+        body: { kind: 'message', role: 'user', blocks: [] },
+        payloadFingerprint: 'last',
+        fence: 1
+      })
+      let visits = 0
+      const known = {
+        ...turn(0),
+        items: [
+          { type: 'userMessage', id: 'exact', clientId: 'last', content: [] },
+          ...Array.from({ length: n }, (_, i) => ({
+            get type() {
+              visits++
+              return 'agentMessage'
+            },
+            id: `tail-${i}`,
+            text: 'old'
+          }))
+        ]
+      }
+      await c.journal.appendItem(
+        { provider: 'codex', threadId: THREAD, turnId: 'turn-0', ordinal: 0 },
+        { kind: 'turn', turnId: 'turn-0', state: 'completed' },
+        { fence: 1 }
+      )
+      await c.open([known], {
+        onReceipt: (id, providerIdentity) =>
+          c.journal.acceptLate({
+            clientMessageId: id,
+            providerIdentity,
+            state: 'accepted',
+            fence: 1
+          })
+      })
+      expect(visits).toBe(0)
+      expect(c.journal.submission('last')?.dispatchState).toBe('accepted')
     }
   })
 
@@ -621,7 +722,19 @@ describe('Codex chat catch-up', () => {
     clock.now = 500_000
     const deps = () => ({ store, logger: testEventSinkLogging().logger })
     await recoverStructuredRewind(deps(), SESSION, c.journal, 1)
-    expect(c.journal.snapshot().items.slice(0, original.length)).toEqual(original)
+    expect(
+      c.journal
+        .snapshot()
+        .items.slice(0, original.length)
+        .map(({ itemId, body, observedAt, turnScope }) => ({ itemId, body, observedAt, turnScope }))
+    ).toEqual(
+      original.map(({ itemId, body, observedAt, turnScope }) => ({
+        itemId,
+        body,
+        observedAt,
+        turnScope
+      }))
+    )
     await c.reopen()
     store = await openTestAgentSessionRecordStore(c.root)
     await recoverStructuredRewind(deps(), SESSION, c.journal, 1)
@@ -633,7 +746,19 @@ describe('Codex chat catch-up', () => {
       'assistant:answer 250',
       'assistant:answer 600'
     ])
-    expect(c.journal.snapshot().items.slice(0, original.length)).toEqual(original)
+    expect(
+      c.journal
+        .snapshot()
+        .items.slice(0, original.length)
+        .map(({ itemId, body, observedAt, turnScope }) => ({ itemId, body, observedAt, turnScope }))
+    ).toEqual(
+      original.map(({ itemId, body, observedAt, turnScope }) => ({
+        itemId,
+        body,
+        observedAt,
+        turnScope
+      }))
+    )
     const complete = c.journal.snapshot()
     await c.reopen()
     await c.open([dated(100), dated(150), dated(200), dated(250), dated(600)])

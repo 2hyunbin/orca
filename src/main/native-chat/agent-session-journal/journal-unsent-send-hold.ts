@@ -103,7 +103,7 @@ export async function holdUnsentSends(
   if (unsent.length === 0) {
     return null
   }
-  const { epoch } = journal.cursor()
+  const { epoch } = journal.physicalCursor()
   const kept = unsent.map((submission) => ({
     submission,
     body: unsentSendKeptAsCard(
@@ -202,7 +202,7 @@ function headOfQueuePositions(
   const keptIds = new Set(
     journal.submissions().flatMap((entry) => entry.keptAsQueuedMessageId ?? [])
   )
-  const { epoch } = journal.cursor()
+  const { epoch } = journal.physicalCursor()
   // Kept by an earlier settlement: its rejection names it, or, past an epoch that dropped that
   // row, it was queued in an earlier epoch, before anything this one accepted.
   const earlier = cards

@@ -142,6 +142,7 @@ export function acceptSubmissionFromProviderItem(
   if (providerItemId === resolvedItemId) {
     return
   }
+  state.inputs.echoes.add(resolvedItemId)
   const submission = [...state.submissions.values()].find(
     (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
   )
@@ -157,15 +158,6 @@ export function acceptSubmissionFromProviderItem(
   submission.reason = null
   submission.resolvedAt = row.ts
   delete submission.recovered
-  state.inputs.outcomes.set(submission.clientMessageId, {
-    ...row,
-    v: 1,
-    kind: 'dispatch',
-    clientMessageId: submission.clientMessageId,
-    state: 'accepted',
-    providerItemId,
-    reason: null
-  })
   state.receipts.set(submission.clientMessageId, {
     clientMessageId: submission.clientMessageId,
     providerItemId,

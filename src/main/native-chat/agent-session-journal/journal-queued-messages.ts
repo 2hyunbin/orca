@@ -13,7 +13,7 @@ import {
   type JournalQueueRow
 } from './journal-queue-events'
 import { LegacyQueuedCards } from './journal-queue-import'
-import { queuedChangeOf, queueNeedsReopen, retainedQueueFacts } from './journal-queue-retention'
+import { queuedChangeOf, queueNeedsReopen } from './journal-queue-retention'
 import { composeJournalOperationReceipts, type JournalOperationReceipt } from './journal-row-writer'
 import type { JournalQueuedMessagesDeps, JournalSubmissionConsume } from './journal-store-contracts'
 import {
@@ -44,12 +44,6 @@ export type JournalQueuePlan = {
   receipt: JournalOperationReceipt
 }
 
-/** What a new epoch writes again of the queue (`retainedQueueFacts`). */
-export type JournalQueueRestatement = {
-  cards: readonly JournalQueueCardChange[]
-  receipt: JournalOperationReceipt
-}
-
 export class JournalQueuedMessages {
   readonly editLeases = new QueuedMessageEditLeases(() => this.list())
   private readonly legacy: LegacyQueuedCards
@@ -65,7 +59,7 @@ export class JournalQueuedMessages {
   }
 
   displayState(): JournalReducerState {
-    return this.legacy.displayState()
+    return this.deps.state()
   }
 
   /** Moves with every card change, so publication memos recompute only when they must. */
@@ -223,12 +217,22 @@ export class JournalQueuedMessages {
     }, receipt)
   }
 
-  /** On the journal's lane: rows for these changes, each card an earlier build wrote moved into the
-   *  journal first, its legacy row deleted in the same transaction (`journal-queue-import.ts`). */
+  /** Adopt each selected legacy witness with its action; deletion is optional cleanup after commit. */
   plan(changes: readonly JournalQueueCardChange[]): JournalQueuePlan {
     const rows: JournalQueuePlan['rows'] = []
     const adopted: string[] = []
+    const witness = (id: string) => {
+      const value = this.legacy.witness(id)
+      if (value && !adopted.includes(value.messageId)) {
+        rows.push(journalQueueRowBuilder(this.deps.state, value.messageId, value.change))
+        adopted.push(value.messageId)
+      }
+    }
     for (const { messageId, change } of changes) {
+      const source = this.get(messageId)?.recovers
+      if (source) {
+        witness(source)
+      }
       const own = this.deps.state().queue.cards.has(messageId) || adopted.includes(messageId)
       const adoption = own
         ? null
@@ -242,7 +246,14 @@ export class JournalQueuedMessages {
         rows.push(journalQueueRowBuilder(this.deps.state, messageId, change))
       }
     }
-    return { rows, receipt: this.legacy.deletion(adopted) }
+    return { rows, receipt: { write: () => {}, committed: () => this.legacy.cleanup(adopted) } }
+  }
+
+  proofWitness(clientMessageId: string): JournalQueuePlan['rows'] {
+    const witness = this.legacy.witness(clientMessageId)
+    return witness
+      ? [journalQueueRowBuilder(this.deps.state, witness.messageId, witness.change)]
+      : []
   }
 
   /** On the lane, before a hand-off's submission is written: the card is what the person acted
@@ -267,24 +278,6 @@ export class JournalQueuedMessages {
       return
     }
     throw new QueuedMessageNotConsumableError(input.messageId, input.expect)
-  }
-
-  /** What a new epoch restates, with every legacy card: their rows go in the same transaction. */
-  restatement(): JournalQueueRestatement {
-    return {
-      cards: retainedQueueFacts(
-        [...this.deps.state().queue.cards.values(), ...this.legacy.cards()],
-        this.deps.state().submissions
-      ),
-      receipt: this.legacy.deletionOfAll()
-    }
-  }
-
-  /** Every legacy card moved into the journal, every legacy row deleted, with a write that retires
-   *  hand-offs: each card's reading is then latched in the fold before its hand-off is gone. */
-  adoptionOfAll(): JournalQueuePlan {
-    const { rows } = this.plan(this.legacy.messageIds().map((messageId) => ({ messageId })))
-    return { rows, receipt: this.legacy.deletionOfAll() }
   }
 
   /** The bulk move of an earlier build's cards, once per open (`LegacyQueuedCards.importAtOpen`). */

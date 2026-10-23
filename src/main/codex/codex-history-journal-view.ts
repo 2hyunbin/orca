@@ -76,17 +76,9 @@ export function readCodexHistoryJournalView(
       ? parseAgentJournalItemKey(submission.providerItemId)
       : null
     if (identity?.provider === 'codex' && identity.threadId === threadId) {
-      known.add(identity.turnId)
       const prompt = journal.item(promptKey)
-      const receipt = journal.receiptFor(submission.clientMessageId)
       if (prompt) {
         note(identity.turnId, agentJournalItemPosition(prompt))
-      } else if (
-        receipt?.cursor.epoch === journal.epoch &&
-        Number.isSafeInteger(receipt.cursor.sequence) &&
-        receipt.cursor.sequence > 0
-      ) {
-        note(identity.turnId, { sequence: receipt.cursor.sequence, index: 0 })
       }
     }
   }
