@@ -174,11 +174,18 @@ function resolveSelector(argument, state) {
   if (functionNode(argument)) {
     return argument
   }
-  const declaration = variableFor(argument, state)?.defs[0]?.node
-  if (declaration?.type === 'FunctionDeclaration' && isModuleScope(declaration)) {
+  const definition = variableFor(argument, state)?.defs[0]
+  const declaration = definition?.node
+  if (
+    definition?.type === 'FunctionName' &&
+    declaration.type === 'FunctionDeclaration' &&
+    isModuleScope(declaration)
+  ) {
     return declaration
   }
-  return declaration?.type === 'VariableDeclarator' && isModuleScope(declaration.parent)
+  return definition?.type === 'Variable' &&
+    declaration.type === 'VariableDeclarator' &&
+    isModuleScope(declaration.parent)
     ? functionNode(declaration.init)
     : null
 }

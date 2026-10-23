@@ -41,7 +41,7 @@ const sources = {
   namedSelectors: `
       import { useAppStore } from '@/store'
       const EarlyFresh = () => useAppStore(selectFreshRows)
-      const selectFreshRows = (state) => state.rows.filter(Boolean)
+      function selectFreshRows(state) { return state.rows.filter(Boolean) }
       const Stable = () => useAppStore(selectActiveId)
       const selectActiveId = (state) => state.activeId
     `,
@@ -84,6 +84,7 @@ const sources = {
         useAppStore(select)
         return useAppStore(s => build(s))
       }
+      export function useTargetState(options) { useAppStore(options); return { options } }
     `,
   shadowedImports: `
       import { useAppStore, useAppStore as useStore } from '@/store'
