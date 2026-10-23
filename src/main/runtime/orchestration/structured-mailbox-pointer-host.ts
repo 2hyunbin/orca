@@ -6,13 +6,13 @@
  * the send and reports what the host said.
  */
 
-import { setImmediate as yieldToEventLoop } from 'node:timers/promises'
 import { AGENT_SESSION_NOT_ATTACHED } from '../../native-chat/agent-session-wire/structured-agent-session-mutation-admission'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type {
   StructuredMailboxPointerHost,
   StructuredPointerSessionFacts
 } from './structured-mailbox-pointer-delivery'
+import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
 import {
   structuredSessionGateFacts,
@@ -47,57 +47,41 @@ export function structuredSessionPointerCallerKey(sessionId: string): string {
 export async function readStructuredSessionGateFacts(
   sessionId: string
 ): Promise<StructuredSessionGateFacts | null> {
-  const snapshot = await readSessionJournal(sessionId)
-  if (!snapshot) {
-    return null
-  }
-  // The host's projection of current work: an agent that ended is idle, whatever its rows say.
-  const work = getStructuredAgentSessionHost()?.currentWork(sessionId)
-  return structuredSessionGateFacts(snapshot.items, work?.scope)
+  return readSessionJournal(sessionId, (snapshot, host) => {
+    const work = host.currentWork(sessionId)
+    return structuredSessionGateFacts(snapshot.items, work?.scope)
+  })
 }
 
 /** What each recorded send settled as. */
 async function readPointerSessionFacts(
   sessionId: string
 ): Promise<StructuredPointerSessionFacts | null> {
-  const snapshot = await readSessionJournal(sessionId)
-  if (!snapshot) {
-    return null
-  }
-  const host = getStructuredAgentSessionHost()
-  const boundary = host?.deps.store.getRecord(sessionId)?.providerContextBoundary
-  return {
-    submissions: boundary
-      ? snapshot.submissions.filter((submission) => submission.fence > boundary.afterFence)
-      : snapshot.submissions
-  }
-}
-
-// Mail opens chats no person is looking at, and after a restart many may owe mail at once: those
-// opens take turns, one chat's history at a time, so mail never reads every owed chat together.
-let mailOpens: Promise<unknown> = Promise.resolve()
-
-function openForMailInTurn<T>(open: () => Promise<T>): Promise<T> {
-  const turn = mailOpens.then(async () => {
-    await yieldToEventLoop()
-    return open()
+  return readSessionJournal(sessionId, (snapshot, host) => {
+    const boundary = host.deps.store.getRecord(sessionId)?.providerContextBoundary
+    return {
+      submissions: boundary
+        ? snapshot.submissions.filter((submission) => submission.fence > boundary.afterFence)
+        : snapshot.submissions
+    }
   })
-  mailOpens = turn.catch(() => undefined)
-  return turn
 }
 
-async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapshot | null> {
+async function readSessionJournal<T>(
+  sessionId: string,
+  read: (snapshot: AgentJournalSnapshot, host: StructuredAgentSessionHost) => T
+): Promise<T | null> {
   const host = getStructuredAgentSessionHost()
   if (!host) {
     return null
   }
   try {
-    // Opens a conversation the idle sweep closed, or a restart never opened; that starts no agent.
-    const read = () => host.journalSnapshot(sessionId)
-    return await (host.hasSession(sessionId) ? read() : openForMailInTurn(read))
+    // Keep snapshot and execution provenance under the same operation borrow.
+    return await host.withAutomaticConversation(sessionId, async () =>
+      read(await host.journalSnapshot(sessionId), host)
+    )
   } catch (error) {
-    // Not attached is a retain reason, not a failure; anything else is still unreadable.
-    if ((error as Error)?.message !== AGENT_SESSION_NOT_ATTACHED.code) {
+    if (!(error instanceof Error) || error.message !== AGENT_SESSION_NOT_ATTACHED.code) {
       console.warn('[orchestration] structured journal unreadable', sessionId, error)
     }
     return null
@@ -132,29 +116,31 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
       }
       let outcome: StructuredSessionTurnOutcome
       try {
-        outcome = await sendAgentTurn({
-          kind: 'structured-session',
-          host,
-          sessionId: input.sessionId,
-          callerKey: input.dispatchId
-            ? structuredPointerCallerKey(input.dispatchId)
-            : structuredSessionPointerCallerKey(input.sessionId),
-          turn: {
-            body: input.body,
-            // A person's plain send: every agent takes it the way it takes their own mid-turn message.
-            delivery: 'now',
-            operationId: input.operationId,
-            expectedRuntimeFence: input.expectedRuntimeFence,
-            beforeRun: () => {
-              if (
-                input.body.from?.orchestration?.message === 'mail-notice' &&
-                host.currentWork(input.sessionId)?.hasActionablePrompt()
-              ) {
-                throw new StructuredMailHeldError()
+        outcome = await host.withAutomaticConversation(input.sessionId, () =>
+          sendAgentTurn({
+            kind: 'structured-session',
+            host,
+            sessionId: input.sessionId,
+            callerKey: input.dispatchId
+              ? structuredPointerCallerKey(input.dispatchId)
+              : structuredSessionPointerCallerKey(input.sessionId),
+            turn: {
+              body: input.body,
+              // A person's plain send: every agent takes it the way it takes their own mid-turn message.
+              delivery: 'now',
+              operationId: input.operationId,
+              expectedRuntimeFence: input.expectedRuntimeFence,
+              beforeRun: () => {
+                if (
+                  input.body.from?.orchestration?.message === 'mail-notice' &&
+                  host.currentWork(input.sessionId)?.hasActionablePrompt()
+                ) {
+                  throw new StructuredMailHeldError()
+                }
               }
             }
-          }
-        })
+          })
+        )
       } catch (error) {
         if (error instanceof StructuredMailHeldError) {
           return { kind: 'held' }

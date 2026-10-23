@@ -14,7 +14,6 @@
 
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
-import { structuredAgentSessionConversationClosable } from './structured-agent-session-host-lifetime'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import {
@@ -131,45 +130,6 @@ export class StructuredAgentSessionIdleSweep {
       )
     } finally {
       this.running = false
-    }
-  }
-
-  /** A conversation became resident: past the cap, the least recently active folds that are only
-   *  a cache close, as the sweep closes a quiet one. Never awaited, so an open never
-   *  waits on another chat's lock; each close re-checks its chat under that lock. */
-  onOpened(opened: string): void {
-    const excess =
-      this.deps.sessions.size - (this.deps.maxResident ?? STRUCTURED_AGENT_SESSION_MAX_RESIDENT)
-    if (excess <= 0 || this.deps.isDisposed()) {
-      return
-    }
-    // The close's own test, so a fold it would refuse is never picked over one it would close.
-    const resting = (sessionId: string, session: StructuredAgentSessionHostSession | undefined) =>
-      session !== undefined &&
-      structuredAgentSessionConversationClosable(session, true) &&
-      !this.deps.deliveryActive(sessionId)
-    const victims = [...this.deps.sessions]
-      .filter(([sessionId, session]) => sessionId !== opened && resting(sessionId, session))
-      .map(([sessionId]) => sessionId)
-      .sort(
-        (a, b) =>
-          (this.deps.sessions.lastActivityAt(a) ?? 0) - (this.deps.sessions.lastActivityAt(b) ?? 0)
-      )
-      .slice(0, excess)
-    for (const sessionId of victims) {
-      void this.deps
-        .serialize(sessionId, async () => {
-          if (!this.deps.isDisposed() && resting(sessionId, this.deps.sessions.get(sessionId))) {
-            await this.deps.closeConversation(sessionId)
-          }
-        })
-        .catch((error: unknown) =>
-          this.deps.logger.warn('closing a chat past the resident cap failed', {
-            scope: 'resident-cap',
-            sessionId,
-            error
-          })
-        )
     }
   }
 

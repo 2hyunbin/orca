@@ -70,11 +70,27 @@ async function keptWithoutAWord(
     offeredUntilOpened ? [SESSION] : []
   )
   expect(await offersFile(root)).toEqual(before)
-  expect((await host.restartResume.continueAfterRestart([SESSION], 'modal')).continued).toEqual([])
+  const action = await host.restartResume.continueAfterRestart([SESSION], 'modal')
+  expect(action.continued).toEqual(
+    offeredUntilOpened
+      ? [
+          expect.objectContaining({
+            outcome: 'refused',
+            reason: 'agent_session_journal_unreadable',
+            refusal: {
+              code: 'agent_session_journal_unreadable',
+              details: { reason: 'journalWrittenByNewerOrca' }
+            }
+          })
+        ]
+      : []
+  )
   expect(acquire).not.toHaveBeenCalled()
   expect(await host.restartResume.list()).toEqual([])
   expect(await host.restartResume.listFailures()).toEqual([])
-  expect(await offersFile(root)).toEqual(before)
+  if (!offeredUntilOpened) {
+    expect(await offersFile(root)).toEqual(before)
+  }
   const capsule = new AgentSessionRecoveryCapsule(root)
   expect((await capsule.list(NOW)).map((marker) => marker.sessionId)).toEqual([SESSION])
   expect(await capsule.listFailed(NOW)).toEqual([])
@@ -120,7 +136,7 @@ it('keeps the offer and files nothing when the send is refused as a newer Orca c
 })
 
 // A failure filed before the chat became a newer Orca's stays for that Orca, and is not shown here.
-it('keeps a failure already filed for a chat a newer Orca saved since, but does not show it', async () => {
+it('lists a saved failure without reading history, then preserves it on an admitted newer-data refusal', async () => {
   const { host, root, acquire } = await interruptedRestart()
   await host.restartResume.list()
   acquire.mockRejectedValueOnce(new Error('provider could not reconnect'))
@@ -129,6 +145,8 @@ it('keeps a failure already filed for a chat a newer Orca saved since, but does 
   await host.close(SESSION, 'evict')
   newerOrcaRow(root)
 
+  expect(await host.restartResume.listFailures()).toMatchObject([{ sessionId: SESSION }])
+  await host.revealSession(SESSION)
   expect(await host.restartResume.listFailures()).toEqual([])
   expect(
     (await new AgentSessionRecoveryCapsule(root).listFailed(NOW)).map((f) => f.marker.sessionId)
@@ -156,15 +174,14 @@ it('still offers a damaged chat, and files its failure when acting on it', async
   ])
 })
 
-// "Dismiss all" ends what the person was shown. A newer Orca's offer was never shown here, so it
-// stays, byte for byte, for the Orca that can act on it.
+// Dismiss ends displayed offers without discovering per-row downgrade formats. Journals stay.
 it.each([
   ['after the dialog listed the offers', true, undefined],
   ['on a host that has not listed them yet', false, undefined],
   // A remote client that cannot show every agent dismisses through its audience.
   ['for a client shown only Codex', false, (agent: string) => agent === 'codex']
 ])(
-  "dismisses every listed offer and leaves a newer Orca's hidden one as it was, %s",
+  'dismisses displayed offers without opening downgraded journal rows, %s',
   async (_when, listFirst, audience) => {
     const NEWER = 'session-newer-orca'
     // A second chat, made before the restart; a newer Orca then saves it with a row this build
@@ -181,18 +198,11 @@ it.each([
     const capsule = JSON.parse(await readFile(path, 'utf8'))
     capsule.entries.push({ state: 'pending', marker: { ...marker, sessionId: NEWER } })
     await writeFile(path, JSON.stringify(capsule))
-    const newerEntry = () =>
-      readFile(path, 'utf8').then((text) =>
-        JSON.stringify(
-          JSON.parse(text).entries.find(
-            (entry: { marker: { sessionId: string } }) => entry.marker.sessionId === NEWER
-          )
-        )
-      )
-    const before = await newerEntry()
+    const before = liveTestJournalRows(openTestJournalHostDatabase(root).db, NEWER)
+    const opened = vi.spyOn(AgentSessionJournal.prototype, 'open')
 
     if (listFirst) {
-      // Listing reads no journal, so it cannot tell the newer Orca's chat yet; dismissing does.
+      // Listing and dismissal read no journal.
       expect((await host.restartResume.list()).map((candidate) => candidate.sessionId)).toEqual([
         SESSION,
         NEWER
@@ -201,7 +211,8 @@ it.each([
     await host.restartResume.dismiss(undefined, audience)
 
     const left = await new AgentSessionRecoveryCapsule(root).list(NOW)
-    expect(left.map((offer) => offer.sessionId)).toEqual([NEWER])
-    expect(await newerEntry()).toBe(before)
+    expect(left).toEqual([])
+    expect(opened).not.toHaveBeenCalled()
+    expect(liveTestJournalRows(openTestJournalHostDatabase(root).db, NEWER)).toEqual(before)
   }
 )

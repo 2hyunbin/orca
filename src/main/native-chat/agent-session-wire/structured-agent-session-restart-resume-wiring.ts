@@ -16,6 +16,7 @@ import { MAX_TIMER_DELAY_MS } from '../../../shared/timer-delay'
 import type { SendSettlementWaitOptions } from './structured-agent-session-send-settlement'
 
 export type StructuredAgentSessionRestartResumeSurfaces = {
+  automatic?: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   revealSession: (
     sessionId: string
   ) => Promise<{ readable: boolean; openRefusal?: AgentSessionWireRefusal }>
@@ -46,6 +47,7 @@ export const STRUCTURED_AGENT_SESSION_RESTART_CONTINUATION_CALLER =
 /** Exactly the host members this binds. Structural, so the host satisfies it without declaring a
  *  dependency, and nothing outside this list is reachable from here. */
 type RestartResumeHostBindings = {
+  withAutomaticConversation?: StructuredAgentSessionRestartResumeSurfaces['automatic']
   revealSession: StructuredAgentSessionRestartResumeSurfaces['revealSession']
   send: (
     caller: { callerKey: string },
@@ -69,6 +71,7 @@ export function structuredAgentSessionRestartResumeSurfaces(
 ): Omit<StructuredAgentSessionRestartResumeSurfaces, 'readChildWork' | 'childWorkOpen'> {
   return {
     revealSession: host.revealSession,
+    automatic: host.withAutomaticConversation,
     send: (params) =>
       host.send({ callerKey: STRUCTURED_AGENT_SESSION_RESTART_CONTINUATION_CALLER }, params),
     // Accepted like any send, so its verdict is its delivery, however long the start takes; the

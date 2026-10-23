@@ -5,11 +5,6 @@
 // always named: `SELECT *` is uncacheable and can drop a column.
 
 import type Database from '../../sqlite/sync-database'
-import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
-import {
-  readAgentJournalTurn,
-  readAgentJournalTurnOutcome
-} from '../../../shared/agent-session-turn-record'
 import { parseJournalRow, serializeJournalRow, type JournalRow } from './journal-row-schema'
 import { AgentSessionJournalError } from './journal-write-guards'
 
@@ -22,13 +17,6 @@ VALUES (?, ?, ?)
 ON CONFLICT(session_id) DO UPDATE SET
   workspace_id = excluded.workspace_id, epoch = excluded.epoch,
   open_turn_id = NULL, open_turn_since = NULL`
-// A revision of the turn already open keeps when it started.
-const OPEN_TURN = `UPDATE journal_sessions SET
-  open_turn_since = CASE WHEN open_turn_id IS ? THEN open_turn_since ELSE ? END,
-  open_turn_id = ?
-WHERE session_id = ?`
-const FINISH_TURN = `UPDATE journal_sessions SET open_turn_id = NULL, open_turn_since = NULL
-WHERE session_id = ? AND open_turn_id = ?`
 const SELECT_REST_FACTS = `SELECT s.open_turn_id AS open_turn_id, s.open_turn_since AS open_turn_since,
   r.seq AS last_seq, r.ts AS last_ts
 FROM journal_sessions s
@@ -99,33 +87,17 @@ export function insertJournalRow(
   }
   // The table timestamp records the save; the JSON timestamp can remain pinned to item start.
   db.prepare(INSERT_ROW).run(sessionId, row.epoch, row.seq, savedAt, rowJson)
-  recordJournalOpenTurn(db, sessionId, row)
   return Buffer.byteLength(rowJson, 'utf8')
 }
 
-/** The chat's open root turn follows the turn records this row writes, in the row's own
- *  transaction, so it can never disagree with the rows. A running record opens its turn; only a
- *  finish the provider reported closes it. One a stop, crash or quit cut short stays open, which is
- *  what a restart reads as interrupted. Rows that write no turn record cost nothing here. */
-function recordJournalOpenTurn(db: Database.Database, sessionId: string, row: JournalRow): void {
-  const writes =
-    row.kind === 'item'
-      ? [row]
-      : row.kind === 'lifecycle-batch'
-        ? row.mutations.flatMap((mutation) => (mutation.kind === 'item' ? [mutation] : []))
-        : []
-  for (const write of writes) {
-    const turn = isRootAgentJournalItem(write) ? readAgentJournalTurn(write.body) : null
-    if (turn?.state === 'running') {
-      const since = turn.startedAt ?? turn.requestedAt ?? row.ts
-      db.prepare(OPEN_TURN).run(write.itemId, since, write.itemId, sessionId)
-    } else if (
-      turn?.state === 'completed' &&
-      readAgentJournalTurnOutcome(turn) !== 'cancellation'
-    ) {
-      db.prepare(FINISH_TURN).run(sessionId, write.itemId)
-    }
-  }
+export function writeJournalRestFact(
+  db: Database.Database,
+  sessionId: string,
+  open: JournalRestFacts['openTurn']
+): void {
+  db.prepare(
+    'UPDATE journal_sessions SET open_turn_id = ?, open_turn_since = ? WHERE session_id = ?'
+  ).run(open?.itemId ?? null, open?.since ?? null, sessionId)
 }
 
 // Why pages, not `.iterate()`: a lazily consumed cursor pins a read snapshot for as long as the

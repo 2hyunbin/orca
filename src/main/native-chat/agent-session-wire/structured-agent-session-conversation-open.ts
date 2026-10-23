@@ -47,6 +47,7 @@ export type StructuredAgentSessionConversationOpenDeps = {
  *  what the gone generation left running itself, from what it read before. */
 export type StructuredAgentSessionConversationOpenOptions = {
   acquisition?: boolean
+  cacheReacquisition?: { reopenFloor: ReturnType<AgentSessionJournal['reopenFloor']> }
 }
 
 export type StructuredAgentSessionConversationOpenContext = {
@@ -132,9 +133,13 @@ export async function openStructuredAgentSessionConversationJournal(
       error
     })
   }
-  // After the leftovers became cards, so the mark follows every card this open found. Every open
-  // comes after the chat stopped running: the idle sweep never closes one with cards waiting.
-  await markStructuredQueueReopen(sessionId, journal, fence, deps.logger)
+  // Cache reacquisition preserves the prior pause, including a failed mark's fallback.
+  if (options.cacheReacquisition) {
+    journal.restoreReopenFloor(options.cacheReacquisition.reopenFloor)
+  }
+  if (!options.cacheReacquisition) {
+    await markStructuredQueueReopen(sessionId, journal, fence, deps.logger)
+  }
   // No child in this process writes to a journal nobody had open, so whatever it shows running
   // belongs to a generation that is gone, whatever the lease still claims. Settled before any
   // reader or child sees it.

@@ -1,3 +1,5 @@
+import { sendAgentTurn } from '../../runtime/orchestration/send-agent-turn'
+import { agentSessionProviderHandleRoot } from '../../../shared/agent-session-provider-handle-encoding'
 // A relaunched host lists every restored chat as Interrupted or Done and reads none of their
 // history: each row comes from the chat's record, its journal's saved open turn and the offers the
 // last quit recorded. Opening a chat is what reads it.
@@ -10,6 +12,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { structuredAgentSessionHostInstance } from './structured-agent-session-queued-pause'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import {
   openTestAgentSessionRecordStore,
@@ -157,9 +160,9 @@ it('lists every restored chat as Interrupted or Done, on every status surface, o
   const rows = (summaries: AgentSessionStatusSummary[]) =>
     summaries.map((row) => [row.sessionId, row.status, row.turnOutcome, row.conversationName])
   const expected = [
-    [CUT, 'idle', 'interruption'],
+    [CUT, 'idle', 'cancellation'],
     [DONE, 'idle', undefined],
-    [LEGACY_WORKING, 'idle', 'interruption'],
+    [LEGACY_WORKING, 'idle', 'cancellation'],
     [NEVER_SENT, null, undefined]
   ].map((row) => [...row, `name of ${row[0]}`])
   expect(rows(snapshot)).toEqual(expected)
@@ -179,7 +182,212 @@ it('reads a chat when it is opened, and keeps only the resident cap of opened ch
   expect([DONE, LEGACY_WORKING].every(host.hasSession)).toBe(true)
   expect(host.readStatusSummary(CUT)).toMatchObject({
     status: 'idle',
-    turnOutcome: 'interruption',
+    turnOutcome: 'cancellation',
     latestPrompt: `ask ${CUT}`
   })
+})
+
+it('preserves waiting-card pause and failed-mark fallback across cache reacquisition', async () => {
+  const journal = await openAgentSessionJournal({
+    identity: {
+      sessionId: CUT,
+      workspaceId: LOCATION.workspaceId,
+      hostId: 'local',
+      agent: 'claude',
+      providerHandle: claudeProviderHandle(`${CUT}-provider`, null)
+    },
+    database: openTestJournalHostDatabase(root)
+  })
+  await journal.queuedMessages.insert({
+    messageId: 'waiting',
+    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'queued' }] },
+    fingerprint: 'fp',
+    hostInstance: structuredAgentSessionHostInstance()
+  })
+  await journal.close()
+  const seen = new Map<string, AgentSessionJournal>()
+  const open = AgentSessionJournal.prototype.open
+  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function () {
+    await open.call(this)
+    seen.set(this.snapshot().sessionId, this)
+  })
+  vi.spyOn(AgentSessionJournal.prototype, 'appendQueueReopen').mockRejectedValueOnce(
+    new Error('disk full')
+  )
+  await host.journalSnapshot(CUT)
+  const before = seen.get(CUT)!.queuedMessages.pauses()
+  expect(before.map((pause) => pause.reason)).toContain('restarted')
+  for (const id of [DONE, LEGACY_WORKING]) {
+    await host.journalSnapshot(id)
+  }
+  await vi.waitFor(() => expect(host.hasSession(CUT)).toBe(false))
+  await host.journalSnapshot(CUT)
+  expect(seen.get(CUT)!.queuedMessages.pauses()).toEqual(before)
+})
+
+it('lists failures and names without opens, opens only an admitted selection, and dismisses without history', async () => {
+  const capsule = host.deps.recoveryCapsule!
+  const offer = (id: string) =>
+    marker({
+      sessionId: id,
+      recordedAt: NOW,
+      providerHandleRoot: agentSessionProviderHandleRoot(
+        claudeProviderHandle(`${id}-provider`, null)
+      )
+    })
+  await capsule.record([offer(CUT), offer(DONE), offer(LEGACY_WORKING)], NOW)
+  await capsule.beginResume([LEGACY_WORKING], 'failed', NOW)
+  await capsule.failResume(
+    'failed',
+    [
+      {
+        sessionId: LEGACY_WORKING,
+        failedAt: NOW,
+        reason: 'provider unavailable',
+        outcome: 'refused',
+        latestPrompt: '',
+        latestUserItemId: null
+      }
+    ],
+    NOW
+  )
+  const opened: string[] = []
+  const original = AgentSessionJournal.prototype.open
+  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function () {
+    await original.call(this)
+    opened.push(this.snapshot().sessionId)
+  })
+  expect((await host.restartResume.list()).map((row) => row.conversationName)).toEqual([
+    `name of ${CUT}`,
+    `name of ${DONE}`
+  ])
+  expect(await host.restartResume.listFailures()).toMatchObject([
+    { sessionId: LEGACY_WORKING, conversationName: `name of ${LEGACY_WORKING}` }
+  ])
+  expect(opened).toEqual([])
+  await host.restartResume.continueAfterRestart([CUT], 'test')
+  expect(opened).toEqual([CUT])
+  opened.length = 0
+  await host.restartResume.dismiss()
+  expect(opened).toEqual([])
+})
+
+it('releases common construction at adoption while awaited actions retain their borrows', async () => {
+  const { lifetime, conversationDelivery, sessions } = host.collaboratorsForTests()
+  let finish!: () => void
+  let adopted!: () => void
+  const ready = new Promise<void>((resolve) => {
+    adopted = resolve
+  })
+  const handover = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  await host.journalSnapshot(NEVER_SENT)
+  const open = vi.spyOn(AgentSessionJournal.prototype, 'open')
+  host.deps.adapter.acquire = async ({ identity, fence, spawnToken }) => ({
+    acquisitionGeneration: 'generation',
+    process: {
+      hostId: 'local',
+      pid: 4242,
+      processStartTimeMs: NOW,
+      spawnToken
+    },
+    link: {
+      linkId: 'acquired',
+      handle: claudeProviderHandle(`${identity.sessionId}-provider`, null),
+      origin: 'resumed',
+      mintedAtFence: fence,
+      observedAt: NOW
+    }
+  })
+  host.deps.adapter.releaseAcquisition = async () => true
+  host.deps.adapter.cancelTurn = async () => ({ cancelled: true })
+  host.deps.adapter.dispatch = async (input) => {
+    await input.beforeDispatch?.()
+    adopted()
+    await handover
+    return {
+      state: 'accepted',
+      providerIdentity: {
+        provider: 'claude',
+        sessionId: `${CUT}-provider`,
+        uuid: 'accepted-send'
+      }
+    }
+  }
+  const acquisition = vi.spyOn(conversationDelivery, 'open')
+  const action = host.withAutomaticConversation(CUT, () =>
+    sendAgentTurn({
+      kind: 'structured-session',
+      host,
+      sessionId: CUT,
+      callerKey: 'trusted-local:orchestration:test',
+      turn: {
+        delivery: 'now',
+        operationId: `${NOW}-${'1'.repeat(32)}`,
+        expectedRuntimeFence: host.deps.store.getRecord(CUT)!.lease.runtimeFence,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'continue' }] }
+      }
+    })
+  )
+  try {
+    await Promise.race([
+      ready,
+      action.then((result) => {
+        throw new Error(JSON.stringify(result))
+      })
+    ])
+    const second = host.withAutomaticConversation(DONE, () => host.journalSnapshot(DONE))
+    await expect(second).resolves.toMatchObject({ sessionId: DONE })
+    await expect(host.withAutomaticConversation(NEVER_SENT, async () => 'resident')).resolves.toBe(
+      'resident'
+    )
+    expect(lifetime.residency.borrowed(CUT)).toBe(true)
+    expect(open).toHaveBeenCalledTimes(2)
+    // All adoption routes clear the failed-reopen floor, including acquisition's direct open.
+    lifetime.residency.closed(CUT, true, { epoch: 'old', sequence: 1 })
+    const session = sessions.get(CUT)!
+    await conversationDelivery.adoptOpened(CUT, { session })
+    expect(lifetime.residency.cacheReacquisition(CUT)).toBeUndefined()
+  } finally {
+    finish()
+  }
+  await expect(action).resolves.toMatchObject({
+    kind: 'sent',
+    submission: { dispatchState: 'accepted' }
+  })
+  expect(acquisition).toHaveBeenCalledWith(CUT, { acquisition: true })
+  await lifetime.residency.trim()
+})
+
+it('does no unrelated history walk on real no-pressure release at N and 10N active residents', async () => {
+  const { lifetime, sessions, serialize } = host.collaboratorsForTests()
+  await host.journalSnapshot(CUT)
+  const original = sessions.get(CUT)!
+  const releases: (() => void)[] = []
+  for (const count of [30, 300]) {
+    for (let index = sessions.size; index < count; index++) {
+      const id = `active-${index}`
+      sessions.set(id, { ...original })
+      releases.push(lifetime.residency.borrow(id))
+    }
+    // These are settled submissions in a real opened canonical journal, not a Set of ids.
+    expect(original.journal.submissions().length).toBeGreaterThan(0)
+    await serialize(CUT, async () => {})
+    await Promise.resolve()
+    const histories = vi.spyOn(original.journal, 'submissions')
+    const population = vi.spyOn(sessions, Symbol.iterator)
+    for (let index = 0; index < 10; index++) {
+      await serialize(CUT, async () => {})
+    }
+    await Promise.resolve()
+    expect(histories).not.toHaveBeenCalled()
+    expect(population).not.toHaveBeenCalled()
+    histories.mockRestore()
+    population.mockRestore()
+  }
+  for (const release of releases) {
+    release()
+  }
+  await lifetime.residency.trim()
 })

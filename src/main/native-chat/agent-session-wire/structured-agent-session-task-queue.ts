@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionResidency } from './structured-agent-session-residency'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
 
@@ -12,8 +13,22 @@ export class StructuredAgentSessionTaskQueue {
     }
   >()
 
+  constructor(
+    private readonly ownership?: () =>
+      | Pick<StructuredAgentSessionResidency, 'active' | 'released'>
+      | undefined
+  ) {}
+
+  busy(sessionId: string): boolean {
+    return this.chains.has(sessionId)
+  }
+
   serialize<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
-    return runKeyedSerializedOperation(this.chains, sessionId, task)
+    this.ownership?.()?.active(sessionId)
+    const operation = runKeyedSerializedOperation(this.chains, sessionId, task)
+    const released = () => queueMicrotask(() => this.ownership?.()?.released(sessionId))
+    void operation.then(released, released)
+    return operation
   }
 
   trackAttach<T>(

@@ -1,3 +1,7 @@
+import type { StructuredAgentSessionConversations } from './structured-agent-session-conversations'
+import type { StructuredAgentSessionLifetimeContext } from './structured-agent-session-host-lifetime'
+import type { StructuredAgentSessionProviderChildIdentity } from './structured-agent-session-host-types'
+import { stopStructuredAgentSessionAgentUnderSerialize } from './structured-agent-session-host-lifetime'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
@@ -15,7 +19,10 @@ import type {
   AgentJournalCursor,
   AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
-import { failedProviderChildStart } from './structured-agent-session-provider-child'
+import {
+  failedProviderChildStart,
+  sameProviderChild
+} from './structured-agent-session-provider-child'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 
 /** A queued message whose child died while it waited inherits that child's failure. */
@@ -160,4 +167,35 @@ export function oldestQueuedSubmission(
     }
   }
   return oldest
+}
+
+export function createExpiredChildStop(host: {
+  context: () => StructuredAgentSessionLifetimeContext
+  sessions: StructuredAgentSessionConversations
+  serialize: <T>(id: string, task: () => Promise<T>) => Promise<T>
+}) {
+  return (sessionId: string, expired: StructuredAgentSessionProviderChildIdentity): void => {
+    void host
+      .serialize(sessionId, async () => {
+        const child = host.sessions.get(sessionId)?.child
+        if (
+          !expired ||
+          !child ||
+          child.phase !== 'starting' ||
+          !sameProviderChild(child, expired)
+        ) {
+          return
+        }
+        await stopStructuredAgentSessionAgentUnderSerialize(host.context(), sessionId, {
+          cause: 'host-stop'
+        })
+      })
+      .catch((error: unknown) =>
+        host.context().deps.logger.warn('stopping an agent that could not finish starting failed', {
+          scope: 'startup-limit',
+          sessionId,
+          error
+        })
+      )
+  }
 }

@@ -21,6 +21,12 @@ import { isAgentSessionContextClear } from '../../../shared/agent-session-contex
 export class JournalDerivedTurnScope {
   private openTurnItemId: string | null = null
 
+  fork(): JournalDerivedTurnScope {
+    const staged = new JournalDerivedTurnScope()
+    staged.openTurnItemId = this.openTurnItemId
+    return staged
+  }
+
   /** The scope for a row being created now that states none. A turn record belongs to no turn. */
   scopeFor(body: AgentJournalItemBody): AgentJournalTurnScope {
     return this.openTurnItemId === null || readAgentJournalTurn(body)

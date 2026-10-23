@@ -226,13 +226,12 @@ export type StructuredAgentSessionCloseCause = Extract<
  *  eviction the person never saw must not; a person's close has marked them already. */
 export function structuredAgentSessionConversationClosable(
   session: StructuredAgentSessionHostSession,
-  atRest = false
+  _atRest = false
 ): boolean {
   return (
     session.child === null &&
     !session.journal.submissions().some(isQueuedAgentJournalSubmission) &&
-    session.journal.pendingSubmissions().length === 0 &&
-    !(atRest && session.journal.queuedMessages.awaitReopenMark())
+    session.journal.pendingSubmissions().length === 0
   )
 }
 
@@ -256,7 +255,12 @@ export async function closeStructuredAgentSessionConversationUnderSerialize(
   }
   context.sessions.delete(sessionId)
   context.closeStatus(sessionId)
-  await session.journal.close()
+  try {
+    await session.journal.close()
+  } catch (error) {
+    context.sessions.set(sessionId, session)
+    throw error
+  }
   return true
 }
 

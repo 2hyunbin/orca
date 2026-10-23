@@ -1,3 +1,5 @@
+import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { StructuredAgentSessionJournalProjections } from './structured-agent-session-status-journal-projection'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -789,4 +791,50 @@ describe('the status sink sees the roster the broadcast cache deliberately lacks
       session: expect.objectContaining({ sessionId: SESSION, status: 'idle' })
     })
   })
+})
+
+it('normalizes only restarted requests for quit, crash and legacy handoff, preserving live-provider faults', async () => {
+  for (const cause of ['quit', 'crash', 'legacy', 'live'] as const) {
+    const journal = await openJournal(`provenance-${cause}`)
+    await journal.appendItem(
+      TURN_IDENTITY,
+      { kind: 'turn', turnId: 'turn-1', state: 'interrupted', startedAt: 100 },
+      { fence: 1 }
+    )
+    const record = { ...agentSessionRecordFixture(), sessionId: `provenance-${cause}` }
+    const projection = new StructuredAgentSessionJournalProjections()
+    if (cause === 'legacy') {
+      projection.noteRestart(record.sessionId, {
+        interrupted: true,
+        openTurn: null,
+        lastSequence: 1,
+        lastSavedAt: 100
+      })
+    }
+    if (cause === 'quit' || cause === 'crash') {
+      record.lease.deathEvidence = {
+        kind: 'pid-absent',
+        detail: 'gone',
+        observedAt: 100,
+        runtimeEnd: cause
+      }
+    }
+    expect(projection.read(journal, record).state.summary.turnOutcome).toBe(
+      cause === 'live' ? 'interruption' : 'cancellation'
+    )
+    expect(readAgentJournalTurn(journal.snapshot().items[0]?.body)?.outcome).toBeUndefined()
+    await journal.appendItem(
+      { ...TURN_IDENTITY, turnId: 'new-turn' },
+      { kind: 'turn', turnId: 'new-turn', state: 'completed', outcome: 'success' },
+      { fence: 2 }
+    )
+    expect(projection.read(journal, record).state.summary.turnOutcome).toBe('success')
+    record.lease.deathEvidence = null
+    await journal.appendItem(
+      { ...TURN_IDENTITY, turnId: 'live-fault' },
+      { kind: 'turn', turnId: 'live-fault', state: 'interrupted' },
+      { fence: 2 }
+    )
+    expect(projection.read(journal, record).state.summary.turnOutcome).toBe('interruption')
+  }
 })

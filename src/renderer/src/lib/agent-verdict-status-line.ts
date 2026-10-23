@@ -8,18 +8,34 @@ import { isProgramStatusRow } from './program-status/row'
 
 type VerdictLineSource = AgentMainAgentVerdictSource &
   Partial<
-    Pick<AgentStatusEntry, 'lastAssistantMessage' | 'agentType' | 'programStatus' | 'observation'>
+    Pick<
+      AgentStatusEntry,
+      'lastAssistantMessage' | 'agentType' | 'programStatus' | 'observation' | 'structuredHostOwned'
+    >
   >
 
-/** The line an agent row shows in place of its preview once its verdict marks it. A user's Stop
- *  says so; a turn a newer request replaced reads plainly interrupted, since no one is named; a
- *  turn cut off by a crash reads failed, as a failure does. */
-export function agentVerdictStatusLine(entry: VerdictLineSource): string | null {
+/** Native cancellation summaries establish Interrupted, but do not establish who stopped it. */
+export function agentVerdictNamesUserStop(
+  entry: VerdictLineSource,
+  nativeSubject = false
+): boolean {
+  return (
+    agentMainAgentVerdict(entry) === 'cancellation' &&
+    !nativeSubject &&
+    entry.observation?.origin !== 'structured' &&
+    entry.structuredHostOwned !== true
+  )
+}
+
+export function agentVerdictStatusLine(
+  entry: VerdictLineSource,
+  nativeSubject = false
+): string | null {
   switch (agentVerdictDisplayMark(entry)) {
     case 'failed':
       return failedLine(entry)
     case 'interrupted':
-      return agentMainAgentVerdict(entry) === 'cancellation' ? 'Interrupted by user' : 'Interrupted'
+      return agentVerdictNamesUserStop(entry, nativeSubject) ? 'Interrupted by user' : 'Interrupted'
     case 'unconfirmed':
       return 'Couldn’t confirm'
     case null:

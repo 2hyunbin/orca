@@ -82,8 +82,6 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
   /** Whether a newer Orca saved the chat: its failure is kept for that Orca but not shown here,
    *  where no retry can land. */
   savedByNewerOrca: (sessionId: string) => boolean
-  /** Makes the failed chats readable here, so `retryable` reads each one's journal. */
-  reveal: (markers: readonly AgentSessionResumeMarker[]) => Promise<void>
   logger: StructuredAgentSessionLogger
   now: () => number
   /** The capsule's single mutation lane, shared with the offer's own operations. */
@@ -118,6 +116,7 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
         trigger: failure.marker.trigger,
         recordedAt: failure.marker.recordedAt,
         latestPrompt: failure.latestPrompt,
+        ...(record.conversationName ? { conversationName: record.conversationName } : {}),
         executionHostId: record.location.executionHostId,
         workspaceKind: record.location.workspaceKind,
         ...(model === undefined ? {} : { model }),
@@ -132,7 +131,6 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
 
   const list = async (): Promise<StructuredAgentSessionResumeFailure[]> => {
     const failures = await read()
-    await deps.reveal(failures.map((failure) => failure.marker))
     return failures.flatMap(toRow)
   }
 

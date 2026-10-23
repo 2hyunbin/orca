@@ -1,5 +1,7 @@
+import { stageJournalMutation } from './journal-mutation-stage'
+import type { JournalReducerState } from './journal-reducer'
 import type Database from '../../sqlite/sync-database'
-import { insertJournalRow } from './journal-row-table'
+import { insertJournalRow, writeJournalRestFact } from './journal-row-table'
 import type { JournalHostDatabase } from './journal-host-database'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { JournalRow } from './journal-row-schema'
@@ -44,6 +46,7 @@ export function writeReceiptIfChanged<T>(
 }
 
 export type JournalRowWriterDeps = {
+  state?: () => JournalReducerState
   sessionId: string
   now: () => number
   serialize: <T>(run: JournalWriteBody<T>) => Promise<T>
@@ -78,11 +81,15 @@ export class JournalRowWriter {
       const savedAt = this.deps.now()
       const row = build(this.deps.nextSequence(), savedAt)
       assertJournalFence(row.fence, this.deps.highestFence())
+      const fact = this.prepareFact([row])
       try {
         // One INSERT: the chat's epoch pointer moves only when the epoch does.
         this.deps.database().transaction(
           (db) => {
             insertJournalRow(db, this.deps.sessionId, row, savedAt)
+            if (fact !== undefined) {
+              writeJournalRestFact(db, this.deps.sessionId, fact)
+            }
             hook?.(db, row)
             receipt?.write(db, row)
             this.runBookkeeping(db, row)
@@ -129,12 +136,16 @@ export class JournalRowWriter {
     for (const row of rows) {
       assertJournalFence(row.fence, this.deps.highestFence())
     }
+    const fact = this.prepareFact(rows)
     try {
       this.deps.database().transaction(
         (db) => {
           for (const row of rows) {
             insertJournalRow(db, this.deps.sessionId, row, ts)
             this.runBookkeeping(db, row)
+          }
+          if (fact !== undefined) {
+            writeJournalRestFact(db, this.deps.sessionId, fact)
           }
           receipt?.write(db, receiptRow?.(rows))
         },
@@ -160,6 +171,15 @@ export class JournalRowWriter {
       epoch: row.epoch,
       sequence: row.seq
     }))
+  }
+
+  private prepareFact(rows: readonly JournalRow[]) {
+    const state = this.deps.state?.()
+    if (!state || this.streamed(rows)) {
+      return undefined
+    }
+    const staged = stageJournalMutation(state, rows)
+    return staged.rest.revision === state.rest.revision ? undefined : staged.rest.fact()
   }
 
   private streamed(rows: readonly JournalRow[]): boolean {

@@ -129,6 +129,7 @@ export class AgentSessionJournal {
         for (const row of rows) {
           applyJournalRow(this.state, row, savedAt)
         }
+        this.state.rest.fact()
         this.onCommitted?.()
       },
       notifyCommitted: () => this.onCommitted?.(),
@@ -147,6 +148,8 @@ export class AgentSessionJournal {
     this.restore = collaborators.restore
     this.context = collaborators.context
   }
+
+  restFact = () => this.state.rest.fact()
 
   get epoch(): string {
     return this.state.epoch
@@ -168,9 +171,9 @@ export class AgentSessionJournal {
 
   /** Where the reopen's pause begins when this handle could not write its mark: where the mark
    *  would have gone. Null once a mark is written. Per handle, so the next open marks again. */
-  reopenFloor(): AgentJournalCursor | null {
-    return this.reopenUnmarked
-  }
+  reopenFloor = (): AgentJournalCursor | null => this.reopenUnmarked
+
+  restoreReopenFloor = (floor: AgentJournalCursor | null) => (this.reopenUnmarked = floor)
 
   async open(): Promise<void> {
     await this.restore()
@@ -259,6 +262,8 @@ export class AgentSessionJournal {
 
   /** Latest saved output at this fence, excluding client actions and recovery bookkeeping. */
   lastProviderActivityAt = (fence: number) => this.state.providerActivityAt.get(fence)
+
+  submissionVersion = () => this.state.submissionVersion
 
   submissions = (): AgentJournalSubmission[] => [...this.state.submissions.values()]
 

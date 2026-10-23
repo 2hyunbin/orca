@@ -70,8 +70,11 @@ function fixtureAnswer(
 }
 
 /** Captured frames go through translation, assembly and the real serialized journal. */
-export async function openAcpFixtureRig(dialect: AcpDialect = GROK_ACP_DIALECT) {
-  const rig = await openProviderTimelineRig()
+export async function openAcpFixtureRig(
+  dialect: AcpDialect = GROK_ACP_DIALECT,
+  identity: Parameters<typeof openProviderTimelineRig>[1] = {}
+) {
+  const rig = await openProviderTimelineRig({ agent: identity.agent ?? 'grok' }, identity)
   let providerSessionId = 'session-1'
   const translator = () => new AcpTimelineTranslator({ sessionId: providerSessionId, dialect })
   let lane = translator()

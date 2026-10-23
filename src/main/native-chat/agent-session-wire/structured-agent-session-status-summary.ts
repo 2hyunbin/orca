@@ -79,6 +79,7 @@ export function withoutLiveExecution(
 /** What a restart knows of a chat it has not opened (`atRestStructuredStatusSummary`). */
 export type StructuredAgentSessionAtRest = {
   interrupted: boolean
+  openTurn?: { itemId: string; since: number } | null
   lastSequence: number
   lastSavedAt: number
 }
@@ -102,7 +103,7 @@ export function atRestStructuredStatusSummary(
     agent: record.provider,
     status,
     latestPrompt: '',
-    ...(status && rest.interrupted ? { turnOutcome: 'interruption' as const } : {}),
+    ...(status && rest.interrupted ? { turnOutcome: 'cancellation' as const } : {}),
     ...structuredSummaryRecordFields(record, deps.namingFailure?.(record.sessionId)),
     updatedAt: rest.lastSavedAt || deps.now()
   }

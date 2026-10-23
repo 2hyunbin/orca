@@ -196,6 +196,7 @@ export class StructuredAgentSessionStatusFeed {
   publishAtRest(sessionId: string, rest: StructuredAgentSessionAtRest): void {
     const record = this.deps.getRecord(sessionId)
     if (record && !this.deps.sessions.has(sessionId)) {
+      this.projections.noteRestart(sessionId, rest)
       const summary = atRestStructuredStatusSummary(record, rest, this.deps)
       this.published.set(sessionId, { summary, firstInputSubmissionKey: null })
       this.sink(summary, record.location)

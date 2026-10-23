@@ -1,6 +1,8 @@
 // A real assembled lane for tests: grammar events → assembler → deferred sink queue → on-disk
 // journal. Assertions read the journal back, so they check what a client sees.
 
+import { readJournalRestFacts } from '../agent-session-journal/journal-row-table'
+import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -208,6 +210,7 @@ export type ProviderTimelineRig = {
   assemble(overrides?: Partial<ProviderTimelineAssemblerDeps>): ProviderTimelineAssembler
   rows(): Promise<AgentJournalRenderItem[]>
   /** Closes the original journal and database, then reads the persisted chat through a new store. */
+  restFacts(): ReturnType<typeof readJournalRestFacts>
   reopenJournal(): Promise<AgentSessionJournal>
   row(itemId: string): Promise<AgentJournalRenderItem | undefined>
   /** The turn row of provider turn `turnKey`, or the row whose turn id is `turnKey`. */
@@ -296,6 +299,7 @@ export async function openProviderTimelineRig(
     assembler: build(),
     sink,
     eventSink: deferred.sink,
+    restFacts: () => readJournalRestFacts(openTestJournalHostDatabase(root).db, SESSION),
     reopenJournal: async () => {
       await rows()
       await journal.close()

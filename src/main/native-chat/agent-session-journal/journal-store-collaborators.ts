@@ -108,6 +108,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     claimAttachments
   })
   const rowWriter = new JournalRowWriter({
+    state: host.state,
     sessionId: host.identity.sessionId,
     now: host.now,
     serialize: host.serialize,

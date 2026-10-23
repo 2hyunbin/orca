@@ -8,7 +8,13 @@ import type { AgentMessageSource } from '../../../shared/agent-session-message-s
 const hostRef: { current: unknown } = { current: null }
 
 vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
-  getStructuredAgentSessionHost: () => hostRef.current
+  getStructuredAgentSessionHost: () =>
+    hostRef.current === null
+      ? null
+      : {
+          withAutomaticConversation: <T>(_id: string, task: () => Promise<T>) => task(),
+          ...(typeof hostRef.current === 'object' ? hostRef.current : {})
+        }
 }))
 
 const {

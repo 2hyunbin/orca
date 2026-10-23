@@ -1,3 +1,4 @@
+import { JournalRestProjection } from './journal-rest-projection'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
 // the live append path and replay call it — a live-only shortcut is how a
@@ -46,6 +47,7 @@ import {
 export const MAX_JOURNAL_APPLIED_SETTLEMENT_IDS = 4_096
 
 export type JournalReducerState = {
+  rest: JournalRestProjection
   sessionId: string
   epoch: string
   lastSequence: number
@@ -65,6 +67,7 @@ export type JournalReducerState = {
   tombstones: Map<string, number>
   /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
   removedTurnIds: Set<string>
+  submissionVersion: number
   submissions: Map<string, AgentJournalSubmission>
   receipts: Map<string, AgentJournalAcceptanceReceipt>
   /** Provider item id → the submission slot that adopted it. Stops an accepted
@@ -87,6 +90,7 @@ export type JournalReducerState = {
 
 export function createJournalReducerState(sessionId: string, epoch: string): JournalReducerState {
   return {
+    rest: new JournalRestProjection(),
     sessionId,
     epoch,
     lastSequence: 0,
@@ -99,6 +103,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     providerActivityAt: new Map(),
     tombstones: new Map(),
     removedTurnIds: new Set(),
+    submissionVersion: 0,
     submissions: new Map(),
     receipts: new Map(),
     aliases: new Map(),
@@ -117,6 +122,21 @@ export function applyJournalRow(
   row: JournalRow,
   savedAt = row.ts
 ): void {
+  applyJournalRowBody(state, row, savedAt)
+  const ids =
+    row.kind === 'item' || row.kind === 'tombstone'
+      ? [row.itemId]
+      : row.kind === 'lifecycle-batch'
+        ? row.mutations.map((mutation) => mutation.itemId)
+        : row.kind === 'submission' || row.kind === 'dispatch'
+          ? [agentJournalSubmissionKey(row.clientMessageId)]
+          : []
+  for (const id of ids) {
+    state.rest.observe(state, state.aliases.get(id) ?? id)
+  }
+}
+
+function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedAt: number): void {
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
   if (row.kind === 'epoch') {

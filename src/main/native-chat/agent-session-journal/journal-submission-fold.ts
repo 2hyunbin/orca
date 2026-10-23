@@ -5,7 +5,10 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import {
+  parseAgentJournalItemKey,
+  agentJournalSubmissionKey
+} from '../../../shared/agent-session-journal-item-key'
 import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { journalRenderItem } from './journal-render-item'
 import { statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold'
@@ -17,6 +20,7 @@ export function applyJournalSubmission(
   state: JournalReducerState,
   row: Extract<JournalRow, { kind: 'submission' }>
 ): void {
+  state.submissionVersion++
   const options = readAgentSessionExecutionOptions(row.options)
   state.submissions.set(row.clientMessageId, {
     clientMessageId: row.clientMessageId,
@@ -109,12 +113,23 @@ export function acceptSubmissionFromProviderItem(
   if (providerItemId === resolvedItemId) {
     return
   }
-  const submission = [...state.submissions.values()].find(
-    (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
-  )
+  const identity = parseAgentJournalItemKey(resolvedItemId)
+  const known =
+    identity?.provider === 'orca' ? state.submissions.get(identity.clientMessageId) : undefined
+  // Oversized components are digests; legacy keys may not recover the original send id.
+  const original =
+    (known && agentJournalSubmissionKey(known.clientMessageId) === resolvedItemId
+      ? known
+      : undefined) ??
+    [...state.submissions.values()].find(
+      (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
+    )
+  const submission = original ? { ...original } : undefined
   if (!submission || !journalDispatchRowApplies(submission)) {
     return
   }
+  state.submissions.set(submission.clientMessageId, submission)
+  state.submissionVersion++
   submission.fence = row.fence
   submission.dispatchState = 'accepted'
   noteTurnAccepted(state, submission)

@@ -101,6 +101,8 @@ export class StructuredAgentSessionClientDelivery {
     return record ? adapter.atRestCommands?.read(record) : undefined
   }
 
+  commands = async (id: string) => ({ commands: await this.readCommandsSettled(id) })
+
   /** As `readCommands`, but a scan this read starts or finds running gets a short while to land,
    *  for a client that asks once per menu and never hears a later change. */
   async readCommandsSettled(sessionId: string) {

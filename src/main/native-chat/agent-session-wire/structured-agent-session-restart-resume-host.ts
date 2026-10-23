@@ -96,20 +96,15 @@ export function createStructuredAgentSessionRestartResume(
     getRecord: deps.store.getRecord,
     retryable: (marker) => derive([marker], 'may-be-held').candidates.length === 1,
     savedByNewerOrca: newerOrca.has,
-    reveal: (markers) => revealMarkers(markers),
     logger: deps.logger,
     now: surfaces.now,
     enqueue: enqueueRecoveryOperation
   })
 
-  const { readMarkers, readActionMarkers, revealMarkers, revealEvery, retireSuperseded } =
+  const { readMarkers, readActionMarkers, retireSuperseded } =
     createStructuredAgentSessionRestartOfferRecords({
       ...(deps.recoveryCapsule ? { capsule: deps.recoveryCapsule } : {}),
       readFailedMarkers: async () => (await failures.read()).map((failure) => failure.marker),
-      hasSession: (sessionId) => sessions.has(sessionId),
-      reveal: async (sessionId) => {
-        newerOrca.note(sessionId, await surfaces.revealSession(sessionId).catch(() => null))
-      },
       logger: deps.logger,
       now: surfaces.now,
       enqueue: enqueueRecoveryOperation
@@ -154,7 +149,6 @@ export function createStructuredAgentSessionRestartResume(
     // lane below also drains a publication already in flight before completion.
     witnesses.clear(audience)
     const markers = await readActionMarkers(sessionIds)
-    await revealMarkers(markers)
     const requested = new Set(sessionIds ?? markers.map((marker) => marker.sessionId))
     const derived = derive(markers, 'may-be-held')
     retireSuperseded(derived.superseded)
@@ -201,7 +195,16 @@ export function createStructuredAgentSessionRestartResume(
           resume: async (sessionId) => {
             const marker = markersBySession.get(sessionId)
             if (marker) {
-              await continueOne(marker, continuationFor(marker))
+              const start = async () => {
+                newerOrca.note(sessionId, await surfaces.revealSession(sessionId).catch(() => null))
+                const refreshed = deriveAtSend([marker], 'may-be-held').candidates[0]
+                const candidate = candidates.find((row) => row.sessionId === sessionId)
+                if (refreshed && candidate) {
+                  Object.assign(candidate, refreshed)
+                }
+                await continueOne(marker, continuationFor(marker))
+              }
+              await (surfaces.automatic ? surfaces.automatic(sessionId, start) : start())
             }
           }
         },
@@ -310,18 +313,12 @@ export function createStructuredAgentSessionRestartResume(
     listFailures,
     // Do not let a teardown witness already captured in this host republish after explicit
     // dismissal. A later capture is a new interruption and may create a fresh offer normally.
-    // "Dismiss all" keeps what this host does not list, so it reveals every record's chat first.
     dismiss: (sessionIds, audience) =>
-      failures.dismiss(
-        sessionIds,
-        async (clearAudience) => {
-          witnesses.clear(clearAudience)
-          await revealEvery()
-        },
-        audience
-      ),
+      failures.dismiss(sessionIds, (clearAudience) => witnesses.clear(clearAudience), audience),
     continueAfterRestart,
     onAgentStarted: withdrawal.onAgentStarted,
+    noteReadResult: newerOrca.note,
+    beforeConversationClose: withdrawal.beforeClose,
     continueInterrupted: createInterruptedContinuation(continuationHost, readMarkers)
   }
 }

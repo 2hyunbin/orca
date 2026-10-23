@@ -61,6 +61,9 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   sessions: Map<string, StructuredAgentSessionHostSession>
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   trackStart: <T>(start: Promise<T>) => Promise<T>
+  cacheReacquisition?: (
+    sessionId: string
+  ) => StructuredAgentSessionConversationOpenOptions['cacheReacquisition']
   /** Claims the queued head's start during its ordered preparation. */
   startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   deliveryOrder: StructuredAgentSessionDeliveryOrder
@@ -222,7 +225,10 @@ export function createStructuredAgentSessionConversationDelivery(input: {
       stopResettling()
     },
     open: (sessionId, options) =>
-      openStructuredAgentSessionConversation({ deps, sessions, adoptOpened }, sessionId, options)
+      openStructuredAgentSessionConversation({ deps, sessions, adoptOpened }, sessionId, {
+        ...options,
+        cacheReacquisition: options?.cacheReacquisition ?? input.cacheReacquisition?.(sessionId)
+      })
   }
 }
 

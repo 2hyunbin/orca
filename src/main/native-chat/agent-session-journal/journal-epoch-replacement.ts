@@ -47,7 +47,8 @@ import {
   deleteJournalEpochRows,
   insertJournalRow,
   publishJournalSessionEpoch,
-  readJournalSessionEpoch
+  readJournalSessionEpoch,
+  writeJournalRestFact
 } from './journal-row-table'
 import type { AgentJournalEpochReason, JournalRow } from './journal-row-schema'
 import { assertJournalFence } from './journal-write-guards'
@@ -188,6 +189,7 @@ export function replaceJournalEpoch(input: {
     for (const row of rows) {
       insertJournalRow(db, sessionId, row)
     }
+    writeJournalRestFact(db, sessionId, state.rest.fact())
     receipt?.write(db)
   })
 

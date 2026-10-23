@@ -1,3 +1,5 @@
+import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import type { StructuredAgentSessionAtRest } from './structured-agent-session-status-summary'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { isStructuredAgentSessionCommandEntry } from '../../../shared/structured-agent-session-command-entry'
@@ -39,6 +41,14 @@ export type StructuredAgentSessionJournalProjection = {
 }
 
 export class StructuredAgentSessionJournalProjections {
+  private readonly restartCuts = new Map<string, string | null>()
+
+  noteRestart(sessionId: string, rest: StructuredAgentSessionAtRest): void {
+    if (rest.interrupted) {
+      this.restartCuts.set(sessionId, rest.openTurn?.itemId ?? null)
+    }
+  }
+
   // Task progress must not sort and scan an unchanged conversation. Journal identity owns cleanup.
   private readonly byJournal = new WeakMap<
     AgentSessionJournal,
@@ -135,9 +145,46 @@ export class StructuredAgentSessionJournalProjections {
           work.scope
         )
       }
+      projection.state = this.restartVerdict(projection.state, journal, record)
       this.byJournal.set(journal, projection)
     }
     return projection
+  }
+  private restartVerdict(
+    state: StructuredAgentSessionStatusState,
+    journal: AgentSessionJournal,
+    record: AgentSessionRecord | null
+  ): StructuredAgentSessionStatusState {
+    const id = record?.sessionId
+    if (!id) {
+      return state
+    }
+    const cut = journal.restFact()
+    if (!cut) {
+      this.restartCuts.delete(id)
+      return state
+    }
+    const known = this.restartCuts.get(id)
+    if (known !== undefined && known !== null && known !== cut.itemId) {
+      this.restartCuts.delete(id)
+    }
+    const fence = journal.itemFence(cut.itemId)
+    const replaced = this.replacedRuntime?.(id)
+    const oldHost = fence !== undefined && replaced !== undefined && fence <= replaced.fence
+    if (!this.restartCuts.has(id) && !oldHost && !record?.lease.deathEvidence?.runtimeEnd) {
+      return state
+    }
+    const request = state.latestRequest
+    if (
+      request?.kind !== 'turn' ||
+      request.id !== readAgentJournalTurn(journal.item(cut.itemId)?.body)?.turnId
+    ) {
+      return state
+    }
+    this.restartCuts.set(id, cut.itemId)
+    return state.summary.status === 'idle'
+      ? { ...state, summary: { ...state.summary, turnOutcome: 'cancellation' } }
+      : state
   }
 }
 

@@ -1,3 +1,4 @@
+import type { AgentSessionWireRefusal } from '../../../shared/agent-session-wire'
 // What a host's restart-resume surface offers: teardown's offer recording, the offer list and its
 // actions, and Continue on a cut reply.
 
@@ -46,6 +47,11 @@ export type StructuredAgentSessionRestartResume = {
   ) => Promise<number>
   /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
   onAgentStarted: (sessionId: string) => void
+  noteReadResult: (
+    sessionId: string,
+    result: { openRefusal?: AgentSessionWireRefusal } | null
+  ) => void
+  beforeConversationClose: (sessionId: string) => void
   /** Continue on a reply an Orca stop cut off, offer or not; the send itself retires any offer. */
   continueInterrupted: ReturnType<typeof createInterruptedContinuation>
 }

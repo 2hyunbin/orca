@@ -38,6 +38,7 @@ export type StructuredAgentSessionResumeCandidate = {
   recordedAt: number
   /** The prompt the row quotes, so the user recognises the chat before resuming it. */
   latestPrompt: string
+  conversationName?: string
   /** Which machine ran it, so the offer carries the same host badge the sidebar shows. */
   executionHostId: AgentSessionRecord['location']['executionHostId']
   /** Git worktree or folder workspace — the surface picks its glyph from this, never from a name. */
@@ -151,6 +152,7 @@ export function structuredAgentSessionResumableSet(
       trigger: marker.trigger,
       recordedAt: marker.recordedAt,
       latestPrompt: input.latestPrompt(marker.sessionId),
+      ...(record.conversationName ? { conversationName: record.conversationName } : {}),
       executionHostId: record.location.executionHostId,
       workspaceKind: record.location.workspaceKind,
       ...(model === undefined ? {} : { model }),

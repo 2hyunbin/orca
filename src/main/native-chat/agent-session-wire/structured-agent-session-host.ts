@@ -15,7 +15,6 @@ import * as reveal from './structured-agent-session-reveal'
 import { structuredAgentSessionOwnerStatus } from './structured-agent-session-owner-status'
 import { StructuredAgentSessionHostRuntimeState } from './structured-agent-session-host-runtime-state'
 import { structuredAgentSessionEntryDelegates } from './structured-agent-session-create'
-import type { StructuredAgentSessionLifetimeContext } from './structured-agent-session-host-lifetime'
 import * as agentStart from './structured-agent-session-agent-start'
 import { createStructuredAgentSessionHostMutationContext } from './structured-agent-session-host-mutation-wiring'
 import * as lifetime from './structured-agent-session-conversation-lifetime'
@@ -52,10 +51,11 @@ export class StructuredAgentSessionHost {
       this.subscribers.publish(sessionId, journal)
       this.conversationDelivery.afterCommit(sessionId, journal)
     },
+    residency: () => this.lifetime?.residency,
     deliverSettleEdge: (id, journal) => this.conversationDelivery.afterSettleEdge(id, journal),
     logger: sessionLogger.deferredStructuredAgentSessionLogger(() => this.deps.logger),
     // Drafts that waited on it re-derive, and the residency cap makes room for it.
-    onOpened: (id) => [this.queued, this.lifetime.idleSweep].forEach((c) => c.onOpened(id)),
+    onOpened: (id) => this.queued.onOpened(id),
     now: () => this.now()
   })
   private readonly queued = wireStructuredAgentSessionQueuedMessages(this.sessions, () =>
@@ -68,11 +68,14 @@ export class StructuredAgentSessionHost {
     () => this.deps,
     this.queued,
     (sessionId) => this.restartResume.onAgentStarted(sessionId),
-    (sessionId) => this.backgroundTasks.publish(sessionId),
+    (sessionId) => {
+      this.backgroundTasks.publish(sessionId)
+      this.lifetime?.residency.released(sessionId)
+    },
     (sessionId) => this.backgroundTasks.read(sessionId)
   )
   private readonly subscribers = this.clientDelivery.subscribers
-  private readonly tasks = new StructuredAgentSessionTaskQueue()
+  private readonly tasks = new StructuredAgentSessionTaskQueue(() => this.lifetime?.residency)
   private readonly runtimeState: StructuredAgentSessionHostRuntimeState
   private readonly reconcileLeases: ReturnType<typeof createRestartReconciler>
   private readonly restore: ReturnType<typeof reveal.createStructuredAgentSessionHostRestore>
@@ -114,6 +117,7 @@ export class StructuredAgentSessionHost {
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       // Quit drains a delivery start before it evicts, so the child it produces is stopped.
       trackStart: (start) => this.tasks.trackAttach(start),
+      cacheReacquisition: (id) => this.lifetime?.residency.cacheReacquisition(id),
       startProviderChild: (sessionId, startedFor) =>
         agentStart.claimStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
@@ -155,7 +159,9 @@ export class StructuredAgentSessionHost {
       context: () => this.lifetimeContext(),
       sessions: this.sessions,
       serialize: (sessionId, task) => this.serialize(sessionId, task),
-      open: (sessionId) => this.conversationDelivery.open(sessionId),
+      open: (sessionId, options) => this.conversationDelivery.open(sessionId, options),
+      busy: (sessionId) => this.tasks.busy(sessionId),
+      restartResume: this.restartResume,
       // A start in flight is execution under way, even before the loop or an operation sees a child.
       deliveryActive: (id) =>
         this.conversationDelivery.loop.isRunning(id) || this.runtimeState.startFlights.has(id),
@@ -189,7 +195,7 @@ export class StructuredAgentSessionHost {
       generationEnded: this.clientDelivery.publishGenerationEnded,
       wakeDelivery: (sessionId: string) => this.conversationDelivery.loop.wake(sessionId),
       endExitedChild: this.eventRecovery.endExitedChildUnderSerialize
-    } satisfies StructuredAgentSessionLifetimeContext
+    }
   }
 
   /** The host's half of attaching, named so it cannot grow dependencies unnoticed. */
@@ -255,6 +261,9 @@ export class StructuredAgentSessionHost {
   revealSession = (sessionId: string): Promise<HostTypes.StructuredAgentSessionReveal> =>
     reveal.revealStructuredAgentSession(this.deps, sessionId, this.lifetime.conversation)
 
+  withAutomaticConversation = <T>(sessionId: string, task: () => Promise<T>): Promise<T> =>
+    this.lifetime.residency.run(sessionId, task)
+
   private serialize = this.tasks.serialize.bind(this.tasks)
 
   private readonly entry = structuredAgentSessionEntryDelegates(() => this.attachContext())
@@ -319,9 +328,7 @@ export class StructuredAgentSessionHost {
 
   conversationCommand = this.conversationCommands.run
   /** Undefined means unavailable; an empty array is an authoritative catalog. */
-  readCommands = async (sessionId: string) => ({
-    commands: await this.clientDelivery.readCommandsSettled(sessionId)
-  })
+  readCommands = this.clientDelivery.commands
 
   /** From the record store, never the session map: an idle-released chat has no map entry. */
   handoffStatus = (sessionId: string) => structuredAgentSessionOwnerStatus(this.deps, sessionId)
@@ -360,11 +367,8 @@ export class StructuredAgentSessionHost {
 
   /** Test rigs only: the collaborators the host builds itself, typed, for tests that drive them. */
   collaboratorsForTests = () => ({
-    sessions: this.sessions,
-    subscribers: this.subscribers,
-    runtimeState: this.runtimeState,
+    ...this.attachContext(),
     conversationDelivery: this.conversationDelivery,
-    lifetime: this.lifetime,
-    serialize: this.serialize
+    lifetime: this.lifetime
   })
 }
