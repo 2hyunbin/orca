@@ -35,4 +35,16 @@ describe('abbreviateOrchestrationTasks', () => {
     expect(task.spec.isWellFormed()).toBe(true)
     expect(task.spec.endsWith('…')).toBe(true)
   })
+
+  it.each([
+    [`${' '.repeat(200_000)}Short\r\n\t task${'\u00a0'.repeat(200_000)}`, 'Short task', false],
+    [`${'x'.repeat(160)}${'\n'.repeat(200_000)}`, 'x'.repeat(160), false],
+    [`${'x'.repeat(160)}${'\n'.repeat(200_000)}y`, `${'x'.repeat(159)}…`, true],
+    [`${'x'.repeat(158)}😀${'\n'.repeat(200_000)}y`, `${'x'.repeat(158)}…`, true],
+    ['\u2028'.repeat(200_000), '', false]
+  ] as const)('preserves brief output across long whitespace runs', (spec, expected, truncated) => {
+    expect(abbreviateOrchestrationTasks([{ id: 'task_1', spec, status: 'ready' }])).toEqual([
+      { id: 'task_1', spec: expected, status: 'ready', spec_truncated: truncated }
+    ])
+  })
 })
