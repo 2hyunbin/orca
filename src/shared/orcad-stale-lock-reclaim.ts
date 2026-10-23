@@ -23,9 +23,11 @@ export const ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES: Record<OrcadStaleLockReclaimSt
  * A command the user can paste on the holder's machine, naming this data root. An orcad names its
  * own runtime and entry, since managed hosts have neither `orca` nor `orcad` on PATH.
  */
+export type OrcadReclaimHintRuntime = { execPath: string; entry: string | undefined }
+
 export function orcadStaleLockReclaimCommand(
   dataRoot: string,
-  runtime: { execPath: string; entry: string | undefined } | null
+  runtime: OrcadReclaimHintRuntime | null
 ): string {
   const program = runtime?.entry
     ? `${quotePosixShellUnlessPlain(runtime.execPath)} ${quotePosixShellUnlessPlain(runtime.entry)}`

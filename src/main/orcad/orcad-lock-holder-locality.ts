@@ -3,7 +3,10 @@ import process from 'node:process'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
 import { OrcadInstanceLockError } from './orcad-data-root-privacy'
-import { orcadStaleLockReclaimCommand } from '../../shared/orcad-stale-lock-reclaim'
+import {
+  orcadStaleLockReclaimCommand,
+  type OrcadReclaimHintRuntime
+} from '../../shared/orcad-stale-lock-reclaim'
 
 /**
  * Same machine: the same machine identity, or (records without one) the same kernel boot. A record
@@ -52,13 +55,10 @@ export function orcadLockHolderUnverifiableError(lock: {
   foreign: boolean
   dataRoot: string
   lockPath: string
-  desktop: boolean
+  /** An orcad names its own runtime and entry: managed hosts have no `orca` or `orcad` on PATH. */
+  hintRuntime: OrcadReclaimHintRuntime | null
 }): OrcadInstanceLockError {
-  // An orcad names its own runtime and entry: managed hosts have no `orca` or `orcad` on PATH.
-  const command = orcadStaleLockReclaimCommand(
-    lock.dataRoot,
-    lock.desktop ? null : { execPath: process.execPath, entry: process.argv[1] }
-  )
+  const command = orcadStaleLockReclaimCommand(lock.dataRoot, lock.hintRuntime)
   const reclaim =
     process.platform === 'linux'
       ? `run \`${command}\` on the machine it ran on to check and clear it, or `

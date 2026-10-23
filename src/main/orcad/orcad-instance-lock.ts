@@ -34,6 +34,7 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
+import type { OrcadReclaimHintRuntime } from '../../shared/orcad-stale-lock-reclaim'
 import {
   orcadLockHolderLocality,
   orcadLockHolderUnverifiableError
@@ -115,6 +116,8 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
    * an earlier reclaimer cut short) is stale. Its PID is then judged as this machine's.
    */
   reclaimConfirmed?: (record: OrcadLockRecord, role: 'holder' | 'recovery-owner') => boolean
+  /** The program a refusal names; defaults to this orcad's own runtime, or `orca serve`. */
+  reclaimHintRuntime?: OrcadReclaimHintRuntime | null
 }
 
 function defaultIdentity(): string {
@@ -272,7 +275,12 @@ export function acquireOrcadInstanceLock(
       foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal) === 'foreign',
       dataRoot,
       lockPath,
-      desktop: hooks.role === 'desktop'
+      hintRuntime:
+        hooks.reclaimHintRuntime !== undefined
+          ? hooks.reclaimHintRuntime
+          : hooks.role === 'desktop'
+            ? null
+            : { execPath: process.execPath, entry: process.argv[1] }
     })
   }
   // The desktop takes this lock only after Electron's single-instance lock, which already proves

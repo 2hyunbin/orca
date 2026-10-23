@@ -33,6 +33,7 @@ import {
   ORCAD_RECLAIM_STALE_LOCK_FLAG,
   ORCAD_STALE_LOCK_DATA_ROOT_FLAG,
   ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES,
+  type OrcadReclaimHintRuntime,
   type OrcadStaleLockReclaimStatus
 } from '../../shared/orcad-stale-lock-reclaim'
 
@@ -71,7 +72,11 @@ export type OrcadStaleLockReclaimResult = {
 
 export async function reclaimStaleOrcadInstanceLock(
   dataRoot: string,
-  options: { yes: boolean },
+  options: {
+    yes: boolean
+    /** Who to name in a refusal's command: an orcad names its own runtime, the CLI `orca serve`. */
+    hintRuntime: OrcadReclaimHintRuntime | null
+  },
   hooks: OrcadStaleLockReclaimHooks = {}
 ): Promise<OrcadStaleLockReclaimResult> {
   const lockPath = join(dataRoot, ORCAD_LOCK_FILE_NAME)
@@ -126,6 +131,7 @@ export async function reclaimStaleOrcadInstanceLock(
     // race-safe rename, and still refuses if that PID is running here under the same identity.
     acquireOrcadInstanceLock(dataRoot, {
       ...hooks.lockHooks,
+      reclaimHintRuntime: options.hintRuntime,
       // Only the record shown above; a reclaimer cut short by the same reboot is just as stale.
       reclaimConfirmed: (record, role) =>
         role === 'holder'
@@ -296,13 +302,17 @@ export async function runOrcadStaleLockReclaimCommandAndExit(argv: string[]): Pr
       !['--yes', '--json', ORCAD_STALE_LOCK_DATA_ROOT_FLAG].includes(arg) &&
       (dataRootIndex === -1 || index !== dataRootIndex + 1)
   )
-  if (!dataRoot || unknown.length) {
+  // A missing value must never fall through to another data root, nor read a flag as a path.
+  if (!dataRoot?.trim() || dataRoot.startsWith('-') || unknown.length) {
     console.error(
       `Usage: orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG} [${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} <dir>] [--yes] [--json]`
     )
     process.exit(ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES.refused)
   }
-  const result = await reclaimStaleOrcadInstanceLock(dataRoot, { yes: args.includes('--yes') })
+  const result = await reclaimStaleOrcadInstanceLock(dataRoot, {
+    yes: args.includes('--yes'),
+    hintRuntime: { execPath: process.execPath, entry: process.argv[1] }
+  })
   printOrcadStaleLockReclaimResult(result, json)
   process.exit(result.exitCode)
 }

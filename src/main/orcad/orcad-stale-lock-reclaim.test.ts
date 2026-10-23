@@ -88,13 +88,21 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
   it('clears a lock from an earlier boot on this host once every check passes and --yes', async () => {
     const root = makeRoot()
     const lockPath = writeLock(root, holderRecord())
-    const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: true, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result).toMatchObject({ status: 'reclaimed', exitCode: 0 })
     expect(existsSync(lockPath)).toBe(false)
   })
 
   it('never reports an empty data root as a recovery', async () => {
-    const result = await reclaimStaleOrcadInstanceLock(makeRoot(), { yes: true }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      makeRoot(),
+      { yes: true, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result).toMatchObject({
       status: 'none',
       exitCode: 4,
@@ -105,7 +113,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
   it('without --yes, names what it found and warns about other machines, then refuses', async () => {
     const root = makeRoot()
     writeLock(root, holderRecord())
-    const result = await reclaimStaleOrcadInstanceLock(root, { yes: false }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: false, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result).toMatchObject({
       status: 'eligible',
       exitCode: 2,
@@ -130,7 +142,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     await new Promise<void>((resolve) =>
       server.listen(join(root, `o-${HOLDER_PID}-rt.sock`), resolve)
     )
-    const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: true, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result).toMatchObject({
       status: 'refused',
       exitCode: 1,
@@ -150,25 +166,37 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
       join(generation, 'owner'),
       JSON.stringify(holderRecord({ pid: 16000, nonce: 'cut-short-reclaimer' }))
     )
-    const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: true, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result.exitCode).toBe(0)
     expect(existsSync(lockPath)).toBe(false)
   })
 
-  it('refuses, rather than reporting nothing to do, when the lock cannot be reached', async () => {
-    const root = makeRoot()
-    writeLock(root, holderRecord())
-    chmodSync(root, 0o000)
-    try {
-      const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
-      expect(result).toMatchObject({
-        exitCode: 1,
-        message: expect.stringContaining('cannot be read')
-      })
-    } finally {
-      chmodSync(root, 0o700)
+  // Root reads through mode 000, so the case only exists for an ordinary user.
+  it.skipIf(process.getuid?.() === 0)(
+    'refuses, rather than reporting nothing to do, when the lock cannot be reached',
+    async () => {
+      const root = makeRoot()
+      writeLock(root, holderRecord())
+      chmodSync(root, 0o000)
+      try {
+        const result = await reclaimStaleOrcadInstanceLock(
+          root,
+          { yes: true, hintRuntime: null },
+          rebootedBox()
+        )
+        expect(result).toMatchObject({
+          exitCode: 1,
+          message: expect.stringContaining('cannot be read')
+        })
+      } finally {
+        chmodSync(root, 0o700)
+      }
     }
-  })
+  )
 
   it('probes an IPv6 WebSocket endpoint by its bare address', async () => {
     const server = createServer()
@@ -193,7 +221,7 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     // Another process now has that PID: its incarnation names this boot, not the record's.
     const reclaimed = await reclaimStaleOrcadInstanceLock(
       reused,
-      { yes: true },
+      { yes: true, hintRuntime: null },
       alive({ linuxStartTicks: '9', bootId: 'boot-2' })
     )
     expect(reclaimed.status).toBe('reclaimed')
@@ -201,7 +229,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
 
     const unreadable = makeRoot()
     writeLock(unreadable, holderRecord())
-    const refused = await reclaimStaleOrcadInstanceLock(unreadable, { yes: true }, alive(null))
+    const refused = await reclaimStaleOrcadInstanceLock(
+      unreadable,
+      { yes: true, hintRuntime: null },
+      alive(null)
+    )
     expect(refused.status).toBe('refused')
     expect(readOrcadInstanceLockRecord(join(unreadable, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
       'stale-holder'
@@ -219,11 +251,16 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     writeFileSync(join(root, `o-${HOLDER_PID}-rt.sock`), '')
     const result = await reclaimStaleOrcadInstanceLock(
       root,
-      { yes: true },
+      { yes: true, hintRuntime: null },
       rebootedBox({ probeEndpoint: swap })
     )
     expect(result.status).toBe('refused')
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('newer-holder')
+    // The refusal names `orca serve`, never the binary this command happens to run under.
+    expect(result.message).not.toContain(process.execPath)
+    if (process.platform === 'linux') {
+      expect(result.message).toContain(`orca serve --reclaim-stale-lock --data-root ${root}`)
+    }
   })
 
   it('answers a TCP probe only for a listener, and anything it cannot check as unknown', async () => {
@@ -249,7 +286,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
   ])('refuses a lock from %s', async (_case, record, reason) => {
     const root = makeRoot()
     writeLock(root, record)
-    const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: true, hintRuntime: null },
+      rebootedBox()
+    )
     expect(result).toMatchObject({
       status: 'refused',
       exitCode: 1,
