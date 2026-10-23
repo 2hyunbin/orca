@@ -133,6 +133,73 @@ function stripGenericEscapes(value: string): string {
   return collector.finish()
 }
 
+function stripCsiSequences(value: string): string {
+  const chunkSize = 64 * 1024
+  if (value.length <= chunkSize) {
+    return value.replace(CSI_SEQUENCE_PATTERN, '')
+  }
+  const sparseMatchLimit = 256
+  const sequences = new RegExp(CSI_SEQUENCE_PATTERN)
+  let result = ''
+  let offset = 0
+  let matches = 0
+  for (let match = sequences.exec(value); match; match = sequences.exec(value)) {
+    result += value.slice(offset, match.index)
+    offset = match.index + match[0].length
+    if (++matches === sparseMatchLimit) {
+      break
+    }
+  }
+  if (matches < sparseMatchLimit) {
+    return result + value.slice(offset)
+  }
+  // Keep the first native window; copying later windows bounds retained replacement ropes.
+  let copyChunks = false
+  let escape = value.indexOf('\u001b', offset)
+  let csi = value.indexOf('\u009b', offset)
+  while (offset < value.length) {
+    if (escape !== -1 && escape < offset) {
+      escape = value.indexOf('\u001b', offset)
+    }
+    if (csi !== -1 && csi < offset) {
+      csi = value.indexOf('\u009b', offset)
+    }
+    const next = escape < 0 ? csi : csi < 0 ? escape : Math.min(escape, csi)
+    if (next === -1) {
+      return result + value.slice(offset)
+    }
+    result += value.slice(offset, next)
+    offset = next
+    let end = Math.min(value.length, offset + chunkSize)
+    if (end < value.length) {
+      const window = value.slice(offset, end)
+      const lastIntroducer = Math.max(
+        escape !== -1 && escape < end ? window.lastIndexOf('\u001b') : -1,
+        csi !== -1 && csi < end ? window.lastIndexOf('\u009b') : -1
+      )
+      // A new introducer cannot belong to the preceding CSI sequence.
+      if (lastIntroducer > 0) {
+        end = offset + lastIntroducer
+      } else {
+        sequences.lastIndex = offset
+        const match = sequences.exec(value)
+        if (!match) {
+          return result + value.slice(offset)
+        }
+        result += value.slice(offset, match.index)
+        offset = sequences.lastIndex
+        continue
+      }
+    }
+    const chunk = value.slice(offset, end)
+    const normalized = chunk.replace(CSI_SEQUENCE_PATTERN, '')
+    result += normalized === chunk || !copyChunks ? normalized : ownRetainedString(normalized)
+    copyChunks = true
+    offset = end
+  }
+  return result
+}
+
 /**
  * Remove ANSI escape sequences while preserving text, tabs and line breaks.
  * Ordering matters: OSC/string sequences must be consumed before the generic
@@ -145,6 +212,6 @@ export function stripAnsiEscapeSequences(value: string): string {
   const stripped = CONTROL_STRING_INTRODUCER_PATTERN.test(value)
     ? stripControlStrings(stripControlStrings(value, true), false)
     : value
-  const withoutCsi = stripped.replace(CSI_SEQUENCE_PATTERN, '')
+  const withoutCsi = stripCsiSequences(stripped)
   return stripGenericEscapes(withoutCsi)
 }

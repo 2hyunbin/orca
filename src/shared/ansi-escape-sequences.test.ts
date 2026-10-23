@@ -42,6 +42,43 @@ describe('ordered linear ANSI stripping', () => {
       expect(stripAnsiEscapeSequences(`${intro}${body}`)).toBe(`${leftover}${body}`)
     }
   })
+  it.each(['\x1b[', '\x9b'])(
+    'keeps complete %j sequences across dense chunk boundaries',
+    (intro) => {
+      const progress = 'x\x1b[K'.repeat(16_630)
+      for (let padding = 0; padding < 100; padding++) {
+        const suffix = `${'a'.repeat(padding)}${intro}1;2H界😀\ud800${intro}0Ktail`
+        expect(stripAnsiEscapeSequences(progress + suffix)).toBe(
+          `${'x'.repeat(16_630)}${'a'.repeat(padding)}界😀\ud800tail`
+        )
+      }
+    }
+  )
+  it('preserves CSI parameters longer than a chunk and unfinished sequences', () => {
+    const progress = 'x\x1b[K'.repeat(16_630)
+    const prefix = 'x'.repeat(16_630)
+    const parameters = '1;'.repeat(40_000)
+    expect(stripAnsiEscapeSequences(`${progress}\x1b[${parameters}mend`)).toBe(`${prefix}end`)
+    expect(stripAnsiEscapeSequences(`${progress}\x9b${parameters}mend`)).toBe(`${prefix}end`)
+    expect(stripAnsiEscapeSequences(`${progress}\x1b[${parameters}`)).toBe(prefix + parameters)
+    expect(stripAnsiEscapeSequences(`${progress}\x9b${parameters}`)).toBe(
+      `${prefix}\x9b${parameters}`
+    )
+    for (const intro of ['\x1b[', '\x9b']) {
+      const interrupted = `${parameters}\nvisible`
+      expect(stripAnsiEscapeSequences(`${progress}${intro}${interrupted}\x1b[Kend`)).toBe(
+        `${prefix}${intro === '\x9b' ? intro : ''}${interrupted}end`
+      )
+    }
+  })
+  it('preserves sparse escapes and Unicode in long output', () => {
+    const text = 'α😀\ud800\udfff\r\n'.repeat(10_000)
+    expect(stripAnsiEscapeSequences(`${text}\x1b[Kend`)).toBe(`${text}end`)
+    expect(stripAnsiEscapeSequences(`\x1b[0m${text}`)).toBe(text)
+    expect(stripAnsiEscapeSequences(text)).toBe(text)
+    expect(stripAnsiEscapeSequences('x\x1b[K'.repeat(8_000) + text)).toBe('x'.repeat(8_000) + text)
+    expect(stripAnsiEscapeSequences('\x1b[31m\x1b[0m'.repeat(20_000))).toBe('')
+  })
   it('preserves unrelated controls and incomplete generic escapes', () => {
     expect(stripAnsiEscapeSequences('a\x1b(Bb\x1bc\x1b\\c')).toBe('abc')
     expect(stripAnsiEscapeSequences('\x00\x01\x18\x1a\x7f\x9c\t\r\n\x1b ')).toBe(
