@@ -213,7 +213,7 @@ describe('a Stop holds the queue, in order', () => {
 
 describe('after a restart, nothing sends by itself', () => {
   /** A turn runs with cards A and B waiting, and Orca quits: a quit writes no Stop event. */
-  async function restartedWithCards(): Promise<{ first: string; second: string }> {
+  async function restartedWithCards(): Promise<{ first: string; second: string; working: string }> {
     const working = await rig.workingSend()
     const first = await queuedDraft('A')
     const second = await queuedDraft('B')
