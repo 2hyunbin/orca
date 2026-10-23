@@ -143,6 +143,12 @@ describe('Recover server', () => {
     await act(async () => button(container, 'Clear lock and restart').click())
     expect(container.textContent).toContain('did not start')
     expect(onOpenChange).not.toHaveBeenCalled()
+    // The lock is gone: no stale evidence, no second confirmation, no manual recovery.
+    expect(container.textContent).not.toContain('boot-old')
+    expect(button(container, 'Clear lock and restart')).toBeUndefined()
+    expect(container.textContent).not.toContain('--reclaim-stale-lock')
+    expect(container.textContent).not.toContain('rm /')
+    expect(button(container, 'Close')).toBeDefined()
   })
 
   it('offers only a delete by hand when the host can’t run the check', async () => {
@@ -164,7 +170,8 @@ describe('Recover server', () => {
       message: 'still running',
       lockPath: '/home/dev/.orca/orcad.lock'
     } as const,
-    { status: 'no-answer', message: 'no answer understood' } as const
+    { status: 'no-answer', message: 'no answer understood' } as const,
+    { status: 'unsupported', message: 'too old to pin', reclaimWithoutPin: true } as const
   ])('names the reclaim command, never a delete, for $status', async (result) => {
     reclaimStaleLock.mockResolvedValueOnce(result)
     const container = await render()

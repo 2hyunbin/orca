@@ -122,14 +122,13 @@ function OpenRecoverServerDialog({
       }
       if (result.status === 'reclaimed') {
         onChanged()
-        if (result.notRestarted) {
-          setError(result.notRestarted)
-        } else {
+        if (!result.notRestarted) {
           onOpenChange(false)
+          return
         }
-      } else {
-        setCheck(result)
       }
+      // A cleared lock ends the flow: its evidence and the confirmation no longer apply.
+      setCheck(result)
     } catch (cause) {
       if (mountedRef.current) {
         setError(messageOf(cause))
@@ -189,7 +188,9 @@ function OpenRecoverServerDialog({
         ) : null}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            {translate('auto.components.settings.recoverServer.cancel', 'Cancel')}
+            {check?.status === 'reclaimed'
+              ? translate('auto.components.settings.recoverServer.close', 'Close')
+              : translate('auto.components.settings.recoverServer.cancel', 'Cancel')}
           </Button>
           {eligible ? (
             <Button
@@ -258,6 +259,20 @@ function CheckOutcome({
   check: OrcadManagedStaleLockReclaimResult
   detail: string
 }): React.JSX.Element {
+  if (check.status === 'reclaimed') {
+    // The lock is gone, so neither the reclaim command nor a delete by hand applies.
+    return (
+      <div className="space-y-2 text-sm">
+        <p>
+          {translate(
+            'auto.components.settings.recoverServer.reclaimedNotStarted',
+            'The lock was cleared, but Orca’s server did not start.'
+          )}
+        </p>
+        {check.notRestarted ? <p className="text-destructive">{check.notRestarted}</p> : null}
+      </div>
+    )
+  }
   if (check.status === 'none') {
     return (
       <p className="text-sm text-muted-foreground">
@@ -274,8 +289,14 @@ function CheckOutcome({
       {check.status === 'refused' || check.status === 'no-answer' ? (
         <ManualReclaim detail={detail} />
       ) : null}
-      {/* The host can't run the reclaim command, so only a delete by hand is offered. */}
-      {check.status === 'unsupported' ? <ManualLockDelete lockPath={check.lockPath} /> : null}
+      {/* Its orcad's own reclaim is safer than a delete; only a host without one gets rm. */}
+      {check.status === 'unsupported' ? (
+        check.reclaimWithoutPin ? (
+          <ManualReclaim detail={detail} />
+        ) : (
+          <ManualLockDelete lockPath={check.lockPath} />
+        )
+      ) : null}
     </div>
   )
 }

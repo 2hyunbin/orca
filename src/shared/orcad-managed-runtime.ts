@@ -102,8 +102,12 @@ export type OrcadManagedStaleLockReclaimResult =
       evidence?: OrcadStaleLockEvidence
       notRestarted?: string
     }
-  /** The host can't run the command; `lockPath` names the lock to delete by hand. Nothing changed. */
-  | { status: 'unsupported'; message: string; lockPath?: string }
+  /**
+   * The host can't run the command from here; nothing changed. `reclaimWithoutPin`: its orcad has
+   * the reclaim, but not the pin a confirmation from here needs, so the user runs the reclaim
+   * themselves. Otherwise `lockPath` names the lock to delete by hand.
+   */
+  | { status: 'unsupported'; message: string; lockPath?: string; reclaimWithoutPin?: true }
   /** The slot runs the command but gave no answer this client understands; nothing is known. */
   | { status: 'no-answer'; message: string }
   /** Another lifecycle step holds the host; nothing changed. */

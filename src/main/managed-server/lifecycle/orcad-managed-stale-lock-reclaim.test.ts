@@ -136,15 +136,28 @@ describe('runManagedOrcadStaleLockReclaim', () => {
   })
 
   // Runs the real command in a shell against a slot whose runtime records any invocation.
+  // The fake runtime prints nothing, which a slot that runs the command reports as no answer.
   it.skipIf(process.platform === 'win32').each([
-    // A build with the reclaim but not the nonce pin must never be confirmed.
+    // A build with the reclaim but not the nonce pin must never be confirmed from here.
     [
-      'never starts an orcad whose bundle lacks the pin',
+      'never starts an orcad that has the reclaim but not the pin',
       'argv[2] === "--reclaim-stale-lock"',
-      false
+      false,
+      { status: 'unsupported', reclaimWithoutPin: true }
     ],
-    ['runs the slot that names the pin', '"--reclaim-stale-lock" "--expect-nonce"', true]
-  ])('%s', async (_case, bundle, invoked) => {
+    [
+      'never starts an orcad without the reclaim',
+      'orcad server',
+      false,
+      { status: 'unsupported', lockPath: expect.stringContaining('orcad.lock') }
+    ],
+    [
+      'runs the slot that names the pin',
+      '"--reclaim-stale-lock" "--expect-nonce"',
+      true,
+      { status: 'no-answer' }
+    ]
+  ])('%s', async (_case, bundle, invoked, expected) => {
     const home = mkdtempSync(join(tmpdir(), 'orcad-reclaim-gate-'))
     roots.push(home)
     mocks.home.current = home
@@ -163,8 +176,7 @@ describe('runManagedOrcadStaleLockReclaim', () => {
       yes: true,
       expectNonce: 'n-1'
     })
-    // The fake runtime prints nothing, which a slot with the command reports as no answer.
-    expect(result.status).toBe(invoked ? 'no-answer' : 'unsupported')
+    expect(result).toMatchObject(expected)
     expect(existsSync(join(home, 'invoked'))).toBe(invoked)
   })
 })

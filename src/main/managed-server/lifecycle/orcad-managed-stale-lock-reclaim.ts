@@ -51,6 +51,7 @@ const ReclaimAnswerSchema = z.object({
 })
 
 const RECLAIM_UNSUPPORTED_SENTINEL = 'ORCA_STALE_LOCK_RECLAIM_UNSUPPORTED'
+const RECLAIM_UNPINNED_SENTINEL = 'ORCA_STALE_LOCK_RECLAIM_UNPINNED'
 
 type ReclaimAnswer = Omit<z.infer<typeof ReclaimAnswerSchema>, 'status'> & {
   status: z.infer<typeof ReclaimStatusSchema>
@@ -58,7 +59,8 @@ type ReclaimAnswer = Omit<z.infer<typeof ReclaimAnswerSchema>, 'status'> & {
 
 type SlotReclaim =
   | { status: 'answered'; answer: ReclaimAnswer }
-  | { status: 'unsupported' | 'no-answer' | 'busy'; message: string }
+  /** `unpinned`: the slot has the reclaim but not `--expect-nonce`, so only a person may run it. */
+  | { status: 'unsupported' | 'unpinned' | 'no-answer' | 'busy'; message: string }
 
 export function runManagedOrcadStaleLockReclaim(
   userDataPath: string,
@@ -81,14 +83,15 @@ export function runManagedOrcadStaleLockReclaim(
         message: 'An update, rollback or recovery holds this host; try again when it finishes.'
       })
     )
+    if (ran.status === 'unsupported') {
+      const lockPath = joinRemotePath(slot.host, slot.userDataDir, ORCAD_LOCK_FILE_NAME)
+      return { status: 'unsupported', message: ran.message, lockPath }
+    }
+    if (ran.status === 'unpinned') {
+      return { status: 'unsupported', message: ran.message, reclaimWithoutPin: true }
+    }
     if (ran.status !== 'answered') {
-      return ran.status === 'unsupported'
-        ? {
-            status: 'unsupported',
-            message: ran.message,
-            lockPath: joinRemotePath(slot.host, slot.userDataDir, ORCAD_LOCK_FILE_NAME)
-          }
-        : { status: ran.status, message: ran.message }
+      return { status: ran.status, message: ran.message }
     }
     const { answer } = ran
     if (answer.status !== 'reclaimed') {
@@ -140,7 +143,8 @@ async function runOnActiveSlot(
     `${selectOrcadSlotRuntimeCommand(slot.host, slotDir, '')} && ` +
     `"$orcad_runtime" ${quotePosixShell(entry)} ${ORCAD_RECLAIM_STALE_LOCK_FLAG} ` +
     `${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} ${quotePosixShell(slot.userDataDir)} --json${confirm}; ` +
-    `else echo ${RECLAIM_UNSUPPORTED_SENTINEL}; fi`
+    `elif grep -qF -- ${quotePosixShell(ORCAD_RECLAIM_STALE_LOCK_FLAG)} ${quotePosixShell(bundle)} 2>/dev/null; then ` +
+    `echo ${RECLAIM_UNPINNED_SENTINEL}; else echo ${RECLAIM_UNSUPPORTED_SENTINEL}; fi`
   let output: string
   try {
     output = await execOrcadRemote(slot, command)
@@ -151,8 +155,15 @@ async function runOnActiveSlot(
     }
     output = error.stdout
   }
-  if (output.split('\n').some((line) => line.trim() === RECLAIM_UNSUPPORTED_SENTINEL)) {
+  const lines = output.split('\n').map((line) => line.trim())
+  if (lines.includes(RECLAIM_UNSUPPORTED_SENTINEL)) {
     return unsupported('This host’s Orca server predates the stale-lock recovery.')
+  }
+  if (lines.includes(RECLAIM_UNPINNED_SENTINEL)) {
+    return {
+      status: 'unpinned',
+      message: 'This host’s Orca server is too old for Orca to clear the lock from here.'
+    }
   }
   const answer = parseReclaimAnswer(output)
   // The slot supports the command, so this is no reason to delete the lock by hand.

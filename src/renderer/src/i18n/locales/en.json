@@ -13355,7 +13355,9 @@
           "action": "Recover server…",
           "written": "Written",
           "manualDeleteCommand": "Delete the lock on the host by hand:",
-          "manualDeleteWarning": "Only do this if no other machine sharing this home runs Orca for this profile."
+          "manualDeleteWarning": "Only do this if no other machine sharing this home runs Orca for this profile.",
+          "close": "Close",
+          "reclaimedNotStarted": "The lock was cleared, but Orca’s server did not start."
         }
       },
       "right": {
