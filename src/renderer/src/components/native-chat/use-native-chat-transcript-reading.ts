@@ -17,7 +17,6 @@ export type NativeChatTranscriptWindowOptions = {
   isVisible: boolean
 }
 type ReadingScroll = Pick<Virtualizer<HTMLDivElement, Element>, 'scrollToIndex' | 'scrollToOffset'>
-
 export function useNativeChatTranscriptReading({
   scrollRef,
   slots,
@@ -145,6 +144,5 @@ export function useNativeChatTranscriptReading({
     },
     [isVisible, journalEpoch, reading, scrollRef, slots, subagentSections]
   )
-
   return { pinned, reading, restore, setRestoring, reconcile, captureReadingPosition }
 }

@@ -102,11 +102,10 @@ export function useNativeChatTranscriptScroll({
       return null
     }
     const geometry = geometryOf(element)
-    captureReadingPosition?.(followingRef.current)
     detachedScrollTopRef.current = followingRef.current ? null : geometry.scrollTop
     setShowJump(shouldShowJumpToLatest(followingRef.current, geometry))
     return geometry
-  }, [captureReadingPosition, followingRef, scrollRef])
+  }, [followingRef, scrollRef])
 
   const readerLeavesEnd = useCallback(() => {
     clearForwardedScroll()
@@ -210,12 +209,15 @@ export function useNativeChatTranscriptScroll({
         previousDistanceFromEnd: previousDistanceFromEndRef.current,
         settling: isAlignPending()
       })
+      captureReadingPosition?.(followingRef.current)
       reconcileReaderScroll(false)
       previousDistanceFromEndRef.current = distanceFromBottom(geometry)
       syncScrollState()
     },
     [
+      captureReadingPosition,
       consumeProgrammaticScroll,
+      followingRef,
       isAlignPending,
       observeForwardedMovement,
       reconcileReaderScroll,
