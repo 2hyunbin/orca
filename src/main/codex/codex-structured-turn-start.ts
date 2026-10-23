@@ -116,7 +116,8 @@ async function steerCodexTurn(
       input.clientMessageId,
       host.threadId,
       'steer',
-      turnInputFor(host, input.body)
+      turnInputFor(host, input.body),
+      expectedTurnId
     )
     const answer = await host.connection.request(
       'turn/steer',

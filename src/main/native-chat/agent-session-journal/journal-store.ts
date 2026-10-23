@@ -8,6 +8,7 @@ import type {
   AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
+  AgentJournalMessageItem,
   AgentJournalRenderItem,
   AgentJournalSnapshot,
   AgentJournalSubmission,
@@ -210,6 +211,9 @@ export class AgentSessionJournal {
   /** Host-only: the stopped messages each handed-over send carried, by its client message id. */
   stoppedHistoryCarried = (): ReadonlyMap<string, readonly string[]> =>
     this.state.stoppedHistoryCarried
+
+  submissionBody = (clientMessageId: string): AgentJournalMessageItem | null =>
+    this.state.inputs.sources.get(clientMessageId)?.body ?? null
 
   /** One reduced item with its attribution, for a writer that needs the turn a row joined. */
   item = (itemId: string): AgentJournalRenderItem | null => this.state.items.get(itemId) ?? null

@@ -150,11 +150,22 @@ export function acceptSubmissionFromProviderItem(
   }
   submission.fence = row.fence
   submission.dispatchState = 'accepted'
+  state.inputs.candidates.delete(submission.clientMessageId)
+  state.inputs.revision++
   noteTurnAccepted(state, submission)
   submission.providerItemId = providerItemId
   submission.reason = null
   submission.resolvedAt = row.ts
   delete submission.recovered
+  state.inputs.outcomes.set(submission.clientMessageId, {
+    ...row,
+    v: 1,
+    kind: 'dispatch',
+    clientMessageId: submission.clientMessageId,
+    state: 'accepted',
+    providerItemId,
+    reason: null
+  })
   state.receipts.set(submission.clientMessageId, {
     clientMessageId: submission.clientMessageId,
     providerItemId,

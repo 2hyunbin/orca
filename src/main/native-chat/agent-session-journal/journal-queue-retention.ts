@@ -23,11 +23,12 @@ export function retainedQueueFacts(
       card.state === 'dispatched' &&
       handOff !== undefined &&
       isQueuedAgentJournalSubmission(handOff)
-    if (card.state !== 'waiting' && card.state !== 'returned' && !unsent) {
+    if (card.state !== 'waiting' && card.state !== 'returned' && !unsent && !card.recovers) {
       return []
     }
     const change: JournalQueuedChange = {
       ...queuedChangeOf(card),
+      ...(card.recovers && card.consumedAs ? { attempt: card.consumedAs } : {}),
       ...(card.state === 'waiting' && card.holdReason !== null
         ? { holdReason: card.holdReason }
         : {}),
@@ -41,7 +42,12 @@ export function retainedQueueFacts(
           }
         : {})
     }
-    return [{ messageId: card.messageId, change }]
+    return [
+      { messageId: card.messageId, change },
+      ...(card.recovers && card.state === 'withdrawn'
+        ? [{ messageId: card.messageId, change: { op: 'withdrawn' as const } }]
+        : [])
+    ]
   })
 }
 
@@ -57,4 +63,22 @@ export function queuedChangeOf(
     ...(card.options ? { options: card.options } : {}),
     ...(card.recovers ? { recovers: card.recovers } : {})
   }
+}
+
+export function queueNeedsReopen(
+  cards: readonly QueuedMessageRow[],
+  submissions: ReadonlyMap<string, AgentJournalSubmission>
+): boolean {
+  return cards.some((card) => {
+    if (card.state === 'waiting') {
+      return true
+    }
+    const handOff = card.consumedAs ? submissions.get(card.consumedAs) : undefined
+    // A recovered doubt outlived its writer: nothing brings that card back to waiting.
+    return (
+      card.state === 'dispatched' &&
+      (handOff?.dispatchState === 'pending' ||
+        (handOff?.dispatchState === 'unknown' && handOff.recovered !== true))
+    )
+  })
 }

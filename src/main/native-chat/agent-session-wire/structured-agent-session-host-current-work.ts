@@ -56,16 +56,19 @@ export function heldStructuredAgentSessionCurrentWork(
   })
 }
 
-/** A start publishes recovery only after its bounded history replay attempt. */
+/** Canonical recovery remains available independently of provider startup presentation. */
 export function bindStructuredAgentSessionRecoveryWork(
   store: StructuredAgentSessionCurrentWorkHost['store'],
   sessionId: string,
-  session: StructuredAgentSessionHostSession | undefined
+  session:
+    | Pick<
+        StructuredAgentSessionHostSession,
+        'journal' | 'child' | 'lastEndedChild' | 'operationalRevision'
+      >
+    | undefined
 ): void {
   if (session) {
     session.journal.queuedMessages.recoveryWork = () =>
-      session.child?.phase === 'starting'
-        ? null
-        : heldStructuredAgentSessionCurrentWork(store, sessionId, session.journal, session)
+      heldStructuredAgentSessionCurrentWork(store, sessionId, session.journal, session)
   }
 }

@@ -39,7 +39,7 @@ export function useNativeChatPtyComposerSend(args: {
   readTerminalScreen?: () => string | null
   resolveTarget: () => NativeChatResolvedTarget | null
   classifySend: NativeChatPickerState['classifySend']
-  onOptimisticSend?: (text: string, imagePaths?: string[]) => string | undefined
+  onOptimisticSend?: (text: string, imagePaths?: string[], recovery?: boolean) => string | undefined
   optimisticSendOutcome?: NativeChatOptimisticSendOutcome
   onSlashCommand?: (command: string, output?: string) => void
   answerCommandLocally?: NativeChatLocalCommandAnswer
@@ -130,9 +130,19 @@ export function useNativeChatPtyComposerSend(args: {
           args.sessionOptionsSurface?.recordOutgoingCommand(text.trim())
         }
       } else {
-        pendingId = args.onOptimisticSend?.(text, imagePaths)
+        pendingId = args.onOptimisticSend?.(text, imagePaths, retry !== undefined)
         if (pendingHandle) {
           args.trackPendingSend(pendingHandle, pendingId)
+          if (retry && pendingId) {
+            const id = pendingId
+            void pendingHandle.outcome?.then((outcome) => {
+              if (outcome === 'not-submitted') {
+                args.optimisticSendOutcome?.reject(id)
+              } else if (outcome === 'uncertain') {
+                args.optimisticSendOutcome?.holdUnconfirmed(id)
+              }
+            })
+          }
         }
       }
       emitNativeChatMessageSent({

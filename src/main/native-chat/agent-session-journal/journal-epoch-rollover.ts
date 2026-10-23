@@ -1,3 +1,5 @@
+import { restateJournalInputs } from './journal-input-obligations'
+import type { JournalReducerState } from './journal-reducer'
 // Opening a new epoch.
 //
 // One transaction: discard every row of the superseded epoch, insert the new
@@ -30,6 +32,7 @@ export function publishNewEpoch(input: {
   now: number
   /** The cards restated in the new epoch; it carries no submission, so a card whose hand-off was
    *  not handed over yet waits again (`retainedQueueFacts`). */
+  previous?: JournalReducerState
   queue: JournalQueueRestatement
   /** Called the instant the transaction commits, before any fallible follow-up. */
   onPublished: (loaded: JournalLoad) => void
@@ -50,6 +53,7 @@ export function publishNewEpoch(input: {
   const state = createJournalReducerState(sessionId, input.epoch)
   applyJournalRow(state, row)
   const rows: JournalRow[] = [row]
+  restateJournalInputs(input.previous, state, rows, new Set())
   for (const { messageId, change } of input.queue.cards) {
     if (change) {
       const card = buildJournalQueueRow(state, messageId, change, state.lastSequence + 1, input.now)

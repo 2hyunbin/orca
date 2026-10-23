@@ -61,12 +61,13 @@ export function useNativeChatPendingDelivery(args: {
     save((entries) => prunePendingSends(releaseEmptyTranscriptClaims(entries, sessionId), messages))
   }, [messages, save, sessionId])
   const record = useCallback(
-    (text: string, imagePaths?: string[]) => {
+    (text: string, imagePaths?: string[], recovery = false) => {
       const sentAt = Date.now()
       const boundary = messages.at(-1)
       const entry: NativeChatPendingSend = {
         id: nextNativeChatPendingSendId(sentAt),
         text,
+        ...(recovery ? { recovery: true } : {}),
         sentAt,
         afterMessageId: boundary?.id ?? null,
         afterMessageTimestamp: boundary?.timestamp ?? null,
@@ -79,7 +80,8 @@ export function useNativeChatPendingDelivery(args: {
     [messages, readEmptySessionId, scope]
   )
   const cancel = useCallback(
-    (id: string) => save((entries) => entries.filter((entry) => entry.id !== id)),
+    (id: string, discard = false) =>
+      save((entries) => entries.filter((entry) => entry.id !== id || (entry.recovery && !discard))),
     [save]
   )
   const reject = useCallback(
@@ -93,8 +95,10 @@ export function useNativeChatPendingDelivery(args: {
     (id: string) =>
       save((entries) =>
         entries.map((entry) =>
-          entry.id === id && !entry.delivery && entry.writeUnconfirmedAt === undefined
-            ? { ...entry, writeUnconfirmedAt: Date.now() }
+          entry.id === id &&
+          (!entry.delivery || entry.recovery) &&
+          entry.writeUnconfirmedAt === undefined
+            ? { ...entry, delivery: undefined, writeUnconfirmedAt: Date.now() }
             : entry
         )
       ),
@@ -102,7 +106,7 @@ export function useNativeChatPendingDelivery(args: {
   )
   // Why keep outcomes: Stop cannot affect a settled failure, and its bubble holds the only copy.
   const clear = useCallback(
-    () => save((entries) => entries.filter((entry) => entry.delivery)),
+    () => save((entries) => entries.filter((entry) => entry.delivery || entry.recovery)),
     [save]
   )
 
@@ -174,7 +178,7 @@ export function useNativeChatPendingDelivery(args: {
           ? {
               onSend: () => {
                 if (composerRef.current?.resend?.(entry.text, entry.imagePaths)) {
-                  cancel(entry.id)
+                  cancel(entry.id, true)
                 }
               }
             }
@@ -186,10 +190,10 @@ export function useNativeChatPendingDelivery(args: {
               ...(entry.imagePaths ?? []).map((path) => ({ type: 'image-ref' as const, path }))
             ])
           ) {
-            cancel(entry.id)
+            cancel(entry.id, true)
           }
         },
-        onDismiss: () => cancel(entry.id)
+        onDismiss: () => cancel(entry.id, true)
       })
     }
     return result

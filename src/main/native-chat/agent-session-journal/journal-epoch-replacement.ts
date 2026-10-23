@@ -1,3 +1,4 @@
+import { restateJournalInputs } from './journal-input-obligations'
 import {
   journalItemEchoFields,
   journalItemEchoRestatement,
@@ -10,11 +11,7 @@ import {
 // session projection.
 
 import { sameJournalConversation } from './journal-history-origin'
-import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
-import {
-  agentJournalItemKey,
-  agentJournalSubmissionKey
-} from '../../../shared/agent-session-journal-item-key'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 
 import type {
   AgentJournalCursor,
@@ -32,11 +29,7 @@ import {
   createJournalReducerState,
   type JournalReducerState
 } from './journal-reducer'
-import {
-  buildJournalItemRow,
-  buildJournalSubmissionRow,
-  journalRowBase
-} from './journal-row-builders'
+import { buildJournalItemRow, journalRowBase } from './journal-row-builders'
 import { buildJournalQueueRow } from './journal-queue-events'
 import type { JournalQueueRestatement } from './journal-queued-messages'
 import {
@@ -110,6 +103,18 @@ export function replaceJournalEpoch(input: {
   }
   const rows: JournalRow[] = [epochRow]
   applyJournalRow(state, epochRow)
+  restateJournalInputs(
+    input.previous,
+    state,
+    rows,
+    new Set(
+      input.items.map(
+        (item) =>
+          input.previous?.aliases.get(agentJournalItemKey(item.identity)) ??
+          agentJournalItemKey(item.identity)
+      )
+    )
+  )
   for (const item of input.items) {
     const row = buildJournalItemRow({
       state,
@@ -147,29 +152,6 @@ export function replaceJournalEpoch(input: {
       applyJournalRow(state, row)
       rows.push(row)
     }
-  }
-  // An accepted message that never reached the agent survives a provider history replacement.
-  const queued = [...(input.previous?.submissions.values() ?? [])]
-    .filter(isQueuedAgentJournalSubmission)
-    .sort((a, b) => (a.acceptedSequence ?? 0) - (b.acceptedSequence ?? 0))
-  for (const submission of queued) {
-    const body = input.previous?.items.get(
-      agentJournalSubmissionKey(submission.clientMessageId)
-    )?.body
-    if (body?.kind !== 'message') {
-      throw new Error('journal_queued_submission_body_missing')
-    }
-    const row = buildJournalSubmissionRow({
-      ...submission,
-      state,
-      body,
-      providerHandle: agentSessionJournalProviderHandle(input.identity),
-      seq: state.lastSequence + 1,
-      fence: input.fence,
-      ts: submission.submittedAt
-    })
-    applyJournalRow(state, row)
-    rows.push(row)
   }
   const { lifted, liveStop, reopened } = input.queuePause
   const place = () => ({ state, seq: state.lastSequence + 1, fence: input.fence, ts: input.now() })

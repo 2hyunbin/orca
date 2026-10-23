@@ -490,9 +490,13 @@ export function registerJournalStoreTests(): void {
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
       })
       await earlier.appendSubmission(submission('earlier'))
+      for (let i = 0; i < 10; i++) {
+        await earlier.appendItem(item(1), body(String(i)), { fence: 1 })
+      }
       await earlier.close()
 
       const journal = await open()
+      const openedCursor = journal.cursor()
       const leftover = journal.submissions().find((entry) => entry.clientMessageId === 'earlier')
       expect(journal.wroteBeforeOpen(leftover?.acceptedSequence)).toBe(true)
 
@@ -506,7 +510,7 @@ export function registerJournalStoreTests(): void {
       await journal.replaceEpochItems('handle_forked', 1, [])
       await journal.appendSubmission(submission('later'))
       const later = journal.submissions().find((entry) => entry.clientMessageId === 'later')
-      expect(later?.acceptedSequence).toBeLessThanOrEqual(2)
+      expect(later?.acceptedSequence).toBeLessThanOrEqual(openedCursor.sequence)
       expect(journal.wroteBeforeOpen(later?.acceptedSequence)).toBe(false)
     })
   })

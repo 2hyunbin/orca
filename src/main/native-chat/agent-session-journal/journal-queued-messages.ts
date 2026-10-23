@@ -1,3 +1,4 @@
+import { journalInputAttemptEnded } from './journal-input-obligations'
 // The queue's one view and its writes. A card is folded from the chat's own rows
 // (`journal-queue-fold.ts`), so every change to one is a journal row on the journal's own lane,
 // committed with whatever else the action writes: the queue keeps no second copy to fall behind.
@@ -12,7 +13,7 @@ import {
   type JournalQueueRow
 } from './journal-queue-events'
 import { LegacyQueuedCards } from './journal-queue-import'
-import { queuedChangeOf, retainedQueueFacts } from './journal-queue-retention'
+import { queuedChangeOf, queueNeedsReopen, retainedQueueFacts } from './journal-queue-retention'
 import { composeJournalOperationReceipts, type JournalOperationReceipt } from './journal-row-writer'
 import type { JournalQueuedMessagesDeps, JournalSubmissionConsume } from './journal-store-contracts'
 import {
@@ -70,7 +71,7 @@ export class JournalQueuedMessages {
   /** Moves with every card change, so publication memos recompute only when they must. */
   revision(): string {
     const { epoch, queue } = this.deps.state()
-    return `${epoch}:${queue.revision}:${this.legacy.key()}:${this.deps.state().lastSequence}:${this.recoveryWork()?.recoveryViewKey() ?? ''}`
+    return `${epoch}:${queue.revision}:${this.legacy.key()}:${this.deps.state().inputs.revision}:${this.recoveryWork()?.recoveryViewKey() ?? ''}`
   }
 
   /** The cards every reader sees, in queue order: the fold's, and any an earlier build wrote that
@@ -83,6 +84,16 @@ export class JournalQueuedMessages {
       this.viewed = { key, cards: cards.sort((a, b) => a.position - b.position) }
     }
     return this.viewed.cards
+  }
+
+  isDerivedRecovery(messageId: string): boolean {
+    return messageId.startsWith('recovery:') && !this.deps.state().queue.cards.has(messageId)
+  }
+
+  attemptEnded(clientMessageId: string): boolean {
+    const state = this.deps.state()
+    const send = state.submissions.get(clientMessageId)
+    return send !== undefined && journalInputAttemptEnded(state, send, this.recoveryWork())
   }
 
   get(messageId: string): QueuedMessageRow | null {
@@ -289,19 +300,7 @@ export class JournalQueuedMessages {
   /** A card waits, or is mid-hand-off and may come back to waiting: a chat that stops running
    *  marks it (`AgentSessionJournal.markQueueReopen`). */
   awaitReopenMark(): boolean {
-    const { submissions } = this.deps.state()
-    return this.list().some((card) => {
-      if (card.state === 'waiting') {
-        return true
-      }
-      const handOff = card.consumedAs ? submissions.get(card.consumedAs) : undefined
-      // A recovered doubt outlived its writer: nothing brings that card back to waiting.
-      return (
-        card.state === 'dispatched' &&
-        (handOff?.dispatchState === 'pending' ||
-          (handOff?.dispatchState === 'unknown' && handOff.recovered !== true))
-      )
-    })
+    return queueNeedsReopen(this.list(), this.deps.state().submissions)
   }
 
   /** The person's Stop still pausing the queue, if any (`journalUserStopInForce`). */

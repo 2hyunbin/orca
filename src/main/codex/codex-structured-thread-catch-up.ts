@@ -1,3 +1,8 @@
+import {
+  codexItemIdentity,
+  CodexTurnOrdinals,
+  readCodexThreadItem
+} from './codex-structured-item-translation'
 import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
@@ -11,7 +16,11 @@ import {
   type CodexAppServerConnection
 } from './codex-app-server-connection'
 import { createCodexHistoryImportPlan } from './codex-history-import-plan'
-import { discoverCodexHistory, loadCodexHistory } from './codex-structured-thread-history-pages'
+import {
+  discoverCodexHistory,
+  loadCodexHistory,
+  loadCodexReceiptHistory
+} from './codex-structured-thread-history-pages'
 import {
   readCodexHistoryJournalView,
   sameCodexHistoryJournalView
@@ -35,10 +44,7 @@ export async function catchUpCodexThread(input: {
     providerIdentity: AgentJournalItemIdentity
   ) => void | Promise<void>
 }): Promise<void> {
-  const deadline = Date.now() + (input.timeoutMs ?? DEFAULT_CODEX_REQUEST_TIMEOUT_MS)
-  let receipts: ReturnType<ReturnType<typeof createCodexHistoryImportPlan>['finish']>['receipts'] =
-    []
-  const outcome = await runHistoryCatchUp({
+  await runHistoryCatchUp({
     agentName: 'Codex',
     scope: 'codex-thread-catch-up',
     sessionId: input.sessionId,
@@ -49,7 +55,7 @@ export async function catchUpCodexThread(input: {
     ...(input.logger ? { logger: input.logger } : {}),
     readView: (history) => readCodexHistoryJournalView(history, input.threadId),
     sameView: sameCodexHistoryJournalView,
-    prepare: async ({ view: readView, journal, signal, deadline, check, yieldTurn }) => {
+    prepare: async ({ view: readView, history, journal, signal, deadline, check, yieldTurn }) => {
       const view = readView()
       const read = {
         connection: input.connection,
@@ -58,6 +64,57 @@ export async function catchUpCodexThread(input: {
         deadline,
         check
       }
+      const unresolved = new Set(view.unresolvedIds)
+      const settle = async (
+        clientMessageId: string,
+        providerIdentity: AgentJournalItemIdentity
+      ) => {
+        check()
+        if (input.sink.journalHistory?.() !== history || history.epoch !== view.epoch) {
+          throw new Error('stale-history')
+        }
+        await waitForPromiseWithSignal(
+          Promise.resolve(input.onReceipt?.(clientMessageId, providerIdentity)),
+          signal
+        )
+        check()
+      }
+      const confirmReceipts = async (turn: Record<string, unknown>) => {
+        check()
+        if (!unresolved.size) {
+          return
+        }
+        const ordinals = new CodexTurnOrdinals()
+        for (const value of Array.isArray(turn.items) ? turn.items : []) {
+          check()
+          const item = readCodexThreadItem(value)
+          if (!item || typeof turn.id !== 'string') {
+            continue
+          }
+          const providerIdentity = codexItemIdentity({
+            threadId: input.threadId,
+            turnId: turn.id,
+            item,
+            ordinals,
+            historyImport: true
+          })
+          if (
+            item.type === 'userMessage' &&
+            typeof item.clientId === 'string' &&
+            unresolved.delete(item.clientId)
+          ) {
+            await settle(item.clientId, providerIdentity)
+          }
+        }
+      }
+      for await (const turn of unresolved.size ? loadCodexReceiptHistory(read) : []) {
+        await confirmReceipts(turn)
+        await yieldTurn()
+        if (!unresolved.size) {
+          break
+        }
+      }
+      Object.assign(view, readCodexHistoryJournalView(history, input.threadId))
       const missing = await discoverCodexHistory(read, view)
       if (missing.pages.length === 0) {
         return null
@@ -71,45 +128,17 @@ export async function catchUpCodexThread(input: {
         check
       })
       try {
-        for await (const turn of loadCodexHistory(read, missing.pages)) {
+        for await (const turn of loadCodexHistory(read, missing.pages, confirmReceipts)) {
           check()
-          if (typeof turn.id === 'string' && view.known.has(turn.id)) {
-            staging.confirmReceipts(turn)
-          } else {
-            staging.restore(turn)
-          }
+          staging.restore(turn)
           await yieldTurn()
         }
         const plan = staging.finish()
-        receipts = plan.receipts
+        Object.assign(view, readCodexHistoryJournalView(history, input.threadId))
         return plan
       } finally {
         staging.dispose()
       }
     }
   })
-  if (outcome === 'committed' || outcome === 'checked') {
-    const signal = AbortSignal.any([
-      ...(input.signal ? [input.signal] : []),
-      AbortSignal.timeout(Math.max(1, deadline - Date.now()))
-    ])
-    try {
-      signal.throwIfAborted()
-      input.assertCurrent?.()
-      await waitForPromiseWithSignal(
-        Promise.all(
-          receipts.map(async (receipt) =>
-            input.onReceipt?.(receipt.clientMessageId, receipt.providerIdentity)
-          )
-        ),
-        signal
-      )
-    } catch (error) {
-      input.logger?.warn('Codex replay receipt settlement did not finish within open', {
-        scope: 'codex-thread-catch-up',
-        sessionId: input.sessionId,
-        error
-      })
-    }
-  }
 }

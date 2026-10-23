@@ -46,14 +46,6 @@ export async function rewindJournalContext(input: {
           removed.set(item.itemId, false)
         }
       }
-      for (const submission of state.submissions.values()) {
-        if (
-          (submission.acceptedSequence ?? 0) > input.floor.sequence &&
-          !isQueuedAgentJournalSubmission(submission)
-        ) {
-          removed.set(agentJournalSubmissionKey(submission.clientMessageId), true)
-        }
-      }
       // Ahead of the tombstones: a legacy card read through a hand-off this retires keeps its reading.
       adoption = input.cards.adoptionOfAll()
       const revisions = new Map<string, number>()

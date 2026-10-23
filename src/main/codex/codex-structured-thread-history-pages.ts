@@ -88,7 +88,7 @@ export async function discoverCodexHistory(
         throw new Error('repeated-turn')
       }
       seen.add(id)
-      if (anchor.known.has(id) && !anchor.needsReceipts) {
+      if (anchor.known.has(id)) {
         continue
       }
       if (anchor.importedAt !== null) {
@@ -115,7 +115,11 @@ export async function discoverCodexHistory(
 }
 
 /** Same cursor semantics in both views; reject a provider that changed selection between reads. */
-export async function* loadCodexHistory(input: CodexHistoryRead, pages: readonly MissingPage[]) {
+export async function* loadCodexHistory(
+  input: CodexHistoryRead,
+  pages: readonly MissingPage[],
+  onReadTurn: (turn: Record<string, unknown>) => Promise<void>
+) {
   for (const descriptor of pages.toReversed()) {
     const page = await readPage(input, descriptor.cursor, 'full')
     if (
@@ -125,6 +129,7 @@ export async function* loadCodexHistory(input: CodexHistoryRead, pages: readonly
       throw new Error('changed-page')
     }
     for (const turn of page.turns.toReversed()) {
+      await onReadTurn(turn)
       if (!descriptor.selected.has(turnId(turn))) {
         continue
       }
@@ -134,4 +139,29 @@ export async function* loadCodexHistory(input: CodexHistoryRead, pages: readonly
       yield turn
     }
   }
+}
+
+/** Recent exact-proof reads have their own open budget, independent of transcript import. */
+export async function* loadCodexReceiptHistory(input: CodexHistoryRead) {
+  const cursors = new Set<string | null>()
+  let cursor: string | null = null
+  let count = 0
+  do {
+    if (cursors.has(cursor)) {
+      throw new Error('invalid-cursor')
+    }
+    cursors.add(cursor)
+    const page = await readPage(input, cursor, 'full')
+    for (const turn of page.turns) {
+      input.check()
+      if (++count > CODEX_RESTORE_MAX_OPERATIONS) {
+        return
+      }
+      if (Array.isArray(turn.items)) {
+        yield turn
+      }
+    }
+    cursor = page.next
+    await setImmediate()
+  } while (cursor !== null)
 }

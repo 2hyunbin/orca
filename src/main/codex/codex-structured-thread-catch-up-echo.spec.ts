@@ -178,7 +178,7 @@ export function registerCodexCatchUpEchoTests(input: {
     await c.reopen()
     const prompt = c.journal.item(key)
     expect(prompt?.body).toEqual(body)
-    expect(c.journal.submission(clientMessageId)).toBeUndefined()
+    expect(c.journal.submission(clientMessageId)?.dispatchState).toBe('unknown')
     const native = {
       ...turn(4),
       items: [
@@ -197,7 +197,7 @@ export function registerCodexCatchUpEchoTests(input: {
     expect(c.journal.item(key)).toEqual(prompt)
     expect(c.journal.snapshot().items.slice(0, before.items.length)).toEqual(before.items)
     expect(c.texts()).toEqual([...beforeTexts, 'assistant:native answer'])
-    expect(c.journal.submission(clientMessageId)).toBeUndefined()
+    expect(c.journal.submission(clientMessageId)?.dispatchState).toBe('unknown')
     expect(c.journal.receiptFor(clientMessageId)).toBeNull()
     const whole = c.journal.snapshot()
     await c.reopen()

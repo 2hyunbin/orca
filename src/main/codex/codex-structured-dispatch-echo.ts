@@ -53,7 +53,8 @@ export type CodexDispatchEchoes = {
     clientMessageId: string,
     threadId: string,
     via: AgentJournalTurnJoin,
-    input: readonly Record<string, unknown>[]
+    input: readonly Record<string, unknown>[],
+    expectedTurnId?: string
   ) => void
   receipt: (
     identity: Extract<AgentJournalItemIdentity, { provider: 'codex' }>,
@@ -213,8 +214,7 @@ export function createCodexDispatchEchoes(
         }
         entry.turn = { threadId, turnId, via }
         entry.answeredAt = answeredAt ?? ++clock
-        const receipt =
-          via === 'start' ? receiptCorrelation.take(clientMessageId, threadId, turnId) : null
+        const receipt = receiptCorrelation.take(clientMessageId, threadId, turnId)
         if (receipt) {
           armed.delete(clientMessageId)
           onReceipt?.(clientMessageId, receipt)

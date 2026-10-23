@@ -1,4 +1,8 @@
-import { journalRecoveryEndSequence } from './journal-unconfirmed-recovery'
+import { journalDispatchRowApplies } from './journal-dispatch-settlement'
+import {
+  createJournalInputObligations,
+  foldJournalInputObligations
+} from './journal-input-obligations'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
 // the live append path and replay call it — a live-only shortcut is how a
@@ -55,8 +59,6 @@ export type JournalReducerState = {
   sessionId: string
   epoch: string
   lastSequence: number
-  /** Latest saved turn end or provider error, rebuilt from journal row order. */
-  recoveryEndSequence: number
   lastActivityAt: number
   /** Lowest sequence still individually replayable; rows below it were compacted. */
   oldestSequence: number
@@ -73,6 +75,7 @@ export type JournalReducerState = {
   tombstones: Map<string, number>
   /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
   removedTurnIds: Set<string>
+  inputs: ReturnType<typeof createJournalInputObligations>
   submissions: Map<string, AgentJournalSubmission>
   receipts: Map<string, AgentJournalAcceptanceReceipt>
   /** Provider item id → the submission slot that adopted it. Stops an accepted
@@ -105,7 +108,6 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     sessionId,
     epoch,
     lastSequence: 0,
-    recoveryEndSequence: 0,
     lastActivityAt: 0,
     oldestSequence: 1,
     highestFence: 0,
@@ -115,6 +117,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     providerActivityAt: new Map(),
     tombstones: new Map(),
     removedTurnIds: new Set(),
+    inputs: createJournalInputObligations(),
     submissions: new Map(),
     receipts: new Map(),
     aliases: new Map(),
@@ -135,9 +138,11 @@ export function applyJournalRow(
   row: JournalRow,
   savedAt = row.ts
 ): void {
+  const dispatchApplies =
+    row.kind !== 'dispatch' || journalDispatchRowApplies(state.submissions.get(row.clientMessageId))
   applyJournalRowFacts(state, row, savedAt)
-  state.recoveryEndSequence = Math.max(state.recoveryEndSequence, journalRecoveryEndSequence(row))
   foldJournalQueueRow(state, row)
+  foldJournalInputObligations(state, row, dispatchApplies)
 }
 
 function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, savedAt: number): void {

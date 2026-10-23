@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalMessageItem
@@ -176,7 +176,18 @@ it('keeps one actionable copy, adopts only a person’s action, and never duplic
   })
   expect(carried.map((entry) => entry.clientMessageId)).toContain('stopped')
   expect(journal.queuedMessages.get(cardId('stopped'))).toBeNull()
+  await journal.replaceEpochItems('handle_forked', 7, [])
   await send('carrier', false)
+  const { carriedStoppedHistory } =
+    await import('../agent-session-wire/structured-agent-session-stopped-history-selection')
+  expect(
+    carriedStoppedHistory(
+      { journal },
+      AGENT_JOURNAL_THREAD_SCOPE,
+      journal.submission('carrier')!,
+      body('carrier')
+    )?.covers
+  ).toContain('stopped')
   await journal.resolveDispatch({
     clientMessageId: 'carrier',
     state: 'pending',
@@ -201,6 +212,19 @@ it('keeps one actionable copy, adopts only a person’s action, and never duplic
   await receipt('boundary')
   held.delete('boundary')
   expect(journal.queuedMessages.get(cardId('boundary'))).toBeNull()
+  // An existing provider-item echo also settles a carrier, without a separate dispatch row.
+  await journal.appendItem(
+    { provider: 'codex', threadId: 'thread', turnId: 'implicit', ordinal: 0 },
+    body('carrier'),
+    { fence: 7 }
+  )
+  expect(journal.submission('carrier')?.dispatchState).toBe('accepted')
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  await journal.close()
+  await open()
+  expect(journal.submission('carrier')?.dispatchState).toBe('accepted')
+  expect(journal.stoppedHistoryCarried().get('carrier')).toEqual(['stopped'])
+  expect(journal.queuedMessages.get(cardId('carrier'))).toBeNull()
 })
 
 it('re-derives after restart, waits for owner reconciliation, and retires an unchanged copy on an exact replay receipt', async () => {
@@ -343,7 +367,12 @@ it('confirms id-less live receipts and releases unopened error/interrupt holds w
   echoes.bindTurn('opener', 'thread', 'opened', 'start')
   const identity = { provider: 'codex' as const, threadId: 'thread', turnId: 'opened', ordinal: 1 }
   const echo = readCodexDispatchEcho(
-    { type: 'userMessage', id: 'old-user', clientId: null, content: [] },
+    {
+      type: 'userMessage',
+      id: 'old-user',
+      clientId: null,
+      content: [{ type: 'text', text: 'opener' }]
+    },
     identity,
     echoes
   )
@@ -372,11 +401,11 @@ it('confirms id-less live receipts and releases unopened error/interrupt holds w
   echoes.arm('late-opener')
   echoes.expect('late-opener', 'thread', 'start', [{ type: 'text', text: 'late' }])
   const earlyReceipt = { ...identity, turnId: 'late-turn', ordinal: 0 }
-  expect(echoes.receipt(earlyReceipt, [])).toBeNull()
+  expect(echoes.receipt(earlyReceipt, [{ type: 'text', text: 'late' }])).toBeNull()
   echoes.endTurn('thread', 'late-turn', { status: 'completed' })
   echoes.bindTurn('late-opener', 'thread', 'late-turn', 'start')
   expect(remembered).toEqual(['late-opener'])
-  expect(echoes.receipt(earlyReceipt, [])).toBe('late-opener')
+  expect(echoes.receipt(earlyReceipt, [{ type: 'text', text: 'late' }])).toBe('late-opener')
   await send('legacy-error')
   echoes.arm('legacy-error')
   echoes.bindTurn('legacy-error', 'thread', 'unopened', 'start')
@@ -418,3 +447,267 @@ it('confirms id-less live receipts and releases unopened error/interrupt holds w
   echoes.endTurn('thread', 'stop-turn', { status: 'interrupted' })
   expect(journal.queuedMessages.get(cardId('unopened-stop'))?.state).toBe('returned')
 })
+
+it('retains full source, action resolution and exact late proof across cuts and epochs', async () => {
+  const noop = { write: () => {}, committed: () => {} }
+  await journal.context.clear(
+    { operationId: 'clear-before-U', afterFence: 7, clearedAt: clock },
+    noop
+  )
+  const floor = journal.context.floor()!
+  const full: AgentJournalMessageItem = {
+    ...body('original'),
+    blocks: [
+      { type: 'text', text: 'original' },
+      { type: 'image-ref', path: '/image.png' }
+    ]
+  }
+  await send('U', true, full)
+  await ended('U-end')
+  const original = journal.queuedMessages.get(cardId('U'))!
+  await journal.context.rewind(floor, 7, [], () => noop)
+  expect(journal.item(agentJournalSubmissionKey('U'))).toBeNull()
+  expect(journal.queuedMessages.get(original.messageId)?.body).toEqual(full)
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  expect(journal.item(agentJournalSubmissionKey('U'))).toBeNull()
+  expect(journal.queuedMessages.get(original.messageId)?.body).toEqual(full)
+  expect(journal.submission('U')?.handedOverAt).toBeDefined()
+  await journal.rollEpoch('handle_forked', 7)
+  await journal.close()
+  await open()
+  expect(journal.queuedMessages.get(original.messageId)?.body).toEqual(full)
+  await receipt('U')
+  expect(journal.queuedMessages.get(original.messageId)).toBeNull()
+  await send('delete-U')
+  await ended('delete-end')
+  await journal.queuedMessages.withdraw([cardId('delete-U')])
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  await journal.close()
+  await open()
+  expect(journal.queuedMessages.get(cardId('delete-U'))?.state).toBe('withdrawn')
+  expect(journal.queuedMessages.list().filter((c) => c.state === 'returned')).toEqual([])
+  await send('edited', true, full)
+  await ended('edited-end')
+  const edit = journal.queuedMessages.get(cardId('edited'))!
+  const before = journal.cursor()
+  await journal.queuedMessages.update({
+    messageId: edit.messageId,
+    expectedBodyFingerprint: edit.fingerprint,
+    text: 'original'
+  })
+  expect(journal.cursor()).toEqual(before)
+  await journal.queuedMessages.update({
+    messageId: edit.messageId,
+    expectedBodyFingerprint: edit.fingerprint,
+    text: 'changed'
+  })
+  await send('resent', true, full)
+  await ended('resent-end')
+  const retry = journal.queuedMessages.get(cardId('resent'))!
+  await journal.appendSubmission(
+    {
+      clientMessageId: 'fresh-attempt',
+      body: full,
+      payloadFingerprint: retry.fingerprint,
+      fence: 7,
+      handoverRecorded: true
+    },
+    { messageId: retry.messageId, expect: 'returned' }
+  )
+  await receipt('fresh-attempt')
+  await journal.replaceEpochItems('handle_forked', 7, [])
+  await journal.close()
+  await open()
+  await receipt('edited')
+  await receipt('resent')
+  expect(journal.queuedMessages.get(edit.messageId)).toMatchObject({
+    state: 'waiting',
+    body: {
+      blocks: [
+        { type: 'text', text: 'changed' },
+        { type: 'image-ref', path: '/image.png' }
+      ]
+    }
+  })
+  expect(journal.queuedMessages.get(retry.messageId)?.state).toBe('dispatched')
+  expect(journal.queuedMessages.list().filter((c) => c.state === 'returned')).toEqual([])
+})
+
+it('does not end observation from warnings, retry errors or another attempt’s explicit end', async () => {
+  await send('U')
+  for (const [kind, payload] of [
+    ['notification:warning', '{}'],
+    ['notification:error', '{"willRetry":true}']
+  ] as const) {
+    await journal.appendItem(
+      { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: kind },
+      {
+        kind: 'status',
+        text: 'provider notice',
+        providerFrame: {
+          provider: 'codex',
+          kind,
+          payload: { head: payload, byteLength: payload.length, digest: '', truncated: false }
+        }
+      },
+      { fence: 7 }
+    )
+  }
+  await journal.appendItem(
+    { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: 'other-end' },
+    {
+      kind: 'turn',
+      turnId: 'other',
+      state: 'completed',
+      userItemId: agentJournalSubmissionKey('other-input')
+    },
+    { fence: 7 }
+  )
+  expect(journal.queuedMessages.attemptEnded('U')).toBe(false)
+  expect(journal.queuedMessages.get(cardId('U'))).toBeNull()
+  await ended('U-end')
+  expect(journal.queuedMessages.attemptEnded('U')).toBe(true)
+})
+
+it('keeps U actions and barrier through later V and a starting child; only first presentation waits', async () => {
+  const { bindStructuredAgentSessionRecoveryWork } =
+    await import('../agent-session-wire/structured-agent-session-host-current-work')
+  const { deferFirstRecoveryPresentation, finishFirstRecoveryPresentation } =
+    await import('../agent-session-wire/structured-agent-session-queued-publication')
+  await send('U')
+  await ended('U-end')
+  const child = { phase: 'starting' as const, fence: 7, generation: 'later', heldSends: () => held }
+  const store = {
+    getRecord: () => agentSessionRecordFixture(lease),
+    replacedRuntime: () => undefined
+  }
+  const session = { journal, child }
+  bindStructuredAgentSessionRecoveryWork(store, identity.sessionId, session)
+  const gate = () => ({ work: work(), record: agentSessionRecordFixture(lease) })
+  deferFirstRecoveryPresentation(journal, child)
+  expect(readQueuePublication(journal, gate).queuedMessages).toEqual([])
+  expect(journal.queuedMessages.get(cardId('U'))?.state).toBe('returned')
+  finishFirstRecoveryPresentation(journal, child)
+  expect(readQueuePublication(journal, gate).queuedMessages.map((c) => c.messageId)).toContain(
+    cardId('U')
+  )
+  await journal.queuedMessages.insert({ messageId: 'W', body: body('waiting') })
+  await send('V')
+  held.add('V')
+  await journal.appendItem(
+    { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: 'turn-lifecycle:V' },
+    { kind: 'turn', turnId: 'V', state: 'running' },
+    { fence: 7 }
+  )
+  deferFirstRecoveryPresentation(journal, child)
+  expect(readQueuePublication(journal, gate).queuedMessages.map((c) => c.messageId)).toContain(
+    cardId('U')
+  )
+  expect(journal.queuedMessages.get(cardId('U'))?.state).toBe('returned')
+  expect(readQueuePublication(journal, gate).nextQueuedMessageId).toBeNull()
+})
+
+it.each([100, 1000])(
+  'does no accepted-history or spent-card visits per streamed row at N=%i',
+  async (count) => {
+    const { applyJournalRow } = await import('./journal-reducer')
+    const state = journal.queuedMessages.displayState()
+    const base = () => ({
+      v: 1,
+      epoch: state.epoch,
+      seq: state.lastSequence + 1,
+      fence: 7,
+      ts: clock++
+    })
+    for (let i = 0; i < count; i++) {
+      applyJournalRow(state, {
+        kind: 'submission',
+        clientMessageId: `old-${i}`,
+        payloadFingerprint: 'old',
+        providerHandle: codexProviderHandle('thread'),
+        body: body('old'),
+        ...base()
+      })
+      applyJournalRow(state, {
+        kind: 'dispatch',
+        clientMessageId: `old-${i}`,
+        state: 'accepted',
+        providerItemId: null,
+        reason: null,
+        ...base()
+      })
+      applyJournalRow(state, {
+        kind: 'queue',
+        messageId: `spent-${i}`,
+        change: { op: 'queued', body: body('spent'), position: i, queuedAt: null },
+        ...base()
+      })
+      applyJournalRow(state, {
+        kind: 'queue',
+        messageId: `spent-${i}`,
+        change: { op: 'withdrawn' },
+        ...base()
+      })
+    }
+    const gate = () => ({ work: work(), record: agentSessionRecordFixture(lease) })
+    readQueuePublication(journal, gate)
+    let visits = 0
+    const sends = state.submissions.values.bind(state.submissions)
+    const cards = state.queue.cards.values.bind(state.queue.cards)
+    vi.spyOn(state.submissions, 'values').mockImplementation(function* () {
+      for (const v of sends()) {
+        visits++
+        yield v
+      }
+    })
+    vi.spyOn(state.queue.cards, 'values').mockImplementation(function* () {
+      for (const v of cards()) {
+        visits++
+        yield v
+      }
+    })
+    const key = journal.queuedMessages.revision()
+    for (let i = 0; i < 10; i++) {
+      await journal.appendItem(
+        { provider: 'legacy', agent: 'codex', sessionId: 'thread', recordId: 'stream' },
+        { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: String(i) }] },
+        { fence: 7 }
+      )
+      readQueuePublication(journal, gate)
+    }
+    expect(journal.queuedMessages.revision()).toBe(key)
+    expect(visits).toBe(0)
+    vi.restoreAllMocks()
+    await send('candidate')
+    held.add('candidate')
+    await ended('candidate-end')
+    expect(journal.queuedMessages.get(cardId('candidate'))).toBeNull()
+    held.delete('candidate')
+    expect(journal.queuedMessages.get(cardId('candidate'))?.state).toBe('returned')
+    await receipt('candidate')
+    expect(journal.queuedMessages.get(cardId('candidate'))).toBeNull()
+    const { structuredAgentSessionCommandTurnIdentity } =
+      await import('../../../shared/structured-agent-session-command-turn-identity')
+    const command = { ...body('/compact'), command: { name: 'compact' as const } }
+    applyJournalRow(state, {
+      kind: 'queue',
+      messageId: 'command',
+      change: {
+        op: 'queued',
+        body: command,
+        position: 0,
+        queuedAt: null,
+        attempt: 'command-send',
+        returned: { reason: 'refused' }
+      },
+      ...base()
+    })
+    expect(state.queue.cards.get('command')?.state).toBe('returned')
+    await journal.appendItem(
+      structuredAgentSessionCommandTurnIdentity('command-send'),
+      { kind: 'turn', turnId: 'compact:command-send', state: 'completed' },
+      { fence: 7 }
+    )
+    expect(state.queue.cards.get('command')?.state).toBe('withdrawn')
+  }
+)

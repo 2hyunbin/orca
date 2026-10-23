@@ -238,6 +238,7 @@ export class StructuredAgentSessionClientDelivery {
     return {
       submissions: () => journal.submissions(),
       cursor: () => journal.cursor(),
+      attemptEnded: (id: string) => journal.queuedMessages.attemptEnded(id),
       activeTurnId: () => this.currentWork(sessionId, journal).activeTurnId()
     }
   }

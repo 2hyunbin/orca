@@ -42,6 +42,7 @@ export class JournalEpochController {
       reason,
       fence,
       now: this.deps.now(),
+      previous: this.deps.state(),
       queue: this.deps.queueRestatement(),
       onPublished: this.deps.adopt
     })
