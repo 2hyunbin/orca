@@ -1,4 +1,5 @@
-import { wslGatedReadFile } from '../native-chat/wsl-transcript-fs-access'
+import { openTranscriptReadStream } from '../native-chat/wsl-transcript-fs-access'
+import { splitTranscriptStreamLines } from '../native-chat/transcript-stream-lines'
 import type { AiVaultSession } from '../../shared/ai-vault-types'
 import { unwrapMuseLogRecords } from '../../shared/muse-session-log'
 import type { ExecutionHostId } from '../../shared/execution-host'
@@ -203,22 +204,35 @@ function foldSessionEvent(
 type MuseDedupeState = { text: string | null; ms: number | null }
 
 function foldMuseContent(accumulator: SessionAccumulator, content: string): void {
-  foldMuseLines(accumulator, content.split('\n'))
+  const dedupe: MuseDedupeState = { text: null, ms: null }
+  for (const line of content.split('\n')) {
+    foldMuseLine(accumulator, line, dedupe)
+  }
 }
 
-function foldMuseLines(
+function foldMuseLine(
   accumulator: SessionAccumulator,
-  lines: Iterable<string>,
-  dedupe: MuseDedupeState = { text: null, ms: null }
+  line: string,
+  dedupe: MuseDedupeState
 ): void {
-  for (const line of lines) {
-    if (!line.trim()) {
-      continue
-    }
-    for (const record of unwrapMuseRecords(line)) {
-      foldMuseRecord(accumulator, record, dedupe)
-    }
+  if (!line.trim()) {
+    return
   }
+  for (const record of unwrapMuseRecords(line)) {
+    foldMuseRecord(accumulator, record, dedupe)
+  }
+}
+
+function createMuseAccumulator(
+  file: FileWithMtime,
+  messages?: TranscriptMessageSink
+): SessionAccumulator {
+  return createAccumulator({
+    agent: 'muse',
+    file,
+    sessionId: museSessionIdFromFilePath(file.path),
+    messages
+  })
 }
 
 export async function parseMuseSessionFile(
@@ -226,13 +240,13 @@ export async function parseMuseSessionFile(
   platform: NodeJS.Platform = process.platform,
   messages?: TranscriptMessageSink
 ): Promise<AiVaultSession | null> {
-  return parseMuseSessionContent(
-    file,
-    await wslGatedReadFile(file.path, 'utf-8', 'scan'),
-    platform,
-    {},
-    messages
-  )
+  const accumulator = createMuseAccumulator(file, messages)
+  const dedupe: MuseDedupeState = { text: null, ms: null }
+  const stream = openTranscriptReadStream(file.path, {}, 'scan')
+  for await (const { line } of splitTranscriptStreamLines(stream)) {
+    foldMuseLine(accumulator, line, dedupe)
+  }
+  return finalizeSession(accumulator, platform)
 }
 
 export function parseMuseSessionContent(
@@ -242,12 +256,7 @@ export function parseMuseSessionContent(
   options: ParserSessionOptions = {},
   messages?: TranscriptMessageSink
 ): AiVaultSession | null {
-  const accumulator = createAccumulator({
-    agent: 'muse',
-    file,
-    sessionId: museSessionIdFromFilePath(file.path),
-    messages
-  })
+  const accumulator = createMuseAccumulator(file, messages)
   foldMuseContent(accumulator, content)
   return finalizeSession(accumulator, platform, options)
 }

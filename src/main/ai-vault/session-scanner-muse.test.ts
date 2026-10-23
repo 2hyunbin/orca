@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { scanAiVaultSessions } from './session-scanner'
-import { parseMuseSessionContent } from './session-scanner-muse-parser'
+import { parseMuseSessionContent, parseMuseSessionFile } from './session-scanner-muse-parser'
 import {
   isolatedScanRoots,
   jsonLines,
@@ -76,5 +76,47 @@ describe('scanAiVaultSessions muse', () => {
       { role: 'user', text: 'Capture this prompt', timestamp: '2026-05-28T20:26:40.000Z' },
       { role: 'assistant', text: 'Captured reply', timestamp: '2026-05-28T20:26:41.000Z' }
     ])
+  })
+
+  it('streams the same records across byte boundaries, mixed endings, and an unterminated tail', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-muse-stream-'))
+    tempRoots.push(root)
+    const path = await writeMuseScannerFixture(root)
+    let content = (await readFile(path, 'utf8')).replaceAll('\n', '\r\n')
+    const tail = JSON.stringify({
+      record_type: 'event',
+      payload_type: 'runtime.session',
+      recorded_at: 1780000004000000,
+      payload: {
+        kind: 'run',
+        event: { kind: 'assistant_message_committed', text: 'Chunk edge 😊 tail' }
+      }
+    })
+    const bareCrRecord = tail.replace('Chunk edge 😊 tail', 'bare CR record')
+    content += `${bareCrRecord}\r${bareCrRecord}\n${tail}\r`
+    const beforeEmoji = Buffer.byteLength(content.slice(0, content.indexOf('😊')))
+    content = ' '.repeat(65_535 - beforeEmoji) + content
+    await writeFile(path, content)
+    const file = { path, mtimeMs: 1780000004000, modifiedAt: '2026-05-28T20:26:44.000Z' }
+    const buffered: TranscriptMessage[] = []
+    const streamed: TranscriptMessage[] = []
+    const expected = parseMuseSessionContent(
+      file,
+      content,
+      'linux',
+      {},
+      {
+        active: true,
+        push: (message) => buffered.push(message)
+      }
+    )
+    const actual = await parseMuseSessionFile(file, 'linux', {
+      active: true,
+      push: (message) => streamed.push(message)
+    })
+    expect(actual).toEqual(expected)
+    expect(streamed).toEqual(buffered)
+    expect(actual?.messageCount).toBe(3)
+    expect(streamed.at(-1)?.text).toBe('Chunk edge 😊 tail')
   })
 })
