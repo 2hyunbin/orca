@@ -82,9 +82,7 @@ vi.mock('../git/worktree', () => ({
 }))
 
 vi.mock('../git/runner', () => ({
-  // Why: createLocalWorktree now fires `git fetch` via gitExecFileAsync in the
-  // background. Return a resolved promise so the fire-and-forget `.catch()`
-  // chain has a valid Promise to attach to.
+  // Background fetch attaches catch, so its mock must return a promise.
   gitExecFileAsync: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
   gitExecFileSync: vi.fn()
 }))
@@ -297,8 +295,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     })
     getLocalPtyProviderMock.mockReturnValue({})
 
-    // Why: createLocalWorktree routes `git fetch` through
-    // `runtime.fetchRemoteWithCache` (§3.3 Lifecycle). Stub it for path tests.
     const runtimeStub = {
       resolveRemoteTrackingBase: vi.fn().mockResolvedValue(null),
       hasRemoteTrackingRef: vi.fn().mockResolvedValue(false),
@@ -347,7 +343,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
       {}
     )
     expect(resolveLocalGitUsernameMock).not.toHaveBeenCalled()
-    // A name the user typed is never retired — the pool holds ordinary words people choose.
     expect(store.addRetiredWorktreeName).not.toHaveBeenCalled()
     expect(store.setWorktreeMeta).toHaveBeenCalledWith(
       hostWorktreeTarget({ id: 'repo-1::C:/workspaces/improve-dashboard', hostId: 'local' }),
@@ -388,8 +383,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
   })
 
   it('leaves a user-typed name reusable even when the same name is retired', async () => {
-    // Why: the creature pool contains ordinary words ("orca", "runner", "molly"). Silently
-    // renaming a deliberate `nautilus` to `nautilus-2` — and burning it — is the wrong trade.
+    // Creature names are ordinary words; explicit user choices must remain reusable.
     store.getRetiredWorktreeNameRegistry.mockReturnValue({ exhaustedTiers: 0, names: ['nautilus'] })
     computeWorktreePathMock.mockReturnValue('C:\\workspaces\\nautilus')
     ensurePathWithinWorkspaceMock.mockReturnValue('C:\\workspaces\\nautilus')
@@ -516,8 +510,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
       isBare: false,
       isMainWorktree: false
     }
-    // Two calls: (1) worktrees:create finds the new worktree,
-    // (2) worktrees:list enumerates worktrees again.
     listWorktreesMock.mockResolvedValueOnce([worktreeEntry]).mockResolvedValueOnce([worktreeEntry])
     store.setWorktreeMeta.mockReturnValue({
       lastActivityAt: 123,
@@ -601,7 +593,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     expect(store.removeWorktreeMeta).toHaveBeenCalledWith(
       hostWorktreeTarget({ id: 'repo-1::C:/workspaces/improve-dashboard', hostId: 'local' })
     )
-    // Windows history lives under a path-derived hash, so scheduling must not regress on this path only.
+    // Exercise Windows path hashing in history-cleanup scheduling.
     expect(deleteWorktreeHistoryDirMock).toHaveBeenCalledWith(
       'repo-1::C:/workspaces/improve-dashboard'
     )
@@ -610,8 +602,7 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     })
   })
   it('gives the issue-command runner the same setup shell as the setup runner', () => {
-    // Regression (C4): native Windows issue runners stayed .cmd even when setup
-    // resolved to Git Bash, so same-session bash issue templates broke.
+    // Issue runners must inherit Git Bash when setup selects it, rather than defaulting to cmd.
     resolveSetupRunnerShellMock.mockReturnValue({ family: 'posix' })
     createIssueCommandRunnerScriptMock.mockReturnValue({
       runnerScriptPath: 'C:\\repo\\.git\\orca\\issue-command-runner.sh',

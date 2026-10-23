@@ -37,7 +37,6 @@ import { withoutInFlightWorktreeCreates } from '../../../worktree-create-in-flig
 
 const WORKTREE_LIST_ALL_CONCURRENCY = 8
 
-// Why always marked: the desktop renderer ships with this main process, so it reads the marker.
 function markLocalWorktreesUnderRemoval<T extends Worktree>(
   worktrees: T[],
   pendingAtScan: PendingWorktreeRemovals
@@ -69,7 +68,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
   const { store } = context
 
   ipcMain.handle('worktrees:listAll', async () => {
-    // A repo the WSL host owns is listed by the host; this build must not scan its old path.
+    // WSL-owned projects must not be scanned at their old desktop paths.
     const repos = withoutWslMovedRepos(store.getRepos())
     const legacyMetadata =
       typeof store.getAllWorktreeMetaForHost === 'function' ? undefined : store.getAllWorktreeMeta()
@@ -102,7 +101,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
       return index
     }
 
-    // Why: each local repo listing can spawn `git worktree list`; cap fan-out so large fleets don't start unbounded subprocesses.
+    // Bound per-repo Git subprocess fan-out across large project fleets.
     const results = await mapWithConcurrency(repos, WORKTREE_LIST_ALL_CONCURRENCY, async (repo) => {
       const connectionId = getRepoDialableSshTargetId(repo)
       try {
@@ -110,7 +109,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
         if (isFolderRepo(repo)) {
           return listVisibleFolderWorkspaces(store, repo)
         }
-        // An `ssh:` repo is not served here, so it lists from metadata, never from this machine.
+        // Unserved SSH rows list from metadata without touching the local filesystem.
         if (connectionId) {
           return listDisconnectedSshWorktrees(store, repo, sshMetaIndexForRepo(repo))
         }
@@ -144,7 +143,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
           `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
           err
         )
-        // Why: do NOT seed empty success — it flags the repo registered, blocking access to legit linked worktrees until the cache is invalidated.
+        // Empty success would poison authorization and block valid linked worktrees until invalidation.
         return []
       }
     })
@@ -161,7 +160,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
   })
 
   ipcMain.handle('worktrees:list', async (_event, args: { repoId: string } | undefined) => {
-    // Renderer startup can race repo selection; malformed requests must fail closed, not crash the handler.
+    // Startup races can omit repo selection; reject malformed requests without crashing IPC.
     const repoId = typeof args?.repoId === 'string' ? args.repoId : ''
     if (!repoId) {
       return []
@@ -181,7 +180,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
       if (isFolderRepo(repo)) {
         return listVisibleFolderWorkspaces(store, repo)
       }
-      // An `ssh:` repo is not served here, so it lists from metadata, never from this machine.
+      // Unserved SSH rows list from metadata without touching the local filesystem.
       if (connectionId) {
         return listDisconnectedSshWorktrees(store, repo, sshWorktreeMetaIndex)
       }
@@ -215,7 +214,7 @@ export function registerWorktreeCatalogHandlers(context: WorktreeIpcContext): vo
         `[worktrees] failed to list worktrees for repo "${repo.displayName}" (${repo.id}) at ${repo.path}`,
         err
       )
-      // Why: see worktrees:listAll catch — seeding an empty-success result would poison the auth cache and block linked worktrees.
+      // Failed listings must not seed empty authorization and block linked worktrees.
       return []
     }
   })
