@@ -22,15 +22,36 @@ Observed on macOS arm64 on 2026-10-15. The installed app was
 - The production `DaemonAsyncIoProbe`, evaluated in that affected daemon,
   returned `stalled` at 5,000.8 ms. The debugger was closed afterwards.
 
+## Recurrence and preserved daemon owners
+
+On 2026-10-23 a preserved v50 macOS daemon (Node 24.21.0/libuv 1.52.1)
+with 155 sessions again accepted control RPCs and output while input and new
+terminal creation stalled. All four workers slept with queued work. The existing
+probe logged `async-io-stalled`; interrupting the verified worker waits restored
+input without replacing PTYs or agents, and the user confirmed recovery.
+A working Claude terminal belonged to a different, older daemon. Agent type did
+not identify which asynchronous worker pool was affected.
+
+The desktop health check previously inspected only the current spawn adapter.
+It now checks every already-adopted local daemon generation concurrently through
+the same optional RPC, without listing sessions or opening connections. Any
+identity-verified stalled owner can raise the existing restart-review notice,
+even when another peer is healthy, unsupported or unreachable. Only a complete
+healthy snapshot clears the notice. Removed adapters contribute no evidence;
+new adapters, changed endpoint identities and provider replacement cannot inherit
+an earlier owner's health. Unsupported and unverifiable results remain explicit.
+
 ## Cause and remaining investigation
 
 The immediate failure is below the renderer: native asynchronous writes stop
 completing, and later keystrokes accumulate behind the first pending write.
 New terminals can also block on asynchronous working-directory checks.
 
-The initial runtime/native trigger is **not established**. No evidence yet ties
-it to a specific patch, an update, sleep/resume, workload size, or a protocol
-version mismatch. Increasing the thread pool, replaying queued input, replacing
+Subsequent native witnesses and an ordinary sequential-job workload reproduced
+a Darwin worker condition-generation half-range failure. The packaged-runtime
+fix and detailed root-cause evidence are tracked in
+[Orca #29133](https://github.com/stablyai/orca/pull/29133). The exact sequence of
+Orca job producers is still unproved. Increasing the thread pool, replaying queued input, replacing
 the writer with synchronous calls, or restarting healthy daemons is not a
 validated prevention fix.
 
@@ -93,6 +114,7 @@ identified this incident in the affected live daemon.
 
 Local/daemon macOS evidence is covered. The probe is platform-independent, but
 physical Linux, Windows, WSL and SSH deployments remain gaps. The notice describes
-only this computer's current daemon. Paired web clients explicitly decline local
-daemon inspection; remote/legacy daemon notices and hidden-sidebar surfacing are
-not covered. Initial-trigger reproduction and a prevention fix remain open.
+only this computer's already-adopted daemons. Paired web clients explicitly decline local
+daemon inspection; remote daemon notices and hidden-sidebar surfacing are
+not covered. Older peers without the optional probe remain unsupported; the
+runtime prevention fix is tracked separately in #29133.

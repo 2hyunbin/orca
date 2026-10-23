@@ -25,7 +25,7 @@ import {
 import type { MacDaemonTccAttributionHealth } from '../daemon/daemon-tcc-attribution'
 import type { DaemonEndpointIdentity } from '../daemon/daemon-hello-protocol'
 import type { DaemonSessionInfo } from '../daemon/types'
-import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import { readDaemonProviderAsyncIoHealth } from '../daemon/daemon-provider-async-io-health'
 
 // Why: poll past the daemon's 5s SIGTERM→SIGKILL ladder (KILL_TIMEOUT_MS in session.ts), else slow-exiting shells falsely look "refused".
 const MAX_POLL_ATTEMPTS = 65
@@ -80,19 +80,7 @@ export function registerDaemonManagementHandlers(): void {
   ipcMain.removeHandler('pty:management:restartSeveredDaemon')
   ipcMain.removeHandler('pty:management:asyncIoHealth')
 
-  ipcMain.handle('pty:management:asyncIoHealth', async (): Promise<DaemonAsyncIoStatus> => {
-    const provider = getDaemonProvider()
-    if (!provider) {
-      return { state: 'unverifiable' }
-    }
-    const adapter = getCurrentDaemonAdapter(provider)
-    const identity = adapter.getDaemonIdentity()
-    const health = await adapter.getAsyncIoHealth()
-    // A result from a replaced endpoint cannot diagnose its successor.
-    return identity && adapter.getDaemonIdentity() === identity && getDaemonProvider() === provider
-      ? health
-      : { state: 'unverifiable' }
-  })
+  ipcMain.handle('pty:management:asyncIoHealth', readDaemonProviderAsyncIoHealth)
 
   // Why: a Linux AppImage daemon kept for its live terminals after its files vanished; the
   // banner polls this and offers the verified restart below.
