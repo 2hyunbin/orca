@@ -227,7 +227,14 @@ async function fenceOrResume(
     result.blockers &&
     onlyLeavableOrcadMigrationBlockers(result.blockers) &&
     !target.managedServerLeaveBehind
-  if (leavable && terminalProof.verdict !== 'exited') {
+  const canLeaveBehind =
+    leavable &&
+    leaveBehindClearsOrcadMigrationBlockers(
+      store,
+      target.id,
+      terminalProof.verdict === 'bridged' ? terminalProof.bridgedPtyIds : []
+    )
+  if (leavable && terminalProof.verdict !== 'exited' && !canLeaveBehind) {
     // Why no offer: leaving tabs behind would strand terminals the relay bridge still serves.
     return refuse(
       result.verdict,
@@ -238,9 +245,7 @@ async function fenceOrResume(
   return {
     ...refuse(result.verdict, result.code, result.reason),
     // Why previewed: an offer the confirmed export would refuse again is a dead end.
-    ...(leavable && leaveBehindClearsOrcadMigrationBlockers(store, target.id)
-      ? { canLeaveBehind: true }
-      : {})
+    ...(canLeaveBehind ? { canLeaveBehind: true } : {})
   }
 }
 

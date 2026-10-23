@@ -21,6 +21,7 @@ import {
   resolveOrcadPreflightTarget
 } from './ssh-target-orcad-claims'
 import { collectUntransferredDependentBlockers } from './ssh-target-orcad-dependents'
+import { preservesOrcadMigrationBridgedPanes } from '../orcad-migration-bridged-panes'
 
 export type OrcadMigrationPreflightStore = OrcadMigrationExportStore &
   Pick<
@@ -75,17 +76,30 @@ export function preflightOrcadMigrationExport(
 /** Whether a confirmed "Move anyway" would export: what it can't leave (desktop drafts) still refuses. */
 export function leaveBehindClearsOrcadMigrationBlockers(
   store: OrcadMigrationPreflightStore & Pick<Store, 'createOrcadMigrationLeaveBehindView'>,
-  targetId: string
+  targetId: string,
+  bridgedPtyIds: readonly string[] = []
 ): boolean {
   const view = store.createOrcadMigrationLeaveBehindView(targetId)
-  return preflightOrcadMigrationExport(
+  const preflight = preflightOrcadMigrationExport(
     {
       ...view,
       getSshTarget: (id) => store.getSshTarget(id),
       getSshRemotePtyLeases: (id) => store.getSshRemotePtyLeases(id)
     },
-    targetId
-  ).claimable
+    targetId,
+    undefined,
+    bridgedPtyIds
+  )
+  const target = store.getSshTarget(targetId)
+  return (
+    preflight.claimable &&
+    target !== undefined &&
+    preservesOrcadMigrationBridgedPanes(
+      createOrcadMigrationManifest(view, target).payload,
+      store.getSshRemotePtyLeases(targetId),
+      bridgedPtyIds
+    )
+  )
 }
 
 /** Only saved state blocks: a confirmed "Move anyway" may leave it on this desktop. */

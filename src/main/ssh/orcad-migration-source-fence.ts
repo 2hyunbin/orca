@@ -34,6 +34,7 @@ import {
   type OrcadMigrationPreflightStore
 } from './targets/ssh-target-orcad-preflight'
 import { orcadMigrationRefusalReason } from './orcad-migration-refusal-reason'
+import { preservesOrcadMigrationBridgedPanes } from './orcad-migration-bridged-panes'
 
 export const ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS = 'orcad_migration_leave_behind_terminals'
 export const ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON =
@@ -114,14 +115,6 @@ export async function fenceOrcadMigrationSource(args: {
   if (proof.verdict !== 'exited' && proof.verdict !== 'bridged') {
     return refuse(proof.verdict, 'orcad_migration_terminals', proof.reason)
   }
-  if (proof.verdict === 'bridged' && target.managedServerLeaveBehind) {
-    // Why: leaving the saved tabs behind drops the identities the relay bridge reattaches through.
-    return refuse(
-      proof.relayVerdict,
-      ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS,
-      ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON
-    )
-  }
   const preflight = preflightOrcadMigrationExport(
     args.store,
     target.id,
@@ -150,6 +143,21 @@ export async function fenceOrcadMigrationSource(args: {
     { ...target, generation },
     { migrationId: randomUUID(), destinationEnvironmentId: args.destinationEnvironmentId }
   )
+  if (
+    proof.verdict === 'bridged' &&
+    target.managedServerLeaveBehind &&
+    !preservesOrcadMigrationBridgedPanes(
+      manifest.payload,
+      args.store.getSshRemotePtyLeases(target.id),
+      proof.bridgedPtyIds
+    )
+  ) {
+    return refuse(
+      proof.relayVerdict,
+      ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS,
+      ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON
+    )
+  }
   // Before the journal: a fence on a manifest no request can carry could never be released.
   assertOrcadMigrationRequestFits({ manifest })
   const cutover: OrcadMigrationSourceCutover = {
