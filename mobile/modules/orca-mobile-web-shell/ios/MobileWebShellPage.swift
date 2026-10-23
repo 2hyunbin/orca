@@ -172,29 +172,25 @@ internal final class MobileWebShellBridgeMessageTooLargeException: GenericExcept
   }
 }
 
-/// Where a page's reports go: the view on screen, or whatever holds the page until one adopts it.
+/// Where a page's reports go.
 protocol MobileWebShellPageSink: AnyObject {
   func pageLoadState(_ payload: [String: Any])
   func pageBridgeMessage(_ json: String)
   func pageExternalNavigation(_ url: String)
 }
 
-/// One WKWebView and every fence on it, apart from whichever view shows it, so a page can be built
-/// before the screen that shows it exists. The view hosts it; nothing here knows about React.
+/// One WKWebView and every fence on it. The view hosts it; nothing here knows about React.
 final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
   weak var sink: MobileWebShellPageSink?
 
   private let schemeHandler = MobileWebShellSchemeHandler()
   private let bridgeReceiver = MobileWebShellBridgeReceiver()
   private let bridgeGate = MobileWebShellBridgeGate()
-  private var bridgeEnabled = false
   private var bridgeInstalled = false
   private var bridgeTarget = MobileWebShellBridgeTarget<WKFrameInfo>()
-  private(set) var webView: WKWebView!
+  let webView: WKWebView
   /// An id issued for a spare whose page is gone: nothing loads, and the first apply says so.
-  private var dead = false
-  private var generationDirectory = ""
-  private var sessionId = ""
+  private var dead: Bool
   private var applied: MobileWebShellAppliedProps?
   private var appliedSessionId: String? { applied?.sessionId }
   private var pendingDocumentUrl: URL?
@@ -204,7 +200,6 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
   init(dead: Bool = false) {
     self.dead = dead
-    super.init()
     let configuration = WKWebViewConfiguration()
     configuration.allowsInlineMediaPlayback = true
     configuration.mediaTypesRequiringUserActionForPlayback = .all
@@ -217,8 +212,9 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     // `user-select: none` is what keeps WebKit's selection off its long presses.
     configuration.setURLSchemeHandler(schemeHandler, forURLScheme: MobileWebShellOrigin.scheme)
     configuration.userContentController.addUserScript(Self.makeBlockerScript())
-    bridgeReceiver.page = self
     webView = WKWebView(frame: .zero, configuration: configuration)
+    super.init()
+    bridgeReceiver.page = self
     webView.navigationDelegate = self
     webView.uiDelegate = self
     webView.allowsBackForwardNavigationGestures = false
@@ -238,13 +234,6 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
   /// A page that can still be shown: its content process is alive and no load failure was reported.
   var isUsable: Bool { !dead && !loadState.isTerminal }
 
-  func apply(generationDirectory: String, sessionId: String, bridgeEnabled: Bool) {
-    self.generationDirectory = generationDirectory
-    self.sessionId = sessionId
-    self.bridgeEnabled = bridgeEnabled
-    propsDidUpdate()
-  }
-
   /// The spare pool's teardown: nothing loads in it again, and the content process goes with it.
   func destroy() {
     dead = true
@@ -254,11 +243,10 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     webView.removeFromSuperview()
   }
 
-  /// Props arrive in no defined order, so neither setter starts anything; this does, once both are
-  /// in. A repeat of the same triple is not a retry: a retry is a remount under a new React key.
+  /// A repeat of the same triple is not a retry: a retry is a remount under a new React key.
   /// `bridgeEnabled` is in the record because a document-start script only takes effect at the next
   /// document start: toggling it has to reload, or the prop would silently do nothing.
-  private func propsDidUpdate() {
+  func apply(generationDirectory: String, sessionId: String, bridgeEnabled: Bool) {
     let next = MobileWebShellAppliedProps(
       generationDirectory: generationDirectory,
       sessionId: sessionId,
@@ -292,7 +280,7 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
     schemeHandler.sessionId = sessionId
     schemeHandler.generation = generation
-    applyBridgeInstallation()
+    applyBridgeInstallation(bridgeEnabled)
     if isolationFailed {
       failPropUpdate(.isolationUnavailable)
       return
@@ -324,7 +312,7 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
   }
 
   /// Nothing here runs while the prop stays false, which is what keeps Phase B byte-identical.
-  private func applyBridgeInstallation() {
+  private func applyBridgeInstallation(_ bridgeEnabled: Bool) {
     guard bridgeEnabled != bridgeInstalled else { return }
     clearBridgeTarget()
     let controller = webView.configuration.userContentController
@@ -474,7 +462,7 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
 
   private func isDocumentUrl(_ url: URL?) -> Bool {
     guard let url, let parts = MobileWebShellRequestParts(url: url) else { return false }
-    return MobileWebShellOrigin.resolveRequestPath(parts, sessionId: sessionId) == "/"
+    return MobileWebShellOrigin.resolveRequestPath(parts, sessionId: appliedSessionId ?? "") == "/"
   }
 
   func webView(

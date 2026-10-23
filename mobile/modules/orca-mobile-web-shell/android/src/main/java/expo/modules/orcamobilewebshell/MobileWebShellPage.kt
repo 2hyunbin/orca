@@ -40,17 +40,14 @@ private class MobileWebShellServed(
   val originHost: String
 )
 
-/** Where a page's reports go: the view on screen, or whatever holds the page until one adopts it. */
+/** Where a page's reports go. */
 internal interface MobileWebShellPageSink {
-  fun onLoadState(payload: Map<String, Any>)
-  fun onBridgeMessage(json: String)
-  fun onExternalNavigation(url: String)
+  fun pageLoadState(payload: Map<String, Any>)
+  fun pageBridgeMessage(json: String)
+  fun pageExternalNavigation(url: String)
 }
 
-/**
- * One WebView and every fence on it, apart from whichever view shows it, so a page can be built
- * before the screen that shows it exists. The view hosts it; nothing here knows about React.
- */
+/** One WebView and every fence on it. The view hosts it; nothing here knows about React. */
 @SuppressLint("SetJavaScriptEnabled")
 internal class MobileWebShellPage(private val context: Context, withWebView: Boolean = true) {
   var sink: MobileWebShellPageSink? = null
@@ -189,7 +186,7 @@ internal class MobileWebShellPage(private val context: Context, withWebView: Boo
       bridgeGate.accepts(json.toByteArray(Charsets.UTF_8).size)
     ) {
       replyProxy = proxy
-      sink?.onBridgeMessage(json)
+      sink?.pageBridgeMessage(json)
     }
   }
 
@@ -271,7 +268,7 @@ internal class MobileWebShellPage(private val context: Context, withWebView: Boo
   }
 
   private fun emit(emission: MobileWebShellLoadEmission?) {
-    if (emission != null) sink?.onLoadState(emission.toPayload())
+    if (emission != null) sink?.pageLoadState(emission.toPayload())
   }
 
   /**
@@ -382,7 +379,7 @@ internal class MobileWebShellPage(private val context: Context, withWebView: Boo
         isDownload = false
       )
       if (verdict is MobileWebShellNavigationVerdict.CancelAndOffer) {
-        sink?.onExternalNavigation(verdict.url)
+        sink?.pageExternalNavigation(verdict.url)
       }
       return verdict !is MobileWebShellNavigationVerdict.Allow
     }

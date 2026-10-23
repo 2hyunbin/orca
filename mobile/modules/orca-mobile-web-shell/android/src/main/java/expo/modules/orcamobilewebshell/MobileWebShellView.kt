@@ -28,10 +28,11 @@ internal class OrcaMobileWebShellView(
   private var adoptedReady: String? = null
 
   private val sink = object : MobileWebShellPageSink {
-    override fun onLoadState(payload: Map<String, Any>) = this@OrcaMobileWebShellView.onLoadState(payload)
-    override fun onBridgeMessage(json: String) =
+    override fun pageLoadState(payload: Map<String, Any>) =
+      this@OrcaMobileWebShellView.onLoadState(payload)
+    override fun pageBridgeMessage(json: String) =
       this@OrcaMobileWebShellView.onBridgeMessage(mapOf("json" to json))
-    override fun onExternalNavigation(url: String) =
+    override fun pageExternalNavigation(url: String) =
       this@OrcaMobileWebShellView.onExternalNavigation(mapOf("url" to url))
   }
 
@@ -70,7 +71,7 @@ internal class OrcaMobileWebShellView(
 
   /** Hands the adopted spare's `ready` to the shell again, until the shell has answered it. */
   fun replayPageReady() {
-    adoptedReady?.let(sink::onBridgeMessage)
+    adoptedReady?.let(sink::pageBridgeMessage)
   }
 
   fun postBridgeMessage(json: String) {

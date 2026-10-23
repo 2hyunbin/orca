@@ -19,20 +19,20 @@ internal class MobileWebShellParkedSink : MobileWebShellPageSink {
   var lastFrame: String? = null
     private set
 
-  override fun onLoadState(payload: Map<String, Any>) {
+  override fun pageLoadState(payload: Map<String, Any>) {
     loadStates += payload
   }
 
-  override fun onBridgeMessage(json: String) {
+  override fun pageBridgeMessage(json: String) {
     lastFrame = json
   }
 
   // A parked page has no screen to have been tapped on.
-  override fun onExternalNavigation(url: String) = Unit
+  override fun pageExternalNavigation(url: String) = Unit
 
   fun replayInto(sink: MobileWebShellPageSink) {
-    loadStates.forEach(sink::onLoadState)
-    lastFrame?.let(sink::onBridgeMessage)
+    loadStates.forEach(sink::pageLoadState)
+    lastFrame?.let(sink::pageBridgeMessage)
   }
 }
 
