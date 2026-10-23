@@ -6,18 +6,14 @@ import {
   isResumableTuiAgent,
   normalizeAgentProviderSession,
   type AgentProviderSessionMetadata,
-  type SleepingAgentLaunchConfig,
-  type SleepingAgentSessionRecord
+  type SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import {
   buildAgentResumeStartupPlan,
   buildAgentStartupPlan
 } from '../../../../shared/tui-agent-startup'
-import {
-  resolveTuiAgentLaunchArgs,
-  resolveTuiAgentLaunchEnv
-} from '../../../../shared/tui-agent-launch-defaults'
+import { resolveResumeLaunchRecipe } from '../../../../shared/tui-agent-launch-defaults'
 import { resolveAgentStartupPlanInputs } from '../../../../shared/agent-startup-plan-inputs'
 import {
   agentLaunchQuotingShell,
@@ -33,6 +29,15 @@ export type MobileTerminalCommandOptions = {
   agentPrompt?: string
   launchConfig?: SleepingAgentLaunchConfig
   launchAgent?: TuiAgent
+}
+
+/** What a resume reads from a recorded session; a SleepingAgentSessionRecord is one. */
+export type ResumableAgentSessionSource = {
+  agent: TuiAgent
+  providerSession: AgentProviderSessionMetadata
+  /** The capture's connection; undefined when the caller compared hosts itself. */
+  connectionId?: string | null
+  launchConfig?: SleepingAgentLaunchConfig
 }
 
 export type MobileTerminalCommand = {
@@ -59,7 +64,7 @@ export abstract class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends
   /** The `--resume` launch for a pane's recorded agent session, as the host window's cold restore builds it. */
   protected resolveMobileSessionResumeCommand(
     workspace: TerminalWorkspaceLaunchScope,
-    record: SleepingAgentSessionRecord
+    record: ResumableAgentSessionSource
   ): MobileTerminalResumeCommand | null {
     const providerSession = normalizeAgentProviderSession(record.providerSession)
     if (!this.store || !providerSession || !isResumableTuiAgent(record.agent)) {
@@ -83,16 +88,7 @@ export abstract class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends
       agent: record.agent,
       providerSession,
       cmdOverrides: settings.agentCmdOverrides ?? {},
-      agentArgs: launchConfig
-        ? launchConfig.agentArgs
-        : resolveTuiAgentLaunchArgs(record.agent, settings.agentDefaultArgs),
-      agentEnv: launchConfig
-        ? launchConfig.agentEnv
-        : resolveTuiAgentLaunchEnv(record.agent, settings.agentDefaultEnv),
-      ...(launchConfig?.agentCommand ? { agentCommand: launchConfig.agentCommand } : {}),
-      ...(launchConfig?.ompResumeFilePath
-        ? { ompResumeFilePath: launchConfig.ompResumeFilePath }
-        : {}),
+      ...resolveResumeLaunchRecipe(launchConfig),
       platform: launchRuntime.platform,
       shell: agentLaunchQuotingShell(launchRuntime),
       isRemote: Boolean(workspace.connectionId)

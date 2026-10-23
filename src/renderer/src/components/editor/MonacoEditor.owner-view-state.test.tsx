@@ -104,6 +104,7 @@ it('preserves a draft, selected range and scroll when the same tab gains a known
     activeWorkspaceExecutionHostId: null,
     runtimeEnvironments: [],
     editorFontZoomLevel: 0,
+    editorDrafts: { [file.id]: 'unsaved draft' },
     repos: [],
     worktreesByRepo: {},
     detectedWorktreesByRepo: {},

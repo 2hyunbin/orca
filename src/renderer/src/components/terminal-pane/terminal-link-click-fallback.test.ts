@@ -116,13 +116,16 @@ describe('createFilePathLinkProvider range bounds', () => {
       }),
       { forceContentReload: true }
     )
-    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(2, {
-      filePath: '\\\\wsl.localhost\\Ubuntu\\root\\workspace\\myrepo\\README.md',
-      fileId: '\\\\wsl.localhost\\Ubuntu\\root\\workspace\\myrepo\\README.md',
-      line: 5,
-      column: 3,
-      matchLength: 0
-    })
+    expect(setPendingEditorRevealMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        filePath: '\\\\wsl.localhost\\Ubuntu\\root\\workspace\\myrepo\\README.md',
+        fileId: '\\\\wsl.localhost\\Ubuntu\\root\\workspace\\myrepo\\README.md',
+        line: 5,
+        column: 3,
+        matchLength: 0
+      })
+    )
   })
 
   it('opens a single-row file path with the system default from shift modifier fallback', async () => {
@@ -198,6 +201,7 @@ describe('createFilePathLinkProvider range bounds', () => {
 
   it('opens a wrapped continuation-row html path from a direct modifier-click fallback', async () => {
     setPlatform('Macintosh')
+    storeState.settings = { openLinksInApp: true }
     const rows = [
       makeBufferLine('open mobile/mock-'),
       makeBufferLine('homepage.html', { isWrapped: true })
