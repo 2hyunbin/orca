@@ -2,6 +2,8 @@ import { sessionTabsListRead } from './mobile-session-read-operations'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcFailure } from '../transport/types'
 
+export const RECONCILIATION_INTERVAL_MS = 2000
+
 export type SessionTabsApplyOutcome<Tab> =
   | { accepted: false }
   | { accepted: true; effectiveTabs: readonly Tab[]; applicationRevision?: number }

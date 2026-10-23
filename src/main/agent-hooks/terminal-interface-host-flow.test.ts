@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from './server'
 import {
   TerminalInterfaceAuthority,
-  type TerminalInterfaceTarget
+  type TerminalInterfaceTarget,
+  type TerminalInterfaceDriver
 } from './server/terminal-interface-authority'
 import {
   isAgentLaunchRunningIn,
@@ -365,4 +366,51 @@ describe('execution-host terminal interface flow', () => {
     expect(retire).toHaveBeenCalledTimes(1)
     expect(authority.read('pty', 'new-birth')?.basis).toBe('cold')
   })
+})
+
+it('keeps Windows native work owned across waiter timeout and driver replacement, then admits the remaining job', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+  const authority = new TerminalInterfaceAuthority()
+  const inventory = Array.from({ length: 3 }, (_, index) => ({
+    ...target,
+    binding: { ...target.binding, ptyId: `job-${index}` }
+  }))
+  const finish: (() => void)[] = []
+  let running = 0
+  let maximum = 0
+  const inspect = vi.fn<TerminalInterfaceDriver['inspect']>(
+    () =>
+      new Promise<TerminalProcessInspection>((resolve) => {
+        running += 1
+        maximum = Math.max(maximum, running)
+        finish.push(() => {
+          running -= 1
+          resolve(alive)
+        })
+      })
+  )
+  const install = () =>
+    authority.install({ inventory: () => inventory, inspect, changed: () => {} })
+  try {
+    install()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(inspect).toHaveBeenCalledTimes(2)
+    install()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(inspect).toHaveBeenCalledTimes(2)
+    finish.splice(0).forEach((resolve) => resolve())
+    await vi.advanceTimersByTimeAsync(250)
+    expect(inspect).toHaveBeenCalledTimes(4)
+    finish.splice(0).forEach((resolve) => resolve())
+    await vi.advanceTimersByTimeAsync(250)
+    expect(inspect.mock.calls.some(([binding]) => binding.ptyId === 'job-2')).toBe(true)
+    expect(maximum).toBe(2)
+  } finally {
+    authority.stop()
+    finish.splice(0).forEach((resolve) => resolve())
+    Object.defineProperty(process, 'platform', platform)
+    vi.useRealTimers()
+  }
 })

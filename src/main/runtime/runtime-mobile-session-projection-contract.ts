@@ -1,4 +1,3 @@
-import type { TerminalInterfaceObservation } from '../../shared/terminal-interface-observation'
 import type { AgentStatusEntry, AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import type {
   BrowserTabInfo,
@@ -14,7 +13,6 @@ import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-term
 import type { TitleDisplayClear } from './runtime-worktree-status-projection'
 
 export type RuntimeMobileSessionProjectionHost = {
-  readTerminalInterface?(ptyId: string, incarnationId: string): TerminalInterfaceObservation | null
   tabs: ReadonlyMap<string, RuntimeSyncedTab>
   leaves: ReadonlyMap<string, RuntimeLeafRecord>
   ptysById: ReadonlyMap<string, RuntimePtyWorktreeRecord>
@@ -64,14 +62,4 @@ export type RuntimeMobileSessionProjectionHost = {
 export type RuntimeMobileSessionProjectionInput = {
   snapshot: RuntimeMobileSessionTabsSnapshot
   tabs: RuntimeMobileSessionClientTab[]
-}
-
-export function projectMobileTerminalInterface(
-  host: RuntimeMobileSessionProjectionHost,
-  pty: RuntimePtyWorktreeRecord | null
-): { terminalInterface?: TerminalInterfaceObservation } {
-  const terminalInterface = pty?.incarnationId
-    ? host.readTerminalInterface?.(pty.ptyId, pty.incarnationId)
-    : null
-  return terminalInterface ? { terminalInterface } : {}
 }

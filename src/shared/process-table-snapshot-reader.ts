@@ -308,20 +308,6 @@ export async function getFreshProcessTableSnapshot(): Promise<ProcessTableRow[]>
   return (await processTableReader.getFreshSnapshot()).lenient()
 }
 
-export async function getFreshStrictProcessTableSnapshotWithAge(): Promise<{
-  rows: ProcessTableRow[]
-  capturedAgeMs: number
-}> {
-  return withEvidenceBudget(captureFreshStrictProcessTableSnapshot())
-}
-
-/** Owner cohorts retain this work until capture settles, independently of each waiter's budget. */
-export async function captureFreshStrictProcessTableSnapshot() {
-  const started = performance.now()
-  const value = await processTableReader.getFreshSnapshot()
-  return { rows: value.strict(), capturedAgeMs: performance.now() - started }
-}
-
 export async function getStrictProcessTableSnapshot(): Promise<ProcessTableRow[]> {
   return (await processTableReader.getSnapshot()).strict()
 }

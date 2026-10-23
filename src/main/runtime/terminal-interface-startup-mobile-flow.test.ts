@@ -72,8 +72,7 @@ it.each([undefined, 'Keep this editable'])(
       buildPtyStatus: () => ({}),
       sanitizeGroups: () => [],
       pruneGroupLayout: () => null,
-      collectTabIds: () => new Set(),
-      readTerminalInterface: (id, incarnation) => authority.read(id, incarnation)
+      collectTabIds: () => new Set()
     }
     const project = () => {
       const result = projectRuntimeMobileSessionTabs(
@@ -85,7 +84,11 @@ it.each([undefined, 'Keep this editable'])(
       }
       expect(result.launchDraft).toBe(draft)
       expect(result.launchAgent).toBe(startup.launchAgent)
-      return result
+      expect(result).not.toHaveProperty('terminalInterface')
+      return {
+        ...result,
+        terminalInterface: authority.read(binding.ptyId, binding.incarnationId) ?? undefined
+      }
     }
     try {
       expect(project()).toMatchObject({ status: 'pending-handle', terminal: null })

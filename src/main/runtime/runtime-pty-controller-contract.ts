@@ -155,6 +155,7 @@ export type RuntimePtyController = {
       expectedIncarnationId?: PtyIncarnationId
       scanChildProcesses?: boolean
       terminalInterface?: boolean
+      steadyState?: boolean
     }
   ): Promise<PtyProcessInspection>
   confirmForegroundProcess?(ptyId: string): Promise<string | null>

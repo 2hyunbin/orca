@@ -1,4 +1,3 @@
-import { requestTerminalInterfaceSnapshot } from '../providers/terminal-interface-capture-cohort'
 import type { TerminalInterfaceEvidence } from '../../shared/terminal-interface-observation'
 import { pruneRetiredPtyIncarnations } from '../../shared/retired-pty-incarnations'
 import { getInspectableTerminalHostSession } from './terminal-host-session-access'
@@ -79,7 +78,7 @@ export async function inspectTerminalHostProcess(args: {
 
   const incarnationMatches =
     !expectedIncarnationId || expectedIncarnationId === session.incarnationId
-  if (args.steadyState === true && !args.terminalInterface && incarnationMatches) {
+  if (args.steadyState === true && incarnationMatches) {
     const anchored = await readAnchoredForeground(session)
     if (anchored !== null) {
       args.onTier?.('cheap')
@@ -92,7 +91,7 @@ export async function inspectTerminalHostProcess(args: {
 
   const snapshot =
     args.terminalInterface && incarnationMatches && process.platform !== 'win32'
-      ? await requestTerminalInterfaceSnapshot().catch(() => null)
+      ? await getStrictProcessTableSnapshotWithAge().catch(() => null)
       : undefined
   let foregroundProcess = session.getForegroundProcess()
   let childProcessEvidence: PtyChildProcessVerdict | undefined = session.processNameIsSpawnFile

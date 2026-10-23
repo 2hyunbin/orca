@@ -54,7 +54,9 @@ export function createPaneForegroundObservationTransitions(
       if (disposed()) {
         return
       }
-      cancelPendingRead()
+      if (!hasCommandReadInFlight()) {
+        cancelPendingRead()
+      }
       deps.publish({ agent: null, shellForeground: true })
     },
     onProcessExitConfirmed(process) {

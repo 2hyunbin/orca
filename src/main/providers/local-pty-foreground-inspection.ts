@@ -118,7 +118,8 @@ async function revalidateCachedPosixAgent(
 
 export async function getLocalPtyForegroundProcess(
   id: string,
-  rows?: readonly ProcessTableRow[]
+  rows?: readonly ProcessTableRow[],
+  anchoredOnly = false
 ): Promise<string | null> {
   const proc = ptyProcesses.get(id)
   if (!proc) {
@@ -185,6 +186,9 @@ export async function getLocalPtyForegroundProcess(
     }
     ptyLastRecognizedForeground.set(id, { ...cachedEntry, at: Date.now() })
     return cachedAgent
+  }
+  if (anchoredOnly) {
+    return null
   }
   try {
     const resolution = await createPtyForegroundResolver(proc)(proc.pid, fallbackProcess, {

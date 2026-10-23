@@ -1,4 +1,3 @@
-import { projectMobileTerminalInterface } from './runtime-mobile-session-projection-contract'
 import {
   normalizeCompatibleAgentStatusEntryForOwner,
   normalizeCompatibleAgentTitleForOwner,
@@ -262,7 +261,6 @@ export function projectRuntimeMobileSessionTabs(
       : {}
     tabs.push({
       type: 'terminal',
-      ...projectMobileTerminalInterface(host, terminalPty),
       id: tab.id,
       parentTabId: tab.parentTabId,
       leafId: tab.leafId,

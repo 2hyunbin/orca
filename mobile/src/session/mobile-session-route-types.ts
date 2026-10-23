@@ -19,6 +19,7 @@ export type MobileSessionTabType = 'terminal' | 'markdown' | 'file' | 'browser' 
 export type MobileSessionTab =
   | {
       type: 'terminal'
+      incarnationId?: string | null
       terminalInterface?: TerminalInterfaceObservation
       id: string
       title: string

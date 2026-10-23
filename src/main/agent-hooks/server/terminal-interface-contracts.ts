@@ -19,14 +19,16 @@ export type TerminalInterfaceTarget = {
   local: boolean
 }
 export type TerminalInterfaceDriver = {
-  inventory: () => TerminalInterfaceTarget[]
-  inspect: (binding: TerminalInterfaceBinding) => Promise<TerminalProcessInspection | null>
+  inventory: (ptyId?: string) => TerminalInterfaceTarget[]
+  inspect: (
+    binding: TerminalInterfaceBinding,
+    steadyState: boolean
+  ) => Promise<TerminalProcessInspection | null>
   changed: () => void
   dispose?: () => void
 }
 export type Lease = {
   driver: TerminalInterfaceDriver
-  running: number
   controller: AbortController
 }
 export type Entry = {

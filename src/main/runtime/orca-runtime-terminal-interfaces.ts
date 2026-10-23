@@ -1,3 +1,4 @@
+import { createKeyedTrailingEdgeCoalescer } from './keyed-trailing-edge-coalescer'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { isAgentLaunchRunningIn } from '../agent-launch/agent-launch-pane-attachment'
 import type { TerminalInterfaceTarget } from '../agent-hooks/server/terminal-interface-authority'
@@ -23,36 +24,42 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
       const offInput = this.terminalRunFacts.onObservationInput((ptyId, kind) =>
         authority.input(ptyId, kind)
       )
+      const changes = createKeyedTrailingEdgeCoalescer(
+        () => this.emitClientEvent(authority.snapshotEvent()),
+        { flushMs: 0, maxWaitMs: 250 }
+      )
       const stop = authority.install({
-        dispose: offInput,
-        inventory: () => this.terminalInterfaceInventory(),
-        inspect: (binding) =>
+        dispose: () => {
+          offInput()
+          changes.flushAll()
+          changes.dispose()
+        },
+        inventory: (ptyId) => this.terminalInterfaceInventory(ptyId),
+        inspect: (binding, steadyState) =>
           this.ptyController?.inspectProcess?.(binding.ptyId, {
             expectedIncarnationId: binding.incarnationId,
             scanChildProcesses: true,
-            terminalInterface: true
+            terminalInterface: true,
+            steadyState
           }) ?? Promise.resolve(null),
-        changed: () => {
-          this.emitClientEvent(authority.snapshotEvent())
-          for (const worktreeId of this.mobileSessionTabsByWorktree.keys()) {
-            this.touchMobileSessionTabsForWorktree(worktreeId, { immediate: true })
-          }
-        }
+        changed: () => changes.schedule('terminal-interfaces')
       })
-      this.registerSubscriptionCleanup('terminal-interface-host', () => {
-        offInput()
-        stop()
-      })
+      this.registerSubscriptionCleanup('terminal-interface-host', stop)
     }
   }
-  private terminalInterfaceInventory(): TerminalInterfaceTarget[] {
-    return [...this.ptysById.values()].flatMap((pty) => {
-      const { paneKey } = this.paneOfPty(pty)
-      if (!pty.connected || !pty.incarnationId || !paneKey) {
+  private terminalInterfaceInventory(ptyId?: string): TerminalInterfaceTarget[] {
+    const target = ptyId === undefined ? undefined : this.ptysById.get(ptyId)
+    const terminals = ptyId === undefined ? this.ptysById.values() : target ? [target] : []
+    return [...terminals].flatMap((pty) => {
+      if (!pty.connected || !pty.incarnationId || pty.connectionId !== null || pty.isWsl === true) {
         return []
       }
       const terminalHandle = this.handleByPtyId.get(pty.ptyId)
       if (!terminalHandle) {
+        return []
+      }
+      const { paneKey } = this.paneOfPty(pty)
+      if (!paneKey) {
         return []
       }
       const pane = parsePaneKey(paneKey)
@@ -67,7 +74,7 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
           },
           generation: this.getPtyLifecycleGeneration(pty.ptyId),
           launchToken: pty.launchToken ?? null,
-          local: pty.connectionId === null && pty.isWsl !== true,
+          local: true,
           blocked:
             this.intentionalPtyStops.hasStop(pty.ptyId, pty.incarnationId) ||
             (pane !== null && isAgentLaunchRunningIn(pty.worktreeId, { kind: 'pane', ...pane })) ||

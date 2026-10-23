@@ -1,4 +1,4 @@
-import type { TerminalInterfaceSnapshot } from '../providers/terminal-interface-capture-cohort'
+import type { TerminalInterfaceSnapshot } from '../providers/terminal-interface-process-evidence'
 import { inspectSessionTerminalInterface } from '../providers/terminal-interface-process-evidence'
 import { isValidPtySize } from './daemon-pty-size'
 import type { SessionOutputPlane, AttachedClient } from './session-output-plane'

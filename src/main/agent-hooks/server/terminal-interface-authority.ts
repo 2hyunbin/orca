@@ -1,5 +1,5 @@
 import {
-  sameTerminalInterfaceTarget,
+  captureTerminalInterfaceSampleCurrentness,
   syncTerminalInterfaceInventory
 } from './terminal-interface-inventory'
 import { TerminalInterfaceHookIngress } from './terminal-interface-hook-ingress'
@@ -47,7 +47,7 @@ export class TerminalInterfaceAuthority {
   install(driver: TerminalInterfaceDriver): () => void {
     this.stop()
     this.hooks.reset()
-    const lease: Lease = { driver, running: 0, controller: new AbortController() }
+    const lease: Lease = { driver, controller: new AbortController() }
     this.lease = lease
     this.lastTick = performance.now()
     this.tick(lease)
@@ -66,9 +66,9 @@ export class TerminalInterfaceAuthority {
     }
     this.timer = null
     lease?.controller.abort()
-    const hadObservations = [...this.entries.values()].some((entry) => entry.observation)
+    const changed = [...this.entries.values()].some((entry) => entry.observation)
     this.entries.clear()
-    if (hadObservations) {
+    if (changed) {
       this.version += 1
       lease?.driver.changed()
     }
@@ -165,72 +165,93 @@ export class TerminalInterfaceAuthority {
       }
     }
     this.lastTick = now
-    const due = [...this.entries.values()]
-      .filter(
-        (entry) => !entry.target.blocked && entry.target.local && !entry.pending && entry.due <= now
-      )
-      .sort((left, right) => left.due - right.due)
-    for (const entry of due.slice(0, Math.max(0, 2 - lease.running))) {
-      void this.sample(lease, entry)
-    }
+    this.probes.sampleDue(
+      this.entries.values(),
+      now,
+      (entry, changed) => this.sample(lease, entry, changed),
+      () => {
+        if (this.lease === lease) {
+          lease.driver.changed()
+        }
+      }
+    )
     this.timer = setTimeout(() => this.tick(lease), 250)
     this.timer.unref?.()
   }
 
-  private async sample(lease: Lease, entry: Entry): Promise<void> {
+  private async sample(lease: Lease, entry: Entry, changed: () => void): Promise<void> {
     entry.pending = true
-    lease.running += 1
     const target = entry.target
-    const input = entry.input
-    const fence = entry.fence
-    const current = (): boolean =>
-      this.lease === lease &&
-      this.entries.get(target.binding.ptyId) === entry &&
-      entry.input === input &&
-      entry.fence === fence &&
-      !entry.target.blocked &&
-      sameTerminalInterfaceTarget(target, entry.target) &&
-      lease.driver
-        .inventory()
-        .some((candidate) => !candidate.blocked && sameTerminalInterfaceTarget(target, candidate))
+    const matches = captureTerminalInterfaceSampleCurrentness(this.entries, lease, entry)
+    const current = (): boolean => this.lease === lease && matches()
     try {
-      const result = await this.probes.bounded(lease, this.probes.inspect(lease, target.binding))
+      const requestedAt = performance.now()
+      const result = await this.probes.bounded(
+        lease,
+        this.probes.inspect(
+          lease,
+          target.binding,
+          entry.observation?.state === 'agent' && process.platform !== 'win32'
+        )
+      )
       if (!current()) {
         return
       }
       const evidence = result?.terminalInterface
       if (
+        !evidence &&
+        entry.observation?.state === 'agent' &&
+        recognizeAgentProcess(result?.foregroundProcess)
+      ) {
+        entry.shellSince = entry.emptySince = null
+        entry.due = performance.now() + 750
+        return
+      }
+      const age = (evidence?.capturedAgeMs ?? Infinity) + performance.now() - requestedAt
+      const capturedAt = requestedAt - (evidence?.capturedAgeMs ?? Infinity)
+      if (
         !result ||
         !evidence ||
-        evidence.capturedAgeMs > 1000 ||
+        !Number.isFinite(age) ||
+        age > 1000 ||
         evidence.capturedAgeMs < 0 ||
         evidence.children === 'unverifiable'
       ) {
-        this.unavailable(entry)
+        this.unavailable(entry, changed)
+        return
+      }
+      if (capturedAt < entry.discoverUntil - 8000) {
+        entry.shellSince = entry.emptySince = null
+        entry.due = performance.now() + 250
         return
       }
       entry.qualified = true
       const recognized = recognizeAgentProcess(result.foregroundProcess)
       if (evidence.shellForeground && (entry.actual || evidence.children === 'no-children')) {
         entry.shellSince ??= performance.now()
-        if (performance.now() - entry.shellSince > 750) {
-          this.publish(entry, 'shell', entry.actual ? (entry.owner ? 'hook' : 'process') : 'cold')
+        if (capturedAt - entry.shellSince > 750) {
+          this.publish(
+            entry,
+            'shell',
+            entry.actual ? (entry.owner ? 'hook' : 'process') : 'cold',
+            changed
+          )
         }
       } else if (recognized && evidence.children === 'children') {
         entry.actual = true
         entry.executionLaunchToken = entry.target.launchToken
         entry.shellSince = entry.emptySince = null
-        this.publish(entry, 'agent', 'process')
+        this.publish(entry, 'agent', 'process', changed)
       } else if (!evidence.shellForeground && evidence.children === 'children') {
         entry.shellSince = null
-        this.publish(entry, 'unverifiable', 'process')
+        this.publish(entry, 'unverifiable', 'process', changed)
       } else {
-        this.unavailable(entry)
+        this.unavailable(entry, changed)
         return
       }
       if (evidence.children === 'no-children' && entry.owner?.current()) {
         entry.emptySince ??= performance.now()
-        if (performance.now() - entry.emptySince > 1500) {
+        if (capturedAt - entry.emptySince > 1500) {
           const owner = entry.owner
           const allowed = await this.probes.bounded(lease, owner.mayRetire())
           if (current() && entry.owner === owner && owner.current() && allowed) {
@@ -251,19 +272,18 @@ export class TerminalInterfaceAuthority {
           : 15000)
     } catch {
       if (current()) {
-        this.unavailable(entry)
+        this.unavailable(entry, changed)
       }
     } finally {
       entry.pending = false
-      lease.running -= 1
     }
   }
 
-  private unavailable(entry: Entry): void {
+  private unavailable(entry: Entry, changed: () => void): void {
     entry.shellSince = entry.emptySince = null
     // Failed reads cannot revoke accepted execution facts; cold proof must remain fresh.
     if (entry.qualified && (!entry.observation || entry.observation.basis === 'cold')) {
-      this.publish(entry, 'unverifiable', 'process')
+      this.publish(entry, 'unverifiable', 'process', changed)
     }
     entry.due = performance.now() + 3000
   }
@@ -271,7 +291,8 @@ export class TerminalInterfaceAuthority {
   private publish(
     entry: Entry,
     state: TerminalInterfaceObservation['state'],
-    basis: TerminalInterfaceObservation['basis']
+    basis: TerminalInterfaceObservation['basis'],
+    changed = () => this.lease?.driver.changed()
   ): void {
     if (
       entry.observation?.state === state &&
@@ -291,6 +312,6 @@ export class TerminalInterfaceAuthority {
       state,
       basis
     }
-    this.lease?.driver.changed()
+    changed()
   }
 }

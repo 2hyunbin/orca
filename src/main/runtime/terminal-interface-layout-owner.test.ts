@@ -55,7 +55,8 @@ it('observes main-bound terminals without pane copies and retracts after exit', 
     expect(inspect).toHaveBeenCalledWith('pty-observed', {
       expectedIncarnationId: 'birth',
       scanChildProcesses: true,
-      terminalInterface: true
+      terminalInterface: true,
+      steadyState: false
     })
     expect(authority.read('pty-observed', 'birth')).toMatchObject({ paneKey, state: 'shell' })
     expect(authority.read('pty-observed', 'another-birth')).toBeNull()

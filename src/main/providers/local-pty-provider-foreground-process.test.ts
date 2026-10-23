@@ -1,3 +1,4 @@
+import type * as ProcessTableSnapshotReader from '../../shared/process-table-snapshot-reader'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as foregroundInspection from './local-pty-foreground-inspection'
 import * as childInspection from '../daemon/pty-subprocess/spawn-file-child-processes'
@@ -35,8 +36,9 @@ const {
   createShellPromptReadinessProbeMock: vi.fn()
 }))
 
-vi.mock('./terminal-interface-capture-cohort', () => ({
-  requestTerminalInterfaceSnapshot: interfaceSnapshotMock
+vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProcessTableSnapshotReader>()),
+  getStrictProcessTableSnapshotWithAge: interfaceSnapshotMock
 }))
 
 vi.mock('fs', () => ({

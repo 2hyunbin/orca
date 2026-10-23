@@ -81,11 +81,11 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
       return true
     }
     // Shell ownership releases input; only a separately confirmed death retires lifetime state.
-    session.deferredCommandFinishedStatusDrop = null
-    session.deferredConfirmedShellReconcile = null
     if (kind === 'foreground-release') {
       session.paneForegroundAgentTracker.onShellForegroundObserved()
     } else if (kind === 'process-exit' && process) {
+      session.deferredCommandFinishedStatusDrop = null
+      session.deferredConfirmedShellReconcile = null
       session.paneForegroundAgentTracker.onProcessExitConfirmed(process)
       if (sleeping) {
         session.clearSleepingRecordProviderDuplicates(state, sleeping)

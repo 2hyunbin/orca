@@ -1,8 +1,8 @@
 import type { SubprocessHandle } from '../daemon/session-subprocess-handle'
-import {
-  requestTerminalInterfaceSnapshot,
-  type TerminalInterfaceSnapshot
-} from './terminal-interface-capture-cohort'
+import { getStrictProcessTableSnapshotWithAge } from '../../shared/process-table-snapshot-reader'
+export type TerminalInterfaceSnapshot = Awaited<
+  ReturnType<typeof getStrictProcessTableSnapshotWithAge>
+>
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
 import {
   getCommandTokenPathBasename,
@@ -99,7 +99,7 @@ export async function inspectPosixTerminalInterface(
   loginWrapped = false,
   suppliedSnapshot?: TerminalInterfaceSnapshot
 ): Promise<TerminalInterfaceEvidence> {
-  const snapshot = suppliedSnapshot ?? (await requestTerminalInterfaceSnapshot())
+  const snapshot = suppliedSnapshot ?? (await getStrictProcessTableSnapshotWithAge())
   return terminalInterfaceEvidenceFromRows(
     snapshot.rows,
     rootPid,

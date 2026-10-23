@@ -16,6 +16,25 @@ export function sameTerminalInterfaceTarget(
   )
 }
 
+export function captureTerminalInterfaceSampleCurrentness(
+  entries: ReadonlyMap<string, Entry>,
+  lease: Lease,
+  entry: Entry
+): () => boolean {
+  const target = entry.target
+  const input = entry.input
+  const fence = entry.fence
+  return () =>
+    entries.get(target.binding.ptyId) === entry &&
+    entry.input === input &&
+    entry.fence === fence &&
+    !entry.target.blocked &&
+    sameTerminalInterfaceTarget(target, entry.target) &&
+    lease.driver
+      .inventory(target.binding.ptyId)
+      .some((candidate) => !candidate.blocked && sameTerminalInterfaceTarget(target, candidate))
+}
+
 export function syncTerminalInterfaceInventory(
   entries: Map<string, Entry>,
   lease: Lease,

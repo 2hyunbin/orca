@@ -242,6 +242,8 @@ it('composes authority boundaries with actual host captures, bounded successors,
     expect(authority.snapshot().some((item) => item.state === 'agent')).toBe(false)
     captures[0].finish()
     await vi.advanceTimersByTimeAsync(1)
+    expect(captures).toHaveLength(1) // Periodic demand never forces a successor to a running wave.
+    await vi.advanceTimersByTimeAsync(3500)
     expect(captures).toHaveLength(2)
     expect(captures[1].at).toBeGreaterThan(boundary)
     captures[1].finish()
@@ -256,6 +258,7 @@ it('composes authority boundaries with actual host captures, bounded successors,
     expect(
       events.flatMap((event) => event.observations).some((item) => item.terminalHandle === 'old')
     ).toBe(false)
+    await vi.advanceTimersByTimeAsync(750)
     shell = true
     facts.recordInput('one', 'driving', '/exit\r', 1)
     await vi.advanceTimersByTimeAsync(250)
@@ -269,7 +272,7 @@ it('composes authority boundaries with actual host captures, bounded successors,
     captures[2].finish() // A genuine shell table, acquired before newer input, must be discarded.
     await vi.advanceTimersByTimeAsync(1)
     expect(authority.read('one', birth)).toEqual(beforeInput)
-    await vi.advanceTimersByTimeAsync(250)
+    await vi.advanceTimersByTimeAsync(750)
     expect(captures).toHaveLength(4)
     expect(captures[3].at).toBeGreaterThan(inputBoundary)
     captures[3].finish(new Error('unreadable'))

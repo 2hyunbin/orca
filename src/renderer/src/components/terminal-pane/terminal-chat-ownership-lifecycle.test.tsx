@@ -585,180 +585,194 @@ it('releases a custom-title mounted Chat when only confirmed host release change
   expect(mocks.state.runtimePaneTitlesByTabId.tab[2]).toBe('My workspace')
 })
 
-it('composes actual D installer, real Done/launch teardown and mounted pending/cold Chat, then legacy episodes', async () => {
-  vi.useFakeTimers()
-  const previousApi = window.api
-  const confirm = vi.fn(async () => 'zsh')
-  let resolveFirstRead!: (value: string) => void
-  confirm.mockReturnValueOnce(
-    new Promise<string>((resolve) => {
-      resolveFirstRead = resolve
+it.each([false, true])(
+  'composes actual D installer, real Done/launch teardown and mounted pending/cold Chat, then legacy episodes (foreground first=%s)',
+  async (foregroundFirst) => {
+    vi.useFakeTimers()
+    const epoch = `installer-${foregroundFirst}`
+    const previousApi = window.api
+    const confirm = vi.fn(async () => 'zsh')
+    let resolveFirstRead!: (value: string) => void
+    confirm.mockReturnValueOnce(
+      new Promise<string>((resolve) => {
+        resolveFirstRead = resolve
+      })
+    )
+    const drop = vi.fn()
+    const reconcile = vi.fn()
+    Object.assign(window, {
+      api: {
+        pty: { getForegroundProcess: confirm, confirmForegroundProcess: confirm },
+        agentStatus: { drop, reconcileEndedProcess: reconcile }
+      }
     })
-  )
-  const drop = vi.fn()
-  const reconcile = vi.fn()
-  Object.assign(window, {
-    api: {
-      pty: { getForegroundProcess: confirm, confirmForegroundProcess: confirm },
-      agentStatus: { drop, reconcileEndedProcess: reconcile }
+    const fixture = makeFixture()
+    const pane = createPane(2)
+    const exited = vi.fn((leafId: string) => fixture.onAgentExitedRef.current(leafId))
+    const paneKey = makePaneKey('tab', RIGHT)
+    const ground = vi.fn()
+    const title = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies all fields read by the complete interrupt/identity installers; transport and terminal effects remain external spies.
+    const session = {
+      cacheKey: paneKey,
+      pendingSpawnKey: paneKey,
+      pane,
+      transport: { getPtyId: () => 'pty' },
+      remotePtyIncarnationId: 'birth',
+      spawnedFreshPtyId: 'pty',
+      disposed: false,
+      pendingStartupCommand: 'codex',
+      startupInjectTimer: null,
+      transportConnectInFlightSince: null,
+      getSleepingRecordForPane: () => null,
+      clearCommandInferredPaneAgentAfterPtySideEffects: vi.fn(),
+      neutralTerminalTitle: () => 'Terminal',
+      writeInputModeGround: ground,
+      manager: fixture.managerRef.current,
+      deps: {
+        tabId: 'tab',
+        worktreeId: 'wt',
+        cwd: '/workspace',
+        isPtyShutdownPending: () => false,
+        setRuntimePaneTitle: title,
+        updateTabTitle: vi.fn(),
+        onAgentExitedRef: { current: exited }
+      }
+    } as unknown as ConnectPanePtySession
+    installInterruptInputIntent(session)
+    const hook = renderHook(() => useFixture(fixture, RIGHT))
+    const finish = async () => {
+      session.commandLifecycle.handlePtyData('\x1b]133;D;0\x07')
+      await vi.advanceTimersByTimeAsync(350)
     }
-  })
-  const fixture = makeFixture()
-  const pane = createPane(2)
-  const exited = vi.fn((leafId: string) => fixture.onAgentExitedRef.current(leafId))
-  const paneKey = makePaneKey('tab', RIGHT)
-  const ground = vi.fn()
-  const title = vi.fn()
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies all fields read by the complete interrupt/identity installers; transport and terminal effects remain external spies.
-  const session = {
-    cacheKey: paneKey,
-    pendingSpawnKey: paneKey,
-    pane,
-    transport: { getPtyId: () => 'pty' },
-    remotePtyIncarnationId: 'birth',
-    spawnedFreshPtyId: 'pty',
-    disposed: false,
-    pendingStartupCommand: 'codex',
-    startupInjectTimer: null,
-    transportConnectInFlightSince: null,
-    getSleepingRecordForPane: () => null,
-    clearCommandInferredPaneAgentAfterPtySideEffects: vi.fn(),
-    neutralTerminalTitle: () => 'Terminal',
-    writeInputModeGround: ground,
-    manager: fixture.managerRef.current,
-    deps: {
-      tabId: 'tab',
-      worktreeId: 'wt',
-      cwd: '/workspace',
-      isPtyShutdownPending: () => false,
-      setRuntimePaneTitle: title,
-      updateTabTitle: vi.fn(),
-      onAgentExitedRef: { current: exited }
-    }
-  } as unknown as ConnectPanePtySession
-  installInterruptInputIntent(session)
-  const hook = renderHook(() => useFixture(fixture, RIGHT))
-  const finish = async () => {
-    session.commandLifecycle.handlePtyData('\x1b]133;D;0\x07')
-    await vi.advanceTimersByTimeAsync(350)
-  }
-  const row = () => useAppStore.getState().agentStatusByPaneKey[paneKey]
-  const accept = () => {
-    useAppStore
-      .getState()
-      .setAgentStatus(paneKey, { agentType: 'codex', state: 'done', prompt: 'task' })
-    useAppStore
-      .getState()
-      .registerAgentLaunchConfig(
-        paneKey,
-        { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
-        { agentType: 'codex', launchToken: 'future' }
-      )
-  }
-  try {
-    await act(async () => {
-      accept()
-      applyTerminalInterfaceSnapshot(
-        {
-          type: 'terminalInterfaces',
-          epoch: 'installer',
-          revision: 1,
-          observations: [
-            {
-              paneKey,
-              ptyId: 'pty',
-              incarnationId: 'birth',
-              terminalHandle: 'handle',
-              worktreeId: 'wt',
-              epoch: 'installer',
-              revision: 1,
-              inputRevision: 0,
-              executionLaunchToken: null,
-              owner: null,
-              state: 'shell',
-              basis: 'cold'
-            }
-          ]
-        },
-        null
-      )
-      await finish()
-      expect(confirm).toHaveBeenCalledOnce()
-      expect(row()).toBeDefined()
-      expect(drop).not.toHaveBeenCalled()
-      resolveFirstRead('zsh')
-      await vi.advanceTimersByTimeAsync(0)
-    })
-    expect(confirm).toHaveBeenCalledOnce() // No C or foreground recognition preceded D.
-    expect(row()).toBeUndefined()
-    expect(useAppStore.getState().agentLaunchConfigByPaneKey[paneKey]).toBeUndefined()
-    expect(drop).toHaveBeenCalledWith(paneKey)
-    expect(drop.mock.invocationCallOrder[0]).toBeLessThan(reconcile.mock.invocationCallOrder[0])
-    expect(hook.result.current.chatLeafId).toBe(RIGHT)
-    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
-    expect(ground).not.toHaveBeenCalled()
-    expect(exited).not.toHaveBeenCalled()
-    await act(async () => {
-      session.pendingStartupCommand = null
-      notifyPaneStartupStateChanged()
-      await Promise.resolve()
-    })
-    expect(hook.result.current.chatLeafId).toBe(RIGHT) // Removed row cannot qualify cold release.
-    expect(ground).not.toHaveBeenCalled()
-    await act(async () => {
+    const row = () => useAppStore.getState().agentStatusByPaneKey[paneKey]
+    const accept = () => {
       useAppStore
         .getState()
-        .setPaneForegroundAgent(makePaneKey('tab', LEFT), { agent: null, shellForeground: true })
-      applyTerminalInterfaceSnapshot(
-        { type: 'terminalInterfaces', epoch: 'installer', revision: 2, observations: [] },
-        null
-      )
-      accept()
-      await finish()
-    })
-    expect(row()).toBeUndefined()
-    expect(hook.result.current.chatLeafId).toBe(RIGHT)
-    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
-    expect(exited).not.toHaveBeenCalled()
-    expect(ground).not.toHaveBeenCalled()
-    await act(async () => {
-      confirm.mockResolvedValueOnce('codex')
-      session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
-      await vi.advanceTimersByTimeAsync(350)
-      expect(useAppStore.getState().paneForegroundAgentByPaneKey[paneKey]).toMatchObject({
-        agent: 'codex',
-        agentEvidence: 'process-read'
+        .setAgentStatus(paneKey, { agentType: 'codex', state: 'done', prompt: 'task' })
+      useAppStore
+        .getState()
+        .registerAgentLaunchConfig(
+          paneKey,
+          { agentCommand: 'codex', agentArgs: '', agentEnv: {} },
+          { agentType: 'codex', launchToken: 'future' }
+        )
+    }
+    try {
+      await act(async () => {
+        accept()
+        applyTerminalInterfaceSnapshot(
+          {
+            type: 'terminalInterfaces',
+            epoch,
+            revision: 1,
+            observations: [
+              {
+                paneKey,
+                ptyId: 'pty',
+                incarnationId: 'birth',
+                terminalHandle: 'handle',
+                worktreeId: 'wt',
+                epoch,
+                revision: 1,
+                inputRevision: 0,
+                executionLaunchToken: null,
+                owner: null,
+                state: 'shell',
+                basis: 'cold'
+              }
+            ]
+          },
+          null
+        )
+        if (foregroundFirst) {
+          session.acceptAgentDeparture('foreground-release')
+        }
+        session.commandLifecycle.handlePtyData('\x1b]133;D;0\x07')
+        session.acceptAgentDeparture('foreground-release')
+        expect(session.paneForegroundAgentTracker.hasReadInFlight()).toBe(true)
+        await vi.advanceTimersByTimeAsync(350)
+        expect(confirm).toHaveBeenCalledOnce()
+        session.acceptAgentDeparture('foreground-release')
+        expect(session.paneForegroundAgentTracker.hasReadInFlight()).toBe(true)
+        expect(row()).toBeDefined()
+        expect(drop).not.toHaveBeenCalled()
+        resolveFirstRead('zsh')
+        await vi.advanceTimersByTimeAsync(0)
       })
-      accept()
-      await finish()
-    })
-    expect(hook.result.current.chatLeafId).toBeNull()
-    expect(ground).toHaveBeenCalledTimes(1)
-    const reads = confirm.mock.calls.length
-    await act(finish)
-    expect(confirm).toHaveBeenCalledTimes(reads) // Accepted D ended tracker presentation history.
-    expect(ground).toHaveBeenCalledTimes(1)
-    await act(async () => {
-      // A new armed D row still settles before the same-shell tail is suppressed.
-      accept()
-      await finish()
-    })
-    expect(row()).toBeUndefined()
-    expect(ground).toHaveBeenCalledTimes(1)
-    await act(async () => {
-      accept()
-      confirm.mockResolvedValueOnce('codex')
-      session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
-      await vi.advanceTimersByTimeAsync(350)
-      await finish()
-    })
-    expect(row()).toBeUndefined()
-    expect(ground).toHaveBeenCalledTimes(2) // Actual execution after C owns a distinct departure episode.
-    expect(title).toHaveBeenCalledTimes(2)
-  } finally {
-    session.paneForegroundAgentTracker.dispose()
-    session.commandLifecycle.dispose()
-    session.unregisterTerminalInterfacePresentation?.()
-    Object.assign(window, { api: previousApi })
+      expect(confirm).toHaveBeenCalledOnce() // No C or foreground recognition preceded D.
+      expect(row()).toBeUndefined()
+      expect(useAppStore.getState().agentLaunchConfigByPaneKey[paneKey]).toBeUndefined()
+      expect(drop).toHaveBeenCalledWith(paneKey)
+      expect(drop.mock.invocationCallOrder[0]).toBeLessThan(reconcile.mock.invocationCallOrder[0])
+      session.acceptAgentDeparture('foreground-release')
+      expect(session.paneForegroundAgentTracker.hasReadInFlight()).toBe(false)
+      expect(hook.result.current.chatLeafId).toBe(RIGHT)
+      expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
+      expect(ground).not.toHaveBeenCalled()
+      expect(exited).not.toHaveBeenCalled()
+      await act(async () => {
+        session.pendingStartupCommand = null
+        notifyPaneStartupStateChanged()
+        await Promise.resolve()
+      })
+      expect(hook.result.current.chatLeafId).toBe(RIGHT) // Removed row cannot qualify cold release.
+      expect(ground).not.toHaveBeenCalled()
+      await act(async () => {
+        useAppStore
+          .getState()
+          .setPaneForegroundAgent(makePaneKey('tab', LEFT), { agent: null, shellForeground: true })
+        applyTerminalInterfaceSnapshot(
+          { type: 'terminalInterfaces', epoch, revision: 2, observations: [] },
+          null
+        )
+        accept()
+        await finish()
+      })
+      expect(row()).toBeUndefined()
+      expect(hook.result.current.chatLeafId).toBe(RIGHT)
+      expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
+      expect(exited).not.toHaveBeenCalled()
+      expect(ground).not.toHaveBeenCalled()
+      await act(async () => {
+        confirm.mockResolvedValueOnce('codex')
+        session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
+        await vi.advanceTimersByTimeAsync(350)
+        expect(useAppStore.getState().paneForegroundAgentByPaneKey[paneKey]).toMatchObject({
+          agent: 'codex',
+          agentEvidence: 'process-read'
+        })
+        accept()
+        await finish()
+      })
+      expect(hook.result.current.chatLeafId).toBeNull()
+      expect(ground).toHaveBeenCalledTimes(1)
+      const reads = confirm.mock.calls.length
+      await act(finish)
+      expect(confirm).toHaveBeenCalledTimes(reads) // Accepted D ended tracker presentation history.
+      expect(ground).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        // A new armed D row still settles before the same-shell tail is suppressed.
+        accept()
+        await finish()
+      })
+      expect(row()).toBeUndefined()
+      expect(ground).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        accept()
+        confirm.mockResolvedValueOnce('codex')
+        session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
+        await vi.advanceTimersByTimeAsync(350)
+        await finish()
+      })
+      expect(row()).toBeUndefined()
+      expect(ground).toHaveBeenCalledTimes(2) // Actual execution after C owns a distinct departure episode.
+      expect(title).toHaveBeenCalledTimes(2)
+    } finally {
+      session.paneForegroundAgentTracker.dispose()
+      session.commandLifecycle.dispose()
+      session.unregisterTerminalInterfacePresentation?.()
+      Object.assign(window, { api: previousApi })
+    }
   }
-})
+)

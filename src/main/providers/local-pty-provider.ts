@@ -1,4 +1,4 @@
-import { requestTerminalInterfaceSnapshot } from './terminal-interface-capture-cohort'
+import { getStrictProcessTableSnapshotWithAge } from '../../shared/process-table-snapshot-reader'
 import { inspectPosixTerminalInterface } from './terminal-interface-process-evidence'
 import { inspectSpawnFileWindowsChildProcesses } from '../daemon/pty-subprocess/spawn-file-child-processes'
 import type * as pty from 'node-pty'
@@ -168,9 +168,15 @@ export class LocalPtyProvider implements IPtyProvider {
         childProcessEvidence: 'unverifiable'
       }
     }
+    if (options?.terminalInterface && options.steadyState && process.platform !== 'win32') {
+      const anchored = await getLocalPtyForegroundProcess(id, undefined, true)
+      if (anchored && ptyProcesses.get(id) === proc && ptyIncarnations.get(id) === incarnation) {
+        return { foregroundProcess: anchored, hasChildProcesses: true }
+      }
+    }
     const snapshot =
       options?.terminalInterface && process.platform !== 'win32'
-        ? await requestTerminalInterfaceSnapshot().catch(() => null)
+        ? await getStrictProcessTableSnapshotWithAge().catch(() => null)
         : undefined
     if (ptyProcesses.get(id) !== proc || ptyIncarnations.get(id) !== incarnation) {
       return {
