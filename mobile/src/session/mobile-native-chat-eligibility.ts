@@ -5,7 +5,6 @@ import {
   isNativeChatSupportedAgent,
   nativeChatRequiresLocalTranscript
 } from '../../../src/shared/native-chat-agent-support'
-import type { MobileSessionTab } from './mobile-session-route-types'
 
 // Why: native chat renders an agent's own JSONL transcript, and the host
 // resolver knows these transcript layouts. Agents whose hook reports no
@@ -101,10 +100,10 @@ export function resolveMobileNativeChat(
 /** Why: a status frame that omits the agent or its session (an older host, a re-subscribe) is
  *  missing evidence, not proof the pane changed, so chat must not flip to the terminal. A new
  *  handle is a new PTY and starts fresh; a pending (null) handle keeps the last identity. */
-export function withRememberedNativeChatIdentity(
-  tabs: MobileSessionTab[],
-  previous: readonly MobileSessionTab[]
-): MobileSessionTab[] {
+// Why structural, not MobileSessionTab: the route types pull React Native globals into e2e.
+export function withRememberedNativeChatIdentity<
+  T extends MobileNativeChatTab & { id: string; terminal?: string | null }
+>(tabs: T[], previous: readonly T[]): T[] {
   const previousById = new Map(previous.map((tab) => [tab.id, tab]))
   return tabs.map((tab) => {
     if (tab.type !== 'terminal') {
@@ -114,14 +113,18 @@ export function withRememberedNativeChatIdentity(
     const prior = priorTab?.type === 'terminal' ? priorTab.nativeChatIdentity : undefined
     const carried =
       prior && (tab.terminal == null || tab.terminal === prior.terminal) ? prior : undefined
-    const { nativeChatIdentity: _hostless, ...live } = tab
-    const resolved = resolveMobileNativeChat({ ...live, nativeChatIdentity: carried }, true)
+    const resolved = resolveMobileNativeChat({ ...tab, nativeChatIdentity: carried }, true)
     const terminal = tab.terminal ?? carried?.terminal
-    if (!resolved || !terminal) {
-      return live
-    }
-    const { agent, sessionId, transcriptPath } = resolved
-    return { ...live, nativeChatIdentity: { terminal, agent, sessionId, transcriptPath } }
+    const nativeChatIdentity =
+      resolved && terminal
+        ? {
+            terminal,
+            agent: resolved.agent,
+            sessionId: resolved.sessionId,
+            transcriptPath: resolved.transcriptPath
+          }
+        : undefined
+    return { ...tab, nativeChatIdentity }
   })
 }
 
