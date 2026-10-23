@@ -3412,6 +3412,11 @@ html.native-shell .app-layout {
   white-space: nowrap;
 }
 
+/* The positioning wrapper must also let pointer events reach the controls below it. */
+[data-radix-popper-content-wrapper]:has(> [data-cursor-tooltip]) {
+  pointer-events: none;
+}
+
 .workspace-reference-title > span {
   display: block;
   overflow: hidden;

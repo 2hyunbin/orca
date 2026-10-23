@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react'
 import { CircleDot, GitMerge, GitPullRequest } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { FilePathCursorTooltip } from '@/components/file-path-cursor-tooltip'
 import { translate } from '@/i18n/i18n'
 import { ReviewChecksIndicator, reviewStateLabel } from './WorktreeCardMetadataStatusBadges'
 import { getReviewLabel, ReviewIcon } from './worktree-review-helpers'
@@ -68,25 +69,27 @@ export function WorktreeCardReferenceRow({
       </div>
       <div className="min-w-0 flex-1">
         {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="workspace-reference-title block w-full rounded-sm text-xs font-medium leading-snug underline decoration-muted-foreground/50 underline-offset-2 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            onPointerEnter={(event) => measureTitleOverflow(event.currentTarget)}
-            onFocus={(event) => measureTitleOverflow(event.currentTarget)}
-            aria-label={translate('workspace.links.openItem', 'Open {{label}}', {
-              label
-            })}
-            onClick={(event) => {
-              event.stopPropagation()
-              onOpen(url, event)
-            }}
-            onAuxClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
-            <span>{title}</span>
-          </a>
+          <FilePathCursorTooltip path={url}>
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="workspace-reference-title block w-full rounded-sm text-xs font-medium leading-snug underline decoration-muted-foreground/50 underline-offset-2 outline-none hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              onPointerEnter={(event) => measureTitleOverflow(event.currentTarget)}
+              onFocus={(event) => measureTitleOverflow(event.currentTarget)}
+              aria-label={translate('workspace.links.openItem', 'Open {{label}}', {
+                label
+              })}
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpen(url, event)
+              }}
+              onAuxClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              <span>{title}</span>
+            </a>
+          </FilePathCursorTooltip>
         ) : (
           <button
             type="button"
@@ -104,9 +107,10 @@ export function WorktreeCardReferenceRow({
           </button>
         )}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+          <span className="shrink-0">{label}</span>
           {review?.status ? <ReviewChecksIndicator status={review.status} /> : null}
           <span className="min-w-0 flex-1 truncate">
-            {label} · {provider}
+            · {provider}
             {source ? ` · ${source}` : ''}
           </span>
           {actions}

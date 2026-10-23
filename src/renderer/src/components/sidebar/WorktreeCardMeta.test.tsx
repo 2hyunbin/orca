@@ -86,9 +86,11 @@ describe('WorktreeCardDetailsHover', () => {
 
     expect(markup).toContain('Reviews · 1')
     expect(markup).toContain('aria-label="More PR actions"')
-    expect(markup.indexOf('PR #456 · GitHub')).toBeLessThan(
-      markup.indexOf('aria-label="More PR actions"')
+    expect(markup.indexOf('PR #456</span>')).toBeGreaterThan(-1)
+    expect(markup.indexOf('PR #456</span>')).toBeLessThan(
+      markup.indexOf('aria-label="Checks: Passing"')
     )
+    expect(markup.indexOf('· GitHub')).toBeLessThan(markup.indexOf('aria-label="More PR actions"'))
     expect(markup).toContain('aria-label="Add reference"')
     expect(markup).not.toContain('Manage links…')
     expect(markup).toContain('href="https://github.com/acme/orca/pull/456"')
