@@ -252,7 +252,9 @@ export function normalizeClaudeEvent(
               : {})
           }
       : undefined
-  const waitingToolUseId = eventToolUseId ?? previousLead?.waitingToolUseId
+  const waitingToolUseId =
+    eventToolUseId ??
+    (eventName === 'PermissionRequest' ? undefined : previousLead?.waitingToolUseId)
 
   if (isManualCompactCompletion) {
     // Why: a manual /compact only ever completes at an idle prompt, so a child that exists ONLY as

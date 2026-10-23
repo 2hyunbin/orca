@@ -19,6 +19,7 @@ export type ClaudePermissionObservation = {
   descendants: Set<string>
   anchored: boolean
   result: boolean
+  superseded?: boolean
   verdict: Verdict
   published?: Verdict
   lead?: ClaudeLeadTurnState
@@ -40,7 +41,8 @@ function blocks(row: Record<string, unknown>): Record<string, unknown>[] {
 
 function bindRequest(
   observation: ClaudePermissionObservation,
-  rows: Record<string, unknown>[]
+  rows: Record<string, unknown>[],
+  allowSettled: boolean
 ): number {
   const candidates: { id: string; uuid: string; index: number }[] = []
   const settled = new Set<string>()
@@ -78,7 +80,10 @@ function bindRequest(
   ) {
     return -1
   }
-  const id = observation.toolUseId ?? (pending.length === 1 ? pending[0].id : undefined)
+  // A late flush can contain both request and result; historical settled calls cannot identify a new wait.
+  const eligible = allowSettled ? candidates : pending
+  const ids = new Set(eligible.map((candidate) => candidate.id))
+  const id = observation.toolUseId ?? (ids.size === 1 ? eligible[0]?.id : undefined)
   const anchor = candidates.findLast((candidate) => candidate.id === id)
   if (anchor) {
     observation.toolUseId = anchor.id
@@ -89,11 +94,16 @@ function bindRequest(
   return -1
 }
 
-export function readClaudePermissionObservation(observation: ClaudePermissionObservation): void {
+export function readClaudePermissionObservation(
+  observation: ClaudePermissionObservation,
+  allowSettled = true
+): void {
   const rows = readJsonlCursor(observation.cursor, undefined, () => {
+    allowSettled = false
     observation.anchored = false
     observation.descendants.clear()
     observation.result = false
+    observation.superseded = false
     observation.verdict = 'working'
   })
   if (!rows) {
@@ -101,7 +111,7 @@ export function readClaudePermissionObservation(observation: ClaudePermissionObs
     return
   }
   observation.failures = 0
-  const start = observation.anchored ? 0 : bindRequest(observation, rows) + 1
+  const start = observation.anchored ? 0 : bindRequest(observation, rows, allowSettled) + 1
   if (!observation.anchored) {
     return
   }
@@ -116,13 +126,6 @@ export function readClaudePermissionObservation(observation: ClaudePermissionObs
       observation.failures = 3
       return
     }
-    if (
-      observation.promptId &&
-      row.promptId !== undefined &&
-      row.promptId !== observation.promptId
-    ) {
-      continue
-    }
     observation.descendants.add(row.uuid)
     const content = blocks(row)
     if (
@@ -136,6 +139,29 @@ export function readClaudePermissionObservation(observation: ClaudePermissionObs
       observation.descendants.clear()
       observation.descendants.add(row.uuid)
     }
+    const differentPrompt =
+      observation.promptId !== undefined &&
+      typeof row.promptId === 'string' &&
+      row.promptId !== observation.promptId
+    const interruption = content.some(
+      (block) =>
+        block.type === 'text' && block.text === '[Request interrupted by user for tool use]'
+    )
+    const userPrompt =
+      row.type === 'user' &&
+      row.isMeta !== true &&
+      row.isCompactSummary !== true &&
+      !interruption &&
+      !content.some((block) => block.type === 'tool_result') &&
+      ((isRecord(row.message) && typeof row.message.content === 'string') ||
+        content.some((block) => block.type === 'text' && typeof block.text === 'string'))
+    if (userPrompt || (differentPrompt && row.type === 'assistant' && content.length > 0)) {
+      observation.superseded = true
+      observation.verdict = 'working'
+    }
+    if (differentPrompt || observation.superseded) {
+      continue
+    }
     if (!observation.result) {
       continue
     }
@@ -143,12 +169,11 @@ export function readClaudePermissionObservation(observation: ClaudePermissionObs
       row.type === 'user' &&
       observation.promptId !== undefined &&
       row.promptId === observation.promptId &&
-      content.some(
-        (block) =>
-          block.type === 'text' && block.text === '[Request interrupted by user for tool use]'
-      )
+      interruption
     ) {
       observation.verdict = 'cancellation'
+    } else if (row.type === 'assistant' && content.length > 0) {
+      observation.verdict = 'working'
     } else if (
       row.type === 'system' &&
       row.subtype === 'turn_duration' &&

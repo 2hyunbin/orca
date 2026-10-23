@@ -59,7 +59,7 @@ export function prepareClaudePermissionObservation(
     verdict: 'working',
     failures: 0
   }
-  readClaudePermissionObservation(observation)
+  readClaudePermissionObservation(observation, false)
   state.claudePermissionObservationByPaneKey.set(paneKey, observation)
   return observation.anchored && observation.toolUseId
     ? { ...hook, tool_use_id: observation.toolUseId }
@@ -107,7 +107,8 @@ export function pollClaudePermissionTranscript(
     return undefined
   }
   const observation = state.claudePermissionObservationByPaneKey.get(original.paneKey)
-  if (!observation) {
+  const lead = state.claudeLeadStateByPaneKey.get(original.paneKey)
+  if (!observation || !lead) {
     return undefined
   }
   readClaudePermissionObservation(observation)
@@ -116,19 +117,24 @@ export function pollClaudePermissionTranscript(
   }
   const binding = !observation.published && original.toolUseId !== observation.toolUseId
   if (!binding && (!observation.result || observation.published === observation.verdict)) {
+    if (observation.superseded && observation.published === 'working') {
+      state.claudePermissionObservationByPaneKey.delete(original.paneKey)
+    }
     return undefined
   }
   const view = {
     ...state,
-    claudeLeadStateByPaneKey: new Map(state.claudeLeadStateByPaneKey),
-    lastToolByPaneKey: new Map(state.lastToolByPaneKey)
+    claudeLeadStateByPaneKey: new Map([[original.paneKey, lead]]),
+    lastToolByPaneKey: new Map([
+      [original.paneKey, state.lastToolByPaneKey.get(original.paneKey) ?? {}]
+    ])
   }
   const record = setClaudeMainAgentTurnState(
     view,
     original.paneKey,
     binding
       ? {
-          ...state.claudeLeadStateByPaneKey.get(original.paneKey),
+          ...lead,
           state: 'waiting',
           waitingToolUseId: observation.toolUseId
         }
@@ -189,7 +195,7 @@ export function pollClaudePermissionTranscript(
       if (!binding) {
         observation.published = observation.verdict
       }
-      if (!binding && observation.verdict !== 'working') {
+      if (!binding && (observation.verdict !== 'working' || observation.superseded)) {
         state.claudePermissionObservationByPaneKey.delete(original.paneKey)
       }
     }

@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { agentVerdictDisplayMark } from '../../shared/agent-main-agent-verdict'
+import { hookRowAgentPhase } from '../../shared/agent-transitions'
 import { createProgramStatusProjector } from '../../shared/program-status/agent-status-projector'
 import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import type { AgentHookRelayEnvelope } from '../../shared/agent-hook-relay'
@@ -158,6 +160,7 @@ describe('Claude permission result observation', () => {
       await pane.post({ hook_event_name: 'UserPromptSubmit', prompt: 'run the permission probe' })
       await permission(pane, tool)
       expect(pane.row()).toMatchObject({ state: 'waiting', toolName: 'Bash' })
+      expect(hookRowAgentPhase(pane.row()!)).toBe('needs-you')
       const terminal = readFileSync(
         join(__dirname, '../../shared/__fixtures__', `claude-permission-${action}.txt`),
         'utf8'
@@ -217,6 +220,7 @@ describe('Claude permission result observation', () => {
         mainAgent: { outcome: 'cancellation' }
       })
       expect(pane.row()?.toolName).toBeUndefined()
+      expect(agentVerdictDisplayMark(pane.row()!)).toBe('interrupted')
     }
   )
 
@@ -295,6 +299,92 @@ describe('Claude permission result observation', () => {
     await pane.tick()
     expect(pane.row()?.state).toBe('waiting')
   })
+
+  it.each([false, true])(
+    'binds a unique Q2 flushed after its ID-less hook (relay=%s)',
+    async (remote) => {
+      const pane = await setup(remote)
+      const { lines, tool } = capture('escape')
+      writeFileSync(pane.transcript, `${lines[0]}\n`)
+      await permission(pane, tool)
+      const second = { ...tool, id: 'late-q2', input: { command: 'second request' } }
+      await permission(pane, second)
+      await pane.tick()
+      expect(pane.row()).toMatchObject({ state: 'waiting', toolInput: 'second request' })
+      const q2 = lines.map((raw) =>
+        raw
+          .replaceAll(tool.id, second.id)
+          .replaceAll('escape2-node-', 'q2-node-')
+          .replaceAll(JSON.stringify(tool.input), JSON.stringify(second.input))
+      )
+      // Its request and result flush together after registration, without another hook.
+      appendFileSync(pane.transcript, `${q2.join('\n')}\n`)
+      await pane.tick()
+      await pane.tick() // Admit identity first, then the exact settlement through the same matcher.
+      expect(pane.row()).toMatchObject({ state: 'done', interrupted: true })
+      expect(agentVerdictDisplayMark(pane.row()!)).toBe('interrupted')
+      await pane.post({ hook_event_name: 'SubagentStart', agent_id: 'refresh' })
+      expect(pane.row()?.toolName).toBeUndefined()
+      // A new ID-less request without a fresh PreToolUse cannot reuse Q2's historical result.
+      await pane.post({
+        hook_event_name: 'PermissionRequest',
+        tool_name: second.name,
+        tool_input: second.input
+      })
+      await pane.tick()
+      expect(pane.row()).toMatchObject({ state: 'waiting', toolName: 'Bash' })
+    }
+  )
+
+  it.each([false, true])(
+    'settles Q1 without an old verdict when P2 precedes its hook (relay=%s)',
+    async (remote) => {
+      const pane = await setup(remote)
+      const { lines, tool } = capture('escape')
+      writeFileSync(pane.transcript, `${lines[0]}\n`)
+      await permission(pane, tool)
+      const root = { isSidechain: false, sessionId: SESSION, promptId: remote ? undefined : 'p2' }
+      const nextPrompt = {
+        ...root,
+        type: 'user',
+        uuid: 'p2-user',
+        parentUuid: 'escape2-node-6',
+        message: {
+          role: 'user',
+          content: remote ? 'Continue working' : [{ type: 'text', text: 'Continue working' }]
+        }
+      }
+      const nextAssistant = {
+        ...root,
+        type: 'assistant',
+        uuid: 'p2-assistant',
+        parentUuid: 'p2-user',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Continuing' }] }
+      }
+      appendFileSync(
+        pane.transcript,
+        `${lines.slice(1).join('\n')}\n${line(nextPrompt)}${line(nextAssistant)}`
+      )
+      if (remote) {
+        pane.disconnect()
+      }
+      await pane.tick()
+      if (remote) {
+        pane.reconnect()
+      }
+      expect(pane.row()).toMatchObject({ state: 'working', mainAgent: { state: 'working' } })
+      expect(pane.row()?.mainAgent?.outcome).toBeUndefined()
+      expect(pane.row()?.toolName).toBeUndefined()
+      expect(agentVerdictDisplayMark(pane.row()!)).toBeNull()
+      await pane.post({
+        hook_event_name: 'UserPromptSubmit',
+        prompt: 'Continue working',
+        prompt_id: 'p2'
+      })
+      await pane.tick()
+      expect(pane.row()).toMatchObject({ state: 'working', prompt: 'Continue working' })
+    }
+  )
 
   it('keeps the exact observation when a live terminal moves to another pane', async () => {
     const pane = await setup()
