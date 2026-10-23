@@ -7,11 +7,11 @@ import { createHash } from 'node:crypto'
 import {
   closeSync,
   existsSync,
+  fstatSync,
   fsyncSync,
   linkSync,
   mkdirSync,
   openSync,
-  readFileSync,
   readSync,
   readdirSync,
   rmSync,
@@ -83,11 +83,29 @@ export function orcadMigrationFileMatches(
   expected: OrcadMigrationStagedContent
 ): boolean {
   try {
-    const bytes = readFileSync(path)
-    return (
-      bytes.length === expected.byteLength &&
-      createHash('sha256').update(bytes).digest('hex') === expected.sha256
-    )
+    const descriptor = openSync(path, 'r')
+    try {
+      if (fstatSync(descriptor).size !== expected.byteLength) {
+        return false
+      }
+      const hash = createHash('sha256')
+      const chunk = Buffer.allocUnsafe(256 * 1024)
+      let length = 0
+      while (true) {
+        const bytesRead = readSync(descriptor, chunk, 0, chunk.length, null)
+        if (bytesRead === 0) {
+          break
+        }
+        length += bytesRead
+        if (length > expected.byteLength) {
+          return false
+        }
+        hash.update(chunk.subarray(0, bytesRead))
+      }
+      return length === expected.byteLength && hash.digest('hex') === expected.sha256
+    } finally {
+      closeSync(descriptor)
+    }
   } catch {
     return false
   }
