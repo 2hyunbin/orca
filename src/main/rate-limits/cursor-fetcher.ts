@@ -234,23 +234,23 @@ function credentialFailure(readResult: CursorAuthReadResult): ProviderRateLimits
 export async function fetchCursorRateLimits(
   options: { signal?: AbortSignal; authReadResult?: CursorAuthReadResult } = {}
 ): Promise<ProviderRateLimits> {
-  options.signal?.throwIfAborted()
-  const readResult =
-    options.authReadResult ?? (await readCursorAuthSession({ signal: options.signal }))
-  options.signal?.throwIfAborted()
-  const failure = credentialFailure(readResult)
-  if (failure || readResult.status !== 'ok') {
-    return failure ?? result('unavailable', SIGNED_OUT_MESSAGE)
-  }
-  const session = readResult.session
-  const source = usageSource(session)
-  const metadata = {
-    source,
-    credentialSource: session.source,
-    authProvenance: accountFingerprint(session)
-  }
-
+  let metadata: ProviderRateLimits['usageMetadata']
   try {
+    options.signal?.throwIfAborted()
+    const readResult =
+      options.authReadResult ?? (await readCursorAuthSession({ signal: options.signal }))
+    options.signal?.throwIfAborted()
+    const failure = credentialFailure(readResult)
+    if (failure || readResult.status !== 'ok') {
+      return failure ?? result('unavailable', SIGNED_OUT_MESSAGE)
+    }
+    const session = readResult.session
+    const source = usageSource(session)
+    metadata = {
+      source,
+      credentialSource: session.source,
+      authProvenance: accountFingerprint(session)
+    }
     const outcome = await fetchDashboardJson(USAGE_SUMMARY_URL, session, options.signal)
     if (outcome.kind === 'result') {
       return outcome.result
@@ -328,7 +328,6 @@ export async function fetchCursorRateLimits(
       usageMetadata: { ...metadata, failureKind: 'usage-unavailable' }
     })
   } catch {
-    options.signal?.throwIfAborted()
     return result('error', 'Cursor usage request failed', {
       usageMetadata: { ...metadata, failureKind: 'network' }
     })

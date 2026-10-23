@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
 import { colors, spacing, typography } from '../theme/mobile-theme'
 import type { ProviderRateLimits } from './account-usage-state'
+import type { UsageRateLimitSource } from '../../../src/shared/rate-limit-types'
 
 // Pure types and selectors live in account-usage-state.ts (no RN imports) so
 // they are unit-testable; re-exported here so existing import sites are stable.
@@ -26,15 +27,21 @@ export {
 
 export function UsageRequestsDisabledNotice({ limits }: { limits: ProviderRateLimits | null }) {
   const source = limits?.usageMetadata?.source ?? limits?.usageMetadata?.lastSuccessfulSource
+  const sourceLabels: Record<UsageRateLimitSource, string> = {
+    oauth: 'OAuth',
+    cli: 'CLI',
+    web: 'Web',
+    'live-session': 'Live session'
+  }
   return (
     <Text style={styles.policyNotice}>
       {source === 'live-session'
         ? 'Usage requests disabled. Live Claude statusLine data can still update.'
-        : 'Usage requests disabled. Shown usage is cached and may be stale.'}
+        : 'Usage requests disabled. Cached usage may be stale.'}
       {limits && limits.updatedAt > 0
         ? ` Last update: ${new Date(limits.updatedAt).toLocaleString()}.`
         : ''}
-      {source ? ` Source: ${source}.` : ''}
+      {source ? ` Source: ${sourceLabels[source]}.` : ''}
     </Text>
   )
 }

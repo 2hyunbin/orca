@@ -12,7 +12,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/i18n/i18n', () => ({
-  translate: (_key: string, fallback: string) => fallback
+  translate: (_key: string, fallback: string, values?: Record<string, string>) =>
+    fallback.replace(/\{\{(\w+)\}\}/g, (placeholder, key: string) => values?.[key] ?? placeholder)
 }))
 vi.mock('@/lib/agent-catalog', () => ({
   AgentIcon: ({ agent }: { agent: string }) => <span data-agent-icon={agent} />
@@ -67,8 +68,9 @@ describe('UsageRow', () => {
         />
       </UsageRequestPolicyContext.Provider>
     )
-    expect(markup).toContain('Usage requests disabled')
-    expect(markup).toContain('cached and may be stale')
+    expect(markup.match(/Usage requests disabled/g)).toHaveLength(1)
+    expect(markup).toContain('Cached usage may be stale.')
+    expect(markup).toContain('Source: Web')
     expect(markup).not.toContain('Fetching…')
     expect(provider.updatedAt).toBe(123_456)
   })

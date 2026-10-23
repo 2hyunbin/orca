@@ -197,6 +197,41 @@ it('cancels only the disabled provider and rejects its late result after reenabl
   expect(fetchClaudeRateLimits).toHaveBeenCalledTimes(2)
 })
 
+it('discards a structured Cursor cancellation result after disabling and reenabling', async () => {
+  const service = new RateLimitService()
+  let policy = enabled()
+  service.setUsageRequestPolicyResolver(() => policy)
+  vi.mocked(fetchCursorRateLimits).mockResolvedValue(okProvider('cursor', 42))
+  await service.refresh()
+  const cached = service.getState().cursor
+  const cancelled = deferred<ProviderRateLimits>()
+  const started = deferred<void>()
+  let signal: AbortSignal | undefined
+  vi.mocked(fetchCursorRateLimits).mockImplementationOnce((options) => {
+    signal = options?.signal
+    started.resolve()
+    return cancelled.promise
+  })
+  const pending = service.refresh()
+  await started.promise
+  policy = { ...policy, cursor: false }
+  service.reconcileUsageRequestPolicy()
+  expect(signal?.aborted).toBe(true)
+  policy = { ...policy, cursor: true }
+  service.reconcileUsageRequestPolicy()
+  cancelled.resolve({
+    provider: 'cursor',
+    status: 'error',
+    session: null,
+    weekly: null,
+    updatedAt: Date.now(),
+    error: 'Cursor usage request failed',
+    usageMetadata: { failureKind: 'network' }
+  })
+  await pending
+  expect(service.getState().cursor).toEqual(cached)
+})
+
 it('keeps live Claude attribution independent of disabled usage preparation at startup and retarget', async () => {
   const service = new RateLimitService()
   service.setUsageRequestPolicyResolver(() => enabled(false))

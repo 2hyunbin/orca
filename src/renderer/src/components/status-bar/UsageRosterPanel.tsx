@@ -162,11 +162,11 @@ export function UsageRow({
         </span>
         {!hasUsage ? (
           <>
-            <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-              {requestsDisabled
-                ? translate('settings.usageRequests.disabled', 'Usage requests disabled')
-                : state.statusLabel}
-            </span>
+            {!requestsDisabled ? (
+              <span className="min-w-0 truncate text-2xs text-muted-foreground">
+                {state.statusLabel}
+              </span>
+            ) : null}
             {showSignInAction ? (
               <span className="ml-auto shrink-0 rounded-md border border-border bg-secondary px-2.5 py-0.5 text-xs text-foreground">
                 {translate('auto.components.status.bar.StatusBar.c35af53b73', 'Sign in')}
@@ -363,7 +363,7 @@ export function UsageRosterPanel({
       {onUsageRequestSettings ? (
         <DropdownMenuItem
           onSelect={onUsageRequestSettings}
-          className="w-full cursor-pointer justify-between"
+          className="w-full cursor-pointer justify-between rounded-none px-3.5 py-2.5 text-[13px] text-foreground"
         >
           {translate('settings.usageRequests.menu', 'Usage request settings…')}
           <ChevronRight size={14} className="text-muted-foreground" />
