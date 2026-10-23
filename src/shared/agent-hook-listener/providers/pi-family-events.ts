@@ -8,7 +8,6 @@ import { resolvePrompt, resolveToolState } from '../prompt-fields'
 import { extractToolFields, isNewTurnEvent } from '../provider-event-routing'
 import { readString } from '../tool-input-preview'
 import { clearActiveToolFieldsUpdate } from '../interactive-tool'
-import { hasOwnField } from '../tool-input-preview'
 import { parseOmpPlanReviewPrompt } from '../../omp-plan-review-prompt'
 
 /** Maps a Pi-family hook event (Pi, OMP, Prime) onto a pane status: lifecycle
@@ -107,12 +106,12 @@ export function normalizePiCompatibleEvent(
     ? undefined
     : agentType === 'pi' && hookPayload.ui_prompt_active === true
       ? 'ui_prompt_start'
-      : agentType === 'omp' && hasOwnField(hookPayload, 'approval_mode')
+      : agentType === 'omp' && Object.hasOwn(hookPayload, 'approval_mode')
         ? 'tool_approval_requested'
         : agentType === 'omp' && readString(hookPayload, 'review_id')
           ? 'plan_review_requested'
           : (agentType === 'omp' ? toolName === 'ask' : isAskUserQuestionTool(toolName)) &&
-              hasOwnField(hookPayload, 'tool_input')
+              Object.hasOwn(hookPayload, 'tool_input')
             ? 'tool_call'
             : undefined
   if (complete) {
