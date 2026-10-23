@@ -529,13 +529,14 @@ it.each([10, 100])(
     let traversed = 0
     const items = Array.from({ length: n }, (_, i) => makeWorktree({ id: `row-${i}` }))
     seed(items)
-    const observed = new Proxy(items, {
-      get(target, key, receiver) {
-        if (typeof key === 'string' && /^\d+$/.test(key)) {
+    const observed = items.slice()
+    items.forEach((row, index) => {
+      Object.defineProperty(observed, index, {
+        get() {
           traversed++
+          return row
         }
-        return Reflect.get(target, key, receiver)
-      }
+      })
     })
     storeState.worktreesByRepo = { [REPO_ID]: observed }
     const change = vi.fn()
