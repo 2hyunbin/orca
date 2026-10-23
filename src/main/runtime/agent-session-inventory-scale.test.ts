@@ -26,7 +26,9 @@ import { parseWorkspaceReferenceUrl } from '../../shared/workspace-reference-ide
 import { createReferenceAgentIndex } from './runtime-reference-agents'
 import {
   seedTestAgentSessionRecordStore,
-  openTestAgentSessionRecordStore
+  openTestAgentSessionRecordStore,
+  editPersistedTestAgentSessionStore,
+  readPersistedTestAgentSessionStore
 } from './agent-session-record-store-test-harness'
 import { OrchestrationDb } from './orchestration/db'
 import { structuredSessionMailReach } from './orchestration/structured-session-mail-address'
@@ -110,6 +112,101 @@ function clearedRecord(sessionId: string, successor: string): AgentSessionRecord
 }
 
 describe('real conversation inventory work', () => {
+  it.each([10, 100])('visits %i unreadable rows once per audience inventory', async (u) => {
+    const root = await scaleDirectory()
+    const healthy = Array.from({ length: 10 }, (_, i) => scaleRecord(`healthy-u-${i}`))
+    const unreadable = Array.from({ length: u }, (_, i) => scaleRecord(`unreadable-u-${i}`))
+    const retained = unreadable.filter((_, i) => i % 2 === 0)
+    await seedTestAgentSessionRecordStore(root, {
+      records: [...healthy, ...unreadable],
+      sessionTabs: [...healthy, ...unreadable].map(({ sessionId }) => ({
+        sessionId,
+        tabId: `tab-${sessionId}`
+      }))
+    })
+    await editPersistedTestAgentSessionStore(root, (state) => {
+      unreadable.forEach(({ sessionId }, i) => {
+        if (i % 2 === 0) {
+          Object.assign(state.records[sessionId].lease, { minimumNextFence: 'bad' })
+        } else {
+          Object.assign(state.records[sessionId], { providerHandleChain: 'bad' })
+        }
+      })
+    })
+    const raw = await readPersistedTestAgentSessionStore(root)
+    const store = await openTestAgentSessionRecordStore(root)
+    const host = new StructuredAgentSessionHost({
+      ...hostTestState().host.deps,
+      store,
+      journalDatabase: openTestJournalHostDatabase(root)
+    })
+    const ids = new Set(unreadable.map(({ sessionId }) => sessionId))
+    const work = countStoreWork(store)
+    const inventories = vi.mocked(store.listConversations)
+    // Default spy executes native flatMap and its production callback on every dense input row.
+    const flatten = vi.spyOn(Array.prototype, 'flatMap')
+    try {
+      for (let repeat = 1; repeat <= 3; repeat++) {
+        expect(host.knownAgentIds()).toContain('claude')
+        expect(work.counts).toMatchObject({
+          inventories: repeat,
+          views: 10 * repeat,
+          clones: 0,
+          decodes: 0
+        })
+      }
+      const scans = flatten.mock.contexts
+        .map((rows, i) =>
+          Array.isArray(rows) &&
+          rows.length === u &&
+          rows.every(
+            (row: unknown) =>
+              typeof row === 'object' &&
+              row !== null &&
+              'raw' in row &&
+              typeof row.raw === 'object' &&
+              row.raw !== null &&
+              'sessionId' in row.raw &&
+              typeof row.raw.sessionId === 'string' &&
+              ids.has(row.raw.sessionId)
+          )
+            ? i
+            : -1
+        )
+        .filter((i) => i >= 0)
+      expect(scans).toHaveLength(3)
+      for (const i of scans) {
+        expect(flatten.mock.contexts[i]).toMatchObject(
+          unreadable.map(({ sessionId }) => ({ raw: { sessionId } }))
+        )
+        expect(flatten.mock.results[i]).toEqual({
+          type: 'return',
+          value: retained.map(({ sessionId }) => store.getConversation(sessionId))
+        })
+      }
+      expect(inventories.mock.results.map((result) => result.value)).toEqual(
+        Array.from({ length: 3 }, () =>
+          [...healthy, ...retained].map(({ sessionId }) => store.getConversation(sessionId))
+        )
+      )
+    } finally {
+      flatten.mockRestore()
+    }
+    expect(store.getVisibleSessionTabIndex().sessionIds).toEqual(
+      [...healthy, ...retained].map(({ sessionId }) => sessionId)
+    )
+    for (const [i, { sessionId }] of unreadable.entries()) {
+      expect(store.getConversation(sessionId)?.sessionId ?? null).toBe(i % 2 ? null : sessionId)
+      expect(store.getRecord(sessionId)).toBeNull()
+      expect(() => store.requireWritableRecord(sessionId)).toThrow()
+    }
+    await store.setConversationName(healthy[0]!.sessionId, 'unrelated update')
+    const after = await readPersistedTestAgentSessionStore(root)
+    for (const { sessionId } of unreadable) {
+      expect(after.records[sessionId]).toEqual(raw.records[sessionId])
+    }
+  })
+
   it('keeps global worker identity separate from candidate inventory and retains closure/loop outcomes', async () => {
     const rootId = testOrcaSessionId('global-root')
     const successor = testOrcaSessionId('visible-successor')
