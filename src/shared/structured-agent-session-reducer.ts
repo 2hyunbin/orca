@@ -275,7 +275,9 @@ export function reduceStructuredAgentSession(
   const merged = journalUnchanged
     ? state.items
     : mergeItems(state.items, liveItems, event.batch.removedItemIds)
-  const items = trimRetainedItems(merged, state.retainedOwnItemLimit, state.retainedItemCap)
+  const items = journalUnchanged
+    ? state.items
+    : trimRetainedItems(merged, state.retainedOwnItemLimit, state.retainedItemCap)
   const outsideWindow = [
     ...(liveItems.length < event.batch.items.length
       ? event.batch.items.filter((item) => !liveItems.includes(item))
@@ -291,7 +293,9 @@ export function reduceStructuredAgentSession(
     items,
     subagentRoster,
     // A trim leaves older items behind the cursor, so paging must stay offered.
-    hasOlder: agentSessionHasOlderTranscript(items, items.length < merged.length || state.hasOlder),
+    hasOlder: journalUnchanged
+      ? state.hasOlder
+      : agentSessionHasOlderTranscript(items, items.length < merged.length || state.hasOlder),
     submissions:
       event.batch.submissions.length === 0 && event.batch.removedItemIds.length === 0
         ? state.submissions

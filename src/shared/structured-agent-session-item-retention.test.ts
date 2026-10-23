@@ -353,6 +353,36 @@ describe('structured agent session item retention', () => {
     expect(unchanged.items).toBe(hydrated.items)
   })
 
+  it('applies metadata without revisiting retained rows', () => {
+    let rowReads = 0
+    const rows = range(200, CAP).map(
+      (sequence) =>
+        new Proxy(item(sequence), {
+          get(target, key, receiver) {
+            rowReads += 1
+            return Reflect.get(target, key, receiver)
+          }
+        })
+    )
+    const hydrated = hydrate(rows, true)
+    rowReads = 0
+    const activity = { turnId: 'turn-a', text: 'Inspecting the changes' }
+    const updated = reduceStructuredAgentSession(hydrated, {
+      type: 'event',
+      event: {
+        type: 'batch',
+        sessionId: 'session-a',
+        batch: { cursor: hydrated.cursor!, items: [], removedItemIds: [], submissions: [] },
+        activity
+      }
+    })
+
+    expect(updated.activity).toBe(activity)
+    expect(updated.items).toBe(hydrated.items)
+    expect(updated.hasOlder).toBe(true)
+    expect(rowReads).toBe(0)
+  })
+
   it("counts the session's own rows, so a subagent's burst keeps the rows before it", () => {
     const streamed = streamBatches(hydrate([item(0), item(1)]), range(2, CAP + 500).map(childItem))
 
