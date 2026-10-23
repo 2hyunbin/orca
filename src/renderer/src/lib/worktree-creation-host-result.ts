@@ -12,31 +12,51 @@ import type { CreateWorktreeResult } from '../../../shared/worktree/create-types
 
 export async function acceptHostCreatedWorktree(
   target: RuntimeClientTarget,
-  launch: AgentLaunchResult,
+  launch: Pick<AgentLaunchResult, 'worktreeId' | 'created'>,
   repoId: string,
-  executionHostId: ExecutionHostId
+  executionHostId: ExecutionHostId,
+  showNotices: () => boolean = () => true,
+  isCurrent: () => boolean = () => true,
+  expectedEnvironmentPairingRevision?: number
 ): Promise<CreateWorktreeResult> {
+  if (!isCurrent()) {
+    throw new Error('agent_session_operation_unknown')
+  }
   const result =
     launch.created ??
-    (await callRuntimeRpc<CreateWorktreeResult>(target, 'worktree.show', {
-      worktree: `id:${launch.worktreeId}`
-    }))
+    (await callRuntimeRpc<CreateWorktreeResult>(
+      target,
+      'worktree.show',
+      {
+        worktree: `id:${launch.worktreeId}`
+      },
+      { expectedEnvironmentPairingRevision }
+    ))
+  if (
+    !isCurrent() ||
+    result.worktree.id !== launch.worktreeId ||
+    result.worktree.repoId !== repoId
+  ) {
+    throw new Error('agent_session_operation_unknown')
+  }
   applyCreatedWorktree(useAppStore.setState, repoId, result, executionHostId)
   const state = useAppStore.getState()
   const created = state.getKnownWorktreeById(result.worktree.id, executionHostId)
   if (created) {
     holdCreatedSidebarWorkspace({ worktree: created })
   }
-  showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree)
-  if (result.baseFallback) {
-    requestWorktreeBaseFallbackNotice(result.baseFallback)
+  if (showNotices()) {
+    showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree)
+    if (result.baseFallback) {
+      requestWorktreeBaseFallbackNotice(result.baseFallback)
+    }
+    showLocalBaseRefUpdateSuggestionToast(result.localBaseRefUpdateSuggestion, {
+      updateSettings: state.updateSettings,
+      getSettings: () => useAppStore.getState().settings,
+      openSettingsPage: state.openSettingsPage,
+      openSettingsTarget: state.openSettingsTarget
+    })
   }
-  showLocalBaseRefUpdateSuggestionToast(result.localBaseRefUpdateSuggestion, {
-    updateSettings: state.updateSettings,
-    getSettings: () => useAppStore.getState().settings,
-    openSettingsPage: state.openSettingsPage,
-    openSettingsTarget: state.openSettingsTarget
-  })
   if (!launch.created) {
     void state.fetchWorktrees(repoId, { executionHostId }).catch((error: unknown) => {
       console.warn('worktree create: catalog refresh failed', error)
@@ -48,7 +68,8 @@ export async function acceptHostCreatedWorktree(
 /** Refresh through the normal inventory fences; a launch result never opens a provisional tab. */
 export async function materializeHostCreatedWorktree(
   target: RuntimeClientTarget,
-  worktreeId: string
+  worktreeId: string,
+  expectedEnvironmentPairingRevision?: number
 ): Promise<void> {
   if (target.kind === 'local') {
     const { refreshLocalStructuredSessionWorktreeTabs } =
@@ -65,6 +86,8 @@ export async function materializeHostCreatedWorktree(
   } else {
     const { refreshWebRuntimeSessionTabsSnapshot } =
       await import('@/runtime/web-runtime-session-snapshot')
-    await refreshWebRuntimeSessionTabsSnapshot(target.environmentId, worktreeId)
+    await refreshWebRuntimeSessionTabsSnapshot(target.environmentId, worktreeId, {
+      expectedEnvironmentPairingRevision
+    })
   }
 }

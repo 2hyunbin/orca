@@ -1,3 +1,4 @@
+import { queueAcceptedWebSessionTerminalSnapshot } from './web-session-terminal-handle-events'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { getRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status'
@@ -172,6 +173,9 @@ export async function refreshWebRuntimeSessionTabsSnapshot(
     )
     settleMirror()
     if (current) {
+      if (!decision.apply) {
+        queueAcceptedWebSessionTerminalSnapshot(recovered, environmentId)
+      }
       options.onCurrentSnapshot?.(recovered)
     }
   } catch (error) {

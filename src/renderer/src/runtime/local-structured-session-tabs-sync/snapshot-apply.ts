@@ -2,6 +2,7 @@ import type {
   RuntimeMobileSessionTabsRemovedResult,
   RuntimeMobileSessionTabsResult
 } from '../../../../shared/runtime-types'
+import { noteHostCreatedLaunchTargets } from '../../lib/structured-agent-session-launch-prompt'
 import { markStructuredAgentSessionLaunchesPublished } from '../../lib/structured-agent-session-launch-publication'
 import type { WorktreeRuntimeOwnerState } from '../../lib/worktree-runtime-owner-state'
 import { getExecutionHostIdForWorktree } from '../../lib/worktree-runtime-owner'
@@ -74,12 +75,17 @@ export function applyStructuredSessionTabSnapshots(
   owner = LOCAL_STRUCTURED_SESSION_OWNER,
   options: StructuredSessionSnapshotApplyOptions = {}
 ): void {
+  const acceptedTopologies: RuntimeMobileSessionTabsResult[] = []
   const acceptedAgentSessions: { worktreeId: string; sessionId: string }[] = []
   const drawnChatLabels: DrawnChatLabel[] = []
   const settleStructuredSessionMirror = applyWebSessionTabsStorePatch(
     (state) =>
       applyLocalStructuredSessionTabSnapshots(state, snapshots, owner, undefined, {
         ...options,
+        onAcceptedTopology: (snapshot) => {
+          acceptedTopologies.push(snapshot)
+          options.onAcceptedTopology?.(snapshot)
+        },
         onAcceptedAgentSession: (worktreeId, sessionId) => {
           acceptedAgentSessions.push({ worktreeId, sessionId })
           options.onAcceptedAgentSession?.(worktreeId, sessionId)
@@ -91,6 +97,9 @@ export function applyStructuredSessionTabSnapshots(
     { frames: [] }
   )
   settleStructuredSessionMirror()
+  for (const topology of acceptedTopologies) {
+    noteHostCreatedLaunchTargets(LOCAL_EXECUTION_HOST_ID, topology)
+  }
   const { setTabLabel } = useAppStore.getState()
   for (const { tabId, label } of drawnChatLabels) {
     setTabLabel(tabId, label)

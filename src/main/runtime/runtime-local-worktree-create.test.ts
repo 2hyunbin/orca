@@ -186,6 +186,38 @@ beforeEach(() => {
   readSparsePresets.mockReturnValue([WEB_PRESET])
 })
 
+it('writes a requested identity only at actual checkout materialization, including the folder-repo creator', async () => {
+  const instanceId = '94d38a16-e9db-4e86-b81d-334788958124'
+  const before = writtenMeta.length
+  mocks.consume.mockRejectedValueOnce(new Error('checkout failed'))
+  await expect(createWorktree({ requestedInstanceId: instanceId })).rejects.toThrow(
+    'checkout failed'
+  )
+  expect(writtenMeta).toHaveLength(before)
+  const created = await createWorktree({ requestedInstanceId: instanceId })
+  expect(created.worktree.id).toBe(`repo-1::${worktreePath}`)
+  expect(writtenMeta.at(-1)).toMatchObject({ instanceId })
+  const { createRuntimeFolderWorktree } = await import('./runtime-folder-worktree-create')
+  const write = vi.fn((_target, meta) => meta)
+  const folder = await createRuntimeFolderWorktree({
+    request: { repoSelector: 'folder', name: 'chat', requestedInstanceId: instanceId },
+    repo: { id: 'folder', path: '/folder', displayName: 'Folder', badgeColor: 'blue', addedAt: 1 },
+    promisedAgentChat: true,
+    // SAFETY: this no-terminal folder create reaches only the supplied store and catalog callbacks.
+    deps: {
+      store: { getSettings: () => ({}), setWorktreeMeta: write },
+      ptySpawnAvailable: false,
+      invalidateResolvedWorktrees: vi.fn(),
+      notifyWorktreesChanged: vi.fn(),
+      emitCreated: vi.fn()
+    } as never
+  })
+  expect(folder.worktree.instanceId).toBe(instanceId)
+  expect(write).toHaveBeenCalledOnce()
+  expect(write.mock.calls[0]?.[1]).toMatchObject({ instanceId })
+  expect(folder.worktree.id).toContain(instanceId)
+})
+
 describe('runtime create listing hold', () => {
   const rows = [{ path: worktreePath }]
 
@@ -792,7 +824,11 @@ describe('runtime create setup decision', () => {
       (error: unknown) => error
     )
     expect(refusal).toBeInstanceOf(WorktreeCreateSetupChoiceRefusedError)
-    expect(refusal).toMatchObject({ message: 'Setup decision required for this repository' })
+    expect(refusal).toMatchObject({
+      code: 'worktree_create_setup_choice_required',
+      message: 'Setup decision required for this repository',
+      cause: expect.objectContaining({ message: 'Setup decision required for this repository' })
+    })
     // Hooks come from the main checkout (no worktree path): the new worktree doesn't exist yet.
     expect(mocks.effectiveHooks.mock.calls).toEqual([[expect.objectContaining({ path: '/repo' })]])
     for (const gitWork of [mocks.defaultBase, mocks.remoteBase, mocks.hasBase, mocks.refresh]) {

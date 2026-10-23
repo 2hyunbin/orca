@@ -1,3 +1,4 @@
+import type { HostFoundingAttempt } from './host-founding-attempt'
 /**
  * The factories `executeAgentLaunch` is handed: how a surface and a workspace are BUILT once the
  * executor has decided which. Separate from the executor because they are the contract each caller
@@ -7,11 +8,13 @@
 import type {
   AgentLaunchIntent,
   AgentLaunchPrompt,
+  AgentLaunchPromptDisposal,
   AgentLaunchResult
 } from '../../shared/agent-launch-intent'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { TuiAgent } from '../../shared/tui-agent'
+import type { StructuredAgentSessionFirstMessage } from '../../shared/structured-agent-session-create'
 
 /** How a surface is built once the executor has decided which one. Injected because an
  *  orchestration worker's session carries a redrive subscription and a mailbox a plain launch
@@ -27,12 +30,8 @@ export type AgentLaunchSurfaceFactory = {
     /** The caller-reserved tab id (the tab half of `paneKey`), so the host records where this chat
      *  is shown; absent records the id clients derive. */
     tabId?: string
-    /** The launch carries no prompt, so a caller that sends the first message itself may get the
-     *  chat at rest, its agent started by that message. */
-    withoutPrompt?: true
-    /** The workspace's setup holds the agent, so the chat is made at rest and its first message
-     *  starts the agent once setup ends. */
-    afterSetup?: true
+    hostFoundingAttempt?: HostFoundingAttempt
+    firstMessage?: StructuredAgentSessionFirstMessage['body']
   }): Promise<AgentLaunchStructuredSurface>
   createTerminalAgent(args: {
     worktreeId: string
@@ -62,18 +61,6 @@ export type AgentLaunchSurfaceFactory = {
     promptRodeLaunchCommand?: boolean
   }>
   /**
-   * Commits the launch text as the session's first turn, answering with the transcript row's id.
-   *
-   * `null` means nothing was committed, and is the answer for every failure — a refused send, an
-   * unreachable host, a throw. Delivery must not fail a launch whose agent is already running: the
-   * caller can resend under `not-delivered`, but it cannot un-create a workspace.
-   */
-  deliverStructuredPrompt?(args: {
-    sessionId: string
-    fence: number
-    prompt: AgentLaunchPrompt
-  }): Promise<string | null>
-  /**
    * Writes the launch text into a terminal agent's live PTY, answering whether it landed.
    *
    * The other half of `startupPrompt`, for the cases the launch command cannot serve: a
@@ -91,14 +78,13 @@ export type AgentLaunchSurfaceFactory = {
   }): Promise<boolean>
 }
 
-/** `fence` is the lease the create was admitted at, carried so the launch prompt's send can fill its
- *  envelope without re-reading the session; the host does not check a write's fence. */
 export type AgentLaunchStructuredSurface = {
   sessionId: string
   handle: string
   fence: number
   /** The host-owned id of the tab that shows this chat; a host that predates it reports none. */
   tabId?: string
+  promptDisposal?: AgentLaunchPromptDisposal
 }
 
 /** A structured create refusal that proves no session was committed, so the launch may downgrade. */

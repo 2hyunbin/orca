@@ -34,6 +34,9 @@ export function markStructuredAgentSessionLaunchPublished(
     if (persisted?.executionHostId !== executionHostId) {
       return false
     }
+    if (persisted.desktopCreate) {
+      return false
+    }
     if (persisted.firstMessage) {
       confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
       return false

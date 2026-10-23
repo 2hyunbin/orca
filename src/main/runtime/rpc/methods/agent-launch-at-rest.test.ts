@@ -1,3 +1,6 @@
+import { OrcaRuntimeService } from '../../orca-runtime'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import { layoutApplyOn } from '../../session-layout-apply.test-fixture'
 import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AGENT_LAUNCH_RUNTIME_CAPABILITY } from '../../../../shared/agent-launch-runtime-capability'
@@ -41,6 +44,29 @@ afterEach(async () => {
 })
 
 function launch(caller: Partial<RpcContext>, prompt?: string) {
+  let session: WorkspaceSessionState = {
+    activeRepoId: null,
+    activeWorktreeId: null,
+    activeTabId: null,
+    tabsByWorktree: {},
+    terminalLayoutsByTabId: {}
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the real ordinary publisher reads only these workspace layout methods in this fixture.
+  const publisher = new OrcaRuntimeService({
+    getRepos: () => [],
+    getSettings: () => ({}),
+    getWorkspaceSession: () => session,
+    getWorkspaceSessionHostIds: () => ['local'],
+    setWorkspaceSession: (next: WorkspaceSessionState) => {
+      session = next
+    },
+    applyLayoutCommand: layoutApplyOn(
+      () => session,
+      (next) => {
+        session = next
+      }
+    )
+  } as never)
   const runtime = {
     ...runtimeStub(),
     resolveStructuredAgentSessionCreateIntent: vi.fn(async (params: { envelope: unknown }) => ({
@@ -57,7 +83,7 @@ function launch(caller: Partial<RpcContext>, prompt?: string) {
       options: { model: 'gpt-5.6-sol', effort: 'medium' },
       runtimeKind: 'native'
     })),
-    publishStructuredAgentSessionTab: vi.fn(async () => {})
+    publishStructuredAgentSessionTab: publisher.publishStructuredAgentSessionTab.bind(publisher)
   }
   const params = AGENT_LAUNCH.params.parse({
     agent: 'codex',

@@ -1,4 +1,5 @@
 import { parsePaneKey } from '../../shared/stable-pane-id'
+import { structuredAgentSessionSendBody } from '../../shared/structured-agent-session-send-mutation'
 import type { AgentLaunchResult } from '../../shared/agent-launch-intent'
 import type { AgentLaunchModeReceipt } from './agent-launch-mode'
 import type { AgentLaunchSurfaceExecution } from './agent-launch-execution'
@@ -31,12 +32,16 @@ export async function createLaunchSurface(
     const reservedTabId = intent.paneKey ? parsePaneKey(intent.paneKey)?.tabId : undefined
     const session = await surfaces.createStructuredSession({
       worktreeId: workspace.worktreeId,
+      ...(execution.hostFoundingAttempt
+        ? { hostFoundingAttempt: execution.hostFoundingAttempt }
+        : {}),
       agent: intent.agent,
       ...(intent.sessionOptions ? { options: intent.sessionOptions } : {}),
       ...(intent.sessionId ? { sessionId: intent.sessionId } : {}),
       ...(reservedTabId ? { tabId: reservedTabId } : {}),
-      ...(intent.prompt ? {} : { withoutPrompt: true as const }),
-      ...(workspace.sequenceTerminalCommand ? { afterSetup: true as const } : {})
+      ...(intent.prompt?.delivery === 'submit' && intent.prompt.text.trim()
+        ? { firstMessage: structuredAgentSessionSendBody(intent.prompt.text, []) }
+        : {})
     })
     return {
       outcome: {

@@ -4,6 +4,7 @@ import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-
 import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import { wasAgentLaunchPaneClosedByUser } from '../lib/agent-launch-pane-closes'
 import { bindLivePtyToExactSurface } from '../lib/worktree-agent-live-surface-adoption'
+import { noteHostCreatedLaunchTargets } from '../lib/structured-agent-session-launch-prompt'
 import { markStructuredAgentSessionLaunchesPublished } from '../lib/structured-agent-session-launch-publication'
 import { useAppStore } from '../store'
 import { createTerminalTabCreationActions } from '../store/terminals/terminal-tab-creation'
@@ -34,6 +35,7 @@ export function materializeWorkspaceInitialSurface(
     return
   }
   let ancillaryTabId: string | undefined
+  const accepted: RuntimeMobileSessionTabsResult[] = []
   const acceptedSessions: { worktreeId: string; sessionId: string }[] = []
   const afterCommit: (() => void)[] = []
   const settle = applyWebSessionTabsStorePatch(
@@ -72,7 +74,6 @@ export function materializeWorkspaceInitialSurface(
             isTerminalLeafId(tab.leafId) &&
             !closed(tab.parentTabId, tab.leafId)
         )
-      const accepted: RuntimeMobileSessionTabsResult[] = []
       const materializedNativeTabIds = new Set<string>()
       const framesDraw = ORCA_LAYOUT_OWNER_IS_MAIN ? framesDrawWorkspace(current) : undefined
       staged = applyLocalStructuredSessionTabSnapshots(staged, [snapshot], undefined, undefined, {
@@ -171,6 +172,9 @@ export function materializeWorkspaceInitialSurface(
     { frames: [] }
   )
   settle()
+  for (const topology of accepted) {
+    noteHostCreatedLaunchTargets('local', topology)
+  }
   markStructuredAgentSessionLaunchesPublished('local', acceptedSessions)
   for (const effect of afterCommit) {
     effect()

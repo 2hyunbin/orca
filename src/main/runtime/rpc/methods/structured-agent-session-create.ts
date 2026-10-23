@@ -1,3 +1,4 @@
+import type { HostFoundingAttempt } from '../../../agent-launch/host-founding-attempt'
 // Resolve the host launch identity, then commit an at-rest create or the compatible acquired path.
 
 import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../../shared/agent-chat-permission-mode'
@@ -197,10 +198,12 @@ export async function commitStructuredAgentSessionCreate(args: {
   activate: boolean
   /** This machine's window made the create and opens the chat's tab where it reserved it. */
   placedByWindow?: boolean
+  hostFoundingAttempt?: HostFoundingAttempt
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   const { prepared } = args
   const tab = prepared.tab
   const placedByWindow = args.placedByWindow ? { placedByWindow: true } : {}
+  let adoptedTabPublicationFailed = false
   const publishTab = tab
     ? async () => {
         if (
@@ -210,14 +213,16 @@ export async function commitStructuredAgentSessionCreate(args: {
           return
         }
         try {
+          const adopted = args.hostFoundingAttempt?.adopted
           await args.runtime.publishStructuredAgentSessionTab({
-            workspaceId: tab.workspaceId,
-            sessionId: prepared.attachParams.envelope.sessionId,
-            agent: tab.agent,
+            workspaceId: adopted?.workspaceId ?? tab.workspaceId,
+            sessionId: adopted?.sessionId ?? prepared.attachParams.envelope.sessionId,
+            agent: adopted?.agent ?? tab.agent,
             activate: args.activate,
+            ...(args.hostFoundingAttempt ? { foundingAttempt: args.hostFoundingAttempt } : {}),
             ...placedByWindow,
-            ...(prepared.attachParams.surfaceTabId
-              ? { tabId: prepared.attachParams.surfaceTabId }
+            ...((adopted?.tabId ?? prepared.attachParams.surfaceTabId)
+              ? { tabId: adopted?.tabId ?? prepared.attachParams.surfaceTabId }
               : {})
           })
         } catch (error) {
@@ -226,6 +231,11 @@ export async function commitStructuredAgentSessionCreate(args: {
             sessionId: prepared.attachParams.envelope.sessionId,
             error
           })
+          if (!prepared.atRest && prepared.attachParams.adopt) {
+            // Imported history keeps the acquired route's receipt even if early notification fails.
+            adoptedTabPublicationFailed = true
+            return
+          }
           throw new AgentSessionRefusalError(
             refuse(
               'agent_session_operation_unknown',
@@ -239,6 +249,7 @@ export async function commitStructuredAgentSessionCreate(args: {
   if (prepared.atRest) {
     return prepared.host.create(args.caller, prepared.attachParams, {
       ...prepared.atRest,
+      ...(args.hostFoundingAttempt ? { hostFoundingAttempt: args.hostFoundingAttempt } : {}),
       ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {}),
       ...(prepared.hostLaunchDirectory
         ? { hostLaunchDirectory: prepared.hostLaunchDirectory }
@@ -246,11 +257,21 @@ export async function commitStructuredAgentSessionCreate(args: {
       ...(publishTab ? { publishTab } : {})
     })
   }
-  return prepared.host.attach(args.caller, prepared.attachParams, {
+  const attached = await prepared.host.attach(args.caller, prepared.attachParams, {
     ...(prepared.hostLaunchDirectory ? { hostLaunchDirectory: prepared.hostLaunchDirectory } : {}),
     ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {}),
     ...(publishTab ? { publishTab } : {})
   })
+  return adoptedTabPublicationFailed && attached.ok
+    ? {
+        ok: false,
+        refusal: refuse(
+          'agent_session_operation_unknown',
+          { reason: 'tabUnconfirmed' },
+          'The chat may have been created, but its tab could not be confirmed.'
+        )
+      }
+    : attached
 }
 
 export async function createStructuredAgentSessionForWorktree(args: {
@@ -265,6 +286,8 @@ export async function createStructuredAgentSessionForWorktree(args: {
   tabId?: string
   /** Create without starting the agent; its first message starts it. */
   atRest?: true
+  firstMessage?: StructuredAgentSessionFirstMessage
+  hostFoundingAttempt?: HostFoundingAttempt
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   // An at-rest create's ledger row is keyed by its intent, as a client's create is.
   const envelope = args.atRest
@@ -284,6 +307,7 @@ export async function createStructuredAgentSessionForWorktree(args: {
     runtime: args.runtime,
     caller: args.caller,
     prepared,
+    ...(args.hostFoundingAttempt ? { hostFoundingAttempt: args.hostFoundingAttempt } : {}),
     activate: args.activate
   })
 }

@@ -1,4 +1,5 @@
 import type Database from '../../sqlite/sync-database'
+import type { JournalTransactionObservation } from './journal-database'
 import { insertJournalRow } from './journal-row-table'
 import type { JournalHostDatabase } from './journal-host-database'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
@@ -15,6 +16,7 @@ export type JournalRowTransactionHook = (db: Database.Database, row: JournalRow)
  *  inside that transaction on the same connection, `committed` synchronously right after its
  *  COMMIT and never after a rollback. */
 export type JournalOperationReceipt = {
+  transactionObservation?: JournalTransactionObservation
   write: (db: Database.Database, row?: JournalRow) => void
   committed: () => void
 }
@@ -87,7 +89,8 @@ export class JournalRowWriter {
             receipt?.write(db, row)
             this.runBookkeeping(db, row)
           },
-          !hook && !receipt && this.streamed([row])
+          !hook && !receipt && this.streamed([row]),
+          receipt?.transactionObservation
         )
       } catch (error) {
         this.deps.rolledBack?.()
@@ -138,7 +141,8 @@ export class JournalRowWriter {
           }
           receipt?.write(db, receiptRow?.(rows))
         },
-        !receipt && this.streamed(rows)
+        !receipt && this.streamed(rows),
+        receipt?.transactionObservation
       )
     } catch (error) {
       this.deps.rolledBack?.()

@@ -8,8 +8,8 @@
  *   structured session   ->  committed to the transcript, named by a message id  ->  journaled
  *   terminal, line fits  ->  folded into the command that execs the agent        ->  handed-to-terminal
  *   terminal, otherwise  ->  bracketed paste into the live PTY once it is ready  ->  handed-to-terminal
- *   anything unproven    ->                                                      ->  not-delivered
- *   host stopped mid-delivery (a replayed record only)                         ->  unconfirmed
+ *   proven message noncommit or terminal refusal                              ->  not-delivered
+ *   a committed message whose row cannot yet be read, or interrupted delivery ->  unconfirmed
  *
  * argv has no readiness race, so it is offered wherever the agent's CLI takes a prompt argument
  * (`agentPromptRidesLaunchCommand`). But that command is TYPED into the user's shell, and a long or
@@ -26,7 +26,6 @@ import { agentPromptRidesLaunchCommand } from '../../shared/tui-agent-startup'
 import type { AgentLaunchModeReceipt } from './agent-launch-mode'
 import type { CreatedSurface } from './agent-launch-surface-creation'
 import type { AgentLaunchSurfaceExecution } from './agent-launch-execution'
-import type { AgentLaunchStructuredSurface } from './agent-launch-surface-factories'
 
 export const HANDED_TO_TERMINAL: AgentLaunchPromptDisposal = { outcome: 'handed-to-terminal' }
 const NOT_DELIVERED: AgentLaunchPromptDisposal = { outcome: 'not-delivered' }
@@ -40,8 +39,11 @@ const UNCONFIRMED: AgentLaunchPromptDisposal = { outcome: 'unconfirmed' }
  */
 export function settledAtCreation(
   intent: Pick<AgentLaunchIntent, 'prompt'>,
-  created: { promptRodeLaunchCommand?: boolean }
+  created: Pick<CreatedSurface, 'promptRodeLaunchCommand' | 'structured'>
 ): AgentLaunchPromptDisposal {
+  if (created.structured?.promptDisposal) {
+    return created.structured.promptDisposal
+  }
   if (created.promptRodeLaunchCommand) {
     return HANDED_TO_TERMINAL
   }
@@ -54,36 +56,13 @@ export async function settleLaunchPromptDisposal(
   created: CreatedSurface
 ): Promise<AgentLaunchPromptDisposal> {
   if (created.structured) {
-    const messageId = await deliverStructuredLaunchPrompt(execution, created.structured)
-    return messageId ? { outcome: 'journaled', messageId } : NOT_DELIVERED
+    return settledAtCreation(execution.intent, created)
   }
   // The surface reported that the startup command carried the prompt; there is nothing left to write.
   if (created.promptRodeLaunchCommand) {
     return HANDED_TO_TERMINAL
   }
   return deliverTerminalLaunchPrompt(execution, created.outcome.handle, { freshLaunch: true })
-}
-
-/**
- * Commits the launch text to a structured session's transcript.
- *
- * `draft` is excluded: a structured draft belongs in the composer, and the host has none.
- */
-async function deliverStructuredLaunchPrompt(
-  execution: AgentLaunchSurfaceExecution,
-  structured: AgentLaunchStructuredSurface
-): Promise<string | null> {
-  const { intent, surfaces } = execution
-  if (!intent.prompt || intent.prompt.delivery !== 'submit') {
-    return null
-  }
-  return (
-    (await surfaces.deliverStructuredPrompt?.({
-      sessionId: structured.sessionId,
-      fence: structured.fence,
-      prompt: intent.prompt
-    })) ?? null
-  )
 }
 
 /**
@@ -130,8 +109,7 @@ export function argvLaunchPrompt(intent: AgentLaunchIntent): string | undefined 
   return text && agentPromptRidesLaunchCommand(intent.agent) ? text : undefined
 }
 
-/** The same question before a surface exists, where a structured create must carry no prompt: its
- *  text is journaled into the session afterwards, not folded into a command. */
+/** Only terminal creates can carry text on their launch command. */
 export function launchCommandPrompt(
   intent: AgentLaunchIntent,
   mode: AgentLaunchModeReceipt['mode']
@@ -145,12 +123,8 @@ export function launchCommandPrompt(
  *
  * Each arm is a consequence of the act it names, never a write-ahead of it: `journaled` is
  * reachable only from a committed message id, `handed-to-terminal` only from a launch command that
- * carried the text or a PTY write that returned, and everything else under-claims as
- * `not-delivered`. A live answer has no "maybe": `unconfirmed` is written only into the record
- * before delivery runs (`settledAtCreation`), and is read back only by a replay. The one live
- * exception never reaches the wire: a `legacy-host` create's unawaited post-start send
- * (agent-launch-legacy-host.ts). Dispatch doubt is not this tier's to report: the submission row
- * carries it.
+ * carried the text or a PTY write that returned. Unreadable committed proof stays `unconfirmed`;
+ * the submission itself records whether a provider received the accepted message.
  */
 export function promptReceipt(
   intent: AgentLaunchIntent,

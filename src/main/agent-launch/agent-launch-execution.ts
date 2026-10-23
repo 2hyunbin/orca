@@ -1,3 +1,4 @@
+import type { HostFoundingAttempt } from './host-founding-attempt'
 /**
  * What a caller hands `executeAgentLaunch`. Two shapes, so the compiler rather than a runtime throw
  * keeps each caller to the inputs its policy needs: a launch that may build its own surface must
@@ -37,7 +38,10 @@ type AgentLaunchExecutionBase = {
   callerRendersStructured?: boolean
   /** Attributes a throw to the step that was running, the way a dispatch's own stages do. */
   onStage?: (stage: 'worktree_create' | 'mode_settle' | 'surface_create') => void
-  /** The surface exists and its tab is published; runs before any prompt delivery. Must not throw. */
+  hostFoundingAttempt?: HostFoundingAttempt
+  /** Best-effort canonical bookkeeping; independent of presentation and ancillary failures. */
+  onSurfaceAdmitted?: (surface: AgentLaunchPublishedSurface) => void
+  /** Only an installed surface may authorize presentation/selection. Must not throw. */
   onSurfacePublished?: (surface: AgentLaunchPublishedSurface) => void
 }
 

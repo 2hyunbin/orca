@@ -37,7 +37,8 @@ type WorktreeCreateParams = Extract<
 
 export function agentLaunchWorkspaceFactory(
   context: RpcContext,
-  agent: TuiAgent
+  agent: TuiAgent,
+  createIdentity?: AgentLaunchIntent['createIdentity']
 ): AgentLaunchWorkspaceFactory {
   return {
     createFolderWorkspace: agentLaunchFolderWorkspaceCreator(context, agent),
@@ -73,6 +74,7 @@ export function agentLaunchWorkspaceFactory(
       // Reserved before creation so a retry can recover; a failed attempt has to release it.
       try {
         const createArgs = {
+          ...(createIdentity ? { requestedInstanceId: createIdentity.instanceId } : {}),
           ...buildManagedWorktreeCreateArgs(
             {
               ...(agentLaunchMovesHostWindow(context) ? params : withoutHostActivation(params)),
@@ -198,6 +200,6 @@ export function agentLaunchWorkspaceCreation(
   intent: AgentLaunchIntent
 ): Pick<AgentLaunchExecution, 'workspaces'> {
   return {
-    workspaces: agentLaunchWorkspaceFactory(context, intent.agent)
+    workspaces: agentLaunchWorkspaceFactory(context, intent.agent, intent.createIdentity)
   }
 }

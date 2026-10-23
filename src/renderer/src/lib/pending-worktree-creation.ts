@@ -1,3 +1,5 @@
+import type { AgentLaunchParams } from '../../../shared/rpc-contract/agent-launch-params'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { FolderWorkspaceLinkedTask } from '../../../shared/folder-workspace-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -36,7 +38,10 @@ export type WorktreeCreationRequest = {
     operationId: string
     sessionId: string
     paneKey: string
-    create: Readonly<Record<string, unknown>>
+    params: AgentLaunchParams
+    target: RuntimeClientTarget
+    executionHostId: ExecutionHostId
+    pairingRevision?: number
     issued: boolean
   }
   repoId: string

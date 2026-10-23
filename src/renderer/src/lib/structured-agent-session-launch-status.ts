@@ -1,3 +1,11 @@
+import { useSyncExternalStore } from 'react'
+import type { StructuredLaunchFailure } from './structured-agent-session-launch-failure'
+import {
+  subscribeStructuredAgentLaunchStatus,
+  getStructuredAgentSessionLaunchFailure,
+  getStructuredAgentSessionLaunchLifecycle,
+  type StructuredAgentSessionLaunchLifecycle
+} from './structured-agent-session-launch-registry'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { structuredLaunchesHoldingIdentity } from './structured-agent-session-launch-holders'
 import {
@@ -34,4 +42,42 @@ export function hasStructuredAgentLaunchInWorktree(worktreeId: string): boolean 
     }
   }
   return false
+}
+
+export function useStructuredAgentSessionLaunchFailure(
+  worktreeId: string,
+  sessionId: string
+): StructuredLaunchFailure | null {
+  return useSyncExternalStore(
+    subscribeStructuredAgentLaunchStatus,
+    () => getStructuredAgentSessionLaunchFailure(worktreeId, sessionId),
+    () => null
+  )
+}
+
+export function useStructuredAgentSessionLaunchLifecycle(
+  worktreeId: string,
+  sessionId: string
+): StructuredAgentSessionLaunchLifecycle | null {
+  return useSyncExternalStore(
+    subscribeStructuredAgentLaunchStatus,
+    () => getStructuredAgentSessionLaunchLifecycle(worktreeId, sessionId),
+    () => null
+  )
+}
+
+import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
+export function launchStateLifecycle(
+  state: StructuredLaunchState
+): StructuredAgentSessionLaunchLifecycle {
+  if (state.cancelled || state.callers.outcome === 'cancelled') {
+    return 'cancelled'
+  }
+  if (state.callers.outcome === 'published') {
+    return 'published'
+  }
+  if (state.visibilityUnknown || state.callers.outcome === 'unknown') {
+    return 'visibility-unknown'
+  }
+  return state.callers.outcome === 'failed' ? 'failed' : 'pending'
 }

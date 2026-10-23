@@ -289,7 +289,7 @@ function provisionArgs(
     worktreePath: args.worktree.path,
     ...(args.setup ? { setup: args.setup } : {}),
     ...(args.defaultTabs ? { defaultTabs: args.defaultTabs } : {}),
-    primaryTerminalHandle,
+    primaryTerminalHandle: args.startup !== undefined ? primaryTerminalHandle : null,
     hasStartupTerminal,
     ...(args.request.setupOnly !== undefined ? { setupOnly: args.request.setupOnly } : {}),
     callerProvidesSurface: callerProvidesInitialSurface(args),

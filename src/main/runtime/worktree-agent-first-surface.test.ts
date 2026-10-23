@@ -152,6 +152,63 @@ describe('host-created workspaces awaiting their agent chat', () => {
     }
   )
 
+  it('keeps every configured command beside a structured-origin terminal fallback', async () => {
+    const { runtime, spawn } = chatCreateRuntime({
+      setupScriptLaunchMode: 'new-tab',
+      withDefaults: true,
+      wait: false
+    })
+    const result = await runtime.createManagedWorktree({
+      repoSelector: 'id:repo-1',
+      name: 'chat-create',
+      setupDecision: 'run',
+      createdWithAgent: 'claude',
+      promisedAgentChat: true,
+      awaitTerminalProvisioning: true,
+      initializeSurface: async (workspace) => {
+        const terminal = await runtime.createTerminal(`id:${workspace.worktreeId}`, {
+          command: 'claude'
+        })
+        return {
+          worktreeId: workspace.worktreeId,
+          outcome: { kind: 'terminal', handle: terminal.handle, paneKey: terminal.paneKey },
+          receipt: {
+            mode: 'terminal',
+            preferred: 'structured',
+            reason: 'structured_unsupported_on_host',
+            detail: 'Chat unavailable'
+          }
+        }
+      }
+    })
+    expect(spawn.mock.calls[0]?.[0].command).toMatch(/^claude(?: |$)/)
+    const commands = spawn.mock.calls.map(([options]) => options.command)
+    expect(commands).toContain('pnpm dev')
+    expect(commands).toContain('pnpm test')
+    const tabs = await runtime.listMobileSessionTabs(`id:${result.worktree.id}`)
+    expect(tabs.tabs).toHaveLength(4)
+  })
+
+  it('keeps first-template reuse for an original startup terminal', async () => {
+    const { runtime, spawn } = chatCreateRuntime({
+      setupScriptLaunchMode: 'new-tab',
+      withDefaults: true,
+      wait: false
+    })
+    const result = await runtime.createManagedWorktree({
+      repoSelector: 'id:repo-1',
+      name: 'chat-create',
+      setupDecision: 'run',
+      startup: { command: 'claude' },
+      awaitTerminalProvisioning: true
+    })
+    const commands = spawn.mock.calls.map(([options]) => options.command)
+    expect(commands[0]).toMatch(/^claude(?: |$)/)
+    expect(commands).not.toContain('pnpm dev')
+    expect(commands).toContain('pnpm test')
+    expect((await runtime.listMobileSessionTabs(`id:${result.worktree.id}`)).tabs).toHaveLength(3)
+  })
+
   it('owns a wrapped setup hold below launch adapters and retains completion after chat timeout', async () => {
     vi.useFakeTimers()
     try {

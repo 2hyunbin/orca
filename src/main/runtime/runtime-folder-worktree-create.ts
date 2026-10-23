@@ -67,7 +67,7 @@ export async function createRuntimeFolderWorktree(args: {
   const { request, repo, deps } = args
   const now = Date.now()
   const settings = deps.store.getSettings()
-  const instanceId = randomUUID()
+  const instanceId = request.requestedInstanceId ?? randomUUID()
   const worktreeId = getRuntimeFolderWorkspaceInstanceId(repo, instanceId)
   const displayNameRequest = resolveWorktreeCreateDisplayNameRequest(
     request.displayName,

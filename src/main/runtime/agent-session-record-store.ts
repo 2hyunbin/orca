@@ -1,3 +1,4 @@
+import { cancelAgentLaunchOperationInto } from './agent-session-operation-admission'
 /** Durable single-writer session records and their operation ledger, as rows in the host's chat
  *  journal database. */
 
@@ -8,6 +9,7 @@ import { pinAgentSessionRecordLaunchDirectory } from './agent-session-record-lau
 import {
   agentSessionOperationKey,
   type AgentSessionOperationDecision,
+  type AgentSessionOperationOutcome,
   type AgentSessionOperationRow
 } from '../../shared/agent-session-operation-ledger'
 import {
@@ -292,6 +294,11 @@ export class AgentSessionRecordStore {
   recordOperationOutcome = (
     args: Parameters<typeof settleAgentSessionOperationInto>[1]
   ): Promise<void> => this.transact((draft) => settleAgentSessionOperationInto(draft, args))
+
+  cancelLaunchOperation = (
+    args: AgentSessionOperationAdmission & { livePrevention: boolean; code: string }
+  ): Promise<AgentSessionOperationOutcome> =>
+    this.transact((draft) => cancelAgentLaunchOperationInto(draft, args))
 
   /** Settlement committed with its journal write; a new submission also clears Sleep in that draft. */
   operationOutcomeReceipt = (args: Parameters<typeof agentSessionOperationOutcomeReceipt>[1]) =>

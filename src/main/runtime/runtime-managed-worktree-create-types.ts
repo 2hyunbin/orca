@@ -22,6 +22,7 @@ import type { RuntimeNavigationTarget } from '../../shared/runtime-navigation'
 import type { RuntimeRepoSelector } from './runtime-repo-selector'
 
 export type RuntimeManagedWorktreeCreateArgs = {
+  requestedInstanceId?: string
   repoSelector: RuntimeRepoSelector
   name: string
   nameWasGenerated?: boolean

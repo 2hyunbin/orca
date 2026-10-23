@@ -213,7 +213,10 @@ function workerSurfaceFactory(
     })
   }
   return {
-    createStructuredSession: async ({ worktreeId }) => {
+    createStructuredSession: async ({ worktreeId, firstMessage }) => {
+      if (firstMessage) {
+        throw new Error('worker_opening_input_uses_its_own_admission')
+      }
       recordSurfaceStage(worktreeId)
       const session = await createStructuredWorkerSessionForWorktree({
         runtime: args.runtime,

@@ -61,6 +61,7 @@ export type AgentLaunchTarget =
 export type AgentLaunchReusedTerminal = { handle: string }
 
 export type AgentLaunchIntent = {
+  createIdentity?: { instanceId: string }
   agent: TuiAgent
   target: AgentLaunchTarget
   prompt?: AgentLaunchPrompt

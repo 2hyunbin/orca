@@ -1,7 +1,35 @@
 // @vitest-environment happy-dom
 
+import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
+import { decideWebSessionTabsSnapshot } from './web-session-tabs-sync/tracking-decisions'
+import { advanceRuntimeEnvironmentConnectionGeneration } from '../store/slices/runtime-status-connection-generation'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import {
+  stageHostCreatedLaunchPrompt,
+  stagedStructuredLaunchPrompts,
+  settleHostCreatedLaunchResult,
+  dismissHostCreatedLaunchPrompt,
+  discardStructuredLaunchPrompts,
+  hasStagedStructuredLaunchPrompt
+} from '../lib/structured-agent-session-launch-prompt'
+import {
+  resetStructuredAgentSessionSendsForTests,
+  reserveStructuredAgentSessionSend
+} from '../components/native-chat/structured-agent-session-message-sender'
+import {
+  getStructuredAgentSessionPendingSends,
+  subscribeToStructuredAgentSessionPendingSends
+} from '../components/native-chat/structured-agent-session-pending-sends'
+import {
+  readNativeChatDraftCache,
+  writeNativeChatDraftCache,
+  clearNativeChatDraftCacheForTests,
+  subscribeToNativeChatDraftAppend
+} from '../components/native-chat/native-chat-draft-cache'
+import { structuredAgentSessionDraftScopeKey } from '../components/native-chat/native-chat-composer-draft-store'
 import { useAppStore } from '../store'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { resetLocalStructuredSessionVersionForTests } from './local-structured-session-tabs-sync/inventory-generation-fence'
@@ -93,6 +121,10 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  discardStructuredLaunchPrompts(SESSION)
+  resetStructuredAgentSessionSendsForTests()
+  clearNativeChatDraftCacheForTests()
+  vi.useRealTimers()
   resetLocalStructuredSessionVersionForTests()
   resetWebSessionTabsSyncTestState()
 })
@@ -242,4 +274,325 @@ describe('initial topology before ancillary terminal delivery', () => {
       ).toBe(false)
     }
   )
+})
+
+function hostPrompt() {
+  return stageHostCreatedLaunchPrompt({
+    sessionId: SESSION,
+    operationId: '1790000000123-0123456789abcdef0123456789abcdef',
+    paneKey: `${AGENT}:${LEAF}`,
+    text: 'opening A',
+    executionHostId: 'local',
+    target: { kind: 'local' },
+    agent: 'claude',
+    delivery: 'submit',
+    terminalNotice: vi.fn(),
+    presentDraft: vi.fn()
+  })
+}
+function hostResult(messageId: string) {
+  return {
+    worktreeId: WORKTREE,
+    outcome: { kind: 'structured' as const, sessionId: SESSION, handle: 'chat' },
+    receipt: {
+      mode: 'structured' as const,
+      preferred: 'structured' as const,
+      reason: 'requested' as const,
+      detail: 'Chat requested'
+    },
+    prompt: { delivery: 'submit' as const, outcome: 'journaled' as const, messageId }
+  }
+}
+it('holds opening input through long checkout and finishes exact proof after accepted topology without a watched echo', async () => {
+  vi.useFakeTimers()
+  const observerError = vi.spyOn(console, 'error').mockImplementation(() => {})
+  const failedObserver = vi.fn().mockImplementationOnce(() => {
+    throw new Error('view notification failed')
+  })
+  const stop = subscribeToStructuredAgentSessionPendingSends(SESSION, failedObserver)
+  const prompt = hostPrompt()
+  if (!prompt?.hostCreate) {
+    throw new Error('missing host claim')
+  }
+  try {
+    await vi.advanceTimersByTimeAsync(35_000)
+    expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(true)
+    expect(readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(SESSION))).toBe('')
+    deliver(topology('chat'))
+    await vi.advanceTimersByTimeAsync(29_000)
+    expect(getStructuredAgentSessionPendingSends(SESSION)).toHaveLength(1)
+    settleHostCreatedLaunchResult(SESSION, 'local', hostResult(prompt.hostCreate.messageId))
+    expect(getStructuredAgentSessionPendingSends(SESSION)).toEqual([])
+    expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(false)
+    await vi.advanceTimersByTimeAsync(2_000)
+    const ordinary = reserveStructuredAgentSessionSend({ sessionId: SESSION, text: 'ordinary B' })
+    expect(ordinary).not.toBeNull()
+    ordinary?.release()
+    expect(readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(SESSION))).toBe('')
+  } finally {
+    stop()
+    observerError.mockRestore()
+  }
+})
+it('returns dismissed unknown input once at the accepted chat, preserving newer text before reentrant listeners and late proof', () => {
+  const prompt = hostPrompt()
+  if (!prompt?.hostCreate) {
+    throw new Error('missing host claim')
+  }
+  const scope = structuredAgentSessionDraftScopeKey(SESSION)
+  dismissHostCreatedLaunchPrompt(SESSION)
+  writeNativeChatDraftCache(scope, 'newer user draft')
+  const observe = vi.fn(() => {
+    expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(false)
+    expect(getStructuredAgentSessionPendingSends(SESSION)).toEqual([])
+    dismissHostCreatedLaunchPrompt(SESSION)
+  })
+  const stop = subscribeToNativeChatDraftAppend(scope, observe)
+  try {
+    deliver(topology('chat'))
+    expect(observe).toHaveBeenCalledOnce()
+    expect(readNativeChatDraftCache(scope)).toBe('newer user draft\n\nopening A')
+    writeNativeChatDraftCache(scope, '')
+    settleHostCreatedLaunchResult(SESSION, 'local', hostResult(prompt.hostCreate.messageId))
+    applyStructuredSessionTabSnapshots([{ ...topology('chat'), snapshotVersion: 3 }])
+    expect(readNativeChatDraftCache(scope)).toBe('')
+    expect(observe).toHaveBeenCalledOnce()
+  } finally {
+    stop()
+  }
+})
+
+it('keeps discovered terminal input quiet and abandons its exact claim on real tab close before a late refusal', () => {
+  const prompt = hostPrompt()
+  if (!prompt?.hostCreate) {
+    throw new Error('missing host claim')
+  }
+  const snapshot = topology('terminal')
+  for (const tab of snapshot.tabs) {
+    if (tab.type === 'terminal' && tab.parentTabId === AGENT) {
+      tab.launchAgent = 'claude'
+    }
+  }
+  deliver(snapshot)
+  expect(prompt.hostCreate.terminalNotice).not.toHaveBeenCalled()
+  expect(prompt.hostCreate.presentDraft).not.toHaveBeenCalled()
+  expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(true)
+  useAppStore.setState({ terminalLayoutsByTabId: {} })
+  useAppStore.getState().closeTab(AGENT, { reason: 'user' })
+  expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(false)
+  expect(getStructuredAgentSessionPendingSends(SESSION)).toEqual([])
+  settleHostCreatedLaunchResult(SESSION, 'local', {
+    ...hostResult(prompt.hostCreate.messageId),
+    outcome: { kind: 'terminal', handle: 'agent-pty', paneKey: `${AGENT}:${LEAF}` },
+    prompt: { delivery: 'submit', outcome: 'not-delivered' }
+  })
+  expect(prompt.hostCreate.terminalNotice).not.toHaveBeenCalled()
+  expect(prompt.hostCreate.presentDraft).not.toHaveBeenCalled()
+  expect(readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(SESSION))).toBe('')
+})
+
+it('returns paired input only from a current accepted host publication after a connection changes', async () => {
+  const environmentId = 'opening-input-host'
+  replaceRuntimeEnvironmentRevisions([{ id: environmentId, createdAt: 11 }])
+  stageHostCreatedLaunchPrompt({
+    sessionId: SESSION,
+    operationId: '1790000000123-0123456789abcdef0123456789abcdef',
+    paneKey: `${AGENT}:${LEAF}`,
+    text: 'paired A',
+    executionHostId: toRuntimeExecutionHostId(environmentId),
+    target: { kind: 'environment', environmentId },
+    agent: 'claude',
+    delivery: 'submit',
+    terminalNotice: vi.fn(),
+    presentDraft: vi.fn()
+  })
+  dismissHostCreatedLaunchPrompt(SESSION)
+  expect(decideWebSessionTabsSnapshot(topology('chat'), environmentId).apply).toBe(true)
+  advanceRuntimeEnvironmentConnectionGeneration(environmentId)
+  await Promise.resolve()
+  expect(readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(SESSION))).toBe('')
+  expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(true)
+  expect(
+    decideWebSessionTabsSnapshot({ ...topology('chat'), snapshotVersion: 3 }, environmentId).apply
+  ).toBe(true)
+  await Promise.resolve()
+  expect(readNativeChatDraftCache(structuredAgentSessionDraftScopeKey(SESSION))).toBe('paired A')
+  expect(hasStagedStructuredLaunchPrompt(SESSION)).toBe(false)
+  expect(getStructuredAgentSessionPendingSends(SESSION)).toEqual([])
+})
+
+it('bounds accepted snapshot prompt work at N and 10N, with no traversal when this host has no claim', async () => {
+  const reads = vi.spyOn(stagedStructuredLaunchPrompts, 'get')
+  try {
+    for (const route of ['initial', 'local', 'paired'] as const) {
+      for (const size of [10, 100]) {
+        resetLocalStructuredSessionVersionForTests()
+        const snapshot: RuntimeMobileSessionTabsResult = {
+          ...topology('chat'),
+          snapshotVersion: size,
+          tabs: Array.from({ length: size }, (_, i) => ({
+            type: 'agent-session' as const,
+            id: `agent-session:perf-${i}`,
+            sessionId: `perf-${i}`,
+            agent: 'claude',
+            title: 'Chat',
+            isActive: false
+          }))
+        }
+        const apply = async () => {
+          if (route === 'initial') {
+            deliver(snapshot)
+          } else if (route === 'local') {
+            applyStructuredSessionTabSnapshots([snapshot], LOCAL_STRUCTURED_SESSION_OWNER, {
+              reacceptCurrentVersion: true
+            })
+          } else {
+            decideWebSessionTabsSnapshot(snapshot, `perf-${size}`)
+            await Promise.resolve()
+          }
+        }
+        reads.mockClear()
+        await apply()
+        expect(reads.mock.calls.filter(([key]) => key.startsWith('perf-'))).toHaveLength(0)
+        const host = route === 'paired' ? toRuntimeExecutionHostId(`perf-${size}`) : 'local'
+        const prompt = stageHostCreatedLaunchPrompt({
+          sessionId: SESSION,
+          operationId: '1790000000123-0123456789abcdef0123456789abcdef',
+          paneKey: `${AGENT}:${LEAF}`,
+          text: 'unsent draft',
+          delivery: 'draft',
+          executionHostId: host,
+          target:
+            route === 'paired'
+              ? { kind: 'environment', environmentId: `perf-${size}` }
+              : { kind: 'local' },
+          agent: 'claude',
+          presentDraft: vi.fn(),
+          terminalNotice: vi.fn()
+        })
+        expect(prompt).not.toBeNull()
+        snapshot.snapshotVersion++
+        reads.mockClear()
+        await apply()
+        const count = reads.mock.calls.filter(([key]) => key.startsWith('perf-')).length
+        expect(count).toBeLessThanOrEqual(2 * size)
+        discardStructuredLaunchPrompts(SESSION)
+      }
+    }
+  } finally {
+    reads.mockRestore()
+  }
+})
+
+it('replaces the catalog chat placeholder with the exact accepted terminal while the outer reply is pending, then notices a lost reply without paste', async () => {
+  const { parseDesktopCreateLaunchRecord } =
+    await import('../lib/structured-agent-session-launch-record')
+  const { issueDesktopCreateLaunch, acceptDesktopCreateCatalog } =
+    await import('../lib/structured-agent-session-desktop-create')
+  const {
+    writeStructuredAgentLaunchRecord,
+    readStructuredAgentLaunchRecord,
+    resetStructuredAgentLaunchPersistenceForTests
+  } = await import('../lib/structured-agent-session-launch-persistence')
+  const rpcModule = await import('./runtime-rpc-client')
+  const { makeWorktree } = await import('../store/slices/worktrees-slice-test-fixtures')
+  const sessionId = 'claude_11111111_2222_4333_8444_555555555555'
+  const tabId = '9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d'
+  const instanceId = '94d38a16-e9db-4e86-b81d-334788958124'
+  const operationId = `${Date.now()}-0123456789abcdef0123456789abcdef`
+  const record = parseDesktopCreateLaunchRecord({
+    sessionId,
+    agent: 'claude',
+    executionHostId: 'local',
+    lifecycle: 'visibility-unknown',
+    desktopCreate: {
+      params: {
+        agent: 'claude',
+        sessionId,
+        surface: 'chat',
+        operationId,
+        createIdentity: { instanceId },
+        paneKey: `${tabId}:${LEAF}`,
+        target: { kind: 'create-worktree', create: { repo: 'repo', name: 'task' } },
+        prompt: { text: 'opening A', delivery: 'submit' }
+      }
+    }
+  })
+  if (!record) {
+    throw new Error('outer fixture invalid')
+  }
+  let rejectReply!: (error: Error) => void
+  const rpc = vi.spyOn(rpcModule, 'callRuntimeRpc').mockImplementation(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectReply = reject
+      })
+  )
+  const notice = vi.fn()
+  const draft = vi.fn()
+  const prompt = stageHostCreatedLaunchPrompt({
+    sessionId,
+    operationId,
+    paneKey: `${tabId}:${LEAF}`,
+    text: 'opening A',
+    delivery: 'submit',
+    executionHostId: 'local',
+    target: { kind: 'local' },
+    agent: 'claude',
+    presentDraft: draft,
+    terminalNotice: notice
+  })
+  resetStructuredAgentLaunchPersistenceForTests()
+  try {
+    writeStructuredAgentLaunchRecord(record)
+    const issue = issueDesktopCreateLaunch(record, { kind: 'local' })
+    const lost = expect(issue).rejects.toThrow('whole reply lost')
+    const row = makeWorktree({ id: WORKTREE, repoId: 'repo', instanceId })
+    acceptDesktopCreateCatalog('local', [row])
+    expect(
+      useAppStore
+        .getState()
+        .unifiedTabsByWorktree[WORKTREE]?.some((tab) => tab.entityId === sessionId)
+    ).toBe(true)
+    const snapshot = topology('terminal')
+    for (const tab of snapshot.tabs) {
+      if (tab.type === 'terminal' && tab.parentTabId === AGENT) {
+        tab.parentTabId = tabId
+        tab.id = `${tabId}::${LEAF}`
+        tab.launchAgent = 'claude'
+      }
+    }
+    snapshot.tabGroups = []
+    snapshot.activeTabId = `${tabId}::${LEAF}`
+    deliver(snapshot)
+    expect(notice).not.toHaveBeenCalled()
+    expect(
+      useAppStore
+        .getState()
+        .unifiedTabsByWorktree[WORKTREE]?.some((tab) => tab.entityId === sessionId)
+    ).toBe(false)
+    expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.some((tab) => tab.id === tabId)).toBe(
+      true
+    )
+    acceptDesktopCreateCatalog('local', [row])
+    rejectReply(new Error('whole reply lost'))
+    await lost
+    expect(notice).toHaveBeenCalledExactlyOnceWith(tabId, LEAF, 'opening A', 'unconfirmed')
+    expect(draft).not.toHaveBeenCalled()
+    expect(getStructuredAgentSessionPendingSends(sessionId)).toEqual([])
+    expect(hasStagedStructuredLaunchPrompt(sessionId)).toBe(false)
+    expect(readStructuredAgentLaunchRecord(sessionId)).toBeUndefined()
+    acceptDesktopCreateCatalog('local', [row])
+    expect(
+      useAppStore
+        .getState()
+        .unifiedTabsByWorktree[WORKTREE]?.some((tab) => tab.entityId === sessionId)
+    ).toBe(false)
+    expect(rpc.mock.calls.map(([, method]) => method)).toEqual(['agent.launchReplay'])
+  } finally {
+    rpc.mockRestore()
+    discardStructuredLaunchPrompts(sessionId)
+    resetStructuredAgentLaunchPersistenceForTests()
+    prompt?.createSend?.drop()
+  }
 })
