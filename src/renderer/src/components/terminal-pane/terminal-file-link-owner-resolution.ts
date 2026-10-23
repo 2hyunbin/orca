@@ -1,13 +1,10 @@
-import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
-import { isHtmlFilePath } from './local-html-file-destinations'
 import type { TerminalFileContext } from './terminal-file-path-mapping'
 import {
   CLIENT_LOCAL_FILE_TARGET,
   resolveHostWorkspaceFile,
   type HostWorkspaceFile
 } from './terminal-host-workspace-file'
-import { hostNamedOtherWorkspaceOwner } from './terminal-file-other-workspace-owner'
 
 export type TerminalLinkFileOwner = {
   fileContext: TerminalFileContext
@@ -18,16 +15,13 @@ export type TerminalLinkFileOwner = {
   stat: { isDirectory: boolean; escapesWorktree: boolean }
   /** Another host workspace the link opens in. */
   hostWorkspaceFile: HostWorkspaceFile | null
-  /** Another host workspace whose file is viewed here, read-only (#32158). */
-  otherWorkspaceOwner: RuntimeWorkspaceFileRoute | null
   hostGrantId: string | null
   clientLocal: boolean
 }
 
 /**
  * Who owns a clicked link's file and how it may be read: a host grant, this computer, another
- * workspace on the host (opened there or viewed here), or the source workspace. Throws when the
- * host cannot answer.
+ * workspace on the host (opened there), or the source workspace. Throws when the host cannot answer.
  */
 export async function resolveTerminalLinkFileOwner(args: {
   fileContext: TerminalFileContext
@@ -35,7 +29,6 @@ export async function resolveTerminalLinkFileOwner(args: {
   worktreePath: string
   filePath: string
   terminalHandle?: string | null
-  openWithSystemDefault: boolean
 }): Promise<TerminalLinkFileOwner> {
   const { fileContext, filePath } = args
   const resolved: TerminalLinkFileOwner = {
@@ -45,7 +38,6 @@ export async function resolveTerminalLinkFileOwner(args: {
     filePath,
     stat: { isDirectory: false, escapesWorktree: false },
     hostWorkspaceFile: null,
-    otherWorkspaceOwner: null,
     hostGrantId: null,
     clientLocal: false
   }
@@ -69,15 +61,6 @@ export async function resolveTerminalLinkFileOwner(args: {
   if (!linkOwner) {
     return { ...resolved, stat: await statUserOpenedPath(fileContext, filePath) }
   }
-  // Why HTML keeps the switch: its rendered preview reads only inside the workspace it opens in.
-  const viewHere = !args.openWithSystemDefault && !isHtmlFilePath(linkOwner.absolutePath)
-  const otherWorkspaceOwner = viewHere
-    ? hostNamedOtherWorkspaceOwner(linkOwner, resolved.worktreeId)
-    : null
-  const stat = { isDirectory: linkOwner.isDirectory, escapesWorktree: false }
-  if (otherWorkspaceOwner) {
-    return { ...resolved, filePath: linkOwner.absolutePath, otherWorkspaceOwner, stat }
-  }
   // Why: the host already stat'ed the path inside the workspace that holds it; open it there.
   const { worktreeId, worktreePath } = linkOwner
   return {
@@ -87,6 +70,6 @@ export async function resolveTerminalLinkFileOwner(args: {
     worktreeId,
     worktreePath,
     fileContext: { ...fileContext, worktreeId, worktreePath },
-    stat
+    stat: { isDirectory: linkOwner.isDirectory, escapesWorktree: false }
   }
 }

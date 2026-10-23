@@ -1,6 +1,6 @@
 import type { OpenFile } from '@/store/slices/editor'
 import type { AppState } from '@/store/types'
-import { LOCAL_EXECUTION_HOST_ID, toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { findWorkspaceFileRoute } from './runtime-workspace-file-route'
 import { editorBufferRouteEpochOf } from '@/store/slices/editor/buffers/editor-buffer-identity-cache'
@@ -21,9 +21,9 @@ type OwnerScope = { worktreeId: string; relativePath: string }
 const ownerScopeCache = new WeakMap<object, { epoch: object; scope: OwnerScope }>()
 
 /**
- * The workspace an open file's reads and watch go through. A read-only view
- * of a file another workspace on its host holds (#32158) lives in one workspace but is scoped to
- * the one that holds the file, derived from the catalog so a restored view needs nothing stored.
+ * The workspace whose watch covers an open file. A read-only view of a file another workspace on
+ * this computer holds (#32158) lives in one workspace but is watched with the one that holds the
+ * file, derived from the catalog so a restored view needs nothing stored.
  */
 export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): OwnerScope {
   const own = { worktreeId: file.worktreeId, relativePath: file.relativePath }
@@ -34,8 +34,10 @@ export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): Owne
     file.liveTail === true ||
     file.relativePath !== file.filePath ||
     file.terminalArtifactGrantId ||
-    // Why: a direct SSH host's paths are never matched against this computer's catalog.
+    // Why: only this computer's files are viewed outside their workspace; an SSH or server
+    // tab naming another workspace's path is moved there by the loader instead.
     file.externalSshTargetId ||
+    file.runtimeEnvironmentId?.trim() ||
     isFloatingWorkspaceId(file.worktreeId)
   ) {
     return own
@@ -46,12 +48,7 @@ export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): Owne
   if (cached?.epoch === epoch) {
     return cached.scope
   }
-  const runtimeOwner = file.runtimeEnvironmentId?.trim()
-  const route = findWorkspaceFileRoute(
-    state,
-    runtimeOwner ? toRuntimeExecutionHostId(runtimeOwner) : LOCAL_EXECUTION_HOST_ID,
-    file.filePath
-  )
+  const route = findWorkspaceFileRoute(state, LOCAL_EXECUTION_HOST_ID, file.filePath)
   const scope = route ? { worktreeId: route.worktreeId, relativePath: route.relativePath } : own
   ownerScopeCache.set(file, { epoch, scope })
   return scope

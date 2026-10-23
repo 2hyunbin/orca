@@ -1,6 +1,7 @@
 import { getWorkspaceFilePreviewPlan, openFileInBrowserTab } from '@/lib/file-preview'
 import { downloadAndOpenRemoteTerminalFile } from './terminal-remote-file-download-open'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
+import type { RuntimeWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
 import { canClientOsOpenWorkspaceFile } from '@/lib/workspace-file-host-routing'
 import { isMissingRuntimePathError } from '@/runtime/runtime-file-metadata-client'
 import { useAppStore } from '@/store'
@@ -151,8 +152,7 @@ export function openDetectedFilePath(
         worktreeId,
         worktreePath,
         filePath: mappedFilePath,
-        terminalHandle: deps.terminalHandle,
-        openWithSystemDefault
+        terminalHandle: deps.terminalHandle
       })
     } catch (error) {
       if (isCurrentOpen() && deps.onOpenFailure) {
@@ -169,7 +169,7 @@ export function openDetectedFilePath(
       return
     }
     const { fileContext, stat: statResult, hostWorkspaceFile, hostGrantId, clientLocal } = owner
-    let { otherWorkspaceOwner } = owner
+    let otherWorkspaceOwner: RuntimeWorkspaceFileRoute | null = null
     ;({ worktreeId, worktreePath, filePath: mappedFilePath } = owner)
 
     const canOpenWithSystemDefault = shouldOpenTerminalFileWithSystemDefault(fileContext)
@@ -255,7 +255,7 @@ export function openDetectedFilePath(
       if (maybeRelative !== null && maybeRelative.length > 0 && !statResult.escapesWorktree) {
         relativePath = maybeRelative
       }
-    } else if (!otherWorkspaceOwner && hostGrantId === null && !clientLocal && !hostWorkspaceFile) {
+    } else if (hostGrantId === null && !clientLocal && !hostWorkspaceFile) {
       const sibling = siblingWorkspaceLink(targetExecutionHostId, mappedFilePath, worktreeId)
       otherWorkspaceOwner = sibling.view
       if (sibling.openInOwner) {
@@ -289,9 +289,7 @@ export function openDetectedFilePath(
         runtimeEnvironmentId: clientLocal ? null : runtimeEnvironmentId,
         // Why: a tab's owner must match its workspace's to be editable; this one is this computer's,
         // or another workspace's, which "Open there" edits under its own owner.
-        ...(clientLocal
-          ? { readOnly: true }
-          : otherWorkspaceViewFields(otherWorkspaceOwner, runtimeOwnerId)),
+        ...(clientLocal ? { readOnly: true } : otherWorkspaceViewFields(otherWorkspaceOwner)),
         // Why: the grant is the only authority to read a host file outside its workspaces.
         ...(hostGrantId !== null ? { readOnly: true, terminalArtifactGrantId: hostGrantId } : {}),
         // Why: absolute SSH paths outside the worktree otherwise look identical

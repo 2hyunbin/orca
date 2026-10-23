@@ -98,13 +98,12 @@ describe('a paired-server link outside its own workspace', () => {
     )
   })
 
-  it('views a file in a workspace this client knows read-only here, with a hint', async () => {
-    const owner: RuntimeWorkspaceFileRoute = {
+  it('opens a file in a workspace this client knows there, with no read-only view or hint', async () => {
+    findWorkspaceFileRouteMock.mockReturnValue({
       worktreeId: 'wt-main',
       relativePath: 'src/index.ts',
       executionHostId: 'runtime:env-1'
-    }
-    findWorkspaceFileRouteMock.mockReturnValueOnce(owner)
+    })
     hostAnswers({
       worktree: 'wt-main',
       relativePath: 'src/index.ts',
@@ -116,28 +115,17 @@ describe('a paired-server link outside its own workspace', () => {
     openDetectedFilePath('/repo/src/index.ts', 3, null, featureWorktree)
     await flushDoubleRaf()
 
-    expect(activateAndRevealWorkspace).toHaveBeenCalledTimes(1)
-    expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-feat', {
+    // Why: a server reads only by workspace-relative path, so its file opens in its own workspace.
+    expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-main', {
       providesInitialSurface: true,
       executionHostId: 'runtime:env-1'
     })
     expect(openFileMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filePath: '/repo/src/index.ts',
-        relativePath: '/repo/src/index.ts',
-        worktreeId: 'wt-feat',
-        runtimeEnvironmentId: 'env-1',
-        readOnly: true
-      }),
+      expect.objectContaining({ relativePath: 'src/index.ts', worktreeId: 'wt-main' }),
       { forceContentReload: true }
     )
-    expect(showHintMock).toHaveBeenCalledWith({
-      fileId: '/repo/src/index.ts',
-      filePath: '/repo/src/index.ts',
-      owner,
-      runtimeEnvironmentId: 'env-1',
-      position: { line: 3, column: null }
-    })
+    expect(openFileMock.mock.calls[0][0]).not.toHaveProperty('readOnly')
+    expect(showHintMock).not.toHaveBeenCalled()
   })
 
   it("opens the host's spelling of the path so the tab stays a workspace file", async () => {
