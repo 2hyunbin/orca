@@ -96,7 +96,6 @@ export async function resolveHostFlagEnvironmentId(
     if (host.kind === 'alias') {
       return null
     }
-    // runtime: selects by persisted ID only; return retryable IDs in structured error data.
     const sshTargets = await selection.listSshTargets()
     throw new RuntimeClientError(
       'invalid_argument',
