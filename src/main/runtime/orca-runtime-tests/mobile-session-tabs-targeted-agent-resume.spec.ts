@@ -14,6 +14,16 @@ import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import type { PtyProcessInfo } from '../../providers/pty-provider-contract'
 import { deterministicAgentSessionUuid } from '../runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../remote-runtime-terminal-create-identity'
+import type { RuntimePtyController } from '../runtime-pty-controller-contract'
+import { AgentSessionRecordStore } from '../agent-session-record-store'
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../shared/agent-session-record.test-fixture'
+import {
+  chooseSavedResumeFreshLaunch,
+  savedResumeResult
+} from '../../ipc/pty/host-env/saved-resume-admission'
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const SESSION = { key: 'session_id', id: 'provider-session-1' } as const
@@ -73,7 +83,7 @@ function sessionRow(paneKey: string, receivedAt = 0): AgentStatusIpcPayload {
 function makeRuntime(
   fixture: Fixture,
   opts: {
-    spawn?: () => Promise<{ id: string }>
+    spawn?: NonNullable<RuntimePtyController['spawn']>
     rows?: () => AgentStatusIpcPayload[]
     checkHookAgentPresence?: () => Promise<'live' | 'unverifiable' | 'exited' | null>
     listProcesses?: () => Promise<PtyProcessInfo[]>
@@ -82,7 +92,7 @@ function makeRuntime(
     ) => () => void
   } = {}
 ) {
-  const spawn = vi.fn<(args: unknown) => Promise<{ id: string }>>(
+  const spawn = vi.fn<NonNullable<RuntimePtyController['spawn']>>(
     opts.spawn ?? (() => Promise.resolve({ id: 'resumed-pty' }))
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
@@ -149,6 +159,64 @@ function storedRecord(fixture: Fixture) {
 }
 
 describe('resumeAgentSessionInWorkspace', () => {
+  it('releases a saved resume claim when actual admission creates a plain shell', async () => {
+    const fixture = makeSleptWorkspace()
+    const saved = storedRecord(fixture)
+    if (!saved) {
+      throw new Error('missing saved conversation')
+    }
+    saved.origin = 'live'
+    const chat = agentSessionRecordFixture(
+      agentSessionLeaseFixture({
+        claimStatus: 'released',
+        ownerProcess: null,
+        reservedSpawnToken: null,
+        deathEvidence: { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
+      })
+    )
+    chat.providerHandleChain[0]!.handle.nativeId = SESSION.id
+    let nativeOpen = true
+    const store: AgentSessionRecordStore = Object.create(AgentSessionRecordStore.prototype)
+    store.listRecords = () => [chat]
+    store.getVisibleSessionTabIndex = () => ({
+      present: true,
+      sessionIds: nativeOpen ? [chat.sessionId] : []
+    })
+    const effectiveCommands: (string | undefined)[] = []
+    const { runtime, spawn, openOldPane, resume } = makeRuntime(fixture, {
+      spawn: async (args) => {
+        const admission = await chooseSavedResumeFreshLaunch(
+          { openAgentSessionRecordStore: async () => store },
+          args,
+          null,
+          args
+        )
+        effectiveCommands.push(args.command)
+        return {
+          id: effectiveCommands.length === 1 ? 'refused-shell' : 'resumed-C',
+          launchAgent: args.launchAgent,
+          launchConfig: args.launchConfig,
+          ...savedResumeResult(admission)
+        }
+      }
+    })
+    await openOldPane()
+    expect(runtime.getTerminalLaunchResult('refused-shell')).toMatchObject({
+      agentResumeRefused: 'chat-home',
+      savedResumeDecision: { agent: 'claude', providerSession: SESSION, verdict: 'chat-home' }
+    })
+    expect(runtime.getTerminalLaunchResult('refused-shell')?.launchAgent).toBeUndefined()
+    expect(effectiveCommands).toEqual([undefined])
+    nativeOpen = false
+    await expect(resume({ mutationId: 'after-native-close' })).resolves.toMatchObject({
+      ok: true,
+      ptyId: 'resumed-C'
+    })
+    expect(effectiveCommands[1]).toContain(SESSION.id)
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(runtime.getTerminalLaunchResult('refused-shell')).toBeDefined()
+  })
+
   // Review repro, on the runtime-owned path: the spawn started but its reply was lost.
   it('retains ownership after an ambiguous create with a running resume', async () => {
     const fixture = makeSleptWorkspace()

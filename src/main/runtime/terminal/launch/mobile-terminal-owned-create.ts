@@ -148,7 +148,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         )
       : await create()
     if (terminal.ptyId) {
-      opts.onPtyCreated?.(terminal.ptyId)
+      opts.onPtyCreated?.(terminal.ptyId, terminal)
     }
     const livePty = this.getLivePtyForHandle(terminal.handle)
     if (!livePty) {

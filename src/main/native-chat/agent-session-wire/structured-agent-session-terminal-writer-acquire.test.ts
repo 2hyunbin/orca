@@ -21,7 +21,10 @@ import { agentSessionLeaseOwnerVerdict } from '../../../shared/agent-session-lea
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
-import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
+import {
+  closeTestJournalHostDatabase,
+  openTestJournalHostDatabase
+} from '../agent-session-journal/journal-host-database-test-support'
 import {
   AgentSessionAcquisitionRefusal,
   type StructuredAgentSessionAdapter
@@ -112,6 +115,7 @@ beforeEach(async () => {
 afterEach(async () => {
   setStructuredAgentSessionHost(null)
   await host.flushAllStreamedEvents()
+  closeTestJournalHostDatabase(root)
   await rm(root, { recursive: true, force: true })
 })
 
@@ -341,42 +345,42 @@ it.each([10, 100])(
     })
     let rowVisits = 0
     let linkVisits = 0
-    const rows = new Proxy(
-      Array.from({ length: size }, (_, index) => ({
-        paneKey: `unrelated-${index}`,
-        connectionId: null,
-        agentType: 'codex',
-        providerSession: { key: 'session_id' as const, id: 'unrelated' },
-        state: 'done' as const,
-        prompt: '',
-        receivedAt: 1,
-        stateStartedAt: 1
-      })),
-      {
-        get(target, key, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
-            rowVisits += 1
-          }
-          return Reflect.get(target, key, receiver)
+    const rows = Array.from({ length: size }, (_, index) => ({
+      paneKey: `unrelated-${index}`,
+      connectionId: null,
+      agentType: 'codex',
+      providerSession: { key: 'session_id' as const, id: 'unrelated' },
+      state: 'done' as const,
+      prompt: '',
+      receivedAt: 1,
+      stateStartedAt: 1
+    }))
+    const links = rows.map(() => ({
+      agent: 'codex',
+      id: 'unrelated',
+      paneOwned: true,
+      worktreeId: 'workspace-1',
+      terminal: () => null
+    }))
+    rows.forEach((row, index) =>
+      Object.defineProperty(rows, index, {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          rowVisits += 1
+          return row
         }
-      }
+      })
     )
-    const links = new Proxy(
-      rows.map(() => ({
-        agent: 'codex',
-        id: 'unrelated',
-        paneOwned: true,
-        worktreeId: 'workspace-1',
-        terminal: () => null
-      })),
-      {
-        get(target, key, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
-            linkVisits += 1
-          }
-          return Reflect.get(target, key, receiver)
+    links.forEach((link, index) =>
+      Object.defineProperty(links, index, {
+        configurable: true,
+        enumerable: true,
+        get: () => {
+          linkVisits += 1
+          return link
         }
-      }
+      })
     )
     rowVisits = 0
     const shell = [{ pid: 10, ppid: 1, stat: 'Ss+', command: '/bin/zsh' }]
