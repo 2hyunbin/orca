@@ -57,7 +57,7 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
         // Why: only a written save may close the tab; anything else keeps it and its edits.
         const result = await queueSave(file, draft)
         if (result !== 'written') {
-          onNotClosed?.(result === 'blocked-stale' ? 'blocked-stale' : 'not-saved')
+          onNotClosed?.(result === 'failed' ? 'not-saved' : result)
           return
         }
       } catch {
