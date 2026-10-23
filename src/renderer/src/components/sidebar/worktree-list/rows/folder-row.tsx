@@ -1,3 +1,4 @@
+import { getWorktreeLineageSelection } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorktreeLineageGroupKey } from '../../../../../../shared/sidebar-list/group-keys'
 import type { LineageToggleHandler } from '../../worktree-lineage-toggle-handler-cache'
 import React from 'react'
@@ -79,8 +80,7 @@ export function renderFolderWorkspaceVirtualRow(args: {
     pathStatus?.exists === false &&
     (isConfirmedStaleFolderPathStatus(pathStatus) || pathStatus.reason === 'ambiguous-connection')
   const folderPrDisplay = getFolderWorkspaceCardPrDisplay({
-    folderWorkspaceId: row.folderWorkspace.id,
-    workspaceLineageByChildKey: ctx.workspaceLineageByChildKey,
+    folderWorktree,
     worktreeLineageById: ctx.worktreeLineageById,
     worktreeMap: ctx.worktreeMap,
     repoMap: ctx.repoMap,
@@ -104,6 +104,7 @@ export function renderFolderWorkspaceVirtualRow(args: {
       aria-selected={ctx.selectedWorktreeIds.has(folderWorktreeIdentity)}
       aria-current={isActiveWorktree ? 'page' : undefined}
       data-worktree-id={folderWorktree.id}
+      data-worktree-lineage-selection={getWorktreeLineageSelection(folderWorktree)}
       data-worktree-host-identity={folderWorktreeIdentity}
       data-worktree-row-key={rowKey}
       data-worktree-virtual-row

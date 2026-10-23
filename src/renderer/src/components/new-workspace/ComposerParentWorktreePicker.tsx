@@ -9,11 +9,13 @@ import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
 import { branchDisplayName } from '@/components/sidebar/WorktreeCardHelpers'
 import {
   getWorktreeLineageProjection,
+  findWorktreeLineageRow,
+  getWorktreeLineageIdentity,
+  getWorktreeLineageSelection,
   getWorktreeLineageDescendants
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import {
@@ -83,8 +85,7 @@ function ComposerParentWorktreePickerImpl({
       return null
     }
     const rows = getLineageInputs(s).worktreeMap
-    const matches = [...rows.values()].filter((row) => row.id === value)
-    const parent = rows.get(value) ?? (matches.length === 1 ? matches[0] : undefined)
+    const parent = findWorktreeLineageRow(rows, value)
     return parent && !parent.isArchived ? parent.displayName : null
   })
 
@@ -179,13 +180,14 @@ function ParentWorktreeCandidateList({
       worktreeLineageById,
       worktreeMap
     ).cyclicIdentities
-    const folder = [...worktreeMap.values()].find(
-      (row) => row.id === folderWorkspaceKey(activeFolderWorkspaceId ?? '')
+    const folder = findWorktreeLineageRow(
+      worktreeMap,
+      folderWorkspaceKey(activeFolderWorkspaceId ?? '')
     )
     const folderSubtreeIds = folder
       ? new Set(
           getWorktreeLineageDescendants(folder, worktreeLineageById, worktreeMap).map(
-            getWorktreeHostIdentity
+            getWorktreeLineageIdentity
           )
         )
       : activeFolderWorkspaceId
@@ -196,8 +198,8 @@ function ParentWorktreeCandidateList({
         (candidate) =>
           !candidate.id.startsWith('folder:') &&
           !candidate.isArchived &&
-          !cyclicLineageIds.has(getWorktreeHostIdentity(candidate)) &&
-          (folderSubtreeIds === null || folderSubtreeIds.has(getWorktreeHostIdentity(candidate)))
+          !cyclicLineageIds.has(getWorktreeLineageIdentity(candidate)) &&
+          (folderSubtreeIds === null || folderSubtreeIds.has(getWorktreeLineageIdentity(candidate)))
       )
       .sort(compareWorktreeDisplayName)
   }, [activeFolderWorkspaceId, worktreeLineageById, worktreeMap])
@@ -221,7 +223,7 @@ function ParentWorktreeCandidateList({
       index === 0
         ? NO_PARENT_ROW_KEY
         : filtered[index - 1]
-          ? getWorktreeHostIdentity(filtered[index - 1])
+          ? getWorktreeLineageSelection(filtered[index - 1])
           : index,
     // Why: the list mounts inside a popover that measures on the next frame, so
     // seed the viewport to avoid a blank first paint.
@@ -269,7 +271,7 @@ function ParentWorktreeCandidateList({
         if (activeIndex === 0 || candidate) {
           event.preventDefault()
           event.stopPropagation()
-          onSelect(candidate ? getWorktreeHostIdentity(candidate) : null)
+          onSelect(candidate ? getWorktreeLineageSelection(candidate) : null)
         }
       }
     },
@@ -311,7 +313,9 @@ function ParentWorktreeCandidateList({
                 key={virtualRow.key}
                 id={`${optionIdPrefix}-${rowIndex}`}
                 role="option"
-                aria-selected={(candidate ? getWorktreeHostIdentity(candidate) : null) === value}
+                aria-selected={
+                  (candidate ? getWorktreeLineageSelection(candidate) : null) === value
+                }
                 data-selected={isHighlighted || undefined}
                 // Why `jump-palette-item`: selection chrome lives in main.css — flat accent is invisible on light popovers.
                 className="jump-palette-item absolute left-0 top-0 flex w-full cursor-default select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-2 text-sm outline-none"
@@ -320,12 +324,13 @@ function ParentWorktreeCandidateList({
                   transform: `translateY(${virtualRow.start}px)`
                 }}
                 onPointerMove={() => setHighlightedIndex(rowIndex)}
-                onClick={() => onSelect(candidate ? getWorktreeHostIdentity(candidate) : null)}
+                onClick={() => onSelect(candidate ? getWorktreeLineageSelection(candidate) : null)}
               >
                 <Check
                   className={cn(
                     'size-3.5 shrink-0',
-                    (candidate ? getWorktreeHostIdentity(candidate) : null) !== value && 'opacity-0'
+                    (candidate ? getWorktreeLineageSelection(candidate) : null) !== value &&
+                      'opacity-0'
                   )}
                 />
                 {candidate ? (

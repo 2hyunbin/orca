@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store'
 import { describe, expect, it, vi } from 'vitest'
 import type * as ResolvedWorktreeLineage from '../../../../shared/resolved-worktree-lineage'
 import type { Repo } from '../../../../shared/repo-types'
@@ -24,11 +25,13 @@ vi.mock('../../../../shared/resolved-worktree-lineage', async (importOriginal) =
 import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
 import type { computeVisibleWorktrees } from './compute-visible-worktrees'
 import {
+  findWorktreeLineageRow,
   getSidebarLineageAncestors,
   getSidebarLineageParentsByIdentity
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import {
+  requireKnownLineageRow,
+  requireCurrentLineageRow,
   getLineageInputs,
   getLineageAncestorIndex,
   getSortedWorktreeRankIndex
@@ -267,7 +270,9 @@ describe('visible worktree indexes', () => {
     // phantom ancestor row.
     expect(computeVisibleWorktreeIds(worktreesByRepo, sortedIds, opts)).toEqual([child.id])
     expect(computeVisibleWorktreeIds(worktreesByRepo, sortedIds, opts)).toEqual([child.id])
-    expect(getLineageAncestorIndex(worktreesByRepo).has(getWorktreeHostIdentity(parent))).toBe(true)
+    expect(Boolean(findWorktreeLineageRow(getLineageAncestorIndex(worktreesByRepo), parent))).toBe(
+      true
+    )
   })
 
   it('keeps both rows of a two-host id collision', () => {
@@ -280,7 +285,36 @@ describe('visible worktree indexes', () => {
     const worktreesByRepo = { repo1: [local, remote] }
 
     const index = getLineageAncestorIndex(worktreesByRepo)
-    expect(index.get(getWorktreeHostIdentity(local))?.path).toBe('/tmp/local')
-    expect(index.get(getWorktreeHostIdentity(remote))?.path).toBe('/tmp/remote')
+    expect(findWorktreeLineageRow(index, local)?.path).toBe('/tmp/local')
+    expect(findWorktreeLineageRow(index, remote)?.path).toBe('/tmp/remote')
   })
+})
+
+it('qualifies unstamped local admission without changing canonical bytes and keeps physical SSH owner precedence', () => {
+  const previous = useAppStore.getState()
+  const local = makeWorktree('shared')
+  const remote = {
+    ...local,
+    hostId: 'runtime:e' as const,
+    runtimeOwnerEnvironmentId: 'e',
+    instanceId: 'remote'
+  }
+  try {
+    useAppStore.setState({ worktreesByRepo: { repo1: [remote, local] }, folderWorkspaces: [] })
+    expect(requireKnownLineageRow(useAppStore.getState(), local, 'local')).toBe(local)
+    expect(local.hostId).toBeUndefined()
+    expect(() => requireKnownLineageRow(useAppStore.getState(), local)).toThrow('changed')
+    const ssh = { ...local, hostId: 'ssh:inner' as const, runtimeOwnerEnvironmentId: 'e' }
+    useAppStore.setState({ worktreesByRepo: { repo1: [ssh] } })
+    expect(requireKnownLineageRow(useAppStore.getState(), ssh, 'runtime:e')).toBe(ssh)
+    expect(requireCurrentLineageRow(useAppStore.getState(), ssh)).toBe(ssh)
+    useAppStore.setState({
+      worktreesByRepo: { repo1: [ssh, { ...ssh, runtimeOwnerEnvironmentId: 'rival' }] }
+    })
+    expect(() => requireKnownLineageRow(useAppStore.getState(), ssh, 'runtime:e')).toThrow(
+      'changed'
+    )
+  } finally {
+    useAppStore.setState(previous, true)
+  }
 })

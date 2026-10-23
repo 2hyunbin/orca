@@ -1,18 +1,15 @@
-import { mergeWorkspaceLineageRecords } from '../../../../shared/resolved-worktree-lineage'
 import type { AppState } from '@/store/types'
 import type { Repo } from '../../../../shared/repo-types'
-import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
+import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { buildParentPrChecksRows } from '@/components/right-sidebar/parent-pr-checks-rows'
 import type { ParentPrChecksRow } from '@/components/right-sidebar/parent-pr-checks-row-types'
 import type { WorktreeCardPrDisplay } from './worktree-card-pr-display'
 import { getWorktreeLineageDescendants } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 type FolderWorkspaceCardPrDisplayArgs = {
-  folderWorkspaceId: string
-  workspaceLineageByChildKey: Record<string, WorkspaceLineage> | null | undefined
-  worktreeLineageById: Record<string, WorktreeLineage> | null | undefined
+  folderWorktree: Worktree
+  worktreeLineageById: Record<string, WorktreeLineage>
   worktreeMap: ReadonlyMap<string, Worktree>
   repoMap: ReadonlyMap<string, Repo>
   hostedReviewCache: AppState['hostedReviewCache'] | null
@@ -28,8 +25,7 @@ const REVIEW_STATUS_PRIORITY: Record<NonNullable<WorktreeCardPrDisplay['status']
 }
 
 export function getFolderWorkspaceCardPrDisplay({
-  folderWorkspaceId,
-  workspaceLineageByChildKey,
+  folderWorktree,
   worktreeLineageById,
   worktreeMap,
   repoMap,
@@ -37,12 +33,11 @@ export function getFolderWorkspaceCardPrDisplay({
   prCache,
   settings
 }: FolderWorkspaceCardPrDisplayArgs): WorktreeCardPrDisplay | null {
-  const attachedWorktrees = getAttachedWorktreesForFolderWorkspaceCard({
-    folderWorkspaceId,
-    workspaceLineageByChildKey,
+  const attachedWorktrees = getWorktreeLineageDescendants(
+    folderWorktree,
     worktreeLineageById,
     worktreeMap
-  })
+  )
 
   const reviews = buildParentPrChecksRows({
     worktrees: attachedWorktrees,
@@ -61,26 +56,6 @@ export function getFolderWorkspaceCardPrDisplay({
   }
 
   return reviews.sort(compareReviewDisplays)[0] ?? null
-}
-
-function getAttachedWorktreesForFolderWorkspaceCard({
-  folderWorkspaceId,
-  workspaceLineageByChildKey,
-  worktreeLineageById,
-  worktreeMap
-}: Pick<
-  FolderWorkspaceCardPrDisplayArgs,
-  'folderWorkspaceId' | 'workspaceLineageByChildKey' | 'worktreeLineageById' | 'worktreeMap'
->): Worktree[] {
-  const folderKey = folderWorkspaceKey(folderWorkspaceId)
-  const folder = [...worktreeMap.values()].find((row) => row.id === folderKey)
-  return folder
-    ? getWorktreeLineageDescendants(
-        folder,
-        mergeWorkspaceLineageRecords(worktreeLineageById ?? {}, workspaceLineageByChildKey ?? {}),
-        worktreeMap
-      )
-    : []
 }
 
 function parentPrChecksRowToCardDisplay(row: ParentPrChecksRow): WorktreeCardPrDisplay | null {

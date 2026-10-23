@@ -1,5 +1,6 @@
 import {
   getSavedWorktreeLineage,
+  resolveWorktreeLineageParents,
   lineageStoreKeyForRow,
   projectResolvedWorktreeLineage,
   mergeWorkspaceLineageRecords
@@ -43,56 +44,37 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
   const repoHosts = new Map(repos.map((repo) => [repo, getRepoExecutionHostId(repo)]))
   const reposById = new Map<string, typeof repos>()
   for (const repo of repos) {
-    reposById.set(repo.id, [...(reposById.get(repo.id) ?? []), repo])
+    const group = reposById.get(repo.id) ?? []
+    group.push(repo)
+    reposById.set(repo.id, group)
   }
   const hostsById = new Map<string, Set<string>>()
   for (const { id, meta } of metadata) {
     if (meta.hostId) {
-      hostsById.set(id, new Set([...(hostsById.get(id) ?? []), meta.hostId]))
+      const hosts = hostsById.get(id) ?? new Set<string>()
+      hosts.add(meta.hostId)
+      hostsById.set(id, hosts)
     }
   }
   const folders = store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
-  const byInstance = new Map<string, Set<string>>()
-  for (const row of [
-    ...metadata.map(({ id, meta }) => ({ id, instanceId: meta.instanceId })),
-    ...folders
-  ]) {
-    if (!row.instanceId) {
-      continue
-    }
-    const ids = byInstance.get(row.instanceId) ?? new Set<string>()
-    ids.add(row.id)
-    byInstance.set(row.instanceId, ids)
-  }
-  const adjacent = new Map<string, Set<string>>()
-  const connect = (a: string, b: string) => {
-    const ids = adjacent.get(a) ?? new Set<string>()
-    ids.add(b)
-    adjacent.set(a, ids)
-  }
-  for (const edge of Object.values(lineageById)) {
-    const candidates = new Set([
-      edge.parentWorktreeId,
-      ...(byInstance.get(edge.parentWorktreeInstanceId) ?? [])
-    ])
-    for (const parent of candidates) {
-      connect(edge.worktreeId, parent)
-      connect(parent, edge.worktreeId)
-    }
+  const currentHost = (repoId: string, hostId: Worktree['hostId']) => {
+    const owners = reposById.get(repoId) ?? []
+    return hostId ?? (owners.length === 1 ? repoHosts.get(owners[0]) : undefined)
   }
   const currentRow = <T extends Worktree>(row: T): T => {
     if (lineageStoreKeyForRow(row)) {
       return row
     }
-    const owners = reposById.get(row.repoId) ?? []
     return {
       ...row,
-      hostId: row.hostId ?? (owners.length === 1 ? repoHosts.get(owners[0]) : undefined),
+      hostId: currentHost(row.repoId, row.hostId),
       savedLineage: undefined,
       lineage: null
     }
   }
   let rows: Worktree[] | undefined
+  let members: Map<string, string | undefined> | undefined
+  let adjacent: Map<string, Set<string>> | undefined
   return {
     lineageById,
     rawMetadata,
@@ -104,7 +86,6 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
         ...new Map(
           [
             ...metadata.map(({ id, meta }) => {
-              const owners = reposById.get(getRepoIdFromWorktreeId(id)) ?? []
               const merged = mergeWorktree(
                 getRepoIdFromWorktreeId(id),
                 {
@@ -119,7 +100,7 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
               return {
                 ...merged,
                 id,
-                hostId: meta.hostId ?? (owners.length === 1 ? repoHosts.get(owners[0]) : undefined)
+                hostId: currentHost(getRepoIdFromWorktreeId(id), meta.hostId)
               }
             }),
             ...folders
@@ -129,11 +110,20 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
     },
     currentRow,
     hasCurrent(row: Worktree) {
+      members ??= new Map([
+        ...metadata.map(({ id, meta }) => {
+          return [
+            getWorktreeHostIdentity({
+              id,
+              hostId: currentHost(getRepoIdFromWorktreeId(id), meta.hostId)
+            }),
+            meta.instanceId
+          ] as const
+        }),
+        ...folders.map((folder) => [getWorktreeHostIdentity(folder), folder.instanceId] as const)
+      ])
       const key = getWorktreeHostIdentity(currentRow(row))
-      return this.rows.some(
-        (candidate) =>
-          getWorktreeHostIdentity(candidate) === key && candidate.instanceId === row.instanceId
-      )
+      return members.has(key) && members.get(key) === row.instanceId
     },
     edgeOf: (row: Worktree) => getSavedWorktreeLineage(currentRow(row), lineageById, rawMetadata),
     project<T extends Worktree>(supplied: readonly T[]) {
@@ -162,9 +152,42 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
       )
     },
     relatedIds(seeds: readonly string[]) {
-      const ids = new Set(seeds.filter((id) => adjacent.has(id)))
+      if (!adjacent) {
+        const links = new Map<string, Set<string>>()
+        adjacent = links
+        const connect = (a: string, b: string) => {
+          const peers = links.get(a) ?? new Set<string>()
+          peers.add(b)
+          links.set(a, peers)
+        }
+        const parents = resolveWorktreeLineageParents(
+          this.rows,
+          this.edgeOf,
+          undefined,
+          'saved-walk'
+        )
+        const selected = new Set<string>()
+        for (const [child, parent] of parents) {
+          if (this.edgeOf(child)?.parentStore === 'external') {
+            continue
+          }
+          selected.add(child.id)
+          connect(child.id, parent.id)
+          connect(parent.id, child.id)
+        }
+        // Missing metadata still needs a bounded raw-locator scan, never for external intent.
+        for (const edge of Object.values(lineageById)) {
+          if (edge.parentStore || selected.has(edge.worktreeId)) {
+            continue
+          }
+          connect(edge.worktreeId, edge.parentWorktreeId)
+          connect(edge.parentWorktreeId, edge.worktreeId)
+        }
+      }
+      const links = adjacent
+      const ids = new Set(seeds.filter((id) => links.has(id)))
       for (const id of ids) {
-        for (const peer of adjacent.get(id) ?? []) {
+        for (const peer of links.get(id) ?? []) {
           ids.add(peer)
         }
       }

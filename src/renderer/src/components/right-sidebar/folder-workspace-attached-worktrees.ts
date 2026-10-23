@@ -1,5 +1,11 @@
 import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import {
+  getWorktreeLineageIdentity,
+  findWorktreeLineageRow
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -15,6 +21,7 @@ export type AttachedWorktreeResolution = {
 }
 
 type AttachedWorktreeResolverArgs = {
+  activeWorkspaceExecutionHostId?: ExecutionHostId | null
   activeWorkspaceKey: string | null
   activeWorktreeId: string | null
   folderWorkspaces: readonly FolderWorkspace[]
@@ -28,6 +35,7 @@ export function getWorktreeActivityTime(worktree: Worktree): number {
 }
 
 export function getAttachedWorktreesForFolderWorkspace({
+  activeWorkspaceExecutionHostId,
   activeWorkspaceKey,
   activeWorktreeId,
   folderWorkspaces,
@@ -36,12 +44,27 @@ export function getAttachedWorktreesForFolderWorkspace({
   worktreesByRepo
 }: AttachedWorktreeResolverArgs): AttachedWorktreeResolution {
   const activeScope = parseWorkspaceKey(activeWorkspaceKey ?? activeWorktreeId ?? '')
+  const { worktreeMap, lineageById } = getLineageInputs({
+    worktreesByRepo,
+    folderWorkspaces,
+    workspaceLineageByChildKey,
+    worktreeLineageById
+  })
+  const key =
+    activeScope?.type === 'folder' ? folderWorkspaceKey(activeScope.folderWorkspaceId) : ''
+  const folder = findWorktreeLineageRow(
+    worktreeMap,
+    activeWorkspaceExecutionHostId
+      ? composeWorktreeHostIdentity(activeWorkspaceExecutionHostId, key)
+      : key
+  )
   const folderWorkspace =
-    activeScope?.type === 'folder'
-      ? (folderWorkspaces.find((workspace) => workspace.id === activeScope.folderWorkspaceId) ??
-        null)
-      : null
-
+    folder &&
+    folderWorkspaces.find(
+      (row) =>
+        getWorktreeLineageIdentity(folderWorkspaceToWorktree(row)) ===
+        getWorktreeLineageIdentity(folder)
+    )
   if (!folderWorkspace) {
     return {
       folderWorkspace: null,
@@ -51,15 +74,6 @@ export function getAttachedWorktreesForFolderWorkspace({
     }
   }
 
-  const { worktreeMap, lineageById } = getLineageInputs({
-    worktreesByRepo,
-    folderWorkspaces,
-    workspaceLineageByChildKey,
-    worktreeLineageById
-  })
-  const folder = [...worktreeMap.values()].find(
-    (row) => row.id === folderWorkspaceKey(folderWorkspace.id)
-  )
   const { children } = getWorktreeLineageProjection(lineageById, worktreeMap)
   const childWorktrees = (folder ? (children.get(folder) ?? []) : [])
     .filter((row) => !row.isArchived)
@@ -68,7 +82,7 @@ export function getAttachedWorktreesForFolderWorkspace({
     [...children]
       .filter(([parent]) => !parent.id.startsWith('folder:'))
       .map(([parent, rows]) => [
-        getWorktreeHostIdentity(parent),
+        getWorktreeLineageIdentity(parent),
         rows.filter((row) => !row.isArchived).toSorted(sortWorktreesByRecentActivity)
       ])
   )

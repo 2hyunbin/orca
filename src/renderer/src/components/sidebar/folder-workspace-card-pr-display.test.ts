@@ -1,11 +1,15 @@
-import { getWorktreeLineageRows } from '../../../../shared/sidebar-list/worktree-lineage-projection'
-import { describe, expect, it } from 'vitest'
+import {
+  getWorktreeLineageRows,
+  findWorktreeLineageRow
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { describe, expect, it, vi } from 'vitest'
 import type { CheckStatus, PRInfo } from '../../../../shared/github/pull-request-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
-import { getFolderWorkspaceCardPrDisplay } from './folder-workspace-card-pr-display'
+import { getFolderWorkspaceCardPrDisplay as display } from './folder-workspace-card-pr-display'
+import { mergeWorkspaceLineageRecords } from '../../../../shared/resolved-worktree-lineage'
 
 const repo: Repo = {
   id: 'repo-1',
@@ -56,6 +60,29 @@ function lineageRows(entries: [string, Worktree][]) {
     }),
     ...entries.map(([, row]) => row)
   ])
+}
+
+function getFolderWorkspaceCardPrDisplay(
+  args: Omit<Parameters<typeof display>[0], 'folderWorktree'> & {
+    folderWorkspaceId: string
+    workspaceLineageByChildKey: Record<string, WorkspaceLineage>
+  }
+) {
+  const folder = findWorktreeLineageRow(
+    args.worktreeMap,
+    folderWorkspaceKey(args.folderWorkspaceId)
+  )
+  if (!folder) {
+    throw new Error('missing held folder fixture')
+  }
+  return display({
+    ...args,
+    folderWorktree: folder,
+    worktreeLineageById: mergeWorkspaceLineageRecords(
+      args.worktreeLineageById,
+      args.workspaceLineageByChildKey
+    )
+  })
 }
 
 function makeWorkspaceLineage(worktree: Worktree): WorkspaceLineage {
@@ -380,3 +407,52 @@ function makePrEntry(
 ): { data: PRInfo; fetchedAt: number } {
   return { data: makePr(number, checksStatus), fetchedAt: 2 }
 }
+
+it.each([10, 100])(
+  'shares one held card graph across two folders and refreshes reparent/clear/replacement at N=%i',
+  (n) => {
+    const f = makeWorktree({ id: 'folder:F', instanceId: 'folder:F', hostId: 'local' })
+    const g = { ...f, id: 'folder:G', instanceId: 'folder:G' }
+    const child = makeWorktree({ id: 'child', instanceId: 'child', linkedPR: 8 })
+    const rows = getWorktreeLineageRows([
+      f,
+      g,
+      child,
+      ...Array.from({ length: n }, (_, i) => makeWorktree({ id: `other-${i}` }))
+    ])
+    let traversed = 0
+    const originalValues = rows.values.bind(rows)
+    vi.spyOn(rows, 'values').mockImplementation(() => {
+      const iterator = originalValues()
+      const next = iterator.next.bind(iterator)
+      iterator.next = () => {
+        const result = next()
+        if (!result.done) {
+          traversed++
+        }
+        return result
+      }
+      return iterator
+    })
+    const edge = makeWorktreeLineage(child, f)
+    const args = {
+      worktreeMap: rows,
+      worktreeLineageById: { child: edge },
+      repoMap: new Map([[repo.id, repo]]),
+      hostedReviewCache: null,
+      prCache: { 'repo-1::child': makePrEntry(8, 'success') }
+    }
+    expect(display({ ...args, folderWorktree: f })).toMatchObject({ number: 8 })
+    const initial = traversed
+    for (const folderWorktree of [g, f, g]) {
+      display({ ...args, folderWorktree })
+    }
+    expect(traversed).toBe(initial)
+    expect(display({ ...args, folderWorktree: f, worktreeLineageById: {} })).toBeNull()
+    const moved = { ...args, worktreeLineageById: { child: makeWorktreeLineage(child, g) } }
+    expect(display({ ...moved, folderWorktree: f })).toBeNull()
+    expect(display({ ...moved, folderWorktree: g })).toMatchObject({ number: 8 })
+    const replaced = getWorktreeLineageRows([f, g, { ...child, instanceId: 'replacement' }])
+    expect(display({ ...moved, folderWorktree: g, worktreeMap: replaced })).toBeNull()
+  }
+)

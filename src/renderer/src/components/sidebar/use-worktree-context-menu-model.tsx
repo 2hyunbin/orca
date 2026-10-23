@@ -1,4 +1,4 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { getWorktreeLineageSelection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getLineageInputs } from './visible-worktree-indexes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
@@ -226,7 +226,7 @@ export function useWorktreeContextMenuModel({
     [worktree, worktreeLineageById, worktreeMap]
   )
   const validParentWorktreeId = lineageInfo.state === 'valid' ? lineageInfo.parent.id : null
-  const validParentHostId = lineageInfo.state === 'valid' ? lineageInfo.parent.hostId : undefined
+  const validParent = lineageInfo.state === 'valid' ? lineageInfo.parent : null
   const hasAnyContextLineage = activeContextWorktrees.some((item) =>
     hasWorktreeParentLink(item, worktreeLineageById, workspaceLineageByChildKey)
   )
@@ -322,7 +322,7 @@ export function useWorktreeContextMenuModel({
     subtreeSleepableWorktrees,
     updateWorktreeMeta,
     validParentWorktreeId,
-    validParentHostId,
+    validParent,
     worktree,
     workspaceStatuses
   })
@@ -335,7 +335,7 @@ export function useWorktreeContextMenuModel({
       setParentPicker,
       setParentPickerOpen,
       unmountTimerRef: parentPickerUnmountTimerRef,
-      worktreeId: getWorktreeHostIdentity(worktree)
+      worktreeId: getWorktreeLineageSelection(worktree)
     })
   const { handleRemoveParentLink, suppressOpeningPointerEvent } =
     useWorktreeContextMenuSecondaryActions({

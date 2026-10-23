@@ -28,8 +28,10 @@ export function useConfirmedWorktreeDeleteTargets({
   const resolveConfirmedTargets = useCallback(
     (identities: readonly WorktreeDeleteIdentity[], expectedCount: number) => {
       const state = useAppStore.getState()
-      const targets = resolveWorktreeBatchDeleteTargets(identities, (worktreeId, hostId) =>
-        getRegisteredWorktreeDeleteTarget(state, worktreeId, hostId)
+      const targets = resolveWorktreeBatchDeleteTargets(
+        identities,
+        (worktreeId, hostId, identity) =>
+          getRegisteredWorktreeDeleteTarget(state, worktreeId, hostId, identity)
       )
       if (!targets || targets.length !== expectedCount) {
         showWorkspaceListChangedToast()

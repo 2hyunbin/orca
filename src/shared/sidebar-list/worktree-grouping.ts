@@ -2,7 +2,7 @@ import { projectGroupIdFromRepoId } from '../folder-workspace-worktree'
 import type { Repo } from '../repo-types'
 import type { ProjectOrderBy } from '../ui-chrome-types'
 import type { WorkspaceStatusDefinition, Worktree } from '../worktree/types'
-import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import { getWorktreeLineageIdentity } from './worktree-lineage-projection'
 import { getWorkspaceStatus, getWorkspaceStatusGroupKey } from '../workspace-statuses'
 import {
   compareFolderWorkspacesForDisplay,
@@ -60,7 +60,7 @@ export function buildOrderedGroups(args: {
     const folderGroups = new Map<string, WorktreeGroupEntry>()
     const gitRows: Worktree[] = []
     for (const row of naturalWorktrees) {
-      const root = displayRootByIdentity?.get(getWorktreeHostIdentity(row)) ?? row
+      const root = displayRootByIdentity?.get(getWorktreeLineageIdentity(row)) ?? row
       if (projectGroupIdFromRepoId(root.repoId)) {
         const group = folderGroups.get(root.repoId) ?? {
           label: '',
@@ -78,7 +78,7 @@ export function buildOrderedGroups(args: {
         items: gitRows,
         repoIdOf: (worktree) => worktree.repoId,
         displayRepoIdOf: (worktree) =>
-          (displayRootByIdentity?.get(getWorktreeHostIdentity(worktree)) ?? worktree).repoId,
+          (displayRootByIdentity?.get(getWorktreeLineageIdentity(worktree)) ?? worktree).repoId,
         repoMap,
         projectIndex,
         placeholderRepoIds,

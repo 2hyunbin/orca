@@ -1,8 +1,11 @@
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getWorktreeLineageProjection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import {
+  getWorktreeLineageProjection,
+  findWorktreeLineageRow,
+  getWorktreeLineageIdentity
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getSavedWorktreeLineage } from '../../../../shared/resolved-worktree-lineage'
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 
 type ParentEligibilityArgs = {
   child: Worktree
@@ -17,18 +20,22 @@ export function canAssignWorktreeParent({
   lineageById,
   worktreeMap
 }: ParentEligibilityArgs): boolean {
-  const identity = getWorktreeHostIdentity(child)
+  const identity = getWorktreeLineageIdentity(child)
   const graph = getWorktreeLineageProjection(lineageById, worktreeMap)
-  const parent = worktreeMap.get(getWorktreeHostIdentity(candidateParent)) ?? candidateParent
+  const parent = findWorktreeLineageRow(worktreeMap, candidateParent)
+  const currentChild = findWorktreeLineageRow(worktreeMap, child)
+  if (!parent || !currentChild) {
+    return false
+  }
   if (
-    identity === getWorktreeHostIdentity(parent) ||
-    graph.parents.get(worktreeMap.get(identity) ?? child) === parent
+    identity === getWorktreeLineageIdentity(parent) ||
+    graph.parents.get(currentChild) === parent
   ) {
     return false
   }
   let current: Worktree | undefined = parent
   while (current) {
-    const key = getWorktreeHostIdentity(current)
+    const key = getWorktreeLineageIdentity(current)
     if (
       key === identity ||
       graph.cyclicIdentities.has(key) ||

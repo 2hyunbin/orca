@@ -1,3 +1,4 @@
+import type { Worktree } from '../../../../shared/worktree/types'
 import { makeFolderWorkspace } from '../worktree-jump-palette-test-fixtures'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import {
@@ -15,7 +16,21 @@ const mocks = vi.hoisted(() => {
     deleteFolderWorkspace: vi.fn().mockResolvedValue(true),
     activeWorktreeId: null,
     setActiveWorktree: vi.fn(),
-    worktreesByRepo: {},
+    get worktreesByRepo() {
+      // SAFETY: partial target fixtures provide the identity/path fields read by this flow.
+      return {
+        'repo-1': (state.worktreeRows as Worktree[]).filter((row) => !row.id.startsWith('folder:'))
+      }
+    },
+    get repos() {
+      // SAFETY: targets supplied to this suite carry repo/host identity.
+      return (state.worktreeRows as Worktree[]).map((row) => ({
+        id: row.repoId,
+        executionHostId: row.hostId ?? 'local'
+      }))
+    },
+    projectGroups: [],
+    runtimeEnvironments: [],
     worktreeMap: new Map<string, unknown>(),
     worktreeRows: [] as unknown[],
     activeWorkspaceExecutionHostId: null as string | null,
@@ -197,6 +212,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'wt-1', executionHostId: null },
       false,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -205,6 +221,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'wt-2', executionHostId: null },
       false,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -246,6 +263,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'child', executionHostId: null },
       false,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -261,6 +279,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'parent', executionHostId: null },
       false,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -328,7 +347,7 @@ describe('runWorktreeDeletesInParallel', () => {
     expect(mocks.state.removeWorktree).toHaveBeenLastCalledWith(
       { id: 'parent', executionHostId: hostId ?? null },
       false,
-      { suppressPreservedBranchToast: true }
+      { assertBeforeDispatch: expect.any(Function), suppressPreservedBranchToast: true }
     )
   })
 
@@ -346,6 +365,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'wt-1', executionHostId: null },
       true,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -354,6 +374,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'wt-2', executionHostId: null },
       true,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -378,7 +399,8 @@ describe('runWorktreeDeletesInParallel', () => {
     expect(mocks.state.removeWorktree).toHaveBeenCalledTimes(1)
     expect(mocks.state.removeWorktree).toHaveBeenCalledWith(
       { id: 'wt-1', executionHostId: null },
-      false
+      false,
+      { assertBeforeDispatch: expect.any(Function) }
     )
     expect(toast.error).not.toHaveBeenCalled()
   })
@@ -413,13 +435,13 @@ describe('runWorktreeDeletesInParallel', () => {
       1,
       { id: 'shared', executionHostId: 'local' },
       false,
-      { suppressPreservedBranchToast: true }
+      { assertBeforeDispatch: expect.any(Function), suppressPreservedBranchToast: true }
     )
     expect(mocks.state.removeWorktree).toHaveBeenNthCalledWith(
       2,
       { id: 'shared', executionHostId: 'ssh:builder' },
       false,
-      { suppressPreservedBranchToast: true }
+      { assertBeforeDispatch: expect.any(Function), suppressPreservedBranchToast: true }
     )
   })
 
@@ -448,6 +470,7 @@ describe('runWorktreeDeletesInParallel', () => {
       { id: 'child', executionHostId: null },
       false,
       {
+        assertBeforeDispatch: expect.any(Function),
         suppressPreservedBranchToast: true
       }
     )
@@ -485,7 +508,7 @@ describe('runWorktreeDeletesInParallel', () => {
     expect(mocks.state.removeWorktree).toHaveBeenCalledWith(
       { id: hostBParent.id, executionHostId: hostBParent.hostId },
       false,
-      { suppressPreservedBranchToast: true }
+      { assertBeforeDispatch: expect.any(Function), suppressPreservedBranchToast: true }
     )
   })
 
@@ -517,3 +540,74 @@ describe('runWorktreeDeletesInParallel', () => {
     ])
   })
 })
+
+it.each(['dependency', 'prune', 'final callback'] as const)(
+  'refuses same-instance owner replacement after %s without sending deletion for the replacement',
+  async (seam) => {
+    mocks.state.removeWorktree.mockReset()
+    vi.unstubAllGlobals()
+    const child = {
+      id: 'child',
+      instanceId: 'child',
+      hostId: 'local' as const,
+      displayName: 'Child',
+      repoId: 'repo-1',
+      path: '/parent/child'
+    }
+    const selected = {
+      ...child,
+      id: 'parent',
+      instanceId: 'parent',
+      path: '/parent',
+      displayName: 'Parent'
+    }
+    const replacement = { ...selected, runtimeOwnerEnvironmentId: 'B' }
+    const gate = deferredDeleteResult()
+    const begin = vi.fn(() => gate.promise)
+    if (seam === 'prune') {
+      vi.stubGlobal('window', {
+        api: {
+          workspaceCleanup: {
+            beginRemovalSnapshotPruneBatch: begin,
+            recordRemovalSnapshotPrune: vi.fn().mockResolvedValue(undefined),
+            finishRemovalSnapshotPruneBatch: vi.fn().mockResolvedValue(undefined)
+          }
+        }
+      })
+    }
+    const sent: string[] = []
+    mocks.state.removeWorktree.mockImplementation(async (target, _force, options) => {
+      if (seam === 'dependency' && target.id === child.id) {
+        await gate.promise
+      }
+      if (seam === 'final callback' && target.id === selected.id) {
+        mocks.state.worktreeRows = [replacement]
+      }
+      try {
+        options?.assertBeforeDispatch?.()
+      } catch {
+        return { ok: false, error: 'stale selection' }
+      }
+      sent.push(target.id)
+      return { ok: true }
+    })
+    const running = runDeletesForCurrentWorktrees(
+      seam === 'final callback' ? [selected] : [selected, child]
+    )
+    if (seam === 'prune') {
+      await vi.waitFor(() => expect(begin).toHaveBeenCalledOnce())
+      mocks.state.worktreeRows = [replacement, child]
+      gate.resolve({ ok: true })
+    }
+    if (seam === 'dependency') {
+      await vi.waitFor(() => expect(mocks.state.removeWorktree).toHaveBeenCalledTimes(1))
+      mocks.state.worktreeRows = [replacement, child]
+      gate.resolve({ ok: true })
+    }
+    const result = await running
+    expect(sent).not.toContain(selected.id)
+    expect(result).toEqual(
+      seam === 'final callback' ? [] : [{ id: child.id, executionHostId: 'local' }]
+    )
+  }
+)

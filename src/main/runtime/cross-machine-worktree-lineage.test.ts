@@ -1,3 +1,4 @@
+import { OrchestrationDb } from './orchestration/db'
 import { mergeWorktreeMetaForWrite } from '../persistence/loading-store/worktree-meta-write-normalization'
 import { describe, expect, it, vi } from 'vitest'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
@@ -242,3 +243,149 @@ describe('cross-machine lineage writes', () => {
     )
   })
 })
+
+it.each([10, 100])(
+  'hydrates through cheap admission and one lazy current corpus per saved synchronous segment at N=%i',
+  async (n) => {
+    const db = new OrchestrationDb(':memory:')
+    try {
+      const task = db.createTask({
+        runId: 'run_legacy_local',
+        spec: 'Recover',
+        createdByTerminalHandle: 'term-parent'
+      })
+      const { store } = setup({})
+      let rows = Array.from({ length: n }, (_, i) => ({ ...row(`C${i}`), comment: '' }))
+      const metadata = vi.fn(() => Object.fromEntries(rows.map((r) => [r.id, r])))
+      const showTerminal = vi.fn(async () => ({ worktreeId: 'P' }))
+      Object.assign(store, { getAllWorktreeMeta: metadata })
+      const controller = new RuntimeWorktreeLineageController({
+        getStore: () => store,
+        getDb: () => db,
+        listResolvedWorktrees: async () => rows,
+        resolveWorktree: async () => row('P'),
+        showTerminal
+      })
+      await controller.listWorktreeLineage()
+      expect(metadata).not.toHaveBeenCalled()
+      rows = rows.map((r) => ({ ...r, comment: 'task_missing' }))
+      await controller.listWorkspaceLineage()
+      expect(metadata).not.toHaveBeenCalled()
+      const noHandle = db.createTask({ runId: 'run_legacy_local', spec: 'No terminal' })
+      rows = rows.map((r) => ({ ...r, comment: noHandle.id }))
+      await controller.hydrate()
+      expect(metadata).not.toHaveBeenCalled()
+      rows = rows.map((r) => ({ ...r, comment: task.id, instanceId: undefined }))
+      await controller.hydrate()
+      expect(metadata).not.toHaveBeenCalled()
+      rows = rows.map((r) => ({ ...r, instanceId: r.id }))
+      Object.assign(store, {
+        getAllWorktreeLineage: () => Object.fromEntries(rows.map((r) => [r.id, edge(r.id, 'P')]))
+      })
+      const some = Array.prototype.some
+      let rowVisits = 0
+      const membership = vi.spyOn(Array.prototype, 'some').mockImplementation(function (
+        this: unknown[],
+        predicate,
+        thisArg
+      ) {
+        return some.call(this, (value, index, array) => {
+          if (value && typeof value === 'object' && 'instanceId' in value && 'id' in value) {
+            rowVisits++
+          }
+          return predicate.call(thisArg, value, index, array)
+        })
+      })
+      try {
+        await controller.listWorktreeLineage()
+      } finally {
+        membership.mockRestore()
+      }
+      expect(rowVisits).toBe(0)
+      expect(metadata).toHaveBeenCalledOnce()
+      expect(showTerminal).not.toHaveBeenCalled()
+      expect(store.setWorktreeLineage).not.toHaveBeenCalled()
+    } finally {
+      db.close()
+    }
+  }
+)
+
+it.each([
+  'recover',
+  'edge during await',
+  'replacement',
+  'null then recover',
+  'clear later',
+  'setter clears later'
+] as const)(
+  'reacquires real task hydration authority after awaits and setters: %s',
+  async (mode) => {
+    const db = new OrchestrationDb(':memory:')
+    try {
+      const task = db.createTask({
+        runId: 'run_legacy_local',
+        spec: 'Recover',
+        createdByTerminalHandle: 'term-parent'
+      })
+      const child = { ...row('C'), comment: task.id }
+      const next = { ...row('Q'), comment: task.id }
+      const parent = row('P')
+      const links: Record<string, WorktreeLineage> = {}
+      if (mode === 'clear later' || mode === 'setter clears later') {
+        links.Q = edge('Q', 'P')
+      }
+      const { store } = setup(links)
+      let meta = { C: child, Q: next, P: parent }
+      const capture = vi.fn(() => meta)
+      Object.assign(store, { getAllWorktreeMeta: capture })
+      let calls = 0
+      const showTerminal = vi.fn(async () => {
+        calls++
+        if (calls === 1) {
+          if (mode === 'clear later') {
+            delete links.Q
+          }
+          if (mode === 'edge during await') {
+            links.C = edge('C', 'P', true)
+          }
+          if (mode === 'replacement') {
+            meta = { ...meta, C: { ...child, instanceId: 'replacement' } }
+          }
+          if (mode === 'null then recover') {
+            meta = { ...meta }
+            throw new Error('terminal gone')
+          }
+        }
+        return { worktreeId: 'P' }
+      })
+      const write = vi.mocked(store.setWorktreeLineage).mockImplementation((_target, value) => {
+        links[value.worktreeId] = value
+        if (mode === 'setter clears later' && value.worktreeId === 'C') {
+          delete links.Q
+        }
+        meta = { ...meta }
+        return value
+      })
+      const controller = new RuntimeWorktreeLineageController({
+        getStore: () => store,
+        getDb: () => db,
+        listResolvedWorktrees: async () => [child, next],
+        resolveWorktree: async () => parent,
+        showTerminal
+      })
+      await controller.hydrate()
+      const written = write.mock.calls.map(([, value]) => value.worktreeId)
+      const recoversBoth =
+        mode === 'recover' || mode === 'clear later' || mode === 'setter clears later'
+      expect(written).toEqual(recoversBoth ? ['C', 'Q'] : ['Q'])
+      expect(capture.mock.calls.length).toBe(recoversBoth ? 4 : 3)
+      expect(links.Q).toMatchObject({ parentWorktreeId: 'P', taskId: task.id })
+      if (mode === 'edge during await') {
+        expect(links.C?.parentStore).toBe('external')
+      }
+    } finally {
+      db.close()
+    }
+  }
+)

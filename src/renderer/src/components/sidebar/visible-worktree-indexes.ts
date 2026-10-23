@@ -1,3 +1,15 @@
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  resolveWorktreeOperationRoute,
+  resolveWorktreeOperationRouteForHost
+} from '@/lib/worktree-operation-route'
+import { onPairedWebClientHost } from '@/lib/paired-web-client-host'
+import { routeForOwner } from '@/lib/worktree-owner-route'
+import {
+  findWorktreeLineageRow,
+  sameWorktreeLineageIdentity,
+  type WorktreeLineageIdentity
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { AppState } from '@/store/types'
 import { getWorkspaceLineageRows } from '../../../../shared/sidebar-list/worktree-lineage-projection'
@@ -55,4 +67,46 @@ export function getLineageInputs(state: LineageState) {
     byRows.set(worktreeMap, inputs)
   }
   return inputs
+}
+
+export function requireCurrentLineageRow(
+  state: AppState,
+  selection: string | WorktreeLineageIdentity,
+  queryHost?: ExecutionHostId
+): Worktree {
+  const row = findWorktreeLineageRow(getLineageInputs(state).worktreeMap, selection)
+  const host = row?.hostId ?? queryHost
+  const actual =
+    row &&
+    (host
+      ? resolveWorktreeOperationRouteForHost(state, row.id, host)
+      : resolveWorktreeOperationRoute(state, row.id))
+  const expected =
+    row &&
+    onPairedWebClientHost(
+      state,
+      routeForOwner(row) ?? { executionHostId: 'local', runtimeEnvironmentId: null }
+    )
+  if (
+    !row ||
+    !actual ||
+    !expected ||
+    actual.executionHostId !== expected.executionHostId ||
+    actual.runtimeEnvironmentId !== expected.runtimeEnvironmentId
+  ) {
+    throw new Error('The selected workspace changed. Select it again.')
+  }
+  return row
+}
+export function requireKnownLineageRow(
+  state: AppState,
+  selection: WorktreeLineageIdentity,
+  queryHost?: ExecutionHostId
+): Worktree {
+  const row = requireCurrentLineageRow(state, selection, queryHost)
+  const known = state.getKnownWorktreeById(row.id, row.hostId ?? queryHost)
+  if (!known || !sameWorktreeLineageIdentity(known, row)) {
+    throw new Error('The selected workspace changed. Select it again.')
+  }
+  return row
 }

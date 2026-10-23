@@ -2,6 +2,7 @@ import { folderWorkspaceToWorktree } from '../folder-workspace-worktree'
 import type { FolderWorkspace } from '../folder-workspace-types'
 import {
   getSavedWorktreeLineage,
+  lineageStoreKeyForRow,
   resolveWorktreeLineageParents
 } from '../resolved-worktree-lineage'
 import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
@@ -15,11 +16,76 @@ export type LineageRenderInfo =
   | { state: 'valid'; lineage: WorktreeLineage; parent: Worktree }
   | { state: 'missing'; lineage: WorktreeLineage }
 
+export type WorktreeLineageIdentity = Pick<
+  Worktree,
+  'id' | 'hostId' | 'runtimeOwnerEnvironmentId' | 'instanceId'
+>
+export function getWorktreeLineageIdentity(row: WorktreeLineageIdentity): string {
+  return JSON.stringify([lineageStoreKeyForRow(row), row.hostId ?? null, row.id])
+}
+export function getWorktreeLineageSelection(row: WorktreeLineageIdentity): string {
+  return JSON.stringify([
+    lineageStoreKeyForRow(row),
+    row.hostId ?? null,
+    row.id,
+    row.instanceId ?? null
+  ])
+}
+export function sameWorktreeLineageIdentity(
+  a: WorktreeLineageIdentity,
+  b: WorktreeLineageIdentity
+): boolean {
+  return a === b || getWorktreeLineageSelection(a) === getWorktreeLineageSelection(b)
+}
+type RowLookup = { selected: Map<string, Worktree | null>; represented: Map<string, Worktree> }
+const selectors = new WeakMap<ReadonlyMap<string, Worktree>, RowLookup>()
+function selectionIndex(
+  rows: ReadonlyMap<string, Worktree>,
+  source: Iterable<Worktree> = rows.values()
+) {
+  let index = selectors.get(rows)
+  if (!index) {
+    const selected = new Map<string, Worktree | null>()
+    index = {
+      selected,
+      represented: new Map([...source].map((row) => [getWorktreeHostIdentity(row), row]))
+    }
+    for (const row of rows.values()) {
+      for (const key of new Set([
+        row.id,
+        getWorktreeHostIdentity(row),
+        getWorktreeLineageSelection(row)
+      ])) {
+        selected.set(key, selected.has(key) ? null : row)
+      }
+    }
+    selectors.set(rows, index)
+  }
+  return index
+}
+export function findWorktreeLineageRow(
+  rows: ReadonlyMap<string, Worktree>,
+  selection: string | WorktreeLineageIdentity
+): Worktree | undefined {
+  return (
+    selectionIndex(rows).selected.get(
+      typeof selection === 'string' ? selection : getWorktreeLineageSelection(selection)
+    ) ?? undefined
+  )
+}
+export function getRepresentedWorktreeLineageRow(
+  rows: ReadonlyMap<string, Worktree>,
+  row: WorktreeLineageIdentity
+): Worktree | undefined {
+  return selectionIndex(rows).represented.get(getWorktreeHostIdentity(row))
+}
+
 const rowIndexes = new WeakMap<readonly Worktree[], Map<string, Worktree>>()
 export function getWorktreeLineageRows(rows: readonly Worktree[]): Map<string, Worktree> {
   let index = rowIndexes.get(rows)
   if (!index) {
-    index = new Map(rows.map((row) => [getWorktreeHostIdentity(row), row]))
+    index = new Map(rows.map((row) => [getWorktreeLineageIdentity(row), row]))
+    selectionIndex(index, rows)
     rowIndexes.set(rows, index)
   }
   return index
@@ -86,11 +152,11 @@ export function getWorktreeLineageProjection(
     projection = {
       parents,
       children,
-      cyclicIdentities: new Set([...cyclic].map(getWorktreeHostIdentity)),
+      cyclicIdentities: new Set([...cyclic].map(getWorktreeLineageIdentity)),
       parentByIdentity: new Map(
         [...parents]
           .filter(([, parent]) => !parent.isArchived)
-          .map(([child, parent]) => [getWorktreeHostIdentity(child), parent])
+          .map(([child, parent]) => [getWorktreeLineageIdentity(child), parent])
       )
     }
     byRows.set(rows, projection)
@@ -110,7 +176,10 @@ export function getLineageRenderInfo(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   rows: ReadonlyMap<string, Worktree>
 ): LineageRenderInfo {
-  const canonical = rows.get(getWorktreeHostIdentity(worktree)) ?? worktree
+  const canonical = findWorktreeLineageRow(rows, worktree)
+  if (!canonical) {
+    return { state: 'none' }
+  }
   const lineage = getSavedWorktreeLineage(canonical, lineageById)
   if (!lineage) {
     return { state: 'none' }
@@ -124,9 +193,8 @@ export function getSidebarLineageParent(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   rows: ReadonlyMap<string, Worktree>
 ): Worktree | undefined {
-  const parent = getWorktreeLineageProjection(lineageById, rows).parents.get(
-    rows.get(getWorktreeHostIdentity(worktree)) ?? worktree
-  )
+  const canonical = findWorktreeLineageRow(rows, worktree)
+  const parent = canonical && getWorktreeLineageProjection(lineageById, rows).parents.get(canonical)
   return parent?.isArchived ? undefined : parent
 }
 
@@ -159,7 +227,8 @@ export function getWorktreeLineageDescendants(
 ): Worktree[] {
   const { children } = getWorktreeLineageProjection(lineageById, rows)
   const descendants: Worktree[] = []
-  const pending = [rows.get(getWorktreeHostIdentity(row)) ?? row]
+  const canonical = findWorktreeLineageRow(rows, row)
+  const pending = canonical ? [canonical] : []
   for (const parent of pending) {
     for (const child of children.get(parent) ?? []) {
       if (includeArchived || !child.isArchived) {

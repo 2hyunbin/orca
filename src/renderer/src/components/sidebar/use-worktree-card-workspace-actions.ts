@@ -1,3 +1,6 @@
+import { showWorkspaceListChangedToast } from './stale-workspace-list-toast'
+import { createWorktreeDeleteAdmission } from './worktree-delete-request'
+import { toWorktreeDeleteIdentities } from './worktree-delete-request'
 import { draggedWorktreeCopiesOf } from './worktree-list/drag/dragged-worktree-copies'
 import React, { useCallback } from 'react'
 
@@ -55,6 +58,12 @@ export function useWorktreeCardWorkspaceActions({
       event.stopPropagation()
       if (showDeleteQuickAction) {
         if (folderWorkspaceId) {
+          try {
+            createWorktreeDeleteAdmission(worktree)()
+          } catch {
+            showWorkspaceListChangedToast()
+            return
+          }
           void deleteFolderWorkspace(
             folderWorkspaceId,
             worktree.hostId ? { executionHostId: worktree.hostId } : undefined
@@ -72,13 +81,17 @@ export function useWorktreeCardWorkspaceActions({
         }
         // Why the host (STA-4343): this row is one of possibly two for the same
         // `repoId::path`, so it has to name its own or the delete lands on the other.
-        runWorktreeDelete(worktree.id, worktree.hostId ? { expectedHostId: worktree.hostId } : {})
+        runWorktreeDelete(worktree.id, {
+          expectedIdentity: toWorktreeDeleteIdentities([worktree])[0],
+          expectedHostId: worktree.hostId,
+          expectedInstanceId: worktree.instanceId
+        })
       }
     },
     [
       deleteFolderWorkspace,
       folderWorkspaceId,
-      worktree.hostId,
+      worktree,
       setActiveWorktree,
       showDeleteQuickAction,
       worktree.id

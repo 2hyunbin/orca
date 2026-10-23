@@ -99,6 +99,14 @@ export class RuntimeWorktreeLineageController {
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
     const store = this.deps.getStore()
     const snapshot = store ? readWorktreeLineageCorpus(store) : undefined
+    this.validateCurrentParent(child, parent, snapshot)
+  }
+
+  private validateCurrentParent(
+    child: ResolvedWorktree,
+    parent: ResolvedWorktree,
+    snapshot: ReturnType<typeof readWorktreeLineageCorpus> | undefined
+  ): void {
     if (snapshot && !snapshot.hasCurrent(child)) {
       throw new RuntimeLineageError(
         'LINEAGE_PARENT_INSTANCE_STALE',
@@ -165,12 +173,21 @@ export class RuntimeWorktreeLineageController {
   }
 
   async resolveTaskCandidate(taskId: string): Promise<WorktreeLineageCandidate | null> {
+    const handle = this.taskHandle(taskId)
+    return handle ? this.resolveTaskHandle(taskId, handle) : null
+  }
+
+  private taskHandle(taskId: string): string | null {
     const db = this.deps.getDb()
     const dispatch = db?.getDispatchContext(taskId)
     const handle = dispatch?.assignee_handle ?? db?.getTask(taskId)?.created_by_terminal_handle
-    if (!handle) {
-      return null
-    }
+    return handle ?? null
+  }
+
+  private async resolveTaskHandle(
+    taskId: string,
+    handle: string
+  ): Promise<WorktreeLineageCandidate | null> {
     try {
       const terminal = await this.deps.showTerminal(handle)
       return {
@@ -188,11 +205,9 @@ export class RuntimeWorktreeLineageController {
     if (!store?.getWorktreeLineage || !store.setWorktreeLineage) {
       return
     }
+    let current: ReturnType<typeof readWorktreeLineageCorpus> | undefined
     for (const worktree of await this.deps.listResolvedWorktrees()) {
-      const current = readWorktreeLineageCorpus(store)
       if (
-        !current.hasCurrent(worktree) ||
-        current.edgeOf(worktree) ||
         !worktree.instanceId ||
         isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
@@ -202,15 +217,29 @@ export class RuntimeWorktreeLineageController {
       if (!taskId) {
         continue
       }
-      const candidate = await this.resolveTaskCandidate(taskId)
+      const handle = this.taskHandle(taskId)
+      if (!handle) {
+        continue
+      }
+      current ??= readWorktreeLineageCorpus(store)
+      if (!current.hasCurrent(worktree) || current.edgeOf(worktree)) {
+        continue
+      }
+      let candidate: WorktreeLineageCandidate | null
+      try {
+        candidate = await this.resolveTaskHandle(taskId, handle)
+      } finally {
+        current = undefined
+      }
       if (!candidate?.parent.instanceId || candidate.parent.type !== 'worktree') {
         continue
       }
       try {
-        if (readWorktreeLineageCorpus(store).edgeOf(worktree)) {
+        current = readWorktreeLineageCorpus(store)
+        if (current.edgeOf(worktree)) {
           continue
         }
-        this.validateParent(worktree, candidate.parent.worktree)
+        this.validateCurrentParent(worktree, candidate.parent.worktree, current)
       } catch {
         continue
       }
@@ -218,16 +247,20 @@ export class RuntimeWorktreeLineageController {
       if (!target) {
         continue
       }
-      store.setWorktreeLineage(target, {
-        worktreeId: worktree.id,
-        worktreeInstanceId: worktree.instanceId,
-        parentWorktreeId: candidate.parent.worktree.id,
-        parentWorktreeInstanceId: candidate.parent.instanceId,
-        origin: 'orchestration',
-        capture: { source: 'orchestration-context', confidence: 'inferred' },
-        taskId,
-        createdAt: Date.now()
-      })
+      try {
+        store.setWorktreeLineage(target, {
+          worktreeId: worktree.id,
+          worktreeInstanceId: worktree.instanceId,
+          parentWorktreeId: candidate.parent.worktree.id,
+          parentWorktreeInstanceId: candidate.parent.instanceId,
+          origin: 'orchestration',
+          capture: { source: 'orchestration-context', confidence: 'inferred' },
+          taskId,
+          createdAt: Date.now()
+        })
+      } finally {
+        current = undefined
+      }
     }
   }
 

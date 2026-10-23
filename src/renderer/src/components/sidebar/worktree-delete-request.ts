@@ -1,8 +1,13 @@
+import { useAppStore } from '@/store'
+import { getLineageInputs, requireCurrentLineageRow } from './visible-worktree-indexes'
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import {
+  findWorktreeLineageRow,
+  getWorktreeLineageSelection,
+  type WorktreeLineageIdentity
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { lineageStoreKeyForRow } from '../../../../shared/resolved-worktree-lineage'
 import type { AppState } from '@/store/types'
-import { getWorktreeOnHostFromState } from '@/store/selectors'
-import { findIndexedFolderWorkspaceOwner } from '@/lib/worktree-runtime-owner-index'
-import { getFolderWorkspaceWorktree } from '@/store/slices/worktrees/listing/detected-worktree-meta'
-import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { PreservedBranchCleanup } from '@/lib/preserved-branch-cleanup'
 import { normalizeExecutionHostId } from '../../../../shared/execution-host'
@@ -16,9 +21,12 @@ export type WorktreeBatchDeleteOptions = {
 }
 
 /** `hostId` rides along because `id` alone repeats across hosts (STA-4343). */
-export type WorktreeDeleteIdentity = Pick<Worktree, 'id' | 'instanceId' | 'hostId'>
+export type WorktreeDeleteIdentity = Pick<Worktree, 'id' | 'instanceId' | 'hostId'> & {
+  storeKey?: string
+}
 
 export type WorktreeDeleteOptions = {
+  expectedIdentity?: WorktreeDeleteIdentity
   expectedInstanceId?: string
   /** Why (STA-4343): the id-keyed map holds one row per `repoId::path`, so a row
    *  that knows its host must say so or the delete lands on the other one. */
@@ -30,36 +38,49 @@ export type WorktreeDeleteWithToastOptions = {
   onForceDeleted?: (target: WorktreeRemovalTarget) => void
   onPreservedBranch?: (branch: PreservedBranchCleanup) => void
   suppressPreservedBranchToast?: boolean
+  assertBeforeDispatch?: () => void
   snapshotPruneBatchId?: string
 }
 
 export function toWorktreeDeleteIdentities(
-  worktrees: readonly Pick<Worktree, 'id' | 'instanceId' | 'hostId'>[]
+  worktrees: readonly WorktreeLineageIdentity[]
 ): WorktreeDeleteIdentity[] {
-  return worktrees.map(({ id, instanceId, hostId }) => ({ id, instanceId, hostId }))
+  return worktrees.map((row) => ({
+    id: row.id,
+    instanceId: row.instanceId,
+    hostId: row.hostId,
+    storeKey: lineageStoreKeyForRow(row)
+  }))
 }
 
 /** Resolves one confirmed row: the id ALONE is not enough, so the host rides along. */
 export type WorktreeDeleteTargetLookup = (
   worktreeId: string,
-  hostId: ExecutionHostId | undefined
+  hostId: ExecutionHostId | undefined,
+  identity?: WorktreeDeleteIdentity
 ) => Worktree | undefined
 
 export function getRegisteredWorktreeDeleteTarget(
   state: Pick<AppState, 'worktreesByRepo' | 'folderWorkspaces'>,
   id: string,
-  hostId: ExecutionHostId | undefined
+  hostId: ExecutionHostId | undefined,
+  identity?: WorktreeDeleteIdentity
 ): Worktree | undefined {
-  const scope = parseWorkspaceKey(id)
-  if (scope?.type !== 'folder') {
-    return getWorktreeOnHostFromState(state, id, hostId)
+  const rows = getLineageInputs(state).worktreeMap
+  const selection =
+    identity?.storeKey !== undefined
+      ? JSON.stringify([identity.storeKey, hostId ?? null, id, identity.instanceId ?? null])
+      : hostId
+        ? composeWorktreeHostIdentity(hostId, id)
+        : id
+  return findWorktreeLineageRow(rows, selection)
+}
+
+export function createWorktreeDeleteAdmission(target: WorktreeLineageIdentity): () => void {
+  const selection = getWorktreeLineageSelection(target)
+  return () => {
+    requireCurrentLineageRow(useAppStore.getState(), selection)
   }
-  const folder = findIndexedFolderWorkspaceOwner(
-    state.folderWorkspaces,
-    scope.folderWorkspaceId,
-    hostId
-  )
-  return folder ? getFolderWorkspaceWorktree(folder) : undefined
 }
 
 export function resolveWorktreeBatchDeleteTargets(
@@ -71,7 +92,10 @@ export function resolveWorktreeBatchDeleteTargets(
   const uniqueRequests = Array.from(
     new Map(
       requestedWorktrees.map((request) => {
-        const key = typeof request === 'string' ? request : `${request.hostId ?? ''}|${request.id}`
+        const key =
+          typeof request === 'string'
+            ? request
+            : JSON.stringify([request.storeKey, request.hostId, request.id, request.instanceId])
         return [key, request] as const
       })
     ).values()
@@ -83,7 +107,11 @@ export function resolveWorktreeBatchDeleteTargets(
     // row can never fall through to a local checkout at the same path — and the
     // other host's row stays reachable instead of being masked by the id-keyed map.
     const target =
-      lookupTarget(worktreeId, typeof request === 'string' ? undefined : request.hostId) ?? null
+      lookupTarget(
+        worktreeId,
+        typeof request === 'string' ? undefined : request.hostId,
+        typeof request === 'string' ? undefined : request
+      ) ?? null
     if (typeof request !== 'string' && (!target || target.instanceId !== request.instanceId)) {
       return null
     }
@@ -109,6 +137,17 @@ export function readWorktreeDeleteIdentities(value: unknown): WorktreeDeleteIden
     const hostId = normalizeExecutionHostId(
       'hostId' in entry && typeof entry.hostId === 'string' ? entry.hostId : null
     )
-    return [{ id: entry.id, instanceId, ...(hostId ? { hostId } : {}) }]
+    const storeKey = 'storeKey' in entry ? entry.storeKey : undefined
+    if (storeKey !== undefined && typeof storeKey !== 'string') {
+      return []
+    }
+    return [
+      {
+        id: entry.id,
+        instanceId,
+        ...(hostId ? { hostId } : {}),
+        ...(storeKey !== undefined ? { storeKey } : {})
+      }
+    ]
   })
 }

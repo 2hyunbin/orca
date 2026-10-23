@@ -1,6 +1,5 @@
 import { getLineageInputs } from './visible-worktree-indexes'
 import { useAppStore } from '@/store'
-import { getWorktreeOnHostFromState } from '@/store/selectors'
 import { toWorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 import { findRepoForHost } from '@/store/slices/repo-host-identity'
 import {
@@ -14,6 +13,7 @@ import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import {
   getRegisteredWorktreeDeleteTarget,
+  createWorktreeDeleteAdmission,
   resolveWorktreeBatchDeleteTargets,
   toWorktreeDeleteIdentities,
   type WorktreeBatchDeleteOptions,
@@ -39,7 +39,13 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
   // acting on a specific sidebar row has to name that row's host — otherwise
   // deleting the SSH row destroys the local checkout at the same path. A caller
   // that names no host keeps the old first-wins behaviour.
-  const target = getWorktreeOnHostFromState(state, worktreeId, options.expectedHostId) ?? null
+  const target =
+    getRegisteredWorktreeDeleteTarget(
+      state,
+      worktreeId,
+      options.expectedHostId,
+      options.expectedIdentity
+    ) ?? null
   const instanceChanged =
     Object.hasOwn(options, 'expectedInstanceId') &&
     target?.instanceId !== options.expectedInstanceId
@@ -103,7 +109,9 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
   const hasLineageChildren = deleteLineage.descendants.length > 0
   const skipConfirm = state.settings?.skipDeleteWorktreeConfirm ?? false
   if (skipConfirm && !hasLineageChildren) {
-    void runWorktreeDeleteWithToast(toWorktreeRemovalTarget(target), target.displayName)
+    void runWorktreeDeleteWithToast(toWorktreeRemovalTarget(target), target.displayName, {
+      assertBeforeDispatch: createWorktreeDeleteAdmission(target)
+    })
     return
   }
   state.openModal('delete-worktree', {
@@ -123,8 +131,10 @@ export function runWorktreeBatchDelete(
   options: WorktreeBatchDeleteOptions = {}
 ): boolean {
   const state = useAppStore.getState()
-  const targets = resolveWorktreeBatchDeleteTargets(requestedWorktrees, (worktreeId, hostId) =>
-    getRegisteredWorktreeDeleteTarget(state, worktreeId, hostId)
+  const targets = resolveWorktreeBatchDeleteTargets(
+    requestedWorktrees,
+    (worktreeId, hostId, identity) =>
+      getRegisteredWorktreeDeleteTarget(state, worktreeId, hostId, identity)
   )
   if (!targets) {
     showWorkspaceListChangedToast()

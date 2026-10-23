@@ -1,3 +1,4 @@
+import { findWorktreeLineageRow } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { AppState } from '../../../types'
 import type { WorkspaceKey } from '../../../../../../shared/folder-workspace-types'
 import { toast } from 'sonner'
@@ -36,12 +37,9 @@ export function resolveWorktreeCreateParent(
   executionHostId: ExecutionHostId
 ): WorktreeCreateParentPick {
   const rows = getLineageInputs(state).worktreeMap
-  const candidates = requestedParentWorktreeId
-    ? [...rows.values()].filter((row) => row.id === requestedParentWorktreeId)
-    : []
-  const picked =
-    rows.get(requestedParentWorktreeId ?? '') ??
-    (candidates.length === 1 ? candidates[0] : undefined)
+  const picked = requestedParentWorktreeId
+    ? findWorktreeLineageRow(rows, requestedParentWorktreeId)
+    : undefined
   const pickedHost = picked
     ? getWorktreeExecutionHostId(
         picked,

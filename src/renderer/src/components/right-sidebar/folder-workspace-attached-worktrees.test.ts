@@ -1,4 +1,4 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import { getWorktreeLineageIdentity } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
@@ -163,7 +163,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
     expect(result.rootChildWorktrees.map((worktree) => worktree.id)).toEqual([parent.id])
     expect(
       result.lineageChildrenByParentId
-        .get(getWorktreeHostIdentity(parent))
+        .get(getWorktreeLineageIdentity(parent))
         ?.map((worktree) => worktree.id)
     ).toEqual([nested.id])
   })
@@ -193,7 +193,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
 
     expect(
       result.lineageChildrenByParentId
-        .get(getWorktreeHostIdentity(parent))
+        .get(getWorktreeLineageIdentity(parent))
         ?.map((worktree) => worktree.id)
     ).toEqual([nested.id])
   })
@@ -254,7 +254,7 @@ describe('getAttachedWorktreesForFolderWorkspace', () => {
       worktreesByRepo: { 'repo-1': [parent, hostChild, projectChild] }
     })
 
-    expect(result.lineageChildrenByParentId.get(getWorktreeHostIdentity(parent))).toEqual([
+    expect(result.lineageChildrenByParentId.get(getWorktreeLineageIdentity(parent))).toEqual([
       hostChild,
       projectChild
     ])

@@ -1,8 +1,8 @@
-import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
   getWorktreeLineageProjection,
+  findWorktreeLineageRow,
   getWorktreeLineageRows
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
@@ -17,7 +17,11 @@ export function getWorkspaceDeleteLineage(
   lineageById: Record<string, WorktreeLineage>
 ): WorkspaceDeleteLineage {
   const rows = 'get' in worktrees ? worktrees : getWorktreeLineageRows(worktrees)
-  parent = rows.get(getWorktreeHostIdentity(parent)) ?? parent
+  const canonical = findWorktreeLineageRow(rows, parent)
+  if (!canonical) {
+    return { descendants: [], deleteAllTargets: [] }
+  }
+  parent = canonical
   const { children: childrenByParent } = getWorktreeLineageProjection(lineageById, rows)
 
   const descendants: Worktree[] = []

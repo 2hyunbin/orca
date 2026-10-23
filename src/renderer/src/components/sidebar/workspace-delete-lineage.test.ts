@@ -239,3 +239,24 @@ describe('getWorkspaceDeleteLineage', () => {
     ).toEqual([sshParent])
   })
 })
+
+it('never admits an unrelated local child to either same-host copied parent Delete-all selection', () => {
+  const a: Worktree = {
+    ...makeWorktree('parent', '/parent'),
+    hostId: SSH_HOST,
+    runtimeOwnerEnvironmentId: 'A'
+  }
+  const b = { ...a, runtimeOwnerEnvironmentId: 'B' }
+  const c: Worktree = { ...makeWorktree('C', '/C'), hostId: 'local' }
+  c.savedLineage = { ...makeLineage(c, a), parentStore: 'external' }
+  const unique: Worktree = {
+    ...makeWorktree('unique', '/unique'),
+    hostId: SSH_HOST,
+    runtimeOwnerEnvironmentId: 'A'
+  }
+  unique.savedLineage = makeLineage(unique, a)
+  const complete = [b, c, a, unique]
+  expect(getWorkspaceDeleteLineage(a, complete, {}).deleteAllTargets).toEqual([unique, a])
+  expect(getWorkspaceDeleteLineage(b, complete, {}).deleteAllTargets).toEqual([b])
+  expect(getWorkspaceDeleteLineage(a, [a, c], {}).deleteAllTargets).toEqual([c, a])
+})

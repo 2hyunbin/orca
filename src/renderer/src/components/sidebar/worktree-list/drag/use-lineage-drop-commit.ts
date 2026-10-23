@@ -1,5 +1,8 @@
 import { getLineageInputs } from '../../visible-worktree-indexes'
-import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import {
+  getWorktreeLineageSelection,
+  findWorktreeLineageRow
+} from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { DraggedWorktreeCopies } from './dragged-worktree-copies'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
@@ -30,8 +33,12 @@ export function useWorktreeLineageDropCommit(args: {
   const selectedKeys = (
     ids: readonly string[],
     copies?: DraggedWorktreeCopies
-  ): readonly string[] =>
-    copies ? copies.filter((copy) => ids.includes(copy.id)).map(getWorktreeHostIdentity) : ids
+  ): readonly string[] => {
+    const selected = new Set(ids)
+    return copies
+      ? copies.filter((copy) => selected.has(copy.id)).map(getWorktreeLineageSelection)
+      : ids
+  }
 
   const getEligibleLineageDropTarget = useCallback(
     (
@@ -44,11 +51,11 @@ export function useWorktreeLineageDropCommit(args: {
         return target
       }
       const canAssignAll = selectedKeys(draggedIds, copies).every((draggedId) => {
-        const child = worktreeMap.get(draggedId)
+        const child = findWorktreeLineageRow(worktreeMap, draggedId)
         if (!child) {
           return false
         }
-        const candidateParent = worktreeMap.get(parentId)
+        const candidateParent = findWorktreeLineageRow(worktreeMap, parentId)
         return Boolean(
           candidateParent &&
           isEligibleWorktreeParent({

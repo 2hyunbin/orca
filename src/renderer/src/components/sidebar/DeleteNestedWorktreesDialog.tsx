@@ -1,3 +1,9 @@
+import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
+import {
+  findWorktreeLineageRow,
+  getWorktreeLineageIdentity
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import { getLineageInputs } from './visible-worktree-indexes'
 import { useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -11,23 +17,24 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { getWorktreeOnHostFromState } from '@/store/selectors'
 import { useAppStore } from '@/store'
 import { translate } from '@/i18n/i18n'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
-import type { GitWorktreeInfo } from '../../../../shared/worktree/types'
+import type { GitWorktreeInfo, Worktree } from '../../../../shared/worktree/types'
 import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 
 export function DeleteNestedWorktreesDialog({
   target,
   worktreeName,
   onDeleted,
-  dismissToast
+  dismissToast,
+  assertBeforeDispatch
 }: {
   target: WorktreeRemovalTarget
   worktreeName: string
   onDeleted?: () => void
   dismissToast: () => void
+  assertBeforeDispatch?: () => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<GitWorktreeInfo[] | null>(null)
@@ -41,6 +48,7 @@ export function DeleteNestedWorktreesDialog({
     setPlan(null)
     setError(null)
     try {
+      assertBeforeDispatch?.()
       const preview = window.api.worktrees.previewNestedRemoval
       if (!preview) {
         throw new Error('This host does not support nested worktree deletion.')
@@ -49,6 +57,7 @@ export function DeleteNestedWorktreesDialog({
         worktreeId: target.id,
         hostId: target.executionHostId ?? undefined
       })
+      assertBeforeDispatch?.()
       if (generation === request.current) {
         setPlan(result)
       }
@@ -68,17 +77,29 @@ export function DeleteNestedWorktreesDialog({
     setError(null)
     const state = useAppStore.getState()
     const repoId = getRepoIdFromWorktreeId(target.id)
-    const nestedRows = plan.slice(0, -1).flatMap((item) => {
-      const row = getWorktreeOnHostFromState(
-        state,
-        `${repoId}::${item.path}`,
-        target.executionHostId ?? undefined
-      )
-      return row ? [row] : []
-    })
-    state.markWorktreesDeleting(nestedRows)
+    let nestedRows: Worktree[] = []
     try {
-      const result = await state.removeWorktree(target, true, { approvedNestedWorktrees: plan })
+      assertBeforeDispatch?.()
+      const rows = getLineageInputs(state).worktreeMap
+      const parent = findWorktreeLineageRow(
+        rows,
+        target.executionHostId
+          ? composeWorktreeHostIdentity(target.executionHostId, target.id)
+          : target.id
+      )
+      nestedRows = parent
+        ? plan.slice(0, -1).flatMap((item) => {
+            const row = rows.get(
+              getWorktreeLineageIdentity({ ...parent, id: `${repoId}::${item.path}` })
+            )
+            return row ? [row] : []
+          })
+        : []
+      state.markWorktreesDeleting(nestedRows)
+      const result = await state.removeWorktree(target, true, {
+        approvedNestedWorktrees: plan,
+        assertBeforeDispatch
+      })
       if (!result.ok) {
         setPlan(null)
         toast.error(

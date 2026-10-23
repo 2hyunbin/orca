@@ -509,3 +509,61 @@ describe('folder-to-Git checkout identity', () => {
     }
   )
 })
+
+it.each([10, 100])(
+  'scans one copied pair owner and builds selected dependencies at N=%i',
+  async (n) => {
+    const repos = Array.from({ length: n }, (_, i) =>
+      repo(`r${i}`, `/r${i}`, { executionHostId: 'local' })
+    )
+    const deps = createDeps(repos)
+    const edges: Record<string, WorktreeLineage> = {}
+    for (let i = 0; i < n; i++) {
+      const child = `r${i}::/c${i}`,
+        parent = `r${i}::/p${i}`
+      deps.metaById[child] = mergeWorktreeMetaForWrite(undefined, {
+        instanceId: `child-${i}`,
+        hostId: 'local'
+      })
+      deps.metaById[parent] = mergeWorktreeMetaForWrite(undefined, {
+        instanceId: 'copied-parent',
+        hostId: 'local'
+      })
+      edges[child] = {
+        worktreeId: child,
+        worktreeInstanceId: `child-${i}`,
+        parentWorktreeId: parent,
+        parentWorktreeInstanceId: 'copied-parent',
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' },
+        createdAt: 1
+      }
+    }
+    Object.assign(deps.store, { getAllWorktreeLineage: () => edges })
+    deps.scanRepo.mockImplementation(async () => ({
+      ok: true,
+      worktrees: [gitWorktree('/c0'), gitWorktree('/p0')]
+    }))
+    const adjacency = new Map<string, Set<string>>()
+    const set = Map.prototype.set
+    const spy = vi.spyOn(Map.prototype, 'set').mockImplementation(function (
+      this: Map<unknown, unknown>,
+      key,
+      value
+    ) {
+      if (typeof key === 'string' && /^r\d+::\/[cp]\d+$/.test(key) && value instanceof Set) {
+        set.call(adjacency, key, value)
+      }
+      return set.call(this, key, value)
+    })
+    try {
+      expect(await resolveScopedWorktreeIdRow(deps, 'r0::/c0', 'local')).toMatchObject({
+        parentWorktreeId: 'r0::/p0'
+      })
+    } finally {
+      spy.mockRestore()
+    }
+    expect([...adjacency.values()].reduce((sum, peers) => sum + peers.size, 0)).toBe(2 * n)
+    expect(deps.scanRepo.mock.calls.map(([owner]) => owner.id)).toEqual(['r0'])
+  }
+)

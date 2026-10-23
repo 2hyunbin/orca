@@ -97,7 +97,9 @@ export function isWorkspaceHiddenBySidebarFilters(
     snapshot.edgeOf
   )) {
     const key = getWorktreeHostIdentity(parent)
-    children.set(key, [...(children.get(key) ?? []), getWorktreeHostIdentity(child)])
+    const siblings = children.get(key) ?? []
+    siblings.push(getWorktreeHostIdentity(child))
+    children.set(key, siblings)
   }
   const isRowHidden = (key: string): boolean => {
     const row = rows.get(key)

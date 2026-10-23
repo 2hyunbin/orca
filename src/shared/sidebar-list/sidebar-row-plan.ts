@@ -1,3 +1,4 @@
+import { getWorktreeLineageIdentity } from './worktree-lineage-projection'
 import {
   getFolderWorkspaceHostIdentity,
   projectGroupIdFromRepoId
@@ -131,7 +132,8 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
   const projectGroupPaths = getProjectGroupOccurrencePaths(projectGroups)
   const occurrencePlan = buildWorktreeOccurrencePlan({
     rows: worktrees,
-    identityOf: getWorktreeHostIdentity,
+    identityOf: getWorktreeLineageIdentity,
+    occurrenceIdentityOf: getWorktreeHostIdentity,
     childrenByParentIdentity: nestLineage
       ? getSidebarLineageChildren(worktrees, lineageById, worktreeMap, filterRepoIds)
       : new Map<string, Worktree[]>(),

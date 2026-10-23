@@ -1,4 +1,7 @@
-import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
+import {
+  findWorktreeLineageRow,
+  getWorktreeLineageIdentity
+} from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { WorktreeMetaBatchUpdate, WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import {
@@ -23,14 +26,14 @@ function hasChangedLineageAncestor(
   const { parents } = getWorktreeLineageProjection(inputs.lineageById, inputs.worktreeMap)
   let child = state.getKnownWorktreeById(worktreeId, hostId)
   if (child) {
-    child = inputs.worktreeMap.get(getWorktreeHostIdentity(child)) ?? child
+    child = findWorktreeLineageRow(inputs.worktreeMap, child)
   }
   while (child) {
     const parent = parents.get(child)
     if (!parent) {
       break
     }
-    if (changedWorktreeIdentities.has(getWorktreeHostIdentity(parent))) {
+    if (changedWorktreeIdentities.has(getWorktreeLineageIdentity(parent))) {
       return true
     }
     child = parent
@@ -72,7 +75,7 @@ export function createSetWorktreesPinnedAndReveal(
         !activeHostId ||
         target.hostId === activeHostId ||
         worktreeOwnerHostIds(current).includes(activeHostId)
-      changedWorktreeIdentities.add(getWorktreeHostIdentity(current))
+      changedWorktreeIdentities.add(getWorktreeLineageIdentity(current))
       const workspaceScope = parseWorkspaceKey(worktreeId)
       if (workspaceScope?.type === 'folder') {
         void get().updateWorktreeMeta(worktreeId, { isPinned }, { executionHostId })

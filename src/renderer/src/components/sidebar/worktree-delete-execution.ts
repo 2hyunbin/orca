@@ -1,5 +1,11 @@
+import { lineageStoreKeyForRow } from '../../../../shared/resolved-worktree-lineage'
+import { getWorktreeLineageSelection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { useAppStore } from '@/store'
-import { getRegisteredWorktreeDeleteTarget } from './worktree-delete-request'
+import {
+  createWorktreeDeleteAdmission,
+  getRegisteredWorktreeDeleteTarget,
+  toWorktreeDeleteIdentities
+} from './worktree-delete-request'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import {
   isPathInsideOrEqual,
@@ -41,13 +47,13 @@ function clearWorktreeDeleteTargetState(target: Pick<Worktree, 'id' | 'hostId'>)
 export async function runWorktreeDeletesInParallel(
   targets: readonly Pick<
     Worktree,
-    'id' | 'instanceId' | 'displayName' | 'repoId' | 'path' | 'hostId'
+    'id' | 'instanceId' | 'displayName' | 'repoId' | 'path' | 'hostId' | 'runtimeOwnerEnvironmentId'
   >[],
   options: WorktreeDeleteWithToastOptions = {}
 ): Promise<WorktreeRemovalTarget[]> {
   // A destructive command must run once per identity even if a refresh duplicated rows.
   const uniqueTargets = Array.from(
-    new Map(targets.map((target) => [getWorktreeHostIdentity(target), target])).values()
+    new Map(targets.map((target) => [getWorktreeLineageSelection(target), target])).values()
   )
   // Mark all targets up front so the sidebar shows progress and no target is picked as the successor.
   useAppStore
@@ -56,7 +62,10 @@ export async function runWorktreeDeletesInParallel(
   // Directory dependencies cross repositories, but never execution hosts.
   const groups = new Map<string, (typeof uniqueTargets)[number][]>()
   for (const target of uniqueTargets) {
-    const groupIdentity = target.hostId ?? LOCAL_EXECUTION_HOST_ID
+    const groupIdentity = JSON.stringify([
+      lineageStoreKeyForRow(target),
+      target.hostId ?? LOCAL_EXECUTION_HOST_ID
+    ])
     const group = groups.get(groupIdentity)
     if (group) {
       group.push(target)
@@ -71,6 +80,9 @@ export async function runWorktreeDeletesInParallel(
   const preservedBranches: PreservedBranchCleanup[] = []
   const aggregatePreservedBranches = uniqueTargets.length > 1
   let listChanged = false
+  const admissions = new Map(
+    uniqueTargets.map((target) => [target, createWorktreeDeleteAdmission(target)])
+  )
   const pendingSnapshotPruneBatch =
     uniqueTargets.length > 1 ? beginWorktreeSnapshotPruneBatch() : null
   const snapshotPruneBatch = pendingSnapshotPruneBatch ? await pendingSnapshotPruneBatch : null
@@ -98,11 +110,11 @@ export async function runWorktreeDeletesInParallel(
       }
     }
   }
-  let groupResults: WorktreeRemovalTarget[][]
+  let groupResults: (typeof uniqueTargets)[]
   try {
     groupResults = await Promise.all(
       Array.from(groups.values()).map(async (group) => {
-        const deletedInGroup: WorktreeRemovalTarget[] = []
+        const deletedInGroup: typeof uniqueTargets = []
         const failedInGroup: (typeof group)[number][] = []
         const started: [(typeof group)[number], Promise<void>][] = []
         // Local hosts own per-repo cleanup locks and delete limits; SSH and older paired hosts
@@ -127,11 +139,20 @@ export async function runWorktreeDeletesInParallel(
             const currentTarget = getRegisteredWorktreeDeleteTarget(
               useAppStore.getState(),
               target.id,
-              target.hostId
+              target.hostId,
+              toWorktreeDeleteIdentities([target])[0]
             )
-            if (!currentTarget || currentTarget.instanceId !== target.instanceId) {
+            const assertBeforeDispatch = admissions.get(target)
+            let current = Boolean(currentTarget)
+            try {
+              assertBeforeDispatch?.()
+            } catch {
+              current = false
+            }
+            if (!currentTarget || !current) {
               clearWorktreeDeleteTargetState(target)
               listChanged = true
+              failedInGroup.push(target)
               return
             }
             if (failedInGroup.some((failed) => isStrictDescendantPath(target.path, failed.path))) {
@@ -143,6 +164,7 @@ export async function runWorktreeDeletesInParallel(
               folder?.type === 'folder'
                 ? await (async () => {
                     try {
+                      assertBeforeDispatch?.()
                       const removed = await useAppStore
                         .getState()
                         .deleteFolderWorkspace(folder.folderWorkspaceId, {
@@ -167,6 +189,10 @@ export async function runWorktreeDeletesInParallel(
                     target.displayName,
                     {
                       ...options,
+                      assertBeforeDispatch: () => {
+                        options.assertBeforeDispatch?.()
+                        assertBeforeDispatch?.()
+                      },
                       suppressPreservedBranchToast: aggregatePreservedBranches,
                       ...(snapshotPruneBatch
                         ? { snapshotPruneBatchId: snapshotPruneBatch.batchId }
@@ -178,7 +204,7 @@ export async function runWorktreeDeletesInParallel(
                     }
                   )
             if (deleted) {
-              deletedInGroup.push(toWorktreeRemovalTarget(target))
+              deletedInGroup.push(target)
             } else {
               // A failed child makes deleting its ancestor unsafe because the child lives below it.
               failedInGroup.push(target)
@@ -202,11 +228,7 @@ export async function runWorktreeDeletesInParallel(
   if (listChanged) {
     showWorkspaceListChangedToast()
   }
-  const deletedIdentities = new Set(
-    groupResults
-      .flat()
-      .map((target) => composeWorktreeHostIdentity(target.executionHostId ?? undefined, target.id))
-  )
+  const deletedIdentities = new Set(groupResults.flat().map(getWorktreeLineageSelection))
   if (aggregatePreservedBranches && preservedBranches.length > 0) {
     const targetOrder = new Map(
       uniqueTargets.map((target, index) => [getWorktreeHostIdentity(target), index])
@@ -221,7 +243,7 @@ export async function runWorktreeDeletesInParallel(
     showPreservedBranchBatchToast(deletedIdentities.size, preservedBranches)
   }
   return uniqueTargets
-    .filter((target) => deletedIdentities.has(getWorktreeHostIdentity(target)))
+    .filter((target) => deletedIdentities.has(getWorktreeLineageSelection(target)))
     .map(toWorktreeRemovalTarget)
 }
 

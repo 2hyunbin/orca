@@ -1,20 +1,11 @@
 import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
-import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import {
+  getWorktreeLineageIdentity,
+  getSidebarLineageParentsByIdentity,
+  sameWorktreeLineageIdentity
+} from './worktree-lineage-projection'
 import { getLineagePlacementRows } from '../worktree-occurrence-plan'
-import { getSidebarLineageParentsByIdentity } from './worktree-lineage-projection'
-
-export function getSidebarLineageRowsByIdentity(
-  worktrees: readonly Worktree[],
-  worktreeMap: ReadonlyMap<string, Worktree>
-): Map<string, Worktree> {
-  return new Map(
-    [...worktreeMap.values(), ...worktrees].map((worktree) => [
-      getWorktreeHostIdentity(worktree),
-      worktree
-    ])
-  )
-}
 
 export function getSidebarLineageChildren(
   worktrees: readonly Worktree[],
@@ -23,22 +14,27 @@ export function getSidebarLineageChildren(
   filterRepoIds: readonly string[] = []
 ): Map<string, Worktree[]> {
   const rowsByIdentity = worktreeMap
-  const visible = new Set(worktrees.map(getWorktreeHostIdentity))
+  const visible = new Map(worktrees.map((row) => [getWorktreeLineageIdentity(row), row]))
   const allowedRepoIds = filterRepoIds.length > 0 ? new Set(filterRepoIds) : null
   const parentByIdentity = getSidebarLineageParentsByIdentity(lineageById, rowsByIdentity)
   const childrenByParentIdentity = new Map<string, Worktree[]>()
   for (const child of rowsByIdentity.values()) {
-    const childIdentity = getWorktreeHostIdentity(child)
+    const childIdentity = getWorktreeLineageIdentity(child)
     const parent = parentByIdentity.get(childIdentity)
     if (
       !parent ||
+      !sameWorktreeLineageIdentity(visible.get(childIdentity) ?? child, child) ||
       !visible.has(childIdentity) ||
-      !visible.has(getWorktreeHostIdentity(parent)) ||
+      !visible.has(getWorktreeLineageIdentity(parent)) ||
+      !sameWorktreeLineageIdentity(
+        visible.get(getWorktreeLineageIdentity(parent)) ?? parent,
+        parent
+      ) ||
       (allowedRepoIds && (!allowedRepoIds.has(child.repoId) || !allowedRepoIds.has(parent.repoId)))
     ) {
       continue
     }
-    const identity = getWorktreeHostIdentity(parent)
+    const identity = getWorktreeLineageIdentity(parent)
     const children = childrenByParentIdentity.get(identity) ?? []
     children.push(child)
     childrenByParentIdentity.set(identity, children)
@@ -63,7 +59,7 @@ export function getPinnedSectionWorktrees(
       worktreeMap,
       filterRepoIds
     ),
-    identityOf: getWorktreeHostIdentity,
+    identityOf: getWorktreeLineageIdentity,
     duplicatePinned: false
   }).pinned
 }
@@ -78,8 +74,8 @@ export function isPinnedSectionWorktree(
   if (worktree.isPinned) {
     return true
   }
-  const identity = getWorktreeHostIdentity(worktree)
+  const identity = getWorktreeLineageIdentity(worktree)
   return getPinnedSectionWorktrees(visibleWorktrees, lineageById, worktreeMap, filterRepoIds).some(
-    (candidate) => getWorktreeHostIdentity(candidate) === identity
+    (candidate) => getWorktreeLineageIdentity(candidate) === identity
   )
 }

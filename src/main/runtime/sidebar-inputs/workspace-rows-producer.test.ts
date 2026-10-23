@@ -1,3 +1,4 @@
+import { OrchestrationDb } from '../orchestration/db'
 import { RuntimeWorktreeLineageController } from '../runtime-worktree-lineage-controller'
 import { updateRuntimeManagedWorktreeMetadata } from '../runtime-managed-worktree-metadata'
 import { buildRuntimeWorktreePsSummaries } from '../runtime-worktree-ps-summaries'
@@ -452,25 +453,26 @@ describe('current saved lineage at real Store boundaries', () => {
         savedLineage: null
       })
       expect([hidden('p'), hidden('q')]).toEqual([true, true])
-      store.setWorktreeMeta(hostWorktreeTarget(input[0]), { comment: 'task_hydrate' })
+      const db = new OrchestrationDb(':memory:')
+      const task = db.createTask({
+        runId: 'run_legacy_local',
+        spec: 'Recover parent',
+        createdByTerminalHandle: 'term-parent'
+      })
+      store.setWorktreeMeta(hostWorktreeTarget(input[0]), { comment: task.id })
       const beforeHydration = await runtime.cached()
       const hydration = new RuntimeWorktreeLineageController({
         getStore: () => store,
-        getDb: () => null,
+        getDb: () => db,
         listResolvedWorktrees: async () => (await runtime.cached()).worktrees,
         resolveWorktree: async () => input[1],
         showTerminal: async () => ({ worktreeId: input[1].id })
       })
-      vi.spyOn(hydration, 'resolveTaskCandidate').mockResolvedValue({
-        source: 'orchestration-context',
-        parent: {
-          type: 'worktree',
-          workspaceKey: worktreeWorkspaceKey(input[1].id),
-          worktree: input[1],
-          instanceId: 'p'
-        }
-      })
-      await hydration.hydrate()
+      try {
+        await hydration.hydrate()
+      } finally {
+        db.close()
+      }
       expect((await summaries()).get(input[0].id)?.parentWorktreeId).toBe(input[1].id)
       expect((await runtime.cached()).worktrees).not.toBe(beforeHydration.worktrees)
       await runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, { lineage: { noParent: true } })

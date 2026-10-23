@@ -249,3 +249,28 @@ it('lists every chat when workspace lineage loops', () => {
   expect(chatBox('in-a')).toBeTruthy()
   expect(chatBox('in-b')).toBeTruthy()
 })
+
+it('walks past an unoffered nearest ancestor to a genuinely offered current ancestor and refreshes on reparent', () => {
+  const offers = seedTree()
+  const parent = worktree('parent', { hostId: 'local' })
+  const middle = worktree('unoffered', { hostId: 'local' })
+  const child = worktree('child', { hostId: 'local' })
+  useAppStore.setState({
+    worktreesByRepo: { 'repo-1': [child, middle, parent] },
+    worktreeLineageById: {
+      [child.id]: lineage(child, middle),
+      [middle.id]: lineage(middle, parent)
+    }
+  })
+  render({ candidates: offers.slice(0, 3) })
+  expect(treeOutline()).toContain('3:workspace:child')
+  act(() =>
+    useAppStore.setState({
+      worktreeLineageById: {
+        [child.id]: { ...lineage(child, parent), parentWorktreeInstanceId: 'replacement' }
+      }
+    })
+  )
+  expect(treeOutline()).toContain('2:workspace:child')
+  expect(chatBox('in-child')).toBeTruthy()
+})

@@ -1,3 +1,4 @@
+import { getWorktreeLineageIdentity } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import WorktreeCard from '@/components/sidebar/WorktreeCard'
 import { stopNestedWorktreeCardBubble } from '@/components/sidebar/worktree-list/rows/header-event-guards'
@@ -13,6 +14,7 @@ import { useState } from 'react'
 
 export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
+  const activeWorkspaceExecutionHostId = useAppStore((s) => s.activeWorkspaceExecutionHostId)
   const activeWorkspaceKey = useAppStore((s) => s.activeWorkspaceKey)
   const folderWorkspaces = useAppStore((s) => s.folderWorkspaces)
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
@@ -26,6 +28,7 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
   const repoById = new Map(repos.map((repo) => [repo.id, repo]))
   const { folderWorkspace, childWorktrees, lineageChildrenByParentId, rootChildWorktrees } =
     getAttachedWorktreesForFolderWorkspace({
+      activeWorkspaceExecutionHostId,
       activeWorkspaceKey,
       activeWorktreeId,
       folderWorkspaces,
@@ -50,11 +53,12 @@ export default function FolderWorkspaceWorktreesPanel(): React.JSX.Element {
     worktree: Worktree,
     ancestorIds: ReadonlySet<string> = new Set()
   ): React.JSX.Element => {
-    const lineageChildren = lineageChildrenByParentId.get(getWorktreeHostIdentity(worktree)) ?? []
+    const lineageChildren =
+      lineageChildrenByParentId.get(getWorktreeLineageIdentity(worktree)) ?? []
     const lineageCollapsed = collapsedLineageWorktreeIds.has(getWorktreeHostIdentity(worktree))
-    const nextAncestorIds = new Set([...ancestorIds, getWorktreeHostIdentity(worktree)])
+    const nextAncestorIds = new Set([...ancestorIds, getWorktreeLineageIdentity(worktree)])
     const safeLineageChildren = lineageChildren.filter(
-      (child) => !nextAncestorIds.has(getWorktreeHostIdentity(child))
+      (child) => !nextAncestorIds.has(getWorktreeLineageIdentity(child))
     )
     const hasSafeLineageChildren = safeLineageChildren.length > 0
     return (

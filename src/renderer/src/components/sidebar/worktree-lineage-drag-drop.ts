@@ -1,7 +1,9 @@
-import { getWorktreeIdFromHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getLineageRenderInfo } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import {
+  getLineageRenderInfo,
+  findWorktreeLineageRow
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 const WORKTREE_CARD_CONTENT_TARGET_SELECTOR = '[data-worktree-card-parent-content]'
 const WORKTREE_DRAG_ROW_SELECTOR = '[data-worktree-drag-id]'
@@ -57,6 +59,7 @@ export function getWorktreeLineageDropTargetId(args: {
   }
 
   return (
+    rowTarget.getAttribute('data-worktree-lineage-selection') ??
     rowTarget.getAttribute('data-worktree-host-identity') ??
     rowTarget.getAttribute('data-worktree-drag-id')
   )
@@ -72,11 +75,11 @@ export function getReorderedWorktreeIdsToUnnest(args: {
   const seen = new Set<string>()
   const sourceGroupIdSet = new Set(args.sourceGroupIds)
   for (const id of args.draggedIds) {
-    const worktree = args.worktreeMap.get(id)
+    const worktree = findWorktreeLineageRow(args.worktreeMap, id)
     if (
       seen.has(id) ||
-      !sourceGroupIdSet.has(getWorktreeIdFromHostIdentity(id)) ||
       !worktree ||
+      !sourceGroupIdSet.has(worktree.id) ||
       getLineageRenderInfo(worktree, args.lineageById, args.worktreeMap).state !== 'valid'
     ) {
       continue

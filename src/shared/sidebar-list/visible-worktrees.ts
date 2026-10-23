@@ -1,3 +1,8 @@
+import {
+  getWorktreeLineageIdentity,
+  sameWorktreeLineageIdentity,
+  getRepresentedWorktreeLineageRow
+} from './worktree-lineage-projection'
 import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
 import { getWorktreeHostIdentity } from '../worktree/host-qualified-identity'
@@ -38,12 +43,19 @@ export function selectVisibleSidebarWorktrees({
   forcedVisibleWorktreeIds
 }: VisibleSidebarWorktreeInputs): Worktree[] {
   // Structural ancestors still respect explicit project and host display boundaries.
+  const represented = new Map(rows.map((row) => [getWorktreeHostIdentity(row), row]))
   const selectedRepoIds = filterRepoIds.length > 0 ? new Set(filterRepoIds) : null
 
   const visibleHostIds = filters.visibleHostIds && new Set(filters.visibleHostIds)
   const admitsAncestor = (row: Worktree): boolean => {
     const hostId = facts.hostId(row)
     return (
+      sameWorktreeLineageIdentity(
+        represented.get(getWorktreeHostIdentity(row)) ??
+          getRepresentedWorktreeLineageRow(ancestorByIdentity, row) ??
+          row,
+        row
+      ) &&
       !row.isArchived &&
       (!selectedRepoIds || selectedRepoIds.has(row.repoId)) &&
       (!visibleHostIds || (hostId !== null && visibleHostIds.has(hostId)))
@@ -92,7 +104,7 @@ function addVisibleLineageAncestors(
   const parentByIdentity = getSidebarLineageParentsByIdentity(lineageById, ancestorByIdentity)
 
   const addWithAncestors = (worktree: Worktree): void => {
-    const identity = getWorktreeHostIdentity(worktree)
+    const identity = getWorktreeLineageIdentity(worktree)
     if (included.has(identity)) {
       return
     }
