@@ -176,7 +176,7 @@ describe('Relay region API', () => {
     expect(response.status).toBe(200)
     expect(plan).toHaveBeenCalledWith(
       { userId: 'user-1', relayHostId: 'abcdefghijklmnop' },
-      { reconnect: true, region: 'asia-east2', regionCorrection: true }
+      { reconnect: true, region: 'asia-east2', regionCorrection: true, preferred: true }
     )
     expect(assign).toHaveBeenCalledWith(
       { userId: 'user-1', relayHostId: 'abcdefghijklmnop' },

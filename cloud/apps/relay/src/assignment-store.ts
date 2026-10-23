@@ -4246,6 +4246,16 @@ export class RelayAssignmentStore {
   private regionalRehomeSqlFailuresBreach: RegionalRehomeSqlFailuresBreach = null
   private readonly regionalRehomePollTelemetry = new RegionalRehomePollTelemetry()
 
+  // The operator's regional rehome switch, for rehome on reconnect; null without the row.
+  async regionRehomeSwitch(): Promise<{ enabled: boolean; notBefore: number } | null> {
+    const control = (
+      await this.database.query(
+        `SELECT enabled, not_before FROM relay_region_rehome_control WHERE control_id = 'global'`
+      )
+    )[0]
+    return control ? { enabled: Number(control.enabled) === 1, notBefore: Number(control.not_before) } : null
+  }
+
   async selectIdleRegionalRehomeCandidates(
     processSafety?: RegionalRehomeSafetySnapshot
   ): Promise<IdleRegionalRehomeCandidate[]> {

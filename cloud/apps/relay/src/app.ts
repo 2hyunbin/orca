@@ -476,7 +476,8 @@ export function createRelayApp(
         plan = await operations.reservePlacement.plan(identity, {
           reconnect: Boolean(body.data.reconnect),
           region: targetRegion,
-          regionCorrection: body.data.regionCorrection !== undefined
+          regionCorrection: body.data.regionCorrection !== undefined,
+          preferred: requestedRegion !== undefined && targetRegion === requestedRegion
         })
       } catch (error) {
         if (!(error instanceof ReservePaceError)) throw error
