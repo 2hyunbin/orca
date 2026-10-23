@@ -1,3 +1,5 @@
+import type { CodexSubagentExecutions } from './codex-subagent-executions'
+import { readCodexJournalRecord } from './codex-structured-journal-translation-values'
 import {
   codexItemIdentity,
   CodexTurnOrdinals,
@@ -19,7 +21,8 @@ import { createCodexHistoryImportPlan } from './codex-history-import-plan'
 import {
   discoverCodexHistory,
   loadCodexHistory,
-  loadCodexReceiptHistory
+  loadCodexReceiptHistory,
+  selectCodexHistoryTurn
 } from './codex-structured-thread-history-pages'
 import {
   readCodexHistoryJournalView,
@@ -33,6 +36,9 @@ import {
 export async function catchUpCodexThread(input: {
   connection: Pick<CodexAppServerConnection, 'request'>
   threadId: string
+  returnedTurns?: readonly unknown[]
+  paginate?: boolean
+  subagentExecutions?: CodexSubagentExecutions
   sessionId: string
   sink: StructuredAgentSessionEventSink
   signal?: AbortSignal
@@ -110,7 +116,26 @@ export async function catchUpCodexThread(input: {
           }
         }
       }
-      for await (const turn of unresolved.size ? loadCodexReceiptHistory(read) : []) {
+      const returned: Record<string, unknown>[] = []
+      const seen = new Set<string>()
+      for (const raw of input.returnedTurns ?? []) {
+        check()
+        const turn = readCodexJournalRecord(raw)
+        if (typeof turn.id !== 'string' || !turn.id) {
+          continue
+        }
+        if (seen.has(turn.id)) {
+          throw new Error('repeated-turn')
+        }
+        seen.add(turn.id)
+        returned.push(turn)
+      }
+      for (const turn of returned) {
+        await confirmReceipts(turn)
+        await yieldTurn()
+      }
+      const paginate = input.paginate !== false
+      for await (const turn of paginate && unresolved.size ? loadCodexReceiptHistory(read) : []) {
         await confirmReceipts(turn)
         await yieldTurn()
         if (!unresolved.size) {
@@ -118,23 +143,41 @@ export async function catchUpCodexThread(input: {
         }
       }
       Object.assign(view, readCodexHistoryJournalView(history, input.threadId))
-      const missing = await discoverCodexHistory(read, view)
-      if (missing.pages.length === 0) {
-        return null
-      }
+      const missing = paginate
+        ? await discoverCodexHistory(read, view)
+        : { pages: [], rewound: view.latest !== null && !seen.has(view.latest) }
       const staging = createCodexHistoryImportPlan({
         sessionId: input.sessionId,
         threadId: input.threadId,
         journal,
         nativePromptKeys: view.nativePromptKeys,
+        subagentExecutions: input.subagentExecutions,
         outsideNotice: view.hasRows ? continuedOutsideNotice(missing.rewound) : undefined,
         check
       })
       try {
+        const loaded = new Set<string>()
         for await (const turn of loadCodexHistory(read, missing.pages, confirmReceipts)) {
           check()
           staging.restore(turn)
+          loaded.add(String(turn.id))
           await yieldTurn()
+        }
+        for (const turn of returned) {
+          if (
+            !loaded.has(String(turn.id)) &&
+            turn.itemsView !== 'summary' &&
+            selectCodexHistoryTurn(turn, {
+              ...view,
+              incomplete: new Set([
+                ...(view.incomplete ?? []),
+                ...(view.latest ? [view.latest] : [])
+              ])
+            })
+          ) {
+            staging.restore(turn)
+            await yieldTurn()
+          }
         }
         const plan = staging.finish()
         Object.assign(view, readCodexHistoryJournalView(history, input.threadId))

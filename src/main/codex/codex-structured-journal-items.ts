@@ -30,7 +30,7 @@ import {
 import { appendCodexLifecycleItem, publishCodexLifecycle } from './codex-structured-journal-sink'
 import { readCodexJournalString } from './codex-structured-journal-translation-values'
 import { readCodexTurnId } from './codex-structured-thread-facts'
-import { confirmCodexHistoryReceipt, readCodexDispatchEcho } from './codex-structured-dispatch-echo'
+import { readCodexDispatchEcho } from './codex-structured-dispatch-echo'
 import {
   codexActiveItemBody,
   codexCompletedItem,
@@ -103,9 +103,6 @@ export class CodexJournalItems {
         admission: CODEX_JOURNAL_ADMITTED,
         ...(echo ? { dispatchEcho: echo } : {})
       }
-    }
-    if (source === 'history' && !this.deps.historyImport) {
-      confirmCodexHistoryReceipt(item, identity, this.deps.onUserMessageEcho)
     }
     if (item.type === 'contextCompaction' && event.method === 'item/started') {
       return { handled: true, admission: CODEX_JOURNAL_ADMITTED }

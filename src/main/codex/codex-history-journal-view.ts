@@ -20,6 +20,7 @@ export type CodexHistoryJournalView = {
   unresolvedIds?: ReadonlySet<string>
   /** Provider turns represented by saved rows or native receipts. */
   known: ReadonlySet<string>
+  incomplete?: ReadonlySet<string>
   /** Latest represented turn by journal position, including within a batch. */
   latest: string | null
   latestPosition: AgentJournalPosition | null
@@ -35,6 +36,7 @@ export function readCodexHistoryJournalView(
 ): CodexHistoryJournalView {
   const known = new Set<string>()
   const nativePromptKeys = new Set<string>()
+  const lifecycles = new Set<string>()
   let latest: string | null = null
   let latestPosition: AgentJournalPosition | null = null
   let hasRows = false
@@ -65,6 +67,10 @@ export function readCodexHistoryJournalView(
     }
     const turnId = codexTurnIdOfRow(itemId, body, threadId)
     if (turnId) {
+      const turn = readAgentJournalTurn(body)
+      if (turn && turn.state !== 'running' && turn.state !== 'unverifiable') {
+        lifecycles.add(turnId)
+      }
       note(turnId, agentJournalItemPosition(journal.item(itemId) ?? { sequence }))
     }
   })
@@ -98,6 +104,7 @@ export function readCodexHistoryJournalView(
         .map((send) => send.clientMessageId)
     ),
     known,
+    incomplete: new Set([...known].filter((id) => !lifecycles.has(id))),
     latest,
     latestPosition,
     hasRows,
@@ -143,6 +150,7 @@ export function sameCodexHistoryJournalView(
     a.hasRows === b.hasRows &&
     a.latest === b.latest &&
     JSON.stringify(a.latestPosition) === JSON.stringify(b.latestPosition) &&
+    JSON.stringify([...(a.incomplete ?? [])]) === JSON.stringify([...(b.incomplete ?? [])]) &&
     a.known.size === b.known.size &&
     [...a.known].every((id) => b.known.has(id)) &&
     a.nativePromptKeys.size === b.nativePromptKeys.size &&

@@ -43,7 +43,7 @@ export function turn(index: number, view: 'full' | 'summary' = 'full'): Record<s
 }
 
 /** Serves Codex's saved turns newest first, two to a page. */
-function codexWith(turns: Record<string, unknown>[]) {
+export function codexWith(turns: Record<string, unknown>[]) {
   return {
     request: async (method: string, params?: Record<string, unknown>) => {
       expect(method).toBe('thread/turns/list')
@@ -145,7 +145,7 @@ export async function chat(clock: { now: number }) {
 }
 
 describe('Codex chat catch-up', () => {
-  registerCodexCatchUpEchoTests({ chat, turn, sessionId: SESSION, threadId: THREAD })
+  registerCodexCatchUpEchoTests({ chat, turn, codexWith, sessionId: SESSION, threadId: THREAD })
 
   it('settles recent unresolved exact proof before unrelated known history or a failed import', async () => {
     const c = await chat({ now: 1_000 })

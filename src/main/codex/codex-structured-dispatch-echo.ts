@@ -310,14 +310,3 @@ export function readCodexDispatchEcho(
     ? { clientMessageId, providerIdentity: identity }
     : null
 }
-
-export function confirmCodexHistoryReceipt(
-  item: { type: string; id: string } & Record<string, unknown>,
-  identity: AgentJournalItemIdentity,
-  onReceipt?: (id: string, identity: AgentJournalItemIdentity) => void
-): void {
-  const echo = readCodexDispatchEcho(item, identity)
-  if (echo) {
-    onReceipt?.(echo.clientMessageId, echo.providerIdentity)
-  }
-}

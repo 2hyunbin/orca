@@ -62,6 +62,26 @@ async function readPage(
   }
 }
 
+export function selectCodexHistoryTurn(
+  turn: Record<string, unknown>,
+  anchor: CodexHistoryJournalView
+): boolean {
+  if (anchor.unresolvedOrigin) {
+    throw new Error('no-legacy-origin')
+  }
+  const id = turnId(turn)
+  if (anchor.known.has(id) && !anchor.incomplete?.has(id)) {
+    return false
+  }
+  if (anchor.importedAt !== null) {
+    if (typeof turn.startedAt !== 'number' || !Number.isFinite(turn.startedAt)) {
+      throw new Error('undated-turn')
+    }
+    return turn.startedAt * 1000 > anchor.importedAt
+  }
+  return true
+}
+
 /** Known identities exclude themselves, never the older gaps behind them. */
 export async function discoverCodexHistory(
   input: CodexHistoryRead,
@@ -88,16 +108,8 @@ export async function discoverCodexHistory(
         throw new Error('repeated-turn')
       }
       seen.add(id)
-      if (anchor.known.has(id)) {
+      if (!selectCodexHistoryTurn(turn, anchor)) {
         continue
-      }
-      if (anchor.importedAt !== null) {
-        if (typeof turn.startedAt !== 'number' || !Number.isFinite(turn.startedAt)) {
-          throw new Error('undated-turn')
-        }
-        if (turn.startedAt * 1000 <= anchor.importedAt) {
-          continue
-        }
       }
       selected.add(id)
       // Every missing turn necessarily writes a lifecycle row, even without content.

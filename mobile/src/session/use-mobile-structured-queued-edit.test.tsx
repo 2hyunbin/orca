@@ -42,7 +42,7 @@ describe('mobile in-place queued Edit', () => {
   let hook: ReturnType<typeof useMobileStructuredAgentSession> | undefined
   let listener: ((data: unknown) => void) | undefined
   const append = vi.fn(() => true)
-  const appendRef = { current: append as (text: string) => boolean }
+  const appendRef: { current: (text: string) => boolean } = { current: append }
   let originDraft = ''
   let nextDraft = ''
   const error = vi.fn()
@@ -325,7 +325,7 @@ describe('mobile in-place queued Edit', () => {
         answer?.(mutationOk({ status, messageId: message.messageId, fingerprint: 'new' }))
         await save
       })
-      if (status === 'updated' || status === 'unchanged') {
+      if (status === 'updated') {
         expect(append).not.toHaveBeenCalled()
       } else {
         expect(append).toHaveBeenCalledWith('edited in place')

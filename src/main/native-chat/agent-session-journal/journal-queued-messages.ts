@@ -156,7 +156,10 @@ export class JournalQueuedMessages {
       edit = undefined
       const card = this.get(input.messageId)
       const decision = queuedMessageUpdateDecision(card, this.deps.sessionId, input)
-      const derived = card?.recovers && !this.deps.state().queue.cards.has(card.messageId)
+      const derived =
+        card?.recovers &&
+        !this.deps.state().queue.cards.has(card.messageId) &&
+        !this.legacy.adoption(card.messageId)
       if (decision.status !== 'ready') {
         const result =
           decision.status === 'unchanged' && derived

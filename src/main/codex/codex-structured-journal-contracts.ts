@@ -63,12 +63,16 @@ export type CodexJournalTranslator = {
   /** The provider turn a Stop naming `turnId` interrupts; undefined while a command has none. */
   commandProviderTurnId: (turnId: string) => string | undefined
   cancelPrompt: (journalItemId: string) => CodexJournalTranslationAdmission
+  resolvePrompt: (journalItemId: string) => void
+  flush: () => void
+  dispose: () => void
+}
+
+export type CodexHistoryTranslator = {
   restoreThread: (
     threadId: string,
     thread: Record<string, unknown>
   ) => CodexJournalTranslationAdmission
-  resolvePrompt: (journalItemId: string) => void
-  flush: () => void
   dispose: () => void
 }
 

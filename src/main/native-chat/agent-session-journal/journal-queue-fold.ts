@@ -159,6 +159,12 @@ function applyQueueRow(state: JournalReducerState, row: JournalQueueRow): void {
   if (change.op === 'queued') {
     const card = queuedCardFromChange(state, row.messageId, change)
     setCard(state, card)
+    if (
+      change.recovers &&
+      state.submissions.get(change.recovers)?.queuedMessageId === row.messageId
+    ) {
+      settleHandOffInDoubt(state, change.recovers)
+    }
     if (card.consumedAs !== null) {
       settleHandOffInDoubt(state, card.consumedAs)
     }

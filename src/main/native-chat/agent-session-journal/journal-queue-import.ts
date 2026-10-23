@@ -4,6 +4,7 @@
 // the same before and after it moves, and every action on one moves it in its own transaction. The
 // bulk import runs once per open and is never retried in a loop: the next open tries again.
 
+import { dispatchWasWithdrawn } from '../../../shared/structured-agent-session-dispatch-rejection'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import { journalDispatchRowApplies, queuedHandOffOutcome } from './journal-dispatch-settlement'
 import { journalQueueRowBuilder, type JournalQueuedChange } from './journal-queue-events'
@@ -45,6 +46,7 @@ export function legacyQueuedChange(
     ...queuedChangeOf(row),
     ...(holdReason !== null ? { holdReason } : {}),
     ...(attempt !== null ? { attempt } : {}),
+    ...(unconfirmed?.recovers ? { recovers: unconfirmed.recovers } : {}),
     ...(row.state === 'returned' && (attempt === null || !state.submissions.has(attempt))
       ? {
           returned: {
@@ -70,7 +72,7 @@ function unconfirmedHandOff(
   row: QueuedMessageRow
 ):
   | { attempt: string; holdReason?: undefined }
-  | { attempt?: undefined; holdReason: string }
+  | { attempt?: undefined; holdReason: string; recovers?: string }
   | null {
   const attempts = [...state.submissions.values()]
     .filter((submission) => submission.queuedMessageId === row.messageId)
@@ -81,7 +83,12 @@ function unconfirmedHandOff(
   const latest = attempts.at(-1)!
   return handOffInDoubt(latest) && latest.payloadFingerprint === row.fingerprint
     ? { attempt: latest.clientMessageId }
-    : { holdReason: QUEUED_MESSAGE_HELD_DELIVERY_UNCONFIRMED }
+    : {
+        holdReason: QUEUED_MESSAGE_HELD_DELIVERY_UNCONFIRMED,
+        ...(handOffInDoubt(latest) && (!dispatchWasWithdrawn(latest) || latest.answeredInTurn)
+          ? { recovers: latest.clientMessageId }
+          : {})
+      }
 }
 
 function handOffInDoubt(submission: AgentJournalSubmission): boolean {
@@ -223,8 +230,9 @@ export class LegacyQueuedCards {
             : legacyQueuedChange(this.deps.state(), row)
           if (change) {
             this.changes.set(row.messageId, change)
-            if (change.attempt) {
-              this.witnesses.set(change.attempt, { messageId: row.messageId, change })
+            const original = change.attempt ?? change.recovers
+            if (original) {
+              this.witnesses.set(original, { messageId: row.messageId, change })
             }
           }
           return change ? [journalQueueRowBuilder(this.deps.state, row.messageId, change)] : []
@@ -246,6 +254,9 @@ export class LegacyQueuedCards {
             if (send && handOffInDoubt(send)) {
               foldQueuedHandOffInDoubt(state, send)
               refreshJournalInputCandidate(state, id)
+              if (witness.change.recovers === id) {
+                state.inputs.candidates.delete(id)
+              }
             }
           }
         }
