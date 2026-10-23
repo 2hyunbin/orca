@@ -67,6 +67,20 @@ it('rejects a tampered cached executable', async () => {
   expect(await readBuiltDarwinTerminalNode(directory, inputs)).toBeNull()
 })
 
+it('rejects unchanged executable bytes built with an older build script', async () => {
+  const { directory, inputs, executable } = artifact()
+  const receiptPath = join(directory, 'receipt.json')
+  const receipt = JSON.parse(readFileSync(receiptPath, 'utf8'))
+  expect(inputs.buildScriptsSha256['build-darwin-terminal-node.mjs']).toMatch(/^[0-9a-f]{64}$/)
+  expect(await readBuiltDarwinTerminalNode(directory, inputs)).toBe(executable)
+  receipt.inputs.buildScriptsSha256['build-darwin-terminal-node.mjs'] = 'older build recipe'
+  writeFileSync(receiptPath, JSON.stringify(receipt))
+  expect(await readBuiltDarwinTerminalNode(directory, inputs)).toBeNull()
+  delete receipt.inputs.buildScriptsSha256
+  writeFileSync(receiptPath, JSON.stringify(receipt))
+  expect(await readBuiltDarwinTerminalNode(directory, inputs)).toBeNull()
+})
+
 it('rejects a partial build, invalid receipt, or non-file executable', async () => {
   const { directory, inputs, executable } = artifact()
   rmSync(executable)

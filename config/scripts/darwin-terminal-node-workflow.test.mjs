@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import { expect, it } from 'vitest'
 import { parse } from 'yaml'
+import { readDarwinVerificationArch } from './verify-darwin-terminal-node.mjs'
 import { classifyPrJobs } from './pr-code-change-scope.mjs'
 
 function workflow(name) {
@@ -20,6 +21,10 @@ it.each([
   'config/scripts/darwin-terminal-node-probe.cjs',
   'config/scripts/__fixtures__/darwin-threadpool-wait.h',
   'config/scripts/macos-terminal-host-bundle.cjs',
+  'config/scripts/pinned-node-downloads.mjs',
+  'config/scripts/update-node-runtime-pin.mjs',
+  'config/scripts/orcad-prebuild-node-gyp.mjs',
+  'config/scripts/orcad-prebuild-slot-contents.mjs',
   'src/shared/node-runtime-pin.ts'
 ])('qualifies the actual macOS runtime when %s changes', (file) => {
   expect(classifyPrJobs([file]).darwin_terminal_node).toBe(true)
@@ -34,12 +39,25 @@ it.each(['adhoc', 'daily', 'hourly', 'release'])(
   (channel) => {
     const jobs = Object.values(workflow(`${channel}-mac-build`).jobs)
     const steps = jobs.find((job) =>
-      job.steps?.some((step) => step.name === 'Build the patched terminal runtimes')
+      job.steps?.some((step) => step.name === 'Build and verify the patched terminal runtimes')
     ).steps
-    const build = steps.findIndex((step) => step.name === 'Build the patched terminal runtimes')
+    const build = steps.findIndex(
+      (step) => step.name === 'Build and verify the patched terminal runtimes'
+    )
     expect(build).toBeGreaterThan(steps.findIndex((step) => step.name === 'Install dependencies'))
-    expect(steps[build].run).toContain('build-darwin-terminal-node.mjs arm64')
-    expect(steps[build].run).toContain('build-darwin-terminal-node.mjs x64')
+    expect(steps[build].run).toContain('pnpm run build:packages')
+    expect(steps[build].run).toContain('verify-darwin-terminal-node.mjs --arch=arm64')
+    expect(steps[build].run).toContain('verify-darwin-terminal-node.mjs --arch=x64')
+    const packaging = steps.findIndex((step) => step.with?.command?.includes('--runtime=electron'))
+    expect(build).toBeLessThan(packaging)
+    const cache = steps.find((step) => step.with?.key?.startsWith('orca-node-runtime-mac-'))
+    for (const dependency of [
+      'pinned-node-downloads.mjs',
+      'update-node-runtime-pin.mjs',
+      'macos-terminal-host-bundle.cjs'
+    ]) {
+      expect(cache.with.key).toContain(dependency)
+    }
     if (channel === 'daily') {
       expect(steps[build].if).toBe("steps.freshness.outputs.should_build == 'true'")
     }
@@ -105,3 +123,16 @@ it('classifies runtime changes from the dependency-free CI sparse checkout', asy
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+it('selects the requested runtime architecture and retains the native default', () => {
+  expect(readDarwinVerificationArch([], 'arm64')).toBe('arm64')
+  expect(readDarwinVerificationArch(['--arch=x64'], 'arm64')).toBe('x64')
+  expect(readDarwinVerificationArch(['--arch=arm64'], 'x64')).toBe('arm64')
+})
+
+it.each([['--arch=riscv64'], ['--arch'], ['--unknown'], ['--arch=x64', '--arch=arm64']])(
+  'rejects invalid verifier arguments %j before building a runtime',
+  (...args) => {
+    expect(() => readDarwinVerificationArch(args, 'arm64')).toThrow('Usage:')
+  }
+)

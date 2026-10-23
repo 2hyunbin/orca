@@ -1,4 +1,3 @@
-const assert = require('node:assert/strict')
 const { setTimeout: delay } = require('node:timers/promises')
 const fs = require('node:fs/promises')
 const pty = require(process.argv[3])
@@ -16,14 +15,15 @@ terminal.onData((chunk) => {
   output = (output + chunk).slice(-4096)
 })
 const deadline = setTimeout(() => {
-  console.error('Stress run exceeded five minutes')
+  console.error('Stress run exceeded one hour')
   terminal.kill()
   process.kill(process.pid, 'SIGKILL')
-}, 300_000)
+}, 60 * 60_000)
 
-async function echo(marker) {
+async function echo(marker, timeoutMs = 10_000) {
   terminal.write(`${marker}\r`)
-  for (let i = 0; i < 1000; i++) {
+  const echoDeadline = Date.now() + timeoutMs
+  while (Date.now() < echoDeadline) {
     if (output.includes(`ECHO:${marker}`)) {
       return
     }
@@ -50,19 +50,21 @@ async function main() {
       lastPrint = Date.now()
     }
     if (Date.now() - lastProgress > 3000) {
-      let statCallbacks = 0
-      let echoed = false
-      for (let i = 0; i < 4; i++) {
-        void fs.stat(process.execPath).then(() => statCallbacks++)
-      }
-      void echo('ORCA_AFTER_STALL')
-        .then(() => (echoed = true))
-        .catch(() => {})
-      await delay(15_000)
-      assert.ok(
-        canary.stressProgress() > completed || statCallbacks > 0 || echoed,
-        `Workers stranded after ${completed} jobs: no progress, stat callbacks or PTY echo`
-      )
+      const marker = `ORCA_AFTER_STALL_${completed}`
+      await Promise.race([
+        Promise.all([
+          ...Array.from({ length: 4 }, () => fs.stat(process.execPath)),
+          echo(marker, 40_000),
+          (async () => {
+            while (canary.stressProgress() <= completed) {
+              await delay(100)
+            }
+          })()
+        ]),
+        delay(40_000, undefined, { ref: false }).then(() => {
+          throw new Error(`Workers stranded after ${completed} jobs: I/O recovery timed out`)
+        })
+      ])
       lastProgress = Date.now()
     }
   }

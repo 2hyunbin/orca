@@ -19,7 +19,8 @@ import {
   NODE_RUNTIME_PIN
 } from '../../src/shared/node-runtime-pin.ts'
 import { fetchPinnedFile, pinnedNodeCacheDir } from './pinned-node-downloads.mjs'
-import { extract, sha256File } from './update-node-runtime-pin.mjs'
+import { sha256File } from './update-node-runtime-pin.mjs'
+import { getTarProgram } from './zip-extractor-command.mjs'
 import { isDirectInvocation } from './script-entry-detection.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -47,6 +48,19 @@ export function darwinTerminalNodeInputs(arch, version = NODE_RUNTIME_PIN.versio
         }
       : {}),
     patchSha256: createHash('sha256').update(readFileSync(patchPath)).digest('hex'),
+    buildScriptsSha256: Object.fromEntries(
+      [
+        'build-darwin-terminal-node.mjs',
+        'pinned-node-downloads.mjs',
+        'update-node-runtime-pin.mjs',
+        'macos-terminal-host-bundle.cjs'
+      ].map((file) => [
+        file,
+        createHash('sha256')
+          .update(readFileSync(join(import.meta.dirname, file)))
+          .digest('hex')
+      ])
+    ),
     minimumOs: NODE_RUNTIME_DARWIN_MINIMUM_OS
   }
 }
@@ -99,7 +113,13 @@ async function compileDarwinTerminalNode(directory, inputs, cacheDir, scratch) {
     await releaseArchive()
   }
   const source = join(scratch, `node-v${inputs.version}`)
-  extract(archive, scratch, `node-v${inputs.version}`)
+  await runBuildCommand(getTarProgram(), [
+    '-xzf',
+    archive,
+    '-C',
+    scratch,
+    `node-v${inputs.version}`
+  ])
   await runBuildCommand('patch', ['--batch', '--forward', '--fuzz=0', '-p1', '-i', patchPath], {
     cwd: source
   })

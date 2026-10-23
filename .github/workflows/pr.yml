@@ -1587,7 +1587,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: out/node-runtime-cache
-          key: darwin-terminal-node-${{ runner.arch }}-${{ hashFiles('src/shared/node-runtime-pin.ts', 'config/node-runtime-patches/**', 'config/scripts/build-darwin-terminal-node.mjs') }}
+          key: darwin-terminal-node-${{ runner.arch }}-${{ hashFiles('src/shared/node-runtime-pin.ts', 'config/node-runtime-patches/**', 'config/scripts/build-darwin-terminal-node.mjs', 'config/scripts/pinned-node-downloads.mjs', 'config/scripts/update-node-runtime-pin.mjs', 'config/scripts/macos-terminal-host-bundle.cjs') }}
       - name: Build and verify the shipping terminal runtime
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON config/scripts/verify-darwin-terminal-node.mjs
 

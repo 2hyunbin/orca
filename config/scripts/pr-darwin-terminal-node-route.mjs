@@ -8,6 +8,10 @@ const DARWIN_TERMINAL_NODE_PREFIXES = [
   'config/scripts/__fixtures__/darwin-terminal-worker-wait',
   'config/scripts/__fixtures__/darwin-threadpool-wait',
   'config/scripts/macos-terminal-host-bundle',
+  'config/scripts/pinned-node-downloads',
+  'config/scripts/update-node-runtime-pin',
+  'config/scripts/orcad-prebuild-node-gyp',
+  'config/scripts/orcad-prebuild-slot-contents',
   'src/shared/node-runtime-pin.ts'
 ]
 

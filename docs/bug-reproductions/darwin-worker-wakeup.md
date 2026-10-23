@@ -96,9 +96,10 @@ and PTY oracle with no private pthread fields. Run it after the normal check:
 ORCA_BACKGROUND_LAUNCH=1 ORCA_DARWIN_WORKER_STRESS=1 node config/scripts/verify-darwin-terminal-node.mjs
 ```
 
-The workload runs 30 million sequential native jobs, requires PTY echo before and
-after, and detects three seconds without progress followed by fifteen seconds
-without a fresh stat callback or PTY echo. It kills only its own disposable test
+The workload runs 30 million sequential native jobs and requires PTY echo before
+and after. After three seconds without progress, it allows forty seconds for
+the thirty-second worker timeout and scheduling margin, requiring all four fresh
+stat callbacks, a new PTY echo and resumed native work. It kills only its own disposable test
 process if libuv cleanup is stranded. This probabilistic stress is opt-in; the
 idle-refresh regression remains the regular CI oracle.
 
@@ -117,8 +118,9 @@ source with this patch. The recipe now follows Node 24.22.1: its source archive
 matches the official SHA-256 manifest, the patch applies with zero fuzz, and the
 reviewed patched worker source is byte-identical to the Node 24.21.0 recipe. The recipe pins the source archive hash, reviewed patched
 source hash, architecture and minimum OS. Cache receipts verify the resulting
-executable bytes. A Node pin change fails until the recipe is reviewed; changes
-to build flags must also bump `recipeVersion`. This preserves the existing signed
+executable bytes and fingerprint the build scripts, so changes to build logic
+invalidate cached binaries. A Node pin change fails until the recipe is reviewed.
+This preserves the existing signed
 helper layout and stable host copy rather than changing its launch or permissions.
 
 Run the shipping-runtime check on each macOS architecture:
@@ -146,7 +148,9 @@ On 2026-10-23, the repository-built Node 24.22.1 arm64 runtime also passed:
 
 The official unpatched 24.22.1 runtime passed the same initial PTY and I/O checks,
 then failed the idle-generation `advances > 0n` assertion. This supplies a current-pin
-red/green regression. Fresh ARM/Intel CI qualification is still required. The cold
+red/green regression. ARM CI qualification passed on PR commit `6f006d865193` in
+[run 39922624279](https://github.com/stablyai/orca/actions/runs/39922624279);
+Intel qualification was still running at review time. The cold
 build also exposed multi-minute synchronous source cleanup; the cache lease is
 now released after atomic publication and before cleanup, so a blocked heartbeat
 cannot let a waiting builder steal the completed producer's lock. Cold source compilation is
@@ -166,7 +170,12 @@ Mobile/relay clients benefit only when their execution host uses the patched
 helper. An isolated Developer ID signed copy of the installed helper, with the
 repository-built runtime substituted, served a PTY under hardened runtime. Its
 protocol 45 required a matching smoke-test handshake; the original patch checkout used 46. A
-complete package build, launchd/TCC attribution, older macOS releases, battery
+repeat on October 23 with Node 24.22.1 passed strict signature verification,
+real PTY input, filesystem/DNS/crypto and all four idle worker refreshes under
+hardened runtime. This disposable copy used the installed helper's native
+dependencies and an untimestamped Developer ID signature; it does not establish
+notarization or qualification of a complete current package. A complete package
+build, launchd/TCC attribution, older macOS releases, battery
 impact and extended soak remain verification gaps. Do not infer remote process
 death from missing callbacks or loss of contact. The experimental reliability gate records these
 limits; an upstream merge and a Node release can eventually replace this backport.
