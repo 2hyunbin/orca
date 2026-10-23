@@ -846,11 +846,11 @@ jobs:
             config/scripts/create-draft-release.mjs \
             config/scripts/assert-github-release-is-draft.mjs
 
-      - name: Create draft release with bounded generated notes
+      - name: Verify existing draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}
-        run: node config/scripts/create-draft-release.mjs "$TAG"
+        run: node config/scripts/assert-github-release-is-draft.mjs "$TAG"
 
   dependency-security:
     needs: cut
