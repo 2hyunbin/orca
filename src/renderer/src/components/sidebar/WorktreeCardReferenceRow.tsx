@@ -46,10 +46,7 @@ export function WorktreeCardReferenceRow({
   actions?: ReactNode
 }): React.JSX.Element {
   return (
-    <div
-      className="workspace-reference-row flex min-w-0 items-start gap-2"
-      data-stale={stale || undefined}
-    >
+    <div className="flex min-w-0 items-start gap-2" data-stale={stale || undefined}>
       {stale ? (
         <span className="sr-only">
           {translate('workspace.links.lastKnownStatus', 'Last known status')}
