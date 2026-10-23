@@ -213,6 +213,16 @@ describe('withoutNativeChatVisualDirectiveLines', () => {
     expect(withoutNativeChatVisualDirectiveLines(`${LINE}\n\nText`)).toBe('Text')
   })
 
+  it.each([
+    [`before\r\r\n${LINE}`, 'before\r'],
+    [`\n${LINE}\n\n\nText\n\n`, 'Text'],
+    [`before\n${LINE}\n${LINE}\nafter`, 'before\nafter'],
+    [`\r\n${LINE}\r\n \t\r\n  indented\r\n`, '  indented'],
+    [`before\n${LINE}\n\n\`\`\`\n${LINE}\n\`\`\``, `before\n\n\`\`\`\n${LINE}\n\`\`\``]
+  ])('preserves exact whitespace around removed runs in %j', (source, expected) => {
+    expect(withoutNativeChatVisualDirectiveLines(source)).toBe(expected)
+  })
+
   it('returns text without a marker untouched', () => {
     expect(withoutNativeChatVisualDirectiveLines('  plain\n\n\n text  ')).toBe(
       '  plain\n\n\n text  '

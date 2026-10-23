@@ -178,37 +178,50 @@ export function withoutNativeChatVisualDirectiveLines(text: string): string {
   }
   let fence: string | null = null
   let skipBlank = false
+  let previousBlank = true
+  let lineStart = 0
+  let keptStart = 0
   const kept: string[] = []
-  for (const line of text.split('\n')) {
+  while (lineStart <= text.length) {
+    const newline = text.indexOf('\n', lineStart)
+    const lineEnd = newline === -1 ? text.length : newline
+    const line = text.slice(lineStart, lineEnd)
     const bare = line.replace(/\r$/, '')
     const blank = bare.trim().length === 0
+    let keep = true
     if (skipBlank && blank) {
-      // The blank line that separated a removed visual from what follows.
       skipBlank = false
-      continue
-    }
-    skipBlank = false
-    if (fence) {
-      const closer = FENCE_CLOSE.exec(bare)?.[1]
-      if (closer && closer[0] === fence[0] && closer.length >= fence.length) {
-        fence = null
+      keep = false
+    } else {
+      skipBlank = false
+      if (fence) {
+        const closer = FENCE_CLOSE.exec(bare)?.[1]
+        if (closer && closer[0] === fence[0] && closer.length >= fence.length) {
+          fence = null
+        }
+      } else {
+        const opener = FENCE_OPEN.exec(bare)?.[1]
+        if (opener) {
+          fence = opener
+        } else if (parseNativeChatVisualDirectiveLine(line)) {
+          skipBlank = previousBlank
+          keep = false
+        }
       }
-      kept.push(line)
-      continue
     }
-    const opener = FENCE_OPEN.exec(bare)?.[1]
-    if (opener) {
-      fence = opener
-      kept.push(line)
-      continue
+    if (keep) {
+      previousBlank = blank
+    } else {
+      if (keptStart < lineStart) {
+        // The join supplies separators between retained spans.
+        kept.push(text.slice(keptStart, lineStart - 1))
+      }
+      keptStart = lineEnd + 1
     }
-    if (parseNativeChatVisualDirectiveLine(line)) {
-      // Drop one blank neighbour too, so the gap closes; every other line keeps its spacing.
-      const previous = kept.at(-1)
-      skipBlank = previous === undefined || previous.replace(/\r$/, '').trim().length === 0
-      continue
-    }
-    kept.push(line)
+    lineStart = lineEnd + 1
+  }
+  if (keptStart <= text.length) {
+    kept.push(text.slice(keptStart))
   }
   // Only blank lines the removal left at the very start or end go; indentation is kept.
   return kept
