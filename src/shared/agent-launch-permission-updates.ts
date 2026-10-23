@@ -1,5 +1,9 @@
 import { agentPermissionHostPlatform, permissionEnvNameMatches } from './agent-permission-env'
-import { agentLaunchSettingsMutationUpdates } from './agent-launch-settings'
+import {
+  agentEnvironmentMutationUpdates,
+  choiceUpdate,
+  legacyEnvUpdates
+} from './agent-launch-environment-updates'
 import type {
   AgentLaunchSettingsMutation,
   AgentLaunchSettingsSource
@@ -21,27 +25,12 @@ import {
   resolveAgentPermission,
   type AgentPermissionChoice
 } from './tui-agent-permission-choice'
-import { liftAgentPermissionArgs, liftAgentPermissionEnv } from './tui-agent-permission-lift'
+import { liftAgentPermissionArgs } from './tui-agent-permission-lift'
 import { isTuiAgent } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 
 // Agent launch settings writes against the stored permission, including the shapes older clients
 // send, which treat the permission flag as part of the Arguments text.
-
-/** An agent's choice changed only when it differs from what it resolves to now. */
-export function choiceUpdate(
-  settings: AgentLaunchSettingsSource,
-  agent: TuiAgent,
-  choice: AgentPermissionChoice
-): AgentLaunchSettingsSource {
-  return resolveAgentPermission(agent, settings).choice === choice
-    ? {}
-    : applyAgentPermissionOverrides(settings, [agent], choice)
-}
-
-function hasEnvPermission(agent: TuiAgent): boolean {
-  return Object.keys(agentPermissionEnv(agent, 'full-access')).length > 0
-}
 
 export function permissionUpdates(
   settings: AgentLaunchSettingsSource,
@@ -172,44 +161,6 @@ export function legacyLaunchTextUpdates(
   }
 }
 
-/** A whole env record as its terminal gets it; for Goose, the bypass entry is the choice. */
-export function legacyEnvUpdates(
-  settings: AgentLaunchSettingsSource,
-  agent: TuiAgent,
-  env: Record<string, string>,
-  platform: NodeJS.Platform | undefined = agentPermissionHostPlatform()
-): AgentLaunchSettingsSource {
-  if (!hasEnvPermission(agent)) {
-    return { agentDefaultEnv: { ...settings.agentDefaultEnv, [agent]: env } }
-  }
-  const previous = resolveTuiAgentLaunchEnv(agent, settings, platform)
-  const names = Object.keys(agentPermissionEnv(agent, 'full-access'))
-  const carrier = (value: Record<string, string>) =>
-    Object.entries(value)
-      .filter(([key]) => names.some((name) => permissionEnvNameMatches(key, name, platform)))
-      .sort(([a], [b]) => a.localeCompare(b))
-  if (JSON.stringify(carrier(previous)) === JSON.stringify(carrier(env))) {
-    const user = { ...env }
-    for (const [key] of carrier(env)) {
-      delete user[key]
-    }
-    return {
-      agentDefaultEnv: {
-        ...settings.agentDefaultEnv,
-        [agent]: {
-          ...user,
-          ...Object.fromEntries(carrier(settings.agentDefaultEnv?.[agent] ?? {}))
-        }
-      }
-    }
-  }
-  const lifted = liftAgentPermissionEnv(agent, env, platform)
-  return {
-    agentDefaultEnv: { ...settings.agentDefaultEnv, [agent]: lifted.env },
-    ...choiceUpdate(settings, agent, lifted.choice ?? 'own')
-  }
-}
-
 export function wholeAgentEnvironmentUpdates(
   settings: AgentLaunchSettingsSource,
   agent: TuiAgent,
@@ -249,7 +200,7 @@ export function wholeAgentEnvironmentUpdates(
       const mutation: AgentLaunchSettingsMutation = present
         ? { type: 'environment-set', agent, name, value: requested[name] }
         : { type: 'environment-remove', agent, name }
-      Object.assign(carrier, agentLaunchSettingsMutationUpdates(carrier, mutation, platform))
+      Object.assign(carrier, agentEnvironmentMutationUpdates(carrier, mutation, platform))
       return
     }
     const key = identity(name)
