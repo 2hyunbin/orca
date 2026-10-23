@@ -8,6 +8,7 @@ import {
   installCodexDetachedPaneRestartExecutor,
   resetCodexDetachedPaneRestartExecutorForTests
 } from './codex-detached-pane-restart-scheduler'
+import { STALLED_DETACHED_RESTART_MS } from './detached-pane-restart-slots'
 
 const spawn = vi.fn<typeof window.api.pty.spawn>()
 const kill = vi.fn<typeof window.api.pty.kill>()
@@ -240,6 +241,42 @@ describe('accepted account restart queue progress', () => {
         result.resolve({ id: pane(position + 2).replacementId })
       }
       await vi.advanceTimersByTimeAsync(0)
+    }
+  })
+  it('asks again and frees the slot when a spawn stalls, then adopts its late result', async () => {
+    const stalled = Array.from({ length: 4 }, () => Promise.withResolvers<{ id: string }>())
+    spawn.mockImplementation(async ({ replacesPtyId }) => {
+      const index = stalled.findIndex((_, position) => pane(position + 1).ptyId === replacesPtyId)
+      return stalled[index]?.promise ?? { id: pane(5).replacementId }
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    seedPanes(5)
+    acceptRestarts([1, 2, 3, 4, 5])
+    const uninstall = installCodexDetachedPaneRestartExecutor()
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      expect(spawn).toHaveBeenCalledTimes(4)
+      expect(
+        awaitsCodexRestartAnswer(useAppStore.getState().codexRestartNoticeByPtyId[pane(1).ptyId])
+      ).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(STALLED_DETACHED_RESTART_MS)
+      expectRestarted(5)
+      expect(
+        awaitsCodexRestartAnswer(useAppStore.getState().codexRestartNoticeByPtyId[pane(1).ptyId])
+      ).toBe(true)
+
+      stalled[0]?.resolve({ id: pane(1).replacementId })
+      await vi.advanceTimersByTimeAsync(0)
+      expectRestarted(1)
+      expect(kill).not.toHaveBeenCalled()
+    } finally {
+      for (const [position, result] of stalled.entries()) {
+        result.resolve({ id: pane(position + 1).replacementId })
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      uninstall()
+      warn.mockRestore()
     }
   })
 })
