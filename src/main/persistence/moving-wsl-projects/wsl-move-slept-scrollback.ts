@@ -15,7 +15,8 @@ import {
 } from 'node:fs'
 import { join } from 'node:path'
 import { ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES } from '../../../shared/orcad-migration/orcad-migration-scrollback'
-import { parsePaneKey } from '../../../shared/stable-pane-id'
+import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
 import type { OrcadMigrationSnapshotSource } from '../../ssh/orcad-migration-snapshot-coordinator'
 import {
@@ -47,12 +48,13 @@ export async function readSleptScrollback(
   deps: Pick<WslMoveDriverDeps, 'sleptScrollback'>,
   panes: readonly WslMoveRestoreHintPane[],
   distro: string,
-  migrationId: string
+  migrationId: string,
+  workspaceIds: readonly string[]
 ): Promise<WslMoveSleptScrollback> {
   if (!deps.sleptScrollback) {
     return emptyWslMoveSleptScrollback()
   }
-  return deps.sleptScrollback(panes, distro, migrationId).catch((error: unknown) => {
+  return deps.sleptScrollback(panes, distro, migrationId, workspaceIds).catch((error: unknown) => {
     console.warn('[wsl-move] Slept terminal history unreadable:', error)
     return {
       ...emptyWslMoveSleptScrollback(),
@@ -188,4 +190,36 @@ export function withSleptSnapshots(
       }
     }
   }
+}
+
+/**
+ * Panes the user slept before the move: they have no live terminal for the move to list, but the
+ * layout still names the session whose checkpoint holds their history. The awin run moved them
+ * empty because only live panes were read.
+ */
+export function listWslMoveSleptSessionPanes(
+  session: WorkspaceSessionState,
+  workspaceIds: readonly string[]
+): WslMoveRestoreHintPane[] {
+  const panes: WslMoveRestoreHintPane[] = []
+  for (const workspaceId of workspaceIds) {
+    for (const tab of session.tabsByWorktree[workspaceId] ?? []) {
+      const bindings = session.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
+      for (const [leafId, sessionId] of Object.entries(bindings)) {
+        if (isTerminalLeafId(leafId) && sessionId) {
+          panes.push({ paneKey: makePaneKey(tab.id, leafId), sessionId })
+        }
+      }
+    }
+  }
+  return panes
+}
+
+/** Live panes first: their session id is the one that just checkpointed. */
+export function withSleptSessionPanes(
+  live: readonly WslMoveRestoreHintPane[],
+  slept: readonly WslMoveRestoreHintPane[]
+): WslMoveRestoreHintPane[] {
+  const known = new Set(live.map((pane) => pane.paneKey))
+  return [...live, ...slept.filter((pane) => !known.has(pane.paneKey))]
 }

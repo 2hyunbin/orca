@@ -92,7 +92,9 @@ export type WslMoveDriverDeps = {
   sleptScrollback?: (
     panes: readonly WslMoveRestoreHintPane[],
     distro: string,
-    migrationId: string
+    migrationId: string,
+    /** The scope's workspaces, for panes slept before the move (no live terminal to list). */
+    workspaceIds: readonly string[]
   ) => Promise<WslMoveSleptScrollback>
   shellHistory: (
     distro: string,

@@ -40,7 +40,9 @@ import {
   WSL_GUEST_PANE_PROCESS_SCRIPT
 } from '../persistence/moving-wsl-projects/wsl-move-guest-foreground'
 import {
+  listWslMoveSleptSessionPanes,
   readWslMoveSleptScrollbackFromHistory,
+  withSleptSessionPanes,
   wslMoveSleptSpoolRoot
 } from '../persistence/moving-wsl-projects/wsl-move-slept-scrollback'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
@@ -155,10 +157,13 @@ export function createWslMoveDriverDeps(
       }
     },
     snapshots: store,
-    sleptScrollback: (panes, distro, migrationId) =>
+    sleptScrollback: (panes, distro, migrationId, workspaceIds) =>
       readWslMoveSleptScrollbackFromHistory(
         new HistoryReader(getDaemonHistoryDir()),
-        panes,
+        withSleptSessionPanes(
+          panes,
+          listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds)
+        ),
         distro,
         wslMoveSleptSpoolRoot(userDataPath, migrationId)
       ),

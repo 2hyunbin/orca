@@ -125,7 +125,7 @@ async function runMove(
     return paused
   }
   const { panes } = paused
-  const slept = await readSleptScrollback(deps, panes, distro, migrationId)
+  const slept = await readSleptScrollback(deps, panes, distro, migrationId, scope.workspaceIds)
   try {
     const journaled = await journalSleptWslMove(deps, prepared, migrationId, startedAt, slept)
     if ('outcome' in journaled) {

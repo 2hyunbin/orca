@@ -9,8 +9,10 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import { makeTerminalScrollbackSnapshotRef } from '../../terminal-scrollback-snapshots'
 import { projectOrcadMigrationSessionScrollback } from '../migrating-orcad-catalog/orcad-source-scrollback-state'
 import {
+  listWslMoveSleptSessionPanes,
   readWslMoveSleptScrollbackFromHistory,
   sleptScrollbackReader,
+  withSleptSessionPanes,
   withSleptSnapshots
 } from './wsl-move-slept-scrollback'
 
@@ -176,5 +178,34 @@ describe('a slept pane on the snapshot channel', () => {
       'saved terminal history Orca could not fully read for tab other'
     ])
     slept.dispose()
+  })
+})
+
+describe('panes slept before the move', () => {
+  it("lists them from the scope's layouts, live panes first", () => {
+    // awin: panes slept earlier in the session had no live terminal, so 0 of 0 were read.
+    const session: WorkspaceSessionState = {
+      ...sleptSession({ ptyIdsByLeafId: { [LEAF]: 'pty-slept' } }),
+      tabsByWorktree: {
+        'app::/w': [
+          {
+            id: TAB,
+            ptyId: null,
+            worktreeId: 'app::/w',
+            title: 't',
+            customTitle: null,
+            color: null,
+            sortOrder: 0,
+            createdAt: 1
+          }
+        ]
+      }
+    }
+    const slept = listWslMoveSleptSessionPanes(session, ['app::/w'])
+    expect(slept).toEqual([{ paneKey: PANE_KEY, sessionId: 'pty-slept' }])
+    expect(listWslMoveSleptSessionPanes(session, ['other::/w'])).toEqual([])
+    expect(withSleptSessionPanes([{ paneKey: PANE_KEY, sessionId: 'pty-live' }], slept)).toEqual([
+      { paneKey: PANE_KEY, sessionId: 'pty-live' }
+    ])
   })
 })
