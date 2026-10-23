@@ -102,12 +102,14 @@ function deliveryBytes(words: string): number {
 export function agentSessionStoppedHistoryOwed(
   journal: StoppedHistoryJournal
 ): OwedStoppedMessage[] {
-  const byId = new Map(journal.submissions.map((entry) => [entry.clientMessageId, entry]))
   const covered = new Set<string>()
-  for (const [carrierId, carried] of journal.carried) {
-    const carrier = byId.get(carrierId)
-    if (carrier && !refusedBeforeWrite(carrier)) {
-      carried.forEach((id) => covered.add(id))
+  if (journal.carried.size > 0) {
+    const byId = new Map(journal.submissions.map((entry) => [entry.clientMessageId, entry]))
+    for (const [carrierId, carried] of journal.carried) {
+      const carrier = byId.get(carrierId)
+      if (carrier && !refusedBeforeWrite(carrier)) {
+        carried.forEach((id) => covered.add(id))
+      }
     }
   }
   return journal.submissions
