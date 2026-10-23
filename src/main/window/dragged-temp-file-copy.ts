@@ -132,17 +132,11 @@ export async function writeCheckedDragTempSource(
   destPath: string,
   signal?: AbortSignal
 ): Promise<void> {
-  // Why: a read stream with `end: -1` throws, so an empty source gets its own branch. Streaming
-  // from the checked handle copies no xattrs, unlike cp, ditto or clonefile.
+  // Reading bytes from the checked handle copies no xattrs, unlike cp, ditto or clonefile.
   await (source.size === 0
     ? writeFile(destPath, '', { flag: 'wx', mode: 0o600 })
     : pipeline(
-        source.handle.createReadStream({
-          start: 0,
-          end: source.size - 1,
-          autoClose: false,
-          highWaterMark: COPY_HIGH_WATER_MARK
-        }),
+        readCheckedDragTempSource(source),
         createWriteStream(destPath, {
           flags: 'wx',
           mode: 0o600,
@@ -156,6 +150,19 @@ export async function writeCheckedDragTempSource(
     !isSameSnapshot(await source.handle.stat(), source.snapshot)
   ) {
     throw new DropCopyError('changed')
+  }
+}
+
+// The pipeline owns the iterator, while the batch keeps the handle for a fallback write.
+async function* readCheckedDragTempSource(source: CheckedDragTempSource): AsyncGenerator<Buffer> {
+  for (let position = 0; position < source.size;) {
+    const buffer = Buffer.allocUnsafe(Math.min(COPY_HIGH_WATER_MARK, source.size - position))
+    const { bytesRead } = await source.handle.read(buffer, 0, buffer.length, position)
+    if (bytesRead === 0) {
+      return
+    }
+    position += bytesRead
+    yield buffer.subarray(0, bytesRead)
   }
 }
 

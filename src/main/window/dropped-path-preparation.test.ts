@@ -206,6 +206,63 @@ describe('dropped path preparation through the shared copy queue', () => {
     }
   )
 
+  it('keeps an unlinked provider file after the store destination stream fails', async () => {
+    const { source, env, store } = await realDrop()
+    const storeWith = store.storeWith.bind(store)
+    const write = vi.spyOn(store, 'storeWith').mockImplementationOnce((name, writePart) =>
+      storeWith(name, async (partPath) => {
+        await rm(source)
+        // The real writer must fail in its destination stream, after taking the source handle.
+        await mkdir(partPath)
+        await writePart(partPath)
+      })
+    )
+    const result = await localQueue(
+      env,
+      async () => store
+    )({
+      paths: [source],
+      consumer: 'local-chat'
+    })
+    await expect(write.mock.results[0].value).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(result.failures).toEqual([])
+    expect(dirname(dirname(result.paths[0]))).toBe(env.copyRoot)
+    expect(await readFile(result.paths[0], 'utf8')).toBe('image')
+    expect(await readdir(store.rootDir)).toEqual([])
+    expect(vi.mocked(open)).toHaveBeenCalledTimes(1)
+    expect((await vi.mocked(open).mock.results[0].value).fd).toBe(-1)
+  })
+
+  it('opens and stores each unique source once as drop size grows tenfold', async () => {
+    for (const count of [4, 40]) {
+      const { source, env, store } = await realDrop()
+      const paths = Array.from({ length: count }, (_, index) =>
+        join(dirname(source), `shot-${index}.png`)
+      )
+      for (const path of paths) {
+        await writeFile(path, 'image')
+      }
+      vi.mocked(open).mockClear()
+      const write = vi.spyOn(store, 'storeWith')
+      const getStore = vi.fn(async () => store)
+      const result = await localQueue(
+        env,
+        getStore
+      )({
+        paths: [...paths, ...paths],
+        consumer: 'local-chat'
+      })
+      expect(result.failures).toEqual([])
+      expect(result.paths).toHaveLength(2 * count)
+      expect(result.paths.slice(count)).toEqual(result.paths.slice(0, count))
+      expect(getStore).toHaveBeenCalledTimes(1)
+      expect(open).toHaveBeenCalledTimes(count)
+      expect(write).toHaveBeenCalledTimes(count)
+      const handles = await Promise.all(vi.mocked(open).mock.results.map((call) => call.value))
+      expect(handles.every((handle) => handle.fd === -1)).toBe(true)
+    }
+  })
+
   it('closes the dropped files when the chat host never starts and serves the next drop', async () => {
     const { source, env } = await realDrop()
     const never = deferred<AgentSessionAttachmentStore | null>()
