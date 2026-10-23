@@ -19,7 +19,10 @@ import {
 import { getAllWorktreeMetaForHost } from './persistence/loading-store/worktree-identity-metadata'
 import { mergeWorktreeMetaForWrite } from './persistence/loading-store/worktree-meta-write-normalization'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
-import { projectWorktreeLineageWithHostPeers } from './worktree-lineage-host-peers'
+import {
+  projectWorktreeLineageWithHostPeers,
+  withSavedWorktreeLineage
+} from './worktree-lineage-host-peers'
 import {
   createSshWorktreeMetaIndex,
   listDisconnectedSshWorktrees
@@ -136,8 +139,8 @@ describe('host-qualified worktree metadata', () => {
         }
       })
     }
-    expect(workspaceRead).toHaveBeenCalledTimes(2)
-    expect(bulkWorkspaceRead).not.toHaveBeenCalled()
+    expect(workspaceRead).not.toHaveBeenCalled()
+    expect(bulkWorkspaceRead).toHaveBeenCalledTimes(2)
 
     for (const rawHost of ['local', 'ssh:copy'] as const) {
       const remoteStore = createStore()
@@ -180,6 +183,35 @@ describe('host-qualified worktree metadata', () => {
       expect(lineageRead).toHaveBeenCalledTimes(1)
       expect(bulkRawRead).not.toHaveBeenCalled()
     }
+  })
+
+  it('omits genuinely absent saved edges without copying unprojected rows or consulting owners', () => {
+    const store = createStoreWithRepo()
+    const repo = store.getRepos()[0]
+    const row = mergeWorktree(repo.id, {
+      path: '/workspace/feature',
+      head: '',
+      branch: '',
+      isBare: false,
+      isMainWorktree: false
+    })
+    const rows = [row]
+    const ownerRead = vi.spyOn(store, 'getWorktreeMeta')
+    const edgeRead = vi.spyOn(store, 'getAllWorktreeLineage')
+    const workspaceRead = vi.spyOn(store, 'getAllWorkspaceLineage')
+    const pointRead = vi.spyOn(store, 'getWorkspaceLineage')
+    expect(withSavedWorktreeLineage(store, repo, rows)).toBe(rows)
+    const [published] = projectWorktreeLineageWithHostPeers(store, repo, rows)
+    expect(published).not.toHaveProperty('savedLineage')
+    expect(published).toMatchObject({ lineage: null, parentWorktreeId: null, childWorktreeIds: [] })
+    expect(ownerRead).not.toHaveBeenCalled()
+    expect(pointRead).not.toHaveBeenCalled()
+    expect(edgeRead).toHaveBeenCalledTimes(2)
+    expect(workspaceRead).toHaveBeenCalledTimes(2)
+    expect(
+      projectWorktreeLineageWithHostPeers(store, repo, [{ ...row, savedLineage: null }])[0]
+        .savedLineage
+    ).toBeNull()
   })
 
   it('stores independent metadata for colliding locators on two hosts', () => {

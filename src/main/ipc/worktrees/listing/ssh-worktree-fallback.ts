@@ -221,8 +221,9 @@ export function stampAndMergeVisibleDetectedWorktree(
   allMetaOverride?: Record<string, WorktreeMeta>
 ) {
   const meta = resolveWorktreeMetaWithDiscoveryBackfill(store, repo, detected.id, allMetaOverride)
-  return {
-    ...mergeWorktree(repo.id, detected, meta, repo.displayName),
-    savedLineage: detected.savedLineage
+  const worktree = mergeWorktree(repo.id, detected, meta, repo.displayName)
+  if (detected.savedLineage !== undefined) {
+    worktree.savedLineage = detected.savedLineage
   }
+  return worktree
 }

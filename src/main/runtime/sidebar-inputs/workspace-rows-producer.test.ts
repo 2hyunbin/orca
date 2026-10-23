@@ -401,12 +401,14 @@ describe('current saved lineage at real Store boundaries', () => {
       const runtime = new Probe(store)
       const read = vi.spyOn(store, 'getWorktreeLineageMetadata')
       const warm = await runtime.cached()
-      const summaries = () =>
-        buildRuntimeWorktreePsSummaries({
+      const summaries = async () => {
+        const publication = await runtime.cached()
+        return buildRuntimeWorktreePsSummaries({
           store,
-          resolvedWorktrees: warm.worktrees,
-          platformByRepoId: warm.platformByRepoId
+          resolvedWorktrees: publication.worktrees,
+          platformByRepoId: publication.platformByRepoId
         })
+      }
       const hidden = (id: string) =>
         isWorkspaceHiddenBySidebarFilters(
           { store, resolvedWorktrees: warm.worktrees },
@@ -424,13 +426,13 @@ describe('current saved lineage at real Store boundaries', () => {
         expect((await runtime.showManagedWorktree(`id:${input[0].id}`)).parentWorktreeId).toBe(
           `repo-1::/r/${id}`
         )
-        expect(summaries().get(input[0].id)?.parentWorktreeId).toBe(`repo-1::/r/${id}`)
+        expect((await summaries()).get(input[0].id)?.parentWorktreeId).toBe(`repo-1::/r/${id}`)
         expect(hidden(id)).toBe(false)
         expect(hidden(id === 'p' ? 'q' : 'p')).toBe(true)
       }
       await runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, { lineage: { noParent: true } })
       expect((await runtime.showManagedWorktree(`id:${input[0].id}`)).savedLineage).toBeNull()
-      expect(summaries().get(input[0].id)).toMatchObject({
+      expect((await summaries()).get(input[0].id)).toMatchObject({
         parentWorktreeId: null,
         savedLineage: null
       })
@@ -450,6 +452,14 @@ describe('current saved lineage at real Store boundaries', () => {
         capture: { source: 'manual-action', confidence: 'explicit' },
         createdAt: 1
       })
+      const folderSummary = (await summaries()).get(folderWorkspaceKey(folder.id))
+      expect(folderSummary).toMatchObject({
+        parentWorktreeId: input[1].id,
+        savedLineage: { parentWorktreeId: 'old::/renamed', parentWorktreeInstanceId: 'p' }
+      })
+      expect((await summaries()).get(input[1].id)?.childWorktreeIds).toContain(
+        folderWorkspaceKey(folder.id)
+      )
       const target = await runtime.terminalTarget(folderWorkspaceKey(folder.id))
       expect(target.scope).toMatchObject({
         id: folderWorkspaceKey(folder.id),
@@ -471,7 +481,16 @@ describe('current saved lineage at real Store boundaries', () => {
         })
       ).rejects.toThrow('changed')
       expect(store.getWorktreeLineage(input[0].id)).toBeUndefined()
+      // The listing fixture now discovers the replacement; stale selections above still refuse.
+      input[1].instanceId = 'replacement'
+      runtime.invalidateResolvedWorktreeCache()
+      expect((await summaries()).get(folderWorkspaceKey(folder.id))).toMatchObject({
+        parentWorktreeId: null,
+        savedLineage: { parentWorktreeId: 'old::/renamed', parentWorktreeInstanceId: 'p' }
+      })
       store.setWorktreeMeta(hostWorktreeTarget(input[1]), { instanceId: 'p' })
+      input[1].instanceId = 'p'
+      runtime.invalidateResolvedWorktreeCache()
       const pendingParent = Promise.withResolvers<ResolvedWorktree>()
       const validateParent = vi.fn()
       const changing = updateRuntimeManagedWorktreeMetadata({

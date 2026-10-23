@@ -22,13 +22,17 @@ export function buildRuntimeWorktreePsSummaries(args: {
   const folders = (args.store ? runtimeVisibleFolderWorkspaces(args.store) : []).filter(
     (folder) => projectGroupById.get(folder.projectGroupId)?.parentPath
   )
-  const all = [...args.resolvedWorktrees, ...folders.map(folderWorkspaceToWorktree)]
-  const projected = args.store
-    ? projectCurrentStoreWorktreeLineage(args.store, all)
-    : args.resolvedWorktrees
+  const projected =
+    args.store && folders.length > 0
+      ? projectCurrentStoreWorktreeLineage(args.store, [
+          ...args.resolvedWorktrees,
+          ...folders.map(folderWorkspaceToWorktree)
+        ])
+      : args.resolvedWorktrees
   const summaries = new Map<string, RuntimeWorktreePsSummary>()
   const ghCache = args.store?.getGitHubCache?.()
-  for (const worktree of projected.slice(0, args.resolvedWorktrees.length)) {
+  for (let index = 0; index < args.resolvedWorktrees.length; index += 1) {
+    const worktree = projected[index]
     const meta =
       args.store?.getWorktreeMeta?.(worktree.id) ?? args.store?.getAllWorktreeMeta()[worktree.id]
     const repo = repoById.get(worktree.repoId)

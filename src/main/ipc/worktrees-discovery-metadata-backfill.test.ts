@@ -558,6 +558,76 @@ describe('registerWorktreeHandlers', () => {
     expect(listedIds).not.toContain('repo-1::/workspace/stale-wt')
   })
 
+  it('reuses a host snapshot until a metadata write during the same listAll request', async () => {
+    const repos = [0, 1, 2].map((index) => ({
+      id: `repo-${index}`,
+      path: `/workspace/repo-${index}`,
+      displayName: `repo-${index}`,
+      badgeColor: '#000',
+      addedAt: 0
+    }))
+    const metadata = Object.fromEntries(
+      repos.map((repo) => [
+        `${repo.id}::${repo.path}`,
+        makeWorktreeMeta({
+          instanceId: repo.id,
+          hostId: 'local',
+          projectId: `repo:${repo.id}`,
+          projectHostSetupId: repo.id,
+          lastActivityAt: 42
+        })
+      ])
+    )
+    let written: ((domains: readonly string[] | undefined) => void) | undefined
+    const detach = vi.fn()
+    const firstRead = Promise.withResolvers<void>()
+    const hostRead = vi.fn(() => {
+      firstRead.resolve()
+      return { ...metadata }
+    })
+    Object.defineProperty(store, 'getAllWorktreeMetaForHost', {
+      configurable: true,
+      value: hostRead
+    })
+    Object.defineProperty(store, 'onStateWritten', {
+      configurable: true,
+      value: (listener: typeof written) => {
+        written = listener
+        return detach
+      }
+    })
+    store.getRepos.mockReturnValue(repos)
+    store.getAllWorktreeMeta.mockImplementation(() => metadata)
+    store.getWorktreeMeta.mockImplementation((id) =>
+      typeof id === 'string' ? metadata[id] : undefined
+    )
+    listWorktreesMock.mockImplementation(async (path) => {
+      if (path === repos[1].path) {
+        await firstRead.promise
+        const id = `${repos[1].id}::${path}`
+        metadata[id] = { ...metadata[id], instanceId: 'after-scan-write' }
+        written?.(['worktreeMetaByIdentity'])
+      }
+      return [{ path, head: 'abc', branch: 'refs/heads/main', isBare: false, isMainWorktree: true }]
+    })
+    try {
+      const rows = await handlers['worktrees:listAll'](null, undefined)
+      expect(rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: `${repos[1].id}::${repos[1].path}`,
+            instanceId: 'after-scan-write'
+          })
+        ])
+      )
+      expect(hostRead).toHaveBeenCalledTimes(2)
+      expect(detach).toHaveBeenCalledTimes(1)
+    } finally {
+      Reflect.deleteProperty(store, 'onStateWritten')
+      Reflect.deleteProperty(store, 'getAllWorktreeMetaForHost')
+    }
+  })
+
   it('limits concurrent repo scans in worktrees:listAll while preserving order', async () => {
     const repos = Array.from({ length: 10 }, (_, index) => ({
       id: `repo-${index}`,

@@ -1,7 +1,7 @@
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
 import type { WorktreeMeta } from '../shared/worktree/meta-types'
-import type { WorktreeLineage } from '../shared/worktree/lineage-types'
+import type { WorkspaceLineage, WorktreeLineage } from '../shared/worktree/lineage-types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
@@ -10,7 +10,7 @@ import {
   getCyclicLineageChildKeys,
   isValidResolvedWorktreeLineageEdge,
   type WorktreeWithResolvedLineage,
-  getSavedWorktreeLineage,
+  getSavedWorktreeLineageFromFields,
   worktreeLineageFromWorkspaceLineage
 } from '../shared/resolved-worktree-lineage'
 import { readAllWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
@@ -32,40 +32,65 @@ type HostPeerStore = Pick<
   | 'getAllWorktreeMeta'
   | 'getAllWorktreeMetaForHost'
   | 'getAllWorktreeLineage'
-  | 'getWorkspaceLineage'
+  | 'getAllWorkspaceLineage'
   | 'getWorktreeMeta'
 >
 
-/** Saved intent is independent of the base publication's resolved fields. */
+function hasSavedLineageRecords(records: Readonly<Record<string, unknown>>): boolean {
+  for (const _key in records) {
+    return true
+  }
+  return false
+}
+
+function savedLineageReader(
+  store: HostPeerStore,
+  repo: Repo,
+  workspaceLineage: Readonly<Record<string, WorkspaceLineage>>,
+  raw?: Readonly<Record<string, WorktreeMeta>>
+) {
+  const hostId = getRepoExecutionHostId(repo)
+  const hasWorkspaceLineage = hasSavedLineageRecords(workspaceLineage)
+  return (row: Worktree, edge: WorktreeLineage | undefined) => {
+    if (!edge && hasWorkspaceLineage) {
+      const key = row.id.startsWith('folder:')
+        ? folderWorkspaceKey(row.id.slice(7))
+        : worktreeWorkspaceKey(row.id)
+      const workspaceEdge = workspaceLineage[key]
+      if (workspaceEdge) {
+        edge = worktreeLineageFromWorkspaceLineage(workspaceEdge)
+      }
+    }
+    if (!edge) {
+      return row.savedLineage === undefined ? undefined : null
+    }
+    return getSavedWorktreeLineageFromFields(
+      row.id,
+      row.hostId ?? hostId,
+      row.runtimeOwnerEnvironmentId,
+      undefined,
+      edge,
+      edge,
+      (raw === undefined ? store.getWorktreeMeta?.(row.id) : raw[row.id])?.hostId
+    )
+  }
+}
+
+/** Unprojected folder/SSH rows need only an actual saved edge attached. */
 export function withSavedWorktreeLineage<T extends Worktree>(
   store: HostPeerStore,
   repo: Repo,
-  rows: readonly T[],
-  lineageById: Readonly<Record<string, WorktreeLineage>> = store.getAllWorktreeLineage?.() ?? {},
-  raw?: Readonly<Record<string, WorktreeMeta>>
-) {
+  rows: T[]
+): T[] {
+  const lineageById = store.getAllWorktreeLineage?.() ?? {}
+  const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
+  if (!hasSavedLineageRecords(lineageById) && !hasSavedLineageRecords(workspaceLineage)) {
+    return rows
+  }
+  const savedLineage = savedLineageReader(store, repo, workspaceLineage)
   return rows.map((row) => {
-    const key = row.id.startsWith('folder:')
-      ? folderWorkspaceKey(row.id.slice(7))
-      : worktreeWorkspaceKey(row.id)
-    const workspaceEdge = lineageById[row.id] ? undefined : store.getWorkspaceLineage?.(key)
-    const ownEdge =
-      lineageById[row.id] ??
-      (workspaceEdge ? worktreeLineageFromWorkspaceLineage(workspaceEdge) : undefined)
-    const owner = raw === undefined && ownEdge ? store.getWorktreeMeta?.(row.id) : undefined
-    const metadata = raw ?? (owner ? { [row.id]: owner } : undefined)
-    const savedLineage =
-      getSavedWorktreeLineage(
-        {
-          ...row,
-          hostId: row.hostId ?? getRepoExecutionHostId(repo),
-          savedLineage: undefined,
-          lineage: ownEdge ?? null
-        },
-        lineageById,
-        metadata
-      ) ?? null
-    return { ...row, savedLineage }
+    const edge = savedLineage(row, lineageById[row.id])
+    return edge === undefined || edge === row.savedLineage ? row : { ...row, savedLineage: edge }
   })
 }
 
@@ -77,9 +102,15 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   rawMetadata?: Readonly<Record<string, WorktreeMeta>>
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
-  const rows = withSavedWorktreeLineage(store, repo, input, lineageById, rawMetadata)
+  const rows = input
+  const savedLineage = savedLineageReader(
+    store,
+    repo,
+    store.getAllWorkspaceLineage?.() ?? {},
+    rawMetadata
+  )
   const project = (peers: readonly Worktree[] = []) =>
-    projectPublishedWorktreeLineage(rows, lineageById, peers)
+    projectPublishedWorktreeLineage(rows, lineageById, savedLineage, peers)
   if (rows.length === 0) {
     return project()
   }
@@ -157,6 +188,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
 function projectPublishedWorktreeLineage<T extends Worktree>(
   worktrees: readonly T[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
+  savedLineage: ReturnType<typeof savedLineageReader>,
   knownPeers: readonly Worktree[] = []
 ): WorktreeWithResolvedLineage<T>[] {
   const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
@@ -166,12 +198,19 @@ function projectPublishedWorktreeLineage<T extends Worktree>(
     indices.push(index)
     indicesById.set(worktree.id, indices)
   })
+  const savedLineageByChildIndex = new Map<number, WorktreeLineage | null>()
   const validLineageByChildIndex = new Map<number, WorktreeLineage>()
   const parentIndexByChildIndex = new Map<number, number>()
   const childIdsByParentIndex = new Map<number, string[]>()
 
   allWorktrees.forEach((child, childIndex) => {
     const lineage = lineageById[child.id]
+    if (childIndex < worktrees.length) {
+      const saved = savedLineage(child, lineage)
+      if (saved !== undefined) {
+        savedLineageByChildIndex.set(childIndex, saved)
+      }
+    }
     if (!lineage) {
       return
     }
@@ -199,12 +238,16 @@ function projectPublishedWorktreeLineage<T extends Worktree>(
 
   return worktrees.map((worktree, index) => {
     const lineage = validLineageByChildIndex.get(index) ?? null
-    return {
+    const projected = {
       ...worktree,
-      savedLineage: worktree.savedLineage ?? null,
       parentWorktreeId: lineage?.parentWorktreeId ?? null,
       childWorktreeIds: childIdsByParentIndex.get(index) ?? [],
       lineage
     }
+    const saved = savedLineageByChildIndex.get(index)
+    if (saved !== undefined) {
+      projected.savedLineage = saved
+    }
+    return projected
   })
 }

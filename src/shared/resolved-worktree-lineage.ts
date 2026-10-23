@@ -58,18 +58,39 @@ export function getSavedWorktreeLineage(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   metadata?: Readonly<Record<string, WorktreeMeta>>
 ): WorktreeLineage | null | undefined {
-  if (row.savedLineage !== undefined) {
-    return row.savedLineage
+  return getSavedWorktreeLineageFromFields(
+    row.id,
+    row.hostId,
+    row.runtimeOwnerEnvironmentId,
+    row.savedLineage,
+    row.lineage,
+    lineageById[row.id],
+    metadata?.[row.id]?.hostId
+  )
+}
+
+export function getSavedWorktreeLineageFromFields(
+  id: string,
+  hostId: Worktree['hostId'],
+  runtimeOwnerEnvironmentId: Worktree['runtimeOwnerEnvironmentId'],
+  savedLineage: Worktree['savedLineage'],
+  lineage: Worktree['lineage'],
+  ownEdge: WorktreeLineage | undefined,
+  ownerHostId?: WorktreeMeta['hostId']
+): WorktreeLineage | null | undefined {
+  if (savedLineage !== undefined) {
+    return savedLineage
   }
-  if (lineageStoreKeyForRow(row)) {
-    return row.lineage
+  if (
+    runtimeOwnerEnvironmentId ??
+    (hostId?.startsWith('runtime:') ? hostId.slice('runtime:'.length) : '')
+  ) {
+    return lineage
   }
-  const owner = metadata?.[row.id]?.hostId
-  if (owner && owner !== row.hostId) {
+  if (ownerHostId && ownerHostId !== hostId) {
     return null
   }
-  const saved = lineageById[row.id]
-  return saved?.worktreeId === row.id ? saved : row.lineage
+  return ownEdge?.worktreeId === id ? ownEdge : lineage
 }
 
 export function isSameSavedWorktreeParent(
