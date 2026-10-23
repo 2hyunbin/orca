@@ -157,3 +157,99 @@ it('shows full host coverage without waiting for discovery to see the installed 
   expect(markup).toContain('All 3 detected agents have the skill.')
   expect(markup).not.toContain('Missing')
 })
+
+it.each([
+  { name: 'foreign file', observed: { kind: 'file', mtimeMs: 1 }, label: 'Missing' },
+  {
+    name: 'empty folder',
+    observed: { kind: 'folder', entries: [], skillDigest: null },
+    label: 'Missing'
+  },
+  { name: 'unverified link', observed: { kind: 'link', target: '/missing' }, label: 'Missing' },
+  { name: 'unreadable entry', observed: { kind: 'unreadable' }, label: 'Needs attention' },
+  {
+    name: 'unreadable skill file',
+    observed: { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: null },
+    label: 'Needs attention'
+  }
+] as const)('does not mark the $name Ready', ({ observed, label }) => {
+  const markup = renderToStaticMarkup(
+    <OrchestrationSkillAgentCoverage
+      loading={false}
+      sources={[]}
+      skills={[]}
+      plan={planOf([
+        planEntry('orchestration', [
+          planOp('leave', '/home/u/.claude/skills/orchestration', {
+            observed,
+            reason: observed.kind === 'unreadable' ? 'unreadable' : 'other'
+          })
+        ])
+      ])}
+    />
+  )
+  expect(markup).toContain('Claude')
+  expect(markup).toContain(label)
+  expect(markup).not.toContain('Ready')
+  expect(markup).not.toContain('All 1 detected agent has the skill.')
+  if (label === 'Needs attention') {
+    expect(markup).not.toContain('Missing')
+  }
+})
+
+it('counts readable edited copies and verified links to them as usable', () => {
+  const markup = renderToStaticMarkup(
+    <OrchestrationSkillAgentCoverage
+      loading={false}
+      sources={[]}
+      skills={[]}
+      plan={planOf([
+        planEntry('orchestration', [
+          planOp('leave', '/home/u/.agents/skills/orchestration', {
+            agents: ['codex'],
+            reason: 'edited',
+            observed: { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: 'c'.repeat(64) }
+          }),
+          planOp('leave', '/home/u/.claude/skills/orchestration', {
+            reason: 'shared-not-current',
+            observed: { kind: 'link', target: '/home/u/.agents/skills/orchestration' }
+          })
+        ])
+      ])}
+    />
+  )
+  expect(markup).toContain('All 2 detected agents have the skill.')
+  expect(markup).not.toContain('Missing')
+})
+
+it.each([
+  { kind: 'unreadable' },
+  { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: null }
+] as const)(
+  'needs attention when a verified link has an unreadable shared skill ($kind)',
+  (observed) => {
+    const markup = renderToStaticMarkup(
+      <OrchestrationSkillAgentCoverage
+        loading={false}
+        sources={[]}
+        skills={[]}
+        plan={planOf([
+          planEntry('orchestration', [
+            planOp('leave', '/home/u/.agents/skills/orchestration', {
+              observed,
+              reason: observed.kind === 'unreadable' ? 'unreadable' : 'other'
+            }),
+            planOp('leave', '/home/u/.claude/skills/orchestration', {
+              reason: 'shared-not-current',
+              observed: { kind: 'link', target: '/home/u/.agents/skills/orchestration' }
+            })
+          ])
+        ])}
+      />
+    )
+    expect(markup).toContain('Needs attention')
+    expect(markup).not.toContain('Ready')
+    expect(markup).not.toContain('Missing')
+    expect(markup).not.toContain('All 1 detected agent has the skill.')
+  }
+)
