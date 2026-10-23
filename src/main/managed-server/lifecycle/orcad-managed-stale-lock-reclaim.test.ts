@@ -68,6 +68,7 @@ beforeEach(() => {
   mocks.home.current = '/home/dev'
   mocks.host.current = getRemoteHostPlatform('linux-x64')
   mocks.wake.mockResolvedValue({ outcome: 'started', readiness: {} })
+  mocks.rebuild.mockResolvedValue(undefined)
 })
 
 describe('runManagedOrcadStaleLockReclaim', () => {
@@ -98,6 +99,24 @@ describe('runManagedOrcadStaleLockReclaim', () => {
     // The slot supports the command, so nothing here argues for deleting the lock by hand.
     expect(result).toEqual({ status: 'no-answer', message: expect.any(String) })
     expect(mocks.wake).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['the wake', () => mocks.wake.mockRejectedValue(new Error('readiness timed out'))],
+    ['the tunnel rebuild', () => mocks.rebuild.mockRejectedValue(new Error('readiness timed out'))]
+  ])('keeps the reclaimed result when %s throws after the lock is gone', async (_step, fail) => {
+    fail()
+    mocks.exec.mockResolvedValue(`${answer('reclaimed', { exitCode: 0, evidence })}\n`)
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
+    expect(result).toMatchObject({
+      status: 'reclaimed',
+      environmentId: 'env-1',
+      evidence,
+      notRestarted: expect.stringContaining('readiness timed out')
+    })
   })
 
   it('reads a status a newer orcad added as no answer', async () => {

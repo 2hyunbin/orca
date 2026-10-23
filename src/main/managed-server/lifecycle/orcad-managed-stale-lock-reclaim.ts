@@ -30,6 +30,7 @@ import { isSshCommandExitError } from '../../ssh/remote-exec/remote-exec-command
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { ORCAD_LOCK_FILE_NAME } from '../../orcad/orcad-instance-lock'
 import { rebuildOrcadManagedTunnel } from './orcad-managed-tunnel'
+import { errorMessage } from '../../../shared/error-message'
 
 const ReclaimStatusSchema = z.enum(['none', 'eligible', 'refused', 'reclaimed'])
 
@@ -104,20 +105,31 @@ export function runManagedOrcadStaleLockReclaim(
       lockPath: answer.lockPath,
       ...(answer.evidence ? { evidence: answer.evidence } : {})
     } as const
+    const notRestarted = await restartAfterReclaim(userDataPath, environment.id, slot)
+    return notRestarted ? { ...reclaimed, notRestarted } : reclaimed
+  })
+}
+
+/** Why the server did not start again, or null; never throws, since the lock is already gone. */
+async function restartAfterReclaim(
+  userDataPath: string,
+  environmentId: string,
+  slot: OrcadSlotOptions
+): Promise<string | null> {
+  try {
     const wake = await wakeStoppedManagedOrcad(slot)
     if (wake.outcome !== 'started' && wake.outcome !== 'serving') {
-      return {
-        ...reclaimed,
-        notRestarted:
-          wake.outcome === 'recovery-refused'
-            ? wake.reason
-            : `The lock was cleared, but this host’s Orca server did not start (${wake.outcome}); reconnect to start it.`
-      }
+      return wake.outcome === 'recovery-refused'
+        ? wake.reason
+        : `The lock was cleared, but this host’s Orca server did not start (${wake.outcome}); reconnect to start it.`
     }
     // The started server may have bound another port than the forward in use.
-    await rebuildOrcadManagedTunnel(userDataPath, environment.id)
-    return reclaimed
-  })
+    await rebuildOrcadManagedTunnel(userDataPath, environmentId)
+    return null
+  } catch (error) {
+    // A lost result would leave the caller's reconnect and note clearing undone.
+    return `The lock was cleared, but this host’s Orca server did not start: ${errorMessage(error)}`
+  }
 }
 
 async function runOnActiveSlot(
