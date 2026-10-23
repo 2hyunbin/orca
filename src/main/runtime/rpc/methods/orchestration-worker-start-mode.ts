@@ -12,8 +12,6 @@ import {
   downgradeAgentLaunchModeForHost,
   readAgentLaunchModeSettings,
   resolveAgentLaunchModeOnHost,
-  type AgentLaunchMode,
-  type AgentLaunchModeReason,
   type AgentLaunchModeReceipt,
   type AgentLaunchModeSettings,
   type AgentLaunchModeVocabulary
@@ -21,8 +19,6 @@ import {
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 
-export type WorkerStartMode = AgentLaunchMode
-export type WorkerStartModeReason = AgentLaunchModeReason
 export type WorkerStartModeReceipt = AgentLaunchModeReceipt
 
 /** Orchestration's receipts are read next to dispatch records, so they name the worker and the
@@ -55,10 +51,7 @@ export function decideWorkerStartMode(args: {
   return decideAgentLaunchMode({
     placement: args.params,
     settings: args.settings,
-    vocabulary: WORKER_START_VOCABULARY,
-    // The structured worker factory creates Claude and Codex only; any other agent (Grok included)
-    // starts as a terminal worker until structured workers take registered agents.
-    registeredStructuredAgents: []
+    vocabulary: WORKER_START_VOCABULARY
   })
 }
 
@@ -79,7 +72,7 @@ export function downgradeWorkerStartModeForHost(
 }
 
 export function readWorkerStartModeSettings(
-  runtime: Pick<OrcaRuntimeService, 'getClientSettings'>
+  runtime: Parameters<typeof readAgentLaunchModeSettings>[0]
 ): AgentLaunchModeSettings | null {
   return readAgentLaunchModeSettings(runtime)
 }

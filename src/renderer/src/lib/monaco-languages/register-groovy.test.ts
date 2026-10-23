@@ -57,15 +57,11 @@ describe('registerGroovyLanguage', () => {
 
 describe('loadGroovyTextMateGrammar', () => {
   it('loads the vendored Groovy TextMate grammar for the Groovy scope', async () => {
-    const grammar = await loadGroovyTextMateGrammar(GROOVY_TEXTMATE_SCOPE)
+    const grammar = await loadGroovyTextMateGrammar()
 
     expect(grammar).toMatchObject({
-      name: 'Groovy',
+      name: GROOVY_LANGUAGE_ID,
       scopeName: GROOVY_TEXTMATE_SCOPE
     })
-  })
-
-  it('ignores unrelated TextMate scopes', async () => {
-    await expect(loadGroovyTextMateGrammar('source.java')).resolves.toBeNull()
   })
 })

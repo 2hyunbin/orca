@@ -1,10 +1,11 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
   createNewProfileNativeChatUpgradeTipAudience,
   parseNativeChatUpgradeTipAudience,
   type NativeChatUpgradeTipAudience
 } from '../../../shared/native-chat-upgrade-tip-audience'
+import { savedChatUiWithTerminalDefaultView } from '../applying-settings/terminal-settings-migrations'
 
 import type { StoreRuntimeState } from './store-runtime-state'
 
@@ -51,9 +52,16 @@ export class LoadedCohortMigrationOperations {
     if (chatUi === true) {
       // Why: every build before the chat upgrade saved this key and the upgrade strips it, so
       // without it the opt-in may postdate the upgrade and cannot prove membership.
-      return settings && Object.hasOwn(settings, 'openAgentTabsInChatByDefault')
-        ? { version: 1, membership: 'eligible', basis: 'chat-ui-on' }
-        : { version: 1, membership: 'excluded', basis: 'chat-ui-on-unproven' }
+      if (!settings || !Object.hasOwn(settings, 'openAgentTabsInChatByDefault')) {
+        return { version: 1, membership: 'excluded', basis: 'chat-ui-on-unproven' }
+      }
+      return {
+        version: 1,
+        membership: 'eligible',
+        basis: savedChatUiWithTerminalDefaultView(settings)
+          ? 'chat-ui-on-terminal-default'
+          : 'chat-ui-on'
+      }
     }
     return {
       version: 1,
@@ -78,12 +86,19 @@ export class LoadedCohortMigrationOperations {
       typeof existing?.existedBeforeTelemetryRelease === 'boolean'
         ? existing.existedBeforeTelemetryRelease
         : fileExistedOnLoad
+    const onboardingLanguageCohort = !fileExistedOnLoad
+      ? randomInt(2) === 0
+        ? 'control'
+        : 'treatment'
+      : undefined
+    this.runtime.loadNeedsSave = true
     return {
       ...state,
       settings: {
         ...state.settings,
         telemetry: {
           ...existing,
+          ...(onboardingLanguageCohort ? { onboardingLanguageCohort } : {}),
           existedBeforeTelemetryRelease: resolvedExistedBefore,
           // Why: preserve any explicit opt-in/out; fall back to cohort default only when optedIn is undefined, never when false.
           optedIn:

@@ -12,7 +12,7 @@ import {
   COMPUTER_USE_SKILL_NAME,
   LINEAR_AGENT_SKILL_NAMES,
   ORCHESTRATION_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+} from '@/lib/agent-feature-skill-names'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkill,
@@ -31,6 +31,13 @@ import {
   buildSettingsProjectList,
   removeSettingsProjectFromAllHosts
 } from './settings-project-list'
+import { resolveSettingsHostScope } from './settings-host-scope'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { defaultScopeHost } from '@/lib/default-creation-host'
+import {
+  blockRemovalForUnsavedFiles,
+  projectRemovalTargets
+} from '@/components/sidebar/removal-unsaved-files'
 
 export function useSettingsStoreModel() {
   const settings = useAppStore((s) => s.settings)
@@ -58,6 +65,8 @@ export function useSettingsStoreModel() {
   const setSettingsSearchQuery = useAppStore((s) => s.setSettingsSearchQuery)
   const modelStates = useAppStore((s) => s.modelStates)
   const refreshModelStates = useAppStore((s) => s.refreshModelStates)
+  const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
+  const runtimeEnvironmentCatalogHydrated = useAppStore((s) => s.runtimeEnvironmentCatalogHydrated)
 
   const projectHostSetupProjection = useProjectHostSetupProjection()
   // Why: same inputs as nav metadata so both lists agree — the source of truth for the pane list.
@@ -80,8 +89,17 @@ export function useSettingsStoreModel() {
   )
   // Why: removes the entry on every host, not just the selected one; an entry of a split project holds only its own part (clones keep their own entries).
   const removeProjectAllHosts = useCallback(
-    (setups: readonly ProjectHostSetup[]): Promise<void> =>
-      removeSettingsProjectFromAllHosts(setups, removeProject),
+    async (setups: readonly ProjectHostSetup[]): Promise<void> => {
+      // Why block: this inline confirm has no room for a file list, and the folders stay on disk.
+      const targets = projectRemovalTargets(
+        useAppStore.getState(),
+        setups.map((setup) => ({ repoId: setup.repoId, hostId: setup.hostId }))
+      )
+      const name = setups[0]?.displayName ?? ''
+      if (!blockRemovalForUnsavedFiles(useAppStore.getState, targets, name)) {
+        await removeSettingsProjectFromAllHosts(setups, removeProject)
+      }
+    },
     [removeProject]
   )
 
@@ -110,8 +128,8 @@ export function useSettingsStoreModel() {
     discoveryTarget: activeSkillRuntime.discoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
-  const skillFreshnessApplies = activeSkillRuntime.canUseLocalSkillFreshness
-  const { inventory: skillFreshnessInventory } = useSkillFreshness(skillFreshnessApplies)
+  const skillFreshnessApplies = activeSkillRuntime.bundledSkillTarget !== null
+  const { plan: skillPlan } = useSkillFreshness(activeSkillRuntime.bundledSkillTarget)
   const [voiceModelStatesLoading, setVoiceModelStatesLoading] = useState(showDesktopOnlySettings)
   // Why: trim platform-only Terminal entries from the shared search index so search never reveals hidden controls.
   const [scrollbackMode, setScrollbackMode] = useState<'preset' | 'custom'>('preset')
@@ -144,6 +162,29 @@ export function useSettingsStoreModel() {
   const confirm = useConfirmationDialog()
   // Why: session-only (deliberately not persisted) unlock — Option-click the Experimental page title reveals the hidden group.
   const [hiddenExperimentalUnlocked, setHiddenExperimentalUnlocked] = useState(false)
+  const [settingsHostChoice, setSettingsHostChoice] = useState<RuntimeClientTarget | null>(null)
+  const defaultScope = defaultScopeHost(settings)
+  const defaultRuntimeEnvironmentId =
+    defaultScope.kind === 'environment' ? defaultScope.environmentId : null
+  // Why: keyed on ids so status-only catalog updates keep the scope (and its loads) stable.
+  const savedEnvironmentIdsKey = runtimeEnvironments.map((environment) => environment.id).join('\n')
+  // Why: the web client's only host is its server, so it never offers a choice.
+  const settingsHostScope = useMemo(
+    () =>
+      resolveSettingsHostScope({
+        choice: isWebClient ? null : settingsHostChoice,
+        defaultEnvironmentId: defaultRuntimeEnvironmentId,
+        savedEnvironmentIds: savedEnvironmentIdsKey ? savedEnvironmentIdsKey.split('\n') : [],
+        catalogHydrated: runtimeEnvironmentCatalogHydrated
+      }),
+    [
+      defaultRuntimeEnvironmentId,
+      isWebClient,
+      runtimeEnvironmentCatalogHydrated,
+      savedEnvironmentIdsKey,
+      settingsHostChoice
+    ]
+  )
 
   return {
     settings,
@@ -184,7 +225,7 @@ export function useSettingsStoreModel() {
     linearSkill,
     computerUseSkill,
     skillFreshnessApplies,
-    skillFreshnessInventory,
+    skillPlan,
     voiceModelStatesLoading,
     setVoiceModelStatesLoading,
     scrollbackMode,
@@ -220,7 +261,10 @@ export function useSettingsStoreModel() {
     setSourceControlAiPromptDiscardSignal,
     confirm,
     hiddenExperimentalUnlocked,
-    setHiddenExperimentalUnlocked
+    setHiddenExperimentalUnlocked,
+    runtimeEnvironments,
+    settingsHostScope,
+    setSettingsHostChoice
   }
 }
 

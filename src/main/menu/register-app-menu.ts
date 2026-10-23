@@ -7,7 +7,7 @@ import {
 } from '../../shared/keybindings'
 import type { UpdateCheckOptions } from '../../shared/update-status-types'
 import { translateMain } from '../i18n/main-i18n'
-import { createAppMenuSelectionItem } from './app-menu-selection-item'
+import { createAppMenuSelectionItem, resolveNativeEditTarget } from './app-menu-selection-item'
 import { createAppMenuQuitItem } from './app-menu-quit-item'
 import { createAppWindowMenu } from './app-menu-window'
 
@@ -198,6 +198,11 @@ function buildAndApplyMenu(options: RegisterAppMenuOptions): void {
           // control, so raw Electron paste cannot know which Orca surface owns it.
           const focusedWindow = BrowserWindow.getFocusedWindow()
           if (focusedWindow) {
+            // Why: focused DevTools own the paste, not the terminal the renderer last focused (#16285).
+            const nativeTarget = resolveNativeEditTarget(focusedWindow)
+            if (nativeTarget) {
+              return nativeTarget.paste()
+            }
             focusedWindow.webContents.send('ui:appMenuPaste')
             return
           }

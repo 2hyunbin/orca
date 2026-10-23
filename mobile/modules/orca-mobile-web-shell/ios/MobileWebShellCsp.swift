@@ -33,8 +33,9 @@ enum MobileWebShellCsp {
     //
     // `http:` stays out: it reaches no image TLS cannot serve, and a cleartext image is readable
     // and replaceable in flight by anything on the path.
-    "img-src 'self' data: https:",
-    "font-src 'none'",
+    "img-src 'self' data: blob: https:",
+    // Terminal fonts use bundled same-origin assets or embedded data URLs.
+    "font-src 'self' data:",
     // The origin is one read-only directory behind the manifest map, so 'self' reaches nothing the
     // page cannot already read, and the bootstrap page reads ./manifest.json through it. This is
     // the fence for fetch and XMLHttpRequest; the document-start script covers only the two things
@@ -46,7 +47,9 @@ enum MobileWebShellCsp {
     "frame-src 'none'",
     "child-src 'none'",
     "worker-src 'none'",
-    "base-uri 'none'",
+    // `about:` only, so a chat visual's srcdoc frame (which inherits this) keeps its own
+    // `about:srcdoc` base and in-page links stay in it; no network base can apply.
+    "base-uri about:",
     "form-action 'none'",
     "frame-ancestors 'none'"
   ].joined(separator: "; ")

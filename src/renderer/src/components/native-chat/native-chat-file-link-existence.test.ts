@@ -2,12 +2,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ParsedTerminalFileLink } from '@/lib/terminal-links'
 import type * as FileLinkTargetModule from '@/components/terminal-pane/terminal-file-link-target'
 import type { FileLinkPathExistence } from '@/components/terminal-pane/terminal-file-link-target'
+import type * as FilePathMappingModule from '@/components/terminal-pane/terminal-file-path-mapping'
+import { TERMINAL_PATH_EXISTS_CACHE_MAX_ENTRIES } from '@/components/terminal-pane/terminal-path-exists-cache'
 import {
   createNativeChatFileLinkExistence,
   UNVERIFIABLE_RETRY_DELAYS_MS
 } from './native-chat-file-link-existence'
 
-const connection = vi.hoisted(() => ({ resolved: true }))
+const connection = vi.hoisted(() => ({
+  resolved: true,
+  sourceHostResolved: true,
+  currentOwnerResolved: true
+}))
 
 vi.mock('@/lib/connection-context', () => ({
   isWorktreeConnectionResolved: () => connection.resolved
@@ -19,10 +25,18 @@ vi.mock('@/components/terminal-pane/terminal-file-link-target', async (importOri
     absolutePath: /^[\\/]{2}/.test(link.pathText) ? link.pathText : `/repo/${link.pathText}`,
     line: null,
     column: null,
-    fileContext: {},
+    fileContext: { target: { kind: 'local' }, sourceHostResolved: connection.sourceHostResolved },
     isRemoteRuntimePath: false,
     cacheKey: link.pathText,
     isKnownWorktreeRoot: link.pathText === 'ROOT'
+  })
+}))
+
+vi.mock('@/components/terminal-pane/terminal-file-path-mapping', async (importOriginal) => ({
+  ...(await importOriginal<typeof FilePathMappingModule>()),
+  getTerminalFileContext: () => ({
+    target: { kind: 'local' },
+    sourceHostResolved: connection.currentOwnerResolved
   })
 }))
 
@@ -69,6 +83,8 @@ describe('createNativeChatFileLinkExistence', () => {
   afterEach(() => {
     vi.useRealTimers()
     connection.resolved = true
+    connection.sourceHostResolved = true
+    connection.currentOwnerResolved = true
   })
 
   it('underlines a path only after the host confirms it, asking once', async () => {
@@ -94,6 +110,22 @@ describe('createNativeChatFileLinkExistence', () => {
     expect(onChange).not.toHaveBeenCalled()
     expect(watcher.getSnapshot().check(link('src/app.ts'))).toBe(false)
     expect(pathExists).toHaveBeenCalledOnce()
+  })
+
+  it('does not recheck a held path once its workspace owner can no longer be placed', async () => {
+    const { asked, pathExists } = hostWith(() => true)
+    const existence = createNativeChatFileLinkExistence(host, pathExists)
+    const { watcher } = watching(existence)
+    watcher.getSnapshot().check(link('src/app.ts'))
+    await settle()
+    expect(asked).toEqual(['/repo/src/app.ts'])
+
+    // A detected row on another host lands after the target was held, making the owner ambiguous.
+    connection.currentOwnerResolved = false
+    existence.recheck()
+    await settle()
+
+    expect(asked).toEqual(['/repo/src/app.ts'])
   })
 
   it('links a path the turn created once the turn ends, without re-rendering first', async () => {
@@ -206,6 +238,27 @@ describe('createNativeChatFileLinkExistence', () => {
     expect(other.watcher.getSnapshot().check(link('src/App.tsx'))).toBe(true)
   })
 
+  it('keeps every answer a shown message needs, past the unobserved cache limit', async () => {
+    const { pathExists } = hostWith(() => true)
+    const existence = createNativeChatFileLinkExistence(host, pathExists)
+    const { watcher } = watching(existence)
+    const names = Array.from(
+      { length: TERMINAL_PATH_EXISTS_CACHE_MAX_ENTRIES + 100 },
+      (_, index) => `file-${index}.md`
+    )
+    const render = (): boolean[] => names.map((name) => watcher.getSnapshot().check(link(name)))
+
+    render()
+    await settle()
+    expect(render().every(Boolean)).toBe(true)
+    await settle()
+    expect(pathExists).toHaveBeenCalledTimes(names.length)
+
+    existence.recheck()
+    await settle()
+    expect(pathExists).toHaveBeenCalledTimes(names.length * 2)
+  })
+
   it('keeps a reply to an older question from overwriting a newer answer', async () => {
     const replies: ((exists: boolean) => void)[] = []
     const pathExists = vi.fn<FileLinkPathExistence>(
@@ -311,6 +364,17 @@ describe('createNativeChatFileLinkExistence', () => {
     const { watcher } = watching(
       createNativeChatFileLinkExistence({ ...host, connectionId: undefined }, pathExists)
     )
+
+    expect(watcher.getSnapshot().check(link('src/App.tsx'))).toBe(false)
+    await settle()
+
+    expect(pathExists).not.toHaveBeenCalled()
+  })
+
+  it('never checks on this machine when same-id owners leave the source host unresolved', async () => {
+    connection.sourceHostResolved = false
+    const { pathExists } = hostWith(() => true)
+    const { watcher } = watching(createNativeChatFileLinkExistence(host, pathExists))
 
     expect(watcher.getSnapshot().check(link('src/App.tsx'))).toBe(false)
     await settle()

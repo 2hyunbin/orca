@@ -18,6 +18,7 @@ import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-rec
 import { parseAgentSessionResumeMarker } from '../../../shared/agent-session-resume-marker'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import * as reducer from '../agent-session-journal/journal-reducer'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import { StructuredAgentSessionResumeAdmission } from './structured-agent-session-restart-resume-runner'
@@ -42,7 +43,6 @@ import { openTestJournalHostDatabase } from '../agent-session-journal/journal-ho
 import { recordingProductionStructuredAgentSessionLogger } from './structured-agent-session-logger-test-support'
 import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
-import { rotateStructuredAgentSessionHostInstanceForTests } from './structured-agent-session-queued-pause'
 
 /** What `interruptedRestart('queued-cards')` queues behind the running turn, in order. */
 export const QUEUED_BEFORE_QUIT = ['card A', 'card B'] as const
@@ -146,10 +146,6 @@ export async function interruptedRestart(
     }
   }
   await previous.host.flushAllStreamedEvents()
-  if (work === 'queued-cards') {
-    // The relaunch is a new process: the cards it finds were written by the one that quit.
-    rotateStructuredAgentSessionHostInstanceForTests()
-  }
   const store = await openTestAgentSessionRecordStore(previous.root)
   const closeSession = vi.fn(async () => true)
   // The relaunch comes after the quit that recorded the offer.
@@ -190,7 +186,7 @@ export async function interruptedRestart(
   return { ...hostTestState(), host, store, log, closeSession, marker, clock }
 }
 
-/** The continuation's submission commits, then its send throws: a send Orca may have taken.
+/** The continuation's submission commits and folds, then its send throws: a resend answers it.
  *  Install it right before the continuation, the only submission written from then on. */
 export function throwAfterContinuationAccepted(): void {
   const append = AgentSessionJournal.prototype.appendSubmission
@@ -200,6 +196,22 @@ export function throwAfterContinuationAccepted(): void {
   ) {
     await append.apply(this, args)
     throw new Error('the accepted continuation could not be answered')
+  })
+}
+
+/** The continuation's submission commits but cannot fold: Orca took a message it cannot vouch
+ *  for. Install it right before the continuation, the only submission written from then on. */
+export function continuationCannotFold(): void {
+  const fold = reducer.applyJournalRow
+  vi.spyOn(reducer, 'applyJournalRow').mockImplementation((state, row) => {
+    if (row.kind !== 'submission') {
+      fold(state, row)
+      return
+    }
+    // As the reducer does before anything can throw, so later appends take later sequences.
+    state.lastSequence = Math.max(state.lastSequence, row.seq)
+    state.highestFence = Math.max(state.highestFence, row.fence)
+    throw new Error('the accepted continuation could not fold')
   })
 }
 

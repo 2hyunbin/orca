@@ -6,10 +6,17 @@ import { normalizeOpenInApplications } from '../../../shared/open-in-application
 import { normalizeTerminalShortcutPolicy } from '../../../shared/keybindings'
 import { normalizeAppIconId } from '../../../shared/app-icon'
 import { normalizeTerminalCustomThemes } from '../../../shared/terminal-custom-themes'
+import { normalizeTerminalDefaultShell } from '../../../shared/terminal-default-shell'
 import { projectSourceControlAiToLegacyCommitMessageAi } from '../../../shared/source-control-ai'
-import { normalizeUiLanguage } from '../../../shared/ui-language'
 import { normalizeNativeChatShellEnvironmentVariables } from '../../../shared/native-chat-shell-environment'
-import { stripRetiredGlobalSettings } from '../applying-settings/terminal-settings-migrations'
+import {
+  loadedChatPermissionSetting,
+  normalizeAgentNativeChatPermissionModes
+} from '../../../shared/agent-chat-permission-mode'
+import {
+  savedChatUiWithTerminalDefaultView,
+  stripRetiredGlobalSettings
+} from '../applying-settings/terminal-settings-migrations'
 import { readLegacySidekickFlag } from '../applying-settings/onboarding-normalization'
 import { normalizeMachineName } from '../../../shared/machine-name'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -34,6 +41,7 @@ export function normalizeLoadedGlobalSettings(
     migratedFloatingTerminalTrustedCwds
   } = terminal
   const {
+    migratedPortugueseUiLanguage,
     migratedExperimentalActivity,
     migratedAutoRenameBranchFromWork,
     migratedTerminalCursorStyle,
@@ -61,6 +69,10 @@ export function normalizeLoadedGlobalSettings(
     // old default indistinguishable from a real opt-in. Preserve stored `true`; only
     // the default changed.
     ...stripRetiredGlobalSettings(parsed.settings),
+    // Why: Chat UI on now opens new tabs in chat; keep users whose new tabs opened in the terminal there.
+    ...(savedChatUiWithTerminalDefaultView(parsed.settings)
+      ? { experimentalNativeChat: false }
+      : {}),
     nativeChatAppearance: normalizeNativeChatAppearanceSettings(
       parsed.settings?.nativeChatAppearance
     ),
@@ -110,6 +122,7 @@ export function normalizeLoadedGlobalSettings(
     floatingTerminalTrustedCwds: migratedFloatingTerminalTrustedCwds,
     floatingTerminalCwdMigratedToAppWorkspace: true,
     terminalScrollbackRows: migratedTerminalScrollback.rows,
+    terminalDefaultShell: normalizeTerminalDefaultShell(parsed.settings?.terminalDefaultShell),
     terminalQuickCommands: normalizeTerminalQuickCommands(parsed.settings?.terminalQuickCommands),
     terminalCustomThemes: normalizeTerminalCustomThemes(parsed.settings?.terminalCustomThemes),
     appIcon: normalizeAppIconId(parsed.settings?.appIcon),
@@ -120,11 +133,23 @@ export function normalizeLoadedGlobalSettings(
     minimizeToTrayOnClose: parsed.settings?.minimizeToTrayOnClose === true,
     // Why: missing means default-on; round-trips unchanged on non-mac since darwin consumers gate the effect.
     showMenuBarIcon: parsed.settings?.showMenuBarIcon !== false,
-    uiLanguage: normalizeUiLanguage(parsed.settings?.uiLanguage),
+    ...migratedPortugueseUiLanguage,
     // Why: the structured runtime reads these per launch; a malformed hand-edited value must not fail a chat.
     nativeChatInheritShellEnvironment: parsed.settings?.nativeChatInheritShellEnvironment !== false,
     nativeChatShellEnvironmentVariables: normalizeNativeChatShellEnvironmentVariables(
       parsed.settings?.nativeChatShellEnvironmentVariables
+    ),
+    // Why: the next settings save stores the seed; until then a reload derives the same one.
+    agentNativeChatPermissionModes: normalizeAgentNativeChatPermissionModes(
+      parsed.settings?.agentNativeChatPermissionModes
+    ),
+    nativeChatPermissionMode: loadedChatPermissionSetting(
+      parsed.settings?.nativeChatPermissionMode,
+      {
+        ...migratedAgentYoloDefaults,
+        terminalWindowsShell: parsed.settings?.terminalWindowsShell
+      },
+      process.platform
     ),
     defaultTaskSource: taskProviderSettings.defaultTaskSource,
     visibleTaskProviders: taskProviderSettings.visibleTaskProviders,
@@ -135,6 +160,7 @@ export function normalizeLoadedGlobalSettings(
     disabledTuiAgents: migratedDisabledTuiAgents,
     ...migratedAgentYoloDefaults,
     claudeAgentTeamsDefaultDisabledMigrated: true,
+    sshRemoteCliControlExistingHostsMigrated: true,
     openInApplications: normalizeOpenInApplications(parsed.settings?.openInApplications, {
       seedDefaults: true
     }),

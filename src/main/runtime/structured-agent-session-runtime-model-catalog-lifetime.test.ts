@@ -35,7 +35,9 @@ afterEach(async () => {
 describe('the host catalog lifetime', () => {
   it('prewarms once the host is installed and stops its listings at teardown', async () => {
     const service = {
+      peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
+      retainedLiveModelIds: vi.fn(async () => []),
       recordLiveListing: vi.fn(),
       prewarm: vi.fn(async () => {}),
       stop: vi.fn(),
@@ -50,7 +52,7 @@ describe('the host catalog lifetime', () => {
       resolveWorkspacePath: async () => root,
       resolveEnvironment: async () => ({}),
       resolveLaunchArgs: () => [],
-      resolveClaudeAuthPolicy: () => ({ stripAuthEnv: true })
+      resolveClaudeAuthPolicy: () => ({ account: 'managed' as const })
     })
     expect(service.prewarm).toHaveBeenCalledOnce()
     expect(service.stop).not.toHaveBeenCalled()

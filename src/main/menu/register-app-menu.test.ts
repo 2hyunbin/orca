@@ -32,6 +32,7 @@ vi.mock('electron', () => ({
 }))
 
 import { getNextDefaultOnAppearanceSettingValue, registerAppMenu } from './register-app-menu'
+import { markNativeBrowserPopupWindow } from '../browser/native-browser-popup-windows'
 
 const isMac = process.platform === 'darwin'
 
@@ -330,6 +331,21 @@ describe('registerAppMenu', () => {
     expect(send).not.toHaveBeenCalled()
   })
 
+  it('pastes into DevTools instead of the Orca pane when DevTools holds focus (#16285)', () => {
+    const send = vi.fn()
+    const devToolsContents = { paste: vi.fn() }
+    getFocusedWindowMock.mockReturnValue({ webContents: { send } })
+    getFocusedWebContentsMock.mockReturnValue(devToolsContents)
+    registerAppMenu(buildMenuOptions())
+
+    getSubmenu(getTemplate(), 'Edit')
+      .find((item) => item.label === 'Paste')
+      ?.click?.({} as never, {} as never, {} as never)
+
+    expect(devToolsContents.paste).toHaveBeenCalledOnce()
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it.each(['darwin', 'linux', 'win32'] as const)(
     'routes Edit selection actions through the focused Orca window on %s',
     (platform) => {
@@ -384,6 +400,48 @@ describe('registerAppMenu', () => {
     expect(sendActionToFirstResponderMock).toHaveBeenCalledOnce()
     expect(sendActionToFirstResponderMock).toHaveBeenCalledWith('paste:')
   })
+
+  it.each(
+    (['darwin', 'linux', 'win32'] as const).flatMap((platform) =>
+      ['popup', 'child', 'unavailable'].map((focus) => ({ platform, focus }))
+    )
+  )(
+    'routes native popup Edit actions to web contents on $platform with $focus focus',
+    ({ platform, focus }) => {
+      vi.spyOn(process, 'platform', 'get').mockReturnValue(platform)
+      const popupContents = { paste: vi.fn(), copy: vi.fn(), selectAll: vi.fn(), send: vi.fn() }
+      const childContents = { paste: vi.fn(), copy: vi.fn(), selectAll: vi.fn(), send: vi.fn() }
+      const popupWindow = { webContents: popupContents }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The popup registry only stores window identity; Edit actions use the mocked webContents methods.
+      markNativeBrowserPopupWindow(popupWindow as unknown as Electron.BrowserWindow)
+      getFocusedWindowMock.mockReturnValue(popupWindow)
+      getFocusedWebContentsMock.mockReturnValue(
+        focus === 'child' ? childContents : focus === 'popup' ? popupContents : null
+      )
+      registerAppMenu(buildMenuOptions())
+
+      const editSubmenu = getSubmenu(getTemplate(), 'Edit')
+      for (const label of ['Paste', 'Copy', 'Select All']) {
+        const click: unknown = editSubmenu.find((item) => item.label === label)?.click
+        expect(click).toBeTypeOf('function')
+        if (typeof click === 'function') {
+          click()
+        }
+      }
+
+      const target = focus === 'child' ? childContents : popupContents
+      const other = focus === 'child' ? popupContents : childContents
+      expect(target.paste).toHaveBeenCalledOnce()
+      expect(target.copy).toHaveBeenCalledOnce()
+      expect(target.selectAll).toHaveBeenCalledOnce()
+      expect(other.paste).not.toHaveBeenCalled()
+      expect(other.copy).not.toHaveBeenCalled()
+      expect(other.selectAll).not.toHaveBeenCalled()
+      expect(popupContents.send).not.toHaveBeenCalled()
+      expect(childContents.send).not.toHaveBeenCalled()
+      expect(sendActionToFirstResponderMock).not.toHaveBeenCalled()
+    }
+  )
 
   it.each(['linux', 'win32'] as const)(
     'does not invoke the native paste responder on %s without a focused window',

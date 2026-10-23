@@ -1,6 +1,8 @@
-import type { StateCreator } from 'zustand'
-import type { AppState } from '../types'
-import type { RuntimeStatusSlice } from './runtime-status-types'
+import type {
+  RuntimeStatusSlice,
+  RuntimeStatusStoreSetState,
+  RuntimeStatusStoreState
+} from './runtime-status-types'
 export type { RuntimeEnvironmentStatus, RuntimeStatusSlice } from './runtime-status-types'
 import { lastVerifiedRuntimeStatus } from '../../../../shared/runtime-host-status'
 import { runtimeEnvironmentStatusesEqual } from './runtime-environment-status-equality'
@@ -15,16 +17,21 @@ import {
   dismissRuntimeDisconnectedToast,
   showRuntimeDisconnectedToast
 } from './runtime-environment-disconnect-toast'
-import { reconcileCatalogRows } from './repo-identity-reconcile'
+import { reconcileCatalogRows } from '../../../../shared/catalog-row-reconcile'
 import { createRuntimeStatusHydration } from './runtime-status-hydration'
 import { refreshRuntimeEnvironmentStatus } from './runtime-status-refresh'
 import * as runtimeStatusConnectionGeneration from './runtime-status-connection-generation'
 import { replayClientHostedBrowserCloseIntents } from '@/runtime/client-hosted-browser-close-intent-replay'
 import {
+  pairedTerminalTabCloseIntentStoreOf,
+  reconcileWebSessionCloseReplaysWithCatalog
+} from '@/runtime/web-session-close-replay'
+import {
   ensureBrowserClientHostOnRuntimeContact,
   ensureBrowserClientHostsForRestoredPages
 } from '@/runtime/restored-client-hosted-browser-host-attach'
-import { applyRuntimeHostStatusSnapshot } from './runtime-status-snapshot'
+import { applyRuntimeHostStatusSnapshot, snapshotOutrunsCatalog } from './runtime-status-snapshot'
+import { refreshRuntimeEnvironmentCatalog } from '@/runtime/runtime-environment-pairing-refresh'
 import {
   classifyPeerReplacements,
   replacedRuntimeEnvironmentIds
@@ -39,10 +46,11 @@ export {
   setRuntimeEnvironmentConnectionGenerationForTests
 } from './runtime-status-connection-generation'
 
-export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeStatusSlice> = (
-  set,
-  get
-) => ({
+export const createRuntimeStatusSlice: (
+  set: RuntimeStatusStoreSetState,
+  get: () => RuntimeStatusStoreState,
+  store?: unknown
+) => RuntimeStatusSlice = (set, get) => ({
   runtimeEnvironments: [],
   runtimeEnvironmentCatalogHydrated: false,
   runtimeEnvironmentCatalogSettled: false,
@@ -144,6 +152,7 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
     get().retainEnvironmentSshState?.(environments.map((environment) => environment.id))
     for (const id of replacedEnvironmentIds) {
       clearRuntimeCompatibilityCache(id)
+      get().clearRuntimeDetectedAgents?.(id)
       get().markEnvironmentSshStateStale?.(id)
     }
     // Why: a same-id re-pair to another peer retires it as surely as a removal.
@@ -153,17 +162,29 @@ export const createRuntimeStatusSlice: StateCreator<AppState, [], [], RuntimeSta
       get().purgeStaleRuntimeHostState?.(retiredEnvironmentIds)
       retiredEnvironmentIds.forEach(dismissRuntimeDisconnectedToast)
     }
+    reconcileWebSessionCloseReplaysWithCatalog(pairedTerminalTabCloseIntentStoreOf(get), {
+      listed: nextIds,
+      ...peerReplacement
+    })
   },
 
-  applyRuntimeHostStatusSnapshot: (snapshot) =>
-    applyRuntimeHostStatusSnapshot(snapshot, get(), (entry) => {
-      set((s) => ({
-        runtimeStatusByEnvironmentId: new Map(s.runtimeStatusByEnvironmentId).set(
-          snapshot.environmentId,
-          entry
-        )
-      }))
-    }),
+  applyRuntimeHostStatusSnapshot: (snapshot) => {
+    const apply = (): void =>
+      applyRuntimeHostStatusSnapshot(snapshot, get(), (entry) => {
+        set((s) => ({
+          runtimeStatusByEnvironmentId: new Map(s.runtimeStatusByEnvironmentId).set(
+            snapshot.environmentId,
+            entry
+          )
+        }))
+      })
+    if (snapshotOutrunsCatalog(snapshot, get())) {
+      // Applied once after the re-read; a catalog that is still behind drops it as before.
+      void refreshRuntimeEnvironmentCatalog().then(apply)
+      return
+    }
+    apply()
+  },
 
   setRuntimeEnvironmentStatus: (environmentId, status, options) => {
     const previous = get().runtimeStatusByEnvironmentId.get(environmentId)

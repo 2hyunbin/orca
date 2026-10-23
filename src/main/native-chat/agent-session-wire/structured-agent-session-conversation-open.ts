@@ -24,10 +24,7 @@ import {
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import { settleStaleStructuredAgentSessionState } from './structured-agent-session-dead-generation-settlement'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
-import {
-  markStructuredQueueReopen,
-  structuredAgentSessionHostInstance
-} from './structured-agent-session-queued-pause'
+import { markStructuredQueueReopen } from './structured-agent-session-queued-pause'
 import type {
   StructuredAgentSessionHostDeps,
   StructuredAgentSessionHostSession
@@ -38,7 +35,7 @@ export type OpenedStructuredAgentSessionConversation = {
 }
 
 export type StructuredAgentSessionConversationOpenDeps = {
-  store: Pick<AgentSessionRecordStore, 'getRecord'>
+  store: Pick<AgentSessionRecordStore, 'getRecord' | 'replacedRuntime'>
   journalDatabase: JournalHostDatabase
   logger: StructuredAgentSessionHostDeps['logger']
 }
@@ -79,9 +76,22 @@ export async function openStructuredAgentSessionConversation(
   return opened.session
 }
 
-/** The open itself, indexed by nobody yet: the caller adopts the result. */
+/** The open itself, indexed by nobody yet: the caller adopts the result. Any open that settles
+ *  needs the store, which names the runtimes this one replaced. */
+export async function openStructuredAgentSessionConversationJournal(
+  deps: StructuredAgentSessionConversationOpenDeps,
+  record: AgentSessionRecord,
+  options?: StructuredAgentSessionConversationOpenOptions
+): Promise<OpenedStructuredAgentSessionConversation>
+/** An acquisition's open settles nothing itself, so it needs no store. */
 export async function openStructuredAgentSessionConversationJournal(
   deps: Omit<StructuredAgentSessionConversationOpenDeps, 'store'>,
+  record: AgentSessionRecord,
+  options: { acquisition: true }
+): Promise<OpenedStructuredAgentSessionConversation>
+export async function openStructuredAgentSessionConversationJournal(
+  deps: Omit<StructuredAgentSessionConversationOpenDeps, 'store'> &
+    Partial<Pick<StructuredAgentSessionConversationOpenDeps, 'store'>>,
   record: AgentSessionRecord,
   options: StructuredAgentSessionConversationOpenOptions = {}
 ): Promise<OpenedStructuredAgentSessionConversation> {
@@ -105,11 +115,7 @@ export async function openStructuredAgentSessionConversationJournal(
   }
   try {
     // Before a Stop this open serves can withdraw one: a Stop never withdraws a card.
-    await holdUnsentSends(journal, {
-      fence,
-      hostInstance: structuredAgentSessionHostInstance(),
-      hold: { cause: 'hostRestarted' }
-    })
+    await holdUnsentSends(journal, { fence, hold: { cause: 'hostRestarted' } })
   } catch (error) {
     // The row stays queued. The delivery loop's first step tries again before it hands anything
     // over; if that fails too, the loop fails and rejects every queued send.
@@ -148,7 +154,8 @@ export async function resettleOpenStructuredAgentSessionConversation(
 }
 
 async function settleGoneGeneration(
-  deps: Pick<StructuredAgentSessionConversationOpenDeps, 'logger'>,
+  deps: Pick<StructuredAgentSessionConversationOpenDeps, 'logger'> &
+    Partial<Pick<StructuredAgentSessionConversationOpenDeps, 'store'>>,
   record: AgentSessionRecord,
   journal: AgentSessionJournal
 ): Promise<void> {
@@ -159,6 +166,7 @@ async function settleGoneGeneration(
       fence: record.lease.runtimeFence,
       acquisitionGeneration: null,
       deathEvidence: record.lease.deathEvidence ?? null,
+      replaced: deps.store?.replacedRuntime(record.sessionId),
       failureTextContext: structuredAgentSessionFailureWordsContext(record)
     })
   } catch (error) {

@@ -1,5 +1,5 @@
 import type * as Monaco from 'monaco-editor'
-import type { IRawGrammar } from 'vscode-textmate'
+import type { LanguageRegistration } from 'shiki/core'
 import { registerTextMateLanguage } from './textmate-language-registration'
 
 type MonacoModule = typeof Monaco
@@ -33,15 +33,11 @@ export const groovyLanguageConfiguration: Monaco.languages.LanguageConfiguration
   ]
 }
 
-export async function loadGroovyTextMateGrammar(scopeName: string): Promise<IRawGrammar | null> {
-  if (scopeName !== GROOVY_TEXTMATE_SCOPE) {
-    return null
-  }
-
-  // Lazy upstream grammar; provenance and license are in groovy-LICENSE.txt.
+export async function loadGroovyTextMateGrammar(): Promise<LanguageRegistration> {
   const grammarModule = await import('./textmate-grammars/groovy.tmLanguage.json')
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: TextMate injects the $self/$base repository entries required by IRawGrammar; real tokenization tests validate this vendored JSON.
-  return grammarModule.default as unknown as IRawGrammar
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: TextMate injects the $self/$base repository entries required by this type; real tokenization tests validate the vendored grammar.
+  const grammar = grammarModule.default as unknown as LanguageRegistration
+  return { ...grammar, name: GROOVY_LANGUAGE_ID }
 }
 
 export function registerGroovyLanguage(monaco: MonacoModule): void {
@@ -53,7 +49,6 @@ export function registerGroovyLanguage(monaco: MonacoModule): void {
       aliases: ['Groovy', 'groovy']
     },
     configuration: groovyLanguageConfiguration,
-    scopeName: GROOVY_TEXTMATE_SCOPE,
     loadGrammar: loadGroovyTextMateGrammar
   })
 }

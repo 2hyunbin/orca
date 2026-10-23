@@ -1,5 +1,6 @@
 import type { TerminalSnapshotUnavailableReason } from '../../../shared/terminal-snapshot-unavailability'
 import type { TerminalStreamEndVerdict } from '../../../shared/terminal-stream-end-verdict'
+import type { TerminalInputAckKind } from '../../../shared/terminal-stream-protocol'
 import type { RemoteTerminalStreamWatchdog } from './remote-terminal-stream-watchdog'
 
 export type RuntimeEnvironmentSubscriptionHandle = {
@@ -13,7 +14,13 @@ export type TerminalMultiplexEvent =
       type: 'subscribed'
       streamId: number
       streamGeneration?: string
-      capabilities?: { ackOutputSourceRanges?: 1; outputPause?: 1 }
+      capabilities?: {
+        ackOutputSourceRanges?: 1
+        outputPause?: 1
+        outputPauseDropNotice?: 1
+        inputAck?: 1
+      }
+      inputLedgerId?: string
     }
   | { type: 'end'; streamId: number; verdict?: TerminalStreamEndVerdict }
   | { type: 'error'; streamId: number; message?: string }
@@ -45,12 +52,16 @@ export type RemoteRuntimeMultiplexedTerminalCallbacks = {
        *  it, which must read as unknown so replay keeps the pane's own grid. */
       cols?: number
       rows?: number
-      /** The image carries no history, so replay must keep the pane's own scrollback. */
-      keepsLocalScrollback?: boolean
+      /** The host folded history above the screen (scrollbackRows > 0). */
+      carriesHistory?: boolean
     }
   ) => void
   onSubscribed?: () => void
+  /** The host installed the stream and named its capabilities; its initial snapshot is still on the way. */
+  onSubscribeAcknowledged?: () => void
   onOutputPauseCapability?: () => void
+  /** The host discarded output while this stream was paused (negotiated streams only). */
+  onPausedOutputDropped?: () => void
   onEnd?: (verdict: TerminalStreamEndVerdict) => void
   onError?: (message: string) => void
   onFitOverrideChanged?: (event: {
@@ -62,6 +73,8 @@ export type RemoteRuntimeMultiplexedTerminalCallbacks = {
     driver: { kind: 'idle' } | { kind: 'desktop' } | { kind: 'mobile'; clientId: string }
   ) => void
   onWriteUnavailable?: () => void
+  /** Cumulative host ack of sequenced input through `appliedSeq` (negotiated streams only). */
+  onInputAck?: (appliedSeq: number, kind: TerminalInputAckKind) => void
   onTransportClose?: (event: { recoverable: boolean; retryWithBackoff?: boolean }) => void
 }
 
@@ -133,17 +146,24 @@ export type RemoteRuntimeSnapshotOutcome = {
 
 export type RemoteRuntimeMultiplexedTerminal = {
   streamId: number
-  sendInput: (text: string) => boolean
+  /** `inputSeq` is honored only once the host negotiated `inputAck`; see `acknowledgesInput`. */
+  sendInput: (text: string, inputSeq?: number) => boolean
+  // Why: until the host echoes `inputAck`, delivery of a sent byte is unknown and must never be replayed.
+  acknowledgesInput: () => boolean
+  /** The host ledger that dedupes this stream's input; a different one has no record of earlier sends. */
+  inputLedgerId: () => string | null
   resize: (cols: number, rows: number) => boolean
   claimViewport: (cols: number, rows: number) => boolean
   setOutputPaused: (paused: boolean) => boolean
-  serializeBuffer: (opts?: {
-    scrollbackRows?: number
-  }) => Promise<RemoteRuntimeSnapshotImage | null>
+  // Why: only then does a pause with no drop notice prove nothing was lost.
+  reportsPausedOutputDrops?: () => boolean
+  serializeBuffer: (
+    opts?: RemoteRuntimeSnapshotRequestOptions
+  ) => Promise<RemoteRuntimeSnapshotImage | null>
   // Why: same request as serializeBuffer, but keeps the host's reason for an absent buffer instead of collapsing it to null.
-  serializeBufferOutcome: (opts?: {
-    scrollbackRows?: number
-  }) => Promise<RemoteRuntimeSnapshotOutcome>
+  serializeBufferOutcome: (
+    opts?: RemoteRuntimeSnapshotRequestOptions
+  ) => Promise<RemoteRuntimeSnapshotOutcome>
   close: () => void
 }
 
@@ -155,6 +175,11 @@ export type RemoteRuntimeMultiplexedTerminalState = {
   acknowledgeOutput: boolean
   acknowledgeOutputSourceRanges: boolean
   supportsOutputPause: boolean
+  supportsPausedOutputDropNotice: boolean
+  // Why: the host announced the seq jump the pane's own restore covers, so it must not also trigger a resync.
+  pausedOutputGapExpected: boolean
+  supportsInputAck: boolean
+  inputLedgerId: string | null
   outputPaused: boolean
   streamGeneration: string | null
   sourceAckedEndByte: number
@@ -180,6 +205,8 @@ export type RemoteRuntimeMultiplexedTerminalState = {
   resyncPendingSend: boolean
   resyncTimer: ReturnType<typeof setTimeout> | null
   resyncAttempts: number
+  /** Consecutive resync timeouts with no recovery frame at all. */
+  resyncUnansweredTimeouts: number
   capacityRejected: boolean
   watchdog: RemoteTerminalStreamWatchdog
 }
@@ -203,8 +230,15 @@ export type RemoteRuntimeSnapshotInfo = {
   pendingEscapeTailAnsi?: string
 }
 
+export type RemoteRuntimeSnapshotRequestOptions = {
+  scrollbackRows?: number
+  /** Client-only: the pane repaints from this image, so live output resumes after its seq. */
+  repaintsPane?: boolean
+}
+
 export type RemoteRuntimeSnapshotRequest = {
   requestId: number
+  repaintsPane?: boolean
   resolve: (outcome: RemoteRuntimeSnapshotOutcome) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>

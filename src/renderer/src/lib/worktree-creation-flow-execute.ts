@@ -60,10 +60,14 @@ export async function executeWorktreeCreation(
     return
   }
 
+  const structuredLaunch = preparedRequest.agentLaunchRoute === 'structured-native-chat'
+  const creationHostId =
+    preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
+  // Named to later steps, so a same-path twin on another host can't blur the owner (L277).
+  const onCreationHost = creationHostId ? { executionHostId: creationHostId } : {}
   let result: CreateWorktreeResult
   try {
     const provisionedRoot = getProvisionedRootCreateOptions(preparedRequest)
-    const structuredLaunch = preparedRequest.agentLaunchRoute === 'structured-native-chat'
     const backendStartup =
       provisionedRoot || structuredLaunch ? undefined : resolveBackendDraftStartup(preparedRequest)
     result = await useAppStore
@@ -95,8 +99,8 @@ export async function executeWorktreeCreation(
         preparedRequest.linkedGiteaPR,
         preparedRequest.compareBaseRef,
         {
-          executionHostId:
-            preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId,
+          setupOnly: preparedRequest.setupOnly,
+          executionHostId: creationHostId,
           ...(preparedRequest.nameWasGenerated ? { nameWasGenerated: true } : {}),
           ...(preparedRequest.displayNameKind
             ? { displayNameKind: preparedRequest.displayNameKind }
@@ -146,7 +150,6 @@ export async function executeWorktreeCreation(
   }
 
   const worktree = result.worktree
-  const structuredLaunch = preparedRequest.agentLaunchRoute === 'structured-native-chat'
   // Why: cancellation can race a successful backend adoption; clean up again after it settles so an adopted workspace cannot outlive its destroyed VM.
   if (!useAppStore.getState().pendingWorktreeCreations[creationId]) {
     if (preparedRequest.ephemeralVmRuntimeId) {
@@ -170,6 +173,8 @@ export async function executeWorktreeCreation(
   // workspace) is handed it; anyone who moved on (another workspace or an app
   // view) keeps their place and gets a toast instead (#9944).
   const shouldActivateOnCompletion = isCreatedWorkspaceInView(creationId, worktree.id)
+  const setupIsOnlySurface = preparedRequest.setupOnly === true && result.setup !== undefined
+  const defaultTabs = setupIsOnlySurface ? undefined : result.defaultTabs
 
   // Why: the worktree exists past this point and nothing awaits this caller, so
   // each follow-up step is best-effort — an escaped throw would strand the
@@ -180,12 +185,14 @@ export async function executeWorktreeCreation(
     try {
       activation = activateAndRevealWorktree(worktree.id, {
         sidebarRevealBehavior: 'auto',
+        ...onCreationHost,
         ...(preparedRequest.agent !== null ? { agent: preparedRequest.agent } : {}),
         ...(result.setup ? { setup: result.setup } : {}),
-        ...(result.defaultTabs ? { defaultTabs: result.defaultTabs } : {}),
+        ...(defaultTabs ? { defaultTabs } : {}),
         ...(startupOpt ? { startup: startupOpt } : {}),
         ...(preparedRequest.issueCommand ? { issueCommand: preparedRequest.issueCommand } : {}),
-        ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {})
+        ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {}),
+        ...(setupIsOnlySurface ? { providesInitialSurface: true } : {})
       })
       primaryTabId = activation === false ? null : activation.primaryTabId
     } catch (error) {
@@ -211,23 +218,20 @@ export async function executeWorktreeCreation(
             startupOpt,
             result.setup,
             preparedRequest.issueCommand,
-            result.defaultTabs,
+            defaultTabs,
             // Activation failed before providing its promised surface, so recovery must seed one.
-            backendSpawned ? { backendStartupTerminalSpawned: true } : undefined
+            { ...onCreationHost, ...(backendSpawned && { backendStartupTerminalSpawned: true }) }
           )
         } catch (recoveryError) {
-          console.error(
-            'worktree create: activation recovery seeding failed',
-            worktree.id,
-            recoveryError
-          )
+          console.error('worktree create: recovery seed failed', worktree.id, recoveryError)
         }
       }
       if (!backendSpawned) {
         try {
           ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id, {
             startup: startupOpt,
-            agent: preparedRequest.agent
+            agent: preparedRequest.agent,
+            unknownHostCountIsEmpty: true
           })
         } catch (recoveryError) {
           console.error(
@@ -241,8 +245,9 @@ export async function executeWorktreeCreation(
   } else {
     // Why: backgrounded creates still need explicit setup/issue terminals, but must not activate them.
     const hasExplicitTerminalWork = Boolean(
-      startupOpt || result.setup || preparedRequest.issueCommand || result.defaultTabs
+      startupOpt || result.setup || preparedRequest.issueCommand || defaultTabs
     )
+    const callerProvidesSurface = preparedRequest.agent !== null || setupIsOnlySurface
     if (preparedRequest.agent === null || hasExplicitTerminalWork) {
       try {
         primaryTabId = ensureWorktreeHasInitialTerminal(
@@ -251,10 +256,11 @@ export async function executeWorktreeCreation(
           startupOpt,
           result.setup,
           preparedRequest.issueCommand,
-          result.defaultTabs,
+          defaultTabs,
           {
             activateCreatedTabs: false,
-            ...(preparedRequest.agent !== null ? { callerProvidesSurface: true } : {}),
+            ...onCreationHost,
+            ...(callerProvidesSurface ? { callerProvidesSurface: true } : {}),
             ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {})
           }
         )
@@ -272,7 +278,9 @@ export async function executeWorktreeCreation(
         ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id, {
           startup: startupOpt,
           agent: preparedRequest.agent,
-          activate: false
+          activate: false,
+          // Why: this client just created the workspace, so it starts empty.
+          unknownHostCountIsEmpty: true
         })
       } catch (error) {
         console.error('worktree create: after-wake terminal seeding failed', worktree.id, error)
@@ -311,7 +319,7 @@ export async function executeWorktreeCreation(
 
   if (!shouldActivateOnCompletion && useAppStore.getState().pendingWorktreeCreations[creationId]) {
     try {
-      showWorktreeCreationReadyToast(worktree)
+      showWorktreeCreationReadyToast(worktree, creationHostId)
     } catch (error) {
       console.error('worktree create: ready toast failed', worktree.id, error)
     }
