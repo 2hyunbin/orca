@@ -70,6 +70,8 @@ const WorktreeCardAgents = React.memo(function WorktreeCardAgents({
   return <WorktreeCardAgentsBody worktreeId={worktreeId} agents={agents} className={className} />
 })
 
+const EMPTY_STATUS_KEYS: readonly string[] = []
+
 type BodyProps = {
   worktreeId: string
   agents: DashboardAgentRowData[]
@@ -90,7 +92,8 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
   )
   // Why: return a stable empty constant unless the send-target popover is ours, so churny pane-title/agent-status maps don't re-render idle bodies.
   const sendTargetInputs = useAgentStatusSelector(
-    useShallow((s) => selectSendTargetInputs(s, worktreeId))
+    useShallow((s) => selectSendTargetInputs(s, worktreeId)),
+    agentSendPopoverTargetMode ? undefined : EMPTY_STATUS_KEYS
   )
   const sendPromptToSidebarAgentTarget = useAppStore((s) => s.sendPromptToSidebarAgentTarget)
   const focusedAgentPaneKey = useFocusedAgentPaneKey(worktreeId)
@@ -98,8 +101,10 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
 
   // Why: acknowledgement writes are app-global; project only this card's rows
   // so unrelated worktree activity does not rerender every agent body.
+  const agentPaneKeys = useMemo(() => agents.map((agent) => agent.paneKey), [agents])
   const agentRowsUnread = useAgentStatusSelector(
-    useShallow((s) => selectAgentRowsUnread(s, agents))
+    useShallow((s) => selectAgentRowsUnread(s, agents)),
+    agentPaneKeys
   )
   const unvisitedByPaneKey = useMemo(() => {
     const out: Record<string, boolean> = {}

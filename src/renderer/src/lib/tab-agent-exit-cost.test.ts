@@ -20,11 +20,11 @@ afterEach(() => {
 
 function countedRows<T>(rows: T[], count: () => void): T[] {
   return new Proxy(rows, {
-    get(target, key, receiver) {
+    get(target, key) {
       if (typeof key === 'string' && /^\d+$/.test(key)) {
         count()
       }
-      return Reflect.get(target, key, receiver)
+      return Reflect.get(target, key)
     }
   })
 }
