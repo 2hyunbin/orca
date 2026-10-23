@@ -65,17 +65,17 @@ export type OpenWorkspaceBrowserTabRequest = {
   placementPreference?: BrowserClientHostPlacementPreference
 }
 
-function createClientBrowserTab(
+async function createClientBrowserTab(
   state: AppState,
   request: OpenWorkspaceBrowserTabRequest,
   hostId: ExecutionHostId,
   presentation: { error: string; title: string },
   // Desktop-rendered pages in runtime workspaces keep runtime ownership or palette/activation disowns their tabs.
   ownerHostId: ExecutionHostId = hostId
-): string | null {
+): Promise<string | null> {
   if (request.linkContext) {
     const destination = workspaceBrowserLinkDestination(request, ownerHostId, null, hostId)
-    const outcome = openClientWorkspaceBrowserLink(request, destination, presentation.title)
+    const outcome = await openClientWorkspaceBrowserLink(request, destination, presentation.title)
     request.onLinkOutcome?.(outcome)
     return outcome.status === 'opened' ? outcome.result.browserPageId : null
   }

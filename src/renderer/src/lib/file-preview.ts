@@ -15,19 +15,17 @@ import {
   REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE,
   TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE
 } from '@/lib/workspace-file-browser-open-target'
-import { selectWorkspaceSurface } from '@/lib/workspace-surface-reveal'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { findSiblingGroupId } from '@/store/slices/tabs'
 import type { CreateBrowserTabOptions } from '@/store/slices/browser/browser-slice-contract'
-import { browserPageDocLocationsEqual } from '../../../shared/browser-page-doc-location'
-import type { BrowserPageDocLocation } from '../../../shared/browser-workspace-types'
-import { findPage } from '@/store/slices/browser-page-records'
-import type { BrowserPageConversionLeg } from '@/store/slices/browser-page-conversion'
 import { ORCA_BROWSER_BLANK_URL } from '../../../shared/constants'
 import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { findWorkspaceShowingDoc } from './file-preview-page-conversion'
+
+export { convertBrowserPageToWorkspaceDoc } from './file-preview-page-conversion'
 
 export type PreviewableLanguage = 'html'
 
@@ -48,7 +46,11 @@ function getLocalFilePreviewPlan(
   if (availability.state !== 'enabled') {
     return { status: 'unsupported', message: availability.reason, reason: 'no-channel' }
   }
-  return { status: 'browser-tab', url: absolutePathToFileUri(filePath), title: basename(filePath) || filePath }
+  return {
+    status: 'browser-tab',
+    url: absolutePathToFileUri(filePath),
+    title: basename(filePath) || filePath
+  }
 }
 
 /** Use embedded browser tabs locally; remote documents require this desktop’s granted orca-preview scheme because client guests refuse file: and local file URLs would read the wrong machine. */
@@ -204,26 +206,19 @@ export function openFileInBrowserTab(
     return plan
   }
   if (params.linkContext) {
-    const outcome = openPlannedFileBrowserLink(
-      state,
-      params,
-      plan,
-      params.linkContext,
-      (current) => {
-        const currentPlan = getWorkspaceFilePreviewPlan(
-          current,
-          params.worktreeId,
-          params.filePath,
-          params.clientLocal
-        )
-        return (
-          currentPlan.status === plan.status &&
-          (currentPlan.status !== 'browser-tab' ||
-            (plan.status === 'browser-tab' && currentPlan.url === plan.url))
-        )
-      }
-    )
-    params.onLinkOutcome?.(outcome)
+    void openPlannedFileBrowserLink(state, params, plan, params.linkContext, (current) => {
+      const currentPlan = getWorkspaceFilePreviewPlan(
+        current,
+        params.worktreeId,
+        params.filePath,
+        params.clientLocal
+      )
+      return (
+        currentPlan.status === plan.status &&
+        (currentPlan.status !== 'browser-tab' ||
+          (plan.status === 'browser-tab' && currentPlan.url === plan.url))
+      )
+    }).then((outcome) => params.onLinkOutcome?.(outcome))
     return plan
   }
   if (plan.status === 'doc-preview') {
@@ -238,74 +233,6 @@ export function openFileInBrowserTab(
     ...(params.clientLocal ? { browserRuntimeEnvironmentId: null } : {})
   })
   return plan
-}
-
-/** Find documents by each page’s docLocation; mixed workspace mirrors can be null while an inactive document page exists. */
-function findWorkspaceShowingDoc(
-  state: AppState,
-  docLocation: BrowserPageDocLocation
-): { workspaceId: string; pageId: string } | null {
-  for (const tab of state.browserTabsByWorktree[docLocation.worktreeId] ?? []) {
-    const page = (state.browserPagesByWorkspace[tab.id] ?? []).find((candidate) =>
-      browserPageDocLocationsEqual(candidate.docLocation ?? null, docLocation)
-    )
-    if (page) {
-      return { workspaceId: tab.id, pageId: page.id }
-    }
-  }
-  return null
-}
-
-/** Address-bar document opens reuse an existing tab/grant before converting the current page. */
-export function convertBrowserPageToWorkspaceDoc(
-  pageId: string,
-  docLocation: BrowserPageDocLocation,
-  options?: { leg?: BrowserPageConversionLeg }
-): 'activated-existing' | 'opened-in-owning-worktree' | 'converted' | 'failed' {
-  const webRefusal = webClientDocPreviewRefusal()
-  if (webRefusal) {
-    toast.error(webRefusal.message)
-    return 'failed'
-  }
-  const state = useAppStore.getState()
-  // History must restore this tab in place; reusing another tab leaves conversion provenance here and can loop forever.
-  const isHistoryLeg = options?.leg !== undefined
-  const existing = isHistoryLeg ? null : findWorkspaceShowingDoc(state, docLocation)
-  if (existing) {
-    // Switch worktrees before scoped activation or cross-worktree reuse would remain out of sight.
-    if (state.activeWorktreeId !== docLocation.worktreeId) {
-      selectWorkspaceSurface(state, docLocation.worktreeId)
-    }
-    if (
-      !activateBrowserWorkspaceTab({
-        worktreeId: docLocation.worktreeId,
-        workspaceId: existing.workspaceId
-      })
-    ) {
-      state.setActiveBrowserTab(existing.workspaceId)
-    }
-    state.setActiveBrowserPage(existing.workspaceId, existing.pageId)
-    return 'activated-existing'
-  }
-  // A converted page retains its workspace; open cross-worktree documents in their owner so guest focus and links work.
-  const owningPage = findPage(state.browserPagesByWorkspace, pageId)
-  if (!isHistoryLeg && owningPage && owningPage.worktreeId !== docLocation.worktreeId) {
-    if (state.activeWorktreeId !== docLocation.worktreeId) {
-      selectWorkspaceSurface(state, docLocation.worktreeId)
-    }
-    const plan = openFileInBrowserTab({
-      filePath: docLocation.filePath,
-      worktreeId: docLocation.worktreeId
-    })
-    if (plan.status === 'unsupported') {
-      toast.error(plan.message)
-      return 'failed'
-    }
-    return 'opened-in-owning-worktree'
-  }
-  return state.convertBrowserPage(pageId, { kind: 'workspace-doc', docLocation }, options)
-    ? 'converted'
-    : 'failed'
 }
 
 export function canPreviewLanguage(language: string): language is PreviewableLanguage {

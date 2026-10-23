@@ -67,7 +67,7 @@ describe('handleOscLink', () => {
     )
     expect(openFilePathMock).not.toHaveBeenCalled()
     // The browser is the surface; activation must not seed a shell into an emptied workspace.
-    expect(activateAndRevealWorktree).toHaveBeenCalledWith('wt-1', {
+    expect(activateAndRevealWorkspace).toHaveBeenCalledWith('wt-1', {
       providesInitialSurface: true
     })
   })
