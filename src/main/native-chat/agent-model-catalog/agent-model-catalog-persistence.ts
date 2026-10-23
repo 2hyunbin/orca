@@ -1,4 +1,4 @@
-import { createAgentModelCatalogDatabase } from './agent-model-catalog-database'
+import { createAgentModelCatalogJson } from './agent-model-catalog-json'
 import type {
   AgentSessionModelOption,
   AgentSessionOptionChoice
@@ -162,19 +162,14 @@ function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   }
 }
 
-/** The adapter owns a private connection only for each sequential load or drain pass. */
+/** One paced drain publishes complete generations of the retained source entries. */
 export function createAgentModelCatalogFilePersistence(
   directory: string
 ): AgentModelCatalogPersistence {
-  const database = createAgentModelCatalogDatabase(
-    directory,
-    parseEntry,
-    persistedEntry,
-    SCHEMA_VERSION
-  )
+  const file = createAgentModelCatalogJson(directory, parseEntry, persistedEntry, SCHEMA_VERSION)
   let entries: () => Iterable<AgentModelCatalogEntry> = () => []
   let hydrate = (_rows: AgentModelCatalogEntry[]): void => {}
-  let acknowledged = new Map<string, AgentModelCatalogEntry>()
+  let acknowledged: AgentModelCatalogEntry[] = []
   let ready = false
   let initializing: Promise<void> | null = null
   let accepted = 0
@@ -190,12 +185,10 @@ export function createAgentModelCatalogFilePersistence(
     if (ready) {
       return Promise.resolve()
     }
-    initializing ??= database
+    initializing ??= file
       .read()
       .then((rows) => {
-        acknowledged = database.isCommitted()
-          ? new Map(rows.map((row) => [row.fingerprint, row]))
-          : new Map()
+        acknowledged = rows
         hydrate(rows)
         ready = true
       })
@@ -230,8 +223,8 @@ export function createAgentModelCatalogFilePersistence(
           due = 0
           const revision = accepted
           const rows = [...entries()]
-          await database.write(rows, acknowledged)
-          acknowledged = new Map(rows.map((row) => [row.fingerprint, row]))
+          await file.write(rows)
+          acknowledged = rows
           durable = revision
           if (!unchanged(rows) && accepted === revision) {
             accepted++
@@ -256,10 +249,7 @@ export function createAgentModelCatalogFilePersistence(
       clearTimeout(timer)
       timer = null
     }
-    if (
-      accepted === durable &&
-      (!ready || !database.isCommitted() || !unchanged([...acknowledged.values()]))
-    ) {
+    if (accepted === durable && (!ready || !unchanged(acknowledged))) {
       accepted++
     }
     if (accepted === durable) {
@@ -279,7 +269,7 @@ export function createAgentModelCatalogFilePersistence(
         await writing
       }
       try {
-        return await database.read()
+        return await file.read()
       } catch (error) {
         diagnose(error)
         return []

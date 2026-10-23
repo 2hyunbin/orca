@@ -105,7 +105,6 @@ export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
   'src/main/ai-vault/session-parse-cache-database.ts': 'ai-vault-parse-cache',
   'src/main/ai-vault/session-scope-cwds-table.ts': 'ai-vault-parse-cache',
   'src/main/browser/browser-cookie-staged-import.ts': 'browser-cookie-import',
-  'src/main/native-chat/agent-model-catalog/agent-model-catalog-database.ts': 'agent-model-catalog',
   'src/main/native-chat/agent-session-attachments/agent-session-attachment-claims.ts':
     'agent-session-journal',
   'src/main/native-chat/agent-session-journal/command-receipt-schema.ts': 'agent-session-journal',
@@ -140,11 +139,6 @@ const tables = (
 /** Tables by `<database>.<table>`. Migration copies (`*_new`, `*_v35`) sit with what they rebuild. */
 export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> =
   Object.fromEntries([
-    ...tables(
-      'agent-model-catalog',
-      ['catalog', 'catalog_state'],
-      notApplicableDisposition(62, 'Execution host retains catalog unchanged across project moves.')
-    ),
     ...tables(
       'agent-session-journal',
       [
