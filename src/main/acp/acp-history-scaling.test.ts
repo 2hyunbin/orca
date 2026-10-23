@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import type { AgentJournalRenderItem } from '../../shared/agent-session-journal-types'
 import {
   agentJournalItemKey,
   agentJournalSubmissionKey
@@ -278,7 +279,12 @@ async function measureCatchUp(
 }
 
 it('bounds actual first/reopened search and repeated source activation at 20 and 200', async () => {
-  const populations = []
+  const populations: {
+    n: number
+    k: number
+    first: Awaited<ReturnType<typeof measureCatchUp>>
+    unchanged: Awaited<ReturnType<typeof measureCatchUp>>
+  }[] = []
   for (const n of [20, 200]) {
     for (const k of [0, 2 * n]) {
       const rig = await openProviderTimelineRig()
@@ -471,7 +477,7 @@ it('keeps Grok timestamp adoption and never enumerates its unread adopted maximu
   const grok: AcpHistoryScope = { ...scope, identity: 'prompt-id', dialect: GROK_ACP_DIALECT }
   for (const n of [20, 200]) {
     const items = new Map(
-      Array.from({ length: n }, (_, i) => {
+      Array.from({ length: n }, (_, i): [string, AgentJournalRenderItem] => {
         const itemId = agentJournalItemKey({
           provider: 'legacy',
           agent: AGENT,
@@ -485,9 +491,9 @@ it('keeps Grok timestamp adoption and never enumerates its unread adopted maximu
             sequence: i + 1,
             revision: 1,
             observedAt: 0,
-            body: { kind: 'message' as const, role: 'assistant' as const, blocks: [] }
+            body: { kind: 'message', role: 'assistant', blocks: [] }
           }
-        ] as const
+        ]
       })
     )
     const frames = Array.from({ length: n }, (_, i) => [
