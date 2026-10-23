@@ -54,18 +54,20 @@ export function foldStructuredAgentSubagentRoster(
       }
     }
   }
-  for (const item of items) {
-    const named = rosterAgentIds(item)
-    if (named === null) {
-      continue
-    }
-    for (const [agentId, held] of draft.next ?? roster) {
-      if (
-        held.rosterItemId === item.itemId &&
-        item.revision > held.rosterRevision &&
-        !named.has(agentId)
-      ) {
-        writable().delete(agentId)
+  if (roster.size > 0) {
+    for (const item of items) {
+      const named = rosterAgentIds(item)
+      if (named === null) {
+        continue
+      }
+      for (const [agentId, held] of draft.next ?? roster) {
+        if (
+          held.rosterItemId === item.itemId &&
+          item.revision > held.rosterRevision &&
+          !named.has(agentId)
+        ) {
+          writable().delete(agentId)
+        }
       }
     }
   }
