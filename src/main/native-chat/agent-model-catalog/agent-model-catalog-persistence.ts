@@ -239,7 +239,6 @@ export function createAgentModelCatalogFilePersistence(
           }
         } while (flushing && durable !== accepted)
       } catch (error) {
-        acknowledged.clear()
         due = 0
         diagnose(error)
       } finally {

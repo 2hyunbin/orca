@@ -140,7 +140,7 @@ export function createAgentModelCatalogDatabase(
   }
   const write = async (
     rows: AgentModelCatalogEntry[],
-    acknowledged: ReadonlyMap<string, AgentModelCatalogEntry>
+    acknowledged: Map<string, AgentModelCatalogEntry>
   ): Promise<void> => {
     await loading
     retire()
@@ -162,28 +162,33 @@ export function createAgentModelCatalogDatabase(
       hardenSqliteDatabaseFiles(path)
       hardenSqliteDatabaseFiles(`${path}-journal`)
       const retained = new Set(rows.map((row) => row.fingerprint))
-      const priorOrder = [...acknowledged.keys()]
+      const positions = new Map(
+        Array.from(
+          connection.prepare('SELECT fingerprint,position FROM catalog').iterate(),
+          (row) => [row.fingerprint, row.position] as const
+        )
+      )
       for (let position = 0; position < rows.length; position++) {
         const entry = rows[position]!
-        if (!initialized || acknowledged.get(entry.fingerprint) !== entry) {
+        if (!positions.has(entry.fingerprint) || acknowledged.get(entry.fingerprint) !== entry) {
+          acknowledged.delete(entry.fingerprint)
           const payload = JSON.stringify(persistedEntry(entry))
           connection
             .prepare('INSERT OR REPLACE INTO catalog VALUES(?,?,?,?)')
             .run(entry.fingerprint, entry.agent, payload, position)
-        } else if (priorOrder[position] !== entry.fingerprint) {
+        } else if (positions.get(entry.fingerprint) !== position) {
           connection
             .prepare('UPDATE catalog SET position=? WHERE fingerprint=?')
             .run(position, entry.fingerprint)
         }
         await yieldToEventLoop()
       }
-      const identities = Array.from(connection.prepare('SELECT fingerprint FROM catalog').iterate())
-      for (const row of identities) {
-        if (typeof row.fingerprint !== 'string') {
+      for (const fingerprint of positions.keys()) {
+        if (typeof fingerprint !== 'string') {
           throw new Error('Invalid catalog identity')
         }
-        if (!retained.has(row.fingerprint)) {
-          connection.prepare('DELETE FROM catalog WHERE fingerprint=?').run(row.fingerprint)
+        if (!retained.has(fingerprint)) {
+          connection.prepare('DELETE FROM catalog WHERE fingerprint=?').run(fingerprint)
           await yieldToEventLoop()
         }
       }

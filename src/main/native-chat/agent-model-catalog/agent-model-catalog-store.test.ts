@@ -35,7 +35,9 @@ import {
 } from './agent-model-catalog-store'
 
 const sql = SyncDatabase.prototype
-
+const faults = 'row delete commit first rollback close busy'.split(' ')
+faults.push('uncertain', 'uncertain-first', 'uncertain-delete-revert', 'uncertain-revert')
+const transactions = [10, 100].flatMap((n) => faults.map((stage) => [n, stage] as const))
 function models(...ids: string[]): AgentSessionModelOption[] {
   return ids.map((id, index) => ({
     id,
@@ -535,61 +537,59 @@ describe('agent model catalog store', () => {
     expect(restored.get('fp-251')?.configured?.modelId).toBe('chosen')
     rmSync(directory, { recursive: true, force: true })
   })
-  it.each([10, 100])(
-    'keyed %i-report bursts defer encoding, yield, reconcile age/recency and join latest flush',
-    async (count) => {
-      const directory = mkdtempSync(join(tmpdir(), 'catalog-keyed-'))
-      let at = 1_000
-      const store = new AgentModelCatalogStore({ now: () => at })
-      const persistence = createAgentModelCatalogFilePersistence(directory)
-      await store.attachPersistence(persistence)
-      const run = vi.spyOn(NodeSqliteStatement.prototype, 'run')
-      const scans = vi.fn<Parameters<typeof persistence.save>[0]>()
-      const save = persistence.save
-      vi.spyOn(persistence, 'save').mockImplementation((source) => {
-        scans.mockImplementation(source)
-        save(scans)
-      })
-      for (let i = 0; i < count; i++) {
-        store.recordSuccess(`fp-${i}`, 'grok', success('model', 'chosen'), 'live')
-      }
-      expect(run).not.toHaveBeenCalled()
-      expect(scans).not.toHaveBeenCalled()
-      const first = store.flushPersistence()
-      expect(store.flushPersistence()).toBe(first)
-      await first
-      expect(run.mock.calls.filter((args) => args.length === 4)).toHaveLength(count)
-      expect(scans).toHaveBeenCalledTimes(2)
-      at++
-      store.get('fp-0')
-      store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
-      store.recordConfiguredDefault('fp-0', { modelId: 'chosen' })
-      let changed = false
-      run.mockRestore()
-      const nativeRun = NodeSqliteStatement.prototype.run
-      const sparse = vi.spyOn(NodeSqliteStatement.prototype, 'run')
-      sparse.mockImplementation(function (this: NodeSqliteStatement, ...args) {
-        const result = nativeRun.apply(this, args)
-        if (!changed && args.length === 4) {
-          changed = true
-          queueMicrotask(() => {
-            at++
-            store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
-            store.get('fp-0')
-          })
-        }
-        return result
-      })
-      await store.flushPersistence()
-      expect(sparse.mock.calls.filter((args) => args.length === 4)).toHaveLength(3)
-      sparse.mockRestore()
-      const loaded = await persistence.load()
-      expect(loaded.at(-1)?.fingerprint).toBe('fp-0')
-      expect(loaded.find((row) => row.fingerprint === 'fp-1')?.live?.at).toBe(at)
-      expect(loaded.at(-1)?.configured?.modelId).toBe('chosen')
-      rmSync(directory, { recursive: true, force: true })
+
+  it.each([10, 100])('keyed %i bursts retain latest source/order', async (count) => {
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-keyed-'))
+    let at = 1_000
+    const store = new AgentModelCatalogStore({ now: () => at })
+    const persistence = createAgentModelCatalogFilePersistence(directory)
+    await store.attachPersistence(persistence)
+    const run = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+    const scans = vi.fn<Parameters<typeof persistence.save>[0]>()
+    const save = persistence.save
+    vi.spyOn(persistence, 'save').mockImplementation((source) => {
+      scans.mockImplementation(source)
+      save(scans)
+    })
+    for (let i = 0; i < count; i++) {
+      store.recordSuccess(`fp-${i}`, 'grok', success('model', 'chosen'), 'live')
     }
-  )
+    expect(run).not.toHaveBeenCalled()
+    expect(scans).not.toHaveBeenCalled()
+    const first = store.flushPersistence()
+    expect(store.flushPersistence()).toBe(first)
+    await first
+    expect(run.mock.calls.filter((args) => args.length === 4)).toHaveLength(count)
+    expect(scans).toHaveBeenCalledTimes(2)
+    at++
+    store.get('fp-0')
+    store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
+    store.recordConfiguredDefault('fp-0', { modelId: 'chosen' })
+    let changed = false
+    run.mockRestore()
+    const nativeRun = NodeSqliteStatement.prototype.run
+    const sparse = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+    sparse.mockImplementation(function (this: NodeSqliteStatement, ...args) {
+      const result = nativeRun.apply(this, args)
+      if (!changed && args.length === 4) {
+        changed = true
+        queueMicrotask(() => {
+          at++
+          store.recordSuccess('fp-1', 'grok', success('model', 'chosen'), 'live')
+          store.get('fp-0')
+        })
+      }
+      return result
+    })
+    await store.flushPersistence()
+    expect(sparse.mock.calls.filter((args) => args.length === 4)).toHaveLength(3)
+    sparse.mockRestore()
+    const loaded = await persistence.load()
+    expect(loaded.at(-1)?.fingerprint).toBe('fp-0')
+    expect(loaded.find((row) => row.fingerprint === 'fp-1')?.live?.at).toBe(at)
+    expect(loaded.at(-1)?.configured?.modelId).toBe('chosen')
+    rmSync(directory, { recursive: true, force: true })
+  })
   it('paces normal starts at 500ms and keeps changes during an active write owed', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'catalog-cadence-'))
     const store = new AgentModelCatalogStore()
@@ -599,10 +599,7 @@ describe('agent model catalog store', () => {
     const started = Date.now()
     const starts: number[] = []
     const exec = sql.exec
-    let firstCommitted!: () => void
-    const committed = new Promise<void>((resolve) => {
-      firstCommitted = resolve
-    })
+    const { promise: committed, resolve: firstCommitted } = Promise.withResolvers<void>()
     const writing = vi.spyOn(sql, 'exec').mockImplementation(function (this: SyncDatabase, sql) {
       if (sql.includes('BEGIN IMMEDIATE')) {
         starts.push(Date.now())
@@ -634,111 +631,116 @@ describe('agent model catalog store', () => {
       rmSync(directory, { recursive: true, force: true })
     }
   })
-  it.each(['row', 'delete', 'commit', 'uncertain', 'first', 'rollback', 'close'] as const)(
-    'rolls back %s failure and retries explicitly without mutation or legacy replay',
-    async (stage) => {
-      const directory = mkdtempSync(join(tmpdir(), 'catalog-transaction-'))
-      const legacy = join(directory, 'agent-model-catalog.json')
-      const seed = new AgentModelCatalogStore()
-      seed.recordSuccess('old', 'grok', success('old'), 'discovery')
-      writeFileSync(legacy, JSON.stringify({ version: 3, entries: [seed.get('old')] }))
-      if (stage === 'first') {
-        const child = spawnSync(process.execPath, [
-          '-e',
-          `const d=new(require('node:sqlite').DatabaseSync)(process.argv[1]);d.exec('BEGIN IMMEDIATE;CREATE TABLE unfinished(x);INSERT INTO unfinished VALUES(1)');process.exit(0)`,
-          join(directory, 'agent-model-catalog.db')
-        ])
-        expect(child.status).toBe(0)
-      }
-      const source = new Map([['old', seed.get('old')!]])
-      const persistence = createAgentModelCatalogFilePersistence(directory)
-      await persistence.attach!(
-        () => source.values(),
-        () => {}
-      )
-      if (stage !== 'first' && stage !== 'uncertain') {
-        await persistence.flush()
-      }
-      const before = await persistence.load()
-      source.clear()
-      seed.recordSuccess('new', 'grok', success('new'), 'live')
-      source.set('new', seed.get('new')!)
-      persistence.save(() => source.values())
-      const exec = sql.exec
-      const run = NodeSqliteStatement.prototype.run
-      let failed = false
-      let retirementFailed = false
-      const close = sql.close
-      const closing = vi.spyOn(sql, 'close').mockImplementation(function (this: SyncDatabase) {
-        if (stage === 'close' && failed && !retirementFailed) {
-          retirementFailed = true
-          throw new Error('close')
-        }
-        return close.call(this)
-      })
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const fault = vi.spyOn(sql, 'exec').mockImplementation(function (this: SyncDatabase, sql) {
-        if (stage === 'rollback' && sql === 'ROLLBACK' && !retirementFailed) {
-          retirementFailed = true
-          throw new Error('rollback')
-        }
-        if (
-          !failed &&
-          (stage === 'commit' || stage === 'uncertain' || stage === 'first') &&
-          sql === 'COMMIT'
-        ) {
-          failed = true
-          if (stage === 'uncertain') {
-            exec.call(this, sql)
-          }
-          throw new Error(stage)
-        }
-        return exec.call(this, sql)
-      })
-      const rowFault = vi.spyOn(NodeSqliteStatement.prototype, 'run')
-      rowFault.mockImplementation(function (this: NodeSqliteStatement, ...args) {
-        if (
-          !failed &&
-          ((['row', 'rollback', 'close'].includes(stage) && args.length === 4) ||
-            (stage === 'delete' && args.length === 1))
-        ) {
-          failed = true
-          throw new Error(stage)
-        }
-        return run.apply(this, args)
-      })
-      await persistence.flush()
-      expect(failed).toBe(true)
-      expect(warn).toHaveBeenCalledTimes(1)
-      expect((await persistence.load()).map((row) => row.fingerprint)).toEqual(
-        stage === 'uncertain' ? ['new'] : before.map((row) => row.fingerprint)
-      )
-      if (stage === 'close') {
-        expect(closing.mock.contexts[0]).toBe(closing.mock.contexts[1])
-      }
-      if (stage === 'rollback') {
-        const contexts = fault.mock.contexts.filter(
-          (_, i) => fault.mock.calls[i]![0] === 'ROLLBACK'
-        )
-        expect(contexts).toHaveLength(2)
-        expect(contexts[0]).toBe(contexts[1])
-      }
-      const attempts = fault.mock.calls.length
-      await new Promise((resolve) => setTimeout(resolve, 550))
-      expect(fault).toHaveBeenCalledTimes(attempts)
-      rowFault.mockRestore()
-      fault.mockRestore()
-      closing.mockRestore()
-      warn.mockRestore()
-      await persistence.flush()
-      source.clear()
-      persistence.save(() => source.values())
-      await persistence.flush()
-      expect(await createAgentModelCatalogFilePersistence(directory).load()).toEqual([])
-      expect(readFileSync(legacy, 'utf8')).toContain('old')
-      rmSync(directory, { recursive: true, force: true })
+  it.each(transactions)('atomic %i/%s sparse retry', async (count, stage) => {
+    vi.restoreAllMocks()
+    const directory = mkdtempSync(join(tmpdir(), 'catalog-transaction-'))
+    const legacy = join(directory, 'agent-model-catalog.json')
+    const seed = new AgentModelCatalogStore()
+    const retained = Array.from({ length: count - 1 }, (_, i) =>
+      seed.recordSuccess(`kept-${i}`, 'grok', success('kept'), 'discovery')!
+    )
+    const old = seed.recordSuccess('old', 'grok', success('old'), 'discovery')!
+    writeFileSync(legacy, JSON.stringify({ version: 3, entries: [...retained, seed.get('old')] }))
+    if (stage === 'first') {
+      const child = spawnSync(process.execPath, [
+        '-e',
+        `const d=new(require('node:sqlite').DatabaseSync)(process.argv[1]);d.exec('BEGIN IMMEDIATE;CREATE TABLE unfinished(x);INSERT INTO unfinished VALUES(1)');process.exit(0)`,
+        join(directory, 'agent-model-catalog.db')
+      ])
+      expect(child.status).toBe(0)
     }
-  )
+    let source = new Map([...retained, seed.get('old')!].map((e) => [e.fingerprint, e]))
+    const persistence = createAgentModelCatalogFilePersistence(directory)
+    await persistence.attach!(() => source.values(), vi.fn())
+    if (!stage.endsWith('first')) {
+      await persistence.flush()
+    }
+    const before = await persistence.load()
+    seed.recordConfiguredDefault('old', { modelId: 'old', effort: 'high' })
+    source.set('old', seed.get('old')!)
+    if (stage.includes('delete')) {
+      source.delete('old')
+      source.set('new', seed.recordSuccess('new', 'grok', success('new'), 'live')!)
+    }
+    source.delete(retained[0]!.fingerprint)
+    source.set(retained[0]!.fingerprint, retained[0]!)
+    const attempted = [...source.values()]
+    persistence.save(() => source.values())
+    const exec = sql.exec
+    const run = NodeSqliteStatement.prototype.run
+    let failed = false
+    let retirementFailed = false
+    const closing = vi.spyOn(sql, 'close')
+    if (stage === 'close') {
+      closing.mockImplementationOnce(() => {
+        throw new Error('close')
+      })
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const fault = vi.spyOn(sql, 'exec').mockImplementation(function (this: SyncDatabase, sql) {
+      if (stage === 'rollback' && sql === 'ROLLBACK' && !retirementFailed) {
+        retirementFailed = true
+        throw new Error('rollback')
+      }
+      if (
+        !failed &&
+        (sql === 'COMMIT' || (stage === 'busy' && sql.includes('BEGIN IMMEDIATE'))) &&
+        !['row', 'delete', 'rollback', 'close'].includes(stage)
+      ) {
+        failed = true
+        if (stage.startsWith('uncertain')) {
+          exec.call(this, sql)
+        }
+        throw new Error(stage)
+      }
+      return exec.call(this, sql)
+    })
+    const rowFault = vi.spyOn(NodeSqliteStatement.prototype, 'run')
+    rowFault.mockImplementation(function (this: NodeSqliteStatement, ...args) {
+      if (args.length === 4 && args[0] === (stage === 'uncertain-delete-revert' ? 'new' : 'old')) {
+        queueMicrotask(() => {
+          source = new Map(retained.map((e) => [e.fingerprint, e]))
+          source.set('old', stage.endsWith('revert') ? old : seed.get('old')!)
+        })
+      }
+      if (
+        !failed &&
+        ((['row', 'rollback', 'close'].includes(stage) && args.length === 4) ||
+          (stage === 'delete' && args.length === 1))
+      ) {
+        failed = true
+        throw new Error(stage)
+      }
+      return run.apply(this, args)
+    })
+    await persistence.flush()
+    expect([failed, warn.mock.calls.length]).toEqual([true, 1])
+    expect(await persistence.load()).toEqual(stage.startsWith('uncertain') ? attempted : before)
+    if (stage === 'close') {
+      expect(closing.mock.contexts[0]).toBe(closing.mock.contexts[1])
+    }
+    if (stage === 'rollback') {
+      const contexts = fault.mock.contexts.filter((_, i) => fault.mock.calls[i]![0] === 'ROLLBACK')
+      expect(contexts).toHaveLength(2)
+      expect(contexts[0]).toBe(contexts[1])
+    }
+    const attempts = fault.mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 550))
+    expect(fault).toHaveBeenCalledTimes(attempts)
+    rowFault.mockClear()
+    await persistence.flush()
+    expect(rowFault.mock.calls.filter((args) => args.length === 4)).toHaveLength(
+      stage.endsWith('first') ? count : 1
+    )
+    expect(await persistence.load()).toEqual([...source.values()])
+    vi.restoreAllMocks()
+    source.clear()
+    persistence.save(() => source.values())
+    await persistence.flush()
+    expect(await createAgentModelCatalogFilePersistence(directory).load()).toEqual([])
+    expect(readFileSync(legacy, 'utf8')).toContain('old')
+    rmSync(directory, { recursive: true, force: true })
+  })
   it.each([
     'PRAGMA user_version=99',
     'CREATE TABLE foreign_data(x)',
