@@ -33,6 +33,7 @@ import type { Store } from '../../persistence'
 import { compareKeys } from '../migrating-orcad-catalog/orcad-source-key-order'
 import { wslUncPathToLinux } from '../../../shared/wsl-paths'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
+import { withoutWindowsShellChoices } from './wsl-move-windows-shell-choices'
 
 export type WslMoveManifestExportRequest = {
   migrationId: string
@@ -151,7 +152,12 @@ export function exportWslMoveManifest(
       )
     }
   }
-  const dormantState = inspection.payload
+  const dormantState = inspection.payload.workspaceSession
+    ? {
+        ...inspection.payload,
+        workspaceSession: withoutWindowsShellChoices(inspection.payload.workspaceSession)
+      }
+    : inspection.payload
   const rewriter = createUncToLinuxPathRewriter(request.distro)
   const payload = rewriteOrcadMigrationPayloadPaths(
     { ...catalog, ...(hasDormantState(dormantState) ? { dormantState } : {}) },
@@ -283,12 +289,7 @@ function differingPaths(left: unknown, right: unknown, path = '$', found: string
     // Array indexes are folded so one dropped field names its shape, not every row.
     const step = Array.isArray(left) ? `${path}[]` : `${path}.${key}`
     const before = found.length
-    differingPaths(
-      (left as Record<string, unknown>)[key],
-      (right as Record<string, unknown>)[key],
-      step,
-      found
-    )
+    differingPaths(Reflect.get(left, key), Reflect.get(right, key), step, found)
     if (Array.isArray(left) && found.length > before) {
       return found
     }

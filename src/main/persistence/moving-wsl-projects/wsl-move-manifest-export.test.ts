@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -411,6 +411,24 @@ describe('exportWslMoveManifest', () => {
     expect(() =>
       assertOrcadMigrationManifestDigest(JSON.parse(JSON.stringify(manifest)))
     ).not.toThrow()
+  })
+
+  it("drops a tab's Windows shell choice on purpose, never through the parser", () => {
+    // awin verify-3: every preview and move warned that the parser dropped shellOverride.
+    const state = sourceState()
+    const tab = state.workspaceSession.tabsByWorktree[WORKTREE]![0]!
+    state.workspaceSession.tabsByWorktree[WORKTREE] = [
+      { ...tab, shellOverride: 'wsl.exe', forceHostRuntime: true }
+    ]
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
+    const moved = Object.values(
+      manifest.payload.dormantState?.workspaceSession?.tabsByWorktree ?? {}
+    )
+    expect(moved.flat()).toHaveLength(1)
+    expect(moved.flat()[0]).not.toHaveProperty('shellOverride')
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('refuses to sign a scope naming a project that is no longer here', () => {

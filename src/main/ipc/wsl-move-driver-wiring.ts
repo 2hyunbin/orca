@@ -157,12 +157,12 @@ export function createWslMoveDriverDeps(
       }
     },
     snapshots: store,
-    sleptScrollback: (panes, distro, migrationId, workspaceIds) =>
+    sleptScrollback: (panes, distro, migrationId, workspaceIds, reported) =>
       readWslMoveSleptScrollbackFromHistory(
         new HistoryReader(getDaemonHistoryDir()),
         withSleptSessionPanes(
           panes,
-          listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds)
+          listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds, reported)
         ),
         distro,
         wslMoveSleptSpoolRoot(userDataPath, migrationId)

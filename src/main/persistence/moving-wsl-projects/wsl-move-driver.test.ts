@@ -198,12 +198,17 @@ describe('moveProjectsToWslHost', () => {
 
   it("refuses rather than move a slept pane whose history it can't fully read", async () => {
     const dispose = vi.fn()
-    world.deps.sleptScrollback = async () => ({
-      buffers: new Map(),
-      problems: ['saved terminal history Orca could not fully read for tab t1'],
-      dispose
-    })
-    const result = await moveProjectsToWslHost(world.deps, request)
+    const sleptPanes = [{ paneKey: 't1:leaf', sessionId: 'w@@slept' }]
+    let reported: unknown
+    world.deps.sleptScrollback = async (_panes, _distro, _id, _workspaces, fromWindow) => {
+      reported = fromWindow
+      return {
+        buffers: new Map(),
+        problems: ['saved terminal history Orca could not fully read for tab t1'],
+        dispose
+      }
+    }
+    const result = await moveProjectsToWslHost(world.deps, { ...request, sleptPanes })
 
     expect(result).toMatchObject({
       outcome: 'refused',
@@ -212,6 +217,8 @@ describe('moveProjectsToWslHost', () => {
     })
     expect(journal()).toEqual([])
     expect(dispose).toHaveBeenCalledTimes(1)
+    // The window's bindings of panes slept earlier reach the reader.
+    expect(reported).toEqual(sleptPanes)
   })
 
   it('refuses a second move of the same distro while one runs', async () => {

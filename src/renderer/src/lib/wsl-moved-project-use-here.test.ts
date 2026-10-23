@@ -7,6 +7,10 @@ import type {
 
 const toastError = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: toastError } }))
+const movedProjects = vi.hoisted((): { kind: string; id: string; displayName: string }[] => [])
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => ({ wslMovedProjects: movedProjects }) }
+}))
 
 const { bringWslMovedProjectBack } = await import('./wsl-moved-project-use-here')
 
@@ -62,6 +66,24 @@ describe('bringWslMovedProjectBack', () => {
     stubApi({ released: false, reason: 'superseded' })
     await bringWslMovedProjectBack(project, async () => true)
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('A later move'))
+  })
+
+  it('names the newer move to bring back first', async () => {
+    // awin verify-3: undoing an older move said nothing about which newer one blocked it.
+    movedProjects.splice(0, movedProjects.length, {
+      kind: 'repo',
+      id: 'repo-9',
+      displayName: 'Repo 9'
+    })
+    stubApi({
+      released: false,
+      reason: 'superseded',
+      newerMove: { repoIds: ['repo-9'], folderWorkspaceIds: [] }
+    })
+    await bringWslMovedProjectBack(project, async () => true)
+    expect(toastError).toHaveBeenCalledWith(
+      'Repo 9 moved to the Ubuntu host after this project. Use those on this computer again first, then this project.'
+    )
   })
 
   it('asks to wait while a move of the distro still runs', async () => {

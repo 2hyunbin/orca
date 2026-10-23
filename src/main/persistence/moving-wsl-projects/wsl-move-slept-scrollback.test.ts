@@ -208,4 +208,42 @@ describe('panes slept before the move', () => {
       { paneKey: PANE_KEY, sessionId: 'pty-live' }
     ])
   })
+
+  it("takes the window's binding of a pane main retired on Sleep, only for a moved workspace", () => {
+    // awin verify-3: with no reload between Sleep and Move, main's layout had no binding left.
+    const tab = {
+      id: TAB,
+      ptyId: null,
+      worktreeId: 'app::/w',
+      title: 't',
+      customTitle: null,
+      color: null,
+      sortOrder: 0,
+      createdAt: 1
+    }
+    const session: WorkspaceSessionState = {
+      ...sleptSession(),
+      tabsByWorktree: { 'app::/w': [tab] }
+    }
+    const minted = 'app::/w@@0b4c'
+    expect(listWslMoveSleptSessionPanes(session, ['app::/w'])).toEqual([])
+    expect(
+      listWslMoveSleptSessionPanes(session, ['app::/w'], [{ paneKey: PANE_KEY, sessionId: minted }])
+    ).toEqual([{ paneKey: PANE_KEY, sessionId: minted }])
+    for (const reported of [
+      { paneKey: PANE_KEY, sessionId: 'other::/w@@0b4c' },
+      { paneKey: PANE_KEY, sessionId: '../../etc' },
+      { paneKey: `${TAB}:22222222-2222-4222-8222-222222222222`, sessionId: minted },
+      { paneKey: `other-tab:${LEAF}`, sessionId: minted }
+    ]) {
+      expect(listWslMoveSleptSessionPanes(session, ['app::/w'], [reported])).toEqual([])
+    }
+    expect(
+      listWslMoveSleptSessionPanes(
+        session,
+        ['other::/w'],
+        [{ paneKey: PANE_KEY, sessionId: minted }]
+      )
+    ).toEqual([])
+  })
 })

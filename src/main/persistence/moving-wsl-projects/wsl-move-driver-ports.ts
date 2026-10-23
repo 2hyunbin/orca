@@ -94,7 +94,9 @@ export type WslMoveDriverDeps = {
     distro: string,
     migrationId: string,
     /** The scope's workspaces, for panes slept before the move (no live terminal to list). */
-    workspaceIds: readonly string[]
+    workspaceIds: readonly string[],
+    /** The window's bindings of slept panes, which main no longer holds; checked before use. */
+    reported: readonly WslMoveRestoreHintPane[]
   ) => Promise<WslMoveSleptScrollback>
   shellHistory: (
     distro: string,

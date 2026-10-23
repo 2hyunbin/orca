@@ -17,6 +17,8 @@ import { join } from 'node:path'
 import { ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES } from '../../../shared/orcad-migration/orcad-migration-scrollback'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { parsePtySessionId } from '../../../shared/pty-session-id-format'
+import { collectLeafIds } from '../../../shared/terminal-pane-layout-tree'
 import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
 import type { OrcadMigrationSnapshotSource } from '../../ssh/orcad-migration-snapshot-coordinator'
 import {
@@ -49,18 +51,21 @@ export async function readSleptScrollback(
   panes: readonly WslMoveRestoreHintPane[],
   distro: string,
   migrationId: string,
-  workspaceIds: readonly string[]
+  workspaceIds: readonly string[],
+  reported: readonly WslMoveRestoreHintPane[] = []
 ): Promise<WslMoveSleptScrollback> {
   if (!deps.sleptScrollback) {
     return emptyWslMoveSleptScrollback()
   }
-  return deps.sleptScrollback(panes, distro, migrationId, workspaceIds).catch((error: unknown) => {
-    console.warn('[wsl-move] Slept terminal history unreadable:', error)
-    return {
-      ...emptyWslMoveSleptScrollback(),
-      problems: ['saved terminal history Orca could not read']
-    }
-  })
+  return deps
+    .sleptScrollback(panes, distro, migrationId, workspaceIds, reported)
+    .catch((error: unknown) => {
+      console.warn('[wsl-move] Slept terminal history unreadable:', error)
+      return {
+        ...emptyWslMoveSleptScrollback(),
+        problems: ['saved terminal history Orca could not read']
+      }
+    })
 }
 
 /** For the export: a slept pane's buffer, read from its spool file only while it is hashed. */
@@ -193,17 +198,21 @@ export function withSleptSnapshots(
 }
 
 /**
- * Panes the user slept before the move: they have no live terminal for the move to list, but the
- * layout still names the session whose checkpoint holds their history. The awin run moved them
- * empty because only live panes were read.
+ * Panes the user slept before the move: they have no live terminal for the move to list, but a
+ * layout still names the session whose checkpoint holds their history. Main retires a slept pane's
+ * binding while the window keeps it for wake, so the window's report counts too; it is trusted
+ * only for a leaf of a moved workspace's tab and a session id minted for that workspace.
  */
 export function listWslMoveSleptSessionPanes(
   session: WorkspaceSessionState,
-  workspaceIds: readonly string[]
+  workspaceIds: readonly string[],
+  reported: readonly WslMoveRestoreHintPane[] = []
 ): WslMoveRestoreHintPane[] {
   const panes: WslMoveRestoreHintPane[] = []
+  const workspaceByTabId = new Map<string, string>()
   for (const workspaceId of workspaceIds) {
     for (const tab of session.tabsByWorktree[workspaceId] ?? []) {
+      workspaceByTabId.set(tab.id, workspaceId)
       const bindings = session.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}
       for (const [leafId, sessionId] of Object.entries(bindings)) {
         if (isTerminalLeafId(leafId) && sessionId) {
@@ -212,14 +221,32 @@ export function listWslMoveSleptSessionPanes(
       }
     }
   }
-  return panes
+  for (const pane of reported) {
+    const key = parsePaneKey(pane.paneKey)
+    const workspaceId = key ? workspaceByTabId.get(key.tabId) : undefined
+    if (
+      key &&
+      workspaceId &&
+      collectLeafIds(session.terminalLayoutsByTabId[key.tabId]?.root).includes(key.leafId) &&
+      parsePtySessionId(pane.sessionId).worktreeId === workspaceId
+    ) {
+      panes.push({ paneKey: pane.paneKey, sessionId: pane.sessionId })
+    }
+  }
+  return withSleptSessionPanes([], panes)
 }
 
-/** Live panes first: their session id is the one that just checkpointed. */
+/** One pane per key, the first listed kept: live panes first, their session just checkpointed. */
 export function withSleptSessionPanes(
   live: readonly WslMoveRestoreHintPane[],
   slept: readonly WslMoveRestoreHintPane[]
 ): WslMoveRestoreHintPane[] {
-  const known = new Set(live.map((pane) => pane.paneKey))
-  return [...live, ...slept.filter((pane) => !known.has(pane.paneKey))]
+  const known = new Set<string>()
+  return [...live, ...slept].filter((pane) => {
+    if (known.has(pane.paneKey)) {
+      return false
+    }
+    known.add(pane.paneKey)
+    return true
+  })
 }
