@@ -75,7 +75,7 @@ internal object MobileWebShellSparePool {
 
   fun adopt(sessionId: String): MobileWebShellSpare? = slots.adopt(sessionId)?.page
 
-  fun wasIssued(sessionId: String): Boolean = slots.wasIssued(sessionId)
+  fun reserve(sessionId: String): Boolean = slots.reserve(sessionId)
 
   fun discard(hostKey: String?) = slots.discard(hostKey)
 

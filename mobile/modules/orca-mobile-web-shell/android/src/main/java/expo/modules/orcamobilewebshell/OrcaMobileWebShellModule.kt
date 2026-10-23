@@ -2,6 +2,8 @@ package expo.modules.orcamobilewebshell
 
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
+import android.os.Handler
+import android.os.Looper
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -28,7 +30,8 @@ class OrcaMobileWebShellModule : Module() {
 
     OnDestroy {
       appContext.reactContext?.applicationContext?.unregisterComponentCallbacks(memoryCallbacks)
-      MobileWebShellSparePool.discardAll()
+      // OnDestroy can run off the main thread, and the pool's WebViews must not.
+      Handler(Looper.getMainLooper()).post { MobileWebShellSparePool.discardAll() }
     }
 
     OnActivityEntersBackground {

@@ -684,7 +684,15 @@ import Foundation
       booted = true
       return FakePage()
     })
-    precondition(!booted && slots.wasIssued(sessionId: "s1") && !slots.wasIssued(sessionId: "s9"))
+    precondition(!booted && !slots.reserve(sessionId: "s1"))
+
+    // An id a view already loads is never parked.
+    precondition(slots.reserve(sessionId: "s9"))
+    precondition(!slots.park(hostKey: "host-a", directory: "/gen/1", sessionId: "s9") {
+      booted = true
+      return FakePage()
+    })
+    precondition(!booted)
 
     // Claimed: adopted once; an expiry after adoption does nothing, one before it destroys.
     slots = MobileWebShellSpareSlots<FakePage>()
@@ -699,18 +707,18 @@ import Foundation
     slots.expire(sessionId: "s2")
     precondition(abandoned.destroyed && slots.adopt(sessionId: "s2") == nil)
 
-    // Discarding a host leaves claimed spares; discarding everything takes them too.
+    // Discarding a host takes its claimed spare and leaves another host's; everything takes all.
     slots = MobileWebShellSpareSlots<FakePage>()
     let claimed = park(slots, "s1")
     _ = slots.take(hostKey: "host-a", directory: "/gen/1")
-    slots.discard(hostKey: "host-a")
-    slots.discard(hostKey: nil)
-    precondition(!claimed.destroyed)
     let parked = park(slots, "s2", host: "host-b")
     slots.discard(hostKey: "host-a")
-    precondition(!parked.destroyed)
+    precondition(claimed.destroyed && slots.adopt(sessionId: "s1") == nil && !parked.destroyed)
+    let otherClaim = park(slots, "s3")
+    _ = slots.take(hostKey: "host-a", directory: "/gen/1")
+    let lastParked = park(slots, "s4", host: "host-b")
     slots.discardAll()
-    precondition(claimed.destroyed && parked.destroyed)
+    precondition(otherClaim.destroyed && lastParked.destroyed)
   }
 
   static func main() {

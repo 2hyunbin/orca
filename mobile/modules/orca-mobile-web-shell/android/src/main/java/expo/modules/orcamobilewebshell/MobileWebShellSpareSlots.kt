@@ -18,8 +18,8 @@ internal class MobileWebShellSpareEntry<P : MobileWebShellSparePage>(
  * them. The same rules as the Swift copy, and pure, so a JVM test can hold them.
  *
  * A session id is loaded by one WebView, ever. `park` refuses an id it has seen, `take` moves the
- * spare out of the parked slot before the caller learns its id, and an issued id whose page is gone
- * stays in [wasIssued], so the view that names it can refuse to build a second page under it.
+ * spare out of the parked slot before the caller learns its id, and [reserve] refuses an issued id
+ * whose page is gone, so the view that names it does not build a second page under it.
  */
 internal class MobileWebShellSpareSlots<P : MobileWebShellSparePage> {
   private var parked: MobileWebShellSpareEntry<P>? = null
@@ -61,19 +61,18 @@ internal class MobileWebShellSpareSlots<P : MobileWebShellSparePage> {
     claimed.remove(sessionId)?.page?.destroy()
   }
 
-  fun wasIssued(sessionId: String): Boolean = sessionId in issued
+  /** Marks an id a view is about to load. False when it was issued before. */
+  fun reserve(sessionId: String): Boolean = issued.add(sessionId)
 
-  /** Null for every host. Claimed spares are left to the view about to adopt them. */
+  /** Null for every host. A view still to adopt a discarded claim finds its id dead and remounts. */
   fun discard(hostKey: String?) {
     if (hostKey == null || parked?.hostKey == hostKey) discardParked()
+    val gone = claimed.values.filter { hostKey == null || it.hostKey == hostKey }
+    gone.forEach { claimed.remove(it.sessionId)?.page?.destroy() }
   }
 
   /** Memory pressure, the app leaving the foreground, or the module going away. */
-  fun discardAll() {
-    discardParked()
-    claimed.values.forEach { it.page.destroy() }
-    claimed.clear()
-  }
+  fun discardAll() = discard(null)
 
   private fun discardParked() {
     parked?.page?.destroy()
