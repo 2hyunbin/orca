@@ -134,7 +134,7 @@ export function mapRestPullRequest(pr: RestPullRequest): PullRequestLookupData {
     ...(pr.mergeable_state !== undefined
       ? { mergeStateStatus: pr.mergeable_state?.toUpperCase() ?? null }
       : {}),
-    ...('auto_merge' in pr ? { autoMergeEnabled: isAutoMergeEnabled(pr.auto_merge) } : {}),
+    ...('auto_merge' in pr ? { autoMergeRequest: pr.auto_merge } : {}),
     baseRefName: pr.base?.ref,
     headRefName: pr.head?.ref,
     baseRefOid: pr.base?.sha,
