@@ -2,7 +2,9 @@ import {
   createContext,
   memo,
   useContext,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
@@ -62,6 +64,13 @@ function SortableQueuedMessages({
   reorder,
   renderCard
 }: Props & { reorder: QueuedMessageReorder }): React.JSX.Element {
+  const mounted = useRef(false)
+  useLayoutEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const sensors = useSensors(useSensor(PointerSensor, pointerOptions))
   const users = useShallow((input: QueuedMessageCard[]) =>
     input.filter((card) => !card.from && card.hold !== 'sending').map((card) => card.messageId)
@@ -82,7 +91,7 @@ function SortableQueuedMessages({
         onDragCancel={() => setDrag(null)}
         onDragEnd={({ active, over }) => {
           setDrag(null)
-          if (!over || active.id === over.id) {
+          if (!mounted.current || !over || active.id === over.id) {
             return
           }
           const from = users.indexOf(String(active.id))
