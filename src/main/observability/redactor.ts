@@ -107,7 +107,12 @@ export function redactString(input: string): string {
 
   // Rule 2 — provider-key fingerprints. Tag names (`anthropic-key`) are stable wire identifiers third-party NDJSON tools grep for.
   for (const { tag, re } of PROVIDER_PATTERNS) {
-    out = out.replace(re, `[redacted:${tag}]`)
+    if (
+      (tag !== 'jwt' || out.indexOf('.') !== out.lastIndexOf('.')) &&
+      (tag !== 'pem' || out.includes('-----END '))
+    ) {
+      out = out.replace(re, `[redacted:${tag}]`)
+    }
   }
 
   // Rule 3 — URL userinfo. After rule 2 so a key-shaped userinfo value gets the more specific redaction first.

@@ -37,6 +37,33 @@ const PROVIDER_KEY_CASES: { label: string; raw: string; tag: string }[] = [
 ]
 
 describe('redactor — provider-key fingerprints', () => {
+  it.each(['eyJABCDEFGHIJKLMN', 'eyJABCDEFGHIJKLMN.ABCDEFGHIJKLMN'])(
+    'redacts other secrets beside an incomplete JWT: %s',
+    (incomplete) => {
+      expect(redactString(`${incomplete}\n${SECRETS.github}`)).toBe(
+        `${incomplete}\n[redacted:github-token]`
+      )
+    }
+  )
+
+  it('redacts other secrets beside an unfinished PEM block', () => {
+    const unfinished = '-----BEGIN PRIVATE KEY-----\nincomplete body'
+    expect(
+      redactString(
+        `${unfinished}\n${SECRETS.github}\nhttps://user:pass@example.test/path\nFOO=value`
+      )
+    ).toBe(
+      `${unfinished}\n[redacted:github-token]\nhttps://[redacted]@example.test/path\nFOO=[redacted:env-value]`
+    )
+  })
+
+  it('redacts adjacent complete PEM blocks before an unfinished tail', () => {
+    const unfinished = '-----BEGIN CERTIFICATE-----\nincomplete body'
+    expect(redactString(`${SECRETS.pem}\n${SECRETS.pem}\n${unfinished}`)).toBe(
+      `[redacted:pem]\n[redacted:pem]\n${unfinished}`
+    )
+  })
+
   for (const { label, raw, tag } of PROVIDER_KEY_CASES) {
     describe(`${label}`, () => {
       it('redacts when the secret appears as an attribute value', () => {
