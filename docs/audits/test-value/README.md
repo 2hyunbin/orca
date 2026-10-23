@@ -22,12 +22,12 @@ Completion requires no unreviewed or stale test files, no unresolved support/scr
 
 ## Ownership
 
-| Area                                             | Reviewer                 | Next batch    |
-| ------------------------------------------------ | ------------------------ | ------------- |
-| `cloud/`                                         | `audit_cloud`            | `cloud-0002`  |
-| `config/`                                        | `audit_config`           | `config-0002` |
-| `mobile/`                                        | `audit_mobile`           | `mobile-0002` |
-| `src/`, `native/`, `tests/`, `.github/`, `docs/` | root; pending assignment | Pending       |
+| Area                                             | Reviewer       | Next batch                 |
+| ------------------------------------------------ | -------------- | -------------------------- |
+| `cloud/`                                         | `audit_cloud`  | `cloud-0003` (read-only)   |
+| `config/`                                        | `audit_config` | `config-0003` (read-only)  |
+| `mobile/`                                        | `audit_mobile` | `mobile-0003` (read-only)  |
+| `src/`, `native/`, `tests/`, `.github/`, `docs/` | root           | Continue after `root-0006` |
 
 Ownership is disjoint. Within an area, continue in tracked path order after the last batch; explicitly include nonstandard/inline cases and support candidates before closing the area.
 
@@ -37,6 +37,24 @@ Each `reviews/<area>-<batch>.jsonl` row records the original path/hash/commit, f
 
 Batch validation lives in `reviews/<area>-<batch>-validation.json`. Local log paths identify session evidence; recorded commands/results and regression descriptions survive outside that session. A production mutation is temporary, must fail the retained tests and must be restored before committing. Mutations are targeted evidence, not a substitute for reviewing every case.
 
-Initial batch: 105 files, 720 original declarations; 22 changed test files, 467 net lines removed. Validation: 256 mobile tests, 196 push tests with PostgreSQL, 180 with SQLite (16 intentional PostgreSQL-only skips), 11 desktop proof tests, and 113 config tests passed. Nine targeted mutations were caught. Production files were restored. PR/check/merge references will be added as batches land.
+## Batches
+
+[PR #32269](https://github.com/stablyai/orca/pull/32269) merged the first 105 reviewed files and 720 original declarations, removing 467 net test lines. Its full PR aggregate and all other checks passed; squash commit `bc99add2897d1e9a77da44630d11eaff5cf81249`.
+
+Further completed review records:
+
+| Batch         | Files | Original cases | Main decisions                                                                                                    |
+| ------------- | ----: | -------------: | ----------------------------------------------------------------------------------------------------------------- |
+| `root-0001`   |    14 |            101 | Repair observer reset/readiness; trim allocator and environment-only checks.                                      |
+| `root-0002`   |    20 |             87 | Exercise installed link callbacks; consolidate cache checks; remove a conditional no-op test.                     |
+| `root-0003`   |     6 |             40 | Classify Windows fixtures and standalone cases; retain native clipboard integration; trim exact traversal counts. |
+| `root-0004`   |    15 |            101 | Remove source-string and capability-only checks; observe pacing in actual mouse delivery.                         |
+| `root-0005`   |     4 |             32 | Retain real Windows argument, filesystem and delayed tree-termination boundaries.                                 |
+| `root-0006`   |     1 |             14 | Retain storage lease ownership, generation conflicts and clock-driven credential caching.                         |
+| `mobile-0002` |    50 |            283 | Consolidate repeated mounts and inventories; fix action routing and deferred SSH assertions.                      |
+| `config-0002` |    50 |            375 | Trim copied policies; fix vacuous assertions and nested Bash fixture isolation.                                   |
+| `cloud-0002`  |    50 |            449 | Use independent authorization inputs and durable phone state; observe scoped locks and clean migration fixtures.  |
+
+Validation commands, results and platform limits live in each batch's validation JSON. The macOS changes require the native Swift CI job; local Linux runs cannot establish that result. Standalone Windows cases are explicitly enumerated even when the static parser finds no declarations. Fixture/support classifications have no invented runnable cases. All remaining candidates stay pending, and broad discovery still requires final runner/entrypoint reconciliation.
 
 `docs/**` is ignored in this repository. Add audit artifacts explicitly with `git add -f`, and stage only completed batches.

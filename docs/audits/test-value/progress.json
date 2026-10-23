@@ -1,33 +1,33 @@
 {
-  "source_commit": "6d473f4bea1d190cb3649af97e04f1cdde170c5f",
+  "source_commit": "9c080ad6c3373d2620e77eb2470e95a22732cb2a",
   "scanned_source_files": 37059,
   "counts": {
-    "files": 16610,
-    "declarations": 119017,
-    "reviewed": 105,
+    "files": 16875,
+    "declarations": 118992,
+    "reviewed": 310,
     "stale": 0,
-    "unreviewed": 16505,
-    "removed": 0
+    "unreviewed": 16565,
+    "removed": 5
   },
-  "reviewed_original_declarations": 720,
+  "reviewed_original_declarations": 2202,
   "areas": {
     ".github": {
       "files": 2,
-      "reviewed": 0,
+      "reviewed": 1,
       "stale": 0,
-      "unreviewed": 2
+      "unreviewed": 1
     },
     "cloud": {
-      "files": 224,
-      "reviewed": 35,
+      "files": 227,
+      "reviewed": 85,
       "stale": 0,
-      "unreviewed": 189
+      "unreviewed": 142
     },
     "config": {
-      "files": 600,
-      "reviewed": 35,
+      "files": 607,
+      "reviewed": 85,
       "stale": 0,
-      "unreviewed": 565
+      "unreviewed": 522
     },
     "docs": {
       "files": 52,
@@ -36,52 +36,52 @@
       "unreviewed": 52
     },
     "mobile": {
-      "files": 1260,
-      "reviewed": 35,
+      "files": 1269,
+      "reviewed": 83,
       "stale": 0,
-      "unreviewed": 1225
+      "unreviewed": 1186
     },
     "native": {
-      "files": 19,
-      "reviewed": 0,
+      "files": 17,
+      "reviewed": 17,
       "stale": 0,
-      "unreviewed": 19
+      "unreviewed": 0
     },
     "src/cli": {
-      "files": 182,
+      "files": 184,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 182
+      "unreviewed": 184
     },
     "src/main": {
-      "files": 6471,
+      "files": 6613,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 6471
+      "unreviewed": 6613
     },
     "src/packages": {
-      "files": 14,
-      "reviewed": 0,
+      "files": 16,
+      "reviewed": 16,
       "stale": 0,
-      "unreviewed": 14
+      "unreviewed": 0
     },
     "src/preload": {
-      "files": 20,
-      "reviewed": 0,
+      "files": 19,
+      "reviewed": 19,
       "stale": 0,
-      "unreviewed": 20
+      "unreviewed": 0
     },
     "src/renderer": {
-      "files": 5329,
+      "files": 5399,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 5329
+      "unreviewed": 5399
     },
     "src/shared": {
-      "files": 1264,
-      "reviewed": 0,
+      "files": 1297,
+      "reviewed": 4,
       "stale": 0,
-      "unreviewed": 1264
+      "unreviewed": 1293
     },
     "src/wsl-guest": {
       "files": 45,
