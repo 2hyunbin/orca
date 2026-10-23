@@ -35,7 +35,7 @@
       "invariant": "A positively recognized occupied composer admits zero automated prompt or mailbox pointer bytes, irrespective of draft age or focus. Every automated paste and suffix fences the exact PTY object, incarnation, generation and monotonic competing-input revision. Admitted output sequence remains current through the synchronous initial handoff. Own-write revision capture is synchronous before settlement awaits. Delayed Enter must not submit a takeover; retry Enter additionally needs the unchanged owned prompt and no observed turn. Refusal before pointer text retains unread mail without immediate self-retry, while possible writes keep durable attempted phases and cannot be replayed as zero-write.",
       "oracle": "Drive attributed composer ANSI through the actual runtime and real emulator, independently verify the exposed draft, age it 60 seconds, then invoke automated prompt and actual mailbox delivery and require an empty write ledger plus intact draft and unread SQLite row. Inject same-millisecond input during beforeWrite, paint a draft during that await, take over after paste and during delayed remote settlement, and require no later Enter. Positive controls render the owned pointer and still submit once, preserve ordinary raw human writes and unknown-screen compatibility, and permit retry only for the unchanged own prompt without a turn. Existing generation, cancellation, permission, ambiguous settlement and restart suites remain part of this gate. Queue real draft output after admission resolves but before the actual write and require zero bytes. A provider snapshot ahead of local output remains admissible. Clear a blocked draft and drive a fresh idle event to verify pointer plus exactly one Enter with unread mail retained. Actual renderer/runtime input funnels fence takeover; a fresh durable RPC executor refuses same-key replay after partial paste.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/terminal-human-draft-admission.test.ts src/main/runtime/terminal-run-facts.test.ts src/main/runtime/agent-prompt-submission-runtime.test.ts src/main/runtime/agent-prompt-submission-runtime-hook-and-generation.test.ts src/main/runtime/orchestration/mailbox-pointer-stage.test.ts src/main/runtime/orchestration/mailbox-pointer-submit.test.ts src/main/runtime/orchestration-mailbox-delivery.test.ts src/main/runtime/orchestration-mailbox-notification-consistency.test.ts src/shared/terminal-composer-draft.test.ts src/main/daemon/terminal-cursor-line-context.test.ts src/main/runtime/agent-prompt-submission-windows-submit-delay.test.ts src/main/runtime/agent-prompt-permission-wait.test.ts src/main/runtime/agent-prompt-line-settle.test.ts src/main/runtime/rpc/methods/orchestration/worker/worker-start-prompt-contract.test.ts src/main/runtime/terminal-run-facts-input.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/terminal-human-draft-admission.test.ts src/main/runtime/terminal-run-facts.test.ts src/main/runtime/agent-prompt-submission-runtime.test.ts src/main/runtime/agent-prompt-submission-runtime-hook-and-generation.test.ts src/main/runtime/orchestration/mailbox-pointer-stage.test.ts src/main/runtime/orchestration/mailbox-pointer-submit.test.ts src/main/runtime/orchestration-mailbox-delivery.test.ts src/main/runtime/orchestration-mailbox-notification-consistency.test.ts src/shared/terminal-composer-draft.test.ts src/main/daemon/terminal-cursor-line-context.test.ts src/main/runtime/agent-prompt-submission-windows-submit-delay.test.ts src/main/runtime/agent-prompt-permission-wait.test.ts src/main/runtime/agent-prompt-line-settle.test.ts src/main/runtime/rpc/methods/orchestration/worker/worker-start-prompt-contract.test.ts src/main/runtime/terminal-run-facts-input.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/main/runtime/orchestration-mailbox-titles.test.ts src/main/runtime/orchestration-mailbox-routing.test.ts"
       ],
       "testFiles": [
         "src/main/runtime/terminal-human-draft-admission.test.ts",
@@ -54,7 +54,11 @@
         "src/main/runtime/rpc/methods/orchestration/worker/worker-start-prompt-contract.test.ts",
         "src/main/runtime/terminal-run-facts-input.test.ts",
         "src/main/ipc/pty/ipc/write-input-user-input.test.ts",
-        "src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts"
+        "src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts",
+        "src/main/runtime/orca-runtime.test.ts",
+        "src/main/runtime/terminal-send-stale-leaf-liveness.test.ts",
+        "src/main/runtime/orchestration-mailbox-titles.test.ts",
+        "src/main/runtime/orchestration-mailbox-routing.test.ts"
       ],
       "assertionRefs": [
         {
@@ -95,6 +99,28 @@
         {
           "file": "src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts",
           "assertions": ["never replays a pasted prompt after human takeover cancels its Enter"]
+        },
+        {
+          "file": "src/main/runtime/orca-runtime.test.ts",
+          "assertions": [
+            "delivers pending orchestration messages to an already-idle agent",
+            "does not reuse the dead process live idle authority after a same-id respawn",
+            "suppresses the %s retry Enter after the first Enter starts a turn"
+          ]
+        },
+        {
+          "file": "src/main/runtime/terminal-send-stale-leaf-liveness.test.ts",
+          "assertions": [
+            "retires an armed Enter when the pty exits and respawns under the same id inside the window",
+            "does not fire a stale Enter through an orphaned leaf snapshot after resync and exit"
+          ]
+        },
+        {
+          "file": "src/main/runtime/orchestration-mailbox-titles.test.ts",
+          "assertions": [
+            "does not restore idle over a permission title received during the host probe",
+            "keeps mail unwritten while readiness is unverified and delivers once it returns"
+          ]
         }
       ],
       "evidenceRuns": [
@@ -102,19 +128,19 @@
           "date": "2026-10-23",
           "runner": "local",
           "platform": "macos",
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/terminal-human-draft-admission.test.ts src/main/runtime/terminal-run-facts.test.ts src/main/runtime/agent-prompt-submission-runtime.test.ts src/main/runtime/agent-prompt-submission-runtime-hook-and-generation.test.ts src/main/runtime/orchestration/mailbox-pointer-stage.test.ts src/main/runtime/orchestration/mailbox-pointer-submit.test.ts src/main/runtime/orchestration-mailbox-delivery.test.ts src/main/runtime/orchestration-mailbox-notification-consistency.test.ts src/shared/terminal-composer-draft.test.ts src/main/daemon/terminal-cursor-line-context.test.ts src/main/runtime/agent-prompt-submission-windows-submit-delay.test.ts src/main/runtime/agent-prompt-permission-wait.test.ts src/main/runtime/agent-prompt-line-settle.test.ts src/main/runtime/rpc/methods/orchestration/worker/worker-start-prompt-contract.test.ts src/main/runtime/terminal-run-facts-input.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/terminal-human-draft-admission.test.ts src/main/runtime/terminal-run-facts.test.ts src/main/runtime/agent-prompt-submission-runtime.test.ts src/main/runtime/agent-prompt-submission-runtime-hook-and-generation.test.ts src/main/runtime/orchestration/mailbox-pointer-stage.test.ts src/main/runtime/orchestration/mailbox-pointer-submit.test.ts src/main/runtime/orchestration-mailbox-delivery.test.ts src/main/runtime/orchestration-mailbox-notification-consistency.test.ts src/shared/terminal-composer-draft.test.ts src/main/daemon/terminal-cursor-line-context.test.ts src/main/runtime/agent-prompt-submission-windows-submit-delay.test.ts src/main/runtime/agent-prompt-permission-wait.test.ts src/main/runtime/agent-prompt-line-settle.test.ts src/main/runtime/rpc/methods/orchestration/worker/worker-start-prompt-contract.test.ts src/main/runtime/terminal-run-facts-input.test.ts src/main/ipc/pty/ipc/write-input-user-input.test.ts src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/terminal-send-stale-leaf-liveness.test.ts src/main/runtime/orchestration-mailbox-titles.test.ts src/main/runtime/orchestration-mailbox-routing.test.ts",
           "result": "passed",
-          "durationSeconds": 16.63,
-          "summary": "248 tests passed across 17 files on final behavior, including actual runtime/emulator final-await output fencing, ahead-of-stream provider snapshot, SQLite mailbox refusal/resume/partial settlement, actual renderer and runtime input funnels and durable RPC replay. No native providers or visible windows launched. Runtime is 77% transform and 20% import."
+          "durationSeconds": 160.99,
+          "summary": "Expanded compatibility gate: 1,816 passed, 3 skipped across 21 files. Includes original draft/input/RPC contracts and full runtime, stale-leaf, mailbox-title/routing entrypoints. Canonical TMPDIR avoids unrelated macOS /var versus /private/var fixture equality failures. Independent affected-entrypoint review passed 1,538 tests / 3 skips. Initial 23 CI assertions corrected in tests only; no production guard changes. No native providers or visible windows launched."
         }
       ],
       "runtimeBudget": {
-        "p95Seconds": 45,
-        "scope": "deterministic runtime, real emulator and SQLite contracts with fake clocks"
+        "p95Seconds": 240,
+        "scope": "Expanded 21-file deterministic runtime, real emulator and SQLite contracts; local 160.99s observation, budget only, not measured p95."
       },
       "flakeHistory": {
         "status": "not-started",
-        "evidence": "Local contract evidence only; no CI soak or native provider matrix yet."
+        "evidence": "Local contract evidence only; no CI soak or native provider matrix yet. Initial CI bb778766 exposed 23 deterministic compatibility-test expectations that assumed synchronous pointer writes or unconditional retry Enter. Corrected tests await actual admission, retain post-paste lifecycle guards, and require zero bytes on prewrite authority loss. Fresh correction must pass CI; no old-SHA retry used."
       },
       "redGreenEvidence": {
         "status": "complete",
