@@ -72,8 +72,8 @@ function findCaseInsensitiveMatchRanges(
 
     const matchEnd = matchStart + normalizedQuery.length
     matches.push({
-      start: normalizedText.originalStartByNormalizedOffset?.[matchStart] ?? matchStart,
-      end: normalizedText.originalEndByNormalizedOffset?.[matchEnd - 1] ?? matchEnd
+      start: normalizedText.originalOffset(matchStart, false),
+      end: normalizedText.originalOffset(matchEnd - 1, true)
     })
     // Why: advance by at least 1 to guarantee forward progress even if a
     // future locale edge-case produces a zero-length normalizedQuery.
@@ -124,47 +124,58 @@ function isWholeWordMatch(text: string, start: number, end: number): boolean {
 
 function buildLocaleLowercaseIndex(text: string): {
   text: string
-  originalStartByNormalizedOffset: number[] | null
-  originalEndByNormalizedOffset: number[] | null
+  originalOffset: (offset: number, end: boolean) => number
 } {
   // ASCII has no contextual casing or multi-unit characters, so every offset stays identical.
   if (!/[\u0080-\uffff]/.test(text)) {
     return {
       text: text.toLocaleLowerCase(),
-      originalStartByNormalizedOffset: null,
-      originalEndByNormalizedOffset: null
+      originalOffset: (offset, end) => offset + (end ? 1 : 0)
     }
   }
 
-  let normalized = ''
-  let originalStartByNormalizedOffset: number[] | null = null
-  let originalEndByNormalizedOffset: number[] | null = null
+  const chunks: string[] = []
+  const chunk: string[] = []
+  const normalizedSpans: number[] = []
+  const originalSpans: number[] = []
+  let normalizedLength = 0
   let originalOffset = 0
 
   for (const char of text) {
     const normalizedChar = char.toLocaleLowerCase()
     const originalEnd = originalOffset + char.length
-    if (!originalStartByNormalizedOffset && (char.length !== 1 || normalizedChar.length !== 1)) {
-      originalStartByNormalizedOffset = Array.from({ length: originalOffset }, (_, index) => index)
-      originalEndByNormalizedOffset = Array.from(
-        { length: originalOffset },
-        (_, index) => index + 1
-      )
+    // Only multi-unit characters need a span; ordinary offsets follow the preceding shift.
+    if (char.length !== 1 || normalizedChar.length !== 1) {
+      normalizedSpans.push(normalizedLength, normalizedLength + normalizedChar.length)
+      originalSpans.push(originalOffset, originalEnd)
     }
-    // Why: locale lowercasing can expand one original character into multiple
-    // UTF-16 code units (for example `İ` -> `i\u0307`). Search matches happen
-    // in normalized text but DOM slicing needs original offsets.
-    for (let i = 0; i < normalizedChar.length; i += 1) {
-      originalStartByNormalizedOffset?.push(originalOffset)
-      originalEndByNormalizedOffset?.push(originalEnd)
+    chunk.push(normalizedChar)
+    if (chunk.length === 1024) {
+      chunks.push(chunk.join(''))
+      chunk.length = 0
     }
-    normalized += normalizedChar
+    normalizedLength += normalizedChar.length
     originalOffset = originalEnd
   }
+  if (chunk.length > 0) {
+    chunks.push(chunk.join(''))
+  }
+
+  let spanOffset = 0
+  let shift = 0
 
   return {
-    text: normalized,
-    originalStartByNormalizedOffset,
-    originalEndByNormalizedOffset
+    text: chunks.join(''),
+    // Search visits match starts and ends in order, so each span is visited once.
+    originalOffset: (offset, end) => {
+      while (spanOffset < normalizedSpans.length && normalizedSpans[spanOffset + 1]! <= offset) {
+        shift = originalSpans[spanOffset + 1]! - normalizedSpans[spanOffset + 1]!
+        spanOffset += 2
+      }
+      if (spanOffset < normalizedSpans.length && normalizedSpans[spanOffset]! <= offset) {
+        return originalSpans[spanOffset + (end ? 1 : 0)]!
+      }
+      return offset + shift + (end ? 1 : 0)
+    }
   }
 }

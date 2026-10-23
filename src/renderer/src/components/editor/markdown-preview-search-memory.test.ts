@@ -16,7 +16,8 @@ beforeAll(async () => {
       contents: `
         import { findTextMatchRanges } from './src/renderer/src/components/editor/markdown-preview-search';
         const size = 600 * 1024;
-        const text = 'x'.repeat(size - 6) + 'NEEDLE';
+        const suffix = process.argv[2] === 'unicode' ? '😊İNEEDLE' : 'NEEDLE';
+        const text = 'x'.repeat(size - suffix.length) + suffix;
         process.stdout.write(JSON.stringify(findTextMatchRanges(text, 'needle')));
       `,
       resolveDir: process.cwd()
@@ -36,17 +37,20 @@ afterAll(async () => {
 })
 
 describe('Markdown Find memory budget', () => {
-  it('searches a 600 KiB ASCII paragraph within a 32 MiB heap', async () => {
-    // A separate heap makes the allocation regression independent of the test worker's load.
-    const result = await runProcess({
-      program: process.execPath,
-      args: ['--max-old-space-size=32', childPath],
-      env: { ...process.env, NODE_OPTIONS: undefined, ORCA_BACKGROUND_LAUNCH: '1' },
-      timeoutMs: 10_000,
-      maxOutputBytes: 4096
-    })
-    expect(result.timedOut).toBe(false)
-    expect(result.code, result.stderr).toBe(0)
-    expect(JSON.parse(result.stdout)).toEqual([{ start: 614394, end: 614400 }])
-  })
+  it.each(['ascii', 'unicode'])(
+    'searches a 600 KiB %s paragraph within a 32 MiB heap',
+    async (kind) => {
+      // A separate heap makes the allocation regression independent of the test worker's load.
+      const result = await runProcess({
+        program: process.execPath,
+        args: ['--max-old-space-size=32', childPath, kind],
+        env: { ...process.env, NODE_OPTIONS: undefined, ORCA_BACKGROUND_LAUNCH: '1' },
+        timeoutMs: 10_000,
+        maxOutputBytes: 4096
+      })
+      expect(result.timedOut).toBe(false)
+      expect(result.code, result.stderr).toBe(0)
+      expect(JSON.parse(result.stdout)).toEqual([{ start: 614394, end: 614400 }])
+    }
+  )
 })
