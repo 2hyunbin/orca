@@ -13,7 +13,8 @@ function normalizeToModelEol(
   if ((eol === '\n' && !content.includes('\r')) || content === currentContent) {
     return content
   }
-  return content.replace(/\r\n|\r|\n/g, eol)
+  const separators = eol === '\r\n' ? /\r(?!\n)|(?<!\r)\n/g : /\r\n|\r|\n/g
+  return content.replace(separators, eol)
 }
 
 function applyModelEdit(
