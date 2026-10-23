@@ -1,4 +1,4 @@
-import { percentile } from './relay-observability.js'
+import { percentile } from '../relay-observability.js'
 import { classifyAssignmentLease, type AssignmentLeaseClass } from './assignment-lease.js'
 
 // What `ticketCheck=enforce` would have said, beside the database answer that still decides.
