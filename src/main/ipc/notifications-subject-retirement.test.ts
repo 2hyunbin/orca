@@ -3,14 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   RuntimeMobileNotificationController,
-  type MobileNotificationDispatchEvent,
   type MobileNotificationEvent
 } from '../runtime/runtime-mobile-notification-controller'
 import {
   agentSessionAttentionSubjectPrefix,
-  type StructuredAttentionRead,
-  type StructuredAttentionOrigin,
-  type StructuredAttentionState
+  type StructuredAttentionOrigin
 } from '../../shared/agent-session-attention'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -40,55 +37,13 @@ vi.mock('../tray/system-tray', async () =>
   (await import('./notifications-test-harness')).createSystemTrayModuleMock()
 )
 
-import { registerNotificationHandlers } from './notifications'
+import { registerSubjectRetirement as register } from './notifications-subject-retirement.test-fixture'
 import { AgentHookServer } from '../agent-hooks/server'
 import { AgentTransitionDetector } from '../agent-hooks/agent-transition-detector'
 import { TerminalAgentPhonePush } from '../runtime/terminal-agent-phone-push'
 import { createAgentHookNotificationRetirement } from '../../renderer/src/hooks/agent-hook-notification-retirement'
 
 const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
-
-function register(
-  options: { suppressWhenFocused: boolean },
-  controller?: RuntimeMobileNotificationController
-): {
-  dispatchMobileNotification: ReturnType<typeof vi.fn>
-  dismissMobileNotification: ReturnType<typeof vi.fn>
-} {
-  const dispatchMobileNotification = vi.fn((event: MobileNotificationDispatchEvent) =>
-    controller?.dispatch(event)
-  )
-  const dismissMobileNotification = vi.fn((id: string) => controller?.dismiss(id))
-  const retireStructuredAttention = (read: StructuredAttentionRead) =>
-    controller?.retireStructuredAttention(read)
-  const reconcileStructuredPromptAttention = (state: StructuredAttentionState) =>
-    controller?.reconcileStructuredPromptAttention(state)
-  registerNotificationHandlers(
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these paths read only getSettings; Store is a class, so a structural double needs the cast.
-    {
-      getSettings: () => ({
-        notifications: {
-          enabled: true,
-          agentTaskComplete: true,
-          terminalBell: true,
-          suppressWhenFocused: options.suppressWhenFocused
-        }
-      })
-    } as never,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the notification handlers call only these four runtime methods.
-    {
-      dispatchMobileNotification,
-      announcedNotifications: controller?.announcedNotifications,
-      dismissMobileNotification,
-      retireStructuredAttention,
-      retireLiveNotifications: (
-        alerts: Parameters<RuntimeMobileNotificationController['retireLiveNotifications']>[0]
-      ) => controller?.retireLiveNotifications(alerts),
-      reconcileStructuredPromptAttention
-    } as never
-  )
-  return { dispatchMobileNotification, dismissMobileNotification }
-}
 
 describe('notifications:dismiss by acknowledged subject', () => {
   beforeEach(() => {
