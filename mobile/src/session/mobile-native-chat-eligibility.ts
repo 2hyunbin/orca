@@ -25,6 +25,9 @@ export type MobileNativeChatResolution = {
   /** Hook-reported transcript path. Recent Claude sessions cannot always be
    *  resolved from the provider session id, so mobile forwards this to runtime. */
   transcriptPath: string | null
+  /** False when only this phone's memory names the agent: it may have exited to a
+   *  shell, so the chat is read-only rather than typing into a bare prompt. */
+  agentConfirmed: boolean
 }
 
 /** The last chat identity resolved for a terminal tab, bound to the handle it was seen on. */
@@ -62,7 +65,7 @@ export function resolveMobileNativeChat(
     // Structured tabs are journal-backed, so any agent the host lists renders here — there is no
     // per-agent transcript layout to know.
     return tab.sessionId && isStructuredAgentId(tab.agent)
-      ? { agent: tab.agent, sessionId: tab.sessionId, transcriptPath: null }
+      ? { agent: tab.agent, sessionId: tab.sessionId, transcriptPath: null, agentConfirmed: true }
       : null
   }
   if (tab.type !== 'terminal') {
@@ -74,7 +77,8 @@ export function resolveMobileNativeChat(
     ? isNativeChatSupportedAgent(liveAgent)
       ? liveAgent
       : null
-    : (tab.launchAgent ?? remembered?.agent ?? null)
+    : // The remembered agent is the latest resolution, so it outranks an older launch hint.
+      (remembered?.agent ?? tab.launchAgent ?? null)
   if (!agent || !isNativeChatSupportedAgent(agent)) {
     return null
   }
@@ -82,13 +86,15 @@ export function resolveMobileNativeChat(
     return null
   }
   const liveSession = tab.agentStatus?.providerSession
-  const rememberedSession = remembered?.agent === agent ? remembered : null
+  // A live agent without a session may be a relaunch; only an identity-less frame inherits one.
+  const rememberedSession = !liveAgent && remembered?.agent === agent ? remembered : null
   return {
     agent,
     sessionId: liveSession?.id ?? rememberedSession?.sessionId ?? null,
     transcriptPath: liveSession
       ? (liveSession.transcriptPath ?? null)
-      : (rememberedSession?.transcriptPath ?? null)
+      : (rememberedSession?.transcriptPath ?? null),
+    agentConfirmed: liveAgent ? true : tab.launchAgent === agent
   }
 }
 
@@ -111,7 +117,11 @@ export function withRememberedNativeChatIdentity(
     const { nativeChatIdentity: _hostless, ...live } = tab
     const resolved = resolveMobileNativeChat({ ...live, nativeChatIdentity: carried }, true)
     const terminal = tab.terminal ?? carried?.terminal
-    return resolved && terminal ? { ...live, nativeChatIdentity: { terminal, ...resolved } } : live
+    if (!resolved || !terminal) {
+      return live
+    }
+    const { agent, sessionId, transcriptPath } = resolved
+    return { ...live, nativeChatIdentity: { terminal, agent, sessionId, transcriptPath } }
   })
 }
 

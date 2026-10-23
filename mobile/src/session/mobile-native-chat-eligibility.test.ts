@@ -63,7 +63,8 @@ describe('resolveMobileNativeChat', () => {
     ).toEqual({
       agent: 'claude',
       sessionId: 'sess-1',
-      transcriptPath: '/tmp/claude-real-transcript.jsonl'
+      transcriptPath: '/tmp/claude-real-transcript.jsonl',
+      agentConfirmed: true
     })
   })
 
@@ -73,14 +74,15 @@ describe('resolveMobileNativeChat', () => {
         type: 'terminal',
         agentStatus: status({ agentType: 'codex' })
       })
-    ).toEqual({ agent: 'codex', sessionId: null, transcriptPath: null })
+    ).toEqual({ agent: 'codex', sessionId: null, transcriptPath: null, agentConfirmed: true })
   })
 
   it('admits OpenClaude with its distinct agent identity', () => {
     expect(resolveMobileNativeChat({ type: 'terminal', launchAgent: 'openclaude' })).toEqual({
       agent: 'openclaude',
       sessionId: null,
-      transcriptPath: null
+      transcriptPath: null,
+      agentConfirmed: true
     })
   })
 
@@ -95,7 +97,8 @@ describe('resolveMobileNativeChat', () => {
     expect(resolveMobileNativeChat(tab, true)).toEqual({
       agent,
       sessionId: 'real-session',
-      transcriptPath: null
+      transcriptPath: null,
+      agentConfirmed: true
     })
     expect(resolveMobileNativeChat(tab, false)).toBeNull()
   })
@@ -153,7 +156,8 @@ describe('resolveMobileNativeChat', () => {
     ).toEqual({
       agent: 'codex',
       sessionId: 'structured-1',
-      transcriptPath: null
+      transcriptPath: null,
+      agentConfirmed: true
     })
   })
 
@@ -167,7 +171,8 @@ describe('resolveMobileNativeChat', () => {
     ).toEqual({
       agent: 'claude',
       sessionId: 'structured-1',
-      transcriptPath: null
+      transcriptPath: null,
+      agentConfirmed: true
     })
   })
 
@@ -176,7 +181,7 @@ describe('resolveMobileNativeChat', () => {
     (agent) => {
       expect(
         resolveMobileNativeChat({ type: 'agent-session', sessionId: 'structured-1', agent })
-      ).toEqual({ agent, sessionId: 'structured-1', transcriptPath: null })
+      ).toEqual({ agent, sessionId: 'structured-1', transcriptPath: null, agentConfirmed: true })
     }
   )
 
@@ -214,14 +219,16 @@ it('resolves folder readability from the serving host catalog and rejects Model-
 describe('withRememberedNativeChatIdentity', () => {
   const terminalTab = (
     terminal: string | null,
-    agentStatus?: AgentStatusEntry
+    agentStatus?: AgentStatusEntry,
+    launchAgent?: 'claude'
   ): MobileSessionTab => ({
     type: 'terminal',
     id: 'tab-1',
     title: 'claude',
     terminal,
     isActive: true,
-    ...(agentStatus ? { agentStatus } : {})
+    ...(agentStatus ? { agentStatus } : {}),
+    ...(launchAgent ? { launchAgent } : {})
   })
   const claude = status({
     agentType: 'claude',
@@ -230,12 +237,14 @@ describe('withRememberedNativeChatIdentity', () => {
   const seen = withRememberedNativeChatIdentity([terminalTab('h1', claude)], [])
 
   // #31977: a typed `claude` has no launchAgent, so a frame without agentType dropped chat.
-  it('keeps chat on the same handle when a frame omits the agent', () => {
+  // Read-only: the agent may have exited to a shell, and a send would run as a command there.
+  it('keeps chat read-only on the same handle when a frame omits the agent', () => {
     const [next] = withRememberedNativeChatIdentity([terminalTab('h1', status())], seen)
     expect(resolveMobileNativeChat(next)).toEqual({
       agent: 'claude',
       sessionId: 'sess-1',
-      transcriptPath: '/t/sess-1.jsonl'
+      transcriptPath: '/t/sess-1.jsonl',
+      agentConfirmed: false
     })
     expect(resolveMobileNativeChatSessionId(next)).toBe('sess-1')
   })
@@ -257,7 +266,28 @@ describe('withRememberedNativeChatIdentity', () => {
     expect(resolveMobileNativeChat(codex)).toEqual({
       agent: 'codex',
       sessionId: null,
-      transcriptPath: null
+      transcriptPath: null,
+      agentConfirmed: true
     })
+  })
+
+  it('does not show the previous conversation when the agent relaunches in the pane', () => {
+    const [relaunched] = withRememberedNativeChatIdentity(
+      [terminalTab('h1', status({ agentType: 'claude' }))],
+      seen
+    )
+    expect(resolveMobileNativeChat(relaunched)?.sessionId).toBeNull()
+    const [later] = withRememberedNativeChatIdentity([terminalTab('h1', status())], [relaunched])
+    expect(resolveMobileNativeChat(later)?.sessionId).toBeNull()
+  })
+
+  it('prefers the latest confirmed agent over an older launch hint', () => {
+    const launched = (agentStatus?: AgentStatusEntry) => terminalTab('h1', agentStatus, 'claude')
+    const switched = withRememberedNativeChatIdentity(
+      [launched(status({ agentType: 'codex' }))],
+      []
+    )
+    const [next] = withRememberedNativeChatIdentity([launched()], switched)
+    expect(resolveMobileNativeChat(next)).toMatchObject({ agent: 'codex', agentConfirmed: false })
   })
 })
