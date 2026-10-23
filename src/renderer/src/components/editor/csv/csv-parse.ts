@@ -16,6 +16,7 @@ export function parseCsv(
   delimiter = ',',
   limits: CsvParseLimits = {}
 ): CsvParseResult {
+  const retainRows = limits.retainRows !== false
   const rows: string[][] = []
   let row: string[] = []
   let start = limits.stripBom !== false && source.charCodeAt(0) === 0xfeff ? 1 : 0
@@ -29,7 +30,9 @@ export function parseCsv(
   let cells = 0
   const appendSpan = (end: number): void => {
     if (end > start) {
-      parts.push(source.slice(start, end))
+      if (retainRows) {
+        parts.push(source.slice(start, end))
+      }
       fieldLength += end - start
     }
   }
@@ -42,7 +45,7 @@ export function parseCsv(
       appendSpan(end)
       row.push(parts.join(''))
     } else {
-      row.push(source.slice(start, end))
+      row.push(retainRows ? source.slice(start, end) : '')
     }
     limits.onField?.(fieldStart, end)
     parts = []
@@ -56,7 +59,7 @@ export function parseCsv(
     }
     pushField(end)
     maxColumns = Math.max(maxColumns, row.length)
-    if (limits.retainRows !== false) {
+    if (retainRows) {
       rows.push(row)
     }
     limits.onRecord?.(recordStart, end, next)
@@ -78,7 +81,9 @@ export function parseCsv(
       if (ch === '"') {
         appendSpan(i)
         if (source[i + 1] === '"') {
-          parts.push('"')
+          if (retainRows) {
+            parts.push('"')
+          }
           fieldLength += 1
           i += 1
         } else {
