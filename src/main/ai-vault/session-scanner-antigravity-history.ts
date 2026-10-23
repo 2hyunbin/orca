@@ -133,7 +133,7 @@ function indexAntigravityHistory(content: string | null): AntigravityHistoryInde
   if (content && Buffer.byteLength(content) > ANTIGRAVITY_INDEX_MAX_BYTES) {
     return index
   }
-  for (const line of content?.split(/\r?\n/).slice(0, 10_000) ?? []) {
+  for (const line of content?.split(/\r?\n/, 10_000) ?? []) {
     const record = parseJsonObject(line)
     const promptHash = antigravityHistoryPromptHash(record?.display)
     const workspace = typeof record?.workspace === 'string' ? record.workspace.trim() : ''
