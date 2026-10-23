@@ -353,17 +353,22 @@ describe('structured agent session item retention', () => {
     expect(unchanged.items).toBe(hydrated.items)
   })
 
-  it('applies metadata without revisiting retained rows', () => {
+  it('applies metadata without rereading retained row content or producers', () => {
     let rowReads = 0
-    const rows = range(200, CAP).map(
-      (sequence) =>
-        new Proxy(item(sequence), {
-          get(target, key, receiver) {
-            rowReads += 1
-            return Reflect.get(target, key, receiver)
-          }
-        })
-    )
+    const rows = range(200, CAP).map((sequence) => {
+      const row = item(sequence)
+      return {
+        ...row,
+        get agentId() {
+          rowReads += 1
+          return row.agentId
+        },
+        get body() {
+          rowReads += 1
+          return row.body
+        }
+      }
+    })
     const hydrated = hydrate(rows, true)
     rowReads = 0
     const activity = { turnId: 'turn-a', text: 'Inspecting the changes' }
