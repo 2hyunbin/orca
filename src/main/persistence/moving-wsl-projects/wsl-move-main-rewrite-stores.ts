@@ -25,11 +25,15 @@ export type WslMoveMainRewriteProfile = Pick<
   | 'flushPendingOrThrowAsync'
 >
 
-// Moves rewritten while a window was open: that window hydrated before them, so its unload
-// re-applies them once (wsl-move-stale-window-reapply.ts).
+// Moves rewritten while a window was open: that window hydrated before them, so each of its
+// unloads re-applies them until its document is replaced (wsl-move-stale-window-reapply.ts).
 const rewrittenUnderOpenWindow = new Set<string>()
 
-/** Drains the moves rewritten under a window that is now unloading. */
+export function listWslMoveRewritesUnderOpenWindow(): string[] {
+  return [...rewrittenUnderOpenWindow]
+}
+
+/** Drains them once the stale window's document is gone. */
 export function takeWslMoveRewritesUnderOpenWindow(): string[] {
   const ids = [...rewrittenUnderOpenWindow]
   rewrittenUnderOpenWindow.clear()

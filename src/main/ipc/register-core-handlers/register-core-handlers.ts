@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, webContents } from 'electron'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { registerAppHandlers } from '../app'
 import { createWslMoveDriverDeps, registerWslSleepShellCwdReader } from '../wsl-move-driver-wiring'
@@ -31,7 +31,10 @@ import {
 } from '../runtime-environments/runtime-environments'
 import { registerWslHostHandlers } from '../wsl-host-handlers'
 import { registerWslMoveHandlers } from '../wsl-move-handlers'
-import { reapplyWslMoveRewritesAtUnload } from '../../persistence/moving-wsl-projects/wsl-move-stale-window-reapply'
+import {
+  reapplyWslMoveRewritesAtUnload,
+  reapplyWslMoveRewritesWhenDocumentReplaced
+} from '../../persistence/moving-wsl-projects/wsl-move-stale-window-reapply'
 import { registerEphemeralVmHandlers } from '../ephemeral-vm'
 import { registerAiVaultHandlers } from '../ai-vault'
 import { registerAiVaultSearchHandlers } from '../ai-vault-search'
@@ -169,6 +172,12 @@ export function registerCoreHandlers(
   setTrustedClipboardRendererWebContentsId(mainWindowWebContentsId)
   setTrustedUIRendererWebContentsId(mainWindowWebContentsId)
   setAgentBrowserBridgeRef(runtime.getAgentBrowserBridge())
+  const mainContents =
+    mainWindowWebContentsId === null ? undefined : webContents.fromId(mainWindowWebContentsId)
+  if (mainContents) {
+    // Per window: each new one replaces its document on reload.
+    reapplyWslMoveRewritesWhenDocumentReplaced(mainContents, app.getPath('userData'), store)
+  }
   if (registered) {
     return
   }

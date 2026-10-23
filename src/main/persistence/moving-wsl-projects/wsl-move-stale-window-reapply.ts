@@ -4,9 +4,10 @@
  * host partition at unload. Two corrections, neither touching the journal or its ledger:
  * - Focus, for every committed move, at each startup and after each unload checkpoint. It only
  *   ever points a moved local project at the host, so no later user choice is undone.
- * - The additive rewrites (UI host copies and visible hosts, the host partition's seed), once, at
- *   the unload of a window that was open when the move was rewritten. Re-applied later they would
- *   undo a user's choice, such as hiding the WSL host.
+ * - The additive rewrites (UI host copies and visible hosts, the host partition's seed), at each
+ *   unload of a window that was open when the move was rewritten, and a last time when its
+ *   document is replaced. Re-applied after that they would undo a user's choice, such as hiding
+ *   the WSL host.
  */
 import { WSL_MOVE_CUTOVER_PHASES } from '../../../shared/wsl-move/wsl-move-cutover'
 import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
@@ -16,6 +17,7 @@ import { wslMoveDesktopRewriteContext } from './wsl-move-desktop-rewrite'
 import {
   applyWslMoveHostSessionSeed,
   applyWslMoveSessionFocus,
+  listWslMoveRewritesUnderOpenWindow,
   takeWslMoveRewritesUnderOpenWindow
 } from './wsl-move-main-rewrite-stores'
 import { wslMoveRewriteScope, type WslMoveRewriteScope } from './wsl-move-rewrite-scope'
@@ -55,23 +57,63 @@ export function reapplyWslMoveRewritesAtUnload(
   if (!wslHostsGateOpen()) {
     return 0
   }
-  const underWindow = new Set(takeWslMoveRewritesUnderOpenWindow())
+  // Not drained: a prepared reload's first unload is synthetic, and the window outlives it.
+  const underWindow = new Set(listWslMoveRewritesUnderOpenWindow())
   return forEachCommittedMove(userDataPath, warn, (scope, migrationId, cutover) => {
-    let writes = 0
-    if (underWindow.has(migrationId)) {
-      const updates = rewriteWslMoveUiRouting(profile.getUI(), scope)
-      if (Object.keys(updates).length > 0) {
-        profile.updateUI(updates)
-        writes += 1
-      }
-      // The window's save replaced the partition with its mirror of the host's tabs, which lacks
-      // what only the seed carries (browser tabs, drafts): add those back beside it.
-      if (applyWslMoveHostSessionSeed(profile, cutover, scope, new Set(), true).length > 0) {
-        writes += 1
-      }
-    }
+    const writes = underWindow.has(migrationId) ? additiveWrites(profile, scope, cutover) : 0
     return writes + focusWrites(profile, scope)
   })
+}
+
+/**
+ * The stale window's document was replaced (reload or new page): it can no longer write, and the
+ * next one has not read yet. A last redo of the additive rewrites, then they are done for good.
+ */
+export function reapplyWslMoveRewritesAtWindowNavigation(
+  userDataPath: string,
+  profile: WslMoveStaleWindowProfile,
+  warn: Warn = defaultWarn
+): number {
+  if (!wslHostsGateOpen()) {
+    return 0
+  }
+  const underWindow = new Set(takeWslMoveRewritesUnderOpenWindow())
+  if (underWindow.size === 0) {
+    return 0
+  }
+  return forEachCommittedMove(userDataPath, warn, (scope, migrationId, cutover) =>
+    underWindow.has(migrationId) ? additiveWrites(profile, scope, cutover) : 0
+  )
+}
+
+/** Main-frame document commits of the app window; `did-navigate` skips in-page navigations. */
+export function reapplyWslMoveRewritesWhenDocumentReplaced(
+  contents: { on: (event: 'did-navigate', listener: () => void) => unknown },
+  userDataPath: string,
+  profile: WslMoveStaleWindowProfile
+): void {
+  contents.on('did-navigate', () => {
+    reapplyWslMoveRewritesAtWindowNavigation(userDataPath, profile)
+  })
+}
+
+function additiveWrites(
+  profile: WslMoveStaleWindowProfile,
+  scope: WslMoveRewriteScope,
+  cutover: Parameters<typeof wslMoveDesktopRewriteContext>[1]
+): number {
+  let writes = 0
+  const updates = rewriteWslMoveUiRouting(profile.getUI(), scope)
+  if (Object.keys(updates).length > 0) {
+    profile.updateUI(updates)
+    writes += 1
+  }
+  // The window's save replaced the partition with its mirror of the host's tabs, which lacks
+  // what only the seed carries (browser tabs, drafts): add those back beside it.
+  if (applyWslMoveHostSessionSeed(profile, cutover, scope, new Set(), true).length > 0) {
+    writes += 1
+  }
+  return writes
 }
 
 function focusWrites(profile: WslMoveStaleWindowProfile, scope: WslMoveRewriteScope): number {
