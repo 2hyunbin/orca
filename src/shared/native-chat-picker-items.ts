@@ -243,8 +243,9 @@ function rankItems<T extends NativeChatPickerItem>(
   if (!query) {
     return entries.map((entry) => entry.item)
   }
+  const foldedQuery = query.toLocaleLowerCase()
   return entries
-    .map((entry) => ({ ...entry, rank: getMatchRank(entry.item, query, matchDescriptions) }))
+    .map((entry) => ({ ...entry, rank: getMatchRank(entry.item, foldedQuery, matchDescriptions) }))
     .filter((entry) => entry.rank !== null)
     .sort((a, b) => a.rank! - b.rank! || a.stableOrder - b.stableOrder)
     .map((entry) => entry.item)
@@ -252,10 +253,9 @@ function rankItems<T extends NativeChatPickerItem>(
 
 function getMatchRank(
   item: Pick<NativeChatPickerItem, 'name' | 'description'>,
-  query: string,
+  normalizedQuery: string,
   matchDescriptions: boolean
 ): number | null {
-  const normalizedQuery = query.toLocaleLowerCase()
   const name = item.name.toLocaleLowerCase()
   if (name === normalizedQuery) {
     return 0
