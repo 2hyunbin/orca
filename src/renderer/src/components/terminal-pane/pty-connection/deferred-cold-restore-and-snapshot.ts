@@ -21,6 +21,7 @@ import { bindStartFreshSpawn } from './fresh-spawn-start'
 import { bindFreshSpawnFollowReset } from './fresh-spawn-follow-reset'
 import { deferHiddenAgentResume } from './hidden-agent-resume-deferral'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
+import { attachToMainResumedSleepPane, mainResumedSleepPane } from './main-resumed-sleep-pane'
 import { startPaneThroughMainThenAttach } from './main-pane-start-request'
 
 export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySession): void {
@@ -89,6 +90,15 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
   ): Promise<string | null> => {
     if (startup?.resumeSource?.cancelled) {
       return Promise.resolve(null)
+    }
+    const mainPane = mainResumedSleepPane(session, startup)
+    if (mainPane && startup?.sleepingRecordEntry) {
+      return attachToMainResumedSleepPane(
+        session,
+        mainPane,
+        startup.sleepingRecordEntry.paneKey,
+        options
+      )
     }
     return startPaneThroughMainThenAttach(session, () => {
       session.applyColdRestoreAgentResumeStartup(startup)
