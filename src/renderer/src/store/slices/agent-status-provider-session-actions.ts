@@ -1,4 +1,3 @@
-import { projectAgentPaneConversation } from './agent-pane-conversation'
 import type { AgentStatusSlice } from './agent-status-slice-contract'
 import type { AgentStatusRuntime } from './agent-status-runtime'
 import type {
@@ -28,7 +27,7 @@ import { settleAttentionRemovedBy } from './workspace-attention/attention-remova
 export function createAgentStatusProviderSessionActions(
   runtime: AgentStatusRuntime
 ): Pick<AgentStatusSlice, 'recordAgentProviderSession'> {
-  const { get, set, requestFreshness } = runtime
+  const { get, set, requestFreshness, projectConversation } = runtime
   return {
     recordAgentProviderSession: (
       paneKey: string,
@@ -152,7 +151,7 @@ export function createAgentStatusProviderSessionActions(
           }
           return {
             agentStatusByPaneKey: nextLive,
-            agentConversationsByPaneKey: projectAgentPaneConversation(s, {
+            agentConversationsByPaneKey: projectConversation(s, {
               ...record,
               agentType: agent
             }),

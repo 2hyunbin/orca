@@ -1,5 +1,6 @@
+import { observeSessionTabPlacementWork } from '../../../shared/session-tab-placement-work.test-fixture'
 // @vitest-environment happy-dom
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
@@ -20,7 +21,7 @@ const chat = (id: string) => ({
   isActive: false
 })
 let frame: RuntimeMobileSessionTabsResult
-beforeEach(() => {
+function resetFrame(n = 0) {
   resetWebSessionTabsSnapshotFreshnessForTests()
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState({
@@ -31,6 +32,9 @@ beforeEach(() => {
       activeRuntimeEnvironmentId: ENV
     })
   })
+  const source = n
+    ? Array.from({ length: n }, (_, i) => (i === n / 2 ? 'C' : `old-${i}`))
+    : ['A', 'C', 'B']
   frame = {
     worktree: WT,
     publicationEpoch: 'host-placement',
@@ -38,21 +42,33 @@ beforeEach(() => {
     activeGroupId: 'R',
     activeTabId: 'agent-session:D',
     activeTabType: 'agent-session',
-    tabs: ['A', 'C', 'B', 'D'].map(chat),
+    tabs: [...source, 'D'].map(chat),
     tabGroups: [
       {
         id: 'L',
         activeTabId: 'agent-session:C',
-        tabOrder: ['A', 'C', 'B'].map((id) => `agent-session:${id}`)
+        tabOrder: source.map((id) => `agent-session:${id}`)
       },
       { id: 'R', activeTabId: 'agent-session:D', tabOrder: ['agent-session:D'] }
     ]
   }
   useAppStore.setState((state) => applyWebSessionTabsSnapshot(state, frame, ENV))
-})
-it.each([false, true])(
-  'keeps client neighbors and pin partitions through early retirement and refresh (pinned: %s)',
-  async (pinned) => {
+}
+beforeEach(() => resetFrame())
+afterEach(() => vi.restoreAllMocks())
+it.each([
+  { pinned: false, n: 0 },
+  { pinned: true, n: 0 },
+  { pinned: false, n: 32 },
+  { pinned: false, n: 320 }
+])(
+  'keeps client neighbors and pin partitions through early retirement and refresh (pinned: $pinned/$n)',
+  async ({ pinned, n }) => {
+    const current = Array.from({ length: n }, (_, i) => `current-${i}`)
+    if (n) {
+      resetFrame(n)
+    }
+    const work = observeSessionTabPlacementWork()
     if (pinned) {
       frame = {
         ...frame,
@@ -79,7 +95,9 @@ it.each([false, true])(
           ...frame,
           snapshotVersion: frame.snapshotVersion + 1,
           tabs: [
-            ...frame.tabs.filter((tab) => tab.id !== 'agent-session:C'),
+            ...(n
+              ? [...current, 'D'].map(chat)
+              : frame.tabs.filter((tab) => tab.id !== 'agent-session:C')),
             {
               type: 'terminal',
               id: 'T::leaf',
@@ -96,8 +114,9 @@ it.each([false, true])(
               id: 'L',
               activeTabId: 'T',
               tabOrder: [
-                'agent-session:A',
-                'agent-session:B',
+                ...(n
+                  ? current.map((id) => `agent-session:${id}`)
+                  : ['agent-session:A', 'agent-session:B']),
                 'T',
                 ...(pinned ? ['agent-session:U'] : [])
               ]
@@ -144,21 +163,30 @@ it.each([false, true])(
     const order = () =>
       useAppStore.getState().groupsByWorktree[WT].find((group) => group.id === sourceGroup)!
         .tabOrder
-    expect(order()).toEqual([
-      'structured-agent-session-A',
-      ...(pinned ? ['structured-agent-session-B'] : []),
-      toWebTerminalSurfaceTabId('T'),
-      ...(pinned ? ['structured-agent-session-U'] : ['structured-agent-session-B']),
-      'concurrent'
-    ])
+    const expected = n
+      ? [
+          ...current.slice(0, n / 2 + 1).map((id) => `structured-agent-session-${id}`),
+          toWebTerminalSurfaceTabId('T'),
+          ...current.slice(n / 2 + 1).map((id) => `structured-agent-session-${id}`),
+          'concurrent'
+        ]
+      : [
+          'structured-agent-session-A',
+          ...(pinned ? ['structured-agent-session-B'] : []),
+          toWebTerminalSurfaceTabId('T'),
+          ...(pinned ? ['structured-agent-session-U'] : ['structured-agent-session-B']),
+          'concurrent'
+        ]
+    expect(order()).toEqual(expected)
     expect(useAppStore.getState().activeGroupIdByWorktree[WT]).toBe(sourceGroup)
+    if (n) {
+      console.info('PAIRED_PLACEMENT_WORK', JSON.stringify({ n, samples: work.samples }))
+      expect(work.samples.length).toBeGreaterThan(0)
+      for (const sample of work.samples) {
+        expect(sample.reads + sample.adds + sample.has).toBeLessThanOrEqual(12 * n + 32)
+      }
+    }
     await refreshWebRuntimeSessionTabsSnapshot(ENV, WT, { acceptCurrentSnapshot: true })
-    expect(order()).toEqual([
-      'structured-agent-session-A',
-      ...(pinned ? ['structured-agent-session-B'] : []),
-      toWebTerminalSurfaceTabId('T'),
-      ...(pinned ? ['structured-agent-session-U'] : ['structured-agent-session-B']),
-      'concurrent'
-    ])
+    expect(order()).toEqual(expected)
   }
 )

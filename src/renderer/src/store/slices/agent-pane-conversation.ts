@@ -21,7 +21,10 @@ export function projectAgentPaneConversation(
   entry: Pick<
     AgentStatusEntry,
     'paneKey' | 'agentType' | 'providerSession' | 'worktreeId' | 'connectionId'
-  >
+  >,
+  copy: (
+    entries: AppState['agentConversationsByPaneKey']
+  ) => AppState['agentConversationsByPaneKey'] = (entries) => ({ ...entries })
 ): AppState['agentConversationsByPaneKey'] {
   const current = state.agentConversationsByPaneKey
   const previous = current[entry.paneKey]
@@ -34,7 +37,7 @@ export function projectAgentPaneConversation(
     if (!previous || previous.agent === agent) {
       return current
     }
-    const next = { ...current }
+    const next = copy(current)
     delete next[entry.paneKey]
     return next
   }
@@ -49,15 +52,19 @@ export function projectAgentPaneConversation(
   ) {
     return current
   }
-  return {
-    ...current,
-    [entry.paneKey]: {
+  const next = copy(current)
+  Object.defineProperty(next, entry.paneKey, {
+    value: {
       paneKey: entry.paneKey,
       worktreeId,
       executionHostId,
       connectionId,
       agent,
       providerSession: entry.providerSession
-    }
-  }
+    },
+    writable: true,
+    enumerable: true,
+    configurable: true
+  })
+  return next
 }

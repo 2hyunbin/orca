@@ -23,8 +23,9 @@ export function placeSessionTabAtCapture(
   captured: CapturedSessionTabPlacement
 ): string[] {
   const next = order.filter((id) => id !== createdId)
-  const previous = captured.preceding.toReversed().find((id) => next.includes(id))
-  const following = captured.following.find((id) => next.includes(id))
+  const present = new Set(next)
+  const previous = captured.preceding.toReversed().find((id) => present.has(id))
+  const following = captured.following.find((id) => present.has(id))
   const index =
     following !== undefined
       ? next.indexOf(following)

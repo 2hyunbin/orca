@@ -1,6 +1,12 @@
+import recordedOmpReply from '../../../../main/acp/fixtures/omp-v17-reply-without-thought.jsonl?raw'
+import { SessionNotificationSchema } from '../../../../main/acp/generated/acp-protocol.generated'
+import { makeRepo, makeWorktree } from '../worktree-jump-palette-test-fixtures'
+import { agentSessionTabFixture } from './native-chat-workspace-test-fixtures'
+import * as cliSwitch from '../tab-bar/native-chat-cli-switch-run'
+import { useAppStore } from '@/store'
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
@@ -29,6 +35,7 @@ afterEach(() => {
   cleanup()
   localStorage.clear()
   resetStructuredSessionMocks()
+  vi.restoreAllMocks()
 })
 
 {
@@ -237,3 +244,50 @@ afterEach(() => {
     expect(document.querySelector('[data-native-chat-background-tasks]')).not.toBeNull()
   })
 }
+
+it('keeps the recorded OMP reply readable with its CLI switch unavailable', () => {
+  const frames = recordedOmpReply
+    .trim()
+    .split('\n')
+    .map((line) => SessionNotificationSchema.safeParse(JSON.parse(line).message.params))
+    .flatMap((result) => (result.success ? [result.data] : []))
+  const text = frames
+    .flatMap(({ update }) =>
+      update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text'
+        ? [update.content.text]
+        : []
+    )
+    .join('')
+  expect(text).toContain('marker recorded')
+  const tab = agentSessionTabFixture('omp-capture', 'wt-1', {
+    agentSessionAgent: 'omp',
+    entityId: frames[0].sessionId
+  })
+  mocks.messages = [{ id: 'recorded-omp', role: 'assistant', blocks: [{ type: 'text', text }] }]
+  useAppStore.setState({
+    settings: { ...useAppStore.getState().settings, experimentalNativeChat: true },
+    repos: [makeRepo()],
+    worktreesByRepo: { 'repo-1': [makeWorktree('wt-1', 'recorded', { path: '/repo' })] },
+    tabsByWorktree: {},
+    unifiedTabsByWorktree: { 'wt-1': [tab] }
+  })
+  const invoke = vi.spyOn(cliSwitch, 'runNativeChatCliSwitch')
+  render(
+    <NativeChatStructuredSession
+      isVisible
+      isFocusedGroup
+      tabId={tab.id}
+      sessionId={tab.entityId}
+      target={{ kind: 'local' }}
+      agent="omp"
+    />,
+    { wrapper: TooltipProvider }
+  )
+  const button = screen.getByRole('button', { name: 'Switch to CLI' })
+  expect(button.hasAttribute('disabled')).toBe(true)
+  fireEvent.click(button)
+  expect(invoke).not.toHaveBeenCalled()
+  expect(mocks.messageListProps).toMatchObject({
+    session: { sessionId: frames[0].sessionId, messages: mocks.messages }
+  })
+})
