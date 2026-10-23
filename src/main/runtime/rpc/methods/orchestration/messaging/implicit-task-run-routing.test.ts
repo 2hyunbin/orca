@@ -110,6 +110,22 @@ describe('implicit task-scoped message routing', () => {
     }
   )
 
+  it('lets a nested coordinator report its child Run task to its parent Run', async () => {
+    const { db, activeRunId, from, send } = setup('worker')
+    const childRun = db.createRun({
+      objective: 'Child Run',
+      coordinatorHandle: from,
+      coordinatorPaneKey: 'tab_worker:leaf_worker'
+    })
+    const childTask = db.createTask({ runId: childRun.id, spec: 'Child work' })
+
+    await send({ payload: JSON.stringify({ taskId: childTask.id }) })
+
+    expect(db.getInbox(100)).toEqual([
+      expect.objectContaining({ run_id: activeRunId, to_handle: `run:${activeRunId}` })
+    ])
+  })
+
   it('preserves explicit terminal delivery when the payload references a foreign task', async () => {
     const { db, otherTask, activeRunId, runtime, send } = setup()
     vi.mocked(runtime.getTerminalPaneKey).mockImplementation((handle) =>

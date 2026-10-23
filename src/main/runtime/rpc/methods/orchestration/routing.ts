@@ -89,10 +89,19 @@ export function resolveMessageRun(
   ) {
     const taskId = parseMessageTaskId(params.payload)
     const task = taskId ? db.getTask(taskId) : undefined
-    if (task?.run_id && task.run_id !== run.id) {
+    // Why: a nested coordinator (worker of the inferred Run) reporting on its own child Run's Task keeps reaching its parent.
+    const senderCoordinatesTaskRun =
+      dispatch !== undefined &&
+      task?.run_id != null &&
+      db.runsBoundToCoordinator(params.sender).some((bound) => bound.id === task.run_id)
+    if (task?.run_id && task.run_id !== run.id && !senderCoordinatesTaskRun) {
+      // Why: a Dispatch-bound sender cannot target another Run (dispatch_run_mismatch), so only offer its own.
+      const nextStep = dispatch
+        ? `rerun with --run ${run.id} to send to your Dispatch ${dispatch.id}'s Run.`
+        : `rerun with --run ${task.run_id} to reach the Task's Run, or --run ${run.id} to keep the inferred Run.`
       throw new OrchestrationError(
         'task_run_mismatch',
-        `Task ${task.id} belongs to Run ${task.run_id}, not the inferred Run ${run.id}. Nothing was sent; pass --run or --to to choose the destination.`
+        `Task ${task.id} belongs to Run ${task.run_id}, not the inferred Run ${run.id}. Nothing was sent; ${nextStep}`
       )
     }
   }
