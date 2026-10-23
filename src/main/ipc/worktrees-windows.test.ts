@@ -18,7 +18,6 @@ const {
   getEffectiveHooksMock,
   getEffectiveHooksFromConfigMock,
   getDefaultTabsLaunchMock,
-  createIssueCommandRunnerScriptMock,
   createSetupRunnerScriptMock,
   resolveSetupRunnerShellMock,
   shouldRunSetupForCreateMock,
@@ -48,7 +47,6 @@ const {
   getEffectiveHooksMock: vi.fn(),
   getEffectiveHooksFromConfigMock: vi.fn(),
   getDefaultTabsLaunchMock: vi.fn(),
-  createIssueCommandRunnerScriptMock: vi.fn(),
   createSetupRunnerScriptMock: vi.fn(),
   resolveSetupRunnerShellMock: vi.fn(),
   shouldRunSetupForCreateMock: vi.fn(),
@@ -114,7 +112,6 @@ vi.mock('../hooks', () => ({
 }))
 
 vi.mock('../worktree-runner-script', () => ({
-  createIssueCommandRunnerScript: createIssueCommandRunnerScriptMock,
   createSetupRunnerScript: createSetupRunnerScriptMock,
   resolveSetupRunnerShell: resolveSetupRunnerShellMock
 }))
@@ -195,7 +192,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     getEffectiveHooksMock.mockReset()
     getEffectiveHooksFromConfigMock.mockReset()
     getDefaultTabsLaunchMock.mockReset()
-    createIssueCommandRunnerScriptMock.mockReset()
     createSetupRunnerScriptMock.mockReset()
     resolveSetupRunnerShellMock.mockReset()
     shouldRunSetupForCreateMock.mockReset()
@@ -608,30 +604,5 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     expect(mainWindow.webContents.send).toHaveBeenCalledWith('worktrees:changed', {
       repoId: 'repo-1'
     })
-  })
-  it('gives the issue-command runner the same setup shell as the setup runner', () => {
-    // Regression (C4): native Windows issue runners stayed .cmd even when setup
-    // resolved to Git Bash, so same-session bash issue templates broke.
-    resolveSetupRunnerShellMock.mockReturnValue({ family: 'posix' })
-    createIssueCommandRunnerScriptMock.mockReturnValue({
-      runnerScriptPath: 'C:\\repo\\.git\\orca\\issue-command-runner.sh',
-      envVars: {},
-      shell: { family: 'posix' }
-    })
-
-    handlers['hooks:createIssueCommandRunner'](null, {
-      repoId: 'repo-1',
-      worktreePath: 'C:\\workspaces\\improve-dashboard',
-      command: 'gh issue view 42'
-    })
-
-    expect(resolveSetupRunnerShellMock).toHaveBeenCalledWith(store.getSettings())
-    expect(createIssueCommandRunnerScriptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'repo-1' }),
-      'C:\\workspaces\\improve-dashboard',
-      'gh issue view 42',
-      expect.anything(),
-      { family: 'posix' }
-    )
   })
 })
