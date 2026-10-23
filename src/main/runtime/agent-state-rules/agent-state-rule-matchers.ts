@@ -40,11 +40,10 @@ export function compileScreenCondition(screen: ScreenCondition): ScreenMatcher {
   const noneAbove = screen.noneAbove ? compileTextTest(screen.noneAbove) : null
   const lastRow = rows.at(-1)
   const rowsUpward = rows.slice(0, -1).toReversed()
-  return (screenLines) => {
-    const lines = screenLines.map((line) => line.trim())
+  return (lines) => {
     let end = lines.length - 1
     const lowestEnd = Math.max(0, lines.length - endsWithinBottom)
-    while (end >= lowestEnd && !lastRow?.matches(lines[end])) {
+    while (end >= lowestEnd && !lastRow?.matches(lines[end].trim())) {
       end -= 1
     }
     if (end < lowestEnd) {
@@ -52,12 +51,15 @@ export function compileScreenCondition(screen: ScreenCondition): ScreenMatcher {
     }
     let cursor = end - 1
     for (const row of rowsUpward) {
-      if (row.matches(lines[cursor] ?? '')) {
+      if (row.matches((lines[cursor] ?? '').trim())) {
         cursor -= 1
       } else if (!row.optional) {
         return false
       }
     }
-    return noneAbove === null || !lines.slice(0, Math.max(0, cursor + 1)).some(noneAbove)
+    return (
+      noneAbove === null ||
+      !lines.slice(0, Math.max(0, cursor + 1)).some((line) => noneAbove(line.trim()))
+    )
   }
 }
