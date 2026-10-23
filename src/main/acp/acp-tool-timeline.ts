@@ -50,15 +50,18 @@ function replacementPatch(path: string, oldText: string, newText: string): strin
     if (!text) {
       return { count: 0, text: '' }
     }
-    const entries = text.split('\n')
-    if (entries.at(-1) === '') {
-      entries.pop()
+    const terminated = text.endsWith('\n')
+    const content = terminated ? text.slice(0, -1) : text
+    const chunks: string[] = []
+    let count = 1
+    for (let offset = 0; offset < content.length; offset += 64 * 1024) {
+      const entries = content.slice(offset, offset + 64 * 1024).split('\n')
+      count += entries.length - 1
+      chunks.push(entries.join(`\n${prefix}`))
     }
     return {
-      count: entries.length,
-      text:
-        entries.map((line) => `${prefix}${line}\n`).join('') +
-        (text.endsWith('\n') ? '' : '\\ No newline at end of file\n')
+      count,
+      text: `${prefix}${chunks.join('')}\n${terminated ? '' : '\\ No newline at end of file\n'}`
     }
   }
   const oldLines = lines(oldText, '-')
