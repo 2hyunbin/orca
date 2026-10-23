@@ -101,7 +101,7 @@ export async function applyWindowLayoutCommand(
     ) {
       markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId: terminalTabId })
     }
-    // Why: a workspace main lacks has no partition record to write; the window already removed the tab.
+    // Why: a workspace main lacks has no tab to close; the window drops the tab as for tab_not_found.
     return reply.ok && reply.result.alreadyClosed
       ? { ok: false, code: 'workspace_not_found' }
       : reply
