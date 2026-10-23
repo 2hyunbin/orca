@@ -415,7 +415,9 @@ describeBinaryCompatibility('real Git binary compatibility', () => {
     await runGit(['branch', branch, 'HEAD'])
     await runGit(['remote', 'add', remote, '.'])
     try {
-      await expect(refreshBranchCleanupTargetRefs(runGit, [target])).resolves.toEqual([target])
+      await expect(
+        refreshBranchCleanupTargetRefs((args) => runGit(args), [target])
+      ).resolves.toEqual([target])
       expect((await runGit(['rev-parse', target])).stdout).toBe(
         (await runGit(['rev-parse', branch])).stdout
       )

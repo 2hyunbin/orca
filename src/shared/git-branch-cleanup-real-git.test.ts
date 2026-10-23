@@ -100,4 +100,73 @@ describe('branch cleanup with real Git', () => {
     expect(commands.some((args) => args[0] === 'merge-tree')).toBe(false)
     expect((await git(shallow, ['show', 'feature:feature'])).stdout).toBe('feature')
   })
+
+  it.each([
+    ['exact', '+refs/heads/unrelated-feature:refs/remotes/origin/main', 'refs/remotes/origin/main'],
+    [
+      'wildcard',
+      '+refs/heads/unrelated-*:refs/remotes/origin/base-*',
+      'refs/remotes/origin/base-feature'
+    ]
+  ])('refreshes renamed tracking refs with an %s mapping', async (_label, refspec, target) => {
+    await git(client, ['config', 'remote.origin.fetch', refspec])
+    await git(remote, ['checkout', '-q', 'unrelated-feature'])
+    await commit(remote, 'new-feature')
+
+    const refreshed = await refreshBranchCleanupTargetRefs((args) => git(client, args), [target])
+
+    expect(refreshed).toEqual([target])
+    expect((await git(client, ['rev-parse', target])).stdout).toBe(
+      (await git(remote, ['rev-parse', 'unrelated-feature'])).stdout
+    )
+  })
+
+  it('preserves a tracking ref when its configured source is ambiguous', async () => {
+    const previousMain = (await git(client, ['rev-parse', 'origin/main'])).stdout
+    await git(client, [
+      'config',
+      '--add',
+      'remote.origin.fetch',
+      '+refs/heads/unrelated-feature:refs/remotes/origin/main'
+    ])
+    await commit(remote, 'new-main')
+
+    await expect(
+      refreshBranchCleanupTargetRefs((args) => git(client, args), ['refs/remotes/origin/main'])
+    ).resolves.toEqual([])
+    expect((await git(client, ['rev-parse', 'origin/main'])).stdout).toBe(previousMain)
+  })
+
+  it('does not bypass negative fetch mappings', async () => {
+    const previousFeature = (await git(client, ['rev-parse', 'origin/unrelated-feature'])).stdout
+    await git(client, ['config', '--add', 'remote.origin.fetch', '^refs/heads/unrelated-*'])
+    await git(remote, ['checkout', '-q', 'unrelated-feature'])
+    await commit(remote, 'excluded-feature')
+
+    await expect(
+      refreshBranchCleanupTargetRefs(
+        (args) => git(client, args),
+        ['refs/remotes/origin/unrelated-feature']
+      )
+    ).resolves.toEqual([])
+    expect((await git(client, ['rev-parse', 'origin/unrelated-feature'])).stdout).toBe(
+      previousFeature
+    )
+  })
+
+  it('refreshes a live fallback base when the saved base was deleted upstream', async () => {
+    const previousMain = (await git(client, ['rev-parse', 'origin/main'])).stdout.trim()
+    await git(client, ['update-ref', 'refs/remotes/origin/deleted-base', previousMain])
+    await commit(remote, 'new-main')
+
+    await expect(
+      refreshBranchCleanupTargetRefs(
+        (args) => git(client, args),
+        ['refs/remotes/origin/deleted-base', 'refs/remotes/origin/main']
+      )
+    ).resolves.toEqual(['refs/remotes/origin/main'])
+    expect((await git(client, ['rev-parse', 'origin/main'])).stdout).toBe(
+      (await git(remote, ['rev-parse', 'main'])).stdout
+    )
+  })
 })

@@ -298,6 +298,9 @@ branch refs/heads/main
       'git remote': {
         stdout: 'origin\n'
       },
+      'git config --get-all remote.origin.fetch': {
+        stdout: '+refs/heads/*:refs/remotes/origin/*\n'
+      },
       'git -c maintenance.auto=false -c maintenance.commit-graph.auto=0 -c gc.auto=0 fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main':
         {
           stdout: ''

@@ -50,10 +50,36 @@ function baseProofResponses(
 }
 
 describe('refreshBranchCleanupTargetRefs', () => {
+  it('does not retry a failed network fetch separately for each target', async () => {
+    let fetches = 0
+    const runGit: GitBranchCleanupExec = async (args) => {
+      if (args[0] === 'remote') {
+        return { stdout: 'origin\n' }
+      }
+      if (args[0] === 'config') {
+        return { stdout: '+refs/heads/*:refs/remotes/origin/*\n' }
+      }
+      fetches += 1
+      throw new Error('connection timed out')
+    }
+
+    await expect(
+      refreshBranchCleanupTargetRefs(runGit, [
+        'refs/remotes/origin/base',
+        'refs/remotes/origin/main'
+      ])
+    ).resolves.toEqual([])
+    expect(fetches).toBe(1)
+  })
+
   it('fetches each remote-tracking target remote once and prefers slashed remote names', async () => {
     const runGit = vi.fn<GitBranchCleanupExec>(async (args) => {
       if (args[0] === 'remote') {
         return { stdout: 'origin\nfoo\nfoo/bar\n' }
+      }
+      if (args[0] === 'config') {
+        const remote = args[2].slice('remote.'.length, -'.fetch'.length)
+        return { stdout: `+refs/heads/*:refs/remotes/${remote}/*\n` }
       }
       return { stdout: '' }
     })
@@ -67,6 +93,7 @@ describe('refreshBranchCleanupTargetRefs', () => {
 
     expect(runGit.mock.calls.map((call) => call[0])).toEqual([
       ['remote'],
+      ['config', '--get-all', 'remote.origin.fetch'],
       [
         ...GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS,
         'fetch',
@@ -74,6 +101,7 @@ describe('refreshBranchCleanupTargetRefs', () => {
         'origin',
         '+refs/heads/main:refs/remotes/origin/main'
       ],
+      ['config', '--get-all', 'remote.foo/bar.fetch'],
       [
         ...GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS,
         'fetch',
@@ -95,6 +123,9 @@ describe('refreshBranchCleanupTargetRefs', () => {
     const fetchFails = vi.fn<GitBranchCleanupExec>(async (args) => {
       if (args[0] === 'remote') {
         return { stdout: 'origin\n' }
+      }
+      if (args[0] === 'config') {
+        return { stdout: '+refs/heads/*:refs/remotes/origin/*\n' }
       }
       throw new Error('offline')
     })
@@ -301,6 +332,9 @@ describe('branchHasNoUnmergedChangesWithLazyTargetRefresh', () => {
       if (args[0] === 'remote') {
         return { stdout: 'origin\n' }
       }
+      if (args[0] === 'config') {
+        return { stdout: '+refs/heads/*:refs/remotes/origin/*\n' }
+      }
       if (args.includes('fetch')) {
         throw new Error('offline')
       }
@@ -349,6 +383,9 @@ describe('branchHasNoUnmergedChangesWithLazyTargetRefresh', () => {
       const command = args.join(' ')
       if (command === 'remote') {
         return { stdout: 'origin\n' }
+      }
+      if (args[0] === 'config') {
+        return { stdout: '+refs/heads/*:refs/remotes/origin/*\n' }
       }
       if (args.includes('fetch')) {
         refreshed = true

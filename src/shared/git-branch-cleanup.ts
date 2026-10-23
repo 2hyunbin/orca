@@ -1,6 +1,7 @@
 import type { GitCapabilityCache } from './git-capability-cache'
 import { isUnsupportedMergeTreeWriteTreeError } from './git-merge-tree-capability'
-import { GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS } from './git-fetch-auto-maintenance'
+import { refreshBranchCleanupTargetRefs } from './git-branch-cleanup-fetch'
+export { refreshBranchCleanupTargetRefs } from './git-branch-cleanup-fetch'
 
 export type GitBranchCleanupExecOptions = {
   stdin?: string
@@ -67,49 +68,6 @@ export async function getBranchCleanupTargetRefs(
   )
   addCandidateRef(candidates, 'HEAD')
   return candidates
-}
-
-export async function refreshBranchCleanupTargetRefs(
-  runGit: GitBranchCleanupExec,
-  targetRefs: readonly string[]
-): Promise<string[]> {
-  const remotesStdout = await readOptionalGitStdout(runGit, ['remote'])
-  const remotes = (remotesStdout ?? '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((remote) => remote && !remote.startsWith('-'))
-    .sort((left, right) => right.length - left.length)
-  const targetsByRemote = new Map<string, Set<string>>()
-
-  for (const targetRef of targetRefs) {
-    const remote = remotes.find((candidate) => targetRef.startsWith(`refs/remotes/${candidate}/`))
-    if (!remote) {
-      continue
-    }
-    const targets = targetsByRemote.get(remote) ?? new Set<string>()
-    targets.add(targetRef)
-    targetsByRemote.set(remote, targets)
-  }
-  const refreshed: string[] = []
-  for (const [remote, targets] of targetsByRemote) {
-    const refspecs = [...targets].map(
-      (target) => `+refs/heads/${target.slice(`refs/remotes/${remote}/`.length)}:${target}`
-    )
-    try {
-      // Deletion must not fetch every feature branch or launch disk-heavy auto-maintenance.
-      await runGit([
-        ...GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS,
-        'fetch',
-        '--no-tags',
-        remote,
-        ...refspecs
-      ])
-      refreshed.push(...targets)
-    } catch {
-      // A stale remote-tracking ref cannot prove the remote still retains these changes.
-    }
-  }
-  return refreshed
 }
 
 async function resolveCommitOid(runGit: GitBranchCleanupExec, ref: string): Promise<string | null> {
