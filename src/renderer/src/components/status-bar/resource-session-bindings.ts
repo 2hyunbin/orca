@@ -1,11 +1,19 @@
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../../../shared/workspace-scope'
 import { mayDestroyWithoutOwnerEvidence } from '../../../../shared/pty-listed-session'
 import type { DaemonSession } from './resource-usage-merge-types'
+import {
+  buildHostIdByWorktreeId,
+  type HostPersistenceState
+} from '@/lib/workspace-session-host-persistence'
 
 export type ResourceSessionBindingInputs = {
   tabsByWorktree: Record<string, TerminalTab[]>
   ptyIdsByTabId: Record<string, string[]>
   terminalLayoutsByTabId?: Record<string, TerminalLayoutSnapshot>
+  /** Source partitions of the displayed tab buckets, independent of the active workspace host. */
+  workspaceSessionHostIdByKey?: Record<string, ExecutionHostId>
   /**
    * Sessions restore knows exist on an SSH host but has not reattached yet, keyed by tab. Restore
    * skips reattach while the relay is not connected (`terminals.ts` reconnectPersistedTerminals),
@@ -21,6 +29,26 @@ export type ResourceSessionBindingIndex = {
   tabIdToWorktreeId: Map<string, string>
   boundPtyIds: Set<string>
   tabsByIdByWorktree: Map<string, Map<string, { tab: TerminalTab; index: number }>>
+}
+
+export function selectLocalResourceSessionTabs(
+  state: HostPersistenceState & Pick<ResourceSessionBindingInputs, 'tabsByWorktree'>
+): ResourceSessionBindingInputs['tabsByWorktree'] {
+  const hostIdByWorktreeId = buildHostIdByWorktreeId(state)
+  const restoredHostIdByWorkspaceId = new Map(
+    Object.entries(state.contestedPrimaryHostBySessionKey ?? {}).map(([key, hostId]) => [
+      normalizeWorkspaceSessionKeyToWorkspaceId(key),
+      hostId
+    ])
+  )
+  return Object.fromEntries(
+    Object.entries(state.tabsByWorktree).filter(([id]) => {
+      const restoredHostId =
+        state.contestedPrimaryHostBySessionKey?.[id] ??
+        restoredHostIdByWorkspaceId.get(normalizeWorkspaceSessionKeyToWorkspaceId(id))
+      return (restoredHostId ?? hostIdByWorktreeId(id)) === 'local'
+    })
+  )
 }
 
 function addBinding(
