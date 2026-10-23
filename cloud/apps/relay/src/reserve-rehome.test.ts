@@ -64,7 +64,7 @@ describe('rehome on reconnect rules', () => {
       { region: 'asia-east2' as const, at: 2 }
     ]
     expect(admitted(warmed(), { leaves })).toBe('moved-recently')
-    expect(admitted(warmed(), { leaves: [{ region: undefined, at: 1 }] })).toBe('moved-recently')
+    expect(admitted(warmed(), { leaves: [{ region: undefined, at: 1 }] })).toBe('unknown-leave-region')
     const rehome = warmed()
     rehome.recordMoved(HOST, 0)
     expect(admitted(rehome)).toBe('moved-recently')
@@ -123,6 +123,31 @@ describe('rehome switch', () => {
     expect(control.isOpen(now)).toBe(false)
     now = 5_000
     expect(control.isOpen(now)).toBe(true)
+  })
+})
+
+describe('the rehome switch under a stalled read', () => {
+  it('never lets a slow answer land after a newer one, and ages it from its question', async () => {
+    let now = 1_000
+    let release!: (value: { enabled: boolean; notBefore: number }) => void
+    const reads: ('stalled' | 'off')[] = []
+    const control = new ReserveRehomeSwitch(async () => {
+      if (reads.length === 0) {
+        reads.push('stalled')
+        return await new Promise((resolve) => (release = resolve))
+      }
+      reads.push('off')
+      return { enabled: false, notBefore: 0 }
+    }, () => now)
+    const stalled = control.refresh()
+    // The next tick finds the first read still out, so it does not start another.
+    await control.refresh()
+    expect(reads).toEqual(['stalled'])
+    now += RESERVE_REHOME_SWITCH_STALE_MS
+    release({ enabled: true, notBefore: 0 })
+    await stalled
+    // Asked at 1 s, answered past the stale bound: off.
+    expect(control.isOpen(now + 1)).toBe(false)
   })
 })
 

@@ -477,7 +477,7 @@ export function createRelayApp(
           reconnect: Boolean(body.data.reconnect),
           region: targetRegion,
           regionCorrection: body.data.regionCorrection !== undefined,
-          preferred: requestedRegion !== undefined && targetRegion === requestedRegion
+          preferred: config.regionalPlacementEnabled !== false && requestedRegion !== undefined
         })
       } catch (error) {
         if (!(error instanceof ReservePaceError)) throw error

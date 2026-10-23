@@ -145,9 +145,16 @@ describe('Relay region selection counters', () => {
     const placed = vi.fn(async () => usAssignment())
     await assign({ recordRegionSelection: vi.fn(), plan, assign: placed }, { reconnect: true }, { regionalPlacementEnabled: false })
     await assign({ recordRegionSelection: vi.fn(), plan, assign: placed }, { reconnect: true, preferredRegion: undefined })
+    // Asking for the default region while regional placement is off is not a preference either.
+    await assign(
+      { recordRegionSelection: vi.fn(), plan, assign: placed },
+      { reconnect: true, preferredRegion: 'us-central1' },
+      { regionalPlacementEnabled: false }
+    )
     const unpreferred = { reconnect: true, region: 'us-central1', regionCorrection: false, preferred: false }
     expect(plan).toHaveBeenNthCalledWith(1, expect.anything(), unpreferred)
     expect(plan).toHaveBeenNthCalledWith(2, expect.anything(), unpreferred)
+    expect(plan).toHaveBeenNthCalledWith(3, expect.anything(), unpreferred)
   })
 
   it('does not count a migration report as a fallback', async () => {

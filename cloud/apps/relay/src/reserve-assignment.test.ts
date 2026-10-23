@@ -659,6 +659,46 @@ describe('reserve assignment on a director', () => {
       expect(await sameRegion.assignment.plan(HOST, { ...ask, region: US })).toMatchObject(sticky)
     })
 
+    it('never runs for a fresh ask, an unknown host, a database-mode source, or an incomplete map', async () => {
+      const fresh = setupRehome()
+      await fresh.warm()
+      // A fresh ask is placed as today (the share draw), not rehomed.
+      expect(await fresh.assignment.plan(HOST, { ...ask, reconnect: false })).toMatchObject({ lane: 'placement' })
+      expect(await fresh.assignment.plan(OTHER, ask)).not.toMatchObject({ lane: 'rehome' })
+      const onDatabase = setup({
+        cells: [...cellList(['us-db']), ...cellList(['asia-r'], ASIA)],
+        feeds: [feed('us-db', { admitMode: 'db', ...usCounts, full: [seated(5, 1_000)] }), feed('asia-r', asiaFull(0.5))],
+        rehome: new ReserveRehome({ percent: 100, switchOpen: () => true })
+      })
+      expect(await onDatabase.assignment.plan(HOST, ask)).toMatchObject({ kind: 'database' })
+      const gated = setup({
+        cells: [...cellList(['us-r']), ...cellList(['asia-r', 'asia-unheard'], ASIA)],
+        feeds: [feed('us-r', { ...usCounts, full: [seated(5, 1_000)] }), feed('asia-r', asiaFull(0.5))],
+        startedAt: 100_500,
+        rehome: new ReserveRehome({ percent: 100, switchOpen: () => true })
+      })
+      expect(await gated.assignment.plan(HOST, ask)).toMatchObject({ lane: 'sticky' })
+      expect(gated.reserved).toEqual([])
+    })
+
+    it('leaves a new-session ask it does not move to the database lane, window and all', async () => {
+      const { assignment, warm } = setupRehome({ asia: asiaFull(0.98) })
+      await warm()
+      expect(await assignment.plan(HOST, { ...ask, regionCorrection: true })).toEqual({
+        kind: 'database',
+        regionReserve: expect.any(Function),
+        reserveSpill: expect.any(Function)
+      })
+    })
+
+    it('falls through to the sticky answer on a pace, never a 503', async () => {
+      const { assignment, warm } = setupRehome({
+        reserve: (cellId) => (cellId === 'asia-r' ? { outcome: 'intake' } : { outcome: 'ok' })
+      })
+      await warm()
+      expect(await assignment.plan(HOST, ask)).toMatchObject({ kind: 'answer', lane: 'sticky' })
+    })
+
     it('leaves a host another install keeps dropping', async () => {
       const { assignment, directory, now, warm } = setupRehome()
       await warm()

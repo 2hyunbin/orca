@@ -321,8 +321,9 @@ export class ReserveAssignment {
   }
 
   // What stickyFromMemory may answer, in its order: only the newest grant (highest epoch, then
-  // the newest join), on a cell that is a candidate in its own region.
-  private stickyCandidates(
+  // the newest join), on a cell that is a candidate in its own region. Lazy, so each cell is
+  // judged after the previous candidate's sticky reserve settled.
+  private *stickyCandidates(
     seats: readonly ShadowSeat[],
     left: { cellId: string; epoch: number; incarnation?: string; closeCode?: number } | undefined,
     now: number,
@@ -331,7 +332,7 @@ export class ReserveAssignment {
     const newest = Math.max(0, ...seats.map((seat) => seat.epoch), left?.epoch ?? 0)
     // A seat at or behind a row the reconcile demoted it for is never answered again.
     if (newest <= rowFloor) {
-      return []
+      return
     }
     const candidates: {
       cellId: string
@@ -353,18 +354,18 @@ export class ReserveAssignment {
     ]
       .filter((candidate) => candidate.epoch === newest)
       .sort((first, second) => second.joinedAt - first.joinedAt)
-    return candidates.flatMap((candidate) => {
+    for (const candidate of candidates) {
       const cell = this.input.cells().find((entry) => entry.cellId === candidate.cellId)
       const state = this.input.directory.cellState(candidate.cellId)
       const placement = this.placementCells().find((entry) => entry.cellId === candidate.cellId)
       if (!cell || !state || !placement || !this.input.placer.isCandidate(placement, cell.region, now)) {
-        return []
+        continue
       }
       if (!candidate.seated && !this.input.placer.hasSeat(placement)) {
-        return []
+        continue
       }
-      return [{ candidate, cell, state, placement }]
-    })
+      yield { candidate, cell, state, placement }
+    }
   }
 
   // Rule set in reserve-rehome.ts; this finds the source and the target room, and books.
@@ -381,7 +382,7 @@ export class ReserveAssignment {
     if (!rehome?.enabled) {
       return null
     }
-    const source = this.stickyCandidates(seats, left, now, rowFloor)[0]
+    const source = this.stickyCandidates(seats, left, now, rowFloor).next().value
     if (!source?.placement.reserve || source.cell.region === region) {
       return null
     }

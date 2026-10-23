@@ -23,6 +23,7 @@ export type RehomeSkip =
   | 'cohort'
   | 'peer-dropped'
   | 'moved-recently'
+  | 'unknown-leave-region'
   | 'target-room'
   | 'source-budget'
   | 'not-placed'
@@ -77,9 +78,13 @@ export class ReserveRehome {
       return 'peer-dropped'
     }
     const leftRegions = new Set(input.leaves.map((leave) => leave.region))
+    // A leave on a cell no longer listed: its region is unknown, so the host stays.
+    if (leftRegions.has(undefined)) {
+      return 'unknown-leave-region'
+    }
     const movedAt = this.moved.get(hostKey(identity))
     const movedByThisDirector = movedAt !== undefined && now - movedAt < RESERVE_REHOME_HOST_COOLDOWN_MS
-    if (leftRegions.size > 1 || leftRegions.has(undefined) || movedByThisDirector) {
+    if (leftRegions.size > 1 || movedByThisDirector) {
       return 'moved-recently'
     }
     const { free, ceiling, bookable } = input.target
@@ -134,6 +139,8 @@ function hostKey(identity: Identity): string {
 export class ReserveRehomeSwitch {
   private last: { enabled: boolean; notBefore: number; readAt: number } | null = null
   private timer: ReturnType<typeof setInterval> | null = null
+  // One read at a time, so a stalled read cannot land after a newer one and reopen the switch.
+  private reading = false
 
   constructor(
     private readonly read: () => Promise<{ enabled: boolean; notBefore: number } | null>,
@@ -148,11 +155,19 @@ export class ReserveRehomeSwitch {
   }
 
   async refresh(): Promise<void> {
+    if (this.reading) {
+      return
+    }
+    this.reading = true
+    // Stamped when the read starts: a slow answer is only as fresh as its question.
+    const readAt = this.now()
     try {
       const control = await this.read()
-      this.last = control ? { ...control, readAt: this.now() } : null
+      this.last = control ? { ...control, readAt } : null
     } catch {
       this.last = null
+    } finally {
+      this.reading = false
     }
   }
 

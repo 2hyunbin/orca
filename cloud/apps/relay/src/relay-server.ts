@@ -204,7 +204,7 @@ export function createRelayServer(
   // Step 1 C: the operator's rehome switch is read only on a director with C switched on.
   const rehomePercent = config.reserveRehomePercent ?? 0
   const rehomeSwitch =
-    config.role === 'director' && rehomePercent > 0
+    config.role === 'director' && shadowSeatPoller && rehomeAudience && config.reservePlacement === 'on' && rehomePercent > 0
       ? new ReserveRehomeSwitch(async () => await assignments.regionRehomeSwitch(), options.now)
       : undefined
   rehomeSwitch?.start()
