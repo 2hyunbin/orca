@@ -276,13 +276,15 @@ export function reduceStructuredAgentSession(
     ? state.items
     : mergeItems(state.items, liveItems, event.batch.removedItemIds)
   const items = trimRetainedItems(merged, state.retainedOwnItemLimit, state.retainedItemCap)
-  const outsideWindow = [
-    ...(liveItems.length < event.batch.items.length
-      ? event.batch.items.filter((item) => !liveItems.includes(item))
-      : []),
-    ...merged.slice(0, merged.length - items.length)
-  ]
-  const lostTurnRow = outsideWindow.some((item) => readAgentJournalTurn(item.body) !== null)
+  const liveItemSet = liveItems.length < event.batch.items.length ? new Set(liveItems) : null
+  const lostTurnRow =
+    (liveItemSet !== null &&
+      event.batch.items.some(
+        (item) => !liveItemSet.has(item) && readAgentJournalTurn(item.body) !== null
+      )) ||
+    merged
+      .slice(0, merged.length - items.length)
+      .some((item) => readAgentJournalTurn(item.body) !== null)
   return {
     ...state,
     ...requests,
