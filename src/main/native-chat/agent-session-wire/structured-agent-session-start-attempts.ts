@@ -93,13 +93,16 @@ export function registerStructuredAgentSessionStart(
                   'The previous agent process could not be verified as stopped.'
                 )
               }
+              const failure = structuredAgentSessionStartFailureFact({
+                exit: handle.result.failure ?? ended.failure
+              })
               return {
                 ...failedStructuredAgentSessionStart(),
                 startKey: ended.generation,
-                failure: structuredAgentSessionStartFailureFact({
-                  exit: handle.result.failure ?? ended.failure
-                }),
-                retry: handle.result.retry ?? ended.cause === 'exit'
+                failure,
+                retry:
+                  handle.result.retry ??
+                  (ended.cause === 'exit' && failure.kind === 'providerStartFailed')
               }
             })
           }

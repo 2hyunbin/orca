@@ -12,6 +12,7 @@ import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapt
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { DISPATCH_REJECTED_CANCELLED } from '../../../shared/structured-agent-session-dispatch-rejection'
@@ -663,6 +664,46 @@ describe('one logical start across physical attempts', () => {
     expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(child)
     expect(acquire).toHaveBeenCalledTimes(1)
     closeSession.mockResolvedValue(true)
+  })
+
+  it('keeps a starting child journal sink fault final for its requester without respawning', async () => {
+    await restartWith(publishFirst)
+    const first = await heldBehindStart('journal fails while starting')
+    const { sessions, runtimeState } = host.collaboratorsForTests()
+    const session = sessions.get(SESSION)!
+    const sink = runtimeState.currentEventSink(SESSION)!
+    const writes = vi.spyOn(session.journal, 'appendLifecycleBatch')
+    vi.spyOn(session.journal, 'appendItem').mockRejectedValueOnce(new Error('journal unavailable'))
+    sink.sink.appendItem(
+      { provider: 'codex', threadId: THREAD, turnId: 'turn-starting', ordinal: 1 },
+      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'starting' }] },
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+    await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
+    expect(session.lastEndedChild).toMatchObject({
+      cause: 'exit',
+      duringStartup: true,
+      rootGone: true,
+      failure: { kind: 'hostFault' }
+    })
+    const failures = writes.mock.calls.filter(([input]) =>
+      input.settlementId.startsWith('start-failure:')
+    )
+    expect(failures).toHaveLength(1)
+    expect(failures[0]![0].dispatches).toEqual([
+      expect.objectContaining({
+        clientMessageId: first,
+        state: 'rejected',
+        rejection: { kind: 'hostFault' }
+      })
+    ])
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(snapshot.items.filter((item) => item.body.kind === 'status')).toEqual([
+      expect.objectContaining({ body: expect.objectContaining({ failure: { kind: 'hostFault' } }) })
+    ])
+    expect(closeSession).toHaveBeenCalledTimes(1)
+    expect(acquire).toHaveBeenCalledTimes(1)
+    expect(dispatch).not.toHaveBeenCalled()
   })
 
   it('ends a backoff on Stop and keeps the original ceiling across attempts', async () => {
