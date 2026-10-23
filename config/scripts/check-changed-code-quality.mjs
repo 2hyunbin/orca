@@ -168,7 +168,7 @@ export function collectAddedLineRanges(
     if (status.startsWith('R') || status.startsWith('C')) {
       const destination = changedEntries[index++]
       changedFiles.push(destination)
-      if (status.startsWith('R')) {
+      if (status.startsWith('R') && includePath(source)) {
         renamedSources.set(destination, source)
       }
     } else if (status !== 'D') {
