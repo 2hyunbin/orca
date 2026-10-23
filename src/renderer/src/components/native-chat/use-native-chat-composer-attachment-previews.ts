@@ -1,4 +1,3 @@
-import { useContext } from 'react'
 import {
   createNativeChatReturnField,
   NativeChatViewIdentity,
@@ -6,7 +5,7 @@ import {
   useNativeChatReturnRef,
   useNativeChatReturnState
 } from './native-chat-view-state-memory'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useContext } from 'react'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 
 const previewRecords = new Map<string, ReadonlyMap<string, string>>()

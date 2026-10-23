@@ -17,8 +17,8 @@ import {
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { NATIVE_CHAT_INITIAL_LIMIT, type NativeChatOlderPageResult } from './native-chat-pagination'
-import { countsTowardInitialHistory } from './native-chat-pagination'
 import {
+  countsTowardInitialHistory,
   OLDER_PAGE_ANCHOR_ATTEMPTS,
   readStructuredAgentSessionOlderPage
 } from './structured-agent-session-older-page-read'

@@ -13,7 +13,6 @@ const records = new Map<
 let timer: ReturnType<typeof setTimeout> | undefined
 const encoder = new TextEncoder()
 
-/** Count every JSON field, stopping before retaining an oversized snapshot. */
 function payloadBytes(value: unknown, remaining: number): number {
   if (value === undefined) {
     return 0
@@ -89,7 +88,6 @@ export function clearStructuredReadResumeCache(): void {
   records.clear()
   clearTimeout(timer)
 }
-
 export function initialStructuredReadSnapshot(key: string): StructuredAgentSessionReadSnapshot {
   return (
     takeStructuredReadResume(key) ?? {

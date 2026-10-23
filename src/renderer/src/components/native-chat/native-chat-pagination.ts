@@ -1,4 +1,3 @@
-import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 // Pure pagination math for the native-chat read window. The renderer reads the
 // transcript tail with a `limit`; when the user scrolls to the top it raises the
 // limit by a page to load older history. Kept pure (no React/IO) so the limit
@@ -28,8 +27,4 @@ export function nextNativeChatLimit(currentLimit: number): number {
  *  reached the head of the transcript and there is nothing older to load. */
 export function hasMoreNativeChatHistory(returnedCount: number, requestedLimit: number): boolean {
   return returnedCount >= requestedLimit
-}
-
-export function countsTowardInitialHistory(item: AgentJournalRenderItem): boolean {
-  return item.body.kind !== 'status' || !item.body.providerFrame
 }

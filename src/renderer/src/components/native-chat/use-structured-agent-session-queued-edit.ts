@@ -5,13 +5,13 @@ import {
 } from '../../../../shared/queued-message-edit'
 import {
   queuedEditImagesEditor,
-  type QueuedEditImageState
+  type QueuedEditImageState,
+  type QueuedEditImagesEditor
 } from './structured-agent-session-queued-edit-images'
 import type { QueuedEditLease } from './structured-agent-session-queued-edit-lease'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { AgentSessionQueuedMessage } from '../../../../shared/agent-session-wire'
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
-import type { QueuedEditImagesEditor } from './structured-agent-session-queued-edit-images'
 import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
 

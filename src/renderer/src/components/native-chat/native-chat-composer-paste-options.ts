@@ -1,9 +1,7 @@
 import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
-import type { NativeChatPendingAttachmentChips } from './native-chat-session-attachment-drop'
-import type { NativeChatStructuredAttachmentSession } from './native-chat-attachment-upload'
+import type * as AttachmentDrop from './native-chat-session-attachment-drop'
+import type * as AttachmentUpload from './native-chat-attachment-upload'
 import type { AgentType } from '../../../../shared/agent-status-types'
-import type { NativeChatAttachmentOwner } from './native-chat-attachment-upload'
-import type { NativeChatReservedAttachment } from './native-chat-session-attachment-drop'
 
 export type UseNativeChatComposerPasteArgs = {
   destinationIsLive?: () => boolean
@@ -15,7 +13,7 @@ export type UseNativeChatComposerPasteArgs = {
   caret: number
   /** Resolved at paste time: a remote pane must save the clipboard image on its
    *  host, or the attached path names a file the agent cannot read. */
-  resolveAttachmentOwner: () => NativeChatAttachmentOwner
+  resolveAttachmentOwner: () => AttachmentUpload.NativeChatAttachmentOwner
   attachResolvedPaths: (paths: string[], connectionId?: string | null) => void
   /** Files a file manager copied attach through the composer's drop route. */
   attachCopiedFiles: (paths: string[], options?: { focus?: boolean }) => void
@@ -23,7 +21,7 @@ export type UseNativeChatComposerPasteArgs = {
    *  clipboard shows they are files, even if the composer unmounted meanwhile. */
   captureCopiedFiles: (options?: {
     focus?: boolean
-  }) => (reserved: NativeChatReservedAttachment[]) => Promise<void>
+  }) => (reserved: AttachmentDrop.NativeChatReservedAttachment[]) => Promise<void>
   /** `serverOwned`: an image the paste saved on the remote target's own server, not a client file. */
   beginPendingImageAttachment: (
     previewUrl?: string,
@@ -43,13 +41,13 @@ export type UseNativeChatExternalAttachmentsArgs = {
   destinationIsLive?: () => boolean
   terminalTabId: string
   structuredWorktreeId?: string
-  structuredSession?: NativeChatStructuredAttachmentSession
+  structuredSession?: AttachmentUpload.NativeChatStructuredAttachmentSession
   disabled: boolean
   attachResolvedPaths: (
     paths: string[],
     connectionId?: string | null,
     options?: NativeChatResolvedPathOptions
   ) => void
-  pendingChips: NativeChatPendingAttachmentChips
+  pendingChips: AttachmentDrop.NativeChatPendingAttachmentChips
   setNotice: (notice: string | null) => void
 }
