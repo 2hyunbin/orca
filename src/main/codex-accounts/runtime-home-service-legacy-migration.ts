@@ -8,6 +8,7 @@ import {
   statSync
 } from 'node:fs'
 import { dirname, extname, join, parse, relative } from 'node:path'
+import { nodeFilesEqualSync } from '../../shared/node-file-content-equality'
 import { writeFileAtomically } from './fs-utils'
 import { migrateLegacySharedAuthToPerAccountHome } from './legacy-shared-auth-migration'
 import { normalizeCodexRuntimeSelection } from './runtime-selection'
@@ -142,9 +143,7 @@ export abstract class CodexRuntimeHomeLegacyMigration extends CodexRuntimeHomePa
         continue
       }
 
-      const legacyContents = readFileSync(legacyFilePath)
-      const runtimeContents = readFileSync(runtimeFilePath)
-      if (runtimeContents.equals(legacyContents)) {
+      if (nodeFilesEqualSync(runtimeFilePath, legacyFilePath)) {
         continue
       }
 

@@ -203,6 +203,9 @@ describe('CodexRuntimeHomeService', () => {
     writeFileSync(join(legacySessionsDir, 'session.json'), '{"turns":[1,2]}', 'utf-8')
     mkdirSync(join(legacySessionsDir, 'nested'), { recursive: true })
     writeFileSync(join(legacySessionsDir, 'nested', 'session.json'), '{"turns":[2,3]}', 'utf-8')
+    const matching = JSON.stringify({ message: 'x'.repeat(128 * 1024 + 1) })
+    writeFileSync(join(legacySessionsDir, 'matching.json'), matching)
+    writeFileSync(join(runtimeSessionsDir, 'matching.json'), matching)
     const store = createStore(createSettings())
 
     const { CodexRuntimeHomeService } = await import('./runtime-home-service')
@@ -226,5 +229,6 @@ describe('CodexRuntimeHomeService', () => {
       .split('\n')
     expect(diagnostics).toHaveLength(2)
     expect(diagnostics[0]).toContain('"type":"session-conflict"')
+    expect(existsSync(join(runtimeSessionsDir, 'matching.orca-legacy-account-1.json'))).toBe(false)
   })
 })
