@@ -38,9 +38,13 @@ describe('RepositorySourceControlAiEnablement', () => {
 })
 
 describe('RepositorySourceControlAiActionRows', () => {
-  it.each(['codex', 'opencode'] as const)(
-    'keeps saved-agent controls disabled until detection settles without replacing fields (%s)',
-    async (agent) => {
+  it.each([
+    { agent: 'codex', detected: ['codex'] },
+    { agent: 'opencode', detected: ['opencode'] },
+    { agent: 'codex', detected: ['claude'] }
+  ] as const)(
+    'keeps saved $agent controls bound across detection returning $detected',
+    async ({ agent, detected }) => {
       useAppStore.getState().clearLocalDetectedAgents()
       const settings = useAppStore.getState().settings!
       const recipe = {
@@ -118,6 +122,10 @@ describe('RepositorySourceControlAiActionRows', () => {
       for (const card of cards) {
         expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
         expect(card.textContent).toContain('Permissions')
+        expect(card.textContent).toContain('Ask')
+        if (agent === 'codex') {
+          expect(card.textContent).toContain('saved')
+        }
         const controls = Array.from(
           card.querySelectorAll<HTMLButtonElement>('button[role="combobox"].min-w-0')
         )
@@ -126,7 +134,7 @@ describe('RepositorySourceControlAiActionRows', () => {
         expect(card.querySelector('input')?.value).toBe('--saved-cli')
       }
       await act(async () => {
-        finish([agent])
+        finish([...detected])
       })
       expect(cards.map((card) => card.textContent)).toEqual(pendingContent)
       for (const card of cards) {
