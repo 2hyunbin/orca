@@ -8,6 +8,7 @@ import {
 } from './runtime-file-client-test-harness'
 import { REMOTE_FILE_CHANGED_DURING_READ_MESSAGE } from './runtime-paged-file-read'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
+import { REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES } from '../../../shared/remote-runtime-memory-limits'
 
 installRuntimeFileClientEnvironment()
 
@@ -338,4 +339,47 @@ describe('remote saves larger than one request frame', () => {
     ).rejects.toThrow('File is too large to save to a remote Orca server')
     expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
   })
+
+  it.each(['a', '"', '\n', '\u001b', 'é', '界', '😀', '\ud800', '\udc00'])(
+    'preserves the exact save boundary for %j',
+    async (unit) => {
+      const budget = REMOTE_RUNTIME_MAX_FILE_WRITE_CONTENT_BYTES - 2
+      const unitBytes = Buffer.byteLength(JSON.stringify(unit)) - 2
+      const content = unit.repeat(Math.floor(budget / unitBytes)) + 'a'.repeat(budget % unitBytes)
+      runtimeEnvironmentCall.mockResolvedValue(ok({}))
+
+      await expect(writeRuntimeFile(context, '/remote/repo/file.txt', content)).resolves.toEqual({
+        ok: true
+      })
+      expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'files.write',
+          params: expect.objectContaining({ content })
+        })
+      )
+
+      runtimeEnvironmentCall.mockClear()
+      await expect(
+        writeRuntimeFile(context, '/remote/repo/file.txt', `${content}a`)
+      ).rejects.toThrow(
+        'File is too large to save to a remote Orca server (721 KB; the limit is 720 KB).'
+      )
+      expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['😀', '\ud800', '\udc00'])(
+    'preserves the reported JSON size with %j at a measurement boundary',
+    async (unit) => {
+      const prefix = 'a'.repeat(64 * 1024 - 1) + unit
+      const prefixBytes = Buffer.byteLength(JSON.stringify(prefix))
+      const content = prefix + 'a'.repeat(MB - prefixBytes)
+      expect(Buffer.byteLength(JSON.stringify(content))).toBe(MB)
+
+      await expect(writeRuntimeFile(context, '/remote/repo/file.txt', content)).rejects.toThrow(
+        'File is too large to save to a remote Orca server (1024 KB; the limit is 720 KB).'
+      )
+      expect(runtimeEnvironmentCall).not.toHaveBeenCalled()
+    }
+  )
 })
