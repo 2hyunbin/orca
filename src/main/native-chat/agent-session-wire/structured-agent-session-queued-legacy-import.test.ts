@@ -394,9 +394,7 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
     }
   })
   const stale = readAgentSessionHistory(earlier, { sessionId: SESSION, direction: 'tail' })
-  if (!stale.ok) {
-    throw new Error('expected old page')
-  }
+  expect(stale.ok).toBe(true)
   await earlier.close()
   seedLegacy(SESSION, [['q', 'waiting', 'stopped words']])
   if (!adopt) {
@@ -460,9 +458,7 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
         { sessionId: SESSION, direction: 'before', cursor: requestedCursor },
         { reader }
       )
-      if (!older.ok) {
-        throw new Error('expected before page')
-      }
+      expect(older.ok).toBe(true)
       state = reduceStructuredAgentSession(state, {
         type: 'older-page',
         requestedCursor,
