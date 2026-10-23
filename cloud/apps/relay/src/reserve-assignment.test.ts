@@ -950,6 +950,29 @@ describe('reserve assignment on a director', () => {
       ])
     })
 
+    it('counts a host once: after its re-booking, a second ask is not a drain re-ask', async () => {
+      const lines: string[] = []
+      const { assignment, directory, now } = setup({
+        feeds: [feed('c1', { draining: true, full: [{ ...seated(7), state: 'drain-only' }] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      // c2 reports the booking before the host's join: the map still holds only the drain-only seat.
+      directory.apply(
+        'c2',
+        feed('c2', {
+          full: undefined,
+          seq: 2,
+          changes: [{ seq: 2, kind: 'reserve', ...HOST, epoch: 8, generation: 0, reservedBy: 'director', at: 1 }]
+        }),
+        now.value,
+        now.value
+      )
+      expect(directory.bookingOf(HOST.userId, HOST.relayHostId)).toMatchObject({ cellId: 'c2', epoch: 8 })
+      await assignment.plan(HOST, { reconnect: false, region: US })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(1)
+    })
+
     it('marks its pace as the drain’s, on the reserve lane and in the region fallback', async () => {
       const { assignment } = setup({
         feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],

@@ -193,7 +193,7 @@ export class ReserveAssignment {
       .at(-1)
     const booking = directory.bookingOf(identity.userId, identity.relayHostId)
     const rowFloor = this.rowFloor(identity, now)
-    const drainedFrom = this.drainSource(seats, left)
+    const drainedFrom = this.drainSource(seats, left, booking)
     const known = [
       ...seats.map((seat) => seat.epoch),
       ...(left ? [left.epoch] : []),
@@ -290,17 +290,20 @@ export class ReserveAssignment {
 
   // Keyed on the cell, not the leave: a same-cap drain (graceMs 0) has the host re-ask before
   // its leave reaches the map, but the cell's feed says draining from the first poll after.
+  // Only the newest grant counts, so a host already re-booked elsewhere is not counted again.
   private drainSource(
     seats: readonly ShadowSeat[],
-    left: { cellId: string; epoch: number } | undefined
+    left: { cellId: string; epoch: number } | undefined,
+    booking: { cellId: string; epoch: number } | undefined
   ): string | undefined {
-    const drainOnly = seats.find((seat) => seat.state === 'drain-only')
-    if (drainOnly) return drainOnly.cellId
-    let newest: { cellId: string; epoch: number } | undefined
-    for (const entry of [...seats, ...(left ? [left] : [])]) {
+    let newest: { cellId: string; epoch: number; state?: string } | undefined
+    for (const entry of [...seats, ...(left ? [left] : []), ...(booking ? [booking] : [])]) {
       if (!newest || entry.epoch > newest.epoch) newest = entry
     }
-    return newest && this.input.directory.cellState(newest.cellId)?.draining === true ? newest.cellId : undefined
+    if (!newest) return undefined
+    const drained =
+      newest.state === 'drain-only' || this.input.directory.cellState(newest.cellId)?.draining === true
+    return drained ? newest.cellId : undefined
   }
 
   // Only the reserve lane's own answers: a database-lane placement off the drained (isolated)
