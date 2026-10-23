@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
-import { act, type ReactNode } from 'react'
+import { act } from 'react'
+import type { AgentSkillSetupPanelProps } from './agent-skill-setup-panel-props'
+import { planEntry, planOf, planOp } from '../skills/bundled-skill-plan-fixtures.test-support'
 import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,10 +21,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./AgentSkillSetupPanel', () => ({
-  AgentSkillSetupPanel: (
-    props: Record<string, unknown> & { actionHint?: ReactNode; footer?: ReactNode }
-  ) => {
-    mocks.panelProps.push(props)
+  AgentSkillSetupPanel: (props: AgentSkillSetupPanelProps) => {
+    mocks.panelProps.push({ ...props })
     return (
       <section>
         <h3>{String(props.title)}</h3>
@@ -32,7 +32,19 @@ vi.mock('./AgentSkillSetupPanel', () => ({
         <button type="button">{props.installed ? 'Update' : 'Install'}</button>
         <button type="button">Re-check</button>
         {props.actionHint}
-        {props.footer}
+        {typeof props.footer === 'function'
+          ? props.footer(
+              planOf([
+                planEntry('orchestration', [
+                  planOp('keep', '/home/u/.claude/skills/orchestration', {
+                    observed: { kind: 'link', target: '/home/u/.agents/skills/orchestration' }
+                  }),
+                  planOp('write', '/home/u/.agents/skills/orchestration', { agents: ['codex'] }),
+                  planOp('link', '/home/u/.gemini/skills/orchestration', { agents: ['gemini'] })
+                ])
+              ])
+            )
+          : props.footer}
       </section>
     )
   }

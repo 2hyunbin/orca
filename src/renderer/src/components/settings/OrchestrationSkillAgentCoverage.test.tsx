@@ -65,7 +65,10 @@ it('uses the install plan to mark an agent missing even when discovery finds a s
       loading={false}
       plan={planOf([
         planEntry('orchestration', [
-          planOp('keep', '/home/u/.agents/skills/orchestration'),
+          planOp('keep', '/home/u/.agents/skills/orchestration', {
+            agents: ['codex'],
+            observed: { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: 'a'.repeat(64) }
+          }),
           planOp('link', '/home/u/.claude/skills/orchestration', { agents: ['claude'] })
         ])
       ])}
@@ -98,4 +101,59 @@ it('uses the install plan to mark an agent missing even when discovery finds a s
   expect(markup).toContain('1 of 2 detected agents have the skill.')
   expect(markup).toContain('Missing')
   expect(markup).not.toContain('All 2 detected agents')
+})
+
+it('uses the remote plan for coverage when local discovery and detection disagree', () => {
+  const markup = renderToStaticMarkup(
+    <OrchestrationSkillAgentCoverage
+      loading={true}
+      sources={[]}
+      skills={[]}
+      plan={planOf([
+        planEntry('orchestration', [
+          planOp('keep', '/home/remote/.agents/skills/orchestration', {
+            agents: ['opencode'],
+            observed: { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: 'a'.repeat(64) }
+          }),
+          planOp('keep', '/home/remote/.cursor/skills/orchestration', {
+            agents: ['cursor'],
+            observed: { kind: 'link', target: '/home/remote/.agents/skills/orchestration' }
+          }),
+          planOp('link', '/home/remote/.gemini/skills/orchestration', { agents: ['gemini'] })
+        ])
+      ])}
+    />
+  )
+  expect(markup).toContain('2 of 3 detected agents have the skill.')
+  expect(markup).toContain('OpenCode')
+  expect(markup).toContain('Cursor')
+  expect(markup).toContain('Gemini')
+  expect(markup).toContain('Ready')
+  expect(markup).toContain('Missing')
+  expect(markup).not.toContain('Claude')
+  expect(markup).not.toContain('Codex')
+})
+
+it('shows full host coverage without waiting for discovery to see the installed copies', () => {
+  const markup = renderToStaticMarkup(
+    <OrchestrationSkillAgentCoverage
+      loading={false}
+      sources={[]}
+      skills={[]}
+      plan={planOf([
+        planEntry('orchestration', [
+          planOp('keep', '/home/remote/.agents/skills/orchestration', {
+            agents: ['opencode', 'codex'],
+            observed: { kind: 'folder', entries: ['SKILL.md:file'], skillDigest: 'a'.repeat(64) }
+          }),
+          planOp('keep', '/home/remote/.claude/skills/orchestration', {
+            agents: ['claude'],
+            observed: { kind: 'link', target: '/home/remote/.agents/skills/orchestration' }
+          })
+        ])
+      ])}
+    />
+  )
+  expect(markup).toContain('All 3 detected agents have the skill.')
+  expect(markup).not.toContain('Missing')
 })

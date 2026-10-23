@@ -71,16 +71,22 @@ export function OrchestrationPane({
   })
 
   const renderCoverage = useCallback(
-    (plan: BundledSkillPlan | undefined) => (
-      <OrchestrationSkillAgentCoverage
-        embedded
-        plan={plan}
-        skills={discoveredSkills}
-        sources={discoveredSkillSources}
-        loading={orchestrationSkillLoading}
-      />
-    ),
-    [discoveredSkills, discoveredSkillSources, orchestrationSkillLoading]
+    (plan: BundledSkillPlan | undefined) =>
+      plan || activeSkillRuntime.agentRuntime?.runtime === 'wsl' ? (
+        <OrchestrationSkillAgentCoverage
+          embedded
+          plan={plan}
+          skills={discoveredSkills}
+          sources={discoveredSkillSources}
+          loading={orchestrationSkillLoading}
+        />
+      ) : null,
+    [
+      activeSkillRuntime.agentRuntime,
+      discoveredSkills,
+      discoveredSkillSources,
+      orchestrationSkillLoading
+    ]
   )
 
   if (!showOrchestration) {

@@ -1,9 +1,13 @@
 import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
 import type { DiscoveredSkill, SkillDiscoverySource } from '../../../../shared/skills'
 import type { OrchestrationSkillAgentStatus } from '@/lib/orchestration-skill-coverage'
-import { AgentIcon } from '@/lib/agent-catalog'
+import { AgentIcon, getAgentLabel } from '@/lib/agent-catalog'
 import { useDetectedAgents } from '@/hooks/useDetectedAgents'
-import { getOrchestrationSkillAgentStatuses } from '@/lib/orchestration-skill-coverage'
+import {
+  getOrchestrationSkillAgentStatuses,
+  sortOrchestrationAgents
+} from '@/lib/orchestration-skill-coverage'
+import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 
@@ -98,23 +102,24 @@ export function OrchestrationSkillAgentCoverage(props: {
   className?: string
 }): React.JSX.Element {
   const { skills, sources, loading: skillsLoading, embedded = false, className } = props
-  const { detectedIds, isLoading: agentsLoading } = useDetectedAgents({
-    kind: 'local'
-  })
-  const loading = skillsLoading || agentsLoading || detectedIds === null
-  const missing = new Set<string>(
-    props.plan?.skills.flatMap((skill) =>
-      skill.ops.flatMap((op) => (op.observed.kind === 'absent' ? op.agents : []))
-    )
+  const { detectedIds, isLoading: agentsLoading } = useDetectedAgents(
+    props.plan ? undefined : { kind: 'local' }
   )
-  const agentStatuses = getOrchestrationSkillAgentStatuses(skills, detectedIds ?? [], sources).map(
-    (status) => ({
-      ...status,
-      installed:
-        status.installed &&
-        !missing.has(status.agent === 'claude-agent-teams' ? 'claude' : status.agent)
-    })
-  )
+  const loading = !props.plan && (skillsLoading || agentsLoading || detectedIds === null)
+  const ops = props.plan?.skills.find((skill) => skill.name === ORCHESTRATION_SKILL_NAME)?.ops
+  const plannedAgents = sortOrchestrationAgents([...new Set(ops?.flatMap((op) => op.agents))])
+  const agentStatuses = props.plan
+    ? plannedAgents.map((agent) => ({
+        agent,
+        label: getAgentLabel(agent),
+        installed: Boolean(
+          ops?.some(
+            (op) =>
+              op.agents.some((provider) => provider === agent) && op.observed.kind !== 'absent'
+          )
+        )
+      }))
+    : getOrchestrationSkillAgentStatuses(skills, detectedIds ?? [], sources)
   const installedCount = agentStatuses.filter((status) => status.installed).length
   const totalCount = agentStatuses.length
   const fullCoverage = !loading && totalCount > 0 && installedCount === totalCount
