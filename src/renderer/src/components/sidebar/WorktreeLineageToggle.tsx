@@ -17,22 +17,21 @@ const STATUS_ORDER: readonly WorktreeStatus[] = [
   'monitoring',
   'interrupted',
   'done',
-  'active',
-  'inactive'
+  'active'
 ]
 
 export function WorktreeLineageToggle({
   childWorktreeIds = EMPTY_CHILD_IDS,
   collapsed,
   ariaLabel,
-  label,
+  count,
   newCardStyle,
   onToggle
 }: {
   childWorktreeIds?: readonly string[]
   collapsed: boolean
   ariaLabel: string
-  label: string
+  count: number
   newCardStyle: boolean
   onToggle?: React.MouseEventHandler<HTMLButtonElement>
 }): React.JSX.Element {
@@ -61,14 +60,19 @@ export function WorktreeLineageToggle({
             aria-expanded={!collapsed}
             onClick={onToggle}
           >
-            <span className="inline-flex min-w-0 items-center gap-2 px-1 py-0.5">
-              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="inline-flex shrink-0 items-center gap-1">
-                  <Workflow className="size-2.5 shrink-0" />
-                  <span className="truncate">{label}</span>
+            <span className="inline-flex min-w-0 items-center gap-1.5 px-1 py-0.5">
+              <span className="inline-flex min-w-0 items-center gap-1.5">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  {summary.length === 0 ? <Workflow className="size-2.5 shrink-0" /> : null}
+                  <span className="shrink-0 tabular-nums">{count}</span>
+                  <span className="truncate">
+                    {count === 1
+                      ? translate('auto.components.sidebar.WorktreeList.0c6ee14f23', 'child')
+                      : translate('auto.components.sidebar.WorktreeList.045a8aed48', 'children')}
+                  </span>
                 </span>
                 {summary.length > 0 ? (
-                  <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-l border-border pl-2">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-1.5">
                     {summary.map((status) => (
                       <span
                         key={status}
@@ -76,7 +80,13 @@ export function WorktreeLineageToggle({
                         data-child-worktree-status={status}
                         aria-hidden="true"
                       >
-                        <StatusIndicator status={status} showTooltip={false} />
+                        {status === 'working' ? (
+                          <span className="inline-flex size-3 shrink-0 items-center justify-center">
+                            <span className="size-2 rounded-full bg-agent-working" />
+                          </span>
+                        ) : (
+                          <StatusIndicator status={status} showTooltip={false} />
+                        )}
                         {counts.get(status)}
                       </span>
                     ))}

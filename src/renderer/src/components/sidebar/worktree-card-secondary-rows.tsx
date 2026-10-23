@@ -31,7 +31,7 @@ export function WorktreeCardSecondaryRows({
     compactInlineAgentRows,
     showLineageChildChip,
     lineageChildAriaLabel,
-    childWorkspaceShortLabel,
+    lineageChildCount,
     isDeleting
   } = card
   const { hasMetaRow } = presentation
@@ -98,7 +98,7 @@ export function WorktreeCardSecondaryRows({
           childWorktreeIds={lineageChildWorktreeIds}
           collapsed={lineageCollapsed}
           ariaLabel={lineageChildAriaLabel}
-          label={childWorkspaceShortLabel}
+          count={lineageChildCount}
           newCardStyle={newCardStyle}
           onToggle={onLineageToggle}
         />
