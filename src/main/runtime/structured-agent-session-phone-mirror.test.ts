@@ -127,8 +127,16 @@ it('uses actual receipt origin and live desktop proof, then retires only a genui
     const count = dismissals().length
     stop()
     const restarted = new RuntimeMobileNotificationController()
-    restarted.retireLiveStructuredTurn(SESSION, journal.cursor(), 0)
-    expect(dismissals()).toHaveLength(count)
+    const restartedEvents: MobileNotificationEvent[] = []
+    const stopRestarted = restarted.onDispatched((event) => restartedEvents.push(event))
+    try {
+      restarted.retireLiveStructuredTurn(SESSION, journal.cursor(), 0)
+      expect(restartedEvents).toEqual([])
+      expect(dismissals()).toHaveLength(count)
+    } finally {
+      stopRestarted()
+      await restarted.closeDismissals()
+    }
   } finally {
     stop()
     await controller.closeDismissals()

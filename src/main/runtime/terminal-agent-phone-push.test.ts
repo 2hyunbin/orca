@@ -135,15 +135,10 @@ describe('TerminalAgentPhonePush', () => {
     ])
   })
 
-  it('seeds a first legacy finish silently', () => {
-    const { sent, finish } = harness()
-    finish()
-    expect(sent).toHaveLength(0)
-  })
-
-  it('does not leave a Pi quiet timer when seeding its history', () => {
+  it.each(['claude', 'pi'] as const)('seeds legacy %s history silently', (agentType) => {
     const { sent, advance, finish } = harness()
-    finish({ agentType: 'pi' })
+    finish({ agentType })
+    expect(sent).toHaveLength(0)
     expect(vi.getTimerCount()).toBe(0)
     advance(AGENT_DONE_QUIET_MS)
     expect(sent).toHaveLength(0)
@@ -195,12 +190,14 @@ describe('TerminalAgentPhonePush', () => {
   })
 
   it('collapses a burst in one workspace as the window’s fan-out does', () => {
-    const { push, sent, finish, working, advance } = harness()
+    const { sent, finish, working, advance } = harness()
     working()
     finish()
     advance(AGENT_DONE_QUIET_MS)
-    push.observe(moved('prompt-submitted', 'working'))
+    working({ stateStartedAt: 5_500 })
     finish({ stateStartedAt: 6_000 })
+    expect(vi.getTimerCount()).toBe(1)
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toHaveLength(1)
   })
 
@@ -225,8 +222,11 @@ describe('TerminalAgentPhonePush', () => {
   })
 
   it('pushes nothing for a muted workspace', () => {
-    const { sent, finish } = harness({ muted: true })
+    const { sent, finish, working, advance } = harness({ muted: true })
+    working()
     finish()
+    expect(vi.getTimerCount()).toBe(1)
+    advance(AGENT_DONE_QUIET_MS)
     expect(sent).toEqual([])
   })
 

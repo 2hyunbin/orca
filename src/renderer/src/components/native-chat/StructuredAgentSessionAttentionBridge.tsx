@@ -1,3 +1,5 @@
+import { agentSessionCurrentContextRows } from '../../../../shared/agent-session-context-clear'
+import { latestStructuredAgentSessionRequest } from '../../../../shared/structured-agent-session-latest-request'
 import { agentSessionAttentionKey } from '../../../../shared/agent-session-attention'
 import { isRootAgentJournalItem } from '../../../../shared/agent-session-journal-producer'
 import { readAgentJournalTurn } from '../../../../shared/agent-session-turn-record'
@@ -76,19 +78,41 @@ function StructuredAgentSessionOwnedAttention({
         return
       }
       const epoch = snapshot.state.cursor?.epoch
-      const root = snapshot.state.items.findLast(
-        (item) => isRootAgentJournalItem(item) && readAgentJournalTurn(item.body) !== null
-      )
-      const ids: { notificationId: string; executionHost?: string }[] = []
       for (const [notificationId, cursor] of owed) {
         if (cursor.epoch !== epoch) {
           owed.delete(notificationId)
-        } else if (
-          root &&
-          !root.recovered &&
-          readAgentJournalTurn(root.body)?.state === 'running' &&
-          root.sequence > cursor.sequence
-        ) {
+        }
+      }
+      if (!owed.size) {
+        return
+      }
+      const context = agentSessionCurrentContextRows(
+        snapshot.state.items,
+        snapshot.state.submissions
+      )
+      const request = latestStructuredAgentSessionRequest(context.items, context.submissions)
+      const roots =
+        request?.kind === 'turn' && request.turnState === 'running'
+          ? context.items.filter(
+              (item) =>
+                isRootAgentJournalItem(item) &&
+                readAgentJournalTurn(item.body)?.turnId === request.id
+            )
+          : []
+      const root = roots.length === 1 ? roots[0] : undefined
+      const userItemId = readAgentJournalTurn(root?.body)?.userItemId
+      const message = context.items.find((item) => item.itemId === userItemId)
+      if (
+        !root ||
+        root.recovered ||
+        message?.body.kind !== 'message' ||
+        message.body.role !== 'user'
+      ) {
+        return
+      }
+      const ids: { notificationId: string; executionHost?: string }[] = []
+      for (const [notificationId, cursor] of owed) {
+        if (root.sequence > cursor.sequence) {
           ids.push({
             notificationId,
             ...(target.kind === 'environment'

@@ -59,7 +59,40 @@ describe('terminal agent phone push on a headless host', () => {
   })
 
   it('pushes a finish once it stays finished, a request for input at once, and never a prompt', () => {
-    const { report, agentAlerts, alerts } = createHost()
+    const { runtime, server, report, agentAlerts, alerts } = createHost()
+    const ingest = (state: 'working' | 'done', agentType: string, isReplay = false) =>
+      server.ingestRemote(
+        {
+          paneKey: PANE,
+          tabId: 'tab-1',
+          worktreeId: WT,
+          isReplay,
+          payload: { state, prompt: '', agentType }
+        },
+        'runtime-output-control'
+      )
+    ingest('working', 'make')
+    ingest('done', 'make')
+    expect(server.getStatusSnapshotForPane(PANE)[0]?.state).toBe('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(alerts).toEqual([])
+    server.clearPaneState(PANE)
+    ingest('done', 'claude', true)
+    expect(server.getStatusSnapshotForPane(PANE)[0]).toMatchObject({
+      state: 'done',
+      isReplay: true
+    })
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(alerts).toEqual([])
+    cleanups.pop()!()
+    server.clearPaneState(PANE)
+    ingest('done', 'claude')
+    expect(server.getStatusSnapshotForPane(PANE)[0]).toMatchObject({ state: 'done' })
+    expect(server.getStatusSnapshotForPane(PANE)[0]?.isReplay).toBeUndefined()
+    cleanups.push(runtime.attachAgentStatusStore(server))
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(alerts).toEqual([])
+    server.clearPaneState(PANE)
     report('working')
     report('done')
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
