@@ -7,7 +7,7 @@ import {
 import { worktreeIdsEqual } from '../../../src/shared/worktree/id'
 import { parsePaneKey } from '../../../src/shared/stable-pane-id'
 import type { RpcClient } from '../transport/rpc-client'
-import type { MobileSessionTab } from './mobile-session-route-types'
+import type { RuntimeMobileSessionTerminalClientTab } from '../../../src/shared/runtime-mobile-session-tab-contracts'
 
 const replicas = new WeakMap<RpcClient, ReturnType<typeof createReplica>>()
 const empty = new Map<string, TerminalInterfaceObservation>()
@@ -148,11 +148,17 @@ export function disposeMobileTerminalInterfaceReplica(client: RpcClient) {
   replicas.get(client)?.dispose()
   replicas.delete(client)
 }
-export function deriveMobileTerminalInterfaces(
-  tabs: MobileSessionTab[],
+export function deriveMobileTerminalInterfaces<
+  Tab extends { type: string; terminalInterface?: TerminalInterfaceObservation } & Partial<
+    Omit<RuntimeMobileSessionTerminalClientTab, 'type'>
+  >
+>(
+  tabs: Tab[],
   observations: ReadonlyMap<string, TerminalInterfaceObservation>,
   worktreeId: string
-): MobileSessionTab[] {
+): ({
+  [Key in keyof Tab as Exclude<Key, 'terminalInterface'>]: Tab[Key]
+} & { terminalInterface?: TerminalInterfaceObservation })[] {
   return tabs.map((tab) => {
     if (tab.type !== 'terminal') {
       return tab
