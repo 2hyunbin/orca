@@ -12,7 +12,8 @@ const {
   recordFeatureInteractionMock,
   setRemoteBrowserPageHandleMock,
   callRuntimeRpcMock,
-  storeState
+  storeState,
+  resetStore
 } = vi.hoisted(() => {
   const workspacePortScansByKey: Record<string, WorkspacePortScanResult> = {}
   const state = {
@@ -22,7 +23,8 @@ const {
     replaceWorkspacePortScans: vi.fn(),
     setWorkspacePortScanRefreshing: vi.fn(),
     recordFeatureInteraction: vi.fn(),
-    workspacePortScansByKey
+    workspacePortScansByKey,
+    workspacePortScan: null as { key: string; result: WorkspacePortScanResult } | null
   }
   return {
     activateAndRevealWorktreeMock: vi.fn(),
@@ -31,14 +33,22 @@ const {
     recordFeatureInteractionMock: state.recordFeatureInteraction,
     setRemoteBrowserPageHandleMock: state.setRemoteBrowserPageHandle,
     callRuntimeRpcMock: vi.fn(),
-    storeState: state
+    storeState: state,
+    resetStore: { current: () => {} }
   }
 })
 
-vi.mock('@/store', () => {
+vi.mock('@/store', async () => {
+  const { useStore } = await import('zustand')
+  const { createStore } = await import('zustand/vanilla')
+  const store = createStore(() => storeState)
+  resetStore.current = () => store.setState({ ...storeState }, true)
+  storeState.replaceWorkspacePortScans.mockImplementation((scansByKey, projection) =>
+    store.setState({ workspacePortScansByKey: scansByKey, workspacePortScan: projection })
+  )
   const useAppStore = Object.assign(
-    (selector: (state: typeof storeState) => unknown) => selector(storeState),
-    { getState: () => storeState }
+    (selector: (state: typeof storeState) => unknown) => useStore(store, selector),
+    { getState: store.getState }
   )
   return { useAppStore }
 })
@@ -80,7 +90,12 @@ vi.mock('sonner', () => ({
 }))
 
 import { PortRow } from './ports-status-popover-rows'
-import { mergeWorkspacePortScans } from '@/lib/workspace-port-actions'
+import {
+  mergeWorkspacePortScans,
+  publishWorkspacePortScanForHost
+} from '@/lib/workspace-port-actions'
+import { useAppStore } from '@/store'
+import { workspacePortHostForRow } from '@/lib/workspace-port-host-availability'
 import { toast } from 'sonner'
 
 const externalPort: WorkspacePort = {
@@ -123,6 +138,7 @@ describe('status bar port row open routing', () => {
     storeState.workspacePortScansByKey = {
       'local:all': { platform: 'darwin', scannedAt: 0, ports: [externalPort] }
     }
+    resetStore.current()
   })
 
   afterEach(() => {
@@ -139,6 +155,7 @@ describe('status bar port row open routing', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
+    resetStore.current()
     act(() => {
       root.render(<PortRow port={port} activeWorktreeId={activeWorktreeId} external />)
     })
@@ -238,6 +255,7 @@ describe('status bar port row open routing', () => {
     if (!row) {
       throw new Error('expected ownerless host-B row')
     }
+    act(() => resetStore.current())
     act(() => root.render(<PortRow port={row} activeWorktreeId="repo-a::/repo-a" external />))
     expect(
       container.querySelector<HTMLButtonElement>('button[aria-label="Stop Process"]')?.disabled
@@ -263,4 +281,105 @@ describe('status bar port row open routing', () => {
     expect(createBrowserTabMock).toHaveBeenCalledTimes(createdTabs)
     expect(openUrlMock).not.toHaveBeenCalled()
   })
+
+  it.each([100, 1_000])(
+    'shares linear source work across %i subscribed rows and changed publications',
+    async (population) => {
+      let reads = 0
+      const scans = Object.fromEntries(
+        Array.from({ length: population / 50 }, (_, host) => [
+          `environment:host:${host}:all`,
+          {
+            platform: 'darwin' as const,
+            scannedAt: 0,
+            ports: Array.from({ length: 50 }, (_, row) => ({
+              ...externalPort,
+              pid: undefined,
+              port: 20_000 + host * 50 + row,
+              get id() {
+                reads += 1
+                return `tcp:${host * 50 + row}`
+              }
+            }))
+          }
+        ])
+      )
+      storeState.workspacePortScansByKey = scans
+      resetStore.current()
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      function Rows(): React.JSX.Element {
+        const projection = useAppStore((state) => state.workspacePortScan)
+        return (
+          <>
+            {projection?.result.ports.map((port) => (
+              <PortRow key={port.id} port={port} activeWorktreeId="repo-a::/repo-a" external />
+            ))}
+          </>
+        )
+      }
+      act(() => root.render(<Rows />))
+      let previousRow: WorkspacePort | undefined
+      for (const generation of [1, 2]) {
+        reads = 0
+        act(() =>
+          publishWorkspacePortScanForHost({
+            getWorkspacePortScansByKey: () => useAppStore.getState().workspacePortScansByKey,
+            replaceWorkspacePortScans: storeState.replaceWorkspacePortScans,
+            scanKey: 'environment:host:1:all',
+            scan: {
+              ...scans['environment:host:1:all'],
+              scannedAt: generation,
+              ports: scans['environment:host:1:all'].ports.map((port) => ({
+                ...port,
+                id: `generation:${generation}:${port.id}`
+              }))
+            }
+          })
+        )
+        // Aggregate spread/id reads and one shared index each get a linear allowance.
+        expect(reads).toBeGreaterThanOrEqual(population)
+        expect(reads).toBeLessThanOrEqual(4 * population)
+        const current = useAppStore.getState()
+        const row = current.workspacePortScan?.result.ports.find((port) => port.port === 20_050)
+        if (!row) {
+          throw new Error('expected host B row')
+        }
+        if (previousRow) {
+          expect(workspacePortHostForRow(previousRow, current.workspacePortScansByKey)).toEqual({
+            kind: 'unknown'
+          })
+        }
+        previousRow = row
+        const before = reads
+        for (const port of current.workspacePortScan?.result.ports ?? []) {
+          workspacePortHostForRow(port, current.workspacePortScansByKey)
+        }
+        expect(reads).toBe(before)
+        expect(container.querySelectorAll('button[aria-label="Open in Browser"]')).toHaveLength(
+          population
+        )
+        expect(
+          [
+            ...container.querySelectorAll<HTMLButtonElement>('button[aria-label="Stop Process"]')
+          ].every((button) => button.disabled)
+        ).toBe(true)
+        const button = container.querySelectorAll<HTMLButtonElement>(
+          'button[aria-label="Open in Browser"]'
+        )[current.workspacePortScan?.result.ports.indexOf(row) ?? -1]
+        await act(async () => button.click())
+        expect(callRuntimeRpcMock).toHaveBeenLastCalledWith(
+          { kind: 'environment', environmentId: 'host:1' },
+          'browser.tabCreate',
+          { url: 'http://127.0.0.1:20050' },
+          { timeoutMs: 30_000 }
+        )
+        expect(setRemoteBrowserPageHandleMock).toHaveBeenLastCalledWith(expect.any(String), {
+          environmentId: 'host:1',
+          remotePageId: 'remote-page'
+        })
+      }
+    }
+  )
 })

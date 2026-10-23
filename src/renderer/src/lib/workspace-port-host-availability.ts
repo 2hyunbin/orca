@@ -41,22 +41,29 @@ export function workspacePortHostForScanKey(scanKey: string): WorkspacePortHostR
   return environmentId ? { kind: 'environment', environmentId } : { kind: 'unknown' }
 }
 
+const sourceHostsBySnapshot = new WeakMap<
+  Record<string, WorkspacePortScanResult>,
+  Map<string, WorkspacePortHostRef>
+>()
+
 /** Recover an aggregate row's source host without asserting process or workspace ownership. */
 export function workspacePortHostForRow(
   port: WorkspacePort,
   scansByKey: Record<string, WorkspacePortScanResult>
 ): WorkspacePortHostRef {
-  const entries = Object.entries(scansByKey)
-  for (const [key, scan] of entries) {
-    if (
-      scan.ports.some(
-        (source) => port.id === (entries.length > 1 ? `${key}:${source.id}` : source.id)
-      )
-    ) {
-      return workspacePortHostForScanKey(key)
+  let hosts = sourceHostsBySnapshot.get(scansByKey)
+  if (!hosts) {
+    hosts = new Map()
+    const entries = Object.entries(scansByKey)
+    for (const [key, scan] of entries) {
+      const host = workspacePortHostForScanKey(key)
+      for (const source of scan.ports) {
+        hosts.set(entries.length > 1 ? `${key}:${source.id}` : source.id, host)
+      }
     }
+    sourceHostsBySnapshot.set(scansByKey, hosts)
   }
-  return { kind: 'unknown' }
+  return hosts.get(port.id) ?? { kind: 'unknown' }
 }
 
 /**
