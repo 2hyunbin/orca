@@ -116,7 +116,7 @@ export async function attributeClaudeUsageTurns(
     let repoId: string | null = null
     let worktreeId: string | null = null
     let projectKey = 'unscoped'
-    let projectLabel = getDefaultProjectLabel(turn.cwd)
+    let projectLabel: string | null = null
 
     if (turn.cwd) {
       let worktree = worktreeByCwd.get(turn.cwd)
@@ -139,7 +139,7 @@ export async function attributeClaudeUsageTurns(
       ...turn,
       day,
       projectKey,
-      projectLabel,
+      projectLabel: projectLabel ?? getDefaultProjectLabel(turn.cwd),
       repoId,
       worktreeId
     })
