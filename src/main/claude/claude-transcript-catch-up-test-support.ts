@@ -2,7 +2,7 @@
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, vi } from 'vitest'
+import { afterEach, type Mock, vi } from 'vitest'
 import type { AgentSessionJournalIdentity } from '../../shared/agent-session-journal-types'
 import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
@@ -120,7 +120,7 @@ export async function chat(project = '-work', cwd = '/work') {
     await journals.closeAll()
     await rm(root, { recursive: true, force: true })
   })
-  const warn = vi.fn()
+  const warn: Mock<(...args: unknown[]) => void> = vi.fn()
   return {
     identity,
     journal,
