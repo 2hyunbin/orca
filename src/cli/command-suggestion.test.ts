@@ -28,8 +28,6 @@ const specs: CommandSpec[] = [
     allowedFlags: []
   },
   {
-    // A destructive command outside the delete-family, to prove the guard keys
-    // off the spec flag rather than a hardcoded verb list.
     path: ['emulator', 'kill'],
     destructive: true,
     summary: 'Kill the emulator',
@@ -51,8 +49,6 @@ describe('suggestCommands', () => {
   })
 
   it('includes alias paths among suggestions', () => {
-    // `worktree remove` is the alias; a typo near it should surface it (an exact
-    // match would resolve as a real command, not trigger a suggestion).
     expect(suggestCommands(specs, ['worktree', 'remov'])).toContain('worktree remove')
   })
 
@@ -74,8 +70,6 @@ describe('suggestCommands', () => {
   })
 
   it('never suggests a destructive command for a benign non-destructive typo', () => {
-    // `worktree move` sits distance 2 from `worktree remove`; without the
-    // guard it would sole-suggest an irreversible delete on blind retry. #6303
     const result = suggestCommands(specs, ['worktree', 'move'])
     expect(result).not.toContain('worktree remove')
     expect(result).not.toContain('worktree rm')
@@ -93,10 +87,7 @@ describe('suggestCommands', () => {
   })
 
   it('guards destructive commands outside the delete-family via the spec flag', () => {
-    // `emulator ball` is a benign token, distance 2 from the flagged `emulator
-    // kill` — close enough to otherwise rank, so the guard must exclude it.
     expect(suggestCommands(specs, ['emulator', 'ball'])).not.toContain('emulator kill')
-    // A genuine near-miss of the destructive verb still recovers.
     expect(suggestCommands(specs, ['emulator', 'kil'])).toContain('emulator kill')
   })
 
