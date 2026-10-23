@@ -447,7 +447,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(await userTexts(COORDINATOR)).toEqual([expect.stringMatching(MAIL)])
   })
 
-  it('steers each report that arrives mid-turn into the running turn whole, sent once and never checked again', async () => {
+  it('holds reports invisibly until idle, then completes one attributed turn per report in order', async () => {
     const chat = await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
     const second = await call(
@@ -457,58 +457,101 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     )
     expect(await sendUserMessage(COORDINATOR, 'go')).toMatchObject({ ok: true })
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-    const notify = (method: string, params: unknown) =>
-      chat.handlers.onNotification?.(method, params)
-    const echo = (id: string, clientId: string, text: string) =>
+    const notify = (method: string, params: Record<string, unknown>) =>
+      chat.handlers.onNotification?.(method, { threadId: chat.threadId, ...params })
+    const startTurn = async (index: number) => {
+      notify('turn/started', { turn: { id: `turn-${index + 1}`, status: 'inProgress' } })
       notify('item/completed', {
-        item: { type: 'userMessage', id, clientId, content: [{ type: 'text', text }] }
+        turnId: `turn-${index + 1}`,
+        item: {
+          type: 'userMessage',
+          id: `input-${index}`,
+          clientId: chat.turns[index]!.clientUserMessageId,
+          content: [{ type: 'text', text: turnText(chat.turns[index]!) }]
+        }
       })
-    notify('turn/started', { turn: { id: 'turn-1' } })
-    echo('echo-go', chat.turns[0]!.clientUserMessageId, 'go')
-    await host.flushStreamedEvents(COORDINATOR)
+      await host.flushStreamedEvents(COORDINATOR)
+    }
+    const finishTurn = async (index: number) => {
+      notify('item/completed', {
+        turnId: `turn-${index + 1}`,
+        item: { type: 'agentMessage', id: `reply-${index}`, text: `Finished ${index}` }
+      })
+      notify('thread/status/changed', { status: { type: 'idle' } })
+      notify('turn/completed', { turn: { id: `turn-${index + 1}`, status: 'completed' } })
+      await host.flushStreamedEvents(COORDINATOR)
+    }
+    await startTurn(0)
 
-    // Two reports, each into the turn that is running as its own message: no card, no second
-    // turn, and the second does not wait for the agent to take in the first.
     await finishWorker(taskId)
-    await vi.waitFor(() => expect(chat.steers).toHaveLength(1), WAIT)
     await finishWorker(idOf(second.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
-    await vi.waitFor(() => expect(chat.steers).toHaveLength(2), WAIT)
-    expect(chat.steers.map((steer) => steer.expectedTurnId)).toEqual(['turn-1', 'turn-1'])
-    const texts = chat.steers.map(turnText)
-    expect(texts).toEqual([expect.stringMatching(MAIL), expect.stringMatching(MAIL)])
-    expect(texts[0]).toContain('**From:** `term_worker` · worker_done')
-    expect(texts[1]).toContain('**From:** `term_worker_2` · worker_done')
+    await edgesAnswered()
+    const pending = db.getUndeliveredUnreadMessages(`run:${runId}`, undefined, {})
+    expect(pending.map((message) => message.from_handle)).toEqual(['term_worker', 'term_worker_2'])
+    expect(chat.turns).toHaveLength(1)
+    expect(await userTexts(COORDINATOR)).toEqual(['go'])
+    expect(await mailSends()).toEqual([])
     expect(await queuedCardTexts()).toEqual([])
-    const sent = (await host.journalSnapshot(COORDINATOR)).items.flatMap((item) =>
+    expect(chat.steers).toEqual([])
+
+    await finishTurn(0)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+    expect(turnText(chat.turns[1]!)).toMatch(MAIL)
+    expect(turnText(chat.turns[1]!)).toContain('**From:** `term_worker` · worker_done')
+    await startTurn(1)
+    await edgesAnswered()
+    expect(chat.turns).toHaveLength(2)
+    await vi.waitFor(
+      () =>
+        expect(
+          db
+            .getUndeliveredUnreadMessages(`run:${runId}`, undefined, {})
+            .map((message) => message.id)
+        ).toEqual([pending[1]!.id]),
+      WAIT
+    )
+
+    await finishTurn(1)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(3), WAIT)
+    expect(turnText(chat.turns[2]!)).toMatch(MAIL)
+    expect(turnText(chat.turns[2]!)).toContain('**From:** `term_worker_2` · worker_done')
+    await startTurn(2)
+    await finishTurn(2)
+    const snapshot = await host.journalSnapshot(COORDINATOR)
+    const sent = snapshot.items.flatMap((item) =>
       item.body.kind === 'message' && item.body.from ? [item.body.from] : []
     )
-    expect(sent).toEqual([
-      expect.objectContaining({
-        orchestration: expect.objectContaining({
-          message: 'mail-notice',
-          carriesMailContent: true,
-          mailbox: `run:${runId}`
+    expect(sent).toEqual(
+      pending.map((message) =>
+        expect.objectContaining({
+          orchestration: expect.objectContaining({
+            message: 'mail-notice',
+            carriesMailContent: true,
+            mailbox: `run:${runId}`,
+            messages: [
+              expect.objectContaining({ messageId: message.id, from: message.from_handle })
+            ]
+          })
         })
-      }),
-      expect.objectContaining({
-        orchestration: expect.objectContaining({
-          message: 'mail-notice',
-          carriesMailContent: true,
-          mailbox: `run:${runId}`
-        })
-      })
-    ])
-
-    chat.steers.forEach((steer, index) =>
-      echo(`echo-mail-${index}`, steer.clientUserMessageId, texts[index]!)
+      )
     )
-    notify('turn/completed', { turn: { id: 'turn-1' } })
-    await host.flushStreamedEvents(COORDINATOR)
-    // Later edges find both received: nothing is resent, and `check` hands out neither.
+    expect(
+      snapshot.items.filter((item) => item.body.kind === 'turn').map((item) => item.body)
+    ).toEqual(
+      [1, 2, 3].map((index) =>
+        expect.objectContaining({ turnId: `turn-${index}`, state: 'completed' })
+      )
+    )
+    expect(new Set(await mailSends()).size).toBe(2)
+    await vi.waitFor(
+      () => expect(db.getUndeliveredUnreadMessages(`run:${runId}`, undefined, {})).toEqual([]),
+      WAIT
+    )
     runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
     await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(chat.turns).toHaveLength(1)
-    expect(chat.steers).toHaveLength(2)
+    expect(chat.turns).toHaveLength(3)
+    expect(chat.steers).toEqual([])
+    expect(await queuedCardTexts()).toEqual([])
     expect(await call('orchestration.check', {}, { sessionId: COORDINATOR })).toMatchObject({
       runId,
       count: 0
