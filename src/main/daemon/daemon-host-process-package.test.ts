@@ -379,7 +379,7 @@ describe('relocated Windows registry package', () => {
         program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? originalExecPath,
         args: [
           '-e',
-          `
+          String.raw`
         const assert = require('node:assert/strict')
         const registry = require('node:module').createRequire(process.argv[1])('@orca/windows-registry')
         const values = registry.getRegistryKey(registry.HK.LM, 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion')
