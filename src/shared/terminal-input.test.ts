@@ -80,14 +80,25 @@ describe('terminal input bounds', () => {
     )
   })
 
+  it('accepts terminal input without scanning code units in JavaScript', () => {
+    const text = 'é'.repeat(64 * 1024)
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt')
+
+    const tooLarge = isTerminalInputTooLarge(text)
+    const scannedCodeUnits = charCodeAt.mock.calls.length
+
+    expect(tooLarge).toBe(false)
+    expect(scannedCodeUnits).toBe(0)
+  })
+
   it('rejects terminal input whose string length already exceeds the byte limit without scanning', () => {
-    const codePointAt = vi.spyOn(String.prototype, 'codePointAt')
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt')
 
     expect(isTerminalInputTooLarge('x'.repeat(6), 5)).toBe(true)
     expect(() => assertTerminalInputWithinLimit('x'.repeat(6), 5)).toThrow(
       TERMINAL_INPUT_TOO_LARGE_ERROR
     )
-    expect(codePointAt).not.toHaveBeenCalled()
+    expect(charCodeAt).not.toHaveBeenCalled()
   })
 
   it('yields while measuring accepted large terminal input', async () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { measureUtf8ByteLength } from '../utf8-byte-limits'
+import { isUtf8ByteLengthWithinLimit, measureUtf8ByteLength } from '../utf8-byte-limits'
 
 export const MAX_PROMPT_BYTES = 256 * 1024
 export const MAX_BLOCKS = 64
@@ -46,8 +46,7 @@ export function structuredAgentSessionBlocksByteLength(blocks: readonly unknown[
 }
 
 export function structuredAgentSessionBlocksTooLarge(blocks: readonly unknown[]): boolean {
-  return measureUtf8ByteLength(JSON.stringify(blocks), { stopAfterBytes: MAX_PROMPT_BYTES })
-    .exceededLimit
+  return !isUtf8ByteLengthWithinLimit(JSON.stringify(blocks), MAX_PROMPT_BYTES)
 }
 
 export const SendBody = SendBodyStructure.refine(

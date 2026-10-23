@@ -39,6 +39,27 @@ describe('clipboard text limits', () => {
     expect(isClipboardTextByteLengthOverLimit('éé', 4)).toBe(false)
   })
 
+  it('checks accepted clipboard text without scanning code units in JavaScript', () => {
+    const text = 'é'.repeat(64 * 1024)
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt')
+
+    const overDefaultLimit = isClipboardTextByteLengthOverLimit(text, 16 * 1024 * 1024)
+    const overExactLimit = isClipboardTextByteLengthOverLimit(text, 128 * 1024)
+    const scannedCodeUnits = charCodeAt.mock.calls.length
+
+    expect(overDefaultLimit).toBe(false)
+    expect(overExactLimit).toBe(false)
+    expect(scannedCodeUnits).toBe(0)
+  })
+
+  it('preserves empty-text and non-finite budget behavior', () => {
+    expect(isClipboardTextByteLengthOverLimit('', -1)).toBe(true)
+    expect(isClipboardTextByteLengthOverLimit('', 0)).toBe(false)
+    expect(isClipboardTextByteLengthOverLimit('é', Number.NaN)).toBe(false)
+    expect(isClipboardTextByteLengthOverLimit('é', Number.POSITIVE_INFINITY)).toBe(false)
+    expect(isClipboardTextByteLengthOverLimit('é', Number.NEGATIVE_INFINITY)).toBe(true)
+  })
+
   it('yields while measuring large accepted clipboard text', async () => {
     const yieldToEventLoop = vi.fn(async () => {})
 
@@ -80,7 +101,7 @@ describe('clipboard text limits', () => {
   })
 
   it('rejects text whose string length already exceeds the byte limit without scanning', () => {
-    const codePointAt = vi.spyOn(String.prototype, 'codePointAt')
+    const charCodeAt = vi.spyOn(String.prototype, 'charCodeAt')
 
     expect(isClipboardTextByteLengthOverLimit('x'.repeat(6), 5)).toBe(true)
     expect(() => assertClipboardTextWithinLimit('x'.repeat(6), { maxBytes: 5 })).toThrow(
@@ -89,7 +110,7 @@ describe('clipboard text limits', () => {
     expect(() => assertClipboardTextWriteWithinLimit('x'.repeat(6), { maxBytes: 5 })).toThrow(
       CLIPBOARD_TEXT_WRITE_TOO_LARGE_ERROR
     )
-    expect(codePointAt).not.toHaveBeenCalled()
+    expect(charCodeAt).not.toHaveBeenCalled()
   })
 
   it('lets each clipboard consumer override the shared default byte limits', async () => {

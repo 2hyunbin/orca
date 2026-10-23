@@ -1,5 +1,6 @@
 import {
   CLIPBOARD_TEXT_MEASURE_YIELD_CODE_UNITS,
+  isClipboardTextByteLengthOverLimit,
   isClipboardTextByteLengthOverLimitWithYield,
   measureClipboardTextByteLength
 } from './clipboard-text'
@@ -28,10 +29,7 @@ export function isTerminalInputTooLarge(
   text: string,
   maxBytes = TERMINAL_INPUT_MAX_BYTES
 ): boolean {
-  return (
-    text.length > maxBytes ||
-    measureClipboardTextByteLength(text, { stopAfterBytes: maxBytes }).exceededLimit
-  )
+  return isClipboardTextByteLengthOverLimit(text, maxBytes)
 }
 
 export function isTerminalInputTooLargeWithYield(
