@@ -16,7 +16,14 @@ const scope = { workspaceIds: [WT], workspaceKeys: new Set([WT]) }
 
 const RELAY = 10
 // The WSL relay (`init`) starts the pane's login shell as a session leader.
-const relay: WslGuestProcessRow = { pid: RELAY, ppid: 1, sid: 1, argc: 1, comm: 'init', paneKey: null }
+const relay: WslGuestProcessRow = {
+  pid: RELAY,
+  ppid: 1,
+  sid: 1,
+  argc: 1,
+  comm: 'init',
+  paneKey: null
+}
 const shellA: WslGuestProcessRow = {
   pid: 100,
   ppid: RELAY,
@@ -49,9 +56,7 @@ describe('classifyWslGuestPaneForeground', () => {
     ['a script waiting at `read`', [child(150, 'bash', { argc: 2 })]],
     ['`sh -c` running a command', [child(150, 'sh', { argc: 3 })]]
   ])('blocks %s', (_label, extra) => {
-    expect(classifyWslGuestPaneForeground([relay, shellA, ...extra], KEY_A)).toBe(
-      'process-running'
-    )
+    expect(classifyWslGuestPaneForeground([relay, shellA, ...extra], KEY_A)).toBe('process-running')
   })
 
   it("ignores another pane's work and the relay above the shell", () => {
@@ -97,7 +102,13 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
   })
   const base: WslMoveGateFactSources = {
     listTerminals: () => [
-      { ptyId: 'pty-1', workspaceId: WT, paneKey: KEY_A, wslDistro: 'Ubuntu', foregroundAgent: null }
+      {
+        ptyId: 'pty-1',
+        workspaceId: WT,
+        paneKey: KEY_A,
+        wslDistro: 'Ubuntu',
+        foregroundAgent: null
+      }
     ],
     inspect: windowsSaysLive,
     agentRows: () => [],

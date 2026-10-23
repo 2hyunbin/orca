@@ -4,7 +4,15 @@
  * own ref. Each buffer is spooled to a file, so only hashes and sizes stay in memory.
  */
 import { createHash } from 'node:crypto'
-import { closeSync, mkdirSync, openSync, readFileSync, readSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  closeSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { join } from 'node:path'
 import { ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES } from '../../../shared/orcad-migration/orcad-migration-scrollback'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
@@ -154,7 +162,10 @@ export function withSleptSnapshots(
       if (!descriptor || !entry || entry.sha256 !== descriptor.sha256) {
         return source.readOrcadMigrationSourceSnapshotChunk(manifest, ref, offset)
       }
-      const length = Math.max(0, Math.min(ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES, entry.byteLength - offset))
+      const length = Math.max(
+        0,
+        Math.min(ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES, entry.byteLength - offset)
+      )
       const chunk = Buffer.alloc(length)
       const fd = openSync(entry.path, 'r')
       try {

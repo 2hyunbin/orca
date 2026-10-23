@@ -31,7 +31,9 @@ function spoolRoot(): string {
   return join(root, 'move-1')
 }
 
-function sleptSession(extra: Partial<WorkspaceSessionState['terminalLayoutsByTabId'][string]> = {}) {
+function sleptSession(
+  extra: Partial<WorkspaceSessionState['terminalLayoutsByTabId'][string]> = {}
+) {
   // What Sleep leaves: the layout names the pane, with at most an older renderer buffer.
   return {
     ...getDefaultWorkspaceSession(),
@@ -69,8 +71,11 @@ describe('a slept pane on the snapshot channel', () => {
     const history = Buffer.from('$ make\r\nok\r\n$ ', 'utf8')
     // Before the fix the moved terminal opened empty: nothing was carried.
     expect(projectOrcadMigrationSessionScrollback(sleptSession()).snapshots).toEqual([])
-    const projected = projectOrcadMigrationSessionScrollback(sleptSession(), undefined, false, () =>
-      history
+    const projected = projectOrcadMigrationSessionScrollback(
+      sleptSession(),
+      undefined,
+      false,
+      () => history
     )
     const ref = makeTerminalScrollbackSnapshotRef(TAB, LEAF)
     expect(projected.blockedItems).toEqual([])

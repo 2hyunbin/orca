@@ -265,7 +265,7 @@ describe('exportWslMoveManifest', () => {
     expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([])
   })
 
-  it("is not refused by a project an earlier move retained, whose agent stays here", () => {
+  it('is not refused by a project an earlier move retained, whose agent stays here', () => {
     const state = sourceState()
     const retainedWorktree = 'old::\\\\wsl.localhost\\Ubuntu\\home\\me\\old'
     state.repos.push(repo('old', '\\\\wsl.localhost\\Ubuntu\\home\\me\\old'))
@@ -292,7 +292,9 @@ describe('exportWslMoveManifest', () => {
     // a project reset with a digest mismatch until a restart (D1b-10 run on awin).
     const state = sourceState()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the in-memory shape the load normalizes.
-    ;(state.repos[0] as unknown as Record<string, unknown>).lastSeenAt = new Date('2026-10-20T00:00:00.000Z')
+    ;(state.repos[0] as unknown as Record<string, unknown>).lastSeenAt = new Date(
+      '2026-10-20T00:00:00.000Z'
+    )
     const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
     expect(() =>
       assertOrcadMigrationManifestDigest(JSON.parse(JSON.stringify(manifest)))
@@ -314,7 +316,11 @@ describe('exportWslMoveManifest', () => {
   })
 
   describe('only the selected projects can refuse it', () => {
-    const agentIn = (worktreeId: string, tabId: string, leafId: string): SleepingAgentSessionRecord => ({
+    const agentIn = (
+      worktreeId: string,
+      tabId: string,
+      leafId: string
+    ): SleepingAgentSessionRecord => ({
       paneKey: `${tabId}:${leafId}`,
       tabId,
       worktreeId,
@@ -395,7 +401,9 @@ describe('exportWslMoveManifest', () => {
     // The awin run: a move right after sleeping terminals reset with a digest mismatch, because the
     // signature covered session fields the manifest parser does not keep.
     const state = sourceState()
-    const sleptTab: Record<string, unknown> = { ...state.workspaceSession.tabsByWorktree[WORKTREE]![0] }
+    const sleptTab: Record<string, unknown> = {
+      ...state.workspaceSession.tabsByWorktree[WORKTREE]![0]
+    }
     sleptTab.fieldNoParserKeeps = 1
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: an extra field on a real tab.
     state.workspaceSession.tabsByWorktree[WORKTREE] = [sleptTab as unknown as TerminalTab]
