@@ -158,12 +158,12 @@ export function NativeChatUserMessageRow({
           <span className="min-w-0 break-words">{deliveryNotice.text}</span>
           {deliveryNotice.onSend ? (
             <Button type="button" variant="ghost" size="xs" onClick={deliveryNotice.onSend}>
-              {translate('common.send', 'Send')}
+              {translate('components.native-chat.queuedMessages.send', 'Send')}
             </Button>
           ) : null}
           {deliveryNotice.onEdit ? (
             <Button type="button" variant="ghost" size="xs" onClick={deliveryNotice.onEdit}>
-              {translate('common.edit', 'Edit')}
+              {translate('components.native-chat.editDeliveryNotice', 'Edit')}
             </Button>
           ) : null}
           {deliveryNotice.onDismiss ? (
