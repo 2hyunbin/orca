@@ -103,7 +103,7 @@ export function resolveAgentPromptSubmitDelayForAgent(
     Buffer.byteLength(buildAgentPromptPasteBytes(prompt), 'utf8'),
     {
       lineSettleMsPerLine: config?.submitLineSettleMsPerLine,
-      lineCount: countAgentTuiInputLines(prompt)
+      lineCount: config?.submitLineSettleMsPerLine ? countAgentTuiInputLines(prompt) : undefined
     }
   )
 }
