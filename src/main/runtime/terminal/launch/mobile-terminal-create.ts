@@ -4,6 +4,7 @@ import { OrcaRuntimeWithFailedStartPanes } from './failed-start-pane'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
+  TerminalLaunchResult,
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../../../shared/agent-session-resume'
@@ -44,7 +45,7 @@ export type OwnedMobileTerminalCreateOptions = {
   /** See TerminalCreateOptions; a create that throws before it proves nothing spawned. */
   onPtySpawnDispatched?: () => void
   /** The PTY this create produced, reported before publication can fail. */
-  onPtyCreated?: (ptyId: string) => void
+  onPtyCreated?: (ptyId: string, result?: TerminalLaunchResult) => void
 }
 
 export abstract class OrcaRuntimeWithCreateMobileSessionTerminal extends OrcaRuntimeWithFailedStartPanes {

@@ -38,21 +38,23 @@ it.each([10, 100])(
     })
     let reads = 0
     let writes = 0
-    const countQueue = <T>(entries: T[]): T[] =>
-      new Proxy(entries, {
-        get(target, key, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
+    const countQueue = <T>(entries: T[]): T[] => {
+      entries.forEach((entry, index) =>
+        Object.defineProperty(entries, index, {
+          configurable: true,
+          enumerable: true,
+          get: () => {
             reads += 1
-          }
-          return Reflect.get(target, key, receiver)
-        },
-        set(target, key, value, receiver) {
-          if (typeof key === 'string' && /^\d+$/.test(key)) {
+            return entry
+          },
+          set: (next: T) => {
             writes += 1
+            entry = next
           }
-          return Reflect.set(target, key, value, receiver)
-        }
-      })
+        })
+      )
+      return entries
+    }
     let copied = 0
     const countMap = <T extends object>(entries: T): T =>
       new Proxy(entries, {
