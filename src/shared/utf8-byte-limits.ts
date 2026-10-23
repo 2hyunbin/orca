@@ -48,7 +48,9 @@ export function measureUtf8ByteLength(
 }
 
 export function getUtf8ByteLength(text: string): number {
-  return measureUtf8ByteLength(text).byteLength
+  return text.length < 1024
+    ? measureUtf8ByteLength(text).byteLength
+    : measureNativeUtf8ByteLength(text)
 }
 
 // Why a native encode: the per-code-unit JS scan walks whole terminal scrollback buffers on the
@@ -58,6 +60,21 @@ export function getUtf8ByteLength(text: string): number {
 const MAX_UTF8_SCRATCH_BYTES = 1024 * 1024
 const utf8Encoder = new TextEncoder()
 let utf8Scratch = new Uint8Array(0)
+
+function measureNativeUtf8ByteLength(text: string): number {
+  const capacity = Math.min(text.length * 3, MAX_UTF8_SCRATCH_BYTES)
+  if (utf8Scratch.length < capacity) {
+    utf8Scratch = new Uint8Array(capacity)
+  }
+  let byteLength = 0
+  let read = 0
+  while (read < text.length) {
+    const encoded = utf8Encoder.encodeInto(text.slice(read), utf8Scratch)
+    read += encoded.read
+    byteLength += encoded.written
+  }
+  return byteLength
+}
 
 export function isUtf8ByteLengthWithinLimit(text: string, maxBytes: number): boolean {
   if (text.length === 0) {

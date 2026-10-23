@@ -74,6 +74,24 @@ describe('scanning a prefix slice whose parent continues past the slice', () => 
   })
 })
 
+describe('getUtf8ByteLength', () => {
+  it.each([
+    { name: 'ASCII with a surrogate pair', unit: 'a', count: 1_048_575, tail: '😀' },
+    {
+      name: 'multibyte text with a lone high surrogate',
+      unit: '中',
+      count: 400_000,
+      tail: '\ud800'
+    },
+    { name: 'emoji with a lone low surrogate', unit: '😀', count: 600_000, tail: '\udc00' }
+  ])('counts large $name strings exactly', ({ unit, count, tail }) => {
+    const text = unit.repeat(count) + tail
+    expect(getUtf8ByteLength(text)).toBe(Buffer.byteLength(text, 'utf8'))
+    expect(isUtf8ByteLengthWithinLimit('é', 1)).toBe(false)
+    expect(isUtf8ByteLengthWithinLimit('é', 2)).toBe(true)
+  })
+})
+
 describe('getUtf8ChunkEndIndex', () => {
   it.each([
     { name: 'ASCII', text: 'abcdef', maxBytes: 3, endIndex: 3 },
