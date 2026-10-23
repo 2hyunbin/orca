@@ -250,14 +250,15 @@ export class AcpToolTimeline {
 
   private remember(key: string, snapshot: ToolSnapshot): void {
     const previous = this.tools.get(key)
-    if (this.size(key, snapshot) > MAX_PROVIDER_TIMELINE_OPEN_BYTES) {
+    const snapshotBytes = this.size(key, snapshot)
+    if (snapshotBytes > MAX_PROVIDER_TIMELINE_OPEN_BYTES) {
       if (previous) {
         this.bytes -= this.size(key, previous)
       }
       this.retire(key, snapshot)
       return
     }
-    let bytes = this.bytes - (previous ? this.size(key, previous) : 0) + this.size(key, snapshot)
+    let bytes = this.bytes - (previous ? this.size(key, previous) : 0) + snapshotBytes
     let count = this.tools.size + (previous ? 0 : 1)
     const evicted: string[] = []
     for (const [candidate, stored] of this.tools) {
