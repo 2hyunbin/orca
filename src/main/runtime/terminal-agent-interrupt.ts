@@ -18,8 +18,8 @@ class AgentNoLongerWorkingError extends Error {
 }
 
 /**
- * One Escape to the agent in `paneKey`, only while its hook row says it is working, and only into
- * the process that row was read with: an idle composer or a successor never gets the key.
+ * One Escape to the agent in `paneKey`, only while its hook row says the main agent's turn runs,
+ * and only into the process that row was read with: an idle composer or a successor never gets it.
  */
 export async function interruptWorkingAgent(
   runtime: TerminalAgentPromptAnswerRuntime,
@@ -38,7 +38,11 @@ export async function interruptWorkingAgent(
       throw new Error('agent_not_reachable')
     }
     const row = readHookRow(paneKey)
-    if (!row || hookRowAgentPhase(row) !== 'working') {
+    // Escape reaches only the main agent's turn; with it done, background work leaves an idle composer.
+    const turnRuns = row?.mainAgent
+      ? row.mainAgent.state === 'working'
+      : row && hookRowAgentPhase(row) === 'working'
+    if (!turnRuns) {
       return null
     }
     const { ptyId, processIncarnation } = runtime.getTerminalPromptRequestBinding(handle)

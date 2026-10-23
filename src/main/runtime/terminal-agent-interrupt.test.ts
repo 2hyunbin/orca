@@ -58,7 +58,7 @@ describe('interruptWorkingAgent', () => {
     expect(h.keys).toEqual(['\x1b'])
   })
 
-  it('types nothing into an idle or waiting agent, or a pane with no terminal', async () => {
+  it('types nothing into an idle, waiting or background-only agent, or a pane with no terminal', async () => {
     const h = harness()
     for (const state of ['done', 'waiting', 'blocked'] as const) {
       h.state.row = row(state)
@@ -67,6 +67,11 @@ describe('interruptWorkingAgent', () => {
         reason: 'agent_not_working'
       })
     }
+    h.state.row = { ...row('working'), mainAgent: { state: 'done' } }
+    await expect(h.interrupt()).resolves.toEqual({
+      outcome: 'refused',
+      reason: 'agent_not_working'
+    })
     h.state.row = row('working')
     await expect(h.interrupt(undefined, 'tab-9:other')).resolves.toEqual({
       outcome: 'refused',
