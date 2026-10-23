@@ -658,6 +658,46 @@ describe('malformed persisted item keys', () => {
 })
 
 describe('bounded item-key collisions', () => {
+  it('accepts an oversized submission separately from a raw digest-form mimic', () => {
+    const oversized = 'a'.repeat(MAX_JOURNAL_KEY_COMPONENT_CHARS + 1)
+    const mimic = boundJournalKeyComponent(oversized)
+    const oversizedBody = userText('oversized')
+    const mimicBody = userText('mimic')
+    const state = fold([
+      {
+        ...base(1),
+        kind: 'submission',
+        clientMessageId: mimic,
+        body: mimicBody,
+        payloadFingerprint: sendFingerprint(mimicBody),
+        providerHandle: { kind: 'claude', sessionId: 'session-1', leafUuid: null }
+      },
+      {
+        ...base(2),
+        kind: 'submission',
+        clientMessageId: oversized,
+        body: oversizedBody,
+        payloadFingerprint: sendFingerprint(oversizedBody),
+        providerHandle: { kind: 'claude', sessionId: 'session-1', leafUuid: null }
+      },
+      {
+        ...base(3),
+        kind: 'item',
+        itemId: 'claude:session-1:oversized',
+        revision: 1,
+        body: oversizedBody
+      }
+    ])
+
+    expect(state.submissions.get(oversized)?.dispatchState).toBe('accepted')
+    expect(state.submissions.get(mimic)?.dispatchState).toBe('pending')
+    expect(state.receipts.get(oversized)?.providerItemId).toBe('claude:session-1:oversized')
+    expect(state.receipts.has(mimic)).toBe(false)
+    expect(state.aliases.get('claude:session-1:oversized')).toBe(
+      agentJournalSubmissionKey(oversized)
+    )
+  })
+
   it('keeps an oversized turn and its raw digest-form mimic as separate items', () => {
     const oversizedTurnId = 'a'.repeat(MAX_JOURNAL_KEY_COMPONENT_CHARS + 1)
     const digestFormMimic = boundJournalKeyComponent(oversizedTurnId)

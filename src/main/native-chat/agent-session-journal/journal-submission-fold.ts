@@ -5,7 +5,10 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import {
+  agentJournalSubmissionKey,
+  parseAgentJournalItemKey
+} from '../../../shared/agent-session-journal-item-key'
 import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import { journalRenderItem } from './journal-render-item'
 import { statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold'
@@ -142,9 +145,15 @@ export function acceptSubmissionFromProviderItem(
   if (providerItemId === resolvedItemId) {
     return
   }
-  const submission = [...state.submissions.values()].find(
-    (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
-  )
+  const identity = parseAgentJournalItemKey(resolvedItemId)
+  const direct =
+    identity?.provider === 'orca' ? state.submissions.get(identity.clientMessageId) : undefined
+  const submission =
+    direct && agentJournalSubmissionKey(direct.clientMessageId) === resolvedItemId
+      ? direct
+      : [...state.submissions.values()].find(
+          (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
+        )
   if (!submission || !journalDispatchRowApplies(submission)) {
     return
   }
