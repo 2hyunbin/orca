@@ -14,10 +14,17 @@ export function hasConflictingStoredWorktreeOwner(
   worktreeIds: readonly string[]
 ): boolean {
   const expectedHostId = getRepoExecutionHostId(repo)
-  const repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length
+  let repoOwnerCount: number | undefined
   return worktreeIds.some((worktreeId) => {
     const meta = store.getWorktreeMeta(worktreeId)
-    return !!meta && (meta.hostId ? meta.hostId !== expectedHostId : repoOwnerCount > 1)
+    if (!meta) {
+      return false
+    }
+    if (meta.hostId) {
+      return meta.hostId !== expectedHostId
+    }
+    repoOwnerCount ??= store.getRepos().filter((candidate) => candidate.id === repo.id).length
+    return repoOwnerCount > 1
   })
 }
 
