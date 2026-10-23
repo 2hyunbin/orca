@@ -1,3 +1,7 @@
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../../shared/agent-session-record.test-fixture'
 /**
  * The redrive edge is coalesced, and coalescing is not allowed to change what gets delivered.
  *
@@ -39,16 +43,8 @@ function installHost(): { emit: (type: string) => void; unsubscribed: () => bool
     },
     deps: {
       store: {
-        getRecord: () => ({
-          provider: 'claude',
-          location: { executionHostId: 'local', wslDistro: null },
-          lease: {
-            runtimeKind: 'native',
-            claimStatus: 'live',
-            deathEvidence: null,
-            runtimeFence: 1
-          }
-        })
+        requireWritableRecord: (sessionId: string) =>
+          agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId, runtimeFence: 1 }))
       }
     }
   } as never)

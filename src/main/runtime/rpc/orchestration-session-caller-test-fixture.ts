@@ -62,7 +62,13 @@ export type SessionCallerHarness = {
   close: () => void
 }
 
-export function createSessionCallerHarness(hostRef: SessionHostRef): SessionCallerHarness {
+export function createSessionCallerHarness(
+  hostRef: SessionHostRef,
+  getVisibleSessionTabIndex: () => { present: boolean; sessionIds: string[] } = () => ({
+    present: false,
+    sessionIds: []
+  })
+): SessionCallerHarness {
   const db = new OrchestrationDb(':memory:')
   const runtime = new OrcaRuntimeService()
   runtime.setOrchestrationDb(db)
@@ -94,7 +100,7 @@ export function createSessionCallerHarness(hostRef: SessionHostRef): SessionCall
           return record
         },
         listRecords: () => [...records.values()],
-        getVisibleSessionTabIndex: () => ({ present: false, sessionIds: [] })
+        getVisibleSessionTabIndex
       }
     }
   }

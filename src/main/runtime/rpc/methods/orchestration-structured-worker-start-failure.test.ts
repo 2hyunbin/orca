@@ -1,3 +1,7 @@
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../../shared/agent-session-record.test-fixture'
 /**
  * A worker start that fails AFTER its structured session exists is the fourth settlement path.
  *
@@ -68,15 +72,8 @@ function installHost() {
     subscribe: () => () => {},
     deps: {
       store: {
-        getRecord: () => ({
-          location: { executionHostId: 'local', wslDistro: null },
-          lease: {
-            runtimeKind: 'native',
-            claimStatus: 'live',
-            deathEvidence: null,
-            runtimeFence: 1
-          }
-        })
+        requireWritableRecord: (sessionId: string) =>
+          agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId, runtimeFence: 1 }))
       }
     }
   } as never)

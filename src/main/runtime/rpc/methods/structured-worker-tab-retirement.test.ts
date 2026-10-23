@@ -1,3 +1,9 @@
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../../shared/agent-session-record.test-fixture'
+import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
+import type { AgentSessionLease } from '../../../../shared/agent-session-record'
 /**
  * Every structured-worker settlement has to retire the chat tab the worker start published.
  *
@@ -34,7 +40,7 @@ const SESSION = 'session-1'
 const HANDLE = 'structworker_11111111-1111-4111-a111-111111111111'
 const HOST_SCOPE = { kind: 'local', hostId: 'local' } as const
 
-function installHost(options: { closeThrows?: boolean; lease?: Record<string, unknown> } = {}) {
+function installHost(options: { closeThrows?: boolean; lease?: Partial<AgentSessionLease> } = {}) {
   let attached = true
   const setSessionTabVisibility = vi.fn(async () => {})
   const close = vi.fn(async () => {
@@ -52,17 +58,20 @@ function installHost(options: { closeThrows?: boolean; lease?: Record<string, un
     subscribe: () => () => {},
     deps: {
       store: {
-        getRecord: () => ({
-          location: { executionHostId: 'local', wslDistro: null },
-          lease: options.lease ?? {
-            runtimeKind: 'native',
-            claimStatus: attached ? 'live' : 'released',
-            deathEvidence: attached
-              ? null
-              : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
-            runtimeFence: 2
-          }
-        })
+        getConversation: () =>
+          agentSessionConversationView(
+            agentSessionRecordFixture(
+              agentSessionLeaseFixture({
+                sessionId: SESSION,
+                claimStatus: attached ? 'live' : 'released',
+                deathEvidence: attached
+                  ? null
+                  : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
+                runtimeFence: 2,
+                ...options.lease
+              })
+            )
+          )
       }
     }
   } as never)

@@ -125,7 +125,7 @@ it.each(['success', 'budget'] as const)(
       Object.assign(hostStub(), {
         deps: {
           modelCatalog: service,
-          store: { getRecord: () => undefined },
+          store: { getRecord: () => undefined, getConversation: () => undefined },
           adapter: {}
         }
       })

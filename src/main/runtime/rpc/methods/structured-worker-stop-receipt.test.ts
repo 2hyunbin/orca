@@ -1,3 +1,8 @@
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../../shared/agent-session-record.test-fixture'
+import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
 /**
  * What `worker-stop` may claim it did to a structured worker.
  *
@@ -99,10 +104,10 @@ describe('worker-stop on a structured worker this runtime cannot reach', () => {
       hasSession: () => false,
       deps: {
         store: {
-          getRecord: () => ({
-            location: { executionHostId: 'local', wslDistro: null },
-            lease: { runtimeKind: 'native', claimStatus: 'live', deathEvidence: null }
-          })
+          getConversation: () =>
+            agentSessionConversationView(
+              agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: SESSION }))
+            )
         }
       }
     } as never)
