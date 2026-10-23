@@ -24,10 +24,10 @@ import {
 } from './daemon-client-ndjson-readers'
 import { writeNotifyWithSettlement } from './daemon-client-notify-settlement'
 import { requestDaemonRpc } from './daemon-client-rpc-request'
+import { DAEMON_DEFAULT_REQUEST_TIMEOUT_MS } from './daemon-request-deadline'
 
 const CONNECT_TIMEOUT_MS = 5000
 const CONNECTION_ATTEMPT_WAIT_MS = CONNECT_TIMEOUT_MS * 4
-const REQUEST_TIMEOUT_MS = 30000
 const NOTIFY_SETTLEMENT_TIMEOUT_MS = 5000
 
 export type DaemonClientOptions = {
@@ -204,7 +204,7 @@ export class DaemonClient {
   async request<T = unknown>(
     type: string,
     payload: unknown,
-    timeoutMs = REQUEST_TIMEOUT_MS,
+    timeoutMs = DAEMON_DEFAULT_REQUEST_TIMEOUT_MS,
     signal?: AbortSignal
   ): Promise<T> {
     if (!this.connected || !this.controlSocket) {
