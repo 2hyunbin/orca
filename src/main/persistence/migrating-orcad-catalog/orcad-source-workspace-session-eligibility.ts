@@ -6,6 +6,7 @@ import type {
   WorkspaceSessionState
 } from '../../../shared/workspace-session-state-types'
 import {
+  orcadMigrationOwnerKeyIsAmbiguous,
   orcadMigrationOwnerMatchesScope,
   orcadMigrationOwnsRepoId,
   orcadMigrationScopeOwnsWholeHost,
@@ -33,7 +34,10 @@ export function collectUnsupportedSessionItems(
   // A WSL move takes some of host `local`'s projects; the others, and rows a past move retained,
   // stay on this desktop untouched, so only the selected projects' rows can refuse it.
   const wholeHost = sourceHostPartition && orcadMigrationScopeOwnsWholeHost(scope)
-  const matches = (ownerKey: string): boolean => Boolean(ownerKey) && (wholeHost || owns(ownerKey))
+  // An unattributable key that may be the selected project's refuses rather than staying behind.
+  const matches = (ownerKey: string): boolean =>
+    Boolean(ownerKey) &&
+    (wholeHost || owns(ownerKey) || orcadMigrationOwnerKeyIsAmbiguous(ownerKey, scope))
   const items: string[] = []
   // Another project's rows in this host's copy stay behind; only an unsaved draft there is work.
   if (wholeHost) {

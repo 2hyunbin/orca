@@ -313,6 +313,84 @@ describe('exportWslMoveManifest', () => {
     ).not.toThrow()
   })
 
+  describe('only the selected projects can refuse it', () => {
+    const agentIn = (worktreeId: string, tabId: string, leafId: string): SleepingAgentSessionRecord => ({
+      paneKey: `${tabId}:${leafId}`,
+      tabId,
+      worktreeId,
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: `session-${tabId}` },
+      prompt: 'Saved prompt',
+      state: 'done',
+      capturedAt: 1,
+      updatedAt: 1,
+      connectionId: null,
+      origin: 'live'
+    })
+    const layout = (leafId: string) => ({
+      root: { type: 'leaf' as const, leafId },
+      activeLeafId: leafId,
+      expandedLeafId: null
+    })
+
+    it('is not refused by a live agent with its tab open, and a draft, in another project', () => {
+      const state = sourceState()
+      const other = agentIn(OTHER_WORKTREE, 'windows-shell', 'win-leaf')
+      state.workspaceSession.terminalLayoutsByTabId = { 'windows-shell': layout('elsewhere') }
+      state.workspaceSession.sleepingAgentSessionsByPaneKey = { [other.paneKey]: other }
+      state.workspaceSession.openFilesByWorktree = {
+        [OTHER_WORKTREE]: [
+          {
+            filePath: 'C:\\code\\win\\notes.md',
+            relativePath: 'notes.md',
+            worktreeId: OTHER_WORKTREE,
+            language: 'markdown',
+            dirtyDraftContent: 'unsaved'
+          }
+        ]
+      }
+      expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([])
+    })
+
+    it('is still refused by the same kinds of state in the selected project', () => {
+      const state = sourceState()
+      const own = agentIn(WORKTREE, 'feature-shell', 'feature-leaf')
+      state.workspaceSession.terminalLayoutsByTabId = { 'feature-shell': layout('elsewhere') }
+      state.workspaceSession.sleepingAgentSessionsByPaneKey = { [own.paneKey]: own }
+      state.workspaceSession.openFilesByWorktree = {
+        [WORKTREE]: [
+          {
+            filePath: '/home/me/app-feature/notes.md',
+            relativePath: 'notes.md',
+            worktreeId: WORKTREE,
+            language: 'markdown',
+            dirtyDraftContent: 'unsaved',
+            runtimeEnvironmentId: 'some-other-server'
+          }
+        ]
+      }
+      const { blockers } = exportWslMoveManifest(storeFor(state), REQUEST)
+      expect(blockers).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/codex session saved in/),
+          expect.stringMatching(/unsaved changes to/)
+        ])
+      )
+    })
+
+    it('never silently leaves behind an agent whose key may be the selected project', () => {
+      // `app` is also registered by an SSH host, so an unqualified `app::` key names either.
+      const state = sourceState()
+      state.repos.push(repo('app', '/srv/app', { connectionId: 'box' }))
+      const own = agentIn(WORKTREE, 'feature-shell', 'feature-leaf')
+      state.workspaceSession.terminalLayoutsByTabId = { 'feature-shell': layout('elsewhere') }
+      state.workspaceSession.sleepingAgentSessionsByPaneKey = { [own.paneKey]: own }
+      expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([
+        expect.stringMatching(/codex session saved in/)
+      ])
+    })
+  })
+
   it('refuses to sign a scope naming a project that is no longer here', () => {
     expect(() =>
       exportWslMoveManifest(storeFor(sourceState()), { ...REQUEST, repoIds: ['app', 'gone'] })
