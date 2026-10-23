@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => {
     subscribeStatus: ReturnType<typeof vi.fn>
     supportsCapability: ReturnType<typeof vi.fn>
     unsubscribe: ReturnType<typeof vi.fn>
-    applyStatus: ReturnType<typeof vi.fn>
+    applyStatus: ReturnType<typeof vi.fn<(update: unknown) => void>>
   } = {
     store: null,
     subscribeStatus: vi.fn(),
