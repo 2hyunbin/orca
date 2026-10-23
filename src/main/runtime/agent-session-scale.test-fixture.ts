@@ -11,9 +11,9 @@ import {
 } from '../../shared/agent-session-record.test-fixture'
 import {
   openTestJournalHostDatabase,
-  closeTestJournalHostDatabases
+  closeTestJournalHostDatabases,
+  createTrackedJournalOpener
 } from '../native-chat/agent-session-journal/journal-host-database-test-support'
-import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import {
   seedTestAgentSessionRecordStore,
   editPersistedTestAgentSessionStore,

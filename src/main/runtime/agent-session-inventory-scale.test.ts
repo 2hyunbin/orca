@@ -17,12 +17,13 @@ import {
   countStoreWork,
   journals,
   scaleJournal,
-  scaleStore
+  scaleStore,
+  scaleDirectory,
+  scaleRecord
 } from './agent-session-scale.test-fixture'
 import { findWorkspaceReferences } from './runtime-reference-find'
 import { parseWorkspaceReferenceUrl } from '../../shared/workspace-reference-identity'
 import { createReferenceAgentIndex } from './runtime-reference-agents'
-import { scaleDirectory, scaleRecord } from './agent-session-scale.test-fixture'
 import {
   seedTestAgentSessionRecordStore,
   openTestAgentSessionRecordStore
