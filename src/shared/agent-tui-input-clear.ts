@@ -34,12 +34,14 @@ export const AGENT_TUI_CLEAR_MAX_LINES = 40
 /** Widest burst we ever send — the remedy when a clear is not observed to land. */
 export const AGENT_TUI_CLEAR_INPUT_MAX = buildAgentTuiClearInput(AGENT_TUI_CLEAR_MAX_LINES)
 
-/** Logical lines in `text`. Visual wrapping is irrelevant to the clear cost. */
-export function countAgentTuiInputLines(text: string): number {
-  return text.split(/\r\n|\r|\n/).length
+/** Logical lines in `text`, optionally capped. Visual wrapping is irrelevant to the clear cost. */
+export function countAgentTuiInputLines(text: string, limit?: number): number {
+  return text.split(/\r\n|\r|\n/, limit).length
 }
 
 /** Clear bytes for a buffer believed to hold `text`, with slack for TUI-side edits. */
 export function buildAgentTuiClearInputForText(text: string): string {
-  return buildAgentTuiClearInput(countAgentTuiInputLines(text) + AGENT_TUI_CLEAR_LINE_SLACK)
+  return buildAgentTuiClearInput(
+    countAgentTuiInputLines(text, AGENT_TUI_CLEAR_MAX_LINES) + AGENT_TUI_CLEAR_LINE_SLACK
+  )
 }
