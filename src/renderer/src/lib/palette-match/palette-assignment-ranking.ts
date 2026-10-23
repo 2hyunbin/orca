@@ -62,7 +62,7 @@ export function selectThresholdAssignment(
   if (candidates.some((entries) => entries.length === 0)) {
     return null
   }
-  let remaining = candidates.map((entries) => [...entries])
+  let remaining = candidates
   for (const { key, aggregate } of SELECTION_STEPS) {
     if (aggregate === 'total') {
       remaining = remaining.map((entries) => {
