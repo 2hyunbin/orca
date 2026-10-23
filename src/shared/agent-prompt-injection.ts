@@ -1,4 +1,5 @@
 import { countAgentTuiInputLines } from './agent-tui-input-clear'
+import { sanitizeBracketedPasteText } from './terminal-bracketed-paste-text'
 import { iterateTerminalInputChunks, TERMINAL_INPUT_CHUNK_MAX_BYTES } from './terminal-input'
 import type { TerminalAgent } from './terminal-agent'
 import { isTuiAgent, TUI_AGENT_CONFIG } from './tui-agent-config'
@@ -108,23 +109,10 @@ export function resolveAgentPromptSubmitDelayForAgent(
   )
 }
 
-const ESCAPE = '\x1b'
 const INERT_ESCAPE = '<ESC>'
 
 export function sanitizeAgentPromptText(text: string): string {
-  let escapeIndex = text.indexOf(ESCAPE)
-  if (escapeIndex === -1) {
-    return text
-  }
-
-  let sanitized = ''
-  let start = 0
-  while (escapeIndex !== -1) {
-    sanitized += `${text.slice(start, escapeIndex)}${INERT_ESCAPE}`
-    start = escapeIndex + ESCAPE.length
-    escapeIndex = text.indexOf(ESCAPE, start)
-  }
-  return sanitized + text.slice(start)
+  return sanitizeBracketedPasteText(text, INERT_ESCAPE)
 }
 
 /** `leadLine` is typed, not pasted; folded to one line so it cannot submit. */

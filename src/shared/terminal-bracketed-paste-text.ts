@@ -9,10 +9,8 @@ const PASTE_TRANSFORM_CHUNK_CODE_UNITS = 64 * 1024
 export const BRACKETED_PASTE_START = `${ESCAPE}[200~`
 export const BRACKETED_PASTE_END = `${ESCAPE}[201~`
 
-// Why: an embedded ESC (e.g. a pasted `\x1b[201~` from scrollback) would close
-// the bracketed-paste frame early and run the tail as keystrokes. Replacing ESC
-// with its printable substitute (␛, U+241B) neutralizes every framing escape.
-export function sanitizeBracketedPasteText(text: string): string {
+// An inert printable ESC substitute prevents pasted text from closing its frame early.
+export function sanitizeBracketedPasteText(text: string, inertEscape = '␛'): string {
   let escapeIndex = text.indexOf(ESCAPE)
   if (escapeIndex === -1) {
     return text
@@ -22,13 +20,15 @@ export function sanitizeBracketedPasteText(text: string): string {
     text.length > PASTE_TRANSFORM_CHUNK_CODE_UNITS &&
     hasDenseTerminalPasteReplacements(text, ESCAPE, escapeIndex)
   ) {
-    return rewriteTerminalPasteChunks(text, escapeIndex, (chunk) => chunk.split(ESCAPE).join('␛'))
+    return rewriteTerminalPasteChunks(text, escapeIndex, (chunk) =>
+      chunk.split(ESCAPE).join(inertEscape)
+    )
   }
 
   let sanitized = ''
   let start = 0
   while (escapeIndex !== -1) {
-    sanitized += `${text.slice(start, escapeIndex)}␛`
+    sanitized += `${text.slice(start, escapeIndex)}${inertEscape}`
     start = escapeIndex + ESCAPE.length
     escapeIndex = text.indexOf(ESCAPE, start)
   }

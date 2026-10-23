@@ -8,15 +8,26 @@ import { expect, it } from 'vitest'
 it.each([
   {
     kind: 'ansi',
+    heapMiB: 96,
+    length: 7_920_012,
     byteLength: 10_800_012,
     digest: '6d088d6f382be965e408a13204efd39ab756476f5100fc5af07a098fe6ecc533'
   },
   {
     kind: 'newlines',
+    heapMiB: 96,
+    length: 7_920_012,
     byteLength: 7_920_012,
     digest: '9e9c012a750dcab2da4bf79febad7e6a4c11f85b5d59a2b821e9b3ec7cb6e5e1'
+  },
+  {
+    kind: 'agent-prompt',
+    heapMiB: 64,
+    length: 13_680_012,
+    byteLength: 13_680_012,
+    digest: 'c15b6c5528c660c322cbcef38a446e885c7f6dc0fc9b2fa9b14750ab1c6cd444'
   }
-])('frames a complete supported $kind paste within a 96 MiB heap', async (fixture) => {
+])('frames a complete supported $kind paste within a $heapMiB MiB heap', async (fixture) => {
   const root = mkdtempSync(join(tmpdir(), 'orca-bracketed-paste-memory-'))
   try {
     const child = join(root, 'paste.cjs')
@@ -25,11 +36,15 @@ it.each([
         contents: `
           import { createHash } from 'node:crypto';
           import { wrapTerminalBracketedPasteText } from './src/shared/terminal-bracketed-paste-text';
+          import { buildAgentPromptPasteBytes } from './src/shared/agent-prompt-injection';
           import { assertTerminalInputWithinLimit } from './src/shared/terminal-input';
-          const text = process.argv[2] === 'ansi'
-            ? '\\x1b[31mX\\x1b[0m\\n'.repeat(720_000)
-            : '\\n'.repeat(7_920_000);
-          const framed = wrapTerminalBracketedPasteText(text);
+          const kind = process.argv[2];
+          const text = kind === 'newlines'
+            ? '\\n'.repeat(7_920_000)
+            : '\\x1b[31mX\\x1b[0m\\n'.repeat(720_000);
+          const framed = kind === 'agent-prompt'
+            ? buildAgentPromptPasteBytes(text)
+            : wrapTerminalBracketedPasteText(text);
           assertTerminalInputWithinLimit(framed);
           console.log(JSON.stringify({
             length: framed.length, byteLength: Buffer.byteLength(framed),
@@ -47,7 +62,7 @@ it.each([
     })
     const result = await runProcess({
       program: process.execPath,
-      args: ['--max-old-space-size=96', child, fixture.kind],
+      args: [`--max-old-space-size=${fixture.heapMiB}`, child, fixture.kind],
       env: { ...process.env, NODE_OPTIONS: undefined, ORCA_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 15_000,
       maxOutputBytes: 4096
@@ -57,7 +72,7 @@ it.each([
     const output: { length: number; byteLength: number; digest: string; peakRss: number } =
       JSON.parse(result.stdout)
     expect(output).toMatchObject({
-      length: 7_920_012,
+      length: fixture.length,
       byteLength: fixture.byteLength,
       digest: fixture.digest
     })
