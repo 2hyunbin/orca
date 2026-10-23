@@ -40,7 +40,7 @@ export function recoverWatcherRecordsAfterChildGone(
   const replacement = ensureWatcherProcess()
   if (!replacement) {
     console.error(
-      '[parcel-watcher-process] watcher process crashed repeatedly; disabling file watching'
+      '[parcel-watcher-process] watcher process crashed repeatedly; falling back to polling until the crash fuse cooldown elapses'
     )
     failAllWatcherSubscriptions(
       records,
