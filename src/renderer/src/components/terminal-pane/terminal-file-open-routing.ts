@@ -1,4 +1,3 @@
-import { absolutePathToFileUri } from '@/components/editor/markdown-internal-links'
 import { getWorkspaceFilePreviewPlan, openFileInBrowserTab } from '@/lib/file-preview'
 import { downloadAndOpenRemoteTerminalFile } from './terminal-remote-file-download-open'
 import { findWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
@@ -27,7 +26,8 @@ import {
 } from './terminal-host-workspace-file'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 import { captureEditorOpenLinkIntent } from '@/store/slices/editor/tabs/editor-open-target-group'
-import { cancelPendingEditorLineRevealFrames } from '@/store/slices/editor/focus/editor-focus-reveal'
+import { reserveDetectedFilePathOpenTurn } from './terminal-file-open-turn'
+import { openHtmlFileInBrowser } from './terminal-html-file-browser-open'
 import { showOpenInGroupRefusedToast } from './terminal-file-open-in-group-toast'
 import { isExplicitEditorScopeKept, openLinkedFileInEditor } from './terminal-file-link-editor-open'
 
@@ -70,36 +70,9 @@ type TerminalFileOpenDeps = {
   openInSourceGroup?: boolean
 }
 
-function openHtmlFileInBrowser(filePath: string, worktreeId: string, clientLocal: boolean): void {
-  const store = useAppStore.getState()
-  if (worktreeId) {
-    // Why: following an HTML file link changes which worktree is foregrounded,
-    // so it must record a history visit before opening the browser tab — but the
-    // browser tab is the surface, so an emptied workspace must not gain a shell.
-    activateAndRevealWorktree(worktreeId, { providesInitialSurface: true })
-  }
-  const fileUrl = absolutePathToFileUri(filePath)
-  const title = filePath.split(/[/\\]/).pop() ?? filePath
-  store.createBrowserTab(worktreeId, fileUrl, {
-    title,
-    activate: true,
-    // Why: the file is on this computer, so the workspace's paired-server runtime must not adopt the page.
-    ...(clientLocal ? { browserRuntimeEnvironmentId: null } : {})
-  })
-}
-
 export function shouldOpenTerminalFileWithSystemDefault(fileContext: TerminalFileContext): boolean {
   // Why: an unresolved owner has no connectionId either, which would otherwise read as local.
   return fileContext.sourceHostResolved && canClientOsOpenWorkspaceFile(fileContext)
-}
-
-let latestOpenDetectedFilePathRequestId = 0
-
-/** Supersedes earlier opens now, for a click still deciding what to open; true until a later open. */
-export function reserveDetectedFilePathOpenTurn(): () => boolean {
-  const requestId = ++latestOpenDetectedFilePathRequestId
-  cancelPendingEditorLineRevealFrames()
-  return () => requestId === latestOpenDetectedFilePathRequestId
 }
 
 export function openDetectedFilePath(
@@ -115,8 +88,7 @@ export function openDetectedFilePath(
     worktreePath,
     terminalLinkWslDistro(deps.wslDistro, runtimeEnvironmentId)
   )
-  const requestId = ++latestOpenDetectedFilePathRequestId
-  cancelPendingEditorLineRevealFrames()
+  const isCurrentOpen = reserveDetectedFilePathOpenTurn()
   // Why: capture at activation; focus may move while the host resolves the path.
   const linkIntent = captureEditorOpenLinkIntent(
     useAppStore.getState(),
@@ -130,7 +102,7 @@ export function openDetectedFilePath(
     if (!explicitGroupRequest) {
       return false
     }
-    if (requestId === latestOpenDetectedFilePathRequestId) {
+    if (isCurrentOpen()) {
       showOpenInGroupRefusedToast(mappedFilePath)
     }
     return true
@@ -164,7 +136,7 @@ export function openDetectedFilePath(
         // Why: root workspace switching must work for SSH/runtime paths without
         // local auth/stat, while still coalescing provider + fallback clicks.
         await Promise.resolve()
-        if (requestId !== latestOpenDetectedFilePathRequestId) {
+        if (!isCurrentOpen()) {
           return
         }
         activateAndRevealWorktree(worktreeRootLink.id, {
@@ -202,7 +174,7 @@ export function openDetectedFilePath(
         statResult = await statUserOpenedPath(fileContext, mappedFilePath)
       }
     } catch (error) {
-      if (requestId === latestOpenDetectedFilePathRequestId && deps.onOpenFailure) {
+      if (isCurrentOpen() && deps.onOpenFailure) {
         // Why: loss of contact with the host is not evidence the file is gone.
         deps.onOpenFailure({
           verdict: isMissingRuntimePathError(error) ? 'missing' : 'unverifiable',
@@ -212,7 +184,7 @@ export function openDetectedFilePath(
       return
     }
 
-    if (requestId !== latestOpenDetectedFilePathRequestId) {
+    if (!isCurrentOpen()) {
       return
     }
 
@@ -355,7 +327,7 @@ export function openDetectedFilePath(
       },
       linkIntent,
       { line, column },
-      () => requestId === latestOpenDetectedFilePathRequestId
+      isCurrentOpen
     )
     if (!opened) {
       refuseExplicitNonEditorRoute()
