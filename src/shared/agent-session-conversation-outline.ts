@@ -95,12 +95,8 @@ function assistantReplyProse(blocks: readonly NativeChatBlock[]): string {
     if (fenced) {
       continue
     }
-    const plain = line
-      .replace(/^(?:[#>]+|[-*+]|\d+[.)])\s+/, '')
-      .replace(/\*\*|`/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (!/[\p{L}\p{N}]/u.test(plain)) {
+    const plain = assistantReplyLinePreview(line)
+    if (!plain) {
       continue
     }
     lines.push(plain)
@@ -112,6 +108,46 @@ function assistantReplyProse(blocks: readonly NativeChatBlock[]): string {
   const prose = truncateOutlinePreview(lines.join(' '), AGENT_SESSION_OUTLINE_PREVIEW_MAX_CHARS)
   replies.set(blocks, prose)
   return prose
+}
+
+function assistantReplyLinePreview(line: string): string {
+  const text = line.replace(/^(?:[#>]+|[-*+]|\d+[.)])\s+/, '')
+  if (text.length <= 4096) {
+    const plain = text
+      .replace(/\*\*|`/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return /[\p{L}\p{N}]/u.test(plain) ? plain : ''
+  }
+  // A letter after the preview still makes the whole line eligible.
+  if (!/[\p{L}\p{N}]/u.test(text)) {
+    return ''
+  }
+  let plain = ''
+  let pendingWhitespace = false
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text.charAt(index)
+    if (char === '*' && text.charAt(index + 1) === '*') {
+      index += 1
+      continue
+    }
+    if (char === '`') {
+      continue
+    }
+    if (/\s/.test(char)) {
+      pendingWhitespace = plain.length > 0
+      continue
+    }
+    if (pendingWhitespace) {
+      plain += ' '
+      pendingWhitespace = false
+    }
+    plain += char
+    if (plain.length > AGENT_SESSION_OUTLINE_PREVIEW_MAX_CHARS) {
+      break
+    }
+  }
+  return plain
 }
 
 /** What the agent answered each turn with, by turn key: the prose of the turn's
