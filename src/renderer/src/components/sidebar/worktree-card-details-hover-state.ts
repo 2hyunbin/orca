@@ -15,8 +15,7 @@ export function useWorktreeCardDetailsHoverControl() {
 
   const handleHoverOpenChange = useCallback(
     (next: boolean) => {
-      // Why: portaled detail menus sit outside HoverCardContent — keep the card
-      // mounted until the menu closes so the menu items stay clickable.
+      // Keep portaled menus mounted until they close; they lie outside HoverCardContent.
       if (openMenu) {
         pendingHoverCloseRef.current = !next
         return
