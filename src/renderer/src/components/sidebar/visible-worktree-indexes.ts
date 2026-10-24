@@ -47,9 +47,7 @@ const inputCache = new WeakMap<object, WeakMap<object, WeakMap<object, LineageIn
 export function getLineageInputs(state: LineageState) {
   const worktreeMap = getWorkspaceLineageRows(
     selectWorktreesByRepo(state),
-    state.folderWorkspaces
-      ? selectFolderWorkspaces({ folderWorkspaces: state.folderWorkspaces })
-      : undefined
+    selectFolderWorkspaces(state)
   )
   const worktreeEdges = state.worktreeLineageById ?? noEdges
   const workspaceEdges = state.workspaceLineageByChildKey ?? noEdges

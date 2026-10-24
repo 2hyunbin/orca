@@ -24,9 +24,9 @@ export function selectWorktreesByRepo<
   return state.worktreesByRepo
 }
 
-export function selectFolderWorkspaces(
-  state: Pick<AppState, 'folderWorkspaces'>
-): AppState['folderWorkspaces'] {
+export function selectFolderWorkspaces<T extends { folderWorkspaces?: readonly FolderWorkspace[] }>(
+  state: T
+): T['folderWorkspaces'] {
   return state.folderWorkspaces
 }
 

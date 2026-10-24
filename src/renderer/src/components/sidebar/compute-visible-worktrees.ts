@@ -6,6 +6,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import type { ExecutionHostId, ExecutionHostScope } from '../../../../shared/execution-host'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 import { selectVisibleSidebarWorktrees } from '../../../../shared/sidebar-list/visible-worktrees'
 import { buildDesktopWorkspaceRowFactReader } from './desktop-workspace-row-facts'
 import { sidebarWorkspaceRowFilters } from './sidebar-filter-actions'
@@ -55,7 +56,7 @@ export function computeVisibleWorktrees(
     : (worktree: Worktree) => worktree.id
   return selectVisibleSidebarWorktrees({
     rows: getIndexedAllWorktrees(worktreesByRepo),
-    ancestorByIdentity: getLineageAncestorIndex(worktreesByRepo, opts.folderWorkspaces),
+    ancestorByIdentity: getLineageAncestorIndex(worktreesByRepo, selectFolderWorkspaces(opts)),
     rankOf: (worktree) => rankByKey.get(keyOf(worktree)),
     filters: sidebarWorkspaceRowFilters(opts),
     facts: buildDesktopWorkspaceRowFactReader(opts),

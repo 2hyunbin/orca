@@ -234,7 +234,9 @@ describe('parent picker context menu affordance', () => {
 
     expect(hasWorktreeParentLink(child, {}, {})).toBe(true)
     const previous = useAppStore.getState()
-    const activate = vi.spyOn(activation, 'activateAndRevealWorktree').mockImplementation(() => {})
+    const activate = vi
+      .spyOn(activation, 'activateAndRevealWorktree')
+      .mockReturnValue({ primaryTabId: null })
     const notice = vi.spyOn(toast, 'info').mockImplementation(() => 0)
     const folder = makeFolderWorkspace({ id: 'chosen-parent', executionHostId: 'local' })
     useAppStore.setState({ repos: [TEST_REPO], worktreesByRepo: {}, folderWorkspaces: [folder] })

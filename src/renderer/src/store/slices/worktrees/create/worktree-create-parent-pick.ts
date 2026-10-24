@@ -71,7 +71,7 @@ export function resolveWorktreeCreateParent(
   const activeScope = parseWorkspaceKey(state.activeWorkspaceKey ?? '')
   const folder =
     activeScope?.type === 'folder'
-      ? state.folderWorkspaces?.find((row) => row.id === activeScope.folderWorkspaceId)
+      ? selectFolderWorkspaces(state)?.find((row) => row.id === activeScope.folderWorkspaceId)
       : undefined
   const folderRow = folder ? folderWorkspaceToWorktree(folder) : undefined
   return {
