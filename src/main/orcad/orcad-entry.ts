@@ -10,14 +10,13 @@
  * the runtime factory, but only when an Electron serve sidecar or an operator-supplied
  * Chromium proves available at startup.
  */
-import { join } from 'node:path'
 import process from 'node:process'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { resolveOrcadInstallRoot, resolveUserDataPath } from './orcad-app-paths'
 import { prepareOrcadCliLauncher } from './orcad-cli-launcher'
 import {
   installOrcadHostAdapters,
-  prepareOrcadSecretStore,
+  prepareOrcadSecretStoreAndMigrate,
   runOrcadQuitHandlers
 } from './orcad-host-adapters'
 import { describeOrcadBindExposure, resolveOrcadBindHost } from './orcad-bind-address'
@@ -79,18 +78,6 @@ export async function startOrcad(options: OrcadOptions = {}): Promise<OrcadHandl
   return { readiness, managedStop: { version, runtimeId: readiness.runtimeId, instance }, stop }
 }
 
-async function prepareOrcadSecretStoreAndMigrate(userDataPath: string): Promise<void> {
-  const { getSecretStore } = await import('../../shared/secret-store')
-  const { reportSecretProtectionGap } = await import('../host/secret-protection-report')
-  const { migratePlaintextCredentials, orcadCredentialRoot } =
-    await import('./orcad-plaintext-credential-migration')
-  // Why the credential root, not userData: a disposable ORCA_USER_DATA would take the key with it.
-  if (await prepareOrcadSecretStore(orcadCredentialRoot(), userDataPath)) {
-    migratePlaintextCredentials(getSecretStore())
-  }
-  reportSecretProtectionGap({ dataFile: join(userDataPath, 'orca-data.json') })
-}
-
 async function startOrcadRuntime(
   options: OrcadOptions,
   registerCleanup: (cleanup: OrcadRuntimeCleanup) => void
@@ -143,6 +130,9 @@ async function startOrcadRuntime(
   // Why disconnect and not shut down: the daemon must outlive this process, or an orcad
   // restart goes back to killing every running terminal.
   registerCleanup(() => stopOrcadDaemon())
+  // Why this early: the fork copies process.env, which only the login-shell adoption changes from
+  // here (hook env reaches each PTY per spawn), so the daemon starts while the stores open below.
+  const daemonStartup = loginEnvironment.then(() => startOrcadDaemon())
   registerCleanup(async () => {
     // A SQLite-backed orcad has no JSON mirror to absorb a debounced write after SIGTERM.
     if (profileStoreForShutdown) {
@@ -197,7 +187,7 @@ async function startOrcadRuntime(
   // Why before the runtime and the PTY handlers: `setLocalPtyProvider` installs the daemon
   // adapter as THE local provider, and the registry's contract is that it lands before
   // registerPtyHandlers so the IPC layer routes through the daemon from the first call.
-  await startOrcadDaemon()
+  await daemonStartup
 
   // Why a holder and not a direct reference: the index is installed after the runtime is
   // constructed, and the deps hook is only ever called later, from an RPC.
