@@ -3,15 +3,14 @@ import type { StructuredAgentSessionConversations } from './structured-agent-ses
 import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
 
 export type StructuredAgentSessionConversationLifetimeHost = {
-  /** Resolved per call: the host's collaborators are assigned after this is built. */
+  /** Resolve lazily because host collaborators are assigned after construction. */
   context: () => StructuredAgentSessionLifetimeContext
   sessions: StructuredAgentSessionConversations
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
-  /** PR 1's one open function, for a caller inside the session's serialize. */
+  /** Caller already holds session serialization. */
   open: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
   deliveryActive: (sessionId: string) => boolean
-  /** The handle closed: `listed` keeps the chat's row in the agent-status store for its tab. */
+  /** Retain status rows while a tab still lists the chat. */
   closeStatus: (sessionId: string, options: { listed: boolean }) => void
-  /** Child work the provider reported running and not over, recorded or not. */
   childWorkOpen: (sessionId: string) => boolean
 }

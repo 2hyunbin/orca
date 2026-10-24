@@ -80,7 +80,10 @@ const MoveTabCommand = z.object({
   type: z.literal('moveTab'),
   ...OnTab,
   toGroupId: z.string().min(1),
-  index: z.number().int().nonnegative()
+  index: z.number().int().nonnegative(),
+  // Optional so an older main still takes the move; it places by `index`.
+  afterTabId: z.union([z.string().min(1), z.null()]).optional(),
+  isPinned: z.boolean().optional()
 })
 
 /** Main mints the new group's id, or moves a lone tab's group whole. */

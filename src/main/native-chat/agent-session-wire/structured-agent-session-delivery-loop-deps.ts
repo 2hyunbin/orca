@@ -23,33 +23,26 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   adapter: StructuredAgentSessionAdapter
   agents: StructuredAgentRegistry
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
-  /** A start step, tracked from enqueue so quit waits for the child it may produce. */
+  /** Track from enqueue so quit drains any child the start may create. */
   trackStart: <T>(start: Promise<T>) => Promise<T>
-  /** Claims the start for the queued head inside the ordered preparation. */
   startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
-  /** Stops a child the chat outgrew (a new login or permission mode); inside `serialize`. */
+  /** Retire mismatched login/permission children under serialization. */
   retireOutgrownChild: (sessionId: string) => Promise<void>
   readiness: (
     sessionId: string,
     child: StructuredAgentSessionProviderChildIdentity
   ) => StructuredAgentSessionStartReadiness | null
-  /** The fence the conversation's own writes carry; see `structuredAgentSessionConversationFence`. */
   conversationFence: (sessionId: string) => number
-  /** A close of this chat that stopped its child and then did not complete still closed what was
-   *  queued before it, so no child starts for those: settled as a completed close does. Ordered,
-   *  not latched: a later send goes on. False when those could not be closed. */
+  /** Settle sends covered by partial close; later sends remain eligible. False means settlement failed. */
   closeWhatTheUserClosed: (sessionId: string) => Promise<boolean>
-  /** Who the chat's failure sentences name. */
   failureTextContext: (sessionId: string) => AgentSessionFailureWordsContext
   logger: StructuredAgentSessionLogger
   record: (sessionId: string) => AgentSessionRecord | null
-  /** The host's projection of the chat's current work (`hostStructuredAgentSessionCurrentWork`). */
   currentWork: (sessionId: string) => StructuredAgentSessionCurrentWork | null
-  /** What is current changed with no row (`publishGenerationEnded`). */
+  /** Publish row-free changes in current work. */
   workChanged?: (sessionId: string) => void
   readChildWork: (sessionId: string) => readonly AgentChildWorkView[] | undefined
   childWorkOpen: (sessionId: string) => boolean
-  /** A person's Stop is still ending the session's work: the status feed's own reading. */
   stopping: (sessionId: string) => boolean
   now: () => number
   acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>

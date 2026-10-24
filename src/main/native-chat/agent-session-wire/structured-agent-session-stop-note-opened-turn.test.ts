@@ -1,5 +1,3 @@
-// A Stop request stays where it was made, even when the provider opens a turn before replying.
-
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,7 +35,6 @@ afterEach(async () => {
   }
 })
 
-/** A Stop with no turn running whose cancel opens turn-1 while it waits, then answers `outcome`. */
 async function stopWhileTheTurnOpens(
   outcome: Awaited<ReturnType<StructuredAgentSessionAdapter['cancelTurn']>>
 ) {

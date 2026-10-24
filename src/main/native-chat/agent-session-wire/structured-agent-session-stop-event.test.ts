@@ -1,7 +1,3 @@
-// A Stop's event, through the real host: written in the Stop's serialized step as it is
-// accepted, before the interrupt and before anything that ends the child, naming the turn and who
-// asked; never by a Stop that stopped nothing.
-
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
@@ -32,7 +28,6 @@ function journal() {
   return open
 }
 
-/** Every Stop event in the live epoch, oldest first. */
 function stopEvents(): JournalStopEvent[] {
   const since = journal().readSince({ epoch: journal().epoch, sequence: 0 })
   if (!since.ok) {
@@ -43,7 +38,6 @@ function stopEvents(): JournalStopEvent[] {
   )
 }
 
-/** The provider's turn row for the working send, which may land after a Stop. */
 async function turnRow(turnId: string, state: 'running' | 'interrupted', userId?: string) {
   return journal().appendItem(
     { provider: 'codex', threadId: 'thread-1', turnId, ordinal: 999 },
