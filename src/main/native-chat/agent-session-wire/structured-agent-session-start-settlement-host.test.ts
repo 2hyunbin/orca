@@ -4,15 +4,9 @@ import { withProviderRequestTimeout } from '../../provider-process/provider-requ
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { DISPATCH_REJECTED_CANCELLED } from '../../../shared/structured-agent-session-dispatch-rejection'
 import * as startFlight from './structured-agent-session-start-flight'
 import { STRUCTURED_AGENT_SESSION_START_WAIT_MS } from './structured-agent-session-send-settlement'
-import {
-  structuredAgentSessionDeliveryNotices,
-  structuredAgentSessionStartFailureFacts
-} from '../../../renderer/src/components/native-chat/structured-agent-session-delivery-notices'
-import { mobileNativeChatUnsentNotices } from '../../../../mobile/src/session/mobile-native-chat-unsent-notices'
 import {
   CALLER,
   attach,
@@ -257,18 +251,24 @@ describe('final logical startup settlement', () => {
     const wake = await accept('new wake after journal recovery')
     await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
     const failed = await host.journalSnapshot(SESSION)
-    // Both clients read the same host-selected failure; B still has no failure notice.
-    const desktop = structuredAgentSessionDeliveryNotices({
-      pending: [],
-      submissions: failed.submissions,
-      agentName: 'Codex',
-      startFailures: structuredAgentSessionStartFailureFacts(failed.items)
+    expect(failed.submissions.find((row) => row.clientMessageId === first)).toMatchObject({
+      dispatchState: 'rejected',
+      rejection: {
+        kind: 'startFailed',
+        requestTimeout: { method: 'initialize', timeoutMs: 60_000 }
+      }
     })
-    const mobile = mobileNativeChatUnsentNotices(failed, 'codex')
-    expect([...desktop].map(([key, notice]) => [key, notice.text])).toEqual([
-      [agentJournalSubmissionKey(first), 'Your message was not sent.']
+    expect(failed.submissions.find((row) => row.clientMessageId === later)).toMatchObject({
+      dispatchState: 'pending',
+      reason: null
+    })
+    expect(
+      failed.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
+    ).toEqual([
+      expect.objectContaining({
+        body: expect.objectContaining({ failure: expect.objectContaining({ kind: 'startFailed' }) })
+      })
     ])
-    expect([...mobile]).toEqual([[agentJournalSubmissionKey(first), 'Your message was not sent.']])
     await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
     await proveOpen()
     await eventually(() =>
