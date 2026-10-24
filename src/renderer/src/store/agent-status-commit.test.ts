@@ -499,3 +499,46 @@ describe('real AppStore status commit boundary', () => {
     expect(late).toHaveBeenCalledTimes(1)
   })
 })
+
+it.each([false, true])(
+  'samples each ordinary updater frame after nested accepted work (throw %s)',
+  (throws) => {
+    const store = createStore(createAppState),
+      owner = getAgentStatusOwner(store)
+    owner.transact((tx) => tx.setEntry('updater:1', row('updater:1')))
+    const pairs: AgentStatusTransition[] = []
+    owner.subscribeTransitions((pair) => pairs.push(pair))
+    const effect = vi.fn()
+    const updater = vi.fn(() => {
+      owner.transact((tx) => {
+        tx.setEntry('updater:1', row('updater:1', 'done'))
+        tx.afterCommit(effect)
+      })
+      store.setState({ sortEpoch: 11 })
+      if (throws) {
+        throw new Error('outer updater failed')
+      }
+      return { sortEpoch: 123 }
+    })
+    if (throws) {
+      expect(() => store.setState(updater)).toThrow('outer updater failed')
+    } else {
+      store.setState(updater)
+    }
+    expect(updater).toHaveBeenCalledTimes(1)
+    expect(effect).toHaveBeenCalledTimes(1)
+    expect(store.getState().sortEpoch).toBe(throws ? 11 : 123)
+    expect(
+      pairs.map((pair) => [
+        pair.previous.agentStatusByPaneKey['updater:1']?.state,
+        pair.next.agentStatusByPaneKey['updater:1']?.state,
+        pair.previous.sortEpoch,
+        pair.next.sortEpoch
+      ])
+    ).toEqual([
+      ['working', 'done', 0, 0],
+      ['done', 'done', 0, 11],
+      ...(throws ? [] : [['done', 'done', 11, 123]])
+    ])
+  }
+)

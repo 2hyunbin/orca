@@ -40,9 +40,8 @@ export function findAgentStatusOwnerByReader(
 export function findAgentStatusOwner(
   state: Partial<Pick<AppState, 'transferAgentPaneAuthority'>>
 ): AgentStatusOwner | undefined {
-  return state.transferAgentPaneAuthority
-    ? actionOwners.get(state.transferAgentPaneAuthority)
-    : undefined
+  const transfer = state.transferAgentPaneAuthority
+  return transfer ? actionOwners.get(transfer) : undefined
 }
 
 export function getAgentStatusOwner(store: Pick<StoreApi<AppState>, 'getState'>): AgentStatusOwner {
@@ -55,11 +54,7 @@ export function getAgentStatusOwner(store: Pick<StoreApi<AppState>, 'getState'>)
 
 export function afterStoreAcceptance(store: { getState: () => unknown }, effect: () => void): void {
   const owner = owners.get(store.getState)
-  if (owner) {
-    owner.afterCommit(effect)
-  } else {
-    effect()
-  }
+  return owner ? owner.afterCommit(effect) : effect()
 }
 
 function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () => AppState) {
@@ -92,13 +87,13 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       return
     }
     const previousFrame = appFrame
-    appFrame = { live }
     appDepth++
     try {
       const resolved =
         args[1] === true
           ? ([typeof args[0] === 'function' ? args[0](get()) : args[0], true] as const)
           : ([typeof args[0] === 'function' ? args[0](get()) : args[0], args[1]] as const)
+      appFrame = { live }
       const requested = resolved[0]
       const previous = get()
       if (
@@ -182,6 +177,7 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       const previous = get()
       const previousLive = live
       const prepared: StatusStage = {
+        accepted: false,
         notice: null,
         purge: [],
         purgedLaunches: new Set(),
@@ -228,12 +224,16 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
           prepared.mirrorBoundaries ||
           prepared.effects.length > 0
         ) {
-          const accept = observers.prepare(
+          const publish = observers.prepare(
             () => joined(previous, previousLive),
             () => joined(prepared.app, nextLive),
             prepared.dirty,
             prepared.effects
           )
+          const accept = () => {
+            prepared.accepted = true
+            publish()
+          }
           coordinatedDepth++
           try {
             const install = prepared.app !== previous ? { app: prepared.app, accept } : null
@@ -264,6 +264,8 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
             }
             coordinatedDepth--
           }
+        } else {
+          prepared.accepted = true
         }
         return result
       } finally {

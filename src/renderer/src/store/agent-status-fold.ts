@@ -15,6 +15,7 @@ import type { StoreSetArgs } from './react-commit-cascade-write-probe'
 import { prepareStructuredReadRetirement } from '../components/native-chat/structured-agent-session-read-owner-registry'
 
 export type AgentStatusTransaction = {
+  captureAcceptance: () => () => boolean
   getState: () => AgentStatusReadState
   retireReadOwner: (sessionId: string, target: RuntimeClientTarget) => void
   editEntries: (edit: (entries: Record<string, AgentStatusEntry>) => readonly string[]) => void
@@ -22,6 +23,7 @@ export type AgentStatusTransaction = {
   afterCommit: (effect: () => void) => void
 }
 export type StatusStage = {
+  accepted: boolean
   authority: ReturnType<typeof createAgentPaneAuthority> | null
   observations: AgentStatusObservationSequencer | null
   mirrorBoundaries: Map<string, HostWorkingClientBoundary> | null
@@ -97,6 +99,10 @@ export function createAgentStatusTransaction(
   afterCommit: AgentStatusTransaction['afterCommit']
 ): AgentStatusTransaction {
   return {
+    captureAcceptance: () => {
+      const stage = getStage()
+      return () => stage?.accepted === true
+    },
     getState: () => {
       const stage = getStage()
       if (!stage) {

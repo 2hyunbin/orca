@@ -2,7 +2,6 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 import type { StructuredAgentSessionReadOwner } from './structured-agent-session-read-owner'
 
 const owners = new Map<string, StructuredAgentSessionReadOwner>()
-const retired = new WeakSet<StructuredAgentSessionReadOwner>()
 export function structuredReadOwnerKey(sessionId: string, target: RuntimeClientTarget): string {
   return `${target.kind === 'local' ? 'local' : `environment:${target.environmentId}`}:${sessionId}`
 }
@@ -46,7 +45,7 @@ export function installStructuredReadRetirement(prepared: PreparedReadRetirement
   for (const [key, retirement] of prepared.retirements) {
     if (retirement.owner && owners.get(key) === retirement.owner) {
       owners.delete(key)
-      retired.add(retirement.owner)
+      retirement.owner.lifetime.retired = true
       retirement.detached = true
     }
   }
@@ -60,7 +59,7 @@ export function retireStructuredAgentSessionReadOwner(
   const owner = owners.get(key)
   owners.delete(key)
   if (owner) {
-    retired.add(owner)
+    owner.lifetime.retired = true
   }
   disposeReadOwner(owner)
 }
@@ -81,7 +80,7 @@ export function adoptStructuredReadOwner(
   key: string,
   owner: StructuredAgentSessionReadOwner
 ): boolean {
-  if (retired.has(owner)) {
+  if (owner.lifetime.retired) {
     return false
   }
   if (!owners.has(key)) {
@@ -99,6 +98,7 @@ export function forgetStructuredReadOwner(
 }
 export function resetStructuredAgentSessionReadOwnersForTests(): void {
   for (const owner of owners.values()) {
+    owner.lifetime.retired = true
     owner.dispose()
   }
   owners.clear()

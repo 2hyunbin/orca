@@ -1,14 +1,7 @@
 import type { AppState } from '@/store/types'
 
-import { applyAgentStatusPatch } from '@/store/agent-status-patch'
-import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createTestStore,
-  makeTab,
-  makeWorktree,
-  TEST_REPO
-} from '../store/slices/store-test-helpers'
+import { makeTab, makeWorktree, TEST_REPO } from '../store/slices/store-test-helpers'
 
 import {
   buildStoreState,
@@ -590,7 +583,17 @@ describe('useIpcEvents agent status snapshot integration', () => {
     )
   })
 
-  it('preserves a SessionStart boundary from snapshot IPC without completion side effects', async () => {
+  it.each([
+    {
+      title: 'preserves a SessionStart boundary from snapshot IPC without completion side effects',
+      boundary: true
+    },
+    { title: 'observes a live completion on the seeded owner', boundary: false }
+  ])('$title', async ({ boundary }) => {
+    const { createTestStore } = await import('../store/slices/store-test-helpers')
+    const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
+    const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
+    let onLiveStatus: ((data: AgentStatusSetData) => void) | undefined
     const now = Date.now()
     const refreshGitHubForWorktreeIfStale = vi.fn()
     const observeAgentHookCompletionForNotification = vi.fn()
@@ -631,19 +634,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       )
 
     stubReactSyncEffect()
-    vi.doMock('../store', async () => {
-      const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
-
-      const fixture = {
-        useAppStore: {
-          subscribe: store.subscribe,
-          getState: store.getState
-        }
-      }
-      const readFixture = fixture.useAppStore.getState
-
-      return withAgentStatusFixture(fixture, () => readFixture() ?? {})
-    })
+    vi.doMock('../store', () => ({ useAppStore: store }))
     vi.doMock('./agent-hook-completion-notifications', () => ({
       observeAgentHookCompletionForNotification,
       resetAgentHookCompletionNotificationCoordinators: vi.fn(),
@@ -655,37 +646,70 @@ describe('useIpcEvents agent status snapshot integration', () => {
       'window',
       buildWindowApi({
         getSnapshot: () =>
-          Promise.resolve([
-            {
-              paneKey: FUTURE_PANE_KEY,
-              tabId: 'tab-future',
-              worktreeId: 'wt-1',
-              state: 'done',
-              prompt: '',
-              agentType: 'claude',
-              sessionBoundary: true,
-              receivedAt: now,
-              stateStartedAt: now
-            }
-          ]),
-        onSet: () => () => {}
+          Promise.resolve(
+            boundary
+              ? [
+                  {
+                    paneKey: FUTURE_PANE_KEY,
+                    tabId: 'tab-future',
+                    worktreeId: 'wt-1',
+                    state: 'done',
+                    prompt: boundary ? '' : 'resumed task',
+                    agentType: 'claude',
+                    sessionBoundary: boundary,
+                    receivedAt: now,
+                    stateStartedAt: now
+                  }
+                ]
+              : []
+          ),
+        onSet: (cb) => {
+          onLiveStatus = cb
+          return () => {}
+        }
       })
     )
 
     const { useIpcEvents } = await import('./useIpcEvents')
+    const { useAppStore } = await import('../store')
+    expect(getAgentStatusOwner(useAppStore)).toBe(getAgentStatusOwner(store))
+    expect(getAgentStatusOwner(useAppStore).getEntry(FUTURE_PANE_KEY)?.state).toBe('working')
     useIpcEvents()
+    await Promise.resolve()
+    if (!boundary) {
+      expect(onLiveStatus).toBeTypeOf('function')
+      onLiveStatus?.({
+        paneKey: FUTURE_PANE_KEY,
+        tabId: 'tab-future',
+        worktreeId: 'wt-1',
+        state: 'done',
+        prompt: 'resumed task',
+        agentType: 'claude',
+        receivedAt: now,
+        stateStartedAt: now
+      })
+    }
 
     await vi.waitFor(() => {
       expect(
         getAgentStatusOwner(store).getState().agentStatusByPaneKey[FUTURE_PANE_KEY]
       ).toMatchObject({
         state: 'done',
-        sessionBoundary: true
+        sessionBoundary: boundary ? true : undefined
       })
     })
     await Promise.resolve()
 
-    expect(refreshGitHubForWorktreeIfStale).not.toHaveBeenCalled()
-    expect(observeAgentHookCompletionForNotification).not.toHaveBeenCalled()
+    if (boundary) {
+      expect(refreshGitHubForWorktreeIfStale).not.toHaveBeenCalled()
+      expect(observeAgentHookCompletionForNotification).not.toHaveBeenCalled()
+    } else {
+      expect(observeAgentHookCompletionForNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          paneKey: FUTURE_PANE_KEY,
+          payload: expect.objectContaining({ state: 'done', prompt: 'resumed task' })
+        })
+      )
+    }
   })
 })

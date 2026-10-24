@@ -51,6 +51,7 @@ function createReadOwner(
   sessionId: string,
   target: RuntimeClientTarget
 ): StructuredAgentSessionReadOwner {
+  const lifetime = { retired: false }
   let snapshot: StructuredAgentSessionReadSnapshot = {
     state: EMPTY_STRUCTURED_AGENT_SESSION,
     loadingOlder: false,
@@ -65,7 +66,7 @@ function createReadOwner(
   const observePRLinks = createStructuredAgentSessionPRLinkObserver(sessionId, target)
 
   const setSnapshot = (next: StructuredAgentSessionReadSnapshot): void => {
-    if (next === snapshot) {
+    if (lifetime.retired || next === snapshot) {
       return
     }
     snapshot = next
@@ -95,11 +96,6 @@ function createReadOwner(
       setSnapshot({ ...snapshot, providerSession })
     }
   }
-  const clearLoadingOlder = (): void => {
-    if (snapshot.loadingOlder) {
-      setSnapshot({ ...snapshot, loadingOlder: false })
-    }
-  }
   const invalidateOlderPages = (): void => {
     setSnapshot({
       ...snapshot,
@@ -108,6 +104,9 @@ function createReadOwner(
     })
   }
   const hydrate = async (shouldStop: () => boolean): Promise<void> => {
+    if (shouldStop()) {
+      return
+    }
     const result = await callStructuredAgentSession<AgentSessionHistoryResult>(
       target,
       'agentSession.history',
@@ -117,10 +116,10 @@ function createReadOwner(
       return
     }
     setProviderSession(result.providerSession)
+    if (shouldStop()) {
+      return
+    }
     if (!result.ok) {
-      if (shouldStop()) {
-        return
-      }
       apply({
         type: 'event',
         event: {
@@ -131,9 +130,6 @@ function createReadOwner(
           fence: result.fence ?? 0
         }
       })
-      return
-    }
-    if (shouldStop()) {
       return
     }
     apply({ type: 'history-page', page: result.page })
@@ -164,9 +160,6 @@ function createReadOwner(
       if (!older.ok || older.page.window.oldest?.sequence === oldest.sequence) {
         break
       }
-      if (shouldStop()) {
-        return
-      }
       // A live batch that head-trimmed past the anchor makes this page discontiguous;
       // the reducer drops it, so re-anchor rather than chase a moving window forever.
       if (oldestStructuredAgentSessionCursor(snapshot.state)?.sequence !== oldest.sequence) {
@@ -193,11 +186,17 @@ function createReadOwner(
     if (snapshot.state.epoch === null) {
       apply({ type: 'loading' })
     }
+    if (lifetime.retired) {
+      return
+    }
     const transport = startStructuredAgentSessionReadTransport({
+      shouldStop: () => lifetime.retired,
       applyRequests: apply,
       applyEvent: (event, options) => {
         apply({ type: 'event', event, ...options })
-        observePRLinks(event)
+        if (!lifetime.retired) {
+          observePRLinks(event)
+        }
       },
       applyError: (message, refusal) => {
         // Once loaded, a failure with no host refusal attached is treated as lost contact: the
@@ -230,6 +229,7 @@ function createReadOwner(
     }
   }
   owner = {
+    lifetime,
     publishCreated: (page) => {
       if (snapshot.state.epoch === null) {
         apply({ type: 'history-page', page })
@@ -287,8 +287,8 @@ function createReadOwner(
           return
         }
         olderPage = null
-        if (!shouldStop()) {
-          clearLoadingOlder()
+        if (!shouldStop() && snapshot.loadingOlder) {
+          setSnapshot({ ...snapshot, loadingOlder: false })
         }
       })
       return page.promise

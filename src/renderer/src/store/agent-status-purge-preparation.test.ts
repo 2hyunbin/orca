@@ -214,6 +214,42 @@ describe('purge ownership preparation', () => {
         launch = getStructuredLaunchStateBySessionId(session)
       const sends = getStructuredAgentSessionPendingSends(session),
         saved = readStructuredAgentLaunchRecord(persisted)
+      const rawBefore = store.getState()
+      const storage = localStorage
+      const prematureWrites: string[] = []
+      let acceptedWrites = 0
+      const write = (method: 'setItem' | 'removeItem', key: string, value = '') => {
+        if (store.getState() === rawBefore) {
+          prematureWrites.push(method)
+        } else {
+          acceptedWrites++
+        }
+        if (method === 'setItem') {
+          storage.setItem(key, value)
+        } else {
+          storage.removeItem(key)
+        }
+      }
+      vi.stubGlobal('localStorage', {
+        getItem: storage.getItem.bind(storage),
+        setItem: (key: string, value: string) => write('setItem', key, value),
+        removeItem: (key: string) => write('removeItem', key),
+        clear: storage.clear.bind(storage)
+      })
+      const schedule = globalThis.setTimeout
+      const timer = vi.spyOn(globalThis, 'setTimeout').mockImplementation((...args) => {
+        if (store.getState() === rawBefore) {
+          prematureWrites.push('timer')
+        }
+        return schedule(...args)
+      })
+      const warn = console.warn
+      const diagnostic = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+        if (store.getState() === rawBefore) {
+          prematureWrites.push('diagnostic')
+        }
+        warn(...args)
+      })
       const purge = () =>
         applyAgentStatusPatch(store, (state) =>
           kind === 'full'
@@ -258,6 +294,11 @@ describe('purge ownership preparation', () => {
       await Promise.resolve()
       expect(observed).toHaveBeenCalledTimes(1)
       expect(dispose).toHaveBeenCalledTimes(1)
+      timer.mockRestore()
+      expect(acceptedWrites).toBeGreaterThan(0)
+      diagnostic.mockRestore()
+      vi.unstubAllGlobals()
+      expect(prematureWrites).toEqual([])
       expect(discard).toHaveBeenCalledTimes(1)
       expect(sendsChanged).toHaveBeenCalledTimes(1)
       stopSends()
@@ -282,4 +323,9 @@ describe('purge ownership preparation', () => {
       }
     }
   )
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })

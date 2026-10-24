@@ -1,6 +1,6 @@
 import {
   getStructuredLaunchStateBySessionId,
-  deleteStructuredLaunchStateIfCurrent
+  detachStructuredLaunchStateIfCurrent
 } from './structured-agent-session-launch-registry'
 import {
   hasStructuredAgentLaunchCancellationTombstonePersisted,
@@ -34,7 +34,7 @@ export function prepareStructuredAgentSessionLaunchCancellation(
       if (captured && getStructuredLaunchStateBySessionId(sessionId) === captured) {
         captured.cancelled = true
         captured.callers.outcome = 'cancelled'
-        deleteStructuredLaunchStateIfCurrent(captured)
+        detachStructuredLaunchStateIfCurrent(captured)
       }
       persistence.install()
       localCancellation?.install()

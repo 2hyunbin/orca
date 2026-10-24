@@ -1,3 +1,4 @@
+import { resolveFocusedRetainedTabAgent } from './tab-agent'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStore } from 'zustand/vanilla'
 import { createAppState } from '@/store'
@@ -184,4 +185,189 @@ describe('root terminal evidence production operation budgets', () => {
       unsubscribe()
     }
   )
+})
+
+it.each([10, 100])('challenger bounds accepted/current recursive raw lookup at %s', (size) => {
+  const { store, service, reset } = setup(size)
+  stops.push(service.start())
+  let visits = 0
+  let nested = false
+  const off = store.subscribe(() => {
+    if (nested) {
+      return
+    }
+    nested = true
+    const current = store.getState()
+    store.setState({
+      tabsByWorktree: {
+        [workspace]: countedRows(
+          current.tabsByWorktree[workspace].map((tab, i) =>
+            i === 0 ? { ...tab, title: 'nested title' } : tab
+          ),
+          () => visits++
+        )
+      }
+    })
+  })
+  stops.push(off)
+  const first = countedRows(
+    store.getState().tabsByWorktree[workspace].map((tab) => ({ ...tab, title: 'outer title' })),
+    () => visits++
+  )
+  reset()
+  store.setState({ tabsByWorktree: { [workspace]: first } })
+  console.info('recursive-raw-id-visits', size, visits)
+  expect(visits).toBeLessThanOrEqual(size * 30)
+})
+
+it.each([10, 100])('challenger bounds accepted/current recursive status index at %s', (size) => {
+  const { store, service, status } = setup(size)
+  const entry = (i: number, prompt: string) => ({
+    paneKey: makePaneKey(`tab-${i}`, leaf),
+    agentType: 'codex' as const,
+    state: 'working' as const,
+    prompt,
+    stateHistory: [],
+    stateStartedAt: 1,
+    updatedAt: 2
+  })
+  status.transact((tx) => {
+    for (let i = 0; i < size; i++) {
+      tx.setEntry(makePaneKey(`tab-${i}`, leaf), entry(i, 'initial'))
+    }
+  })
+  stops.push(service.start())
+  const sources = new Set<object>()
+  let scans = 0
+  const realEntries = Object.entries
+  vi.spyOn(Object, 'entries').mockImplementation((obj) => {
+    if (sources.has(obj)) {
+      scans++
+    }
+    return realEntries(obj)
+  })
+  let nested = false
+  const off = store.subscribe(() => {
+    if (nested) {
+      return
+    }
+    nested = true
+    sources.add(status.getSnapshot())
+    status.transact((tx) => tx.setEntry(makePaneKey('tab-0', leaf), entry(0, 'nested')))
+    sources.add(status.getSnapshot())
+  })
+  stops.push(off)
+  status.transact((tx) => {
+    for (let i = 0; i < size; i++) {
+      tx.setEntry(makePaneKey(`tab-${i}`, leaf), entry(i, 'outer'))
+    }
+    store.setState({ agentStatusEpoch: 123 })
+  })
+  console.info('recursive-live-source-scans', size, scans)
+  expect(scans).toBeLessThanOrEqual(4)
+})
+
+it('challenger captures current status before an app updater installation', () => {
+  const { store, status } = setup(10)
+  const pane = makePaneKey('tab-0', leaf)
+  const working = {
+    paneKey: pane,
+    agentType: 'codex' as const,
+    state: 'working' as const,
+    prompt: 'task',
+    stateHistory: [],
+    stateStartedAt: 1,
+    updatedAt: 2
+  }
+  status.transact((tx) => tx.setEntry(pane, working))
+  const pairs: unknown[] = []
+  const off = status.subscribeTransitions((t) =>
+    pairs.push({
+      previous: t.previous.agentStatusByPaneKey[pane]?.state,
+      next: t.next.agentStatusByPaneKey[pane]?.state,
+      previousEpoch: t.previous.agentStatusEpoch,
+      nextEpoch: t.next.agentStatusEpoch
+    })
+  )
+  stops.push(off)
+  store.setState(() => {
+    status.transact((tx) => tx.setEntry(pane, { ...working, state: 'done' }))
+    return { agentStatusEpoch: 123 }
+  })
+  expect(pairs).toEqual([
+    { previous: 'working', next: 'done', previousEpoch: 0, nextEpoch: 0 },
+    { previous: 'done', next: 'done', previousEpoch: 0, nextEpoch: 123 }
+  ])
+})
+
+it.each([10, 100])('bounds retained reentry across two stores at %s tabs', (size) => {
+  const { store, status, service } = setup(size)
+  const other = createStore(createAppState),
+    otherStatus = getAgentStatusOwner(other)
+  const retained = (prompt: string) =>
+    Object.fromEntries(
+      Array.from({ length: size }, (_, i) => {
+        const key = makePaneKey(`tab-${i}`, leaf)
+        return [
+          key,
+          {
+            worktreeId: workspace,
+            tab: makeTab({ id: `tab-${i}`, worktreeId: workspace }),
+            agentType: 'codex' as const,
+            startedAt: 1,
+            entry: {
+              paneKey: key,
+              state: 'done' as const,
+              agentType: 'codex' as const,
+              prompt,
+              stateHistory: [],
+              stateStartedAt: 1,
+              updatedAt: 2
+            }
+          }
+        ]
+      })
+    )
+  store.setState({ retainedAgentsByPaneKey: retained('initial') })
+  other.setState({ retainedAgentsByPaneKey: retained('other store') })
+  stops.push(service.start())
+  const sources = new Set<object>()
+  const scans = new Map<object, number>()
+  const entries = Object.entries
+  vi.spyOn(Object, 'entries').mockImplementation((source) => {
+    if (sources.has(source)) {
+      scans.set(source, (scans.get(source) ?? 0) + 1)
+    }
+    return entries(source)
+  })
+  let nested = false
+  stops.push(
+    store.subscribe(() => {
+      if (nested) {
+        return
+      }
+      nested = true
+      sources.add(status.getState().retainedAgentsByPaneKey)
+      store.setState({ retainedAgentsByPaneKey: retained('nested') })
+      sources.add(status.getState().retainedAgentsByPaneKey)
+    })
+  )
+  const outer = retained('outer')
+  sources.add(outer)
+  store.setState({ retainedAgentsByPaneKey: outer })
+  const { retainedAgentsByPaneKey: a } = status.getState()
+  const { retainedAgentsByPaneKey: b } = otherStatus.getState()
+  const old = retained('third source')
+  sources.add(a)
+  sources.add(b)
+  sources.add(old)
+  for (const source of [a, b, a, old, a]) {
+    for (let i = 0; i < size; i++) {
+      expect(resolveFocusedRetainedTabAgent(source, undefined, `tab-${i}`)).toBe('codex')
+    }
+  }
+  console.info('retained-two-store-source-scans', size, [...scans.values()])
+  for (const count of scans.values()) {
+    expect(count).toBe(1)
+  }
 })

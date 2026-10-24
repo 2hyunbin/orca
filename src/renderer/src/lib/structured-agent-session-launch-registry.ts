@@ -97,11 +97,18 @@ export function setStructuredLaunchState(state: StructuredLaunchState): void {
   persistStructuredLaunchState(state)
 }
 
-export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchState): boolean {
+export function detachStructuredLaunchStateIfCurrent(state: StructuredLaunchState): boolean {
   if (structuredLaunchesBySessionId.get(state.intent.sessionId) !== state) {
     return false
   }
   structuredLaunchesBySessionId.delete(state.intent.sessionId)
+  return true
+}
+
+export function deleteStructuredLaunchStateIfCurrent(state: StructuredLaunchState): boolean {
+  if (!detachStructuredLaunchStateIfCurrent(state)) {
+    return false
+  }
   deleteStructuredAgentLaunchRecord(state.intent.sessionId)
   return true
 }

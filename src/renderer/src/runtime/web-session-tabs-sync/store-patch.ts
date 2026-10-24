@@ -180,7 +180,9 @@ export function applyWebSessionTabsStorePatch(
     return patch
   }
 
+  let wasAccepted = () => false
   owner.transact((transaction) => {
+    wasAccepted = transaction.captureAcceptance()
     const previous = transaction.getState()
     const patch = runStorePatch(previous)
     applyAgentStatusPatch(useAppStore, patch)
@@ -201,5 +203,9 @@ export function applyWebSessionTabsStorePatch(
       transaction.afterCommit(() => observeAgentHookCompletionForNotification(status))
     }
   })
-  return settleHostMirror
+  return () => {
+    if (wasAccepted()) {
+      settleHostMirror()
+    }
+  }
 }

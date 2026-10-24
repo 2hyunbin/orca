@@ -1,3 +1,4 @@
+import { ownSourceKeys } from './structured-chat-tab-index'
 import type { AgentStatusTransition } from '@/store/agent-status-observers'
 import { getTerminalTabOwners } from '@/store/slices/terminal-tab-owner-index'
 import { getCachedTerminalTabForWorktree } from '@/components/terminal-pane/terminal-tab-lookup'
@@ -29,8 +30,8 @@ export function affectedExitEvidenceTabs({
       }
     } else {
       for (const workspace of new Set([
-        ...Object.keys(previous.tabsByWorktree),
-        ...Object.keys(next.tabsByWorktree)
+        ...ownSourceKeys(previous.tabsByWorktree),
+        ...ownSourceKeys(next.tabsByWorktree)
       ])) {
         if (previous.tabsByWorktree[workspace] === next.tabsByWorktree[workspace]) {
           continue
@@ -56,7 +57,7 @@ export function affectedExitEvidenceTabs({
     hints?: readonly string[]
   ): void => {
     if (before !== after) {
-      for (const key of hints ?? new Set([...Object.keys(before), ...Object.keys(after)])) {
+      for (const key of hints ?? new Set([...ownSourceKeys(before), ...ownSourceKeys(after)])) {
         if (before[key] !== after[key]) {
           add(key)
         }
@@ -107,7 +108,7 @@ export function affectedExitEvidenceTabs({
     }
   }
   if (!haveSameTerminalRoutingInputs(previous, next)) {
-    for (const workspace of Object.keys(next.tabsByWorktree)) {
+    for (const workspace of ownSourceKeys(next.tabsByWorktree)) {
       if (
         worktreeUsesRemoteConnection(previous, workspace) !==
         worktreeUsesRemoteConnection(next, workspace)

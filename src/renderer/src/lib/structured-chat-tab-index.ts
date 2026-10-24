@@ -1,5 +1,15 @@
 import type { Tab } from '../../../shared/tab-types'
 
+const sourceKeys = new WeakMap<object, readonly string[]>()
+export function ownSourceKeys(source: object): readonly string[] {
+  let keys = sourceKeys.get(source)
+  if (!keys) {
+    keys = Object.keys(source)
+    sourceKeys.set(source, keys)
+  }
+  return keys
+}
+
 type StructuredTabIndex = {
   byId: ReadonlyMap<string, Tab>
   bySessionId: ReadonlyMap<string, Tab>
@@ -74,7 +84,8 @@ function indexWorkspaces(tabsByWorkspace: WorkspaceTabMap | undefined) {
     const byTabId = new Map<string, string>()
     const bySessionId = new Map<string, string[]>()
     const structuredTabs: { workspaceId: string; tabIndex: number }[] = []
-    for (const [workspaceId, tabs] of Object.entries(tabsByWorkspace)) {
+    for (const workspaceId of ownSourceKeys(tabsByWorkspace)) {
+      const tabs = tabsByWorkspace[workspaceId]
       for (const [tabIndex, { id, contentType, entityId }] of (tabs ?? []).entries()) {
         if (contentType === 'agent-session') {
           structuredTabs.push({ workspaceId, tabIndex })

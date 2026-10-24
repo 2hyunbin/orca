@@ -81,3 +81,164 @@ describe('accepted status authority boundaries', () => {
     }
   })
 })
+
+describe('review acceptance and root observer integration', () => {
+  it('does not let an aborted nested mirror return a usable settle receipt', async () => {
+    const { parkUntilHostSessionMirrorHydrates, resetHostSessionMirrorHydrationForTests } =
+      await import('@/runtime/host-session-mirror-hydration')
+    resetHostSessionMirrorHydrationForTests()
+    const owner = getAgentStatusOwner(useAppStore)
+    const before = useAppStore.getState()
+    const hydrated = vi.fn()
+    const environmentId = 'review-acceptance-host',
+      worktreeId = 'review-acceptance-workspace'
+    parkUntilHostSessionMirrorHydrates(environmentId, worktreeId, hydrated)
+    let settle: (() => void) | undefined
+    expect(() =>
+      owner.transact(() => {
+        settle = applyWebSessionTabsStorePatch(() => ({ sortEpoch: before.sortEpoch + 1 }), {
+          frames: [
+            { environmentId, worktreeId, decision: { apply: true, settlesHostMirror: true } }
+          ]
+        })
+        throw new Error('abort outer mirror fold')
+      })
+    ).toThrow('abort outer mirror fold')
+    expect(useAppStore.getState()).toBe(before)
+    settle?.()
+    owner.transact(() => useAppStore.setState({ sortEpoch: before.sortEpoch + 2 }))
+    settle?.()
+    useAppStore.setState(before, true)
+    resetHostSessionMirrorHydrationForTests()
+    expect(hydrated).not.toHaveBeenCalled()
+  })
+  it.each([10, 100])(
+    'counts full unified-map enumeration with the root exit owner at %i chats',
+    async (count) => {
+      const { getTabAgentExitOwner } = await import('@/lib/tab-agent-exit-owner')
+      const a = createStore(createAppState),
+        status = getAgentStatusOwner(a)
+      const { structuredChatTabs } = await import('@/lib/structured-chat-tab-index')
+      const previousMap = Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [
+          `wt${i}`,
+          [
+            {
+              id: `agent-session:s${i}`,
+              entityId: `s${i}`,
+              worktreeId: `wt${i}`,
+              contentType: 'agent-session',
+              executionHostId: 'local',
+              label: 'chat',
+              groupId: 'g',
+              customLabel: null,
+              color: null,
+              sortOrder: 0,
+              createdAt: 1
+            }
+          ]
+        ])
+      )
+      let walks = 0
+      const before = new Proxy(previousMap, {
+        ownKeys(target) {
+          walks++
+          return Reflect.ownKeys(target)
+        }
+      })
+      a.setState({ unifiedTabsByWorktree: before })
+      structuredChatTabs(before)
+      const stop = getTabAgentExitOwner(status).start()
+      const next = new Proxy(
+        { ...previousMap, wt0: [{ ...previousMap.wt0[0], label: 'changed' }] },
+        {
+          ownKeys(target) {
+            walks++
+            return Reflect.ownKeys(target)
+          }
+        }
+      )
+      walks = 0
+      a.setState({ unifiedTabsByWorktree: next })
+      stop()
+      console.log('REVIEW_ROOT_UNIFIED_MAP_WALKS', count, walks)
+      expect(walks).toBeLessThanOrEqual(1)
+    }
+  )
+})
+
+it.each([false, true])(
+  'uses the actual outer receipt for nested mirror capability (patchless %s)',
+  async (patchless) => {
+    const { parkUntilHostSessionMirrorHydrates, resetHostSessionMirrorHydrationForTests } =
+      await import('@/runtime/host-session-mirror-hydration')
+    resetHostSessionMirrorHydrationForTests()
+    const owner = getAgentStatusOwner(useAppStore)
+    const initial = useAppStore.getState()
+    const environmentId = 'accepted-nested-host',
+      worktreeId = 'accepted-nested-workspace'
+    const hydrated = vi.fn()
+    const effects = vi.fn()
+    let settle: (() => void) | undefined
+    const stop = useAppStore.subscribe(() => {
+      expect(effects).not.toHaveBeenCalled()
+      settle?.()
+      expect(hydrated).toHaveBeenCalledTimes(1)
+    })
+    try {
+      parkUntilHostSessionMirrorHydrates(environmentId, worktreeId, hydrated)
+      owner.transact((tx) => {
+        settle = applyWebSessionTabsStorePatch(
+          (state) => (patchless ? state : { sortEpoch: initial.sortEpoch + 1 }),
+          {
+            frames: [
+              { environmentId, worktreeId, decision: { apply: true, settlesHostMirror: true } }
+            ]
+          }
+        )
+        settle()
+        expect(hydrated).not.toHaveBeenCalled()
+        tx.afterCommit(effects)
+        if (patchless) {
+          useAppStore.setState({ sortEpoch: initial.sortEpoch + 1 })
+        }
+      })
+      expect(effects).toHaveBeenCalledTimes(1)
+      expect(hydrated).toHaveBeenCalledTimes(1)
+    } finally {
+      stop()
+      useAppStore.setState(initial, true)
+      resetHostSessionMirrorHydrationForTests()
+    }
+  }
+)
+
+it('accepts identity-equal evidence without an app write', async () => {
+  const { parkUntilHostSessionMirrorHydrates, resetHostSessionMirrorHydrationForTests } =
+    await import('@/runtime/host-session-mirror-hydration')
+  resetHostSessionMirrorHydrationForTests()
+  const initial = useAppStore.getState()
+  const hydrated = vi.fn(),
+    app = vi.fn()
+  const stop = useAppStore.subscribe(app)
+  try {
+    parkUntilHostSessionMirrorHydrates('patchless-host', 'patchless-workspace', hydrated)
+    const settle = applyWebSessionTabsStorePatch((state) => state, {
+      frames: [
+        {
+          environmentId: 'patchless-host',
+          worktreeId: 'patchless-workspace',
+          decision: { apply: true, settlesHostMirror: true }
+        }
+      ]
+    })
+    expect(useAppStore.getState()).toBe(initial)
+    expect(app).not.toHaveBeenCalled()
+    expect(hydrated).not.toHaveBeenCalled()
+    settle()
+    expect(hydrated).toHaveBeenCalledTimes(1)
+  } finally {
+    stop()
+    resetHostSessionMirrorHydrationForTests()
+  }
+})
