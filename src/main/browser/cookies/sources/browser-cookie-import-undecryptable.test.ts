@@ -6,7 +6,7 @@ import type { CookiesGetFilter } from 'electron'
 const {
   appGetPathMock,
   createDecipherivMock,
-  execFileSyncMock,
+  runProcessSyncMock,
   sessionFromPartitionMock,
   dialogShowOpenDialogMock,
   setPendingCookieImportMock,
@@ -15,7 +15,7 @@ const {
 } = vi.hoisted(() => ({
   appGetPathMock: vi.fn(),
   createDecipherivMock: vi.fn(),
-  execFileSyncMock: vi.fn(),
+  runProcessSyncMock: vi.fn(),
   sessionFromPartitionMock: vi.fn(),
   dialogShowOpenDialogMock: vi.fn(),
   setPendingCookieImportMock: vi.fn(),
@@ -28,13 +28,15 @@ vi.mock('node:crypto', async (importOriginal) => {
   createDecipherivMock.mockImplementation(original.createDecipheriv)
   return { ...original, createDecipheriv: createDecipherivMock }
 })
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
   }
 }))
-vi.mock('node:child_process', () => ({ execFileSync: execFileSyncMock }))
+vi.mock('@orca/process-host', () => ({
+  runProcessSync: runProcessSyncMock
+}))
 vi.mock('node:fs', async (importOriginal) => ({ ...(await importOriginal<typeof NodeFs>()) }))
 vi.mock('electron', () => ({
   app: { getPath: appGetPathMock },
@@ -42,7 +44,7 @@ vi.mock('electron', () => ({
   dialog: { showOpenDialog: dialogShowOpenDialogMock },
   session: { fromPartition: sessionFromPartitionMock }
 }))
-vi.mock('./browser-cookie-clear-store', () => ({
+vi.mock('../../browser-cookie-clear-store', () => ({
   openCookieClearStore: (targetSession: {
     cookies: {
       get: (filter: CookiesGetFilter) => Promise<unknown>
@@ -60,8 +62,9 @@ vi.mock('./browser-cookie-clear-store', () => ({
   })
 }))
 
-import { importCookiesFromBrowser, type DetectedBrowser } from './browser-cookie-import'
-import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
+import { importCookiesFromBrowser } from '../../browser-cookie-import'
+import type { DetectedBrowser } from './browser-cookie-detection-types'
+import { createChromiumCookieTestDatabase } from '../../browser-cookie-import-test-database'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -125,15 +128,29 @@ describe('importCookiesFromBrowser — undecryptable cookies', () => {
       getStoragePath: vi.fn().mockReturnValue(join(tmpDir, 'userData', 'Partitions', 'test'))
     })
     platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux')
-    execFileSyncMock.mockImplementation(() => {
+    runProcessSyncMock.mockImplementation(() => {
       throw new Error('secret-tool: no such service')
     })
   })
 
   afterEach(() => {
-    platformSpy.mockRestore()
-    vi.clearAllMocks()
-    rmSync(tmpDir, { recursive: true, force: true })
+    try {
+      expect(runProcessSyncMock).toHaveBeenCalledTimes(2)
+      expect(runProcessSyncMock).toHaveBeenNthCalledWith(1, {
+        program: 'secret-tool',
+        args: ['lookup', 'service', 'Chrome Safe Storage', 'account', 'Chrome'],
+        timeoutMs: 5_000
+      })
+      expect(runProcessSyncMock).toHaveBeenNthCalledWith(2, {
+        program: 'secret-tool',
+        args: ['lookup', 'application', 'chrome'],
+        timeoutMs: 5_000
+      })
+    } finally {
+      platformSpy.mockRestore()
+      vi.clearAllMocks()
+      rmSync(tmpDir, { recursive: true, force: true })
+    }
   })
 
   function seedProfile(...encryptedValues: Buffer[]): string {

@@ -141,6 +141,7 @@ export async function completeHostWorktreeCreation(args: {
       activation,
       primaryTabId: tabId,
       backendSpawned: true,
+      hostPlannedStartup: false,
       focusOnCompletion
     })
   } catch (error) {

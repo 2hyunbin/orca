@@ -2,20 +2,16 @@ import { DatabaseSync } from 'node:sqlite'
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { BrowserCookieImportResult } from '../../shared/browser-workspace-types'
+import type { BrowserCookieImportResult } from '../../../../shared/browser-workspace-types'
 import { readFirefoxRowPartition } from './browser-cookie-source-partition'
 import {
   importValidatedCookies,
   cookieImportTarget,
   type CookieImportOptions
-} from './browser-cookie-import-pipeline'
-import {
-  databaseSameSite,
-  deriveUrl,
-  type ValidatedCookie
-} from './cookies/sources/browser-cookie-validation'
+} from '../../browser-cookie-import-pipeline'
+import { databaseSameSite, deriveUrl, type ValidatedCookie } from './browser-cookie-validation'
 import type { DetectedBrowser } from './browser-cookie-detection-types'
-import { diag } from './browser-cookie-import-diagnostics'
+import { diag } from '../../browser-cookie-import-diagnostics'
 
 export async function importCookiesFromFirefox(
   browser: DetectedBrowser,

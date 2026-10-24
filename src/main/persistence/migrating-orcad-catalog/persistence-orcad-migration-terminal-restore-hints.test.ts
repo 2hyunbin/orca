@@ -148,7 +148,7 @@ describe('orcad migration terminal restore hints through the store', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
-  it('installs hints scoped to their worktree after the durable commit, and survives a restart', async () => {
+  it('installs hints scoped to their worktree after the durable commit, and survives store reload', async () => {
     const input = manifest()
     const store = createStore()
     stageBlob(store, input, encodedHints())

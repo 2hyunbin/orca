@@ -70,6 +70,9 @@ export type OrcadLaunchDetach = 'nohup' | 'setsid'
 
 const ORCAD_SETSID_PID_WAIT_TRIES = 100
 
+/** Halving V8's 16 MB semi-spaces saves ~30 MB idle RSS; a CLI flag because the heap cannot be resized later. */
+export const ORCAD_RUNTIME_V8_FLAGS = '--max-semi-space-size=8'
+
 /** Pass bind explicitly so launch policy cannot change with installed-version defaults. */
 export function orcadLaunchCommand(
   host: RemoteHostPlatform,
@@ -128,7 +131,7 @@ export function orcadLaunchCommand(
           '{ umask "$orcad_login_umask" &&',
           ...launchEnv,
           // exec keeps $! equal to runtime PID; in-place launcher loading also preserves older clients’ argv checks.
-          `exec nohup "$orcad_runtime" ${entry}`,
+          `exec nohup "$orcad_runtime" ${ORCAD_RUNTIME_V8_FLAGS} ${entry}`,
           `--json --bind ${quotePosixShell(spec.bindHost)} --port ${String(spec.port)};`,
           `} > ${readiness} 2>> ${log} < /dev/null &`,
           `echo $! > ${pidFile} &&`,
@@ -159,7 +162,7 @@ function setsidLaunchTail(
       'else setsid "$@" & fi; }; orcad_detach "$@"\' orcad-detach',
     `sh -c 'echo $$ > "$1" && umask "$2" && shift 2 && exec "$@"' orcad-launch ${pidFile}`,
     '"$orcad_login_umask"',
-    `"$orcad_runtime" ${entry}`,
+    `"$orcad_runtime" ${ORCAD_RUNTIME_V8_FLAGS} ${entry}`,
     `--json --bind ${quotePosixShell(spec.bindHost)} --port ${String(spec.port)}`,
     `> ${readiness} 2>> ${log} < /dev/null &&`,
     `orcad_wait=0; while [ ! -s ${pidFile} ] && [ "$orcad_wait" -lt ${ORCAD_SETSID_PID_WAIT_TRIES} ];`,

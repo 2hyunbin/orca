@@ -25,6 +25,11 @@ import { TerminalAttachCanceledError } from './daemon-errors'
 import { waitForTerminalAttachOperation } from './terminal-attach-cancellation'
 import { SessionNotFoundError } from './types'
 import { resolveWslSessionContext } from './wsl-session-context'
+import {
+  attachSessionInputViewer,
+  isSessionInputClosed,
+  trackSessionInput
+} from './session-input-path'
 
 type TerminalHostSessionCreateDependencies = {
   sessions: Map<string, Session>
@@ -72,6 +77,7 @@ export async function createOrAttachTerminalSession(
     const snapshot = existing.getSnapshot()
     existing.detachAllClients()
     const token = existing.attachClient(opts.streamClient)
+    attachSessionInputViewer(existing, opts.streamClient)
     return {
       isNew: false,
       snapshot,
@@ -79,6 +85,7 @@ export async function createOrAttachTerminalSession(
       shellState: existing.shellState,
       incarnationId: existing.incarnationId,
       ...getDaemonSessionResultMetadata(existing),
+      ...(isSessionInputClosed(existing) ? { inputClosed: true as const } : {}),
       attachToken: token
     }
   }
@@ -199,6 +206,8 @@ async function spawnAndPublishSession(
       : {})
   })
 
+  trackSessionInput(session, subprocess, deps.reportReadinessEvent)
+
   if (opts.isCanceled?.()) {
     // Retain cleanup ownership if the native child refuses to exit.
     deps.sessions.set(opts.sessionId, session)
@@ -218,6 +227,7 @@ async function spawnAndPublishSession(
   deps.onSessionCreated(opts.sessionId, opts.agentSessionGeneration, session.isAlive)
   onPublished(opts.sessionId, session.isAlive)
   const token = session.attachClient(opts.streamClient)
+  attachSessionInputViewer(session, opts.streamClient)
 
   const startupCommandWritten =
     Boolean(opts.command) && !subprocess.startupCommandDeliveredInShellArgs
@@ -269,6 +279,7 @@ async function spawnAndPublishSession(
     shellState: session.shellState,
     incarnationId: session.incarnationId,
     ...getDaemonSessionResultMetadata(session),
+    ...(isSessionInputClosed(session) ? { inputClosed: true as const } : {}),
     ...(cwdReadableByDaemon !== null ? { cwdReadableByDaemon } : {}),
     attachToken: token
   }

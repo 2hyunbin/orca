@@ -14,6 +14,8 @@ export async function completeWorktreeCreation(args: {
   primaryTabId: string | null
   startupTerminalTabId?: string
   backendSpawned: boolean
+  /** The host was asked to plan the agent launch, so the desktop's plan never runs. */
+  hostPlannedStartup: boolean
   focusOnCompletion: boolean
 }): Promise<void> {
   const { request } = args
@@ -21,7 +23,9 @@ export async function completeWorktreeCreation(args: {
   useAppStore
     .getState()
     .removePendingWorktreeCreation(args.creationId, { cleanupVm: false, reason: 'completed' })
-  if (!args.structuredLaunchAccepted) {
+  // Why: an agent the host planned but did not start has no tab to seed and is not the window's to start.
+  const hostAgentMissing = args.hostPlannedStartup && !args.backendSpawned
+  if (!args.structuredLaunchAccepted && !hostAgentMissing) {
     seedAgentTabStateAfterWorktreeCreate({
       request,
       worktreeId: args.worktreeId,
@@ -30,7 +34,12 @@ export async function completeWorktreeCreation(args: {
       backendSpawned: args.backendSpawned
     })
   }
-  if (!args.structuredLaunchAccepted && request.startupPlan && !args.backendSpawned) {
+  if (
+    !args.structuredLaunchAccepted &&
+    request.startupPlan &&
+    !args.backendSpawned &&
+    !args.hostPlannedStartup
+  ) {
     void ensureAgentStartupInTerminal({
       worktreeId: args.worktreeId,
       primaryTabId: args.primaryTabId,

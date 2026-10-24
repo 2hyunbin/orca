@@ -1,20 +1,20 @@
 import type { TaskPageSourceAvailabilityPreludeModel } from './use-task-page-source-availability'
 import { useMemo } from 'react'
-import type { TaskProvider } from '../../../shared/task-providers'
+import type { TaskProvider } from '../../../../shared/task-providers'
 import type {
   TaskSourceAvailabilityNotice,
   TaskSourceHostAvailability
-} from './task-source-context-summary'
-import type { TaskSourceContext } from '../../../shared/task-source-context'
+} from '../task-source-context-summary'
+import type { TaskSourceContext } from '../../../../shared/task-source-context'
 import {
   getTaskSourceHostAvailabilityForHost,
   getTaskPageRepoSourceContext
-} from './task-page-source-context'
+} from '../task-page-source-context'
 import { getRepoBackedProviderAvailability } from '@/components/task-source-provider-availability'
 import {
   getTaskSourceAvailabilityNotice,
   getTaskSourceContextSummary
-} from './task-source-context-summary'
+} from '../task-source-context-summary'
 import { getRepoBackedTaskEmptyState } from '@/components/task-page-empty-state'
 export function useTaskPageSourceSummary(model: TaskPageSourceAvailabilityPreludeModel) {
   const {
