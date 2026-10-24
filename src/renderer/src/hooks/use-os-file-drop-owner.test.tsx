@@ -24,6 +24,9 @@ type DropHandler<Destination = undefined> = (
   context: { target: EventTarget | null; destination?: Destination }
 ) => void | Promise<void>
 
+const uuid = vi.hoisted(() => ({ next: 0 }))
+vi.mock('@/lib/browser-uuid', () => ({ createBrowserUuid: () => `uuid-${++uuid.next}` }))
+
 const getPathForFile = vi.fn((file: File) => `/dropped/${file.name}`)
 const prepareDroppedPaths = vi.fn(
   async ({ paths }: PrepareDroppedPathsRequest): Promise<PreparedDroppedPaths> => ({
@@ -103,6 +106,7 @@ function drag(
 }
 
 beforeEach(() => {
+  uuid.next = 0
   vi.stubGlobal('api', { fs: { getPathForFile, prepareDroppedPaths } })
   getPathForFile.mockClear()
   prepareDroppedPaths.mockClear()
@@ -333,6 +337,28 @@ describe('useOsFileDropOwner', () => {
     expect(prepared.paths).toHaveLength(1)
     expect(takeBrowserAttachmentFile(prepared.paths[0]!)).toBe(file)
     expect(prepareDroppedPaths).not.toHaveBeenCalled()
+  })
+
+  it('releases the browser files of a drop its detached owner never delivers', async () => {
+    vi.stubGlobal('api', withFallback({ fs: { prepareDroppedPaths } }, []))
+    let finishFirst: (() => void) | undefined
+    const onDrop = vi.fn<DropHandler>(
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve
+        })
+    )
+    const view = render(<Owner onDrop={onDrop} acceptsBrowserFiles />)
+    drag(view.getByTestId('owner'), 'drop', [new File(['a'], 'first.txt')])
+    await act(async () => undefined)
+    drag(view.getByTestId('owner'), 'drop', [new File(['b'], 'second.txt')])
+    view.unmount()
+    await act(async () => {
+      finishFirst?.()
+    })
+    expect(onDrop).toHaveBeenCalledTimes(1)
+    expect(takeBrowserAttachmentFile('orca-browser-file:uuid-2/second.txt')).toBeNull()
+    expect(takeBrowserAttachmentFile('orca-browser-file:uuid-1/first.txt')).not.toBeNull()
   })
 
   it('delivers drops in order within an owner while another owner can finish', async () => {

@@ -11,7 +11,10 @@ import {
   type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
-import { holdBrowserAttachmentFiles } from '../lib/browser-attachment-files'
+import {
+  holdBrowserAttachmentFiles,
+  releaseBrowserAttachmentFiles
+} from '../lib/browser-attachment-files'
 
 export type OsFileDropSequence = { deliveryTail: Promise<void> }
 
@@ -130,13 +133,13 @@ export function useOsFileDropOwner<Destination = undefined>(
           sequence.deliveryTail = sequence.deliveryTail
             .then(async () => {
               const result = await prepared
+              const live = isDestinationLive ? isDestinationLive(context) : attached
               if (isDestinationLive || attached) {
-                await deliver(
-                  isDestinationLive && !isDestinationLive(context)
-                    ? { ...result, paths: [] }
-                    : result,
-                  context
-                )
+                await deliver(live ? result : { ...result, paths: [] }, context)
+              }
+              if (!live) {
+                // A drop no destination takes must not leave its browser files held.
+                releaseBrowserAttachmentFiles(result.paths)
               }
             })
             .catch((error: unknown) => console.error('OS file drop owner callback failed', error))

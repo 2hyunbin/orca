@@ -384,6 +384,15 @@ describe('useNativeChatExternalAttachments', () => {
     expect(attachResolvedPaths).not.toHaveBeenCalled()
   })
 
+  it('releases browser files a picker returns to an already disabled composer', async () => {
+    const [token] = holdBrowserAttachmentFiles([new File(['a'], 'a.txt')])
+    const probe = await renderProbe({ disabled: true, attachResolvedPaths: vi.fn() })
+
+    act(() => probe.latest().attachExternalPaths([token!]))
+
+    expect(takeBrowserAttachmentFile(token!)).toBeNull()
+  })
+
   describe('a structured chat on a paired server', () => {
     const session = { sessionId: 'session-1', runtimeEnvironmentId: 'env-1' }
     const target = {

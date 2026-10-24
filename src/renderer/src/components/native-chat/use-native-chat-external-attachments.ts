@@ -2,7 +2,9 @@ import { useCallback, useLayoutEffect, useRef } from 'react'
 import { useAppStore } from '@/store'
 import { NATIVE_FILE_DROP_MAX_PATHS } from '../../../../shared/native-file-drop'
 import {
+  isSameComposerWorkspace,
   nativeChatAttachmentOwnerUnchanged,
+  type ComposerWorkspace,
   type NativeChatAttachmentFocusOptions,
   type NativeChatResolvedPathOptions
 } from './native-chat-resolved-path-ownership'
@@ -47,22 +49,6 @@ export type UseNativeChatExternalAttachmentsArgs = {
   /** Chips shown while a file uploads, so Send waits for it. */
   pendingChips: NativeChatPendingAttachmentChips
   setNotice: (notice: string | null) => void
-}
-
-type ComposerWorkspace = {
-  structuredWorktreeId?: string
-  terminalTabId: string
-  structuredSession?: NativeChatStructuredAttachmentSession
-}
-
-function isSameComposerWorkspace(captured: ComposerWorkspace, current: ComposerWorkspace): boolean {
-  return (
-    captured.structuredWorktreeId === current.structuredWorktreeId &&
-    captured.terminalTabId === current.terminalTabId &&
-    captured.structuredSession?.sessionId === current.structuredSession?.sessionId &&
-    captured.structuredSession?.runtimeEnvironmentId ===
-      current.structuredSession?.runtimeEnvironmentId
-  )
 }
 
 /**
@@ -314,6 +300,8 @@ export function useNativeChatExternalAttachments({
     (paths: string[], options?: NativeChatAttachmentFocusOptions): void => {
       if (!disabledRef.current && mountedRef.current && paths.length > 0) {
         void captureExternalDrop(undefined, options)(paths)
+      } else {
+        releaseBrowserAttachmentFiles(paths)
       }
     },
     [captureExternalDrop, mountedRef]
