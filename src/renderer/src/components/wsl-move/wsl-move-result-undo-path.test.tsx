@@ -21,10 +21,15 @@ const mockState = {
   unifiedTabsByWorktree: {},
   activeWorktreeId: null,
   activeGroupIdByWorktree: {},
-  groupsByWorktree: {}
+  groupsByWorktree: {},
+  // No unsaved file, so the release is not refused before it reaches main.
+  openFiles: []
 }
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: typeof mockState) => unknown) => selector(mockState)
+  useAppStore: Object.assign(
+    (selector: (state: typeof mockState) => unknown) => selector(mockState),
+    { getState: () => mockState }
+  )
 }))
 vi.mock('@/components/confirmation-dialog-context', () => ({
   useConfirmationDialog: () => async () => true
