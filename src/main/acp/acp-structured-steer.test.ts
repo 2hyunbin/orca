@@ -3,7 +3,6 @@ import '../runtime/rpc/unused-default-rpc-methods.test-fixture'
 // stays) and the message goes as the next prompt. The adapter holds a steer only while that cancel
 // lands; the host's queue holds everything else.
 
-import { z } from 'zod'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
 import { DISPATCH_REJECTED_CANCELLED } from '../../shared/structured-agent-session-dispatch-rejection'
@@ -16,6 +15,10 @@ import {
   envelope
 } from '../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import { HOST_TEST_SESSION as SESSION } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
+import {
+  prepareMailPerformanceHistory,
+  measureMailDeliveryWork
+} from './acp-mail-performance.test-support'
 import type { AcpScriptedAgent, FakeFrame } from './acp-scripted-agent.test-support'
 import {
   openAcpAdapterRig,
@@ -365,9 +368,11 @@ describe('Steer on a Grok card, through the host', () => {
 })
 
 // A real execution host, ACP adapter and RPC dispatcher; only the ACP child is scripted.
-it.each(['fresh', 'mixed', 'invalidation', 'held-epoch'] as const)(
+it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
   'drains five mail obligations as one ACP input (%s), with exact check replay and ack',
-  async (history) => {
+  async (variant) => {
+    const history = variant === 'mixed-10N' ? 'mixed' : variant
+    const population = variant === 'mixed-10N' ? 1000 : 100
     const { OrchestrationDb } = await import('../runtime/orchestration/db')
     const { OrcaRuntimeService } = await import('../runtime/orca-runtime')
     const { RpcDispatcher } = await import('../runtime/rpc/dispatcher')
@@ -405,10 +410,14 @@ it.each(['fresh', 'mixed', 'invalidation', 'held-epoch'] as const)(
     try {
       const runId = idOf((await call('orchestration.runCreate', { objective: 'backlog' })).run)
       const mailbox = `run:${runId}`
+      const performance =
+        history === 'mixed'
+          ? prepareMailPerformanceHistory(db, mailbox, runId, population)
+          : undefined
       const pointerHost = createStructuredMailboxPointerHost()
       const delivery = new OrchestrationStructuredMailboxPointerDelivery({
         getDb: () => db,
-        getMessageWaiters: () => undefined,
+        getMessageWaiters: () => performance?.waiters,
         resolveStructuredTarget: () => ({ sessionId: SESSION, dispatchId: null }),
         getCliCommand: () => 'orca',
         senderName: () => null,
@@ -454,6 +463,7 @@ it.each(['fresh', 'mixed', 'invalidation', 'held-epoch'] as const)(
         expect(journal.cursor().epoch).not.toBe(original.epoch)
         held.mockRestore()
       }
+      performance?.restoreParkedCandidates(db.getMessageById(first.id)!.handoff!)
       const messages = [first, ...Array.from({ length: 4 }, insert)]
       let invalidated = false
       const actualSend = f.host.send.bind(f.host)
@@ -503,93 +513,19 @@ it.each(['fresh', 'mixed', 'invalidation', 'held-epoch'] as const)(
       await waitFor(() =>
         expect(JSON.parse(db.getMessageById(messages.at(-1)!.id)!.handoff!).phase).toBe('offered')
       )
-      if (history === 'mixed') {
-        const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
-        const maps = z
-          .object({ items: z.instanceof(Map), submissions: z.instanceof(Map) })
-          .parse(Object.getOwnPropertyDescriptor(journal, 'state')?.value)
-        const costs: number[][] = []
-        for (const scale of [10, 100]) {
-          for (let index = 0; index < scale * 10; index++) {
-            await journal.appendItem(
-              {
-                provider: 'legacy',
-                agent: 'grok',
-                sessionId: SESSION,
-                recordId: `history-${scale}-${index}`
-              },
-              message('historical output'),
-              { fence: f.fence(), turnScope: { kind: 'thread' } }
-            )
-          }
-          await f.host.flushStreamedEvents(SESSION)
-          await journal.readInOrder(() => undefined)
-          await new Promise<void>((resolve) => setImmediate(resolve))
-          let reading = false
-          const scanCounts = [0, 0, 0]
-          let lookups = 0
-          const mapsToMeasure = [maps.items, maps.submissions]
-          const scans = mapsToMeasure.map((map, index) =>
-            vi.spyOn(map, 'values').mockImplementation(() => {
-              if (reading) {
-                scanCounts[index]++
-              }
-              return Map.prototype.values.call(map)
-            })
-          )
-          const snapshot = journal.snapshot.bind(journal)
-          const snapshotSpy = vi.spyOn(journal, 'snapshot').mockImplementation(() => {
-            if (reading) {
-              scanCounts[2]++
-            }
-            return snapshot()
-          })
-          const gets = mapsToMeasure.map((map) =>
-            vi.spyOn(map, 'get').mockImplementation((key) => {
-              if (reading) {
-                lookups++
-              }
-              return Map.prototype.get.call(map, key)
-            })
-          )
-          const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
-          const readEvidence = f.host.readMailHandoffEvidenceNow.bind(f.host)
-          const evidence = vi
-            .spyOn(f.host, 'readMailHandoffEvidenceNow')
-            .mockImplementation((...args) => {
-              reading = true
-              try {
-                return readEvidence(...args)
-              } finally {
-                reading = false
-              }
-            })
-          for (let trigger = 0; trigger < scale; trigger++) {
-            const calls = candidates.mock.calls.length
-            delivery.deliverForHandle(mailbox)
-            await vi.waitFor(() => expect(candidates.mock.calls.length).toBe(calls + 2), {
-              interval: 1
-            })
-          }
-          const rows = candidates.mock.results.reduce(
-            (sum, result) => sum + (result.type === 'return' ? result.value.length : 0),
-            0
-          )
-          const work = [candidates.mock.calls.length, rows, evidence.mock.calls.length, lookups]
-          expect(scanCounts).toEqual([0, 0, 0])
-          expect(work[0]).toBe(scale * 2)
-          expect(rows).toBeLessThanOrEqual(scale * 6)
-          expect(work[2]).toBeLessThanOrEqual(scale * 3)
-          expect(work[3]).toBeLessThanOrEqual(scale * 30)
-          costs.push(work)
-          for (const spy of [...scans, snapshotSpy, ...gets, candidates, evidence]) {
-            spy.mockRestore()
-          }
-        }
-        costs[1]!.forEach((cost, index) => expect(cost).toBeLessThanOrEqual(costs[0]![index]! * 10))
+      if (performance) {
+        await measureMailDeliveryWork({ f, db, delivery, mailbox, performance })
         expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
+        expect(f.rig.sent('session/cancel')).toHaveLength(0)
+        expect(messages.map((row) => db.getMessageById(row.id)!.recovery_used)).toEqual([
+          1, 0, 0, 0, 0
+        ])
+        performance.finish()
       }
       const fetched = await call('orchestration.check')
+      if (performance) {
+        expect(fetched.messages).toMatchObject(messages.map((row) => ({ id: row.id })))
+      }
       const replay = await call('orchestration.check')
       expect(replay).toMatchObject({
         deliveryId: fetched.deliveryId,

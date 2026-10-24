@@ -1,5 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
+import { z } from 'zod'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
@@ -128,6 +129,7 @@ it('upgrades N/10N fetched history with one membership traversal and unchanged u
     const path = join(directory, 'orchestration.db')
     let db: OrchestrationDb | undefined = new OrchestrationDb(path)
     let migrationSql = ''
+    let membershipVisits = 0
     const prepare = SyncDatabase.prototype.prepare
     const capture = vi.spyOn(SyncDatabase.prototype, 'prepare').mockImplementation(function (
       this: SyncDatabase,
@@ -135,6 +137,21 @@ it('upgrades N/10N fetched history with one membership traversal and unchanged u
     ) {
       if (sql.includes('json_each(d.message_ids)')) {
         migrationSql = sql
+        const native = z
+          .instanceof(DatabaseSync)
+          .parse(Object.getOwnPropertyDescriptor(this, 'db')?.value)
+        native.function('observe_membership', { deterministic: true }, (value) => {
+          membershipVisits++
+          return value
+        })
+        const observed = sql.replace('m.value', 'observe_membership(m.value)')
+        const plan = (query: string) =>
+          native
+            .prepare(`EXPLAIN QUERY PLAN ${query}`)
+            .all(UNKNOWN_MAIL_HANDOFF)
+            .map((row) => row.detail)
+        expect(plan(observed)).toEqual(plan(sql))
+        return prepare.call(this, observed)
       }
       return prepare.call(this, sql)
     })
@@ -227,48 +244,19 @@ it('upgrades N/10N fetched history with one membership traversal and unchanged u
       })
       db.close()
       db = undefined
-      // Count SQLite VM work on the captured production statement and the actual upgraded file.
-      costs.push(
-        Number(
-          execFileSync(
-            'python3',
-            [
-              '-c',
-              `
-import sqlite3, sys
-db = sqlite3.connect(sys.argv[1])
-db.execute('BEGIN')
-db.execute('UPDATE messages SET handoff = NULL')
-steps = 0
-def tick():
-    global steps
-    steps += 1
-    return 0
-db.set_progress_handler(tick, 1)
-db.execute(sys.argv[2], (sys.argv[3],))
-db.set_progress_handler(None, 0)
-print(steps)
-db.rollback()
-db.close()
-`,
-              path,
-              migrationSql,
-              UNKNOWN_MAIL_HANDOFF
-            ],
-            { encoding: 'utf8' }
-          ).trim()
-        )
-      )
+      // Actual Node SQLite visits every fetched member once, including fenced/unread deliveries.
+      expect(membershipVisits).toBe(count + 1)
+      costs.push(membershipVisits)
     } finally {
       capture.mockRestore()
       db?.close()
       rmSync(directory, { recursive: true, force: true })
     }
   }
-  console.info('fetched-history upgrade VM steps N/10N', costs)
+  console.info('native fetched-history upgrade membership visits N/10N', costs)
   for (const plan of plans) {
     expect.soft(plan.some((detail) => detail.includes('CORRELATED'))).toBe(false)
   }
   expect(costs[0]).toBeGreaterThan(0)
-  expect(costs[1]).toBeLessThanOrEqual(costs[0]! * 12)
+  expect(costs[1]).toBeLessThanOrEqual(costs[0]! * 10)
 })
