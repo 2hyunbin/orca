@@ -10,6 +10,7 @@ import {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../orca-runtime-test-fixtures.spec'
+import type { RuntimeStore } from '../runtime-store-contract'
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 // The host's own pane-owned capture form (#11598), which no wake resumes a second time.
@@ -55,13 +56,12 @@ function withClaudeLaunchedTab(fixture: ReturnType<typeof makeWorkingSleepStore>
 }
 
 function openPane(
-  runtimeStore: unknown,
+  runtimeStore: RuntimeStore,
   windowStatus: 'blocked' | 'openable',
   opts: { spawn?: () => Promise<{ id: string }>; withWindow?: boolean; tap?: boolean } = {}
 ) {
   const spawn = vi.fn(opts.spawn ?? (() => Promise.resolve({ id: 'persisted-pty' })))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+  const runtime = new OrcaRuntimeService(runtimeStore, undefined, {
     getDesktopWindowStatus: () => windowStatus
   })
   runtime.setPtyController({

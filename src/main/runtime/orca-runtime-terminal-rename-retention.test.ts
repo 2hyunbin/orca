@@ -15,6 +15,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { bindPaneFirst, committingSpawn } from './bind-first-pane.test-fixture'
 import { buildRuntimeMobileAgentStatus } from './runtime-mobile-agent-status-builder'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 describe('terminal rename before renderer graph hydration', () => {
   it.each(['Media Engine Orch', null])(
@@ -213,8 +214,9 @@ describe('terminal view rename characterization', () => {
   }
   it('keeps rename persistence before the current notifier with its own receiver', async () => {
     // Switch-on, main's layout says which tab holds the terminal; that layout lives in a store.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the rename path reads only the session bindPaneFirst adds to this store.
-    const runtime = new OrcaRuntimeService(ORCA_LAYOUT_OWNER_IS_MAIN ? ({} as never) : undefined)
+    const runtime = new OrcaRuntimeService(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? partialRuntimeStore() : undefined
+    )
     bindPaneFirst(runtime, {
       worktreeId: 'folder-workspace',
       tabId: 'host-tab',

@@ -7,6 +7,7 @@ import { REPO_METHODS } from './rpc/methods/repo'
 import { WORKTREE_METHODS } from './rpc/methods/worktree'
 import { agentLaunchWorkspaceFactory } from './rpc/methods/agent-launch-worktree-creation'
 import { OrcaRuntimeService } from './orca-runtime'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // Why twins: a project copied between hosts keeps its repo id (Codex review 6 #6).
 const REPOS: Repo[] = [
@@ -31,16 +32,16 @@ const REPOS: Repo[] = [
 ]
 
 function createRuntime(): OrcaRuntimeService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these paths stop right after repo resolution, which reads only these store methods.
-  return new OrcaRuntimeService({
-    getRepos: () => REPOS,
-    getRepo: (id: string) => REPOS.find((repo) => repo.id === id) ?? null,
-    getAllWorktreeMeta: () => ({}),
-    getWorktreeMeta: () => null,
-    setWorktreeMeta: vi.fn(),
-    getGitHubCache: () => null,
-    getSettings: () => ({})
-  } as never)
+  return new OrcaRuntimeService(
+    partialRuntimeStore({
+      getRepos: () => REPOS,
+      getRepo: (id: string) => REPOS.find((repo) => repo.id === id),
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined,
+      setWorktreeMeta: vi.fn(),
+      getSettings: () => ({})
+    })
+  )
 }
 
 /** Stops every create at the step that receives the resolved repo, and records that repo. */

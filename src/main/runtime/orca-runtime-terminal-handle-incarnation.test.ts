@@ -3,6 +3,7 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { registerBoundPty } from './bind-first-pane.test-fixture'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 const PTY_ID = 'ssh:target@@relay-pty'
 const WORKTREE_ID = 'repo::/worktree'
@@ -16,9 +17,8 @@ function makeRuntime(opts: { paneLayout?: boolean } = {}): {
 } {
   const writes: string[] = []
   // Switch-on, main's layout answers which pane holds a terminal; that layout lives in a store.
-  const store = opts.paneLayout && ORCA_LAYOUT_OWNER_IS_MAIN ? {} : null
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolve path reads only the session bindPaneFirst adds to this store.
-  const runtime = new OrcaRuntimeService(store as never)
+  const store = opts.paneLayout && ORCA_LAYOUT_OWNER_IS_MAIN ? partialRuntimeStore() : null
+  const runtime = new OrcaRuntimeService(store)
   runtime.setPtyController({
     write: (_ptyId, data) => {
       writes.push(data)
