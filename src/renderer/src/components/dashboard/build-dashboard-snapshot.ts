@@ -77,7 +77,11 @@ export type DashboardSnapshotState = Pick<
       DashboardLaunchDetectionState &
       Pick<
         AppState,
-        'runtimeEnvironments' | 'sshTargetLabels' | 'unifiedTabsByWorktree' | 'worktreeLineageById'
+        | 'runtimeEnvironments'
+        | 'sshTargetLabels'
+        | 'unifiedTabsByWorktree'
+        | 'worktreeLineageById'
+        | 'workspaceLineageByChildKey'
       >
   >
 

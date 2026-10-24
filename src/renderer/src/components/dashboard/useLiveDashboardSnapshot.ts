@@ -24,6 +24,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   rowsCacheRef.current ??= createWorktreeAgentRowsCache()
   const repos = useAppStore((s) => s.repos)
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
+  const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
+  const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
   const tabsByWorktree = useAppStore((s) => s.tabsByWorktree)
   const unifiedTabsByWorktree = useAppStore((s) => s.unifiedTabsByWorktree)
   const agentStatusByPaneKey = useAppStore((s) => s.agentStatusByPaneKey)
@@ -93,6 +95,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
         {
           repos,
           worktreesByRepo,
+          worktreeLineageById,
+          workspaceLineageByChildKey,
           tabsByWorktree,
           unifiedTabsByWorktree,
           agentStatusByPaneKey,
@@ -136,6 +140,8 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
     [
       repos,
       worktreesByRepo,
+      worktreeLineageById,
+      workspaceLineageByChildKey,
       tabsByWorktree,
       unifiedTabsByWorktree,
       agentStatusByPaneKey,

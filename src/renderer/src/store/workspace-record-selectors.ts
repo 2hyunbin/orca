@@ -18,9 +18,9 @@ export type WorkspaceRecordState = Pick<AppState, 'worktreesByRepo' | 'folderWor
 // ─── Compatibility views ─────────────────────────────────────────────
 
 /** Git worktrees per repo id, in listing order. */
-export function selectWorktreesByRepo(
-  state: Pick<AppState, 'worktreesByRepo'>
-): AppState['worktreesByRepo'] {
+export function selectWorktreesByRepo<
+  T extends Readonly<Record<string, readonly Worktree[]>>
+>(state: { worktreesByRepo: T }): T {
   return state.worktreesByRepo
 }
 

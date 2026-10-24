@@ -404,7 +404,8 @@ describe('registerWorktreeHandlers', () => {
       badgeColor: '#111',
       addedAt: 0
     }
-    store.getRepos.mockReturnValue([sshRepo, localRepo])
+    const repos: ReturnType<Store['getRepos']> = [sshRepo, localRepo]
+    store.getRepos.mockReturnValue(repos)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({ displayName: 'Remote cached' })
     })
@@ -420,9 +421,7 @@ describe('registerWorktreeHandlers', () => {
 
     const complete = vi.fn()
     Object.assign(store, { getWorktreeLineageMetadata: complete })
-    const listed = (
-      await Promise.all(store.getRepos().map((repo) => listDetectedRows(repo.id)))
-    ).flat()
+    const listed = (await Promise.all(repos.map((repo) => listDetectedRows(repo.id)))).flat()
 
     // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
     expect(complete).not.toHaveBeenCalled()
@@ -457,7 +456,8 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-2'
     }
-    store.getRepos.mockReturnValue([sshRepoA, sshRepoB])
+    const repos: ReturnType<Store['getRepos']> = [sshRepoA, sshRepoB]
+    store.getRepos.mockReturnValue(repos)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh-a::/remote/a/one': makeWorktreeMeta({ displayName: 'One' }),
       'repo-ssh-b::/remote/b/two': makeWorktreeMeta({ displayName: 'Two' })
@@ -465,9 +465,7 @@ describe('registerWorktreeHandlers', () => {
 
     const complete = vi.fn()
     Object.assign(store, { getWorktreeLineageMetadata: complete })
-    const listed = (
-      await Promise.all(store.getRepos().map((repo) => listDetectedRows(repo.id)))
-    ).flat()
+    const listed = (await Promise.all(repos.map((repo) => listDetectedRows(repo.id)))).flat()
 
     // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
     expect(complete).not.toHaveBeenCalled()

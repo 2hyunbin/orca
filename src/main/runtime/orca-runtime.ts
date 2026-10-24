@@ -165,7 +165,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     this.store?.onStateWritten?.((domains) => {
       if (domains === undefined || WORKTREE_METADATA_DOMAINS.some((d) => domains.includes(d))) {
         this.invalidateResolvedWorktreeCache()
-        this.sidebarFacts?.sortStamps.noteRecordsWritten()
       }
     })
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists

@@ -14,7 +14,10 @@ import {
   makeRepo,
   makeWorktreeLineage
 } from '../../persistence-test-harness'
-import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import {
+  hostWorktreeTarget,
+  composeWorktreeHostIdentity
+} from '../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
 import { projectCurrentStoreWorktreeLineage } from '../../worktree-lineage-candidates'
 import { buildDetectedGitWorktrees } from '../../ipc/worktrees/listing/ssh-worktree-fallback'
@@ -25,7 +28,7 @@ import {
 } from '../../../shared/sidebar-list/worktree-lineage-projection'
 import { WorkspaceRowsProducer } from './workspace-rows-producer'
 // Runs on plain Node, as orcad does: rows come from the runtime's own listing and store.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../shared/repo-types'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import { OrcaRuntimeService } from '../orca-runtime'
@@ -38,7 +41,6 @@ import type {
   ResolvedWorktreeRepoScans,
   ResolvedWorktreeScanJoin
 } from '../workspaces/resolved-worktree-scan-join'
-import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import { getRepoHostIdentityForParts } from '../../../shared/repo-host-identity'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
@@ -565,9 +567,7 @@ describe('current saved lineage at real Store boundaries', () => {
       )
       await pending
       const result = producer.snapshot()
-      if (!result) {
-        throw new Error('scan did not apply')
-      }
+      assert(result, 'scan did not apply')
       expect(result.rows[`local|${c.id}`]).toMatchObject({ lineage: null, savedLineage: edge })
       expect(result.rows[`local|${folderId}`]).toMatchObject({
         lineage: null,
@@ -587,9 +587,7 @@ describe('current saved lineage at real Store boundaries', () => {
       expect(graph.parents.size).toBe(0)
       store.removeWorktreeMeta(hostWorktreeTarget({ id: qid, hostId: 'ssh:copy' }))
       const recovered = producer.snapshot()
-      if (!recovered) {
-        throw new Error('cached scan disappeared')
-      }
+      assert(recovered, 'cached scan disappeared')
       expect(recovered.rows[`local|${c.id}`].lineage).toMatchObject({
         parentWorktreeId: 'old::/gone'
       })

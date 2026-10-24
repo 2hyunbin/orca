@@ -1,3 +1,5 @@
+import type { ResolvedWorktreeSnapshot } from './runtime-resolved-worktree-cache'
+import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 /**
  * The projects a client may list: the same rows the desktop sidebar shows. A converted SSH host's
  * source rows and a WSL host's moved rows stay in the store for a downgrade, but the server that
@@ -157,4 +159,19 @@ export function withoutHiddenHosts(
   hidden: ReadonlySet<ExecutionHostId>
 ): ExecutionHostId[] {
   return [...hostIds].filter((hostId) => !hidden.has(hostId))
+}
+
+/** The visible listing keeps the scan's other fields and filters its git rows through both gates. */
+export function runtimeVisibleWorktreeSnapshot(
+  store: CatalogSource | null,
+  snapshot: ResolvedWorktreeSnapshot,
+  isVisible: (worktree: ResolvedWorktree) => boolean
+): ResolvedWorktreeSnapshot {
+  const hiddenRepos = runtimeHiddenRepos(store)
+  return {
+    ...snapshot,
+    worktrees: snapshot.worktrees.filter(
+      (worktree) => !hiddenRepos.hasWorktree(worktree) && isVisible(worktree)
+    )
+  }
 }

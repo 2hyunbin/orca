@@ -18,6 +18,8 @@ import { applyRuntimeWorktreePsUnverifiableTerminals } from '../runtime-worktree
 import { attachRuntimeWorktreeAgentRows } from '../runtime-worktree-agent-rows'
 import { compareWorktreePs } from '../runtime-worktree-status-projection'
 import type { Repo } from '../../../shared/repo-types'
+import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { enrichMissingRepoGitRemoteIdentities } from '../../repo-git-remote-identity-enrichment'
 import { ensureStructuredAgentSessionHost as installStructuredAgentSessionHost } from '../structured-agent-session-runtime'
 import {
@@ -53,7 +55,7 @@ import { structuredAgentConfiguredArgs } from '../../native-chat/structured-agen
 import { claudeCliFlagSupport } from '../../claude/claude-cli-flag-support'
 import {
   runtimeHiddenHostIds,
-  runtimeHiddenRepos,
+  runtimeVisibleWorktreeSnapshot,
   runtimeVisibleRepos,
   withoutHiddenHosts
 } from '../runtime-visible-catalog'
@@ -162,19 +164,25 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       sourceDefaultsSupported,
       visibilitySettings
     )
-    const hiddenRepos = runtimeHiddenRepos(this.store)
-    return {
-      ...snapshot,
-      worktrees: snapshot.worktrees.filter(
-        (worktree) =>
-          !hiddenRepos.hasWorktree(worktree) &&
-          this.isRuntimeWorktreeVisible(
-            worktree,
-            visibilitySourceMatchersByRepoId.get(worktree.repoId),
-            sourceDefaultsSupported,
-            visibilitySettings
-          )
+    return runtimeVisibleWorktreeSnapshot(this.store, snapshot, (worktree) =>
+      this.isRuntimeWorktreeVisible(
+        worktree,
+        visibilitySourceMatchersByRepoId.get(worktree.repoId),
+        sourceDefaultsSupported,
+        visibilitySettings
       )
+    )
+  }
+
+  /** The agent's configured env, with the account a desktop that owns this host's accounts chose
+   *  laid over it, as its own launches here carry. */
+  protected structuredAgentLaunchEnv(
+    agent: StructuredAgentId,
+    settings: Pick<GlobalSettings, 'agentDefaultEnv'>
+  ) {
+    return {
+      ...resolveTuiAgentLaunchEnv(agent, settings),
+      ...this.accounts.hostLaunchEnvFor(agent)
     }
   }
 
@@ -278,10 +286,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         preModeChatGetsFullAccess(agent, this.requireStore().getSettings(), process.platform),
       resolveAgentLaunchEnv: (agent) =>
         isTuiAgent(agent)
-          ? {
-              ...resolveTuiAgentLaunchEnv(agent, this.requireStore().getSettings()),
-              ...this.accounts.hostLaunchEnvFor(agent)
-            }
+          ? this.structuredAgentLaunchEnv(agent, this.requireStore().getSettings())
           : {},
       resolveAgentCommandSettings: () => this.requireStore().getSettings(),
       resolveCodexAccountKind: (home) =>
