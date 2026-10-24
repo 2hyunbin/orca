@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi, type MockInstance } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { acpChildWorkStatusSink } from '../../acp/acp-structured-child-work.test-support'
@@ -33,6 +33,10 @@ import {
   resetHostTestOperationIds
 } from './structured-agent-session-host-test-data'
 
+let revision: MockInstance<
+  NonNullable<EventSink.StructuredAgentSessionEventSink['tryReviseResolvedItem']>
+>
+
 const CALLER = { callerKey: 'client-1' }
 vi.mock('./structured-agent-session-event-sink', async (importOriginal) => {
   const actual = await importOriginal<typeof EventSink>()
@@ -40,8 +44,8 @@ vi.mock('./structured-agent-session-event-sink', async (importOriginal) => {
     ...actual,
     createDeferredStructuredAgentSessionEventSink: (
       deps: Parameters<typeof actual.createDeferredStructuredAgentSessionEventSink>[0]
-    ) =>
-      actual.createDeferredStructuredAgentSessionEventSink({
+    ) => {
+      const sink = actual.createDeferredStructuredAgentSessionEventSink({
         ...deps,
         watermarks: {
           maxQueuedOperations: 4,
@@ -50,6 +54,9 @@ vi.mock('./structured-agent-session-event-sink', async (importOriginal) => {
           lowQueuedOperations: 1
         }
       })
+      revision = vi.spyOn(sink.sink, 'tryReviseResolvedItem')
+      return sink
+    }
   }
 })
 
@@ -195,7 +202,7 @@ it('retains the root end under pressure so the same input progresses once withou
     })
     await host.flushStreamedEvents(SESSION)
   }
-  const revision = vi.spyOn(sink.sink, 'tryReviseResolvedItem')
+  revision.mockClear()
   frame(connection, { type: 'system', subtype: 'session_state_changed', state: 'idle' })
   expect(sink.state()).toMatchObject({ backpressured: true, failed: false })
   expect(sink.state().queuedOperations).toBeGreaterThan(4)

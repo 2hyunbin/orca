@@ -288,6 +288,7 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     const f = await fixture()
     const shared = join(f.root, 'shared-package.js')
     await writeFile(shared, 'shared package', { mode: 0o444 })
+    const originalMode = (await lstat(shared)).mode & 0o777
     const file = await generated(f.sibling)
     await link(shared, join(dirname(file), 'package.js'))
     await utimes(dirname(file), new Date(0), new Date(0))
@@ -299,7 +300,7 @@ it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     })
     await expect(lstat(file)).rejects.toMatchObject({ code: 'ENOENT' })
     expect(await readFile(shared, 'utf8')).toBe('shared package')
-    expect((await lstat(shared)).mode & 0o777).toBe(0o444)
+    expect((await lstat(shared)).mode & 0o777).toBe(originalMode)
   }
 )
 
