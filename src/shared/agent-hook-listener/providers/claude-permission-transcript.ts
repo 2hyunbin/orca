@@ -60,7 +60,7 @@ export function prepareClaudePermissionObservation(
     verdict: 'working',
     failures: 0
   }
-  readClaudePermissionObservation(observation, false)
+  readClaudePermissionObservation(observation)
   if (!observation.anchored && observation.requiresUniqueInput) {
     observation.toolUseId = undefined
   }

@@ -50,8 +50,12 @@ export function readJsonlFirstRecord(filePath: string): JsonRecord | undefined {
 export function readJsonlCursor(
   cursor: JsonlCursor,
   lineFilter?: (line: string) => boolean,
-  onGap?: () => void
+  onGap?: () => void,
+  progress?: { complete: boolean; bytes: number }
 ): JsonRecord[] | undefined {
+  if (progress) {
+    Object.assign(progress, { complete: false, bytes: 0 })
+  }
   if (!cursor.filePath) {
     return undefined
   }
@@ -68,7 +72,7 @@ export function readJsonlCursor(
     if (!stats.isFile()) {
       return undefined
     }
-    const incarnation = `${stats.dev}:${stats.ino}:${stats.birthtimeMs}`
+    const incarnation = `${stats.dev}:${stats.ino}`
     if (stats.size < cursor.offset || (cursor.incarnation && cursor.incarnation !== incarnation)) {
       cursor.offset = 0
       cursor.carry = ''
@@ -76,6 +80,9 @@ export function readJsonlCursor(
     }
     cursor.incarnation = incarnation
     if (stats.size === cursor.offset) {
+      if (progress) {
+        progress.complete = true
+      }
       return []
     }
     const bytesToRead = Math.min(stats.size - cursor.offset, TRANSCRIPT_READ_MAX_BYTES)
@@ -138,6 +145,9 @@ export function readJsonlCursor(
   if (oversizedCarry && onGap) {
     onGap()
     return []
+  }
+  if (progress) {
+    Object.assign(progress, { complete: true, bytes: bytesRead })
   }
   return records
 }

@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { runProcess } from '@orca/process-host'
 import { agentVerdictDisplayMark } from '../../shared/agent-main-agent-verdict'
 import { hookRowAgentPhase } from '../../shared/agent-transitions'
 import { createProgramStatusProjector } from '../../shared/program-status/agent-status-projector'
@@ -75,9 +76,30 @@ async function setup(remote = false) {
     await desktop.start({ env: 'production' })
   }
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance', 'Date'] })
-  const post = async (payload: Record<string, unknown>) => {
+  const post = async (payload: Record<string, unknown>, cli = false) => {
     const body = buildBody({ session_id: SESSION, transcript_path: transcript, ...payload })
-    if (!relay) {
+    if (cli) {
+      const env = desktop.buildPtyEnv()
+      const coordinates = relay?.getCoordinates()
+      const port = coordinates?.port ?? env.ORCA_AGENT_HOOK_PORT
+      const token = coordinates?.token ?? env.ORCA_AGENT_HOOK_TOKEN
+      const result = await runProcess({
+        program: process.platform === 'win32' ? 'curl.exe' : 'curl',
+        args: [
+          '-qfsS',
+          '--noproxy',
+          '127.0.0.1',
+          '-HContent-Type: application/json',
+          `-HX-Orca-Agent-Hook-Token: ${token}`,
+          '--data-binary',
+          '@-',
+          `http://127.0.0.1:${port}/hook/claude`
+        ],
+        input: JSON.stringify(body),
+        timeoutMs: 5000
+      })
+      expect(result.code, result.stderr).toBe(0)
+    } else if (!relay) {
       expect((await postHookEvent(desktop, body)).status).toBe(204)
     } else {
       const { port, token } = relay.getCoordinates()
@@ -157,10 +179,10 @@ describe('Claude permission result observation', () => {
     async ({ action, remote }) => {
       const pane = await setup(remote)
       const { lines, tool } = capture(action)
-      // A result can flush before HTTP admission; initial catch-up must include it.
+      // A supplied current ID can settle even when its result flushed before HTTP admission.
       writeFileSync(pane.transcript, `${lines.slice(0, remote ? 1 : lines.length).join('\n')}\n`)
       await pane.post({ hook_event_name: 'UserPromptSubmit', prompt: 'run the permission probe' })
-      await permission(pane, tool)
+      await permission(pane, tool, remote ? {} : { tool_use_id: tool.id })
       expect(pane.row()).toMatchObject({ state: 'waiting', toolName: 'Bash' })
       expect(hookRowAgentPhase(pane.row()!)).toBe('needs-you')
       const terminal = readFileSync(
@@ -307,24 +329,29 @@ describe('Claude permission result observation', () => {
     async (remote) => {
       const pane = await setup(remote)
       const { lines, tool } = capture('escape')
-      writeFileSync(pane.transcript, `${lines[0]}\n`)
-      await permission(pane, tool)
-      const second = { ...tool, id: 'late-q2', input: { command: 'second request' } }
-      await permission(pane, second)
+      renameSync(pane.transcript, `${pane.transcript}.unavailable`)
+      await pane.post(
+        { hook_event_name: 'PermissionRequest', tool_name: tool.name, tool_input: tool.input },
+        true
+      )
+      writeFileSync(pane.transcript, `${lines.join('\n')}\n`)
       await pane.tick()
-      expect(pane.row()).toMatchObject({ state: 'waiting', toolInput: 'second request' })
+      expect([pane.row()?.state, pane.row()?.toolUseId]).toEqual(['waiting', undefined])
+      const second = { ...tool, id: 'late-q2' }
       const q2 = lines.map((raw) =>
-        raw
-          .replaceAll(tool.id, second.id)
-          .replaceAll('escape2-node-', 'q2-node-')
-          .replaceAll(JSON.stringify(tool.input), JSON.stringify(second.input))
+        raw.replaceAll(tool.id, second.id).replaceAll('escape2-node-', 'q2-node-')
       )
       // Its request and result flush together after registration, without another hook.
-      appendFileSync(pane.transcript, `${q2.join('\n')}\n`)
+      const flushed = `${q2.join('\n')}\n`
+      appendFileSync(pane.transcript, flushed.slice(0, q2[0].length + 80))
+      await pane.tick()
+      expect(pane.row()?.toolUseId).toBeUndefined()
+      appendFileSync(pane.transcript, flushed.slice(q2[0].length + 80))
       await pane.tick()
       await pane.tick() // Admit identity first, then the exact settlement through the same matcher.
       expect(pane.row()).toMatchObject({ state: 'done', interrupted: true })
       expect(agentVerdictDisplayMark(pane.row()!)).toBe('interrupted')
+      pane.reconnect()
       await pane.post({ hook_event_name: 'SubagentStart', agent_id: 'refresh' })
       expect(pane.row()?.toolName).toBeUndefined()
       // A new ID-less request without a fresh PreToolUse cannot reuse Q2's historical result.

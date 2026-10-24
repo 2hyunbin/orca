@@ -188,12 +188,9 @@ function runHookProcess(
   args: string[],
   env: NodeJS.ProcessEnv,
   // An open, unwritten pipe exposes read-to-EOF hangs outside an Orca pane.
-  stdin: 'close' | 'abandon' = 'close',
-  diagnostic?: string
+  stdin: 'close' | 'abandon' = 'close'
 ): Promise<HookRun> {
   return new Promise((resolve, reject) => {
-    const startedAt = new Date().toISOString()
-    const started = performance.now()
     const child = spawnProcess({
       program: executable,
       args,
@@ -203,74 +200,10 @@ function runHookProcess(
     const stdinErrors: NodeJS.ErrnoException[] = []
     let stderr = ''
     let stdout = ''
-    let timedOut = false
-    let spawnedAfterMs: number | undefined
-    let exited: { afterMs: number; code: number | null; signal: NodeJS.Signals | null } | undefined
-    let closed: { afterMs: number; code: number | null; signal: NodeJS.Signals | null } | undefined
-    const elapsed = () => Math.round(performance.now() - started)
-    const scrub = (text: string) => {
-      for (const [key, value] of Object.entries(env)) {
-        if (
-          value &&
-          value.length >= 4 &&
-          /token|secret|password|auth|cookie|credential|key/i.test(key)
-        ) {
-          text = text.split(value).join('[redacted]')
-        }
-      }
-      return text
-        .replace(/([a-z][a-z0-9+.-]*:\/\/)[^/\s]+@/gi, '$1[redacted]@')
-        .replace(/(Bearer\s+)\S+/gi, '$1[redacted]')
-        .replace(
-          /((?:token|secret|password|api[_-]?key)["']?\s*[:=]\s*)[^\s"',;]+/gi,
-          '$1[redacted]'
-        )
-        .slice(-4096)
-    }
-    if (diagnostic) {
-      child.on('spawn', () => {
-        spawnedAfterMs = elapsed()
-      })
-      child.on('exit', (code, signal) => {
-        exited = { afterMs: elapsed(), code, signal }
-        if (timedOut) {
-          console.error('[hook-stdin-timeout exit]', { diagnostic, pid: child.pid, ...exited })
-        }
-      })
-    }
     const timeout = setTimeout(() => {
-      timedOut = true
-      const details = diagnostic
-        ? JSON.stringify({
-            diagnostic,
-            stdin,
-            executable: scrub(executable),
-            args: args.map(scrub),
-            argumentLengths: args.map((arg) => arg.length),
-            spawnfile: scrub(child.spawnfile),
-            spawnargs: child.spawnargs.map(scrub),
-            pid: child.pid,
-            startedAt,
-            spawnedAfterMs: spawnedAfterMs ?? null,
-            elapsedMs: elapsed(),
-            exit: exited ?? null,
-            close: closed ?? null,
-            exitCode: child.exitCode,
-            signalCode: child.signalCode,
-            stdinFinished: child.stdin.writableFinished,
-            stdinDestroyed: child.stdin.destroyed,
-            stdinBufferedBytes: child.stdin.writableLength,
-            stdinErrors: stdinErrors.map((error) => error.code),
-            stdoutEnded: child.stdout.readableEnded,
-            stdoutBytes: Buffer.byteLength(stdout),
-            stderrEnded: child.stderr.readableEnded,
-            stderrBytes: Buffer.byteLength(stderr),
-            stderr: scrub(stderr)
-          })
-        : undefined
       child.stdin.destroy()
       child.kill('SIGKILL')
-      reject(new Error(`hook did not finish with stdin ${stdin}d${details ? `\n${details}` : ''}`))
+      reject(new Error(`hook did not finish with stdin ${stdin}d`))
     }, 10_000)
     child.on('error', (error) => {
       clearTimeout(timeout)
@@ -283,18 +216,7 @@ function runHookProcess(
       stderr += chunk.toString()
     })
     child.stdin.on('error', (error: NodeJS.ErrnoException) => stdinErrors.push(error))
-    child.on('close', (exitCode, signal) => {
-      if (diagnostic) {
-        closed = { afterMs: elapsed(), code: exitCode, signal }
-        if (timedOut) {
-          console.error('[hook-stdin-timeout close]', {
-            diagnostic,
-            pid: child.pid,
-            ...closed,
-            stderr: scrub(stderr)
-          })
-        }
-      }
+    child.on('close', (exitCode) => {
       clearTimeout(timeout)
       resolve({ exitCode, stdinErrors, stderr, stdout })
     })
@@ -489,13 +411,7 @@ describe('Windows managed hook stdin structure', () => {
             : fileName.endsWith('.ps1')
               ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath]
               : [scriptPath]
-          const result = await runHookProcess(
-            executable,
-            args,
-            hookEnvironment(),
-            'close',
-            `${fileName} / no Orca env`
-          )
+          const result = await runHookProcess(executable, args, hookEnvironment())
           expect(result.exitCode, `${fileName} exit code`).toBe(0)
           // Only missing-context Windows paths permit broken writers; in-pane hooks must drain.
           for (const error of result.stdinErrors) {
@@ -521,9 +437,7 @@ describe('Windows managed hook stdin structure', () => {
           const outside = await runHookProcess(
             launcher.executable,
             launcher.args,
-            hookEnvironment(),
-            'close',
-            `${launcher.name} / missing script / no Orca env`
+            hookEnvironment()
           )
           expect(outside.exitCode, `${launcher.name} exit code`).toBe(0)
           for (const error of outside.stdinErrors) {
@@ -538,9 +452,7 @@ describe('Windows managed hook stdin structure', () => {
               ORCA_AGENT_HOOK_PORT: '59999',
               ORCA_AGENT_HOOK_TOKEN: 'token',
               ORCA_PANE_KEY: 'tab:leaf'
-            }),
-            'close',
-            `${launcher.name} / missing script / in-pane`
+            })
           )
           expect(insideAPane.exitCode, `${launcher.name} in-pane exit code`).toBe(0)
           expect(insideAPane.stdinErrors, `${launcher.name} in-pane stdin errors`).toHaveLength(0)
@@ -549,8 +461,7 @@ describe('Windows managed hook stdin structure', () => {
             launcher.executable,
             launcher.args,
             hookEnvironment(),
-            'abandon',
-            `${launcher.name} / missing script / no Orca env`
+            'abandon'
           )
           expect(abandoned.exitCode, `${launcher.name} abandoned-stdin exit code`).toBe(0)
         }

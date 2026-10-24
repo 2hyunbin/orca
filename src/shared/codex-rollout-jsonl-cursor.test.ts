@@ -3,6 +3,7 @@ import {
   appendFileSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync
@@ -12,21 +13,39 @@ import { join, resolve } from 'node:path'
 import { runProcess } from '@orca/process-host'
 
 import type * as NodeFs from 'node:fs'
-const io = vi.hoisted(() => ({ open: 0, stat: 0, read: 0, close: 0, bytes: 0, short: false }))
+const io = vi.hoisted(() => ({
+  open: 0,
+  stat: 0,
+  read: 0,
+  close: 0,
+  bytes: 0,
+  short: false,
+  fault: '',
+  birth: 0
+}))
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof NodeFs>()
   return {
     ...actual,
     openSync: (...args: Parameters<typeof actual.openSync>) => {
       io.open++
+      if (io.fault === 'open') {
+        io.fault = ''
+        throw new Error('injected open failure')
+      }
       return actual.openSync(...args)
     },
     fstatSync: (...args: Parameters<typeof actual.fstatSync>) => {
       io.stat++
-      return actual.fstatSync(...args)
+      const stats = actual.fstatSync(...args)
+      return io.birth ? Object.assign(stats, { birthtimeMs: io.birth }) : stats
     },
     readSync: (...args: Parameters<typeof actual.readSync>) => {
       io.read++
+      if (io.fault === 'read') {
+        io.fault = ''
+        throw new Error('injected read failure')
+      }
       const bytes = actual.readSync(...args)
       io.bytes += bytes
       if (io.short) {
@@ -50,7 +69,7 @@ import {
 const directories: string[] = []
 
 afterEach(() => {
-  io.short = false
+  Object.assign(io, { fault: '', birth: 0, short: false })
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -120,10 +139,21 @@ it.each([1_000, 10_000])(
     expect(read().records?.length).toBeGreaterThan(0)
     expect(cursor.offset).toBe(Buffer.byteLength(row) * (count * 2 + 1))
     expect(read()).toEqual({ records: [], parsed: 0 })
+    writeFileSync(path, '{"id":"A"}\n{"id":')
+    const appendCursor = { filePath: path, offset: 0, carry: '' }
+    const gap = vi.fn()
+    io.birth = 100
+    expect(readJsonlCursor(appendCursor, undefined, gap)).toEqual([{ id: 'A' }])
+    appendFileSync(path, '"B"}\n')
+    io.birth = 101
+    io.bytes = 0
+    expect(readJsonlCursor(appendCursor, undefined, gap)).toEqual([{ id: 'B' }])
+    expect(io.bytes).toBe(5)
+    expect(gap).not.toHaveBeenCalled()
   }
 )
 
-it('invalidates an opt-in short read without changing ordinary cursor behavior or reviving proof on quiet reads', () => {
+it('qualifies bounded acquisition, fragments and gaps without reviving lost proof', () => {
   const directory = mkdtempSync(join(tmpdir(), 'cursor-short-'))
   directories.push(directory)
   const filePath = join(directory, 'session.jsonl')
@@ -180,4 +210,88 @@ it('invalidates an opt-in short read without changing ordinary cursor behavior o
     expect(observation.result).toBe(true)
     expect(observation.verdict).toBe('cancellation')
   }
+  const fixture = `${lines.join('\n')}\n`
+  const tool = JSON.parse(lines[0]).message.content[0]
+  const fresh = fixture.replaceAll(tool.id, 'q2').replaceAll('escape2-node-', 'q2-node-')
+  const make = (text: string, exact = false): ClaudePermissionObservation => {
+    writeFileSync(filePath, text)
+    const observation = makeObservation()
+    observation.toolUseId = exact ? tool.id : undefined
+    observation.requiresUniqueInput = !exact
+    return observation
+  }
+
+  const read = readClaudePermissionObservation
+  for (const fault of ['open', 'read', 'candidate']) {
+    const o = make(fixture)
+    o.toolUseId = fault === 'candidate' ? tool.id : undefined
+    if (fault !== 'candidate') {
+      io.fault = fault
+      expect(read(o)).toBeUndefined()
+    }
+    read(o)
+    expect(o).toMatchObject({ anchored: false, result: false, initialized: true })
+  }
+  for (const cut of [100, fixture.indexOf('\n', fixture.indexOf('\n') + 1) + 80]) {
+    const o = make(fixture.slice(0, cut))
+    o.toolUseId = tool.id // An unverified PreToolUse candidate is not a supplied PermissionRequest ID.
+    read(o)
+    expect(o.anchored).toBe(false)
+    const reads = io.read
+    read(o)
+    expect(io.read).toBe(reads)
+    appendFileSync(filePath, fixture.slice(cut))
+    read(o)
+    expect(o).toMatchObject({ anchored: false, result: false, initialized: true })
+  }
+  for (const cut of [100, fresh.indexOf('\n') + 80]) {
+    const o = make('')
+    read(o)
+    appendFileSync(filePath, fresh.slice(0, cut))
+    io.fault = 'read'
+    expect(read(o)).toBeUndefined()
+    read(o)
+    expect(o.anchored).toBe(false)
+    appendFileSync(filePath, fresh.slice(cut))
+    expect(read(o)).toBe('complete')
+    expect(o).toMatchObject({ toolUseId: 'q2', result: true, verdict: 'cancellation' })
+  }
+  const pending = make(`${lines[0]}\n{"type":`)
+  read(pending)
+  expect(pending.anchored).toBe(false)
+  appendFileSync(filePath, '"metadata"}\n')
+  read(pending)
+  expect(pending).toMatchObject({ anchored: true, toolUseId: tool.id, result: false })
+  const competing = make('')
+  read(competing)
+  appendFileSync(filePath, fixture + fresh.slice(0, 100))
+  read(competing)
+  expect(competing.anchored).toBe(false)
+  appendFileSync(filePath, fresh.slice(100, fresh.indexOf('\n') + 1))
+  read(competing)
+  expect(competing.anchored).toBe(false)
+  const exact = make(fixture.slice(0, -50), true)
+  expect(read(exact)).toBe('pending')
+  expect(exact).toMatchObject({ anchored: true, result: true })
+  for (const fault of ['replacement', 'truncation', 'short']) {
+    const o = make(`${JSON.stringify({ type: 'metadata', text: ' '.repeat(3000) })}\n`)
+    read(o)
+    if (fault === 'replacement') {
+      renameSync(filePath, `${filePath}.old`)
+    }
+    writeFileSync(filePath, fixture)
+    io.fault = fault === 'short' ? '' : 'read'
+    io.short = fault === 'short'
+    read(o)
+    read(o)
+    expect(o.anchored).toBe(false)
+  }
+  const bounded = make('')
+  read(bounded)
+  const metadata = `${JSON.stringify({ type: 'metadata', text: 'x'.repeat(200_000) })}\n`
+  appendFileSync(filePath, `${metadata.repeat(4)}{`)
+  read(bounded)
+  appendFileSync(filePath, `}\n${metadata.repeat(2)}{`)
+  expect(read(bounded)).toBe('lost')
+  expect(bounded).toMatchObject({ acquisition: undefined, anchored: false })
 })

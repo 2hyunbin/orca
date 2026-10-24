@@ -72,6 +72,7 @@ it.each([10, 100])(
     })
     const original = post({
       hook_event_name: 'PermissionRequest',
+      tool_use_id: 'toolu_01QFGUSJNpFMqWgCSxXKSoRJ',
       tool_name: 'Bash',
       tool_input: {
         command: 'printf permission_probe > escape2-probe.txt',

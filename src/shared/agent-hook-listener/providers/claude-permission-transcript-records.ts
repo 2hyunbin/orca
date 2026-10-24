@@ -26,6 +26,8 @@ export type ClaudePermissionObservation = {
   published?: Verdict
   lead?: ClaudeLeadTurnState
   failures: number
+  initialized?: boolean
+  acquisition?: { rows: Record<string, unknown>[][]; bytes: number }
 }
 
 function rootRecord(row: Record<string, unknown>, sessionId: string): boolean {
@@ -86,11 +88,14 @@ function bindRequest(
   const eligible = allowSettled ? candidates : pending
   const ids = new Set(eligible.map((candidate) => candidate.id))
   const id = observation.toolUseId ?? (ids.size === 1 ? eligible[0]?.id : undefined)
-  const anchor = candidates.findLast((candidate) => candidate.id === id)
+  const anchor = (observation.requiresUniqueInput ? eligible : candidates).findLast(
+    (candidate) => candidate.id === id
+  )
   if (anchor) {
     observation.toolUseId = anchor.id
     observation.descendants.add(anchor.uuid)
     observation.anchored = true
+    observation.requiresUniqueInput = false
     observation.proof = 'pending'
     return anchor.index
   }
@@ -98,19 +103,27 @@ function bindRequest(
 }
 
 export function readClaudePermissionObservation(
-  observation: ClaudePermissionObservation,
-  allowSettled = true
+  observation: ClaudePermissionObservation
 ): Proof | undefined {
+  let allowSettled = observation.initialized === true
+  const progress = { complete: false, bytes: 0 }
   const lost = observation.proof === 'lost' && observation.anchored
-  const rows = readJsonlCursor(observation.cursor, undefined, () => {
-    allowSettled = false
-    observation.proof = 'lost'
-    observation.anchored = false
-    observation.descendants.clear()
-    observation.result = false
-    observation.superseded = false
-    observation.verdict = 'working'
-  })
+  let rows = readJsonlCursor(
+    observation.cursor,
+    undefined,
+    () => {
+      allowSettled = false
+      observation.initialized = false
+      observation.acquisition = undefined
+      observation.proof = 'lost'
+      observation.anchored = false
+      observation.descendants.clear()
+      observation.result = false
+      observation.superseded = false
+      observation.verdict = 'working'
+    },
+    progress
+  )
   if (!rows) {
     observation.failures++
     observation.proof = observation.failures >= 3 || lost ? 'lost' : 'pending'
@@ -119,6 +132,28 @@ export function readClaudePermissionObservation(
   observation.failures = 0
   if (lost && observation.anchored) {
     return 'lost'
+  }
+  if (!observation.anchored && observation.requiresUniqueInput) {
+    if (!progress.complete || (observation.proof === 'lost' && rows.length === 0)) {
+      return observation.proof
+    }
+    const acquisition = (observation.acquisition ??= { rows: [], bytes: 0 })
+    acquisition.bytes += progress.bytes
+    if (acquisition.bytes - Buffer.byteLength(observation.cursor.carry) > 1024 * 1024) {
+      observation.acquisition = undefined
+      observation.initialized = false
+      return (observation.proof = 'lost')
+    }
+    if (rows.length) {
+      acquisition.rows.push(rows)
+    }
+    if (observation.cursor.carry) {
+      observation.toolUseId = undefined
+      return (observation.proof = 'pending')
+    }
+    rows = acquisition.rows.flat()
+    observation.acquisition = undefined
+    observation.initialized = true
   }
   const start = observation.anchored ? 0 : bindRequest(observation, rows, allowSettled) + 1
   if (!observation.anchored) {
