@@ -3373,7 +3373,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "closeTabsToLeft": "Close All Tabs To The Left"
+          "closeTabsToLeft": "Close All Tabs To The Left",
+          "switchToTerminalView": "Show as terminal"
         }
       }
     },
