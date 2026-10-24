@@ -117,11 +117,7 @@ export async function restoreTerminalTestGlobals(): Promise<void> {
   // Drain deferred confirmation work before the next test replaces its store mock.
   await drainFakeTimerWork()
   vi.useRealTimers()
-  // Why: reattach/settle chains await a real promise and then touch `window.api`.
-  // Under fake timers those continuations cannot run, so they only become
-  // schedulable here — flush them while `window` still exists, or a late
-  // continuation throws `ReferenceError: window is not defined` and fails the
-  // whole file (orca#14728, CI-only because it needs a slow enough tick).
+  // Flush real-promise settle continuations while window still exists; fake timers postpone them beyond teardown (orca#14728).
   await flushAsyncTicks(20)
   statusSnapshot?.dispose()
   resetStatusSnapshot?.dispose()
@@ -145,11 +141,7 @@ export async function restoreTerminalTestGlobals(): Promise<void> {
   } else {
     delete (globalThis as { document?: Document }).document
   }
-  // Why: an in-flight reattach/settle chain can resolve after teardown and call
-  // `window.api.pty.*`. Deleting `window` turned that into a ReferenceError that
-  // failed the whole file (orca#14728). A real renderer never loses `window`, so
-  // swap in an inert stand-in instead: late calls become harmless no-ops, and the
-  // next test replaces it wholesale via installTerminalTestGlobals().
+  // Late reattach continuations can outlive teardown; keep an inert window like a real renderer until the next test installs its replacement (orca#14728).
   ;(globalThis as unknown as { window?: unknown }).window = { api: createInertApi() }
   delete (globalThis as Record<string, unknown>).__ptyConnectDiag
   resetAgentStartupDelayedDeliveryForTests()

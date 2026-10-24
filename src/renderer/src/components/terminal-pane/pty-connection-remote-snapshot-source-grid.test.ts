@@ -127,8 +127,7 @@ const HOST_ROWS = 12
 const PANE_COLS = 120
 const PANE_ROWS = 40
 
-// A serialized TUI frame the way @xterm/addon-serialize emits one: newline-fed
-// rows plus a trailing absolute CUP. Both are grid-relative.
+// SerializeAddon emits newline-fed rows plus absolute CUP; both depend on the capture grid.
 const HOST_FRAME = `\x1b[?1049h\x1b[2J\x1b[H${Array.from(
   { length: HOST_ROWS },
   (_unused, index) => `host row ${index + 1}`
@@ -217,8 +216,7 @@ describe('pushed remote snapshot replay grid', () => {
     )
     expect(sourceResizeIndex).toBeGreaterThanOrEqual(0)
     expect(frameWriteIndex).toBeGreaterThan(sourceResizeIndex)
-    // Why the PTY push matters: the pane must not be left driving the host at
-    // the replay geometry once the destination fit has run.
+    // Push the destination grid to the host after replay so the PTY cannot stay at capture geometry.
     expect(session.transport.resize).toHaveBeenCalledWith(PANE_COLS, PANE_ROWS)
     expect(session.transport.resize).not.toHaveBeenCalledWith(HOST_COLS, HOST_ROWS)
     session.dispose()
@@ -238,9 +236,7 @@ describe('pushed remote snapshot replay grid', () => {
     const atHostGrid = await renderHeadlessBuffer([HOST_FRAME], HOST_COLS, HOST_ROWS)
     const atPaneGrid = await renderHeadlessBuffer([HOST_FRAME], PANE_COLS, HOST_ROWS - 4)
 
-    // Why this is the user-visible failure: the alternate screen has no
-    // scrollback, so rows scrolled off by a shorter grid are gone for good and
-    // an idle TUI never repaints them.
+    // A shorter alt grid loses rows permanently because there is no scrollback and an idle TUI may never repaint.
     expect(atHostGrid.filter((line) => line.startsWith('host row'))).toHaveLength(HOST_ROWS)
     expect(atPaneGrid.filter((line) => line.startsWith('host row')).length).toBeLessThan(HOST_ROWS)
     expect(atPaneGrid).not.toContain('host row 1')

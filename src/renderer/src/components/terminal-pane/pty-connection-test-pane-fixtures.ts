@@ -143,8 +143,7 @@ export type MockPane = {
 export function createPane(paneId: number): MockPane {
   const leafId = leafIdForPane(paneId)
   const activeBuffer = {
-    // Mutable so a test can put the pane on the alt screen: the replay prologue
-    // only switches buffers when this disagrees with the snapshot.
+    // Keep buffer type mutable to test replay switches when snapshot and live xterm disagree.
     type: 'normal' as 'normal' | 'alternate',
     viewportY: 0,
     baseY: 0,
