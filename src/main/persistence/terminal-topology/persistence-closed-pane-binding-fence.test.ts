@@ -1,21 +1,21 @@
-import { closeTestStores, createStore, testState } from './persistence-test-harness'
+import { closeTestStores, createStore, testState } from '../../persistence-test-harness'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { collectLayoutLeafIdsInOrder } from '../shared/workspace-layout/terminal-pane-tree'
-import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
-import { _resetClosedPaneFencesForTests } from './persistence/terminal-topology/closed-pane-binding-fence'
-import { closeLeafOrTab } from './persistence/terminal-topology/terminal-topology-commit'
-import { captureTerminalCloseRequest } from './runtime/terminal-surface-close'
-import type { TerminalSurfaceCloseTarget } from '../shared/terminal-surface-close-target'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../shared/execution-host'
+import { collectLayoutLeafIdsInOrder } from '../../../shared/workspace-layout/terminal-pane-tree'
+import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
+import { _resetClosedPaneFencesForTests } from './closed-pane-binding-fence'
+import { closeLeafOrTab } from './terminal-topology-commit'
+import { captureTerminalCloseRequest } from '../../runtime/terminal-surface-close'
+import type { TerminalSurfaceCloseTarget } from '../../../shared/terminal-surface-close-target'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
 const WORKTREE = 'repo1::/worktree'
 const TAB = 'host-tab'

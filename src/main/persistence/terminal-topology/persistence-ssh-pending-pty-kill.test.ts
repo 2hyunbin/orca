@@ -3,7 +3,7 @@ import {
   testState,
   createStore,
   createStoreWithSshRemotePtyLeases
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
@@ -18,8 +18,8 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 
 const NOW = 1_800_000_000_000
 

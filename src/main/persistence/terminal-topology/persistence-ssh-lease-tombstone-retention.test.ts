@@ -2,22 +2,22 @@ import {
   closeTestStores,
   createStoreWithSshRemotePtyLeases,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { TEST_LEAF_1 } from './persistence-session-fixtures'
-import { PtyExitProof } from './pty-exit-proof'
+import { TEST_LEAF_1 } from '../../persistence-session-fixtures'
+import { PtyExitProof } from '../../pty-exit-proof'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 
 describe('operator-closed SSH lease tombstones', () => {
   beforeEach(() => {

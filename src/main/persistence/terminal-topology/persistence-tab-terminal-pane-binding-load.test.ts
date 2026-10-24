@@ -3,23 +3,23 @@ import {
   testState,
   createStore,
   writeDataFile,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
+  makeRepo
+} from '../../persistence-test-harness'
+import { makeTerminalTab } from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 
 const layoutOwner = vi.hoisted(() => ({ isMain: true }))
-vi.mock('../shared/layout-owner-switch', () => ({
+vi.mock('../../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -27,8 +27,10 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: vi.fn().mockReturnValue({})
+}))
 
 const REPO = 'repo-a'
 const WORKTREE = `${REPO}::/work/a`

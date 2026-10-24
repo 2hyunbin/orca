@@ -3,21 +3,21 @@ import {
   testState,
   createStore,
   createStoreWithSshRemotePtyLeases
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
-import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
+import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -43,11 +43,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

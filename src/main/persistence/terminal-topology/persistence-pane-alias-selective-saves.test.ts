@@ -1,22 +1,20 @@
-import { closeTestStores, createStore, dataFile, testState } from './persistence-test-harness'
+import { closeTestStores, createStore, dataFile, testState } from '../../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { agentHookServer } from './agent-hooks/server'
+import { agentHookServer } from '../../agent-hooks/server'
 import {
   clearMigrationUnsupportedPty,
   setMigrationUnsupportedPty,
   setMigrationUnsupportedPtyPersistenceListener
-} from './agent-hooks/migration-unsupported-pty-state'
-import { StateSerializationSecretHandlingOperations } from './persistence/loading-store/state-serialization-secret-handling'
-import {
-  openProfileStateDatabaseReadOnly,
-  profileStateDatabaseFile
-} from './persistence/profile-state/profile-state-database'
-import { ProfileStateSqliteAuthority } from './persistence/profile-state/profile-state-sqlite-authority'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { makePaneKey } from '../shared/stable-pane-id'
+} from '../../agent-hooks/migration-unsupported-pty-state'
+import { StateSerializationSecretHandlingOperations } from '../loading-store/state-serialization-secret-handling'
+import { openProfileStateDatabaseReadOnly } from '../profile-state/profile-state-database'
+import { profileStateDatabaseFile } from '../../../shared/profile-state-storage-paths'
+import { ProfileStateSqliteAuthority } from '../profile-state/profile-state-sqlite-authority'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import { makePaneKey } from '../../../shared/stable-pane-id'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -26,8 +24,8 @@ vi.mock('electron', () => ({
     decryptString: (ciphertext: Buffer) => ciphertext.toString('utf-8').slice('encrypted:'.length)
   }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const SOURCE = makePaneKey('tab-source', '11111111-1111-4111-8111-111111111111')
 const TARGET = makePaneKey('tab-target', '22222222-2222-4222-8222-222222222222')

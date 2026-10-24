@@ -4,16 +4,16 @@ import {
   createStore,
   writeDataFile,
   readDataFile
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { SshTarget } from '../shared/ssh-types'
-import { isRemoteCliControlAllowed } from '../shared/ssh-remote-cli-control'
-import { SshConnectionStore } from './ssh/connection/ssh-connection-store'
+import type { SshTarget } from '../../../shared/ssh-types'
+import { isRemoteCliControlAllowed } from '../../../shared/ssh-remote-cli-control'
+import { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -25,8 +25,8 @@ vi.mock('electron', () => ({
     decryptString: (ciphertext: Buffer) => ciphertext.toString('utf-8').slice('encrypted:'.length)
   }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: () => ({ nth_repo_added: 2 })
 }))
 

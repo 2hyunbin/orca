@@ -4,16 +4,16 @@ import {
   createStore,
   writeDataFile,
   readDataFile,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
+  makeRepo
+} from '../../persistence-test-harness'
+import { makeTerminalTab } from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { isTerminalLeafId } from '../shared/stable-pane-id'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import { isTerminalLeafId } from '../../../shared/stable-pane-id'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },

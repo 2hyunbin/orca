@@ -3,24 +3,24 @@ import {
   createSqliteTestStore,
   createStore as createFreshStore,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 // Re-adoption must repair automation targets and persisted host filters alongside workspace ownership.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { Automation, AutomationRun } from '../shared/automations-types'
-import type { FolderWorkspace } from '../shared/folder-workspace-types'
-import type { ProjectGroup } from '../shared/project-group-types'
-import type { Repo } from '../shared/repo-types'
-import type { RemovedSshTargetTombstone } from '../shared/ssh-types'
-import type { SshConnectionStore } from './ssh/connection/ssh-connection-store'
-import { getDefaultPersistedState } from '../shared/constants'
-import { toSshExecutionHostId } from '../shared/execution-host'
-import { hostStableKey } from '../shared/automation-owner-key'
-import { folderWorkspaceKey } from '../shared/workspace-scope'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import { resetRetirementCollisionKeyCacheForTests } from './worktree-name-retirement'
+import type { Automation, AutomationRun } from '../../../shared/automations-types'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Repo } from '../../../shared/repo-types'
+import type { RemovedSshTargetTombstone } from '../../../shared/ssh-types'
+import type { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { toSshExecutionHostId } from '../../../shared/execution-host'
+import { hostStableKey } from '../../../shared/automation-owner-key'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
+import { resetRetirementCollisionKeyCacheForTests } from '../../worktree-name-retirement'
 
 let hasCreatedStoreInCase = false
 
@@ -28,8 +28,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const NOW = 1_700_000_000_000
 const OLD_ID = 'ssh-1738000000000-a9f3x'
@@ -146,7 +146,8 @@ async function createStoreFromState(state: Record<string, unknown>) {
   }
   vi.resetModules()
   installFakeAppEnvironment({ getPath: () => testState.dir })
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
 }
@@ -154,14 +155,15 @@ async function createStoreFromState(state: Record<string, unknown>) {
 async function reloadStore() {
   vi.resetModules()
   installFakeAppEnvironment({ getPath: () => testState.dir })
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
 }
 
 async function createSshStore(state: Record<string, unknown>) {
   const store = await createStoreFromState(state)
-  const { SshConnectionStore } = await import('./ssh/connection/ssh-connection-store')
+  const { SshConnectionStore } = await import('../../ssh/connection/ssh-connection-store')
   return { store, ssh: new SshConnectionStore(store) }
 }
 
@@ -348,7 +350,7 @@ describe('SSH re-adoption tombstone retention', () => {
   it('retains the tombstone when a same-id re-registration leaves the automation on the old incarnation', async () => {
     const { store } = await createSshStore(removedHostState())
     const { readoptOrphanedWorkspacesForTarget } =
-      await import('./ssh/targets/ssh-target-readoption')
+      await import('../../ssh/targets/ssh-target-readoption')
     // Re-registering the same ID changes no pointers; the tombstone remains the replacement evidence.
     const target = { id: OLD_ID, label: 'Dev box', ...IDENTITY, generation: 9 }
     store.addSshTarget(target)

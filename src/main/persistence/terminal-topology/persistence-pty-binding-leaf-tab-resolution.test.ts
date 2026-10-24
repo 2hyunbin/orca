@@ -1,25 +1,20 @@
-import {
-  closeTestStores,
-  testState,
-  createStore,
-  makeTerminalTab
-} from './persistence-test-harness'
+import { closeTestStores, testState, createStore } from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { findTerminalTabIdForLeaf } from './persistence/terminal-topology/terminal-topology-membership'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import { findTerminalTabIdForLeaf } from './terminal-topology-membership'
 
-import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
+import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 
 describe('findTerminalTabIdForLeaf after persistPtyBinding grafts a leaf', () => {
   beforeEach(() => {
