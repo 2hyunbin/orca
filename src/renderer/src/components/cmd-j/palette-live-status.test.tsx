@@ -6,7 +6,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { AppState } from '@/store/types'
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStatusEntry,
@@ -111,7 +110,7 @@ describe('palette live status', () => {
       tabsByWorktree: { 'wt-a': [makeTerminalTab('term-a', 'wt-a')] },
       ptyIdsByTabId: { 'term-a': ['pty-term-a'] },
       browserTabsByWorktree: {}
-    } as Partial<AppState>)
+    })
     testContainer = document.createElement('div')
     document.body.appendChild(testContainer)
     testRoot = createRoot(testContainer)
@@ -249,7 +248,7 @@ describe('palette live status', () => {
       tabsByWorktree: {
         'wt-a': [{ ...makeTerminalTab('term-a', 'wt-a'), title: 'claude [working]' }]
       }
-    } as Partial<AppState>)
+    })
 
     await render()
 
@@ -301,7 +300,7 @@ describe('palette live status', () => {
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         unreadTerminalTabs: { 'term-a': true }
-      } as Partial<AppState>)
+      })
     })
 
     expect(dotLabels()).toEqual(['Unread agent completion'])
@@ -407,7 +406,7 @@ describe('palette live status', () => {
   it('shows only the content icon when a terminal-backed row is inactive', async () => {
     applyAgentStatusPatch(useAppStore, {
       ptyIdsByTabId: {}
-    } as Partial<AppState>)
+    })
     await act(async () => {
       testRoot.render(
         <PaletteLiveStatusProvider active>
@@ -434,7 +433,7 @@ describe('palette live status', () => {
       unreadAgentCompletionPanes: {
         [makePaneKey('term-a', LEAF)]: true
       }
-    } as Partial<AppState>)
+    })
     await act(async () => {
       testRoot.render(
         <PaletteLiveStatusProvider active>
@@ -461,7 +460,7 @@ describe('palette live status', () => {
     setAgentState('working')
     applyAgentStatusPatch(useAppStore, {
       unreadTerminalTabs: { 'term-a': true }
-    } as Partial<AppState>)
+    })
     await act(async () => {
       testRoot.render(
         <PaletteLiveStatusProvider active>
@@ -511,7 +510,7 @@ describe('palette live status', () => {
     setAgentState('done')
     applyAgentStatusPatch(useAppStore, {
       unreadTerminalTabs: { 'term-a': true }
-    } as Partial<AppState>)
+    })
     await act(async () => {
       testRoot.render(
         <PaletteLiveStatusProvider active>
@@ -536,7 +535,7 @@ describe('palette live status', () => {
     setAgentState('blocked')
     applyAgentStatusPatch(useAppStore, {
       unreadTerminalTabs: { 'term-a': true }
-    } as Partial<AppState>)
+    })
     await act(async () => {
       testRoot.render(
         <PaletteLiveStatusProvider active>

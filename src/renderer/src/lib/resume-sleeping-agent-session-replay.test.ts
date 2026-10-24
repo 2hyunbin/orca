@@ -1,4 +1,5 @@
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { useAppStore } from '@/store'
@@ -38,8 +39,17 @@ function makeRecord(
   }
 }
 
-function makeTerminalTab(id: string): Record<string, unknown> {
-  return { id, ptyId: null, worktreeId: 'wt-1', title: 'shell', sortOrder: 0, createdAt: 1 }
+function makeTerminalTab(id: string): TerminalTab {
+  return {
+    id,
+    ptyId: null,
+    worktreeId: 'wt-1',
+    title: 'shell',
+    customTitle: null,
+    color: null,
+    sortOrder: 0,
+    createdAt: 1
+  }
 }
 
 describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
@@ -48,7 +58,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
     applyAgentStatusPatch(useAppStore, {
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
     let firstVisible:
       | {
           command: string | undefined
@@ -90,7 +100,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
     applyAgentStatusPatch(useAppStore, {
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
     const resumedTab = useAppStore.getState().tabsByWorktree['wt-1']![0]!
@@ -110,7 +120,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
     applyAgentStatusPatch(useAppStore, {
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
     applyAgentStatusPatch(useAppStore, (state) => ({
@@ -130,7 +140,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
     applyAgentStatusPatch(useAppStore, {
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
     const resumedTab = useAppStore.getState().tabsByWorktree['wt-1']![0]!
@@ -139,7 +149,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
 
     applyAgentStatusPatch(useAppStore, {
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toHaveLength(1)
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
@@ -163,7 +173,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
         }
       },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(0)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toHaveLength(2)
     expect(useAppStore.getState().sleepingAgentSessionsByPaneKey[record.paneKey]).toBeUndefined()
@@ -184,7 +194,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
         }
       },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
     expect(useAppStore.getState().tabsByWorktree['wt-1']).toHaveLength(1)
@@ -196,7 +206,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
     applyAgentStatusPatch(useAppStore, {
       tabsByWorktree: { 'wt-1': [] },
       sleepingAgentSessionsByPaneKey: { [record.paneKey]: record }
-    } as never)
+    })
 
     expect(resumeSleepingAgentSessionsForWorktree('wt-1')).toBe(1)
     const resumedTab = useAppStore.getState().tabsByWorktree['wt-1']![0]!
@@ -217,7 +227,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
           providerSession: { key: 'session_id', id: 'sess-1' }
         }
       }
-    } as never)
+    })
 
     const payload = buildWorkspaceSessionPayload(useAppStore.getState())
 
@@ -225,7 +235,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
   })
 
   it('leaves explicit AI Vault resumes outside automatic-resume claims', () => {
-    applyAgentStatusPatch(useAppStore, { tabsByWorktree: { 'wt-1': [] } } as never)
+    applyAgentStatusPatch(useAppStore, { tabsByWorktree: { 'wt-1': [] } })
 
     const first = launchAiVaultSessionInNewTab({
       agent: 'codex',

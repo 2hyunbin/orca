@@ -1,7 +1,6 @@
 import { applyAgentStatusPatch } from '../agent-status-patch'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUIStore } from './ui-slice-test-harness'
-import type { AppState } from '../types'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -59,7 +58,7 @@ describe('acknowledgeAgents with a clock-skewed execution host', () => {
       agentStatusByPaneKey: {
         [PANE_KEY]: makeAgentEntry({ stateStartedAt: futureStartedAt, updatedAt: futureStartedAt })
       }
-    } as Partial<AppState>)
+    })
 
     store.getState().acknowledgeAgents([PANE_KEY])
 
@@ -75,7 +74,7 @@ describe('acknowledgeAgents with a clock-skewed execution host', () => {
       agentStatusByPaneKey: {
         [PANE_KEY]: makeAgentEntry({ stateStartedAt: futureStartedAt, updatedAt: futureStartedAt })
       }
-    } as Partial<AppState>)
+    })
 
     store.getState().acknowledgeAgents([PANE_KEY])
     const firstMap = store.getState().acknowledgedAgentsByPaneKey
@@ -103,7 +102,7 @@ describe('acknowledgeAgents with a clock-skewed execution host', () => {
           startedAt: NOW + 1_000
         }
       }
-    } as Partial<AppState>)
+    })
 
     store.getState().acknowledgeAgents([PANE_KEY])
 
@@ -123,7 +122,7 @@ describe('acknowledgeAgents with a clock-skewed execution host', () => {
           updatedAt: futureUpdatedAt
         }
       }
-    } as Partial<AppState>)
+    })
 
     store.getState().acknowledgeAgents([PANE_KEY])
 
@@ -136,7 +135,7 @@ describe('acknowledgeAgents with a clock-skewed execution host', () => {
       agentStatusByPaneKey: {
         [PANE_KEY]: makeAgentEntry({ stateStartedAt: NOW - 5_000, updatedAt: NOW - 5_000 })
       }
-    } as Partial<AppState>)
+    })
 
     store.getState().acknowledgeAgents([PANE_KEY])
 
