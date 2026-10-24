@@ -89,6 +89,7 @@ describe('local preflight context worktree lookup', () => {
         id,
         name: id,
         endpoint: '',
+        endpoints: [],
         createdAt: 0,
         updatedAt: 0,
         lastUsedAt: null,
