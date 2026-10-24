@@ -69,7 +69,7 @@ describe('managed tunnel on an unbindable saved local port', () => {
     rmSync(userDataPath, { recursive: true, force: true })
   })
 
-  function setup(bindError?: Error) {
+  function setup(bindError?: Error, connectDelayMs = 0) {
     const target: SshTarget = {
       id: 'ssh-1',
       label: 'Builder',
@@ -100,7 +100,12 @@ describe('managed tunnel on an unbindable saved local port', () => {
     const manager = new OrcadManagedTunnelManager({
       getConnectionManager: () =>
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tunnel manager reads only connect.
-        ({ connect: async () => connection }) as unknown as SshConnectionManager,
+        ({
+          connect: async () => {
+            await new Promise((resolve) => setTimeout(resolve, connectDelayMs))
+            return connection
+          }
+        }) as unknown as SshConnectionManager,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the tunnel manager reads only getTarget.
       getTargetStore: () => ({ getTarget: () => target }) as unknown as SshConnectionStore,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double for the members the tunnel manager calls.
@@ -154,6 +159,15 @@ describe('managed tunnel on an unbindable saved local port', () => {
     expect(getRuntimeSshAccess(moved)?.remotePort).toBe(6_768)
     // Status owners and transports still dialing the old port are retired, as after a repair.
     expect(retired).toHaveBeenCalledWith('environment-1')
+  })
+
+  it('moves once and lets every concurrent caller build on the moved port', async () => {
+    const { ensure, resolve, retired } = setup(undefined, 50)
+
+    await expect(Promise.all([ensure(), ensure(), ensure()])).resolves.toHaveLength(3)
+
+    expect(getRuntimeSshAccess(resolve())?.localPort).not.toBe(savedPort)
+    expect(retired).toHaveBeenCalledOnce()
   })
 
   it('keeps the saved port when the bind fails for another reason', async () => {

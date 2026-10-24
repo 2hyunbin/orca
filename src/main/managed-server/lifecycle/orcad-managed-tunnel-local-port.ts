@@ -17,22 +17,24 @@ export async function buildOnBindableLocalPort<T>(
   environmentId: string,
   build: () => Promise<T>
 ): Promise<T> {
-  const saved = getOrcadSshDeployment(resolveEnvironment(userDataPath, environmentId))?.localPort
+  const savedPort = () =>
+    getOrcadSshDeployment(resolveEnvironment(userDataPath, environmentId))?.localPort
+  const saved = savedPort()
   try {
     return await build()
   } catch (error) {
-    if (
-      saved === undefined ||
-      !(error instanceof Error) ||
-      !UNBINDABLE_LOCAL_PORT_CODES.has(error.cause)
-    ) {
+    if (saved === undefined) {
+      throw error
+    }
+    // A concurrent build moved this server, superseding or failing ours; build on what it saved.
+    if (savedPort() !== saved) {
+      return build()
+    }
+    if (!(error instanceof Error) || !UNBINDABLE_LOCAL_PORT_CODES.has(error.cause)) {
       throw error
     }
     const localPort = await reserveLocalForwardPort(0)
-    // A concurrent build already moved this server; build on what it saved.
-    if (
-      getOrcadSshDeployment(resolveEnvironment(userDataPath, environmentId))?.localPort !== saved
-    ) {
+    if (savedPort() !== saved) {
       return build()
     }
     console.warn(
