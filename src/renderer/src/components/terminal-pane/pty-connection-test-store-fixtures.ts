@@ -2,9 +2,46 @@ import { vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type * as PtyConnection from './pty-connection'
+import type { AppState } from '@/store/types'
 import type { AgentStatusPatch } from '@/store/agent-status-patch'
 import { LEAF_1 } from './pty-connection-test-pane-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
+
+type RowInput<Row, Key extends keyof Row> = Partial<Row> & Pick<Row, Key>
+type StatusInput = RowInput<AgentStatusEntry, 'state'>
+type SettingsInput = Omit<Partial<NonNullable<AppState['settings']>>, 'notifications'> & {
+  notifications?: Partial<NonNullable<AppState['settings']>['notifications']>
+}
+type SeedRows = {
+  tabsByWorktree?: Record<string, RowInput<AppState['tabsByWorktree'][string][number], 'id'>[]>
+  worktreesByRepo?: Record<
+    string,
+    RowInput<AppState['worktreesByRepo'][string][number], 'id' | 'repoId'>[]
+  >
+  repos?: RowInput<AppState['repos'][number], 'id'>[]
+  settings?: SettingsInput | null
+  agentStatusByPaneKey?: Record<string, StatusInput>
+  agentLaunchConfigByPaneKey?: Record<
+    string,
+    RowInput<AppState['agentLaunchConfigByPaneKey'][string], 'launchConfig'>
+  >
+}
+type FixturePatch = Omit<AgentStatusPatch, keyof SeedRows> & SeedRows
+function mapRecord<Input, Output>(
+  rows: Record<string, Input>,
+  map: (row: Input, key: string) => Output
+): Record<string, Output> {
+  return Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, map(row, key)]))
+}
+function completeStatus(key: string, entry: StatusInput): AgentStatusEntry {
+  return Object.assign(entry, {
+    paneKey: entry.paneKey ?? key,
+    prompt: entry.prompt ?? '',
+    updatedAt: entry.updatedAt ?? Date.now(),
+    stateStartedAt: entry.stateStartedAt ?? Date.now(),
+    stateHistory: entry.stateHistory ?? []
+  })
+}
 
 export async function createInitialStoreState() {
   const { createTestStore } = await import('@/store/slices/store-test-helpers')
@@ -89,9 +126,58 @@ export async function createInitialStoreState() {
     },
     actions: spies,
     read: owner.getState,
-    patch: (patch: AgentStatusPatch) => applyAgentStatusPatch(store, patch),
-    setStatus: (key: string, entry: AgentStatusEntry | undefined) =>
-      owner.transact((transaction) => transaction.setEntry(key, entry))
+    patch: (patch: FixturePatch) => {
+      const {
+        tabsByWorktree,
+        worktreesByRepo,
+        repos,
+        settings,
+        agentStatusByPaneKey,
+        agentLaunchConfigByPaneKey,
+        ...app
+      } = patch
+      const defaults = getDefaultSettings('/tmp')
+      const prepared: AgentStatusPatch = app
+      if (tabsByWorktree) {
+        prepared.tabsByWorktree = mapRecord(tabsByWorktree, (tabs, worktreeId) =>
+          tabs.map((tab) => makeTab({ worktreeId, ...tab }))
+        )
+      }
+      if (worktreesByRepo) {
+        prepared.worktreesByRepo = mapRecord(worktreesByRepo, (rows) =>
+          rows.map((row) => makeWorktree(row))
+        )
+      }
+      if (repos) {
+        prepared.repos = repos.map((repo) => ({ ...TEST_REPO, ...repo }))
+      }
+      if (settings !== undefined) {
+        prepared.settings =
+          settings === null
+            ? null
+            : {
+                ...defaults,
+                ...settings,
+                notifications: { ...defaults.notifications, ...settings.notifications }
+              }
+      }
+      if (agentStatusByPaneKey) {
+        prepared.agentStatusByPaneKey = mapRecord(agentStatusByPaneKey, (entry, key) =>
+          completeStatus(key, entry)
+        )
+      }
+      if (agentLaunchConfigByPaneKey) {
+        prepared.agentLaunchConfigByPaneKey = mapRecord(agentLaunchConfigByPaneKey, (entry) => ({
+          ...entry,
+          identity: entry.identity ?? {}
+        }))
+      }
+      applyAgentStatusPatch(store, prepared)
+    },
+    setStatus: (key: string, entry: StatusInput | undefined) =>
+      owner.transact((transaction) =>
+        transaction.setEntry(key, entry && completeStatus(key, entry))
+      )
   }
 }
 

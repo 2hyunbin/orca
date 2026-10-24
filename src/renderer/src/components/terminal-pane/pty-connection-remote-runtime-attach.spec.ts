@@ -457,19 +457,26 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
+      const worktreeId = 'repo1::/srv/wt-1'
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
         ...storeFixture.read(),
-        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        tabsByWorktree: { [worktreeId]: [{ id: 'tab-1', worktreeId, ptyId: null }] },
         worktreesByRepo: {
-          repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/srv/wt-1' }]
+          repo1: [{ id: worktreeId, repoId: 'repo1', path: '/srv/wt-1' }]
         },
-        repos: [{ id: 'repo1', connectionId: null }],
+        repos: storeFixture
+          .read()
+          .repos.map((repo) => ({ ...repo, executionHostId: undefined, connectionId: null })),
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'legacy-hub' }
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ worktreeId }) as never
+      )
 
       // Why: the client stamps every server row on arrival, so an unstamped row is this machine's.
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()

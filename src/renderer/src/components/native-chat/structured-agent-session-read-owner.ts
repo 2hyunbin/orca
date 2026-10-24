@@ -23,7 +23,6 @@ import {
 } from './structured-agent-session-older-page-read'
 import { startStructuredAgentSessionReadTransport } from './structured-agent-session-read-transport'
 import { createStructuredAgentSessionPRLinkObserver } from './structured-agent-session-pr-link-observer'
-
 import type {
   StructuredAgentSessionReadSnapshot,
   StructuredAgentSessionReadOwner
@@ -32,7 +31,6 @@ export type {
   StructuredAgentSessionReadSnapshot,
   StructuredAgentSessionReadOwner
 } from './structured-agent-session-read-owner-contract'
-
 import {
   adoptStructuredReadOwner,
   getOrCreateStructuredReadOwner,
@@ -45,9 +43,8 @@ export {
   resetStructuredAgentSessionReadOwnersForTests
 } from './structured-agent-session-read-owner-registry'
 
-function countsTowardInitialHistory(item: AgentJournalRenderItem): boolean {
-  return item.body.kind !== 'status' || !item.body.providerFrame
-}
+const countsTowardInitialHistory = (item: AgentJournalRenderItem): boolean =>
+  item.body.kind !== 'status' || !item.body.providerFrame
 
 function createReadOwner(
   key: string,
@@ -74,6 +71,11 @@ function createReadOwner(
     snapshot = next
     for (const listener of listeners) {
       listener()
+    }
+  }
+  const markStale = (): void => {
+    if (snapshot.current) {
+      setSnapshot({ ...snapshot, current: false })
     }
   }
   const apply = (action: StructuredAgentSessionAction): void => {
@@ -206,11 +208,7 @@ function createReadOwner(
         apply({ type: 'error', message, refusal })
       },
       getCursor: () => snapshot.state.cursor,
-      onContactLost: () => {
-        if (snapshot.current) {
-          setSnapshot({ ...snapshot, current: false })
-        }
-      },
+      onContactLost: markStale,
       onHistoryReadInvalidated: invalidateOlderPages,
       hydrate: snapshot.state.epoch === null ? hydrate : undefined,
       sessionId,

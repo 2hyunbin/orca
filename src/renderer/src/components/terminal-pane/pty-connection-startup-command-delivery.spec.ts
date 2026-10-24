@@ -74,7 +74,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-        repos: [{ id: 'repo1', connectionId: null }]
+        repos: storeFixture.read().repos.map((repo) => ({ ...repo, connectionId: null }))
       })
 
       const pane = createPane(1)
@@ -418,7 +418,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         storeFixture.patch({
           ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-          repos: [{ id: 'repo1', connectionId: null }]
+          repos: storeFixture.read().repos.map((repo) => ({ ...repo, connectionId: null }))
         })
 
         const pane = createPane(1)
@@ -480,7 +480,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         storeFixture.patch({
           ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-          repos: [{ id: 'repo1', connectionId: null }]
+          repos: storeFixture.read().repos.map((repo) => ({ ...repo, connectionId: null }))
         })
 
         const pane = createPane(1)

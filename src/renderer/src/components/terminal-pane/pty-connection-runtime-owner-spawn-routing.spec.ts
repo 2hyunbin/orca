@@ -109,6 +109,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/srv/stale-worktree' }]
         },
+        repos: storeFixture.read().repos.map((repo) => ({ ...repo, executionHostId: undefined })),
         runtimeEnvironments: [{ id: 'hub-a' }, { id: 'hub-b' }],
         runtimeEnvironmentCatalogHydrated: true,
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
