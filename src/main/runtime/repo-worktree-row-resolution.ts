@@ -209,6 +209,7 @@ export function joinRepoWorktreeRows(
   metaById: Record<string, WorktreeMeta>,
   repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length
 ): RepoWorktreeRow[] {
+  let projectedMeta: Record<string, WorktreeMeta> | undefined
   if (!isFolderRepo(repo)) {
     const hostId = getRepoExecutionHostId(repo)
     for (const git of scan?.worktrees ?? []) {
@@ -217,11 +218,12 @@ export function joinRepoWorktreeRows(
         readWorktreeMetaForHost(deps.store, id, hostId) ??
         getRepoOwnedWorktreeMeta(repo, id, metaById, repoOwnerCount)
       if (!owned?.instanceId && (owned || (!metaById[id] && repoOwnerCount === 1))) {
-        deps.store.setWorktreeMeta(hostWorktreeTarget({ id, hostId }), {})
+        projectedMeta ??= { ...metaById }
+        projectedMeta[id] = deps.store.setWorktreeMeta(hostWorktreeTarget({ id, hostId }), {})
       }
     }
   }
-  return projectRepoWorktreeRows(deps, repo, scan, deps.store.getAllWorktreeMeta(), repoOwnerCount)
+  return projectRepoWorktreeRows(deps, repo, scan, projectedMeta ?? metaById, repoOwnerCount)
 }
 
 /** One repo's worktree rows before lineage projection. Shared by the fleet scan and scoped lookups. */

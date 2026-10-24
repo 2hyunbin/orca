@@ -82,10 +82,18 @@ describe('model catalog prewarm', () => {
     await prewarmed
 
     expect(codex).toHaveBeenCalledTimes(1)
-    expect(codex).toHaveBeenCalledWith(HOME('CODEX_HOME', '/homes/a'), {
-      workspacePath: expect.any(String),
-      signal: expect.any(AbortSignal)
-    })
+    expect(codex).toHaveBeenCalledWith(
+      HOME('CODEX_HOME', '/homes/a'),
+      expect.objectContaining({
+        workspacePath: expect.any(String),
+        signal: expect.any(AbortSignal),
+        operation: expect.objectContaining({
+          current: expect.any(Function),
+          deadline: expect.any(Number),
+          signal: expect.any(AbortSignal)
+        })
+      })
+    )
     expect(grok).toHaveBeenCalledTimes(1)
     expect((await service.read({ agent: 'codex' })).origin).toBe('probe')
     expect((await service.read({ agent: 'grok' })).origin).toBe('probe')
@@ -225,10 +233,18 @@ describe('model catalog prewarm', () => {
     await prewarmed
     expect((await waited).origin).toBe('probe')
     expect(probe).toHaveBeenCalledTimes(1)
-    expect(probe).toHaveBeenCalledWith(HOME('OPENCODE_HOME', '/homes/a'), {
-      signal: expect.any(AbortSignal),
-      workspacePath: '/work/project'
-    })
+    expect(probe).toHaveBeenCalledWith(
+      HOME('OPENCODE_HOME', '/homes/a'),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        workspacePath: '/work/project',
+        operation: expect.objectContaining({
+          current: expect.any(Function),
+          deadline: expect.any(Number),
+          signal: expect.any(AbortSignal)
+        })
+      })
+    )
   })
 
   it('lists the new account after a switch and leaves the old account’s catalog alone', async () => {

@@ -261,7 +261,7 @@ describe('a chat permission mode', () => {
       expect(resolve).toHaveBeenCalledWith(
         home,
         '/project',
-        true,
+        'saved',
         expect.objectContaining({
           deadline: expect.any(Number),
           current: expect.any(Function),

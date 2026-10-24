@@ -126,13 +126,15 @@ describe('a default learned from a chat with no pick', () => {
     async (agent) => {
       const clean = workspace('clean')
       const catalog = await afterNoPickChat(agent, clean)
-      const answer = await catalog.read({ agent, workspacePath: clean })
+      const answer = await catalog.read({ agent, workspacePath: clean, waitForListing: true })
       expect(named(answer)).toBe('github-copilot/claude-fable-5')
       // Project config can override this default; do not promote it to every workspace.
       expect(answer).not.toHaveProperty('defaultHoldsInEveryWorkspace')
-      expect(named(await catalog.read({ agent, workspacePath: workspace('other') }))).toBe(
-        'github-copilot/claude-fable-5'
-      )
+      expect(
+        named(
+          await catalog.read({ agent, workspacePath: workspace('other'), waitForListing: true })
+        )
+      ).toBe('github-copilot/claude-fable-5')
     }
   )
 

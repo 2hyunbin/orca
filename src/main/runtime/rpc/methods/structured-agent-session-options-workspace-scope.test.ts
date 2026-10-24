@@ -125,6 +125,7 @@ async function chatAtRest(repoConfig: {
     agentReadsProjectModelConfig,
     workspaceMayOverrideDefaultModel
   })
+  await rig.restart({ modelCatalog })
   if (repoConfig.complete) {
     await modelCatalog.read({
       agent: 'codex',
@@ -133,7 +134,6 @@ async function chatAtRest(repoConfig: {
       waitForListing: true
     })
   }
-  await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
   return modelCatalog
