@@ -1,5 +1,3 @@
-// The one place that decides a chat's permission mode: what a start launches, a restart compares, a read shows.
-
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   agentChatPermissionModes,
@@ -8,7 +6,7 @@ import {
 } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
-/** Null for an agent whose chats offer no modes, or one this runtime did not register. */
+/** null for unregistered agents or agents without permission modes. */
 export async function structuredAgentSessionLaunchPermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents'>,
   record: AgentSessionRecord

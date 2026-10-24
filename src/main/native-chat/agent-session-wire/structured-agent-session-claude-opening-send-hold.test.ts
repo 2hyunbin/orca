@@ -1,7 +1,4 @@
-// A follow-up sent before Claude echoes the first message waits for the turn that echo opens, then
-// goes in scoped to it: the CLI folds it into that turn, and the client draws it there, never as a
-// message of its own ahead of the reply. On the shipping adapter and host, fed the CLI's captured
-// early-steer frame order (CLI 2.1.280).
+// Captured Claude 2.1.280 early-steer ordering: follow-ups wait for the opening echo before joining its turn.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -95,7 +92,6 @@ beforeEach(async () => {
       claudeConfigDir: join(root, 'claude-home'),
       providerSessionId: PROVIDER_SESSION_ID,
       resumeLeafUuid: null,
-      // A child started after a Stop's close resumes the conversation that close ended.
       resumesTranscript: (store.getRecord(SESSION)?.providerHandleChain.length ?? 0) > 0,
       continuesChain: (store.getRecord(SESSION)?.providerHandleChain.length ?? 0) > 0
     }),
@@ -177,7 +173,6 @@ async function snapshot() {
   return host.journalSnapshot(SESSION)
 }
 
-/** Each row's text and the turn it is drawn in, in the order the client draws the conversation. */
 async function drawn(): Promise<{ text: string; turn: string | undefined }[]> {
   const { items, submissions } = await snapshot()
   const rows = projectNativeChatTranscriptMessages(
@@ -195,7 +190,7 @@ it('reads a send as accepted across its echo, never in doubt, so a worker start 
   const connection = claude.connections[0]!
   const first = await send('FIRST prompt')
   await eventually(() => expect(written(connection, 'FIRST prompt')).toBeDefined())
-  // What `orchestration worker-start` waits on; a doubt here closed the new worker (STA-11160).
+  // Worker-start waits here; premature uncertainty previously closed the new worker (STA-11160).
   const answer = host.waitForSendSettlement(SESSION, first, { budgetMs: 5_000 })
   frame(connection, {
     ...written(connection, 'FIRST prompt')!,
@@ -329,7 +324,6 @@ it('holds a follow-up until the echo opens the turn, then folds it in, drawn ins
     expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
   )
 
-  // Not written to the CLI, and still queued, until the turn it would join has opened.
   expect(written(connection, 'STEER prompt')).toBeUndefined()
   const queued = (await snapshot()).submissions.find((entry) => entry.clientMessageId === steer)
   expect(queued?.handedOverAt).toBeUndefined()
@@ -415,8 +409,7 @@ it('holds a follow-up until the echo opens the turn, then folds it in, drawn ins
   expect(first).not.toBe(steer)
 })
 
-// Claude's own facts end the wait: a send the CLI started and then went idle on without echoing is
-// doubt (`releaseClaudeDispatchesUnansweredAtIdle`), with no clock in the host or the adapter.
+// Provider idle facts end acknowledgement waits; elapsed time cannot prove delivery.
 it('releases the follow-up when the CLI goes idle on a started send it never echoed', async () => {
   const connection = claude.connections[0]!
   const first = await send('FIRST prompt')
@@ -452,7 +445,6 @@ it('releases the follow-up when the CLI goes idle on a started send it never ech
   expect(submissions.find((entry) => entry.clientMessageId === steer)?.handedOverAt).toBeDefined()
 })
 
-/** A person's Stop naming no turn. */
 function stop() {
   return host.cancel(CALLER, {
     envelope: {
@@ -468,8 +460,7 @@ function stop() {
   })
 }
 
-// Claude's interrupt names no turn, but its Stop ends the CLI, and that end settles the send. Until
-// the close proves it, the CLI still holds the send: never doubt while the child is being stopped.
+// Keep delivery pending until Stop’s close proves exit; stopping is not yet uncertainty.
 it('settles a send a Stop took before its echo, and the next message goes out', async () => {
   const connection = claude.connections[0]!
   const first = await send('FIRST prompt')
@@ -512,8 +503,7 @@ it('settles a send a Stop took before its echo, and the next message goes out', 
   })
 })
 
-/** As the real connection: once a close begins it refuses every write; the first `failures`
- *  closes come back unproven. */
+/** Reject writes from close start; inject unproven exit for the first failures attempts. */
 function closeUnprovenFor(connection: FakeConnection, failures: number): void {
   const close = connection.close
   let left = failures
@@ -535,7 +525,6 @@ function closeUnprovenFor(connection: FakeConnection, failures: number): void {
       : write(message, beforeDispatch)
 }
 
-/** A turn the CLI opened and is writing, whose Stop's close comes back unproven once. */
 async function stoppedWithUnprovenClose(): Promise<FakeConnection> {
   const connection = claude.connections[0]!
   const working = await send('Write a long reply.')
@@ -573,8 +562,6 @@ async function stoppedWithUnprovenClose(): Promise<FakeConnection> {
   return connection
 }
 
-// The first message joins the close the Stop could not prove and goes to the resumed child; one
-// sent before that child echoes it waits for the echo, as any follow-up waits for its turn.
 it('sends a message that joins an unproven Stop close to the resumed child, and holds the next until its echo', async () => {
   const connection = await stoppedWithUnprovenClose()
 
