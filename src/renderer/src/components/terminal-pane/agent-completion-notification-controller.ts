@@ -1,5 +1,6 @@
 import type {
   AgentCompletionCoordinatorOptions,
+  AgentCompletionHookCandidate,
   AgentCompletionStatusSnapshot
 } from './agent-completion-coordinator-types'
 import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
@@ -9,6 +10,9 @@ import type {
 } from './agent-completion-identity-store'
 import { isPiCompatibleAgentType } from '../../../../shared/pi-agent-kind'
 import { AGENT_DONE_QUIET_MS } from '../../../../shared/agent-transitions'
+import { selectHookNotificationTimestamp } from './agent-completion-notification-timestamp'
+
+export { selectHookNotificationTimestamp } from './agent-completion-notification-timestamp'
 
 type CompletionSource = 'hook' | 'title' | 'process-exit'
 
@@ -27,7 +31,10 @@ export type CompletionState = {
   lastAttentionToken: string | null
   pendingHookDoneTimer: ReturnType<typeof setTimeout> | null
   pendingHookDoneTitle: string | null
-  pendingHookDonePayload: AgentCompletionStatusSnapshot | null
+  pendingHookDonePayload: {
+    snapshot: AgentCompletionStatusSnapshot
+    hookCandidate?: AgentCompletionHookCandidate
+  } | null
 }
 
 type ProcessState = {
@@ -41,22 +48,6 @@ type CompletionControllerOptions = {
   state: CompletionState
   processState: ProcessState
   identityScope: AgentCompletionIdentityScope
-}
-
-export function selectHookNotificationTimestamp(
-  payload: AgentCompletionStatusSnapshot
-): number | undefined {
-  if (typeof payload.turnCompletedAt === 'number' && Number.isFinite(payload.turnCompletedAt)) {
-    return payload.turnCompletedAt
-  }
-  if (
-    payload.state === 'done' &&
-    typeof payload.turnEndedAt === 'number' &&
-    Number.isFinite(payload.turnEndedAt)
-  ) {
-    return payload.turnEndedAt
-  }
-  return payload.stateStartedAt
 }
 
 export function createAgentCompletionNotificationController({
@@ -164,6 +155,7 @@ export function createAgentCompletionNotificationController({
       quietedHookDone?: boolean
       terminalIdleConfirmed?: boolean
       agentStatus?: AgentCompletionStatusSnapshot
+      hookCandidate?: AgentCompletionHookCandidate
       completionIdentity?: LastCompletionIdentity | null
       /** Announce only. The pane is still genuinely `working` (Claude background inventory), so the synthetic `done` must not run pane lifecycle. */
       notifyWithoutLifecycle?: boolean
@@ -217,19 +209,22 @@ export function createAgentCompletionNotificationController({
       // Why: confirmed process death is independent completion evidence; keep its provenance so stale hook rows can't veto it later.
       options.dispatchCompletion(title, {
         source,
+        ...(optionsOverride.hookCandidate ? { hookCandidate: optionsOverride.hookCandidate } : {}),
         quietedHookDone: optionsOverride.quietedHookDone === true,
         ...(optionsOverride.terminalIdleConfirmed === true ? { terminalIdleConfirmed: true } : {}),
         ...(optionsOverride.agentStatus ? { agentStatus: optionsOverride.agentStatus } : {})
       })
     } else if (
       optionsOverride.agentStatus &&
-      (optionsOverride.notifyWithoutLifecycle === true ||
+      (optionsOverride.hookCandidate !== undefined ||
+        optionsOverride.notifyWithoutLifecycle === true ||
         options.usesHookTurnEnds?.(optionsOverride.agentStatus) === true)
     ) {
       // Why: carry the hook's own snapshot; the stored row may be a newer state (a pinned `working`) or too old to lend content.
       options.dispatchCompletion(title, {
         source,
         quietedHookDone: false,
+        ...(optionsOverride.hookCandidate ? { hookCandidate: optionsOverride.hookCandidate } : {}),
         agentStatus: optionsOverride.agentStatus
       })
     } else {
@@ -238,7 +233,10 @@ export function createAgentCompletionNotificationController({
     return true
   }
 
-  function dispatchAttention(payload: AgentCompletionStatusSnapshot): void {
+  function dispatchAttention(
+    payload: AgentCompletionStatusSnapshot,
+    hookCandidate?: AgentCompletionHookCandidate
+  ): void {
     if (!options.dispatchAttention || !options.isLive() || !processState.hasAgentRunEvidence) {
       return
     }
@@ -251,13 +249,18 @@ export function createAgentCompletionNotificationController({
     options.dispatchHookLifecycle?.(payload)
     options.dispatchAttention(payload.agentType ?? options.paneKey, {
       source: 'hook',
+      ...(hookCandidate ? { hookCandidate } : {}),
       agentStatus: payload
     })
   }
 
-  function scheduleHookDoneCompletion(title: string, payload: AgentCompletionStatusSnapshot): void {
+  function scheduleHookDoneCompletion(
+    title: string,
+    payload: AgentCompletionStatusSnapshot,
+    hookCandidate?: AgentCompletionHookCandidate
+  ): void {
     state.pendingHookDoneTitle = title
-    state.pendingHookDonePayload = payload
+    state.pendingHookDonePayload = { snapshot: payload, hookCandidate }
     if (state.pendingHookDoneTimer !== null) {
       return
     }
@@ -265,13 +268,15 @@ export function createAgentCompletionNotificationController({
     state.pendingHookDoneTimer = setTimeout(() => {
       state.pendingHookDoneTimer = null
       const pendingTitle = state.pendingHookDoneTitle
-      const pendingPayload = state.pendingHookDonePayload
+      const pending = state.pendingHookDonePayload
+      const pendingPayload = pending?.snapshot
       state.pendingHookDoneTitle = null
       state.pendingHookDonePayload = null
       if (pendingTitle) {
         const hookIdentity = pendingPayload ? hookCompletionIdentity(pendingPayload) : null
         dispatchCompletion('hook', pendingTitle, {
           quietedHookDone: true,
+          ...(pending?.hookCandidate ? { hookCandidate: pending.hookCandidate } : {}),
           ...(pendingPayload ? { agentStatus: pendingPayload } : {}),
           ...(hookIdentity
             ? {

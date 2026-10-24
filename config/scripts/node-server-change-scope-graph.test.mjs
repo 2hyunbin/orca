@@ -20,8 +20,10 @@ describe('the actual Bun build and profile-test dependency graph', () => {
     expect(inputs.has('src/renderer/src/runtime/runtime-terminal-inspection.ts')).toBe(false)
     expect([...inputs].filter((file) => file.startsWith('src/renderer/')).sort()).toEqual([
       'src/renderer/src/components/terminal-pane/agent-completion-hook-observer.ts',
+      'src/renderer/src/components/terminal-pane/agent-completion-hook-only-observer.ts',
       'src/renderer/src/components/terminal-pane/agent-completion-identity-store.ts',
       'src/renderer/src/components/terminal-pane/agent-completion-notification-controller.ts',
+      'src/renderer/src/components/terminal-pane/agent-completion-notification-timestamp.ts',
       'src/renderer/src/hooks/agent-hook-notification-retirement.ts'
     ])
   })
@@ -41,8 +43,10 @@ describe('the actual Bun build and profile-test dependency graph', () => {
   it.each([
     ...Object.values(ORCAD_CHILD_ENTRY_POINTS),
     'src/renderer/src/components/terminal-pane/agent-completion-hook-observer.ts',
+    'src/renderer/src/components/terminal-pane/agent-completion-hook-only-observer.ts',
     'src/renderer/src/components/terminal-pane/agent-completion-identity-store.ts',
     'src/renderer/src/components/terminal-pane/agent-completion-notification-controller.ts',
+    'src/renderer/src/components/terminal-pane/agent-completion-notification-timestamp.ts',
     'src/renderer/src/hooks/agent-hook-notification-retirement.ts',
     'src/shared/keybindings/definitions-core-1.ts',
     'src/shared/pty-running-work-probe.ts',

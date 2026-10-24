@@ -3557,12 +3557,15 @@
             "54f29b7c0d": "Cargando host…"
           },
           "AgentLaunchPaneNotice": {
-            "commandNotFound": "Su comando no se encontró en este equipo.",
+            "agent": "El agente",
+            "commandNotFound": "{{agent}} no pudo iniciarse porque no se encontró su comando en este equipo.",
             "copyPrompt": "Copiar prompt",
-            "exitedDuringStart": "Se cerró mientras se iniciaba.",
-            "notStarted": "El agente no pudo iniciarse.",
-            "unconfirmed": "No se pudo confirmar que el agente se iniciara.",
-            "workspaceGone": "Su espacio de trabajo ya no está disponible."
+            "exitedDuringStart": "{{agent}} se cerró durante el inicio.",
+            "notStarted": "{{agent}} no pudo iniciarse.",
+            "restoreWorkspace": "Restaura la carpeta del espacio de trabajo o abre un espacio de trabajo disponible y vuelve a intentarlo.",
+            "tryInTerminal": "Ejecútalo en una terminal en esta carpeta para ver el motivo y vuelve a intentarlo.",
+            "unconfirmed": "No se pudo confirmar que {{agent}} se haya iniciado. Revisa su terminal antes de volver a intentarlo.",
+            "workspaceGone": "{{agent}} no pudo iniciarse porque su espacio de trabajo ya no está disponible."
           },
           "TerminalSleepingPaneOverlay": {
             "pausedDetail": "Las restauraciones automáticas están en pausa porque el host se detuvo de forma inesperada. Tu sesión está guardada.",
@@ -9709,6 +9712,11 @@
               "invert": "invertir",
               "opposite": "opuesto"
             },
+            "linkRoutingBackground": {
+              "background": "segundo plano",
+              "focus": "foco",
+              "tab": "pestaña"
+            },
             "72c58f7792": "vista web",
             "82ba1c80ea": "localhost",
             "bea27bac4b": "enlaces",
@@ -11904,6 +11912,10 @@
           "titleOrca": "Mantenga presionada la tecla Mayús para abrir en Orca",
           "descriptionSystem": "Los enlaces se abren en Orca, por lo que {{chord}}+clic envía uno al navegador de su sistema.",
           "descriptionOrca": "Los enlaces se abren en el navegador de su sistema. Cuando está habilitado, {{chord}}+clic abre uno en el navegador integrado de Orca."
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "Abrir enlaces en segundo plano",
+          "description": "Los enlaces de la terminal, el chat y markdown se abren en el navegador sin quitar el foco de donde hiciste clic."
         },
         "PluginConsentDialog": {
           "workerTrust": "Proceso en segundo plano — se ejecuta en su propio proceso",
@@ -19745,7 +19757,8 @@
     "jiraUserPicker": {
       "select": "Seleccione {{value0}}",
       "search": "Buscar usuarios",
-      "empty": "No se encontraron usuarios"
+      "empty": "No se encontraron usuarios",
+      "useKnownId": "Usar el ID de usuario conocido \"{{value0}}\""
     },
     "status": {
       "bar": {

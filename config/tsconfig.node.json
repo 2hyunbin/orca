@@ -15,6 +15,8 @@
     "./scripts/vitest-node-runtime-pool.ts",
     "../src/main/**/*",
     "../src/renderer/src/components/terminal-pane/agent-completion-hook-observer.ts",
+    "../src/renderer/src/components/terminal-pane/agent-completion-hook-only-observer.ts",
+    "../src/renderer/src/components/terminal-pane/agent-completion-notification-timestamp.ts",
     "../src/renderer/src/components/terminal-pane/agent-completion-notification-controller.ts",
     "../src/renderer/src/components/terminal-pane/agent-completion-identity-store.ts",
     "../src/renderer/src/components/terminal-pane/agent-completion-coordinator-types.ts",

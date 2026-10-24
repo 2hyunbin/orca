@@ -27,14 +27,21 @@ export type AgentCompletionStatusSnapshot = ParsedAgentStatusPayload &
     localStateStartedAt?: number
   }
 
+export type AgentCompletionHookCandidate = {
+  snapshot: AgentCompletionStatusSnapshot
+  originalRow: AgentStatusIpcPayload
+}
+
 export type AgentCompletionDispatchMeta = {
   source: 'hook' | 'title' | 'process-exit'
   quietedHookDone: boolean
+  hookCandidate?: AgentCompletionHookCandidate
   terminalIdleConfirmed?: boolean
   agentStatus?: AgentCompletionStatusSnapshot
 }
 
 export type AgentAttentionDispatchMeta = {
+  hookCandidate?: AgentCompletionHookCandidate
   source: 'hook'
   agentStatus: AgentCompletionStatusSnapshot
 }

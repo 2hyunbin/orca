@@ -24,7 +24,10 @@ import type {
 } from '../../shared/notification-settings-types'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
-import { TerminalAgentTurnNews, type TerminalAgentTurnNewsItem } from './terminal-agent-turn-news'
+import {
+  TerminalAgentTurnNews,
+  type TerminalAgentTurnNewsDelivery
+} from './terminal-agent-turn-news'
 
 export type TerminalAgentWorkspaceLabels = { repoLabel?: string; worktreeLabel?: string }
 
@@ -57,7 +60,7 @@ export class TerminalAgentPhonePush {
   }
 
   observe(change: AgentPaneChange): void {
-    this.turnNews.observe(change)
+    this.turnNews.observeNotification(change)
   }
 
   dispose(): void {
@@ -100,7 +103,11 @@ export class TerminalAgentPhonePush {
     }
   }
 
-  private send({ paneKey, worktreeId, row }: TerminalAgentTurnNewsItem): string | undefined {
+  private send({
+    paneKey,
+    worktreeId,
+    snapshot: row
+  }: TerminalAgentTurnNewsDelivery): string | undefined {
     // Decided when the alert would go out: a window that took over by then announces it itself.
     if (
       this.deps.hasWindow() ||
