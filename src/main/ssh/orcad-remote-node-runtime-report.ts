@@ -9,6 +9,9 @@ export const REMOTE_NODE_RUNTIME_SECURITY_MODIFIED = 'ORCA_NODE_RUNTIME_SECURITY
 export const REMOTE_NODE_RUNTIME_EXIT_PREFIX = 'ORCA_RUNTIME_EXIT='
 export const REMOTE_NODE_RUNTIME_VERIFIED_MARKER = '.verified'
 
+// NixOS's stub loader refuses generic Linux binaries with this sentence.
+const NIXOS_STUB_LOADER = /NixOS cannot run dynamically linked executables/
+
 /** A failed version self-test is positive host evidence, not an unanswered transport probe. */
 export class RemoteNodeRuntimeSelfTestError extends RelayHostAnsweredError {
   constructor(
@@ -21,7 +24,11 @@ export class RemoteNodeRuntimeSelfTestError extends RelayHostAnsweredError {
       missing
         ? `The host is missing ${missing}, which Orca's Node runtime needs. ` +
             `${installHint(missing)} Then reconnect. (${exit}: ${output})`
-        : `The pinned Node runtime did not run on the host (${exit}): ${output}`
+        : NIXOS_STUB_LOADER.test(output)
+          ? 'NixOS can’t run Orca’s Node runtime as it is. Turn on nix-ld ' +
+            '(programs.nix-ld.enable = true; in configuration.nix), run nixos-rebuild switch, ' +
+            `then reconnect. (${exit}: ${output})`
+          : `The pinned Node runtime did not run on the host (${exit}): ${output}`
     )
     this.name = 'RemoteNodeRuntimeSelfTestError'
   }
