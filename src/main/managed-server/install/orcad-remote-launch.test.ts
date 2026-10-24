@@ -121,7 +121,7 @@ describe('liveness', () => {
   describe.skipIf(process.platform === 'win32')(
     'a recorded PID after a restart (real shell)',
     () => {
-      const probeIn = (slot: string, script: string): string =>
+      const probeIn = (script: string): string =>
         spawnSync('sh', ['-c', script], { encoding: 'utf8' }).stdout
 
       async function withSlot(run: (slot: string, probe: string) => Promise<void>): Promise<void> {
@@ -146,10 +146,9 @@ describe('liveness', () => {
 
       it('calls dead a PID held by the probe shell or the shell wrapping it', async () => {
         await withSlot(async (slot, probe) => {
-          const own = probeIn(slot, `echo $$ > '${slot}/.orcad-pid'; ${probe}`)
+          const own = probeIn(`echo $$ > '${slot}/.orcad-pid'; ${probe}`)
           expect(parseOrcadLiveness(own)).toBe('DEAD')
           const wrapped = probeIn(
-            slot,
             `echo $$ > '${slot}/.orcad-pid'; sh -c ${JSON.stringify(probe).replace(/\$/g, '\\$')}`
           )
           expect(parseOrcadLiveness(wrapped)).toBe('DEAD')
@@ -168,10 +167,10 @@ describe('liveness', () => {
           try {
             await waitForArgs(orcad.pid, 'orcad.js')
             writeFileSync(join(slot, '.orcad-pid'), `${orcad.pid}\n`)
-            expect(parseOrcadLiveness(probeIn(slot, probe))).toBe('LIVE')
+            expect(parseOrcadLiveness(probeIn(probe))).toBe('LIVE')
             await waitForArgs(waiting.pid, 'orcad.js')
             writeFileSync(join(slot, '.orcad-pid'), `${waiting.pid}\n`)
-            expect(parseOrcadLiveness(probeIn(slot, probe))).toBe('LIVE')
+            expect(parseOrcadLiveness(probeIn(probe))).toBe('LIVE')
           } finally {
             orcad.kill()
             waiting.kill()
