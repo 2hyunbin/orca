@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { z } from 'zod'
 import { sessionFor } from '../../claude/claude-structured-dispatch-test-support'
 import type { ClaudeSession } from '../../claude/claude-structured-session-state'
 import { dispatchClaudeMessage } from '../../claude/claude-structured-message-options'
@@ -143,8 +144,29 @@ it('carries Claude effort validation through the SDK queue and saved desktop/pho
   })()
   const session = sessionFor(
     vi.fn((...args: Parameters<ClaudeSession['connection']['send']>) => {
-      // SAFETY: actual dispatch builds the SDK envelope, as the real connection's send does.
-      return queue.push(args[0] as unknown as SDKUserMessage, args[1])
+      const message = z
+        .strictObject({
+          type: z.literal('user'),
+          uuid: z.templateLiteral([
+            z.string(),
+            '-',
+            z.string(),
+            '-',
+            z.string(),
+            '-',
+            z.string(),
+            '-',
+            z.string()
+          ]),
+          session_id: z.string(),
+          parent_tool_use_id: z.null(),
+          message: z.strictObject({
+            role: z.literal('user'),
+            content: z.array(z.strictObject({ type: z.literal('text'), text: z.string() }))
+          })
+        })
+        .parse(args[0])
+      return queue.push(message, args[1])
     })
   )
   session.providerSessionId = THREAD
