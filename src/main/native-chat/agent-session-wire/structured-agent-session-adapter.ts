@@ -1,10 +1,6 @@
 import type { AiVaultConversationCopy } from '../../../shared/ai-vault-resume-preparation'
 import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
-import type {
-  AgentSessionRewindFork,
-  AgentSessionRewindReason,
-  AgentSessionRewindSupport
-} from '../../../shared/agent-session-rewind'
+import type * as rewind from '../../../shared/agent-session-rewind'
 // The host owns journal/lease authority; adapters report delivery uncertainty without guessing.
 
 import type {
@@ -256,7 +252,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     onExecutionSnapshot?: () => void
   }): Promise<AgentSessionDispatchOutcome>
   /** Narrow declared rewind per session; agent supplies the resting-session answer. */
-  rewindSupport?(sessionId: string, agent?: string): AgentSessionRewindSupport
+  rewindSupport?(sessionId: string, agent?: string): rewind.AgentSessionRewindSupport
   /** Observe lost-reply rewind effects without repeating; keptTurnId null means no turns retained. */
   recoverRewind?(input: {
     sessionId: string
@@ -264,19 +260,20 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     signal?: AbortSignal
     beforeTurnId: string
     keptTurnId: string | null
-  }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
+  }): Promise<{ ok: true } | { ok: false; reason: rewind.AgentSessionRewindReason }>
   rewind?(input: {
     sessionId: string
     fence: number
     beforeTurnId: string
-  }): Promise<{ ok: true } | { ok: false; reason: AgentSessionRewindReason }>
+  }): Promise<{ ok: true } | { ok: false; reason: rewind.AgentSessionRewindReason }>
   /** Save the rewind fork before changing journal/record; refusals preserve the conversation, even at rest. */
   forkForRewind?(input: {
     record: AgentSessionRecord
     beforeMessage: { sessionId: string; uuid: string }
     rewindOperationId: string
   }): Promise<
-    { ok: true; fork: AgentSessionRewindFork } | { ok: false; reason: AgentSessionRewindReason }
+    | { ok: true; fork: rewind.AgentSessionRewindFork }
+    | { ok: false; reason: rewind.AgentSessionRewindReason }
   >
   /** Return provider compaction admission; translator ends the command turn unless child-exit recovery does first. */
   compact?(input: {
