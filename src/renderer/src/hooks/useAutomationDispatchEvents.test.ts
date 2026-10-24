@@ -176,20 +176,13 @@ vi.mock('@/lib/browser-uuid', () => ({
 
 function mockCanonicalFixtureStore(): void {
   vi.doMock('@/store', async () => {
-    const { createTestStore } = await import('@/store/slices/store-test-helpers')
-    const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
-    const canonical = createTestStore()
-    const publishSnapshot = () => applyAgentStatusPatch(canonical, state)
-    latestStoreSubscriber = publishSnapshot
-    return {
-      useAppStore: {
-        get getState() {
-          publishSnapshot()
-          return canonical.getState
-        },
-        subscribe: mockStoreSubscribe
-      }
-    }
+    const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+    const fixture = withAgentStatusFixture(
+      { useAppStore: { getState: () => state, subscribe: mockStoreSubscribe } },
+      () => state
+    )
+    latestStoreSubscriber = () => void fixture.useAppStore.getState()
+    return fixture
   })
 }
 

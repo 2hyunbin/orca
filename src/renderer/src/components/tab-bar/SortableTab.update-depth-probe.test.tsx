@@ -48,7 +48,6 @@ async function createProbeStore(): Promise<StoreApiWithHook> {
     store.setState({
       unreadTerminalTabs: {},
       unreadAgentCompletionPanes: {},
-      agentStatusByPaneKey: {},
       agentStatusEpoch: 0,
       runtimePaneTitlesByTabId: {},
       ptyIdsByTabId: {},

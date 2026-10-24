@@ -113,11 +113,13 @@ export async function loadIpcEventsHarness(
     const actual = await vi.importActual<typeof ReactModule>('react')
     return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
   })
-  const { createTestStore } = await import('@/store/slices/store-test-helpers')
-  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
-  const store = createTestStore()
-  applyAgentStatusPatch(store, storeState)
-  vi.doMock('../store', () => ({ useAppStore: store }))
+  const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+  vi.doMock('../store', () =>
+    withAgentStatusFixture(
+      { useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => storeState } },
+      () => storeState
+    )
+  )
   vi.doMock('@/lib/ui-zoom', () => ({ applyUIZoom: vi.fn() }))
   vi.doMock('@/lib/worktree-activation', () => ({
     activateAndRevealWorktree: vi.fn(),

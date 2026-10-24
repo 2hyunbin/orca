@@ -2,6 +2,7 @@
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Tab } from '../../../../shared/tab-types'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { useTerminalPaneChatState } from './use-terminal-pane-chat-state'
 import { useTerminalPaneLayoutPersistence } from './use-terminal-pane-layout-persistence'
@@ -14,7 +15,19 @@ const LEFT = '11111111-1111-4111-8111-111111111111'
 const RIGHT = '22222222-2222-4222-8222-222222222222'
 const mocks = vi.hoisted(() => {
   const layouts: Record<string, TerminalLayoutSnapshot> = {}
-  const tab = { id: 'tab', entityId: 'tab', contentType: 'terminal', viewMode: 'chat' }
+  const tab: Tab = {
+    id: 'tab',
+    entityId: 'tab',
+    groupId: 'group',
+    worktreeId: 'wt',
+    contentType: 'terminal',
+    viewMode: 'chat',
+    label: 'Terminal',
+    customLabel: null,
+    color: null,
+    sortOrder: 0,
+    createdAt: 1
+  }
   const state = {
     terminalLayoutsByTabId: layouts,
     unifiedTabsByWorktree: { wt: [tab] },
@@ -27,7 +40,7 @@ const mocks = vi.hoisted(() => {
     setTabLayout: (_id: string, layout: TerminalLayoutSnapshot) => {
       layouts.tab = layout
     },
-    setTabViewMode: (_id: string, mode: string) => {
+    setTabViewMode: (_id: string, mode: 'terminal' | 'chat') => {
       state.unifiedTabsByWorktree = { wt: [{ ...tab, viewMode: mode }] }
     },
     toggleTabViewMode: (id: string): void => {
@@ -58,7 +71,8 @@ vi.mock('../../store', async () => {
     useAppStore.setState({ unifiedTabsByWorktree: mocks.state.unifiedTabsByWorktree })
   }
   const store = createTestStore()
-  applyAgentStatusPatch(store, mocks.state)
+  const { settings: _settings, ...seed } = mocks.state
+  applyAgentStatusPatch(store, seed)
   const useAppStore = Object.assign(
     (selector: (state: ReturnType<typeof store.getState>) => unknown) => useStore(store, selector),
     store

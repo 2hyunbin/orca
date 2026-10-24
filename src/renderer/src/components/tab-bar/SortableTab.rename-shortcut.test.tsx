@@ -242,16 +242,8 @@ useAppStoreExport.getState = () => ({
 })
 
 vi.mock('@/store', async () => {
-  const { createTestStore } = await import('@/store/slices/store-test-helpers')
-  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
-  const canonical = createTestStore()
-  Object.defineProperty(useAppStoreExport, 'getState', {
-    get() {
-      applyAgentStatusPatch(canonical, storeState)
-      return canonical.getState
-    }
-  })
-  return { useAppStore: useAppStoreExport }
+  const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+  return withAgentStatusFixture({ useAppStore: useAppStoreExport }, () => storeState)
 })
 vi.mock('@/store/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()

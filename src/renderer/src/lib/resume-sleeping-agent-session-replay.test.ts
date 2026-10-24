@@ -165,6 +165,7 @@ describe('resumeSleepingAgentSessionsForWorktree replay protection', () => {
           prompt: record.prompt,
           updatedAt: 10,
           stateStartedAt: 10,
+          stateHistory: [],
           agentType: record.agent,
           paneKey: 'live-tab:leaf-1',
           worktreeId: 'wt-1',
