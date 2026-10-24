@@ -16,7 +16,6 @@ afterEach(() => {
   }
 })
 
-/** An `opencode.db` under a fresh XDG data home, built by `schema`; returns that data home. */
 function dataHomeWith(schema: string): string {
   const root = mkdtempSync(join(tmpdir(), 'orca-opencode-stored-'))
   roots.push(root)
@@ -27,7 +26,6 @@ function dataHomeWith(schema: string): string {
   return root
 }
 
-/** The bounded reader in-process, standing in for its worker. */
 const readInProcess: OpenCodeTranscriptPageReader = async (args) => readOpenCodeTranscriptPage(args)
 
 function readFrom(dataHome: string) {

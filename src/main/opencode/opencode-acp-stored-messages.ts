@@ -6,13 +6,12 @@ import type { readOpenCodeTranscriptPageViaWorker } from '../ai-vault/session-sc
 
 export type OpenCodeTranscriptPageReader = typeof readOpenCodeTranscriptPageViaWorker
 
-/** The latest user messages of an OpenCode session, read from the database its pinned account
- *  selects, through the existing bounded reader: 2.x's `session_v2` rows first, else 1.x's. */
+/** Read the pinned account’s stored user messages through the bounded reader, preferring v2. */
 export function openCodeStoredUserMessagesReader(
   readPage?: OpenCodeTranscriptPageReader
 ): AcpStoredUserMessagesReader {
   return async ({ env, providerSessionId, signal }) => {
-    // The child's own home, which its account may name, not this process's.
+    // Use the child account’s home rather than this process’s.
     const home = (process.platform === 'win32' ? env.USERPROFILE : env.HOME) || homedir()
     const dbPath = resolveOpenCodeDatabasePath(env, home)
     if (!dbPath) {
