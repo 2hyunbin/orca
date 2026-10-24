@@ -159,6 +159,7 @@ describe('dropped path preparation through the shared copy queue', () => {
     const result = await localQueue(env, getStore)({ paths: [source], consumer: 'local-chat' })
     expect(result.failures).toEqual([])
     expect(getStore).toHaveBeenCalledTimes(1)
+    await expect(getStore.mock.results[0].value).resolves.toBe(store)
     expect(await readFile(result.paths[0], 'utf8')).toBe('image')
   })
 
