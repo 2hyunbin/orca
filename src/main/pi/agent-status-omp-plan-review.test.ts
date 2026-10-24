@@ -51,6 +51,8 @@ describe('OMP plan review forwarding', () => {
   it('posts the open review and answers it from the terminal input Orca writes', async () => {
     const harness = createAgentStatusExtensionHarness({ kind: 'omp' })
     const { ctx, resolvePlanReview, readInput } = createPlanReviewContext()
+    ctx.sessionManager = { getSessionId: () => 'session-1', getSessionFile: () => '/lead.jsonl' }
+    await harness.callHook('session_start', {}, ctx)
 
     await harness.callHook('plan_review_requested', PLAN_REVIEW_REQUEST, ctx)
     expect(readInput('x')).toBeUndefined()

@@ -106,7 +106,6 @@ describe('OMP model reporting', () => {
     expect(postedPayloads(harness.fetchMock)).toEqual([
       {
         hook_event_name: 'agent_start',
-        is_idle: false,
         session_id: 'omp-a',
         session_file: '/tmp/omp-a.jsonl',
         model: 'deepseek/deepseek-v4-pro',
@@ -114,13 +113,11 @@ describe('OMP model reporting', () => {
       },
       {
         hook_event_name: 'agent_start',
-        is_idle: false,
         session_id: 'omp-b',
         session_file: '/tmp/omp-b.jsonl'
       },
       {
         hook_event_name: 'agent_start',
-        is_idle: false,
         session_id: 'omp-b',
         session_file: '/tmp/omp-b.jsonl',
         model: 'minimax-cn/MiniMax-M3',

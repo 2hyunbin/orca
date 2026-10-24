@@ -76,7 +76,6 @@ describe('Pi session changes', () => {
         },
         {
           hook_event_name: 'session_start',
-          is_idle: true,
           session_id: 'B',
           session_file: '/sessions/B.jsonl'
         }
@@ -339,7 +338,6 @@ describe('Pi session changes', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(posts(harness).at(-1)).toEqual({
       hook_event_name: 'agent_end',
-      is_idle: true,
       session_id: 'A',
       session_file: '/sessions/A.jsonl'
     })

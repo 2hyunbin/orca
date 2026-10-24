@@ -230,7 +230,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-it('keeps new-source lead provenance/content and surviving-request relays on an old raw receiver', async () => {
+it('keeps new-source lead provenance/content and selected-lead modals on an old raw receiver', async () => {
   vi.useFakeTimers()
   const current = listenerState.createHookListenerState()
   const old = listenerState.createHookListenerState()
@@ -282,13 +282,6 @@ it('keeps new-source lead provenance/content and surviving-request relays on an 
   const root = ctx('lead')
   await h.callHook('session_start', {}, root)
   await h.callHook('agent_start', {}, root)
-  const child = h.registerSession(),
-    childCtx = ctx('child')
-  await child.callHook('session_start', {}, childCtx)
-  const input = { questions: [{ question: 'A source-owned question?', options: ['yes', 'no'] }] }
-  await child.callHook('tool_call', { toolName: 'ask_user_question', input }, childCtx)
-  await vi.advanceTimersByTimeAsync(0)
-  expect(oldPayload?.state).toBe('blocked')
   await h.callHook('before_agent_start', { prompt: 'A real prompt' }, root)
   await vi.advanceTimersByTimeAsync(0)
   expect(accepted).toMatchObject({
@@ -297,35 +290,29 @@ it('keeps new-source lead provenance/content and surviving-request relays on an 
     providerSession: { id: 'lead' }
   })
   expect(oldPayload).toMatchObject({ state: 'working', prompt: 'A real prompt' })
-  expect(accepted?.payload.state).toBe('blocked')
+  expect(accepted?.payload.state).toBe('working')
+  await h.callHook('ui_prompt_start', {}, root)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(oldPayload?.state).toBe('waiting')
   await h.callHook('message_end', { message: { role: 'assistant', content: 'A real reply' } }, root)
   await vi.advanceTimersByTimeAsync(0)
-  expect(oldPayload).toMatchObject({ state: 'working', lastAssistantMessage: 'A real reply' })
+  expect(oldPayload).toMatchObject({ state: 'waiting', lastAssistantMessage: 'A real reply' })
   expect(accepted?.payload).toMatchObject({
-    state: 'blocked',
-    lastAssistantMessage: 'A real reply',
-    interactivePrompt: JSON.stringify(input)
+    state: 'waiting',
+    lastAssistantMessage: 'A real reply'
   })
   await h.callHook('agent_end', {}, root)
   await vi.advanceTimersByTimeAsync(0)
-  expect(oldPayload?.state).toBe('done')
-  expect(accepted?.payload.state).toBe('blocked')
-  const other = h.registerSession(),
-    otherCtx = ctx('other')
-  await other.callHook('session_start', {}, otherCtx)
-  await other.callHook(
-    'tool_call',
-    { toolName: 'ask_user_question', input: { questions: [{ question: 'Other?' }] } },
-    otherCtx
-  )
-  await other.callHook('tool_execution_end', { toolName: 'ask_user_question' }, otherCtx)
+  expect(oldPayload?.state).toBe('waiting')
+  expect(accepted?.payload.state).toBe('waiting')
+  await h.callHook('ui_prompt_end', {}, root)
   await vi.advanceTimersByTimeAsync(0)
-  expect(accepted?.hookEventName).toBe('tool_call')
-  expect(oldPayload).toMatchObject({ state: 'blocked', interactivePrompt: JSON.stringify(input) })
-  await child.callHook('tool_execution_end', { toolName: 'ask_user_question' }, childCtx)
-  await vi.advanceTimersByTimeAsync(0)
+  expect(oldPayload).toMatchObject({ state: 'done', lastAssistantMessage: 'A real reply' })
+  expect(accepted).toMatchObject({
+    providerSession: { id: 'lead' },
+    payload: { state: 'done', lastAssistantMessage: 'A real reply' }
+  })
   expect(oldPayload?.interactivePrompt).toBeUndefined()
-  expect(accepted?.payload).toMatchObject({ state: 'done' })
   expect(accepted?.payload.toolInput).toBeUndefined()
 })
 

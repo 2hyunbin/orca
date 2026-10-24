@@ -108,7 +108,7 @@ describe.each([
         ).toBe('agent_end')
       )
       const payload = JSON.parse(String(harness.fetchMock.mock.lastCall?.[1]?.body)).payload
-      expect(payload).toEqual({ hook_event_name: 'agent_end', is_idle: true })
+      expect(payload).toEqual({ hook_event_name: 'agent_end' })
       expect(extractAgentProviderSession('omp', payload)).toBeNull()
     }
   )

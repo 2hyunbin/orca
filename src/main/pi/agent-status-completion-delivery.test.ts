@@ -134,15 +134,6 @@ describe('OMP completion delivery', () => {
       await harness.callHook('session_start', {}, ctx)
       await harness.callHook('agent_start', {}, ctx)
       await vi.advanceTimersByTimeAsync(0)
-      const child = harness.registerSession()
-      const childCtx = { sessionManager: { getSessionId: () => 'helper' } }
-      await child.callHook('session_start', {}, childCtx)
-      await child.callHook(
-        'tool_approval_requested',
-        { toolName: 'bash', approvalMode: 'yolo', reason: 'Captured request' },
-        childCtx
-      )
-      await vi.advanceTimersByTimeAsync(0)
       let acknowledge: ((value: { ok: boolean }) => void) | undefined
       let fail: ((error: Error) => void) | undefined
       if (delivery === 'scheduled retry') {
@@ -160,11 +151,6 @@ describe('OMP completion delivery', () => {
       await vi.advanceTimersByTimeAsync(0)
       id = 'B'
       await harness.callHook('session_switch', { reason: 'new' }, ctx)
-      await child.callHook(
-        'tool_approval_requested',
-        { toolName: 'read', approvalMode: 'yolo', reason: 'Later request' },
-        childCtx
-      )
       await harness.callHook('agent_start', {}, ctx)
       if (delivery === 'in-flight failure') {
         fail?.(new Error('late failure'))
@@ -184,16 +170,12 @@ describe('OMP completion delivery', () => {
       expect(completions).toHaveLength(delivery === 'in-flight success' ? 1 : 2)
       for (const completion of completions) {
         expect(completion).toMatchObject({
-          session_id: 'A',
-          tool_name: 'bash',
-          reason: 'Captured request'
+          session_id: 'A'
         })
       }
       expect(payloads.at(-1)).toMatchObject({
         hook_event_name: 'agent_start',
-        session_id: 'B',
-        tool_name: 'read',
-        reason: 'Later request'
+        session_id: 'B'
       })
       expect(vi.getTimerCount()).toBe(0)
     }
@@ -224,22 +206,13 @@ describe('OMP completion delivery', () => {
     expect(harness.fetchMock).toHaveBeenCalledTimes(4)
     expect(vi.getTimerCount()).toBe(0)
   })
-  it('carries an undelivered completion through model selection with its captured request', async () => {
+  it('carries an undelivered completion through model selection with its session metadata', async () => {
     const h = createAgentStatusExtensionHarness({ kind: 'omp' })
     const ctx = {
       sessionManager: { getSessionId: () => 'lead', getSessionFile: () => '/sessions/lead.jsonl' }
     }
     await h.callHook('session_start', {}, ctx)
     await h.callHook('agent_start', {}, ctx)
-    await vi.advanceTimersByTimeAsync(0)
-    const child = h.registerSession()
-    const childCtx = { sessionManager: { getSessionId: () => 'helper' } }
-    await child.callHook('session_start', {}, childCtx)
-    await child.callHook(
-      'tool_approval_requested',
-      { toolName: 'bash', approvalMode: 'yolo', reason: 'Captured' },
-      childCtx
-    )
     await vi.advanceTimersByTimeAsync(0)
     h.fetchMock.mockRejectedValueOnce(new Error('offline'))
     await h.callHook('agent_end', {}, ctx)
@@ -249,13 +222,11 @@ describe('OMP completion delivery', () => {
     expect(events(h.fetchMock).slice(-2)).toEqual([
       expect.objectContaining({
         hook_event_name: 'agent_end',
-        session_id: 'lead',
-        reason: 'Captured'
+        session_id: 'lead'
       }),
       expect.objectContaining({
         hook_event_name: 'agent_end',
         session_id: 'lead',
-        reason: 'Captured',
         model: 'test/new-model'
       })
     ])
@@ -264,7 +235,7 @@ describe('OMP completion delivery', () => {
     expect(h.fetchMock).toHaveBeenCalledTimes(count)
   })
 
-  it('retries a quiet old-session boundary before publishing successor attention', async () => {
+  it('retries a quiet old-session boundary before publishing successor work', async () => {
     const h = createAgentStatusExtensionHarness({
       kind: 'pi',
       argv: ['node', '/usr/bin/pi'],
@@ -276,14 +247,6 @@ describe('OMP completion delivery', () => {
     const old = ctx('A')
     await h.callHook('session_start', { reason: 'startup' }, old)
     await h.callHook('agent_start', {}, old)
-    const child = h.registerSession()
-    const childCtx = ctx('child')
-    await child.callHook('session_start', {}, childCtx)
-    await child.callHook(
-      'tool_call',
-      { toolName: 'ask_user_question', input: { questions: [{ question: 'Survive switch?' }] } },
-      childCtx
-    )
     await vi.advanceTimersByTimeAsync(0)
     h.fetchMock.mockRejectedValueOnce(new Error('offline'))
     await h.replacePiSession('new', '/sessions/B.jsonl')
@@ -315,8 +278,7 @@ describe('OMP completion delivery', () => {
     }
     expect(sent.at(-1)).toMatchObject({
       hook_event_name: 'agent_start',
-      session_id: 'B',
-      tool_name: 'ask_user_question'
+      session_id: 'B'
     })
     expect(vi.getTimerCount()).toBe(0)
   })

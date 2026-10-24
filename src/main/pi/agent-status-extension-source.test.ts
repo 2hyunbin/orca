@@ -68,7 +68,6 @@ describe('getPiAgentStatusExtensionSource', () => {
     expect(harness.fetchMock).toHaveBeenCalledTimes(1)
     expect(JSON.parse(String(harness.fetchMock.mock.calls[0]?.[1]?.body)).payload).toEqual({
       hook_event_name: 'session_start',
-      is_idle: true,
       session_id: 'pi-session-1',
       session_file: '/tmp/pi-session-1.jsonl'
     })
@@ -79,7 +78,6 @@ describe('getPiAgentStatusExtensionSource', () => {
     const body = JSON.parse(String(harness.fetchMock.mock.calls[1]?.[1]?.body))
     expect(body.payload).toEqual({
       hook_event_name: 'before_agent_start',
-      is_idle: true,
       prompt: 'resume this task',
       session_id: 'pi-session-1',
       session_file: '/tmp/pi-session-1.jsonl'
@@ -105,8 +103,7 @@ describe('getPiAgentStatusExtensionSource', () => {
     )
 
     expect(JSON.parse(String(harness.fetchMock.mock.calls[0]?.[1]?.body)).payload).toEqual({
-      hook_event_name: 'session_start',
-      is_idle: true
+      hook_event_name: 'session_start'
     })
 
     sessionFileExists = true
@@ -115,7 +112,6 @@ describe('getPiAgentStatusExtensionSource', () => {
     await vi.waitFor(() => expect(harness.fetchMock).toHaveBeenCalledTimes(2))
     expect(JSON.parse(String(harness.fetchMock.mock.calls[1]?.[1]?.body)).payload).toEqual({
       hook_event_name: 'agent_end',
-      is_idle: true,
       session_id: 'pi-session-1',
       session_file: '/tmp/pi-session-1.jsonl'
     })
@@ -142,7 +138,6 @@ describe('getPiAgentStatusExtensionSource', () => {
     await harness.callHook('agent_start')
     expect(JSON.parse(String(harness.fetchMock.mock.calls[0]?.[1]?.body)).payload).toEqual({
       hook_event_name: 'agent_start',
-      is_idle: false,
       session_id: 'pi-reloaded',
       session_file: '/tmp/pi-reloaded.jsonl'
     })
@@ -192,7 +187,7 @@ describe('getPiAgentStatusExtensionSource', () => {
         worktreeId: 'tree-1',
         env: 'env-1',
         version: '1.2.3',
-        payload: { hook_event_name: 'agent_start', is_idle: false }
+        payload: { hook_event_name: 'agent_start' }
       })
     )
   })
@@ -218,18 +213,16 @@ describe('getPiAgentStatusExtensionSource', () => {
     ).toEqual([
       {
         hook_event_name: 'agent_start',
-        is_idle: false,
         session_id: 'omp-session-8',
         session_file: '/tmp/s'
       },
       {
         hook_event_name: 'before_agent_start',
-        is_idle: false,
         prompt: 'hi',
         session_id: 'omp-session-9',
         session_file: '/tmp/s'
       },
-      { hook_event_name: 'agent_end', is_idle: true }
+      { hook_event_name: 'agent_end' }
     ])
   })
 
@@ -259,7 +252,6 @@ describe('getPiAgentStatusExtensionSource', () => {
     expect(payloads).toEqual([
       {
         hook_event_name: 'agent_start',
-        is_idle: false,
         session_id: 'root-session',
         session_file: '/tmp/root.jsonl'
       }
@@ -303,7 +295,6 @@ describe('getPiAgentStatusExtensionSource', () => {
       const body = JSON.parse(String(harness.fetchMock.mock.calls[1]?.[1]?.body))
       expect(body.payload).toEqual({
         hook_event_name: 'message_end',
-        is_idle: false,
         role: 'assistant',
         text: 'done',
         session_id: 'omp-session-9',

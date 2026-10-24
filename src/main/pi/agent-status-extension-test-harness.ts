@@ -122,7 +122,6 @@ export function createAgentStatusExtensionHarness(args: {
   // Pi before 0.84 handed every registration the one shared bus.
   sharedEventBus?: boolean
   titlebar?: 'first' | 'last' | 'only'
-  onMapEntry?: () => void
 }): AgentStatusExtensionHarness {
   const fetchMock = vi.fn(
     args.fetchImpl ??
@@ -221,7 +220,6 @@ export function createAgentStatusExtensionHarness(args: {
     AbortController,
     setInterval,
     clearInterval,
-    Map: sessionDispatch.createCountingMap(args.onMapEntry),
     setTimeout,
     clearTimeout
   }

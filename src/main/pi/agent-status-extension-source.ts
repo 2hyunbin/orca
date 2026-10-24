@@ -207,15 +207,10 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     ...(kind === 'pi' ? ['let piUiState = { depth: 0, turnInFlight: false }'] : []),
     '',
     // `final` marks the last post of a session that is being closed.
-    `function post(hookEventName: string, extra: Record<string, unknown> = {}, final = false${kind === 'prime-agent' ? '' : ', relayed = false'}): void {`,
+    'function post(hookEventName: string, extra: Record<string, unknown> = {}, final = false): void {',
     ...(kind === 'prime-agent'
       ? []
-      : [
-          '  if (authority === "retired") return',
-          '  if (!relayed && authority !== "legacy" && postAttention(hookEventName, extra)) return',
-          '  if (authority !== "main" && authority !== "legacy") return',
-          '  if (authority === "main" && extra.session_boundary !== true) extra = attentionSnapshot(extra)'
-        ]),
+      : ['  if (authority !== "main" && authority !== "legacy") return']),
     '  const ompRuntime = isOmpRuntime()',
     // Why: the body is built at delivery, so the session is pinned here, where the event happened.
     '  const metadata = getPostSessionMetadata(ompRuntime)',

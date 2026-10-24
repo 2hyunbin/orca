@@ -87,7 +87,7 @@ describe('declared session authority', () => {
     expect(saved).toMatchObject({ id: 'lead', transcriptPath: '/sessions/lead.jsonl' })
   })
 
-  it('relays early child attention without sharing model, prompt, roster or callbacks', async () => {
+  it('fences child attention and preserves selected model, roster, answers and callback retirement', async () => {
     const harness = createAgentStatusExtensionHarness({ kind: 'omp' })
     const helper = harness.registerSession()
     const child = session('helper', 'sub')
@@ -105,48 +105,28 @@ describe('declared session authority', () => {
       { reviewId: 'review', planContent: 'plan', options: [] },
       child
     )
-    const abandoned = harness.registerSession()
-    const stopAbandoned = vi.fn()
-    const abortedContext = { ...child, ui: { onTerminalInput: () => stopAbandoned } }
-    await abandoned.callHook(
-      'plan_review_requested',
-      { reviewId: 'abandoned', options: [] },
-      abortedContext
-    )
-    await abandoned.callHook('session_shutdown', {}, abortedContext)
-    expect(stopAbandoned).toHaveBeenCalledOnce()
     await helper.callHook('session_start', {}, child)
     expect(harness.fetchMock).not.toHaveBeenCalled()
     const root = session('lead', 'main')
     root.model = { provider: 'lead', id: 'model' }
     await harness.callHook('session_start', {}, root)
+    await harness.callHook('before_agent_start', { prompt: 'lead prompt' }, root)
     await vi.waitFor(() => expect(harness.fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1))
     const payloads = (): Record<string, unknown>[] =>
       harness.fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).payload)
     expect(
       payloads().every((payload) => payload.session_id === 'lead' && payload.model === 'lead/model')
     ).toBe(true)
-    expect(payloads().at(-1)).toMatchObject({
-      hook_event_name: 'plan_review_requested',
-      review_id: 'review'
-    })
-    expect(payloads().some((payload) => payload.review_id === 'abandoned')).toBe(false)
-    await helper.callHook('plan_review_resolved', { reviewId: 'review' }, child)
-    expect(stopInput).toHaveBeenCalledOnce()
-    await vi.waitFor(() =>
-      expect(payloads().at(-1)).toMatchObject({
-        hook_event_name: 'tool_approval_requested',
-        tool_name: 'bash'
-      })
-    )
+    expect(child.ui.onTerminalInput).not.toHaveBeenCalled()
     await helper.callHook('tool_call', { toolName: 'ask', input: { question: 'choose' } }, child)
-    await vi.waitFor(() => expect(payloads().at(-1)?.tool_name).toBe('ask'))
-    // Advisor tools have a sub identity on the selected session's own runner.
-    await harness.callHook(
-      'tool_execution_end',
-      { toolName: 'ask' },
-      { ...root, agent: { kind: 'sub' } }
-    )
+    await helper.callHook('plan_review_resolved', { reviewId: 'review' }, child)
+    expect(stopInput).not.toHaveBeenCalled()
+    expect(payloads().every((payload) => !payload.tool_name && !payload.review_id)).toBe(true)
+    const stopLeadInput = vi.fn()
+    root.resolvePlanReview = vi.fn(() => true)
+    root.ui = { onTerminalInput: vi.fn(() => stopLeadInput) }
+    await harness.callHook('plan_review_requested', { reviewId: 'lead-review', options: [] }, root)
+    expect(root.ui.onTerminalInput).toHaveBeenCalledOnce()
     await harness.callHook('before_agent_start', { prompt: 'lead prompt' }, root)
     await harness.callHook('agent_start', {}, root)
     harness.emitPiEvent('task:subagent:lifecycle', { id: 'task', status: 'started' })
@@ -163,6 +143,8 @@ describe('declared session authority', () => {
     const previous = { ...harness.handlers }
     harness.reload()
     await harness.callHook('session_start', { reason: 'reload' }, root)
+    expect(stopLeadInput).toHaveBeenCalledOnce()
+    expect(root.resolvePlanReview).not.toHaveBeenCalled()
     await harness.callHook('agent_start', {}, root)
     await vi.waitFor(() => expect(payloads().at(-1)?.hook_event_name).toBe('agent_start'))
     const count = harness.fetchMock.mock.calls.length

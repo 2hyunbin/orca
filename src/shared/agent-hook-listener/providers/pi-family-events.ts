@@ -7,7 +7,6 @@ import { clearPaneTurnCacheState, type HookListenerState } from '../listener-sta
 import { resolvePrompt, resolveToolState } from '../prompt-fields'
 import { extractToolFields, isNewTurnEvent } from '../provider-event-routing'
 import { readString } from '../tool-input-preview'
-import { clearActiveToolFieldsUpdate } from '../interactive-tool'
 import { parseOmpPlanReviewPrompt } from '../../omp-plan-review-prompt'
 
 /** Maps a Pi-family hook event (Pi, OMP, Prime) onto a pane status: lifecycle
@@ -22,16 +21,11 @@ export function normalizePiCompatibleEvent(
   paneKey: string,
   hookPayload: Record<string, unknown>
 ): ParsedAgentStatusPayload | null {
-  const complete =
-    agentType !== 'prime-agent' &&
-    typeof hookPayload.is_idle === 'boolean' &&
-    hookPayload.session_boundary !== true
-  const metadataEvent = eventName === 'model_select' || eventName === 'subagents_update'
   if (agentType !== 'omp' && eventName === 'session_start') {
     // Why: Pi's session_start fires on TUI open/resume; discard stale turn details, no working row before user activity.
     clearPaneTurnCacheState(state, paneKey)
     // Why: a custom modal can switch sessions before its promise resolves.
-    if (!complete && (agentType !== 'pi' || hookPayload.ui_prompt_active !== true)) {
+    if (agentType !== 'pi' || hookPayload.ui_prompt_active !== true) {
       return null
     }
   }
@@ -42,7 +36,7 @@ export function normalizePiCompatibleEvent(
     hookPayload.model_switch_command === 'orca-model' ? 'orca-model' : undefined
   // Why: every post restates the extension's whole live roster, so an absent list means none.
   const subagents = hookPayload.subagents
-  if (metadataEvent && !complete) {
+  if (eventName === 'model_select' || eventName === 'subagents_update') {
     // Why: a model switch or a child ending happens between lead events, so it rides on the
     // pane's last visible row instead of inventing a state. Before any row exists there is
     // nothing to describe, and a providerSessionOnly placeholder is a hidden resume record.
@@ -102,69 +96,24 @@ export function normalizePiCompatibleEvent(
     stateName = hookPayload.is_idle === true ? 'done' : 'working'
   }
 
-  const attentionEvent = !complete
-    ? undefined
-    : agentType === 'pi' && hookPayload.ui_prompt_active === true
-      ? 'ui_prompt_start'
-      : agentType === 'omp' && Object.hasOwn(hookPayload, 'approval_mode')
-        ? 'tool_approval_requested'
-        : agentType === 'omp' && readString(hookPayload, 'review_id')
-          ? 'plan_review_requested'
-          : (agentType === 'omp' ? toolName === 'ask' : isAskUserQuestionTool(toolName)) &&
-              Object.hasOwn(hookPayload, 'tool_input')
-            ? 'tool_call'
-            : undefined
-  if (complete) {
-    const initialization = metadataEvent || eventName === 'session_start'
-    const previous = state.lastStatusByPaneKey.get(paneKey)
-    if (
-      !attentionEvent &&
-      initialization &&
-      (!previous || previous.providerSessionOnly || previous.payload.agentType !== agentType)
-    ) {
-      return null
-    }
-    stateName = attentionEvent
-      ? attentionEvent === 'ui_prompt_start'
-        ? 'waiting'
-        : 'blocked'
-      : initialization ||
-          isOmpApprovalResolution ||
-          (eventName === 'tool_execution_end' &&
-            (agentType === 'omp' ? toolName === 'ask' : isAskUserQuestionTool(toolName)))
-        ? hookPayload.is_idle
-          ? 'done'
-          : 'working'
-        : stateName
-  }
-
   if (
     !stateName ||
-    (!complete &&
-      ((stateName === 'working' && holdsOmpApproval(state, agentType, eventName, paneKey)) ||
-        (eventName === 'agent_end' && holdsOmpPlanReview(state, agentType, hookPayload, paneKey))))
+    (stateName === 'working' && holdsOmpApproval(state, agentType, eventName, paneKey)) ||
+    (eventName === 'agent_end' && holdsOmpPlanReview(state, agentType, hookPayload, paneKey))
   ) {
     return null
   }
 
-  const metadata = metadataEvent ? state.lastStatusByPaneKey.get(paneKey)?.payload : undefined
   const snapshot = resolveToolState(
     state,
     paneKey,
-    {
-      ...metadata,
-      ...(complete ? clearActiveToolFieldsUpdate() : {}),
-      ...extractToolFields(agentType, eventName, hookPayload),
-      ...(attentionEvent ? extractToolFields(agentType, attentionEvent, hookPayload) : {}),
-      ...(complete ? { hasToolInputField: true } : {})
-    },
+    extractToolFields(agentType, eventName, hookPayload),
     { resetOnNewTurn: isNewTurnEvent(agentType, eventName) }
   )
 
   return normalizeAgentStatusPayload({
-    ...metadata,
     state: stateName,
-    prompt: resolvePrompt(state, paneKey, promptText || metadata?.prompt || '', {
+    prompt: resolvePrompt(state, paneKey, promptText, {
       resetOnNewTurn: isNewTurnEvent(agentType, eventName)
     }),
     agentType,
