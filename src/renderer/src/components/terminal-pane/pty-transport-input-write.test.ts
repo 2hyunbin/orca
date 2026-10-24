@@ -117,6 +117,34 @@ describe('createIpcPtyTransport', () => {
     expect(delivered).toEqual(['first-', 'second-', 'third'])
   })
 
+  it('delivers keys typed during a slow SSH spawn in order once the PTY binds', async () => {
+    const spawn = createDeferred<{ id: string }>()
+    vi.mocked(window.api.pty.spawn).mockReturnValue(spawn.promise as never)
+    const { createIpcPtyTransport } = await import('./pty-transport')
+    const transport = createIpcPtyTransport({
+      connectionId: 'ssh-1',
+      bufferInputUntilConnect: true
+    })
+
+    expect(transport.sendInput('ec', 'driving')).toBe(true)
+    const connecting = transport.connect({ url: '', callbacks: {} })
+    expect(transport.sendInput('ho hi\r', 'driving')).toBe(true)
+    expect(window.api.pty.write).not.toHaveBeenCalled()
+
+    spawn.resolve({ id: 'pty-1' })
+    await connecting
+    await flushAsyncTicks()
+    expect(vi.mocked(window.api.pty.write).mock.calls).toEqual([
+      ['pty-1', 'ec', 'driving'],
+      ['pty-1', 'ho hi\r', 'driving']
+    ])
+
+    // Live input still writes straight through.
+    expect(transport.sendInput('next', 'driving')).toBe(true)
+    await flushAsyncTicks()
+    expect(window.api.pty.write).toHaveBeenLastCalledWith('pty-1', 'next', 'driving')
+  })
+
   it('flushes remount-handoff input before newly typed input without recapturing the seed', async () => {
     const spawn = createDeferred<{ id: string }>()
     vi.mocked(window.api.pty.spawn).mockReturnValue(spawn.promise as never)

@@ -107,6 +107,8 @@ export function showPaneStartFailure(
   session: ConnectPanePtySession,
   reason: string | undefined
 ): void {
+  // Why: keys typed while main was starting it have no terminal to go to.
+  session.transport.abandonPreconnectInput?.()
   if (!session.disposed) {
     session.deps.onPtyErrorRef?.current?.(
       session.pane.id,

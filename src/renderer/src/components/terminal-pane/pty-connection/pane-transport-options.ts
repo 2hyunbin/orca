@@ -10,9 +10,8 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
     terminalKittyKeyboardProtocol:
       session.pane.terminal.options.vtExtensions?.kittyKeyboard === true,
     cwd: session.deps.cwd,
-    ...(session.deps.cwdPromise || session.deps.preconnectInput?.length
-      ? { bufferInputUntilConnect: true }
-      : {}),
+    // Why: a first spawn can wait seconds on the host (cold WSL, agent launch prep); keys typed meanwhile must reach the PTY.
+    bufferInputUntilConnect: true,
     ...(session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }
       : {}),

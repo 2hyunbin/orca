@@ -52,6 +52,8 @@ export function installRunDeferredConnect(session: ConnectPanePtySession): void 
       }
       if (!wakeWaitStarted) {
         wakeWaitStarted = true
+        // Why: keys typed into a slept pane must not run in the shell a later wake reattaches.
+        session.transport.abandonPreconnectInput?.()
         recordPtyConnectDiagnostic(
           `pane=${session.pane.id} tab=${session.deps.tabId} -> WAIT FOR WAKE (deliberate sleep)`
         )

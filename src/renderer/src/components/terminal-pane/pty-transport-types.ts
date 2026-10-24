@@ -288,7 +288,7 @@ export type PtyTransport = {
 
 export type IpcPtyTransportOptions = {
   cwd?: string
-  /** Retain bounded user input while a visible split waits to start its PTY. */
+  /** Retain bounded user input until the pane's first PTY connection binds. */
   bufferInputUntilConnect?: boolean
   /** Seed a fresh transport with input handed off from a remounted deferred split. */
   preconnectInput?: readonly PtyPreconnectInputEntry[]
