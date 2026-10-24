@@ -22,6 +22,7 @@ import {
   readStructuredAgentSessionOlderPage
 } from './structured-agent-session-older-page-read'
 import { startStructuredAgentSessionReadTransport } from './structured-agent-session-read-transport'
+import { teardownStructuredReadOwner } from './structured-agent-session-read-teardown'
 import { createStructuredAgentSessionPRLinkObserver } from './structured-agent-session-pr-link-observer'
 import type {
   StructuredAgentSessionReadSnapshot,
@@ -215,10 +216,13 @@ function createReadOwner(
     })
     captureActiveHistoryReadGuard = transport.captureHistoryReadGuard
     stopActiveRun = () => {
-      captureActiveHistoryReadGuard = () => retiredHistoryRead
-      transport.dispose()
       stopActiveRun = null
-      markStale()
+      captureActiveHistoryReadGuard = () => retiredHistoryRead
+      try {
+        transport.dispose()
+      } finally {
+        markStale()
+      }
     }
   }
 
@@ -253,11 +257,7 @@ function createReadOwner(
         }
       }
     },
-    dispose: () => {
-      activations.clear()
-      listeners.clear()
-      stopActiveRun?.()
-    },
+    dispose: () => teardownStructuredReadOwner(activations, listeners, () => stopActiveRun?.()),
     getSnapshot: () => snapshot,
     loadOlder: () => {
       // Concurrent callers (scroll-to-top, the button, a rail jump) share one page

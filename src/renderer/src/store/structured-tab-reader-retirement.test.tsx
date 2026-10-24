@@ -21,7 +21,7 @@ import {
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { isTabClosePending } from '@/runtime/layout-owner-pending-tabs'
 
-const mocks = vi.hoisted(() => ({ main: true, refuse: false, subscribe: vi.fn() }))
+const mocks = vi.hoisted(() => ({ main: true, refuse: false, subscribe: vi.fn(), call: vi.fn() }))
 vi.mock('../../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
     return mocks.main
@@ -48,7 +48,7 @@ vi.mock('@/runtime/runtime-layout-client', async (original) =>
   ).runtimeLayoutClientWithTestFrames(await original())
 )
 vi.mock('@/runtime/structured-agent-session-client', () => ({
-  callStructuredAgentSession: () => Promise.resolve({ ok: true, page: history }),
+  callStructuredAgentSession: mocks.call,
   subscribeStructuredAgentSession: mocks.subscribe
 }))
 
@@ -95,6 +95,7 @@ function storeWithTab() {
 
 let main: TabsDrawnFromMain | undefined
 beforeEach(() => {
+  mocks.call.mockReset().mockResolvedValue({ ok: true, page: history })
   mocks.refuse = false
   mocks.main = true
   mocks.subscribe.mockReset().mockResolvedValue({ unsubscribe: vi.fn() })
@@ -226,4 +227,439 @@ describe('reader lifetime follows committed structured tab removal', () => {
       expect(dispose).toHaveBeenCalledTimes(1)
     }
   )
+})
+
+it.each([false, true])(
+  'round2: same-stack retained pane stays live (visibility replay %s)',
+  async (replay) => {
+    const React = await import('react')
+    const { render } = await import('@testing-library/react')
+    const store = storeWithTab()
+    let visible = true
+    let observed: ReturnType<typeof useStructuredAgentSessionRead> | undefined
+    const Pane = React.memo(function Pane({ visible }: { visible: boolean }) {
+      observed = useStructuredAgentSessionRead({
+        sessionId: tab.entityId,
+        target,
+        isVisible: visible
+      })
+      return null
+    })
+    function Surface() {
+      const state = React.useSyncExternalStore(store.subscribe, store.getState, store.getState)
+      return state.unifiedTabsByWorktree.wt?.some((candidate) => candidate.id === tab.id)
+        ? React.createElement(Pane, { key: tab.id, visible })
+        : null
+    }
+    const view = render(React.createElement(Surface))
+    await waitFor(() => expect(observed?.state.status).toBe('ready'))
+    const old = getStructuredAgentSessionReadOwner(tab.entityId, target)
+    const dispose = vi.spyOn(old, 'dispose')
+    const attention = vi.fn()
+    const { subscribeStructuredAttentionViews } =
+      await import('@/attention/agent-subject-read-actions')
+    const stopAttention = subscribeStructuredAttentionViews(attention)
+    const calls = mocks.subscribe.mock.calls.length
+    act(() => {
+      store.setState({ unifiedTabsByWorktree: {} })
+      store.setState({ unifiedTabsByWorktree: { wt: [tab] } })
+    })
+    expect(store.getState().unifiedTabsByWorktree.wt).toEqual([tab])
+    expect(dispose).toHaveBeenCalledTimes(1)
+    if (replay) {
+      visible = false
+      view.rerender(React.createElement(Surface))
+      visible = true
+      view.rerender(React.createElement(Surface))
+    }
+    const fresh = getStructuredAgentSessionReadOwner(tab.entityId, target)
+    expect(fresh).not.toBe(old)
+    act(() =>
+      fresh.publishCreated({
+        ...history,
+        items: [
+          {
+            itemId: 'reopened-reply',
+            revision: 1,
+            sequence: 2,
+            observedAt: 2,
+            body: { kind: 'message', role: 'assistant', blocks: [] }
+          }
+        ]
+      })
+    )
+    console.log(
+      'ROUND2_SAME_STACK_REOPEN',
+      JSON.stringify({
+        oldRetired: old.lifetime.retired,
+        oldDisposals: dispose.mock.calls.length,
+        subscribeBefore: calls,
+        subscribeAfter: mocks.subscribe.mock.calls.length,
+        freshItems: fresh.getSnapshot().state.items.map((item) => item.itemId),
+        renderedItems: observed?.state.items.map((item) => item.itemId)
+      })
+    )
+    expect(observed?.state.items.map((item) => item.itemId)).toContain('reopened-reply')
+    expect(observed?.loadOlder).toBe(fresh.loadOlder)
+    expect(await observed?.loadOlder()).toBe('exhausted')
+    await waitFor(() => expect(mocks.subscribe.mock.calls.length).toBeGreaterThan(calls))
+    expect(attention).toHaveBeenCalledWith(expect.objectContaining({ sessionId: tab.entityId }))
+    const before = observed?.state
+    act(() => old.publishCreated({ ...history, items: [] }))
+    expect(observed?.state).toBe(before)
+    expect(old.lifetime.retired).toBe(true)
+    expect(await old.loadOlder()).toBe('superseded')
+    act(() =>
+      mocks.subscribe.mock.calls.at(-1)?.[2]({
+        type: 'snapshot',
+        sessionId: tab.entityId,
+        page: {
+          ...history,
+          items: [
+            {
+              itemId: 'q-live',
+              revision: 1,
+              sequence: 3,
+              observedAt: 3,
+              body: { kind: 'message', role: 'assistant', blocks: [] }
+            }
+          ]
+        }
+      })
+    )
+    expect(observed?.state.items.map((item) => item.itemId)).toContain('q-live')
+    stopAttention()
+    view.unmount()
+    expect(findStructuredAgentSessionReadOwner(tab.entityId, target)).toBeUndefined()
+  }
+)
+
+it('does not acquire during abandoned render and genuine committed close', async () => {
+  const React = await import('react')
+  const { render } = await import('@testing-library/react')
+  const store = storeWithTab()
+  let beforeCommit: ReturnType<typeof useStructuredAgentSessionRead> | undefined
+  function Pending(): never {
+    beforeCommit = useStructuredAgentSessionRead({ sessionId: 'abandoned', target })
+    throw new Promise(() => {})
+  }
+  const pending = render(
+    React.createElement(React.Suspense, { fallback: null }, React.createElement(Pending))
+  )
+  expect(findStructuredAgentSessionReadOwner('abandoned', target)).toBeUndefined()
+  expect(await beforeCommit?.loadOlder()).toBe('superseded')
+  expect(mocks.subscribe).not.toHaveBeenCalled()
+  pending.unmount()
+  const Pane = React.memo(function Pane() {
+    useStructuredAgentSessionRead({ sessionId: tab.entityId, target })
+    return null
+  })
+  function Surface() {
+    const state = React.useSyncExternalStore(store.subscribe, store.getState, store.getState)
+    return state.unifiedTabsByWorktree.wt?.length ? React.createElement(Pane) : null
+  }
+  const view = render(React.createElement(Surface))
+  await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledTimes(1))
+  act(() => store.setState({ unifiedTabsByWorktree: {} }))
+  await act(async () => {})
+  expect(findStructuredAgentSessionReadOwner(tab.entityId, target)).toBeUndefined()
+  expect(mocks.subscribe).toHaveBeenCalledTimes(1)
+  view.unmount()
+})
+
+it.each([10, 100])(
+  'keeps terminal notification and ownership work local among %s keys',
+  async (count) => {
+    const { retireStructuredAgentSessionReadOwner } =
+      await import('../components/native-chat/structured-agent-session-read-owner')
+    const owners = Array.from({ length: count }, (_, i) =>
+      getStructuredAgentSessionReadOwner(`key-${i}`, target)
+    )
+    const visits = owners.map(() => vi.fn())
+    const releases = owners.map((owner, i) => owner.subscribe(visits[i]))
+    const closes = owners.map((owner) => vi.spyOn(owner, 'dispose'))
+    const snapshots = owners.map((owner) => vi.spyOn(owner, 'getSnapshot'))
+    const view = renderHook(() => [
+      useStructuredAgentSessionRead({ sessionId: 'key-0', target }),
+      useStructuredAgentSessionRead({ sessionId: 'key-0', target })
+    ])
+    await waitFor(() => expect(view.result.current[0].state.status).toBe('ready'))
+    expect(mocks.subscribe).toHaveBeenCalledTimes(1)
+    visits.forEach((visit) => visit.mockClear())
+    snapshots.forEach((snapshot) => snapshot.mockClear())
+    act(() => retireStructuredAgentSessionReadOwner('key-0', target))
+    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledTimes(2))
+    expect(view.result.current[0].loadOlder).not.toBe(owners[0].loadOlder)
+    expect(view.result.current[0].loadOlder).toBe(view.result.current[1].loadOlder)
+    expect(snapshots.slice(1).map((snapshot) => snapshot.mock.calls.length)).toEqual(
+      Array(count - 1).fill(0)
+    )
+    expect(snapshots[0].mock.calls.length).toBeLessThan(30)
+    expect(visits.map((visit) => visit.mock.calls.length)).toEqual([1, ...Array(count - 1).fill(0)])
+    expect(closes.map((close) => close.mock.calls.length)).toEqual([1, ...Array(count - 1).fill(0)])
+    const q = findStructuredAgentSessionReadOwner('key-0', target)
+    expect(q).toBeDefined()
+    expect(q).not.toBe(owners[0])
+    for (let i = 1; i < count; i++) {
+      expect(findStructuredAgentSessionReadOwner(`key-${i}`, target)).toBe(owners[i])
+    }
+    releases.forEach((release) => release())
+    view.unmount()
+    expect(findStructuredAgentSessionReadOwner('key-0', target)).toBeUndefined()
+  }
+)
+
+describe('key-resolved committed consumer binding', () => {
+  afterEach(() => {
+    cleanup()
+    resetStructuredAgentSessionReadOwnersForTests()
+    vi.restoreAllMocks()
+  })
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.call.mockResolvedValue({ ok: true, page: history })
+    mocks.subscribe.mockResolvedValue({ unsubscribe: vi.fn() })
+  })
+
+  it('keeps hidden StrictMode consumers coherent through equal-empty replacement and host/key changes', async () => {
+    const React = await import('react')
+    const {
+      getStructuredAgentSessionReadOwner,
+      retireStructuredAgentSessionReadOwner,
+      findStructuredAgentSessionReadOwner
+    } = await import('../components/native-chat/structured-agent-session-read-owner')
+    const registry =
+      await import('../components/native-chat/structured-agent-session-read-owner-registry')
+    const acquire = vi.spyOn(registry, 'getOrCreateStructuredReadOwner')
+    const remote = { kind: 'environment', environmentId: 'twin' } as const
+    const twin = getStructuredAgentSessionReadOwner('binding', remote)
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.StrictMode, null, children)
+    const initialProps: {
+      visible: boolean
+      sessionId: string
+      target: typeof target | typeof remote
+    } = { visible: false, sessionId: 'binding', target: target }
+    const view = renderHook(
+      ({ visible, sessionId, target }) => [
+        useStructuredAgentSessionRead({ sessionId, target, isVisible: visible }),
+        useStructuredAgentSessionRead({ sessionId, target, isVisible: visible })
+      ],
+      {
+        wrapper,
+        initialProps
+      }
+    )
+    const old = getStructuredAgentSessionReadOwner('binding', target)
+    expect(
+      acquire.mock.results
+        .filter((_, i) => acquire.mock.calls[i][0] === 'local:binding')
+        .every((result) => result.value === old)
+    ).toBe(true)
+    expect(mocks.subscribe).not.toHaveBeenCalled()
+    const firstState = view.result.current[0].state
+    act(() => retireStructuredAgentSessionReadOwner('binding', target))
+    const fresh = getStructuredAgentSessionReadOwner('binding', target)
+    expect(fresh).not.toBe(old)
+    expect(view.result.current[0].state).toBe(firstState)
+    expect(view.result.current[0].loadOlder).toBe(fresh.loadOlder)
+    expect(view.result.current[1].loadOlder).toBe(fresh.loadOlder)
+    expect(findStructuredAgentSessionReadOwner('binding', remote)).toBe(twin)
+    const qTail = {
+      ...history,
+      direction: 'tail' as const,
+      items: [
+        {
+          itemId: 'q-tail',
+          revision: 1,
+          sequence: 2,
+          observedAt: 2,
+          body: {
+            kind: 'message' as const,
+            role: 'assistant' as const,
+            blocks: [{ type: 'text' as const, text: 'q-tail' }]
+          }
+        }
+      ],
+      window: {
+        oldest: { epoch: history.epoch, sequence: 2 },
+        newest: { epoch: history.epoch, sequence: 2 },
+        nextCursor: { epoch: history.epoch, sequence: 2 }
+      },
+      hasOlder: true,
+      hasNewer: false
+    }
+    act(() => fresh.publishCreated(qTail))
+    mocks.call.mockImplementation((_target, method, params) =>
+      Promise.resolve(
+        method === 'agentSession.history' && params.direction === 'before'
+          ? {
+              ok: true,
+              page: {
+                ...history,
+                direction: 'before' as const,
+                items: [
+                  {
+                    itemId: 'q-older',
+                    revision: 1,
+                    sequence: 1,
+                    observedAt: 1,
+                    body: {
+                      kind: 'message' as const,
+                      role: 'assistant' as const,
+                      blocks: [{ type: 'text' as const, text: 'q-older' }]
+                    }
+                  }
+                ],
+                window: {
+                  oldest: { epoch: history.epoch, sequence: 1 },
+                  newest: { epoch: history.epoch, sequence: 1 },
+                  nextCursor: { epoch: history.epoch, sequence: 1 }
+                },
+                hasOlder: false,
+                hasNewer: true
+              }
+            }
+          : { ok: true, requests: [] }
+      )
+    )
+    view.rerender({ visible: true, sessionId: 'binding', target: target })
+    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledTimes(1))
+    await act(async () => expect(await view.result.current[0].loadOlder()).toBe('applied'))
+    expect(view.result.current[1].state.items.map((item) => item.itemId)).toEqual([
+      'q-older',
+      'q-tail'
+    ])
+    expect(await old.loadOlder()).toBe('superseded')
+    view.rerender({ visible: false, sessionId: 'binding', target: target })
+    expect(findStructuredAgentSessionReadOwner('binding', target)).toBe(fresh)
+    expect(fresh.lifetime.retired).toBe(false)
+    view.rerender({ visible: true, sessionId: 'other', target: remote })
+    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledTimes(2))
+    expect(findStructuredAgentSessionReadOwner('binding', target)).toBeUndefined()
+    view.unmount()
+    expect(findStructuredAgentSessionReadOwner('other', remote)).toBeUndefined()
+    expect(findStructuredAgentSessionReadOwner('binding', remote)).toBe(twin)
+  })
+
+  it('reconciles canonical ownership between render and subscription and refuses displaced idle activity', async () => {
+    const React = await import('react')
+    const {
+      getStructuredAgentSessionReadOwner,
+      findStructuredAgentSessionReadOwner,
+      retireStructuredAgentSessionReadOwner
+    } = await import('../components/native-chat/structured-agent-session-read-owner')
+    const old = getStructuredAgentSessionReadOwner('race', target)
+    const release = old.subscribe(() => {})
+    let fresh = old
+    const view = renderHook(() => {
+      React.useLayoutEffect(() => {
+        release()
+        fresh = getStructuredAgentSessionReadOwner('race', target)
+      }, [])
+      return useStructuredAgentSessionRead({
+        sessionId: 'race',
+        target: target,
+        isVisible: false
+      })
+    })
+    expect(fresh).not.toBe(old)
+    expect(view.result.current.loadOlder).toBe(fresh.loadOlder)
+    const staleListener = vi.fn()
+    const stopListen = old.subscribe(staleListener)
+    const stop = old.activate()
+    expect(mocks.subscribe).not.toHaveBeenCalled()
+    old.publishCreated({
+      ...history,
+      direction: 'tail' as const,
+      items: [
+        {
+          itemId: 'old-only',
+          revision: 1,
+          sequence: 1,
+          observedAt: 1,
+          body: {
+            kind: 'message' as const,
+            role: 'assistant' as const,
+            blocks: [{ type: 'text' as const, text: 'old-only' }]
+          }
+        }
+      ],
+      window: {
+        oldest: { epoch: history.epoch, sequence: 1 },
+        newest: { epoch: history.epoch, sequence: 1 },
+        nextCursor: { epoch: history.epoch, sequence: 1 }
+      },
+      hasOlder: false,
+      hasNewer: false
+    })
+    expect(staleListener).not.toHaveBeenCalled()
+    expect(findStructuredAgentSessionReadOwner('race', target)).toBe(fresh)
+    stopListen()
+    stop()
+    view.unmount()
+    const r = getStructuredAgentSessionReadOwner('late', target)
+    const late = renderHook(() => {
+      React.useLayoutEffect(() => retireStructuredAgentSessionReadOwner('late', target), [])
+      return useStructuredAgentSessionRead({
+        sessionId: 'late',
+        target: target,
+        isVisible: false
+      })
+    })
+    const q = findStructuredAgentSessionReadOwner('late', target)
+    expect(q).toBeDefined()
+    expect(q).not.toBe(r)
+    expect(late.result.current.loadOlder).toBe(q?.loadOlder)
+    late.unmount()
+  })
+
+  it('notifies surviving consumers despite throwing teardown/listener and preserves reset callback successors', async () => {
+    const {
+      getStructuredAgentSessionReadOwner,
+      findStructuredAgentSessionReadOwner,
+      retireStructuredAgentSessionReadOwner
+    } = await import('../components/native-chat/structured-agent-session-read-owner')
+    const r = getStructuredAgentSessionReadOwner('throws', target)
+    const last = vi.fn()
+    const teardown = vi.fn(() => {
+      throw new Error('transport teardown')
+    })
+    mocks.subscribe.mockResolvedValue({ unsubscribe: teardown })
+    const release = r.activate()
+    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalled())
+    await act(async () => {})
+    r.subscribe(() => {
+      throw new Error('first listener')
+    })
+    r.subscribe(last)
+    const view = renderHook(() =>
+      useStructuredAgentSessionRead({ sessionId: 'throws', target: target, isVisible: false })
+    )
+    last.mockClear()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    act(() => retireStructuredAgentSessionReadOwner('throws', target))
+    expect(last).toHaveBeenCalledTimes(1)
+    expect(teardown).toHaveBeenCalledTimes(1)
+    const q = getStructuredAgentSessionReadOwner('throws', target)
+    expect(q).not.toBe(r)
+    expect(view.result.current.loadOlder).toBe(q.loadOlder)
+    const keepQ = q.subscribe(() => {})
+    view.unmount()
+    expect(() => release()).not.toThrow()
+    expect(() => r.dispose()).not.toThrow()
+    expect(teardown).toHaveBeenCalledTimes(1)
+    expect(findStructuredAgentSessionReadOwner('throws', target)).toBe(q)
+    const other = getStructuredAgentSessionReadOwner('reset-other', target)
+    let successor = q
+    q.subscribe(() => {
+      expect(other.lifetime.retired).toBe(true)
+      successor = getStructuredAgentSessionReadOwner('throws', target)
+    })
+    resetStructuredAgentSessionReadOwnersForTests()
+    expect(successor).not.toBe(q)
+    expect(successor.lifetime.retired).toBe(false)
+    expect(findStructuredAgentSessionReadOwner('throws', target)).toBe(successor)
+    keepQ()
+  })
 })

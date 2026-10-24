@@ -86,7 +86,7 @@ export function adoptStructuredReadOwner(
   if (!owners.has(key)) {
     owners.set(key, owner)
   }
-  return true
+  return owners.get(key) === owner
 }
 export function forgetStructuredReadOwner(
   key: string,
@@ -97,9 +97,12 @@ export function forgetStructuredReadOwner(
   }
 }
 export function resetStructuredAgentSessionReadOwnersForTests(): void {
-  for (const owner of owners.values()) {
-    owner.lifetime.retired = true
-    owner.dispose()
-  }
+  const cohort = [...owners.values()]
   owners.clear()
+  for (const owner of cohort) {
+    owner.lifetime.retired = true
+  }
+  for (const owner of cohort) {
+    disposeReadOwner(owner)
+  }
 }

@@ -7,6 +7,10 @@ import { projectGroupedTerminalTab, resolveTerminalItemTab } from './terminal-ta
 
 const groupRanks = new WeakMap<TabGroupLayoutNode, ReadonlyMap<string, number>>()
 
+function ownValue<T>(source: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(source, key) ? source[key] : undefined
+}
+
 function ranksFor(layout: TabGroupLayoutNode): ReadonlyMap<string, number> {
   let ranks = groupRanks.get(layout)
   if (!ranks) {
@@ -30,9 +34,10 @@ export function terminalAgentEvidenceScopes(
   tab: TerminalTab
 ): readonly TerminalAgentEvidenceScope[] {
   const enabled = state.settings?.tabAutoGenerateTitle === true
-  const layout = state.layoutByWorktree[tab.worktreeId]
+  const layout = ownValue(state.layoutByWorktree, tab.worktreeId)
   const fallbackGroup =
-    state.activeGroupIdByWorktree[tab.worktreeId] ?? state.groupsByWorktree[tab.worktreeId]?.[0]?.id
+    ownValue(state.activeGroupIdByWorktree, tab.worktreeId) ??
+    ownValue(state.groupsByWorktree, tab.worktreeId)?.[0]?.id
   const ranks = layout ? ranksFor(layout) : null
   const candidates = getCachedUnifiedTerminalTabCandidates(
     state.unifiedTabsByWorktree,

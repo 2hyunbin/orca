@@ -6,6 +6,10 @@ import { parsePaneKey, parseLegacyNumericPaneKey } from '../../../shared/stable-
 import { haveSameTerminalRoutingInputs } from './terminal-agent-routing-inputs'
 import { worktreeUsesRemoteConnection } from '@/store/terminals/terminal-workspace-routing'
 
+function ownValue<T>(source: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(source, key) ? source[key] : undefined
+}
+
 export function affectedExitEvidenceTabs({
   previous,
   next,
@@ -33,12 +37,14 @@ export function affectedExitEvidenceTabs({
         ...ownSourceKeys(previous.tabsByWorktree),
         ...ownSourceKeys(next.tabsByWorktree)
       ])) {
-        if (previous.tabsByWorktree[workspace] === next.tabsByWorktree[workspace]) {
+        if (
+          ownValue(previous.tabsByWorktree, workspace) === ownValue(next.tabsByWorktree, workspace)
+        ) {
           continue
         }
         for (const tab of [
-          ...(previous.tabsByWorktree[workspace] ?? []),
-          ...(next.tabsByWorktree[workspace] ?? [])
+          ...(ownValue(previous.tabsByWorktree, workspace) ?? []),
+          ...(ownValue(next.tabsByWorktree, workspace) ?? [])
         ]) {
           if (
             getCachedTerminalTabForWorktree(previous.tabsByWorktree, workspace, tab.id) !==
@@ -58,7 +64,7 @@ export function affectedExitEvidenceTabs({
   ): void => {
     if (before !== after) {
       for (const key of hints ?? new Set([...ownSourceKeys(before), ...ownSourceKeys(after)])) {
-        if (before[key] !== after[key]) {
+        if (ownValue(before, key) !== ownValue(after, key)) {
           add(key)
         }
       }
@@ -82,8 +88,8 @@ export function affectedExitEvidenceTabs({
     }
   } else {
     changedRecords(previous.unifiedTabsByWorktree, next.unifiedTabsByWorktree, (workspace) => {
-      const before = new Set(previous.unifiedTabsByWorktree[workspace] ?? [])
-      const after = new Set(next.unifiedTabsByWorktree[workspace] ?? [])
+      const before = new Set(ownValue(previous.unifiedTabsByWorktree, workspace) ?? [])
+      const after = new Set(ownValue(next.unifiedTabsByWorktree, workspace) ?? [])
       for (const item of new Set([...before, ...after])) {
         if (item.contentType === 'terminal' && before.has(item) !== after.has(item)) {
           affected.add(item.entityId)
@@ -93,8 +99,8 @@ export function affectedExitEvidenceTabs({
   }
   const addWorkspace = (workspace: string): void => {
     for (const tab of [
-      ...(previous.tabsByWorktree[workspace] ?? []),
-      ...(next.tabsByWorktree[workspace] ?? [])
+      ...(ownValue(previous.tabsByWorktree, workspace) ?? []),
+      ...(ownValue(next.tabsByWorktree, workspace) ?? [])
     ]) {
       affected.add(tab.id)
     }
@@ -113,7 +119,7 @@ export function affectedExitEvidenceTabs({
         worktreeUsesRemoteConnection(previous, workspace) !==
         worktreeUsesRemoteConnection(next, workspace)
       ) {
-        for (const tab of next.tabsByWorktree[workspace]) {
+        for (const tab of ownValue(next.tabsByWorktree, workspace) ?? []) {
           affected.add(tab.id)
         }
       }

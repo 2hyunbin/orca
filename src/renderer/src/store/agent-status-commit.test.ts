@@ -168,7 +168,8 @@ describe('real AppStore status commit boundary', () => {
     const releaseAfterAbort = reader.subscribe(vi.fn())
     expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
     releaseAfterAbort()
-    const releaseIdleReplay = reader.subscribe(vi.fn())
+    const terminalSignal = vi.fn()
+    const releaseIdleReplay = reader.subscribe(terminalSignal)
     expect(findStructuredAgentSessionReadOwner(session, target)).toBe(reader)
     const observed: unknown[] = []
     const app = vi.fn(() => {
@@ -178,11 +179,13 @@ describe('real AppStore status commit boundary', () => {
         findStructuredAgentSessionReadOwner(session, target),
         dispose.mock.calls.length
       ])
+      expect(terminalSignal).not.toHaveBeenCalled()
       getStructuredAgentSessionReadOwner(session, target)
     })
     const stop = store.subscribe(app)
     owner.transact(prepareRemoval)
     expect(observed).toEqual([[[], undefined, undefined, 0]])
+    expect(terminalSignal).toHaveBeenCalledTimes(1)
     expect(dispose).toHaveBeenCalledTimes(1)
     const replacement = findStructuredAgentSessionReadOwner(session, target)
     expect(replacement).toBeDefined()

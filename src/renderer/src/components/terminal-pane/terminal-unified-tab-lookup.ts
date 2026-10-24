@@ -14,7 +14,9 @@ export function getCachedUnifiedTerminalTabForWorktree(
   worktreeId: string,
   terminalTabId: string
 ): Tab | null {
-  const unifiedTabs = unifiedTabsByWorktree[worktreeId]
+  const unifiedTabs = Object.hasOwn(unifiedTabsByWorktree, worktreeId)
+    ? unifiedTabsByWorktree[worktreeId]
+    : undefined
   if (!unifiedTabs) {
     return null
   }
@@ -77,6 +79,9 @@ export function getCachedUnifiedTerminalTabCandidates(
   worktreeId: string,
   terminalTabId: string
 ): readonly Tab[] {
+  if (!Object.hasOwn(source, worktreeId)) {
+    return []
+  }
   getCachedUnifiedTerminalTabForWorktree(source, worktreeId, terminalTabId)
   return terminalTabLookupByUnifiedTabs.get(source[worktreeId])?.get(terminalTabId) ?? []
 }

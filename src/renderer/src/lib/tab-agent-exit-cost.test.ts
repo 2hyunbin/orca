@@ -371,3 +371,171 @@ it.each([10, 100])('bounds retained reentry across two stores at %s tabs', (size
     expect(count).toBe(1)
   }
 })
+
+import { affectedExitEvidenceTabs as round2Affected } from '@/lib/tab-agent-exit-inputs'
+it.each(['__proto__', 'constructor'])('round2 prototype raw addition %s is lossless', (id) => {
+  const store = createStore(createAppState)
+  const status = getAgentStatusOwner(store)
+  const previous = status.getState()
+  store.setState({
+    tabsByWorktree: Object.fromEntries([[id, [makeTab({ id: 'prototype-tab', worktreeId: id })]]])
+  })
+  const next = status.getState()
+  let affected: ReadonlySet<string> = new Set()
+  expect(() => {
+    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+  }).not.toThrow()
+  expect([...affected]).toContain('prototype-tab')
+})
+it.each(['__proto__', 'constructor'])('round2 prototype unified addition %s is lossless', (id) => {
+  const store = createStore(createAppState)
+  const status = getAgentStatusOwner(store)
+  const previous = status.getState()
+  store.setState({
+    unifiedTabsByWorktree: Object.fromEntries([
+      [id, [makeUnifiedTab({ id: 'prototype-item', entityId: 'prototype-tab', worktreeId: id })]]
+    ])
+  })
+  const next = status.getState()
+  let affected: ReadonlySet<string> = new Set()
+  expect(() => {
+    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+  }).not.toThrow()
+  expect([...affected]).toContain('prototype-tab')
+})
+it.each(['__proto__', 'constructor'])('round2 prototype raw removal %s is lossless', (id) => {
+  const store = createStore(createAppState)
+  const status = getAgentStatusOwner(store)
+  store.setState({
+    tabsByWorktree: Object.fromEntries([[id, [makeTab({ id: 'prototype-tab', worktreeId: id })]]])
+  })
+  const previous = status.getState()
+  store.setState({ tabsByWorktree: {} })
+  const next = status.getState()
+  let affected: ReadonlySet<string> = new Set()
+  expect(() => {
+    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+  }).not.toThrow()
+  expect([...affected]).toContain('prototype-tab')
+})
+it.each(['__proto__', 'constructor'])('round2 prototype unified removal %s is lossless', (id) => {
+  const store = createStore(createAppState)
+  const status = getAgentStatusOwner(store)
+  store.setState({
+    unifiedTabsByWorktree: Object.fromEntries([
+      [id, [makeUnifiedTab({ id: 'prototype-item', entityId: 'prototype-tab', worktreeId: id })]]
+    ])
+  })
+  const previous = status.getState()
+  store.setState({ unifiedTabsByWorktree: {} })
+  const next = status.getState()
+  let affected: ReadonlySet<string> = new Set()
+  expect(() => {
+    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+  }).not.toThrow()
+  expect([...affected]).toContain('prototype-tab')
+})
+import { getCachedTerminalTabForWorktree as round2Lookup } from '@/components/terminal-pane/terminal-tab-lookup'
+it.each(['__proto__', 'constructor'])('round2 prototype absent raw lookup %s is empty', (id) => {
+  expect(round2Lookup({}, id, 'prototype-tab')).toBeNull()
+})
+it('round2 prototype actual root service records a newly published agent signal', () => {
+  const id = '__proto__'
+  const store = createStore(createAppState)
+  const status = getAgentStatusOwner(store)
+  store.setState({
+    layoutByWorktree: { [id]: null },
+    groupsByWorktree: { [id]: [] },
+    activeGroupIdByWorktree: { [id]: 'g' }
+  })
+  const service = getTabAgentExitOwner(status)
+  stops.push(service.start())
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  store.setState({
+    tabsByWorktree: {
+      [id]: [makeTab({ id: 'prototype-tab', worktreeId: id, title: 'codex', launchAgent: 'codex' })]
+    }
+  })
+  expect(warn).not.toHaveBeenCalled()
+  expect(service.getObservation(id, 'prototype-tab')).toBe(true)
+})
+
+it.each(['__proto__', 'constructor'])(
+  'round2 prototype companions and group/layout discovery %s are own-only',
+  (id) => {
+    const store = createStore(createAppState)
+    const status = getAgentStatusOwner(store)
+    const previous = status.getState()
+    const next = {
+      ...previous,
+      layoutByWorktree: { [id]: null },
+      groupsByWorktree: { [id]: [] },
+      activeGroupIdByWorktree: { [id]: 'group' }
+    }
+    expect(() =>
+      round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+    ).not.toThrow()
+    const terminal = makeTab({
+      id: 'prototype-tab',
+      worktreeId: id,
+      title: 'codex',
+      launchAgent: 'codex'
+    })
+    store.setState({ tabsByWorktree: { [id]: [terminal] } })
+    const service = getTabAgentExitOwner(status)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(() => stops.push(service.start())).not.toThrow()
+    expect(service.getObservation(id, terminal.id)).toBe(true)
+    const before = status.getState()
+    const after = { ...before, groupsByWorktree: { [id]: [] } }
+    expect([
+      ...round2Affected({ previous: before, next: after, changedKeys: [], terminalFacts: {} })
+    ]).toContain(terminal.id)
+    expect(warn).not.toHaveBeenCalled()
+  }
+)
+
+it('round2 prototype cached unified candidates reject inherited array aliases', async () => {
+  const { getCachedUnifiedTerminalTabCandidates } =
+    await import('@/components/terminal-pane/terminal-unified-tab-lookup')
+  const item = makeUnifiedTab({ id: 'own', entityId: 'terminal', worktreeId: 'own' })
+  const source = { own: [item] }
+  expect(getCachedUnifiedTerminalTabCandidates(source, 'own', 'terminal')).toEqual([item])
+  const inherited: typeof source = Object.create(source)
+  expect(getCachedUnifiedTerminalTabCandidates(inherited, 'own', 'terminal')).toEqual([])
+})
+
+it.each(['__proto__', 'constructor'])(
+  'round2 prototype root ignores inherited group/layout scopes %s',
+  (id) => {
+    const store = createStore(createAppState)
+    const status = getAgentStatusOwner(store)
+    const tab = makeTab({
+      id: 'inherited-layout',
+      worktreeId: id,
+      title: 'zsh',
+      launchAgent: 'codex'
+    })
+    store.setState({
+      tabsByWorktree: { [id]: [tab] },
+      unifiedTabsByWorktree: {
+        [id]: [
+          makeUnifiedTab({
+            id: 'item',
+            entityId: tab.id,
+            worktreeId: id,
+            groupId: 'g',
+            label: 'codex'
+          })
+        ]
+      },
+      layoutByWorktree: Object.create({ [id]: { type: 'leaf', groupId: 'g' } }),
+      activeGroupIdByWorktree: Object.create({ [id]: 'g' }),
+      groupsByWorktree: Object.create({ [id]: [{ id: 'g' }] })
+    })
+    const service = getTabAgentExitOwner(status)
+    expect(() => stops.push(service.start())).not.toThrow()
+    expect(service.getObservation(id, tab.id, 'g')).toBe(false)
+    expect(service.getObservation(id, tab.id)).toBe(false)
+  }
+)
