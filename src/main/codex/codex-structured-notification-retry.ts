@@ -1,6 +1,6 @@
 import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import type { StructuredAgentSessionSinkBarrier } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import type { CodexAppServerConnection } from './codex-app-server-connection'
+import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-translation'
 import type { CodexSession } from './codex-structured-session-state'
 
@@ -110,8 +110,7 @@ export function createCodexStructuredNotificationRetry(deps: {
       clearTimeout(state.timer)
       state.timer = null
     }
-    // The queue is no longer replayable. Drop it explicitly, release the read
-    // pause, and enter the adapter's generation-checked unexpected-exit seam.
+    // Unreplayable queues must release paused reads before host recovery.
     state.events.length = 0
     state.bytes = 0
     state.connection.resumeReading?.()
@@ -140,8 +139,6 @@ export function createCodexStructuredNotificationRetry(deps: {
       return false
     }
     if (state.events.length >= MAX_RETRY_EVENTS) {
-      // A bounded queue cannot retain more traffic. Fail it truthfully so the
-      // provider's generation enters host recovery instead of stranding a pause.
       fail(sessionId, state, 'notification retry queue overflow')
       return false
     }

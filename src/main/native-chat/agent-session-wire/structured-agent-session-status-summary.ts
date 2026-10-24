@@ -35,7 +35,6 @@ export function structuredAgentSessionStatusSummary({
   journal: AgentSessionJournal
   record: AgentSessionRecord | null
   state: StructuredAgentSessionStatusState
-  /** A person's Stop is still ending the work it stopped. */
   stopping: boolean
   childWork: Pick<AgentSessionStatusSummary, 'children' | 'backgroundTasks'>
   namingFailure: StructuredChatNamingFailure | undefined
@@ -54,7 +53,6 @@ export function structuredAgentSessionStatusSummary({
       : {}),
     ...(session.restartResume ? { restartResume: { phase: session.restartResume.phase } } : {}),
     ...projected,
-    // Only a working session is still being stopped; any other status already ended that work.
     ...(stopping && projected.status === 'working' ? { stopping: true as const } : {}),
     ...structuredSummaryRecordFields(record, namingFailure),
     ...childWork,
@@ -160,7 +158,6 @@ function structuredSummaryRecordFields(
   }
 }
 
-/** The record's name, and the failure to replace it only while that is still the name. */
 function structuredSummaryConversationNaming(
   record: AgentSessionRecord | null,
   failure: StructuredChatNamingFailure | undefined
@@ -177,7 +174,6 @@ function structuredSummaryConversationNaming(
     : { conversationName: name }
 }
 
-/** A closed chat's retained summary with current record annotations, or null if unchanged. */
 export function renamedStructuredStatusSummary(
   previous: AgentSessionStatusSummary,
   deps: Pick<StructuredAgentSessionStatusFeedDeps, 'getRecord' | 'namingFailure'>,

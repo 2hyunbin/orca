@@ -1,9 +1,10 @@
+import { settleCodexRequestEndWaiters } from './codex-request-end-wait'
 import {
   finishChildWorkAdmission,
   type ChildWorkAdmission
 } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
-import type { CodexAppServerConnection } from './codex-app-server-connection-types'
+import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
 import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
 import {
   cancelCodexAcquisitionAttempt,
@@ -19,7 +20,7 @@ export function handleCodexSessionExit(input: {
   sessionId: string
   connection: CodexAppServerConnection | null
   error: Error
-  /** Set for the end of a close Orca began: by that close, or by the root's own exit report. */
+  /** Includes root exits reported during or after an Orca close attempt. */
   closedByOrca?: true
   prompts?: CodexSession['prompts']
   onEvent?: (event: CodexStructuredSessionEvent) => void
@@ -32,18 +33,26 @@ export function handleCodexSessionExit(input: {
   }
   session.exitObservedAt ??= Date.now()
   session.events?.observeExit?.(session.dispatchEchoes.heldSends(), session.exitObservedAt)
-  // Before the admission check: the child is gone whether or not its end was admitted.
+  // Release waits even if terminal journal rows are refused.
   session.turnOpenWaits.releaseAll()
   const event: StructuredAgentSessionEndedEvent = {
     type: 'ended',
     sessionId: input.sessionId,
-    // The connection reports the exit inside the close it ends; the close's own reason is the why.
+    // Preserve the initiating close reason when its exit arrives.
     reason: ((input.closedByOrca && session.orcaClose?.reason) || input.error).message,
-    // Only the child's own exit blames Codex; a close Orca made, for any reason, is Orca's.
+    // Orca-initiated closes are host faults, regardless of the exit report.
     failure: input.closedByOrca
       ? agentSessionFailureFact('hostFault')
       : agentSessionFailureFact('providerExited', { detail: providerDiagnosticOf(input.error) }),
     cause: session.orcaClose?.requested ? 'requested-close' : 'unexpected-exit',
+    ...(input.closedByOrca && input.connection?.closeResult
+      ? {
+          processExit: {
+            root: input.connection.closeResult.root,
+            workload: input.connection.closeResult.tree ?? 'unverifiable'
+          }
+        }
+      : {}),
     fence: session.fence,
     acquisitionGeneration: session.acquisitionGeneration,
     observedAt: session.exitObservedAt
@@ -68,7 +77,7 @@ export function handleCodexSessionExit(input: {
         retry: append
       }
     }
-    session.backgroundTasks.clear()
+    session.backgroundTasks.clear(event.processExit)
     suffix = () => session.backgroundTasks.publishChildWork() ?? { accepted: true }
     const result = suffix()
     if (!result.accepted && result.retry) {
@@ -78,6 +87,7 @@ export function handleCodexSessionExit(input: {
   }
   const admission = producer?.continueWork?.(append) ?? append()
   session.ended = true
+  settleCodexRequestEndWaiters(session)
   session.dispatchEchoes.clear()
   session.prompts.clear()
   session.endWritten = finishChildWorkAdmission(admission, producer).then((result) => {
@@ -128,14 +138,12 @@ export async function closeCodexPublishedSession(
     sessions.delete(sessionId)
     return true
   }
-  // Sink-failure recovery force-closes the child but must preserve the
-  // observed-exit cause so host lease settlement runs as an unexpected death.
+  // Preserve unexpected-death settlement when sink failure forces a close.
   session.orcaClose ??= {
     requested: options?.requestedClose ?? true,
     reason: options?.unexpectedReason ?? new Error('codex session closed')
   }
-  // Keep the session indexed until the child exit is observed. A timeout or
-  // failed kill must leave the live connection available for a safe retry.
+  // Keep unproven closes indexed for a safe retry.
   const exited = await session.connection.close()
   if (exited !== true) {
     return false

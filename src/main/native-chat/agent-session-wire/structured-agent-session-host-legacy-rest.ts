@@ -1,3 +1,4 @@
+import { structuredJournalBackgroundReady } from './structured-agent-session-registry'
 import { JournalLegacyRestInitializer } from '../agent-session-journal/journal-legacy-rest-initializer'
 import { orderedLegacyRestCandidates } from './structured-agent-session-legacy-candidates'
 import {
@@ -51,4 +52,8 @@ export function createHostLegacyRestInitializer(
         error
       })
   })
+}
+
+export function advanceHostLegacyRest(initializer: JournalLegacyRestInitializer | undefined): void {
+  initializer?.advance(structuredJournalBackgroundReady)
 }

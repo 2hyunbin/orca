@@ -15,7 +15,7 @@ import type Database from '../../sqlite/sync-database'
  *  and its chats are refused as a newer Orca's, so every change stays additive. */
 export const JOURNAL_DB_SCHEMA_VERSION = 5
 
-/** The first version a release wrote; 1 and 2 only ever came from development builds. */
+// Versions 1–2 existed only in unreleased builds.
 export const JOURNAL_DB_OLDEST_RELEASED_VERSION = 3
 
 export function createJournalTablesSql(): string {

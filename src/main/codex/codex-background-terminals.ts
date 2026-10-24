@@ -4,8 +4,8 @@ import { finishChildWorkAdmission } from '../native-chat/agent-session-wire/stru
 // app-server, so one probe per app-server answers for the Codex binary on the host that runs it. The
 // killed process still ends its item with `item/completed`, which removes the command's record.
 
-import type { CodexAppServerConnection } from './codex-app-server-connection'
-import { isCodexAppServerRequestError } from './codex-app-server-request-error'
+import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
+import { isCodexAppServerRequestError } from './app-server/codex-app-server-request-error'
 import {
   CodexAppServerTimeoutError,
   isCodexAppServerUnsupportedError
@@ -19,10 +19,9 @@ import type {
 
 type CodexTerminalRpc = Pick<CodexAppServerConnection, 'request'>
 
-/** One command process a Stop names: the thread that ran it and Codex's id for its process. */
 export type CodexBackgroundTerminal = { threadId: string; processId: string }
 
-/** Why bounded: a Stop the app-server never answers must not hold the session's other actions. */
+// Bound unanswered stops so other session actions can proceed.
 const CODEX_BACKGROUND_TERMINAL_TIMEOUT_MS = 10_000
 const MAX_LIST_PAGES = 32
 
@@ -33,7 +32,6 @@ export function boundedTimeout(timeoutMs: number | undefined): number {
   )
 }
 
-/** An older Codex refuses the method by name: unknown variant, or method not found. */
 function refusesMethod(error: unknown): boolean {
   return (
     isCodexAppServerUnsupportedError(error) ||
@@ -43,8 +41,7 @@ function refusesMethod(error: unknown): boolean {
   )
 }
 
-/** Whether this app-server lists background terminals, and so can stop them. Only a refusal or
- *  a malformed answer is no; a timeout or dropped request proves nothing either way. */
+/** Refusals/malformed lists mean unsupported; timeouts and dropped requests leave support unknown. */
 export async function probeCodexBackgroundTerminals(
   rpc: CodexTerminalRpc,
   threadId: string,
@@ -64,8 +61,7 @@ export async function probeCodexBackgroundTerminals(
   }
 }
 
-/** Codex unloaded the thread, which ends its terminals. A connection that dropped is no such
- *  proof: losing contact is never evidence the process ended. */
+// Thread unloading ends terminals; losing the connection proves no process exit.
 function terminalsAreGone(error: unknown): boolean {
   return (
     isCodexAppServerRequestError(error) &&
@@ -103,9 +99,7 @@ async function stillRunning(
   throw new Error('codex app-server listed more background terminals than Orca reads')
 }
 
-/** Terminates each terminal, then confirms against the thread's own list. Resolves with how many
- *  are gone and whether the list shows one still running; throws when a request failed with no
- *  survivor listed, after trying every other, since the effect is then unknown. */
+/** Confirm termination against each thread's list; request failures throw unless a survivor is confirmed. */
 export async function terminateCodexBackgroundTerminals(
   rpc: CodexTerminalRpc,
   terminals: readonly CodexBackgroundTerminal[],
@@ -132,8 +126,7 @@ export async function terminateCodexBackgroundTerminals(
         { threadId, processId },
         { timeoutMs }
       )
-      // Answered either way: `terminated: false` is a process Codex no longer holds, which the
-      // list below tells apart from one that survived.
+      // Confirm via the list even if terminated is false; Codex may no longer hold the process.
       unconfirmed.set(threadId, (unconfirmed.get(threadId) ?? new Set()).add(processId))
     } catch (error) {
       if (terminalsAreGone(error)) {
@@ -170,8 +163,7 @@ export async function terminateCodexBackgroundTerminals(
   return { stopped, survived }
 }
 
-/** Probes the session's app-server off the frame path when a running command has a process a stop
- *  could name, until it answers; a yes restates the running commands as stoppable. */
+/** Probe outside frame handling; support restates running commands as stoppable. */
 export function startCodexTerminalStopProbe(
   sessions: ReadonlyMap<string, CodexSession>,
   sessionId: string,

@@ -1,3 +1,4 @@
+import type { AcpStructuredLaneDeps } from './acp-structured-lane-deps'
 import type { StructuredAgentSessionSinkBarrier } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 // One ACP child's path into the journal: the translator turns its traffic into grammar events, and
@@ -10,10 +11,9 @@ import {
   type ProviderTimelineAssembler
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
 import type { AcpTimelineEvent } from './acp-timeline-event'
+import { acpPromptTurnId } from './acp-prompt-turns'
 import { createLegacyProviderTimelineIdentityScheme } from '../native-chat/agent-session-timeline/provider-timeline-identity'
-import type { ProviderTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import type { StructuredAgentSessionCommandRun } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
-import type { AcpChildStops, AcpDialect } from './acp-dialects/acp-dialect'
 import { AcpTimelineTranslator } from './acp-timeline-translator'
 import {
   acpBackgroundTaskChildWork,
@@ -26,7 +26,6 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { AcpTextDrop } from './acp-turn-messages'
 
-/** How long a held event waits for the sink to say it drained before trying again on its own. */
 const BACKPRESSURE_RETRY_MS = 250
 
 /** Subagent evidence holds its place among the events: it reaches the host only after the journal
@@ -37,25 +36,7 @@ type SubagentWork = {
   retry?: () => ChildWorkAdmission
 }
 
-export type AcpStructuredLaneDeps = {
-  sink: ProviderTimelineSink
-  sessionId: string
-  agent: string
-  /** The agent's name as a person reads it, for the rows that name it. */
-  agentName: string
-  generation: string
-  providerSessionId: string
-  dialect: AcpDialect
-  logger: StructuredAgentSessionLogger
-  /** A send of Orca's reached the agent: the turn it opened has its first provider event. */
-  onInputAccepted: (clientMessageId: string) => void
-  /** The sink refused for good; nothing more this child says can be journaled. */
-  onFailed: (reason: string) => void
-  onChildWorkEvidence?: (evidence: AgentChildWorkEvidence[]) => ChildWorkAdmission | void
-  onChildWorkFailure?: (error: unknown) => void
-  now?: () => number
-  childStops?: () => AcpChildStops
-}
+export type { AcpStructuredLaneDeps } from './acp-structured-lane-deps'
 
 export class AcpStructuredLane {
   readonly translator: AcpTimelineTranslator
@@ -93,11 +74,27 @@ export class AcpStructuredLane {
     })
   }
 
+  hasPendingDiagnostic(clientMessageId: string): boolean {
+    const turn = acpPromptTurnId(clientMessageId)
+    return (
+      !this.failed &&
+      !this.disposed &&
+      !this.ended &&
+      this.backlog.some(
+        (event) =>
+          event.type === 'item.update' &&
+          event.body.kind === 'status' &&
+          !event.producer &&
+          event.join?.thread === this.deps.providerSessionId &&
+          event.join.turn === turn
+      )
+    )
+  }
+
   get openTurnId(): string | null {
     return this.assembler.openTurnId
   }
 
-  /** The host already opened this command's turn; the agent's frames and end join that turn. */
   beginCommand(command: StructuredAgentSessionCommandRun): void {
     if (this.failed || this.disposed || this.backlog.length > 0) {
       throw new Error('ACP timeline has not drained for this command')
@@ -121,7 +118,7 @@ export class AcpStructuredLane {
     this.drain()
   }
 
-  /** Resolves once `turnId` is no longer the open turn, or nothing more can be written. */
+  /** Resolves when the turn leaves or further writes become impossible. */
   whenTurnLeaves(turnId: string): Promise<void> {
     return new Promise((resolve) => {
       const check = (): void => {
@@ -149,8 +146,7 @@ export class AcpStructuredLane {
     this.drain()
   }
 
-  /** Whether the journal row `itemId` is the row of request `requestKey`, which the assembler
-   *  writes under this acquisition's generation (any incarnation a reused key adds). */
+  /** Matches this acquisition's request row, including reused-key incarnations. */
   isRequestRow(itemId: string, requestKey: string): boolean {
     const identity = parseAgentJournalItemKey(itemId)
     if (identity?.provider !== 'legacy' || identity.sessionId !== this.deps.sessionId) {

@@ -13,8 +13,7 @@ import type {
 } from './structured-agent-session-restart-resume-set'
 
 export type StructuredAgentSessionRestartResume = {
-  /** Teardown: begin, then per session a snapshot right before its child stops and a confirmation
-   *  once the stop is proven, then one write of the confirmed offers. */
+  /** Snapshot before Stop, confirm proven exit, then persist confirmed offers together. */
   beginTeardown: (trigger: AgentSessionResumeTrigger) => void
   captureBeforeStop: (sessionId: string) => void
   confirmStopped: (sessionId: string) => void
@@ -22,11 +21,10 @@ export type StructuredAgentSessionRestartResume = {
   list: (
     audience?: StructuredAgentSessionRestartAudience
   ) => Promise<StructuredAgentSessionResumeCandidate[]>
-  /** Offers already acted on whose agent did not carry on. Read-only; nothing here is spent. */
   listFailures: (
     audience?: StructuredAgentSessionRestartAudience
   ) => Promise<StructuredAgentSessionResumeFailure[]>
-  /** Unnamed, continues every offer the audience sees; named, only those of them. */
+  /** Unnamed actions continue visible offers; named actions may also retry selected failures. */
   continueAfterRestart: (
     sessionIds: readonly string[] | undefined,
     owner: string,
@@ -34,18 +32,15 @@ export type StructuredAgentSessionRestartResume = {
   ) => Promise<{
     resumed: StructuredAgentSessionResumeOutcome[]
     continued: StructuredAgentSessionContinuationOutcome[]
-    /** Requested chats excluded from this action. */
     skipped?: string[]
     sessions?: StructuredAgentSessionResumeCandidate[]
     failed?: StructuredAgentSessionResumeFailure[]
   }>
-  /** Named sessions forget their offer or failure; unnamed, every record this host lists goes (a
-   *  newer Orca's stay). An audience limits either to the agents it sees. */
+  /** Dismiss visible records only; preserve newer-chat records this host never lists. */
   dismiss: (
     sessionIds?: readonly string[],
     audience?: StructuredAgentSessionRestartAudience
   ) => Promise<number>
-  /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
   onAgentStarted: (sessionId: string) => void
   noteReadResult: (
     sessionId: string,

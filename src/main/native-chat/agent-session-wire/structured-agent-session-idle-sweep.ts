@@ -36,15 +36,13 @@ export type StructuredAgentSessionIdleSweepDeps = {
   now: () => number
   isDisposed: () => boolean
   deliveryActive: (sessionId: string) => boolean
-  /** Child work the provider reported running and not over, recorded or not. */
+  /** Includes provider work not yet recorded. */
   childWorkOpen: (sessionId: string) => boolean
-  /** An orchestration dispatch that still owns this session's worker; derived from its database. */
   hasOpenDispatch: (sessionId: string) => boolean
-  /** The provider holds a send it took and has not answered; see `holdsDispatch`. */
+  /** Provider-retained, unanswered sends. */
   providerHoldsDispatch: (sessionId: string) => boolean
-  /** The lease store the current-work projection reads (`heldStructuredAgentSessionCurrentWork`). */
   store: StructuredAgentSessionCurrentWorkHost['store']
-  /** Each of these runs inside the session's serialize and never takes it again. */
+  /** Already inside nonreentrant session serialization. */
   stopAgent: (sessionId: string) => Promise<void>
   stopStartingAgent: (sessionId: string) => Promise<void>
   closeConversation: (sessionId: string) => Promise<boolean>
@@ -54,24 +52,19 @@ export type StructuredAgentSessionIdleSweepDeps = {
   maxResident?: number
 }
 
-/** The host's reads of what a running child still serves. */
 export type StructuredAgentSessionChildWorkReads = {
-  /** The host's projection of current work: an ended generation's turn or prompt holds nothing.
-   *  Null when the host holds no conversation, which has none. */
+  /** Ended-generation turns/prompts cannot retain children; null means no held conversation. */
   currentWork: () => Pick<
     StructuredAgentSessionCurrentWork,
     'activeTurnId' | 'hasActionablePrompt'
   > | null
-  /** The provider's own account, never the bounded store, which may have refused a record. */
+  /** Provider evidence; bounded stores may have refused a record. */
   childWorkOpen: () => boolean
   hasOpenDispatch: () => boolean
   providerHoldsDispatch: () => boolean
 }
 
-/** Work the running child owes apart from queued sends: a turn, a child agent, an open
- *  orchestration dispatch, a send the provider holds, or a prompt nobody answered (a subagent's
- *  too, which the lead turn cannot see). Whatever owes any of it keeps its child; it builds no
- *  snapshot. */
+/** Check turn, child, dispatch, held-send and prompt work without building a snapshot. */
 export function structuredAgentSessionChildHasOpenWork(
   reads: StructuredAgentSessionChildWorkReads
 ): boolean {
@@ -96,7 +89,6 @@ export class StructuredAgentSessionIdleSweep {
       () => void this.tick(),
       this.deps.intervalMs ?? STRUCTURED_AGENT_SESSION_IDLE_SWEEP_INTERVAL_MS
     )
-    // An idle sweep must never be the reason a process stays alive at quit.
     this.timer.unref?.()
   }
 
@@ -107,8 +99,7 @@ export class StructuredAgentSessionIdleSweep {
     }
   }
 
-  /** One pass over every open conversation. Sessions run concurrently, so one waiting behind a
-   *  locked start does not hold up the rest; a pass still running skips the next. */
+  /** Run sessions concurrently; skip overlapping ticks so one locked start cannot delay others. */
   async tick(): Promise<void> {
     if (this.running || this.deps.isDisposed()) {
       return
@@ -133,14 +124,13 @@ export class StructuredAgentSessionIdleSweep {
     }
   }
 
-  /** Re-derives everything inside the session's lock, so an accept already queued ahead is seen. */
+  /** Recheck under serialization to include queued acceptance. */
   private async tickUnderSerialize(sessionId: string): Promise<void> {
     const session = this.deps.sessions.get(sessionId)
     if (!session || this.deps.isDisposed()) {
       return
     }
-    // Owed work is activity, read every tick, so the agent gets a full window once it ends: a child
-    // can read done before the lead's wake-up turn writes anything.
+    // Renew owed work every tick to allow a full window for the lead’s post-child wake-up.
     if (session.child && session.child.phase !== 'starting' && this.owesWork(sessionId, session)) {
       this.deps.sessions.touch(sessionId)
       return
@@ -150,7 +140,6 @@ export class StructuredAgentSessionIdleSweep {
       return
     }
     if (session.child) {
-      // A start that has been quiet this long is not coming: the host stops it, with its reason.
       if (session.child.phase === 'starting') {
         await this.deps.stopStartingAgent(sessionId)
         return
@@ -167,8 +156,7 @@ export class StructuredAgentSessionIdleSweep {
     )
   }
 
-  /** Work the running child still owes. Scoped to the child: with none, nothing here can pin the
-   *  handle, and a leftover prompt or turn row is only history. */
+  /** Without a child, leftover turns/prompts are history and cannot retain the handle. */
   private owesWork(sessionId: string, session: StructuredAgentSessionHostSession): boolean {
     return (
       this.queuedOrDelivering(sessionId, session) ||

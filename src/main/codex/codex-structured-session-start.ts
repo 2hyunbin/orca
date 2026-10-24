@@ -7,8 +7,8 @@ import type {
   StructuredAgentSessionProviderOpenInput,
   StructuredAgentSessionProviderOpenResult
 } from '../native-chat/agent-session-wire/structured-agent-session-provider-open-contract'
-import { initializeCodexAppServerConnection } from './codex-app-server-handshake'
-import type { CodexAppServerConnection } from './codex-app-server-connection'
+import { initializeCodexAppServerConnection } from './app-server/codex-app-server-handshake'
+import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
 import { CodexBackgroundTaskTracker, codexChildWorkSink } from './codex-background-task-tracker'
 import type { CodexSubagentExecutions } from './codex-subagent-executions'
 import type { CodexDispatchEchoes } from './codex-structured-dispatch-echo'
@@ -100,8 +100,7 @@ export async function openCodexStructuredSession(
     openCodexThread(
       connection,
       { ...threadLaunch, commandEnv },
-      // No deadline of its own: resuming a long rollout or starting MCP servers takes what it
-      // takes. The host's start ceiling, a close and a Stop end the wait through the signal.
+      // Long rollout/MCP setup relies on the host ceiling and cancellation unless a timeout is supplied.
       deps.requestTimeoutMs ?? null,
       openInput.signal
     ),
@@ -197,7 +196,7 @@ export async function openCodexStructuredSession(
   }
 }
 
-/** An older Codex may still answer a resume with the whole thread, which the restore above took. */
+/** Older Codex versions return history inline, already handled by restoreThread. */
 function threadReturnedTurns(thread: Record<string, unknown> | undefined): boolean {
   return Array.isArray(thread?.turns) && thread.turns.length > 0
 }

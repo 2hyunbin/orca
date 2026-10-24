@@ -3,12 +3,7 @@ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentSessionAtRest } from './structured-agent-session-status-summary'
 
-/**
- * Chat-tab visibility is the deletion funnel: every path that removes a chat as a user-facing
- * artifact — a closed tab, the close RPC, worker settlement, worktree removal — retires the
- * durable tab here, so the chat's restart offer and any failure record die with it. Advisory:
- * recovery bookkeeping must never gate closing a chat.
- */
+/** Retire durable tabs/restart offers together; advisory recovery bookkeeping must never block chat close. */
 export function setStructuredAgentSessionTabVisibility(
   host: {
     deps: {
@@ -66,7 +61,6 @@ type TabSessions = ReadonlyMap<
   }
 >
 
-/** The host's chat-tab surface; reads `host.deps` per call, so it sees the host's wrapped deps. */
 export function createStructuredAgentSessionTabSurface(
   host: Parameters<typeof setStructuredAgentSessionTabVisibility>[0] & {
     deps: {
@@ -112,7 +106,7 @@ export function createStructuredAgentSessionTabSurface(
       sessionId: string,
       visible: boolean,
       tabId?: string,
-      /** A close that may still put the tab back sends the hidden notice once it settles. */
+      /** Defer hidden notices while a failed close could restore visibility. */
       options?: { deferHiddenNotice?: boolean }
     ): Promise<void> => {
       await setStructuredAgentSessionTabVisibility(host, sessionId, visible, tabId)
@@ -122,7 +116,7 @@ export function createStructuredAgentSessionTabSurface(
           notifyTabHidden(host, sessionId)
         }
       }
-      // The tab edge of the row's lifetime; the handle close is the other.
+      // Tab visibility and handle closure jointly determine status-row lifetime.
       if (!visible && !sessions.get(sessionId)?.child) {
         statuses.forgetStatus(sessionId)
       }
@@ -137,7 +131,6 @@ function notifyTabHidden(
   try {
     host.deps.onSessionTabHidden?.(sessionId)
   } catch (error) {
-    // Bookkeeping never gates closing a chat.
     host.deps.logger.warn('a chat tab close listener failed', {
       scope: 'tab-hidden-listener',
       sessionId,

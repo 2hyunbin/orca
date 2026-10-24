@@ -21,6 +21,10 @@ export function stageJournalMutation(
     aliases: new JournalMutationMap(state.aliases),
     itemEchoes: new JournalMutationMap(state.itemEchoes),
     stoppedHistoryCarried: new JournalMutationMap(state.stoppedHistoryCarried),
+    queuedHandOffPlaces: new JournalMutationMap(state.queuedHandOffPlaces),
+    // The fold only adds these display corrections; staging never publishes them.
+    normalizedHandOffs: new Set(),
+    queue: { ...state.queue, cards: new JournalMutationMap(state.queue.cards) },
     // Only membership is needed while staging; the canonical fold adopts these after COMMIT.
     removedTurnIds: new Set(),
     appliedSettlementIds: new Set(state.appliedSettlementIds),

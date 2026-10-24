@@ -92,7 +92,7 @@ export async function acquireCodexStructuredSession(input: {
     })
   })
   let account: AgentSessionAccountKind | undefined
-  // Minted before the translator, which names this connection's frame rows with it.
+  // Frame row identities include this generation.
   const acquisitionGeneration = mintCodexAcquisitionGeneration(deps)
   const translator = createCodexSessionJournalTranslator({
     sink: acquireInput.events,
@@ -212,7 +212,7 @@ export async function acquireCodexStructuredSession(input: {
               sessionId,
               connection: acquisition.connection,
               error,
-              // The end of a close Orca began, even one that came back unproven before it.
+              // A previously unproven Orca close still owns this exit.
               ...(exit?.expected ? { closedByOrca: true as const } : {}),
               ...(deps.logger ? { logger: deps.logger } : {}),
               prompts: acquisition.prompts,

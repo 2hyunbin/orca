@@ -218,6 +218,7 @@ export type JournalStructuralCheckpoint = {
   rest: ReturnType<JournalRestProjection['checkpoint']>
   scope: string | null
   latestAcceptedTurnSequence: number
+  queueRevision?: number
 }
 
 export function structuralJournalState(
@@ -275,6 +276,23 @@ export function structuralJournalState(
   // Only presence suppresses the old fingerprint rule; unvalidated echo payload is never interpreted.
   state.itemEchoes = scratch.map('echoes', { encode: () => true, decode: () => true })
   state.stoppedHistoryCarried = scratch.map('carried', { encode: () => [], decode: () => [] })
+  state.queuedHandOffPlaces = scratch.map('queuedHandOffPlaces')
+  state.normalizedHandOffs = scratch.set('normalizedHandOffs')
+  state.queue = {
+    revision: saved?.queueRevision ?? 0,
+    cards: scratch.map('queuedCards', {
+      encode: (card) => ({
+        ...card,
+        body: {
+          kind: 'message' as const,
+          role: card.body.role,
+          blocks: [],
+          ...(card.body.command ? { command: { name: card.body.command.name } } : {})
+        }
+      }),
+      decode: (card) => card
+    })
+  }
   state.rest = new JournalRestProjection(scratch, saved?.rest)
   state.derivedTurnScope = new JournalDerivedTurnScope(saved?.scope)
   state.lastSequence = saved?.cursor ?? 0

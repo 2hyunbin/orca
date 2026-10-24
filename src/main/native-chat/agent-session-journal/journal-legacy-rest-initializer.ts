@@ -84,7 +84,7 @@ export class JournalLegacyRestInitializer {
     if (tip < 1) {
       return null
     }
-    return { ...projection, tip, guard: JSON.stringify([4, sessionId, projection, tip, owner]) }
+    return { ...projection, tip, guard: JSON.stringify([5, sessionId, projection, tip, owner]) }
   }
   private async run(canWork: () => boolean): Promise<void> {
     await yieldToForeground()
@@ -187,7 +187,8 @@ export class JournalLegacyRestInitializer {
               agent: state.agent,
               rest: state.rest.checkpoint(),
               scope: state.derivedTurnScope.checkpoint(),
-              latestAcceptedTurnSequence: state.latestAcceptedTurnSequence
+              latestAcceptedTurnSequence: state.latestAcceptedTurnSequence,
+              queueRevision: state.queue.revision
             } satisfies JournalStructuralCheckpoint)
             scratch.db.exec('COMMIT')
           } catch (error) {

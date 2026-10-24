@@ -1,9 +1,3 @@
-// Every statement the journal issues against `journal_rows` / `journal_sessions`.
-//
-// Rows are keyed by the chat's identity: `(session_id, epoch, seq)`, the table's primary key. A
-// replay is one range scan of that key, and retiring an epoch deletes one range of it. Columns are
-// always named: `SELECT *` is uncacheable and can drop a column.
-
 import type Database from '../../sqlite/sync-database'
 import { parseJournalRow, serializeJournalRow, type JournalRow } from './journal-row-schema'
 import { AgentSessionJournalError } from './journal-write-guards'
@@ -93,8 +87,7 @@ export function insertJournalRow(
   savedAt = row.ts
 ): number {
   const rowJson = serializeJournalRow(row)
-  // A row the reader rejects would fail the chat's next load, so it is never written: the throw
-  // rolls back the caller's transaction.
+  // Reject unreadable rows before they can break the next load; the caller rolls back.
   const readBack = parseJournalRow(rowJson)
   if (!readBack.ok || readBack.row.seq !== row.seq) {
     throw new AgentSessionJournalError(
@@ -144,7 +137,6 @@ export function materializeJournalLegacyCut(
 // statement, so the consumer's memory is bounded by a page while no snapshot outlives a fetch.
 const EPOCH_ROW_PAGE_SIZE = 128
 
-/** The epoch's rows in sequence order, fetched one completed statement at a time. */
 export function* iterateJournalEpochRows(
   db: Database.Database,
   sessionId: string,
@@ -180,7 +172,6 @@ export function readJournalRowsAfter(
   )
 }
 
-/** Every row of a retired epoch, in the transaction that retires it. */
 export function deleteJournalEpochRows(
   db: Database.Database,
   sessionId: string,

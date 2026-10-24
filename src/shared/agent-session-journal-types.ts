@@ -1,3 +1,5 @@
+import type { AgentJournalTurnScope } from './agent-session-journal-turn-scope'
+export type { AgentJournalTurnScope } from './agent-session-journal-turn-scope'
 import type { AgentSessionSemanticWork } from './agent-session-semantic-work'
 import type { AgentSessionProviderContextBoundary } from './agent-session-provider-context'
 // ─── Canonical agent-session journal: cross-process wire shapes ─────────────
@@ -28,8 +30,11 @@ export { type AgentType }
 /** v3 introduced the `turn` item. A row without one is still written at v2 so
  *  an older host keeps reading it; the first v3 row stops that host writing the chat
  *  (a released one keeps it read-only, this build fails its load) instead of truncating. */
-export const AGENT_SESSION_JOURNAL_SCHEMA_VERSION = 3
+export const AGENT_SESSION_JOURNAL_SCHEMA_VERSION = 4
 export const AGENT_SESSION_JOURNAL_TURN_ITEM_SCHEMA_VERSION = 3
+/** v4 introduced the `queue` row: an older build keeps a chat holding one read-only rather than
+ *  meeting a kind it does not know. Every other row keeps its own version. */
+export const AGENT_SESSION_JOURNAL_QUEUE_SCHEMA_VERSION = 4
 const AGENT_SESSION_JOURNAL_PRE_TURN_SCHEMA_VERSION = 2
 
 export function journalRowSchemaVersion(bodies: readonly { kind: string }[]): number {
@@ -413,11 +418,6 @@ export type AgentJournalProducerLinkage = {
   attempt?: number
 }
 
-/** Which turn a row belongs to, stated by the write that created it. `turn` names the turn
- *  record's journal key; `thread` is a row that belongs to no turn — a notice about the
- *  conversation, or a message not yet delivered into one. Turn records themselves are `thread`. */
-export type AgentJournalTurnScope = { kind: 'turn'; turnItemId: string } | { kind: 'thread' }
-
 export const AGENT_JOURNAL_THREAD_SCOPE: AgentJournalTurnScope = { kind: 'thread' }
 
 /** Who produced a row and which turn it belongs to: what every item write states. */
@@ -425,12 +425,7 @@ export type AgentJournalRowAttribution = AgentJournalProducerLinkage & {
   turnScope: AgentJournalTurnScope
 }
 
-/** Where the journal placed an item: the sequence of the row that created it,
- *  then its place among that row's writes. The timeline's only ordering key. */
-export type AgentJournalPosition = {
-  sequence: number
-  index: number
-}
+export type { AgentJournalPosition } from './agent-session-journal-position'
 
 /** One reduced timeline entry. `sequence` orders the list; `observedAt` is the
  *  provider's own clock and may sort earlier than a later sequence when the row

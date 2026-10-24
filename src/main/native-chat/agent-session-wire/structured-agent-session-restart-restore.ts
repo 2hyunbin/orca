@@ -38,9 +38,8 @@ export type StructuredAgentSessionRestartListingDeps = {
   // Lease bookkeeping. Neither throws: listing grants no writer, so bookkeeping must not block it.
   /** Whether every lease on this host is settled. */
   reconcileAll: () => Promise<boolean>
-  /** Whether this chat's lease is settled. */
   reconcile: (sessionId: string) => Promise<boolean>
-  /** False when its store write failed; the next attach or send resolves it again. */
+  /** Failed writes retry strictly on the next attach/send. */
   resolveRecovery: (sessionId: string) => Promise<boolean>
   /** Chats the teardown resume marker says were working when their host stopped: what a chat
    *  saved before its journal kept an open turn is read as interrupted by. */
@@ -69,8 +68,7 @@ export async function listStructuredAgentSessionsOnRestart(
   if (records.length === 0) {
     return
   }
-  // One whole-host check for the pass, which also retries a startup pass that failed. After a
-  // failure, per-chat retries only hit the same store again; each chat's own action reconciles it.
+  // Avoid per-chat store retries after a failed host-wide pass; explicit actions retry later.
   let settled = await input.reconcileAll()
   await mapWithConcurrency(records, LEASE_RECONCILE_CONCURRENCY, async ({ sessionId }) => {
     // A session latched in recovery exits here at startup, without waiting for a client.

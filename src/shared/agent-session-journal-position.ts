@@ -2,8 +2,15 @@
 // item's place among that row's writes. Time never enters it — a row recovered
 // after a crash carries the provider's earlier clock at a later sequence.
 
-import type { AgentJournalPosition, AgentJournalRenderItem } from './agent-session-journal-types'
+import type { AgentJournalRenderItem } from './agent-session-journal-types'
 import type { NativeChatMessage } from './native-chat-types'
+
+/** Where the journal placed an item: the sequence of the row that created it,
+ *  then its place among that row's writes. The timeline's only ordering key. */
+export type AgentJournalPosition = {
+  sequence: number
+  index: number
+}
 
 type PositionedItem = Pick<AgentJournalRenderItem, 'sequence' | 'sequenceIndex'>
 
