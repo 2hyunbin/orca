@@ -181,7 +181,7 @@ describe('worktree base directory watch target resolution', () => {
   })
 
   // Real host (win-lowspec): the synchronous probe blocked main 5 s on a cold distro and killed its boot.
-  it('never probes a WSL repo distro home, and never synchronously', async () => {
+  it('never probes a distro home for a WSL repo or a Windows repo', async () => {
     const wsl = makeRepo(0, { path: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\project' })
     const mirrored = makeRepo(1, { path: 'C:\\Users\\alice\\orca' })
 
@@ -197,6 +197,7 @@ describe('worktree base directory watch target resolution', () => {
     }
 
     expect(wslHomeMock).not.toHaveBeenCalled()
+    expect(wslHomeAsyncMock).not.toHaveBeenCalled()
   })
 
   // WSL-mirrored worktrees can have Windows Git metadata; UNC root refusal must preserve that watcher.

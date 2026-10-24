@@ -12,7 +12,11 @@ import {
 import { isWslUncPath } from '../../shared/wsl-paths'
 import { mapWithConcurrency } from '../../shared/map-with-concurrency'
 import { getWorktreeMirrorDistro } from '../project-runtime-git-options'
-import { computeWorkspaceRootAsync, getWorktreePathSettings } from './worktree-logic'
+import {
+  computeWorkspaceRoot,
+  getWorktreePathSettings,
+  workspaceRootMirrorsIntoWsl
+} from './worktree-logic'
 import { shouldEmitBoundedWarning } from './bounded-warning-dedupe'
 import { resolveWorktreeCommonGitDirectory } from './worktree-common-git-directory'
 import type {
@@ -78,15 +82,17 @@ async function maybeAddBaseTarget(
     return
   }
   const pathSettings = getWorktreePathSettings(repo, settings, mirrorDistro)
-  // Why async: the synchronous home probe blocks main for up to 5 s and kills a still-booting distro.
-  const workspaceRoot = await computeWorkspaceRootAsync(repo.path, pathSettings)
   const config = {
     repoId: repo.id,
     repoName: getRuntimePathBasename(repo.path).replace(/\.git$/, ''),
     nestWorkspaces: pathSettings.nestWorkspaces
   }
-  if (isWslUncPath(workspaceRoot)) {
-    warnSkippedWslRoot(repo.id, workspaceRoot)
+  // A root mirrored into WSL is a UNC path either way; probing the distro's home (which can kill a
+  // booting distro) would only lead to the same skip, so keep just the Git-common watch.
+  const mirrorsIntoWsl = workspaceRootMirrorsIntoWsl(repo.path, pathSettings)
+  const workspaceRoot = mirrorsIntoWsl ? null : computeWorkspaceRoot(repo.path, pathSettings)
+  if (workspaceRoot === null || isWslUncPath(workspaceRoot)) {
+    warnSkippedWslRoot(repo.id, workspaceRoot ?? repo.path)
   } else {
     try {
       if ((await stat(workspaceRoot)).isDirectory()) {
