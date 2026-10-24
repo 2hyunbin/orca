@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   attachTerminalMouseWheelMultiplier,
   createTerminalTuiMouseWheelDistanceState,
@@ -74,11 +74,6 @@ function wheelEvent(
 }
 
 describe('terminal mouse wheel multiplier', () => {
-  beforeEach(() => {
-    // The notch unit follows the UI zoom read from window.api; no api means 100%.
-    vi.stubGlobal('window', {})
-  })
-
   afterEach(() => {
     vi.unstubAllGlobals()
   })
@@ -273,7 +268,7 @@ describe('terminal mouse wheel multiplier', () => {
     expect(reports).toEqual([1, 1, 1, 2, 1, 1, 0, 1])
   })
 
-  it('keeps a Mac trackpad flick linear when its wheelDelta lands on the notch grid', () => {
+  it('keeps a Mac trackpad flick linear once its wheelDelta reaches notch size', () => {
     const state = createTerminalTuiMouseWheelDistanceState()
     // Chromium on macOS reports wheelDeltaY = -3 * deltaY for continuous devices.
     const flick = [8, 16, 24, 32, 40, 48, 56, 48, 40, 32, 24, 16, 8]
@@ -292,6 +287,8 @@ describe('terminal mouse wheel multiplier', () => {
 
   it.each([
     ['Mac', { deltaY: -4, wheelDeltaY: 120 }],
+    // Chromium divides both deltas by browser zoom, which the page cannot always know.
+    ['Mac at 110% browser zoom', { deltaY: 4 / 1.1, wheelDeltaY: -109 }],
     ['Windows', { deltaY: 100, wheelDeltaY: -120 }]
   ])('treats a %s notched wheel right after trackpad input as discrete', (_platform, notch) => {
     const afterTrackpad = createTerminalTuiMouseWheelDistanceState()
@@ -315,37 +312,20 @@ describe('terminal mouse wheel multiplier', () => {
     expect(notchReports(afterTrackpad)).toEqual(notchReports(fresh))
   })
 
-  it('keeps notches discrete and trackpad flicks linear under page zoom', () => {
-    // Chromium divides deltaY and wheelDelta by page zoom: a 125% notch reports 96.
-    const zoom = 1.25
-    const metrics = { cellHeight: 16, notchWheelDelta: 120 / zoom }
-    const notchState = createTerminalTuiMouseWheelDistanceState()
-    const notches = [0, 200, 400].map((timeStamp) =>
+  it('keeps a touchpad flick linear when wheelDelta tracks deltaY one to one', () => {
+    const state = createTerminalTuiMouseWheelDistanceState()
+    const flick = [20, 60, 120, 160, 120, 60, 20]
+
+    const reports = flick.map((deltaY, index) =>
       resolveTerminalTuiMouseWheelReportCount(
-        { deltaY: 4 / zoom, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -96, timeStamp },
+        { deltaY, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -deltaY, timeStamp: index * 8 },
         1,
-        notchState,
-        metrics
-      )
-    )
-    const flickState = createTerminalTuiMouseWheelDistanceState()
-    const flick = [10, 20, 30, 40, 50, 40, 30, 20, 10].map((deltaY, index) =>
-      resolveTerminalTuiMouseWheelReportCount(
-        {
-          deltaY,
-          deltaMode: DOM_DELTA_PIXEL,
-          wheelDeltaY: -Math.trunc(3 * deltaY),
-          timeStamp: index * 8
-        },
-        1,
-        flickState,
-        metrics
+        state,
+        { cellHeight: 16 }
       )
     )
 
-    expect(notches).toEqual([1, 1, 1])
-    expect(flick.reduce((sum, reports) => sum + reports, 0)).toBe(Math.trunc(250 / 16))
-    expect(Math.max(...flick)).toBe(3)
+    expect(reports).toEqual([1, 4, 7, 10, 8, 3, 2])
   })
 
   it('drops pending trackpad distance on each direction change', () => {

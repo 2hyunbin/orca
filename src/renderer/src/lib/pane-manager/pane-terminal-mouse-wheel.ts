@@ -1,5 +1,4 @@
 import type { Terminal } from '@xterm/xterm'
-import { windowDipToCssPx } from '../ui-zoom'
 import {
   createTerminalTuiMouseWheelDistanceState,
   normalizeTerminalTuiMouseWheelMultiplier,
@@ -21,7 +20,6 @@ export type { TerminalTuiMouseWheelDistanceState } from './pane-terminal-tui-whe
 const XTERM_MOUSE_REPORTING_CLASS = 'enable-mouse-events'
 const REPLAYED_WHEEL_EVENT_PROPERTY = '__orcaReplayedTerminalWheelEvent'
 const DOM_DELTA_LINE = 1
-const LEGACY_NOTCH_WHEEL_DELTA = 120
 
 type TerminalWheelTarget = Pick<Terminal, 'attachCustomWheelEventHandler' | 'element' | 'rows'> & {
   modes: Pick<Terminal['modes'], 'mouseTrackingMode'>
@@ -212,8 +210,6 @@ export function attachTerminalMouseWheelMultiplier(
       replayState.distance,
       {
         cellHeight: resolveTerminalWheelCellHeight(terminal),
-        // Why: Chromium scales a notch's 120 wheelDelta by page zoom, like deltaY.
-        notchWheelDelta: windowDipToCssPx(LEGACY_NOTCH_WHEEL_DELTA),
         rows: terminal.rows
       }
     )
