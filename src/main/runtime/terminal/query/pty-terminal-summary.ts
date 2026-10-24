@@ -157,10 +157,13 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     if (!pty?.connected || !this.servesHeadlessMailboxLane()) {
       return null
     }
-    const paneKey = this.paneOfPty(pty).paneKey
+    const recorded = this.paneOfPty(pty)
+    const paneKey = recorded.paneKey
     const pane = parsePaneKey(paneKey ?? '')
     if (
       !pane ||
+      // A pane a window retracted before it closed stays an orphan, as the summary reports it.
+      !ptyHoldsRecordedSurface(pty.ptyId, recorded, this.ptySurfaceTopology()) ||
       this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId)) ||
       this.getLeavesForPty(pty.ptyId).length > 0
     ) {
@@ -177,6 +180,11 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       return null
     }
     return { leaf: ptyMailboxLeaf(pane, pty), pty, handle }
+  }
+
+  /** Off a headless graph the lane has no say; on one, only its single pane owner is typed into. */
+  protected headlessMailboxLaneAdmitsPty(pty: RuntimePtyWorktreeRecord): boolean {
+    return !this.servesHeadlessMailboxLane() || this.getPtyLaneMailboxTargetForPty(pty) !== null
   }
 
   /**

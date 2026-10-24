@@ -2,7 +2,10 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness } from '../../terminal/lifecycle/floating-session-liveness'
 import { writeOrchestrationPointerWithSettlement } from '../mailbox-pointer-pty-write'
 import type { WriteSettlement } from '../../../../shared/pty-write-settlement'
-import type { RuntimeLeafRecord } from '../../runtime-terminal-state-records'
+import type {
+  RuntimeLeafRecord,
+  RuntimePtyWorktreeRecord
+} from '../../runtime-terminal-state-records'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -24,6 +27,7 @@ import { mainPaneVerdict } from '../../terminal/surface/main-pane-verdict'
 
 export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
+  protected abstract headlessMailboxLaneAdmitsPty(pty: RuntimePtyWorktreeRecord): boolean
 
   protected writeOrchestrationPointerPty(
     ptyId: string,
@@ -57,7 +61,9 @@ export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRu
       ? pty?.connected &&
         pane?.tabId === stagedLeaf.tabId &&
         isTerminalLeafId(stagedLeaf.leafId) &&
-        pane.paneKey === makePaneKey(stagedLeaf.tabId, stagedLeaf.leafId)
+        pane.paneKey === makePaneKey(stagedLeaf.tabId, stagedLeaf.leafId) &&
+        // Re-checked at Enter: a second claimant may have appeared since the pointer was staged.
+        this.headlessMailboxLaneAdmitsPty(pty)
         ? { ...stagedLeaf, ...ptyMailboxLeaf(stagedLeaf, pty) }
         : null
       : currentLeaf.ptyId === ptyId

@@ -2,6 +2,7 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from './orchestration/db'
 import type { OrcaRuntimeService } from './orca-runtime'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 import {
   createRuntime,
   PANE_KEY,
@@ -109,6 +110,45 @@ describe('headless orchestration mailbox pointer', () => {
       incarnationId: 'mailbox-replacement-incarnation'
     })
     await runtime.listTerminals()
+    await goIdle(runtime)
+    sendRunMail()
+    await vi.advanceTimersByTimeAsync(3_500)
+    expect(pointerCount(write)).toBe(0)
+    db.close()
+  })
+
+  it('withholds Enter when a second PTY claims the pane after the pointer was typed', async () => {
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    await goIdle(runtime)
+    sendRunMail()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pointerCount(write)).toBe(1)
+
+    runtime.registerPty('pty-mailbox-replacement', WORKTREE_ID, null, {
+      tabId: TAB_ID,
+      leafId: LEAF_ID,
+      incarnationId: 'mailbox-replacement-incarnation'
+    })
+    await vi.advanceTimersByTimeAsync(500)
+    expect(write).not.toHaveBeenCalledWith(PTY_ID, '\r')
+    db.close()
+  })
+
+  it('does not revive a pane a serve window retracted before it closed', async () => {
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, {
+      tabs: [{ tabId: TAB_ID, worktreeId: WORKTREE_ID, title: 'Codex', activeLeafId: LEAF_ID }],
+      leaves: [
+        { tabId: TAB_ID, worktreeId: WORKTREE_ID, leafId: LEAF_ID, paneRuntimeId: 1, ptyId: PTY_ID }
+      ]
+    })
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+    runtime.markGraphUnavailable(1)
+    expect([runtime['authoritativeWindowId'], runtime['graphStatus']]).toEqual([
+      HEADLESS_RUNTIME_WINDOW_ID,
+      'ready'
+    ])
     await goIdle(runtime)
     sendRunMail()
     await vi.advanceTimersByTimeAsync(3_500)
