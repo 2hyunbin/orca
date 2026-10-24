@@ -158,6 +158,7 @@ async function createThroughDispatcher(
       baseBranch: 'main',
       branchName: 'task',
       effectiveRequestedName: 'task',
+      displayNameKind: request.displayNameKind,
       effectiveSanitizedName: 'task',
       effectiveCreatedWithAgent: 'claude',
       localWorktreeGitOptions: {},
@@ -167,8 +168,13 @@ async function createThroughDispatcher(
     return { worktree: materialized.worktree }
   })
   vi.spyOn(runtime, 'resolveStructuredAgentSessionCreateIntent').mockImplementation(
-    async (args) => ({
-      envelope: args.envelope,
+    async (args): ReturnType<OrcaRuntimeService['resolveStructuredAgentSessionCreateIntent']> => ({
+      envelope: {
+        sessionId: args.envelope.sessionId,
+        clientOperationId: args.envelope.clientOperationId,
+        expectedRuntimeFence: null,
+        payloadFingerprint: ''
+      },
       location: {
         executionHostId: 'local',
         wslDistro: null,
