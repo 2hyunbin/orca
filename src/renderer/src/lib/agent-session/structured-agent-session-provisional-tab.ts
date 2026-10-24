@@ -7,8 +7,8 @@ import type {
   StructuredAgentLaunchHandle,
   StructuredAgentLaunchHooks
 } from '@/lib/structured-agent-launch-settlement'
-import { useAppStore } from '@/store'
-import type { ExecutionHostId } from '../../../shared/execution-host'
+import { useAppStore } from '@/store/index'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   beginHostAdmittedStructuredLaunch,
   type DeclinedStructuredLaunchTerminalOptions,
@@ -19,19 +19,18 @@ import {
   resolveStructuredAgentSessionOwner,
   structuredAgentSessionTargetForHost
 } from '@/runtime/structured-agent-session-owner'
-import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import {
   openTerminalForDeclinedChat,
   openDeclinedTerminal,
   opensAtAction
-} from './structured-agent-session-action-launch'
-import { holdEmptyWorkspaceDefaultSurfaceForLaunch } from './empty-workspace-default-surface-claims'
-import type { OpenedAgentSessionTab } from './structured-agent-session-tab-open-through-layout-owner'
+} from '../structured-agent-session-action-launch'
+import { holdEmptyWorkspaceDefaultSurfaceForLaunch } from '../empty-workspace-default-surface-claims'
+import type { OpenedAgentSessionTab } from '../structured-agent-session-tab-open-through-layout-owner'
 import {
   captureStructuredLaunchSurfaceAddress,
   openStructuredAgentSessionProvisionalTab
-} from './structured-agent-session-launch-surface'
-export { openStructuredAgentSessionProvisionalTab } from './structured-agent-session-launch-surface'
+} from '../structured-agent-session-launch-surface'
 
 type LocalProvisionalLaunch = StructuredAgentLaunchHandle & { tab: OpenedAgentSessionTab }
 
