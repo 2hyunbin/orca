@@ -43,8 +43,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     if (!targetId) {
       return ''
     }
-    // Prefer the live label, then the removed target's last known label (ghost
-    // host), then the raw id as a last resort.
+    // Retain removed-host labels for ghost workspaces before falling back to raw IDs.
     return s.sshTargetLabels.get(targetId) ?? s.removedSshTargetLabels.get(targetId) ?? targetId
   })
   const [busy, setBusy] = useState<null | 'reconnect' | 'forget'>(null)
@@ -67,8 +66,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
   }
   const { worktreeId, displayName, resolution } = modalData
   const canReconnect = resolution.kind === 'disconnected'
-  // This dialog only opens for a workspace pinned to a named SSH target, so that
-  // target IS the host the removal was confirmed against (STA-4343).
+  // This workspace’s named SSH target is the host confirmed for removal.
   const removalTarget: WorktreeRemovalTarget = {
     id: worktreeId,
     executionHostId:
@@ -82,7 +80,6 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     }
   }
 
-  // Reconnect the SSH target, then run the normal remote worktree removal.
   const handleReconnectAndDelete = async (): Promise<void> => {
     if (resolution.kind !== 'disconnected') {
       return
@@ -105,7 +102,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
       )
       return
     }
-    // Close before the delete toast fires so the two don't overlap.
+    // Close before the delete toast to avoid overlapping confirmations.
     closeModal()
     void runWorktreeDeleteWithToast(removalTarget, displayName, { confirmedDiscards })
     if (mountedRef.current) {
@@ -113,7 +110,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     }
   }
 
-  // Remove Orca's records only — never touches remote files, worktrees, or branches.
+  // Forget only Orca’s records; remote files, worktrees and branches survive.
   const handleForget = async (): Promise<void> => {
     const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     setBusy('forget')
@@ -178,8 +175,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
 
         <RemovalUnsavedFilesNotice targets={unsavedTargets} enabled />
 
-        {/* Why: the ghost-host description already states files are untouched, so
-            only repeat the reassurance on the reconnect (disconnected) path. */}
+        {/* Ghost-host copy already promises files survive; repeat only on the reconnect path. */}
         {canReconnect ? (
           <p className="text-[11px] leading-snug text-muted-foreground">{forgetDescription}</p>
         ) : null}
