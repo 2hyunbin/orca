@@ -1,7 +1,5 @@
 import { mockRecordedOwnerProcess } from './structured-agent-session-owner-process.test-support'
-// A host that dies while its Codex child is still starting leaves a lease behind. The child's
-// identity is committed the moment it spawns, before the handshake, so the next host can stop that
-// exact process and start over instead of guessing whether anything is running.
+// Persist spawn identity before handshake so relaunch can stop the exact orphan instead of guessing.
 
 import { cp, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -49,18 +47,17 @@ afterEach(async () => {
 
 type HostGeneration = 'dying' | 'relaunched'
 
-/** Each generation's files. The relaunch opens a copy taken at the crash: the dying host stays in
- *  this process with its attach still pending, and a dead process writes nothing after it dies. */
+/** Relaunch from a crash-time copy; the still-pending dying host cannot write into it. */
 function generationRoot(generation: HostGeneration): string {
   return join(root, generation)
 }
 
 async function crash(dying: AgentSessionRecordStore): Promise<void> {
-  // An empty renewal queues behind every write the dying host committed, so they are on disk.
+  // Empty renewal drains preceding durable store writes before copying.
   await dying.renewLeases([])
   await cp(generationRoot('dying'), generationRoot('relaunched'), {
     recursive: true,
-    // A write still in flight at the crash never landed, and a dead process holds no lock.
+    // Exclude uncommitted writes and locks a dead process no longer holds.
     filter: (source) => !source.endsWith('.tmp') && !source.includes('.lock')
   })
 }
@@ -69,8 +66,7 @@ function openStore(generation: HostGeneration): Promise<AgentSessionRecordStore>
   return openTestAgentSessionRecordStore(generationRoot(generation))
 }
 
-/** A Codex adapter whose child spawns, reports its pid (the fake's `CHILD_PID`) the way the real
- *  connection does, and then never answers the thread handshake: the host dies in that window. */
+/** Report spawn identity, then hang in thread handshake. */
 function adapterThatNeverFinishesStarting(): StructuredAgentSessionAdapter {
   const codex = fakeCodex({
     'thread/start': () => new Promise(() => {}),
@@ -79,8 +75,7 @@ function adapterThatNeverFinishesStarting(): StructuredAgentSessionAdapter {
   return Object.assign(adapterFor(codex), { supportsCreate: () => true })
 }
 
-/** A Codex adapter whose child spawns and reports its pid, and whose acquire never answers: the
- *  host dies with the child recorded and the create still unanswered. */
+/** Report spawn identity, then hang acquisition before create answers. */
 function adapterThatNeverAnswersItsSpawn(): StructuredAgentSessionAdapter {
   const codex = fakeCodex()
   const openConnection: typeof openCodexAppServerConnection = async (launch, handlers = {}) => {
@@ -90,8 +85,7 @@ function adapterThatNeverAnswersItsSpawn(): StructuredAgentSessionAdapter {
   return Object.assign(adapterFor({ ...codex, openConnection }), { supportsCreate: () => true })
 }
 
-/** A Codex adapter whose child never gets as far as reporting its pid: the reservation is all the
- *  next host finds. */
+/** Leave only a reservation with no observed spawn identity. */
 function adapterThatNeverSpawns(): StructuredAgentSessionAdapter {
   const codex = fakeCodex()
   const openConnection: typeof openCodexAppServerConnection = () => new Promise(() => {})
@@ -122,8 +116,7 @@ describe('a host that dies while its Codex child is starting', () => {
     const first = await openStore('dying')
     const dying = host('dying', first, adapterThatNeverFinishesStarting())
     void dying.attach(CALLER, hostTestAttachParams(null)).catch(() => {})
-    // Durable before the handshake returned, which never does: the only record the next host will
-    // have. The child is published at spawn, so its lease is already live while it starts.
+    // Spawn proof must be durable while handshake remains unanswered.
     await vi.waitFor(() =>
       expect(first.getRecord(SESSION)?.lease).toMatchObject({
         claimStatus: 'live',
@@ -132,7 +125,6 @@ describe('a host that dies while its Codex child is starting', () => {
       })
     )
 
-    // The relaunch. The orphan is still alive until something stops it.
     let orphanAlive = true
     const stopOwnerProcess = vi.fn(() => {
       orphanAlive = false
@@ -163,7 +155,6 @@ describe('a host that dies while its Codex child is starting', () => {
       ownerProcess: null,
       deathEvidence: { kind: 'pid-absent' }
     })
-    // What the next send's delivery does: start at the record's current fence.
     const fence = store.getRecord(SESSION)?.lease.runtimeFence ?? null
     expect(await relaunched.attach(CALLER, hostTestAttachParams(fence))).toMatchObject({ ok: true })
     expect(restarted.connections).toHaveLength(1)
@@ -174,8 +165,7 @@ describe('a host that dies while its Codex child is starting', () => {
   })
 })
 
-// The client keeps a create it never heard back from and retries it under the same operation id, so
-// that replay, not a fresh start, is what the user's Retry and first send go through.
+// Unknown-outcome creates retry the same operation, including user Retry and first-send recovery.
 describe('a create replayed after the host that ran it died', () => {
   const PAST_OPERATION_EXPIRY =
     AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS + AGENT_SESSION_OPERATION_FUTURE_SKEW_MS + 60_000
@@ -215,7 +205,7 @@ describe('a create replayed after the host that ran it died', () => {
       Object.assign(adapterFor(restarted), { supportsCreate: () => true }),
       {
         mintSpawnToken: () => 'spawn-b',
-        // A reservation with no pid probes indeterminate: no token scan off Linux.
+        // Non-Linux hosts cannot scan tokens; missing-PID reservations remain indeterminate.
         probeOwner: async (record): Promise<AgentSessionOwnerProbe> =>
           record.lease.ownerProcess
             ? { outcome: 'pid-absent' }
@@ -231,7 +221,6 @@ describe('a create replayed after the host that ran it died', () => {
     })
 
     const replayed = await relaunched.attach(CALLER, params)
-    // Before, `agent_session_ownership_unknown` while the row was pending, then `_operation_expired`.
     expect(replayed.ok ? null : replayed.refusal.code).toBeNull()
     expect(replayed).toMatchObject({ ok: true, value: { sessionId: SESSION, fence: 3 } })
     expect(restarted.connections).toHaveLength(1)
@@ -244,7 +233,6 @@ describe('a create replayed after the host that ran it died', () => {
       store.getOperationRow(CALLER.callerKey, params.envelope.clientOperationId)?.outcome
     ).toEqual({ status: 'succeeded', sessionId: SESSION })
 
-    // Settled now: the same id replays that answer and never starts a second agent.
     await expect(relaunched.attach(CALLER, params)).resolves.toMatchObject({
       ok: true,
       replayed: true
@@ -253,7 +241,6 @@ describe('a create replayed after the host that ran it died', () => {
   })
 })
 
-// The dying host answered the create at spawn, but the answer was lost on its way to the client.
 describe('a create answered before the host that ran it died', () => {
   it('replays that answer with the chat at rest, and the next send starts the agent', async () => {
     const params = hostTestAttachParams(null)
@@ -273,7 +260,6 @@ describe('a create answered before the host that ran it died', () => {
     await relaunched.restoreReadableSessions()
     expect(store.getRecord(SESSION)?.lease).toMatchObject({ claimStatus: 'released' })
 
-    // Before, `ownerUnproven`: the replay tried to start an agent from a reservation long gone.
     await expect(relaunched.attach(CALLER, params)).resolves.toMatchObject({
       ok: true,
       replayed: true,

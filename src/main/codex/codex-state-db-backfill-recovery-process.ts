@@ -17,7 +17,6 @@ export type CodexBackfillRecoveryProcess = {
   managed?: ManagedProviderProcess
 }
 
-/** Starts the read-only app-server whose presence lets Codex finish its own backfill. */
 export function spawnCodexBackfillRecoveryProcess(
   codexHomePath: string,
   spawnProcess: CodexAppServerSpawn,

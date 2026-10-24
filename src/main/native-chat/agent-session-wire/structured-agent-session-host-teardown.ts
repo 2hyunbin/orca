@@ -1,9 +1,5 @@
-// Host teardown, made failure-complete.
-//
-// Every phase runs whatever an earlier one threw: `flushAllEventSinks` throws BY DESIGN when a
-// sink barrier fails, and the attach drain can reject too. Each conversation is then retired — its
-// admitted writes drained, what it still queues left for its next open to keep — before the
-// runtime closes the one journal connection, last.
+// Attempt every teardown phase despite earlier failures; drain conversation writes before closing
+// the shared database last. Queued sends recover on next open.
 
 import type { AgentSessionResumeTrigger } from '../../../shared/agent-session-resume-marker'
 import { DESCENDANT_SNAPSHOT_TIMEOUT_MS } from '../../pty-descendant-termination'
@@ -28,10 +24,8 @@ export type StructuredAgentSessionTeardownPhase = {
   run: () => Promise<void> | void
 }
 
-/** Advisory persistence must not hold shutdown open. */
 export const RESUME_MARKER_RECORD_TIMEOUT_MS = 2_000
 
-/** Covers a provider's stop observed late on a loaded host. */
 export const EVICTION_MARGIN_MS = 1_000
 
 /** Includes the owner ladder, external descendant verification and final output before quit. */
@@ -44,7 +38,7 @@ export const CHILD_EVICTION_TIMEOUT_MS =
   PROVIDER_OUTPUT_DRAIN_TIMEOUT_MS +
   EVICTION_MARGIN_MS
 
-/** Bounds a phase without swallowing its failure, which `withTimeout` alone would. */
+/** Bound duration while preserving rejection, unlike withTimeout alone. */
 async function withPhaseTimeout(run: () => Promise<void>, timeoutMs: number): Promise<void> {
   const settled = run().then(
     () => ({ failed: false }) as const,
@@ -59,7 +53,6 @@ async function withPhaseTimeout(run: () => Promise<void>, timeoutMs: number): Pr
   }
 }
 
-/** The quit-path phase order, which is load-bearing rather than incidental. */
 export function structuredAgentSessionHostTeardownPhases(collaborators: {
   idleSweep: { dispose: () => Promise<void> | void }
   runtimeState: {
@@ -69,7 +62,7 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
   }
   tasks: { drainAttaches: () => Promise<void> }
   evictOwnedSessions: () => Promise<void>
-  /** Opens this teardown's witnesses; each session's own is taken as eviction stops its child. */
+  /** Begin witnesses now; eviction captures each session immediately before child shutdown. */
   beginResumeMarkers: () => void
   recordResumeMarkers: () => Promise<void>
   logger: StructuredAgentSessionLogger
@@ -89,7 +82,7 @@ export function structuredAgentSessionHostTeardownPhases(collaborators: {
     },
     { name: 'dispose-idle-sweep', run: () => collaborators.idleSweep.dispose() },
     { name: 'stop-lease-renewal', run: () => collaborators.runtimeState.stopLeaseRenewal() },
-    // Before the drain, which would otherwise wait out a start the provider never answers.
+    // Abort before drain so unanswered startup cannot block quit.
     {
       name: 'abort-acquires',
       run: () => collaborators.runtimeState.acquireAborts.abortAll('closed by quit')
@@ -132,9 +125,7 @@ async function tearDownStructuredAgentSessionHost(input: {
   const entries = [...input.sessions.entries()].filter(
     ([sessionId]) => !input.retainSessionIds?.has(sessionId)
   )
-  // Quit settles nothing still queued: delivery and the queue's drain are already disposed, so
-  // nothing hands it over now, and the next open settles it as it would after a crash. `allSettled`, so one failed close
-  // cannot skip the others.
+  // Delivery is disposed; next open recovers queued sends. allSettled ensures failed closes cannot skip others.
   const closed = await Promise.allSettled(
     entries.map(async ([, session]) => {
       await session.journal.close()
@@ -143,7 +134,7 @@ async function tearDownStructuredAgentSessionHost(input: {
   closed.forEach((result, index) => {
     const sessionId = entries[index]?.[0]
     if (result.status === 'fulfilled') {
-      // Only a closed conversation drops out; one whose close failed stays indexed for a retry.
+      // Retain failed closes for retry.
       if (sessionId !== undefined) {
         input.sessions.delete(sessionId)
         input.acknowledgeSessionRelease?.(sessionId)

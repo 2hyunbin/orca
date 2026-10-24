@@ -33,7 +33,6 @@ describe('Claude child root identity', () => {
       terminateDescendants
     })
 
-    // The descendant reaper cannot substitute a root signal for tree proof.
     await expect(tree.reap()).resolves.toBe('exited')
     expect(terminateDescendants).toHaveBeenCalled()
     expect(child.kill).not.toHaveBeenCalled()
@@ -59,7 +58,6 @@ describe('Claude child root identity', () => {
     })
 
     await expect(tree.reap()).resolves.toBe('unverifiable')
-    // No admissible snapshot gives this reaper authority over any process.
     expect(terminateDescendants).not.toHaveBeenCalled()
     expect(child.kill).not.toHaveBeenCalled()
   })

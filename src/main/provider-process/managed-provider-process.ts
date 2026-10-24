@@ -157,8 +157,7 @@ export function spawnManagedProviderProcess(
       return { root: rootVerdict(), tree: verdict }
     })
     return (async () => {
-      const previous = await groupFlight
-      const result = previous
+      const result = await groupFlight
       if (observed) {
         await drain()
       }
