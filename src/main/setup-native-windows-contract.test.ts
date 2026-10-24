@@ -59,10 +59,14 @@ it.skipIf(process.platform !== 'win32')(
           'cmd.exe /c plain.cmd',
           `cmd.exe /c plain.cmd${' '.repeat(6100)}`
         ]
-        for (const route of [cmd, powershell, 'fallback']) {
-          const shell = route === 'fallback' ? cmd : route
-          for (const command of commands) {
-            const token = `native:windows-${status}-${shell === cmd ? 'cmd' : 'ps'}`
+        for (const route of [cmd, powershell, 'fallback', 'cmd-argv-control']) {
+          const control = route === 'cmd-argv-control'
+          const shell = route === 'fallback' || control ? cmd : route
+          for (const command of control ? commands.slice(1, 2) : commands) {
+            const label = `${status}/${route}/${commands.indexOf(command)}`
+            const token = control
+              ? undefined
+              : `native:windows-${status}-${shell === cmd ? 'cmd' : 'ps'}`
             const resolved = resolveWindowsShellLaunchArgs(
               shell,
               root,
@@ -77,7 +81,7 @@ it.skipIf(process.platform !== 'win32')(
               shell === powershell
                 ? ['-NoProfile', ...resolved.shellArgs]
                 : ['/d', ...resolved.shellArgs]
-            const proc =
+            const spawned =
               route === 'fallback'
                 ? spawnShellWithFallback({
                     shellPath: join(root, 'absent-pwsh.exe'),
@@ -104,13 +108,29 @@ it.skipIf(process.platform !== 'win32')(
                           resolved.startupCommandDeliveredInShellArgs === true
                       }
                     ]
-                  }).process
-                : spawn(shell, args, {
-                    cwd: resolved.effectiveCwd,
-                    env,
-                    cols: 200,
-                    rows: 40
                   })
+                : {
+                    process: spawn(shell, args, {
+                      cwd: resolved.effectiveCwd,
+                      env,
+                      cols: 200,
+                      rows: 40
+                    }),
+                    shellPath: shell,
+                    startupCommandDeliveredInShellArgs:
+                      resolved.startupCommandDeliveredInShellArgs === true
+                  }
+            const proc = spawned.process
+            const winningShell = spawned.shellPath
+            const delivered = spawned.startupCommandDeliveredInShellArgs === true
+            console.info('native setup schedule', {
+              label,
+              command,
+              args,
+              delivered,
+              winningShell,
+              pid: proc.pid
+            })
             const startedPromise = runProcess({
               program: powershell,
               args: [
@@ -123,12 +143,14 @@ it.skipIf(process.platform !== 'win32')(
             })
             let exited = false
             let output = ''
-            let sent = resolved.startupCommandDeliveredInShellArgs === true
+            let sent = delivered
             let checked = false
             let code: number | undefined
-            const scanner = createSetupCompletionScanner(token, (value) => {
-              code = value
-            })
+            const scanner = token
+              ? createSetupCompletionScanner(token, (value) => {
+                  code = value
+                })
+              : undefined
             const completion = new Promise<void>((resolve, reject) => {
               proc.onExit(() => {
                 exited = true
@@ -136,21 +158,33 @@ it.skipIf(process.platform !== 'win32')(
               })
               proc.onData((data) => {
                 output += data
-                scanner.scan(data)
+                scanner?.scan(data)
                 if (!sent && (output.includes('>') || output.includes(']133;B'))) {
                   sent = true
                   const native = appendNativeSetupCompletion(
                     command,
                     token,
-                    nativeSetupCompletionShell(shell)
+                    nativeSetupCompletionShell(winningShell)
                   )
                   expect(native.startsWith(command)).toBe(true)
                   proc.write(`${native}\r`)
                 }
+                if (control && !checked && output.includes(`${root}>`)) {
+                  checked = true
+                  proc.write('echo __ORCA_PARENT_STATUS__:%errorlevel% & echo parent-alive\r')
+                }
+                if (control) {
+                  const match = output.match(/(?:^|\r?\n)__ORCA_PARENT_STATUS__:(-?\d+)\r?\n/)
+                  if (match) {
+                    code = Number(match[1])
+                  }
+                }
                 if (code !== undefined && !checked) {
                   checked = true
                   proc.write(
-                    shell === cmd ? 'echo parent-alive\r' : "[Console]::WriteLine('parent-alive')\r"
+                    winningShell === cmd
+                      ? 'echo parent-alive\r'
+                      : "[Console]::WriteLine('parent-alive')\r"
                   )
                 }
                 if (checked && /(?:^|\r?\n)parent-alive\r?\n/.test(output)) {
@@ -158,7 +192,7 @@ it.skipIf(process.platform !== 'win32')(
                 }
               })
               setTimeout(
-                () => reject(new Error(`native shell completion timeout: ${output}`)),
+                () => reject(new Error(`native shell completion timeout (${label}): ${output}`)),
                 20_000
               ).unref()
             })
@@ -166,12 +200,18 @@ it.skipIf(process.platform !== 'win32')(
             const startedAt = started.stdout.trim()
             try {
               await completion
+              expect(winningShell, label).toBe(shell)
+              expect(delivered, label).toBe(resolved.startupCommandDeliveredInShellArgs === true)
+              if (shell === cmd) {
+                expect(delivered, label).toBe(control)
+              }
               expect(code, output).toBe(status)
               expect(output).toContain('parent-alive')
               if (command === commands[0]) {
                 expect(output).toContain(`body:${root}:token=`)
                 expect(output).not.toContain('token=native:')
               }
+              console.info('native setup schedule passed', { label, code, delivered, winningShell })
             } finally {
               if (!exited) {
                 expect(startedAt).not.toBe('')
@@ -186,7 +226,7 @@ it.skipIf(process.platform !== 'win32')(
                     '-RootStarted',
                     startedAt,
                     '-Image',
-                    shell
+                    winningShell
                   ],
                   env
                 })
@@ -210,7 +250,15 @@ it.skipIf(process.platform !== 'win32')(
       expect(Buffer.from(attempts[0].shellArgs.at(-1)!, 'base64').toString('utf16le')).toContain(
         'native:fallback'
       )
-      expect(attempts[1].shellArgs.join(' ')).toContain('%%errorlevel%%')
+      expect(attempts[1].startupCommandDeliveredInShellArgs).toBe(false)
+      expect(attempts[1].shellArgs.join(' ')).not.toContain('native:fallback')
+      expect(
+        appendNativeSetupCompletion(
+          'cmd.exe /c plain.cmd',
+          'native:fallback',
+          nativeSetupCompletionShell(attempts[1].shellPath)
+        )
+      ).toContain('%%errorlevel%%')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

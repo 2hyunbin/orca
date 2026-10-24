@@ -189,19 +189,19 @@ export function resolveWindowsShellLaunchArgs(
   const nativeCwd = normalizeWindowsTerminalCwd(cwd)
 
   if (shellBasename === 'cmd.exe') {
-    const shellArgStartupCommand = getCmdShellArgStartupCommand(startupCommand)
+    const shellArgStartupCommand = getCmdShellArgStartupCommand(
+      startupCommand
+        ? appendNativeSetupCompletion(
+            startupCommand,
+            nativeSetupToken,
+            nativeSetupCompletionShell(shellPath)
+          )
+        : undefined
+    )
     const startupCommands = [
       CMD_UTF8_SETUP_COMMAND,
       ...(codexLaunchPreflightCommand ? [CMD_CODEX_LAUNCH_PREFLIGHT] : []),
-      ...(shellArgStartupCommand
-        ? [
-            appendNativeSetupCompletion(
-              shellArgStartupCommand,
-              nativeSetupToken,
-              nativeSetupCompletionShell(shellPath)
-            )
-          ]
-        : [])
+      ...(shellArgStartupCommand ? [shellArgStartupCommand] : [])
     ]
     return {
       shellArgs: ['/K', startupCommands.join(' & ')],
