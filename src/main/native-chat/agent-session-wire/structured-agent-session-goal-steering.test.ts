@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import {
   createQueuedMessageTestRig,
   eventually,
@@ -25,9 +27,13 @@ beforeEach(async () => {
 afterEach(() => rig.dispose())
 
 /** Codex goal turns have no ordinary Orca submission as their opener. */
-async function startGoalTurn(firstChoices?: Readonly<Record<string, string>>): Promise<void> {
+async function startGoalTurn(
+  firstChoices?: Readonly<Record<string, string>>,
+  beforeGoal?: () => Promise<void>
+): Promise<void> {
   const first = await rig.workingSend(firstChoices)
   await rig.settleAccepted(first, 'first')
+  await beforeGoal?.()
   rig.host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
   const change = { kind: 'set' as const, objective: 'Keep improving the project' }
   expect(
@@ -125,3 +131,25 @@ it.each([
     expect(rig.dispatch).toHaveBeenCalledTimes(dispatches)
   }
 )
+
+it('compares with a send that set the thread choices before its turn rejected it', async () => {
+  await startGoalTurn(undefined, async () => {
+    const stopped = await rig.workingSend({ model: 'other-model', effort: 'high' })
+    await rig.host.settleLateDispatch({
+      sessionId: SESSION,
+      clientMessageId: stopped,
+      state: 'rejected',
+      ...agentSessionFailureWords(agentSessionFailureFact('cancelled'), { surface: 'rejection' }),
+      answeredInTurn: {
+        turn: { provider: 'codex', threadId: THREAD, turnId: 'turn-stopped', ordinal: 0 },
+        via: 'start'
+      }
+    })
+  })
+  const steering = rig.send('Back to the reported model', undefined, {
+    carried: { model: 'gpt-ran', effort: 'high' }
+  })
+  expect(await steering.result).toMatchObject({ ok: true })
+  await rig.host.collaboratorsForTests().conversationDelivery.loop.wake(SESSION)
+  expect(rig.dispatch).toHaveBeenCalledTimes(2)
+})

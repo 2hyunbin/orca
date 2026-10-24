@@ -44,9 +44,20 @@ export function waitsForCodexTurnOptions(
       (submission) => agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
     ) ??
     // Goal continuations have no opener and run on this child's last turn/start choices.
-    handed.findLast(
-      (submission) => submission.fence === child.fence && submission.dispatchState !== 'rejected'
-    )
+    handed
+      .filter(
+        (submission) =>
+          submission.fence === child.fence &&
+          // A send rejected after its turn opened still set the thread's choices.
+          (submission.dispatchState !== 'rejected' || Boolean(submission.answeredInTurn))
+      )
+      .reduce<AgentJournalSubmission | undefined>(
+        (newest, submission) =>
+          newest && (newest.handedOverAt ?? 0) > (submission.handedOverAt ?? 0)
+            ? newest
+            : submission,
+        undefined
+      )
   const ran = structuredAgentSessionChildRan(child)
   if (active) {
     return !sameOptions(active.options, next.options, ran)
