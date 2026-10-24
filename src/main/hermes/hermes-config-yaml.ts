@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from 'node:util'
 import { parse } from 'yaml'
 
-import { HERMES_PLUGIN_NAME } from './hermes-managed-plugin-source'
+import { HERMES_CLIENT_ENV_PASSTHROUGH, HERMES_PLUGIN_NAME } from './hermes-managed-plugin-source'
 import { updateHermesPluginDocument } from './hermes-config-document'
 
 export type HermesConfig = Record<string, unknown>
@@ -76,6 +76,35 @@ export function disablePlugin(config: HermesConfig): HermesConfig {
   return next
 }
 
+function updatePassthrough(
+  config: HermesConfig,
+  update: (names: string[]) => string[]
+): HermesConfig {
+  const terminal = config.terminal === undefined ? {} : config.terminal
+  // Hermes ignores a malformed section; leave it for the user rather than fail the plugin install.
+  const names = isRecord(terminal) ? asStringArray(terminal.client_env_passthrough) : null
+  if (names === null) {
+    return config
+  }
+  const next = update(names)
+  return isDeepStrictEqual(names, next)
+    ? config
+    : { ...config, terminal: { ...terminal, client_env_passthrough: next } }
+}
+
+export function installOrcaStatusConfig(config: HermesConfig): HermesConfig {
+  return updatePassthrough(enablePlugin(config), (names) => [
+    ...names,
+    ...HERMES_CLIENT_ENV_PASSTHROUGH.filter((name) => !names.includes(name))
+  ])
+}
+
+export function removeOrcaStatusConfig(config: HermesConfig): HermesConfig {
+  return updatePassthrough(disablePlugin(config), (names) =>
+    names.filter((name) => !HERMES_CLIENT_ENV_PASSTHROUGH.includes(name))
+  )
+}
+
 export function updateConfigContent(
   content: string | null,
   updater: (config: HermesConfig) => HermesConfig
@@ -88,7 +117,7 @@ export function updateConfigContent(
   if (isDeepStrictEqual(parsed.config, next)) {
     return { content: content ?? '' }
   }
-  return updateHermesPluginDocument(content ?? '', next)
+  return updateHermesPluginDocument(content ?? '', parsed.config, next)
 }
 
 export function getConfigEnablement(config: HermesConfig): {
