@@ -524,6 +524,7 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
   const { createCodexJournalTranslator } =
     await import('../../codex/codex-structured-journal-translation')
   const { codexLiveTextKey } = await import('../../codex/codex-thread-item-identity')
+  const { CodexItemStreamRetention } = await import('../../codex/codex-item-stream-retention')
   for (const n of [30, 300]) {
     const r = await rig(),
       errors = vi.fn()
@@ -548,6 +549,20 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
         }).accepted
       ).toBe(true)
     send('turn/started', { turn: { id: 'turn' } })
+    for (let k = 0; k < n; k++) {
+      send('item/started', {
+        turnId: 'turn',
+        item: {
+          type: 'commandExecution',
+          id: `cmd-${k}`,
+          source: 'unifiedExecStartup',
+          command: 'sleep 30',
+          cwd: '/workspace',
+          status: 'inProgress'
+        }
+      })
+      expect((await deferred.drained()).ok).toBe(true)
+    }
     for (let k = 0; k <= n; k++) {
       send('item/reasoning/textDelta', { itemId: `r-${k}`, turnId: 'turn', delta: `reason-${k}` })
       translator.flush()
@@ -556,6 +571,16 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
     const general = vi.spyOn(deferred.sink, 'liveTexts')
     const keyed = vi.spyOn(deferred.sink, 'liveText')
     let productionLookups = 0
+    let commandVisits = 0
+    const originalGet = CodexItemStreamRetention.prototype.get
+    const get = vi
+      .spyOn(CodexItemStreamRetention.prototype, 'get')
+      .mockImplementation(function (key) {
+        if (key.includes('cmd-')) {
+          commandVisits++
+        }
+        return originalGet.call(this, key)
+      })
     for (let k = 0; k < n; k++) {
       const raw = codexLiveTextKey('thread', 'turn', { type: 'reasoning', id: `r-${k}` })
       const identity = deferred.sink.liveText?.(raw)?.live?.identity
@@ -577,12 +602,18 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
       })
       expect(deferred.sink.liveText?.(raw)).toBeUndefined()
     }
+    get.mockRestore()
+    expect(commandVisits).toBe(0)
+    expect(
+      r.journal.snapshot().items.filter((item) => item.body.kind === 'tool-call')
+    ).toHaveLength(n)
     expect(general).not.toHaveBeenCalled()
     expect(productionLookups).toBeLessThanOrEqual(3 * n)
     console.info('selected Codex completion operations', {
       n,
       generalCalls: general.mock.calls.length,
       generalPopulationVisits: 0,
+      commandVisits,
       productionLookups,
       keyedLookupsIncludingTestProbes: keyed.mock.calls.length
     })

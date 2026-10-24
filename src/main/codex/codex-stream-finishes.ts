@@ -80,8 +80,15 @@ export function finishCodexStreams(
   select: CodexStreamFinishSelection
 ): CodexStructuredItemStreamAdmission {
   const { threadId, turnId, at, item } = select
+  const selectedKey = item ? codexStructuredItemKey(threadId!, item.id) : ''
+  const selectedProducer = item ? producers.get(selectedKey) : undefined
+  const candidates = item
+    ? selectedProducer
+      ? [[selectedKey, selectedProducer] as const]
+      : []
+    : producers
   const release = () => {
-    for (const [key, producer] of producers) {
+    for (const [key, producer] of candidates) {
       const state = states.get(key)
       if (
         (state?.item.type === 'agentMessage' || state?.item.type === 'reasoning') &&
@@ -104,7 +111,7 @@ export function finishCodexStreams(
     return admission
   }
   if (!deps.sink.prepareText) {
-    for (const [key, producer] of producers) {
+    for (const [key, producer] of candidates) {
       const state = states.get(key)
       if (!state) {
         continue
