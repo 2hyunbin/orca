@@ -25,32 +25,42 @@ it('keeps the main Codex turn working through a /side chat after Orca restarts',
     `${JSON.stringify({ type: 'event_msg', payload: { type: 'task_started', turn_id: 'turn-main' } })}\n`
   )
   const main = { session_id: MAIN, transcript_path: transcriptPath }
+  const side = { session_id: SIDE, transcript_path: null }
+  const post = async (payload: Record<string, unknown>): Promise<void> => {
+    expect((await postHookEvent(server, buildBody(payload), '/hook/codex')).status).toBe(204)
+    expect(server.getStatusSnapshot()[0]).toMatchObject({
+      state: 'working',
+      prompt: 'main task',
+      providerSession: { id: MAIN }
+    })
+  }
   let server = new AgentHookServer()
   await server.start({ env: 'production', userDataPath })
   try {
-    for (const payload of [
-      { ...main, hook_event_name: 'SessionStart', source: 'startup' },
-      { ...main, hook_event_name: 'UserPromptSubmit', turn_id: 'turn-main', prompt: 'main task' }
-    ]) {
-      expect((await postHookEvent(server, buildBody(payload), '/hook/codex')).status).toBe(204)
-    }
-    // Terminals outlive the app, so Codex keeps running while the listener's caches start empty.
+    await postHookEvent(
+      server,
+      buildBody({ ...main, hook_event_name: 'SessionStart', source: 'startup' }),
+      '/hook/codex'
+    )
+    await post({
+      ...main,
+      hook_event_name: 'UserPromptSubmit',
+      turn_id: 'turn-main',
+      prompt: 'main task'
+    })
+    await post({ ...side, hook_event_name: 'SessionStart', source: 'fork' })
+    // Terminals outlive the app, so the side chat continues while every listener cache starts empty.
     server.stop()
     server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath })
-    const side = { session_id: SIDE, transcript_path: null }
-    for (const payload of [
-      { ...side, hook_event_name: 'SessionStart', source: 'fork' },
-      { ...side, hook_event_name: 'UserPromptSubmit', turn_id: 'turn-side', prompt: 'side chat' },
-      { ...side, hook_event_name: 'Stop', turn_id: 'turn-side' }
-    ]) {
-      expect((await postHookEvent(server, buildBody(payload), '/hook/codex')).status).toBe(204)
-      expect(server.getStatusSnapshot()[0]).toMatchObject({
-        state: 'working',
-        prompt: 'main task',
-        providerSession: { id: MAIN }
-      })
-    }
+    await post({
+      ...side,
+      hook_event_name: 'UserPromptSubmit',
+      turn_id: 'turn-side',
+      prompt: 'side chat'
+    })
+    await post({ ...side, hook_event_name: 'SessionStart', source: 'compact' })
+    await post({ ...side, hook_event_name: 'Stop', turn_id: 'turn-side' })
     await postHookEvent(
       server,
       buildBody({ ...main, hook_event_name: 'Stop', turn_id: 'turn-main' }),

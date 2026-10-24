@@ -23,7 +23,6 @@ import {
   codexTurnApprovalsAreAutoReviewed,
   reconcileCodexSubagentReviewer
 } from '../../codex-subagent-reviewer'
-import { codexHookThread, isForeignEphemeralCodexThread } from '../../codex-ephemeral-thread'
 import { readFirstString } from '../interactive-tool'
 import type { HookListenerState } from '../listener-state'
 import { resolvePrompt, resolveToolState } from '../prompt-fields'
@@ -38,6 +37,7 @@ import {
   resolveCodexPaneStatus,
   setCodexMainAgentTurnState
 } from './codex-state'
+import { isForeignEphemeralCodexThread } from './codex-ephemeral-threads'
 
 export function buildCodexStatusPayload(
   state: HookListenerState,
@@ -172,8 +172,7 @@ export function normalizeCodexEvent(
   }
 
   // Ephemeral side chats share the pane but must not replace its recorded main turn.
-  const thread = codexHookThread(eventName, hookPayload)
-  if (thread && isForeignEphemeralCodexThread(state.lastStatusByPaneKey.get(paneKey), thread)) {
+  if (isForeignEphemeralCodexThread(state, paneKey, eventName, hookPayload)) {
     return null
   }
 
