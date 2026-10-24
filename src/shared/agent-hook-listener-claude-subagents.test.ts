@@ -253,6 +253,26 @@ describe('shared agent-hook-listener', () => {
       expect(stop?.payload.subagents ?? []).toEqual([])
     })
 
+    it('does not mint a row for an agent hook that fires inside a subagent', () => {
+      claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
+      claudeEvent({
+        hook_event_name: 'SubagentStart',
+        agent_id: 'aa34e9e23451d1f6b',
+        agent_type: 'general-purpose'
+      })
+      // Why: observed on Claude Code 2.1.310 — the hook agent inherits the subagent's agent_type.
+      const hookTool = claudeEvent({
+        hook_event_name: 'PreToolUse',
+        agent_id: 'hook-agent-5179ea04-58c0-440a-b861-04ead9f87aaa',
+        agent_type: 'general-purpose',
+        tool_name: 'Read',
+        tool_input: { file_path: '/tmp/README.md' }
+      })
+      expect(hookTool?.payload.subagents).toEqual([
+        expect.objectContaining({ id: 'aa34e9e23451d1f6b' })
+      ])
+    })
+
     it('revives an idle known child from its untyped tool event', () => {
       claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'spawn probe' })
       const agentId = 'aprobe1-6d3cb5b52120b7bf'

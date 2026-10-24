@@ -33,7 +33,8 @@ import { buildClaudeStatusPayload } from './claude-status-build'
 import { trackClaudeTaskNotificationDelivery } from './claude-task-notification-delivery'
 import { recordClaudeTeammateSpawn } from './claude-teammate-spawn'
 
-/** Maps one Claude hook event to the pane's status payload, tracking subagent rows from lifecycle and typed or known child tool events. */
+const CLAUDE_HOOK_AGENT_ID_PREFIX = 'hook-agent-'
+
 export function normalizeClaudeEvent(
   state: HookListenerState,
   eventName: unknown,
@@ -180,11 +181,12 @@ export function normalizeClaudeEvent(
       eventName === 'PostToolUseFailure')
       ? eventAgentId
       : undefined
-  // Why: hook-spawned agents (`"type": "agent"` hooks, ids `hook-agent-<uuid>`) and long-lived async agents emit tool hooks with no agent_type and never send SubagentStop; minting a row from those leaves it working forever. Tool activity only refreshes a known row or creates a typed one.
+  // Why: `"type": "agent"` hook runs (`hook-agent-<uuid>`, typed only when inherited from the hooked subagent) and long-lived async agents emit tool hooks but never SubagentStop, so a row minted from them stays working forever.
   const isMintableChildEvent =
-    !subagentOriginId ||
-    readString(hookPayload, 'agent_type') !== undefined ||
-    state.claudeSubagentRosterByPaneKey.get(paneKey)?.has(subagentOriginId) === true
+    eventAgentId?.startsWith(CLAUDE_HOOK_AGENT_ID_PREFIX) !== true &&
+    (!subagentOriginId ||
+      readString(hookPayload, 'agent_type') !== undefined ||
+      state.claudeSubagentRosterByPaneKey.get(paneKey)?.has(subagentOriginId) === true)
   if (eventAgentId && (subagentOriginId || isWaitingInducing) && isMintableChildEvent) {
     upsertWorkingClaudeSubagent(
       getOrCreateClaudeSubagentRoster(state, paneKey),
