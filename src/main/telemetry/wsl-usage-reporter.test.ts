@@ -211,7 +211,8 @@ describe('countWindowsDriveReposWithWslWorktrees', () => {
     const repos = [
       repoWithLinks('mixed', ['C:/src/mixed-a/.git', '/mnt/c/src/mixed-b/.git']),
       repoWithLinks('native', ['C:/src/native-a/.git']),
-      repoWithLinks('none', [])
+      repoWithLinks('none', []),
+      repoWithLinks('share', ['//server/share/app-feature/.git'])
     ]
     const countStore: WslUsageStore = {
       getRepos: () => repos,

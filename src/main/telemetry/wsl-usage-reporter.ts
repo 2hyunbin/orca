@@ -18,7 +18,7 @@ import { loadWindowsNativeRegistry, WINDOWS_REG_SZ } from '../windows-native-reg
 import { readWslDistroRegistrations } from '../wsl/wsl-distro-registry-id'
 import { listWslHostDistros } from '../wsl/wsl-host-distro-list'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
-import { readWorktreeLinks } from '../git/worktree-prune-guard'
+import { isForeignLink, readWorktreeLinks } from '../git/worktree-prune-guard'
 import { isTelemetryEnabled, track } from './client'
 import {
   buildWslUsageSnapshot,
@@ -87,7 +87,8 @@ export function collectWslProjects(
 
 /**
  * Windows-drive WSL git repos with a linked worktree whose link is a Linux path (WSL Git made it).
- * File reads only, one folder per such repo; no Git is spawned.
+ * File reads only, one folder per such repo; no Git is spawned, so a repo whose `.git` is a file
+ * (bare, or itself a linked worktree) reads as having none.
  */
 export async function countWindowsDriveReposWithWslWorktrees(
   store: WslUsageStore
@@ -106,7 +107,8 @@ export async function countWindowsDriveReposWithWslWorktrees(
       continue
     }
     const links = await readWorktreeLinks(join(repo.path, '.git', 'worktrees'))
-    if (links.some(({ link }) => link.startsWith('/'))) {
+    // As Windows Git would read it: a POSIX link, not a `//server/share` one.
+    if (links.some(({ link }) => isForeignLink(link, false))) {
       total += 1
     }
   }
