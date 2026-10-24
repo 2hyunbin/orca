@@ -1,8 +1,11 @@
+/* eslint-disable max-lines -- Keep checked-source snapshot validation, writes and fallback handle ownership together. */
 import { constants, createWriteStream, type Stats } from 'node:fs'
 import { lstat, mkdtemp, open, realpath, rm, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
+import { readNodeFileHandleWithinLimit } from '../../shared/node-bounded-file-reader'
 import {
   formatByteCeiling,
   REMOTE_IMPORT_MAX_FILE_BYTES,
@@ -125,7 +128,7 @@ export async function removeCreatedDragTempCopies(directories: Iterable<string>)
   }
 }
 
-/** Streams the checked source into `destPath` from offset 0, then proves the bytes are the ones
+/** Copies the checked source into `destPath` from offset 0, then proves the bytes are the ones
  *  opened: written size and the handle's stat must still match the open-time snapshot. */
 export async function writeCheckedDragTempSource(
   source: CheckedDragTempSource,
@@ -133,17 +136,35 @@ export async function writeCheckedDragTempSource(
   signal?: AbortSignal
 ): Promise<void> {
   // Reading bytes from the checked handle copies no xattrs, unlike cp, ditto or clonefile.
-  await (source.size === 0
-    ? writeFile(destPath, '', { flag: 'wx', mode: 0o600 })
-    : pipeline(
-        readCheckedDragTempSource(source),
-        createWriteStream(destPath, {
-          flags: 'wx',
-          mode: 0o600,
-          highWaterMark: COPY_HIGH_WATER_MARK
-        }),
-        { signal }
-      ))
+  if (source.size <= AGENT_SESSION_ATTACHMENT_MAX_BYTES) {
+    const read = await readNodeFileHandleWithinLimit(
+      source.handle,
+      AGENT_SESSION_ATTACHMENT_MAX_BYTES,
+      {
+        regularFileOnly: true,
+        signal,
+        window: { offset: 0, length: source.size }
+      }
+    ).finally(async () => {
+      if (!isSameSnapshot(await source.handle.stat(), source.snapshot)) {
+        throw new DropCopyError('changed')
+      }
+    })
+    if (!isSameSnapshot(read.stats, source.snapshot)) {
+      throw new DropCopyError('changed')
+    }
+    await writeFile(destPath, read.buffer, { flag: 'wx', mode: 0o600, signal })
+  } else {
+    await pipeline(
+      readCheckedDragTempSource(source),
+      createWriteStream(destPath, {
+        flags: 'wx',
+        mode: 0o600,
+        highWaterMark: COPY_HIGH_WATER_MARK
+      }),
+      { signal }
+    )
+  }
   const written = await lstat(destPath)
   if (
     written.size !== source.size ||

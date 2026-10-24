@@ -157,30 +157,33 @@ describe('dropped path preparation through the shared copy queue', () => {
     expect(getStore).not.toHaveBeenCalled()
   })
 
-  it('keeps a file the provider removes after the drop and refuses one rewritten before its write', async () => {
-    const { source, env, store } = await realDrop()
-    const second = join(dirname(source), 'second.png')
-    await writeFile(second, 'second')
-    const started = deferred<void>()
-    const release = deferred<null>()
-    const enqueue = localQueue(env, async () => {
-      started.resolve()
-      await release.promise
-      return store
-    })
-    const pending = enqueue({ paths: [source, second, source], consumer: 'local-chat' })
-    await started.promise
-    await rm(source)
-    await writeFile(second, 'SECOND-rewritten')
-    release.resolve(null)
-    const result = await pending
-    expect(result.paths).toHaveLength(2)
-    expect(result.paths[0]).toBe(result.paths[1])
-    expect(await readFile(result.paths[0], 'utf8')).toBe('image')
-    expect(result.failures).toEqual([
-      expect.objectContaining({ pathCount: 1, commonReason: 'changed' })
-    ])
-  })
+  it.each(['SECOND-rewritten', 'x'])(
+    'keeps a provider-removed file and refuses a rewrite to %s',
+    async (rewritten) => {
+      const { source, env, store } = await realDrop()
+      const second = join(dirname(source), 'second.png')
+      await writeFile(second, 'second')
+      const started = deferred<void>()
+      const release = deferred<null>()
+      const enqueue = localQueue(env, async () => {
+        started.resolve()
+        await release.promise
+        return store
+      })
+      const pending = enqueue({ paths: [source, second, source], consumer: 'local-chat' })
+      await started.promise
+      await rm(source)
+      await writeFile(second, rewritten)
+      release.resolve(null)
+      const result = await pending
+      expect(result.paths).toHaveLength(2)
+      expect(result.paths[0]).toBe(result.paths[1])
+      expect(await readFile(result.paths[0], 'utf8')).toBe('image')
+      expect(result.failures).toEqual([
+        expect.objectContaining({ pathCount: 1, commonReason: 'changed' })
+      ])
+    }
+  )
 
   it.each(['unavailable', 'refused', 'write fails'] as const)(
     'keeps the checked bytes as a private copy when the store %s',
@@ -206,13 +209,13 @@ describe('dropped path preparation through the shared copy queue', () => {
     }
   )
 
-  it('keeps an unlinked provider file after the store destination stream fails', async () => {
+  it('keeps an unlinked provider file after the store destination write fails', async () => {
     const { source, env, store } = await realDrop()
     const storeWith = store.storeWith.bind(store)
     const write = vi.spyOn(store, 'storeWith').mockImplementationOnce((name, writePart) =>
       storeWith(name, async (partPath) => {
         await rm(source)
-        // The real writer must fail in its destination stream, after taking the source handle.
+        // The real writer must fail at its destination, after taking the source handle.
         await mkdir(partPath)
         await writePart(partPath)
       })

@@ -1,4 +1,4 @@
-import type * as NodeFs from 'node:fs'
+import type * as NodeFsPromises from 'node:fs/promises'
 import { appendFileSync } from 'node:fs'
 import {
   chmod,
@@ -22,18 +22,16 @@ const fsFaults: {
   writeError: NodeJS.ErrnoException | null
 } = vi.hoisted(() => ({ beforeCopyWrite: null, writeError: null }))
 
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof NodeFs>()
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof NodeFsPromises>()
   return {
     ...actual,
-    createWriteStream: (...args: Parameters<typeof actual.createWriteStream>) => {
+    writeFile: (...args: Parameters<typeof actual.writeFile>) => {
       fsFaults.beforeCopyWrite?.()
-      const stream = actual.createWriteStream(...args)
-      const writeError = fsFaults.writeError
-      if (writeError) {
-        stream.once('open', () => stream.destroy(writeError))
+      if (fsFaults.writeError) {
+        return Promise.reject(fsFaults.writeError)
       }
-      return stream
+      return actual.writeFile(...args)
     }
   }
 })
