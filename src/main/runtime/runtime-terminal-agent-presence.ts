@@ -4,6 +4,7 @@ import {
   recognizeAgentProcess
 } from '../../shared/agent-process-recognition'
 import { isOpenCodeNativeTitle } from '../../shared/agent-detection'
+import { isShellProcess } from '../../shared/shell-process-detection'
 import { isKnownReadyPromptPreview } from './terminal-wait-detection'
 import { buildTerminalWaitText } from './terminal-wait-tail-state'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
@@ -22,6 +23,9 @@ import {
 const WRAPPER_RETRY_INTERVAL_MS = 150
 const WRAPPER_RETRY_TIMEOUT_MS = 6_500
 
+/** `unknown`: nothing shows an agent and the foreground process could not be read. */
+export type TerminalAgentPresence = 'present' | 'absent' | 'unknown'
+
 type RuntimeTerminalAgentPresenceDependencies = {
   /** A structured agent session of this runtime; it has no pane, so no PTY probe can see it. */
   isLiveStructuredAgent?(handle: string): boolean
@@ -31,6 +35,9 @@ type RuntimeTerminalAgentPresenceDependencies = {
   getTrackedPty(ptyId: string): RuntimePtyWorktreeRecord | null
   getTabTitle(tabId: string): string | null
   getForegroundProcess(ptyId: string): Promise<string | null> | null
+  confirmForegroundProcess(ptyId: string): Promise<string | null> | null
+  /** The agent's own live account of itself: OSC 7501 activity or a fresh hook status row. */
+  reportsAgentStatus(handle: string, ptyId: string): boolean
   /** The stale-working timer's display-only clear of the PTY's own title, if one stands. */
   getTitleDisplayClear(ptyId: string): TitleDisplayClear | null
 }
@@ -41,6 +48,16 @@ export type RuntimeTerminalAgentPresenceOptions = {
   foregroundProcess?: string | null
 }
 
+type PaneAgentEvidence = {
+  ptyId: string | null
+  /** A title or prompt that only an agent paints. */
+  shown: boolean
+  /** An agent status recorded with no title to contradict it. */
+  untitledStatus: boolean
+  /** Claude's management screen is up, so a Claude process there is not a task agent. */
+  suppressClaude: boolean
+}
+
 export class RuntimeTerminalAgentPresence {
   constructor(private readonly deps: RuntimeTerminalAgentPresenceDependencies) {}
 
@@ -48,184 +65,175 @@ export class RuntimeTerminalAgentPresence {
     handle: string,
     options: RuntimeTerminalAgentPresenceOptions = {}
   ): Promise<boolean> {
-    // Before every PTY probe below, because none of them can answer for a session that has no
-    // pane: `getLiveLeaf` threw, the catch turned that into `false`, and a coordinator running
-    // `dispatch --inject` concluded its structured worker was a bare shell — `no_agent_detected`.
-    // A structured session IS the agent; there is no foreground process to recognise.
+    return (await this.resolve(handle, options)) === 'present'
+  }
+
+  async resolve(
+    handle: string,
+    options: RuntimeTerminalAgentPresenceOptions = {}
+  ): Promise<TerminalAgentPresence> {
+    // Why: a structured session IS the agent and has no pane or foreground process to probe.
     if (this.deps.isLiveStructuredAgent?.(handle)) {
-      return true
+      return 'present'
     }
     try {
-      // Why display records: presence reads what the pane shows, as before the stale-working
-      // clear stopped rewriting records. A cwd spinner clears to a neutral title, so the
-      // foreground process decides for an agent that exited behind it.
-      const pty = this.deps.getLivePty(handle)
-      if (pty) {
-        const clear = this.deps.getTitleDisplayClear(pty.ptyId)
-        const leaf = this.deps.getPrimaryLeaf(pty.ptyId)
-        return await this.isPtyRunning(
-          getPtyDisplayRecord(pty, clear),
-          leaf ? getLeafDisplayRecord(leaf, clear) : null,
-          options
-        )
+      const pane = this.readPaneEvidence(handle)
+      if (pane.shown) {
+        return 'present'
       }
-      const liveLeaf = this.deps.getLiveLeaf(handle)
-      const leaf = getLeafDisplayRecord(
-        liveLeaf,
-        liveLeaf.ptyId ? this.deps.getTitleDisplayClear(liveLeaf.ptyId) : null
-      )
-      const trackedPty = leaf.ptyId ? this.deps.getTrackedPty(leaf.ptyId) : null
-      const paneTitle = getLatestLeafTitle(leaf, null)
-      const paneClassification = classifyAgentTitle(paneTitle)
-      if (
-        trackedPty
-          ? ptyTitleProvesAgentPresence(trackedPty, paneTitle, paneClassification)
-          : agentTitleProvesAgentPresence(paneTitle, paneClassification)
-      ) {
-        return true
+      if (!pane.ptyId) {
+        return pane.untitledStatus ? 'present' : 'absent'
       }
-      const tabTitle = this.deps.getTabTitle(leaf.tabId)
-      const tabClassification = paneTitle === null ? classifyAgentTitle(tabTitle) : 'neutral'
-      if (
-        trackedPty
-          ? ptyTitleProvesAgentPresence(trackedPty, tabTitle, tabClassification)
-          : agentTitleProvesAgentPresence(tabTitle, tabClassification)
-      ) {
-        return true
-      }
-      const markerTitle = paneTitle ?? tabTitle
-      const waitText = buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview)
-      if (!isOpenCodeNativeTitle(markerTitle) && isKnownReadyPromptPreview(waitText)) {
-        return true
-      }
-      if (leaf.lastAgentStatus !== null && paneTitle === null && tabTitle === null) {
-        return true
-      }
-      if (!leaf.ptyId) {
-        return false
-      }
-      const foreground = await this.readForegroundProcess(leaf.ptyId, options)
+      // Why: under OSC 7501 an agent paints no title glyph, so its own status is the evidence;
+      // it counts only where the process read below does not contradict it.
+      const reported =
+        !pane.suppressClaude &&
+        (pane.untitledStatus || this.deps.reportsAgentStatus(handle, pane.ptyId))
+      const foreground = await this.readForegroundProcess(pane.ptyId, {
+        confirmShell: reported,
+        cached: options.foregroundProcess
+      })
       if (!foreground) {
-        return false
+        return reported ? 'present' : 'unknown'
       }
-      const suppressClaude =
-        paneClassification === 'management' || tabClassification === 'management'
-      if (suppressClaude && isExpectedAgentProcess(foreground, 'claude')) {
-        return false
+      const recognized = recognizeAgentProcess(foreground)
+      if (recognized) {
+        return pane.suppressClaude && isExpectedAgentProcess(recognized.processName, 'claude')
+          ? 'absent'
+          : 'present'
       }
-      return await this.isRecognizedForegroundAgentProcess(
-        leaf.ptyId,
-        foreground,
-        suppressClaude,
-        options.retryForegroundWrappers !== false
-      )
+      if (isShellProcess(foreground)) {
+        return 'absent'
+      }
+      if (reported) {
+        return 'present'
+      }
+      return options.retryForegroundWrappers !== false &&
+        isAgentForegroundWrapperProcess(foreground) &&
+        (await this.waitForWrappedAgent(pane.ptyId, pane.suppressClaude))
+        ? 'present'
+        : 'absent'
     } catch {
-      return false
+      return 'absent'
     }
   }
 
-  private async isPtyRunning(
-    pty: RuntimePtyWorktreeRecord,
-    leaf: RuntimeLeafRecord | null,
-    options: RuntimeTerminalAgentPresenceOptions
-  ): Promise<boolean> {
-    const leafTitle = leaf
-      ? getLatestAgentCandidateTitle(
-          { title: leaf.paneTitle, updatedAt: leaf.paneTitleUpdatedAt },
-          { title: leaf.lastOscTitle, updatedAt: leaf.lastOscTitleAt }
-        )
-      : null
-    const leafClassification = classifyAgentTitle(leafTitle)
-    if (ptyTitleProvesAgentPresence(pty, leafTitle, leafClassification)) {
-      return true
-    }
-    const ptyTitle = getLatestAgentCandidateTitle(
-      { title: pty.title, updatedAt: pty.titleUpdatedAt },
-      { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
-    )
-    const ptyClassification = classifyAgentTitle(ptyTitle)
-    if (leafTitle === null && ptyTitleProvesAgentPresence(pty, ptyTitle, ptyClassification)) {
-      return true
-    }
-    const managementClassification = classifyLatestAgentTitle({
-      title: pty.managementTitle,
-      updatedAt: pty.managementTitleAt
-    })
-    const markerTitle = leafTitle ?? ptyTitle
-    if (isOpenCodeNativeTitle(markerTitle) && pty.launchAgent === 'opencode') {
-      return true
-    }
-    const waitText = buildTerminalWaitText(pty.tailBuffer, pty.tailPartialLine, pty.preview)
-    if (!isOpenCodeNativeTitle(markerTitle) && isKnownReadyPromptPreview(waitText)) {
-      return true
-    }
-    if (
-      pty.lastAgentStatus !== null &&
-      leafTitle === null &&
-      ptyTitle === null &&
-      managementClassification !== 'management'
-    ) {
-      return true
-    }
-    const foreground = await this.readForegroundProcess(pty.ptyId, options)
-    if (!foreground) {
-      return false
-    }
-    const suppressClaude =
-      leafTitle !== null
-        ? leafClassification === 'management'
-        : managementClassification === 'management'
-    if (suppressClaude && isExpectedAgentProcess(foreground, 'claude')) {
-      return false
-    }
-    return await this.isRecognizedForegroundAgentProcess(
-      pty.ptyId,
-      foreground,
-      suppressClaude,
-      options.retryForegroundWrappers !== false
-    )
-  }
-
-  private async readForegroundProcess(
+  /**
+   * The foreground's name, re-read once from the launch command line when the cached name proves
+   * nothing: macOS p_comm names the native Claude install by its version directory (`2.1.310`),
+   * and a Windows tracker answers with the shell until its scan lands.
+   */
+  async readForegroundProcess(
     ptyId: string,
-    options: RuntimeTerminalAgentPresenceOptions
+    { confirmShell, cached }: { confirmShell: boolean; cached?: string | null }
   ): Promise<string | null> {
-    if (options.foregroundProcess !== undefined) {
-      return options.foregroundProcess
+    const foreground =
+      cached !== undefined
+        ? cached
+        : await Promise.resolve(this.deps.getForegroundProcess(ptyId)).catch(() => null)
+    if (
+      !foreground ||
+      recognizeAgentProcess(foreground) ||
+      isAgentForegroundWrapperProcess(foreground) ||
+      (!confirmShell && isShellProcess(foreground))
+    ) {
+      return foreground
     }
-    return await this.deps.getForegroundProcess(ptyId)
+    const confirmed = await Promise.resolve(this.deps.confirmForegroundProcess(ptyId)).catch(
+      () => null
+    )
+    return confirmed ?? foreground
   }
 
-  private async isRecognizedForegroundAgentProcess(
-    ptyId: string,
-    foregroundProcess: string,
-    suppressClaude: boolean,
-    retryForegroundWrappers: boolean
-  ): Promise<boolean> {
-    const recognized = recognizeAgentProcess(foregroundProcess)
-    if (recognized) {
-      return !(suppressClaude && isExpectedAgentProcess(recognized.processName, 'claude'))
+  private readPaneEvidence(handle: string): PaneAgentEvidence {
+    // Why display records: presence reads what the pane shows, as before the stale-working
+    // clear stopped rewriting records. A cwd spinner clears to a neutral title, so the
+    // foreground process decides for an agent that exited behind it.
+    const pty = this.deps.getLivePty(handle)
+    if (pty) {
+      const clear = this.deps.getTitleDisplayClear(pty.ptyId)
+      const leaf = this.deps.getPrimaryLeaf(pty.ptyId)
+      return readPtyEvidence(
+        getPtyDisplayRecord(pty, clear),
+        leaf ? getLeafDisplayRecord(leaf, clear) : null
+      )
     }
-    if (!isAgentForegroundWrapperProcess(foregroundProcess)) {
-      return false
+    const liveLeaf = this.deps.getLiveLeaf(handle)
+    const leaf = getLeafDisplayRecord(
+      liveLeaf,
+      liveLeaf.ptyId ? this.deps.getTitleDisplayClear(liveLeaf.ptyId) : null
+    )
+    const trackedPty = leaf.ptyId ? this.deps.getTrackedPty(leaf.ptyId) : null
+    const titleProves = (
+      title: string | null,
+      classification: ReturnType<typeof classifyAgentTitle>
+    ): boolean =>
+      trackedPty
+        ? ptyTitleProvesAgentPresence(trackedPty, title, classification)
+        : agentTitleProvesAgentPresence(title, classification)
+    const paneTitle = getLatestLeafTitle(leaf, null)
+    const paneClassification = classifyAgentTitle(paneTitle)
+    const tabTitle = this.deps.getTabTitle(leaf.tabId)
+    const tabClassification = paneTitle === null ? classifyAgentTitle(tabTitle) : 'neutral'
+    const waitText = buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview)
+    return {
+      ptyId: leaf.ptyId,
+      shown:
+        titleProves(paneTitle, paneClassification) ||
+        titleProves(tabTitle, tabClassification) ||
+        (!isOpenCodeNativeTitle(paneTitle ?? tabTitle) && isKnownReadyPromptPreview(waitText)),
+      untitledStatus: leaf.lastAgentStatus !== null && paneTitle === null && tabTitle === null,
+      suppressClaude: paneClassification === 'management' || tabClassification === 'management'
     }
-    if (!retryForegroundWrappers) {
-      return false
-    }
+  }
+
+  private async waitForWrappedAgent(ptyId: string, suppressClaude: boolean): Promise<boolean> {
     const startedAt = Date.now()
     while (Date.now() - startedAt < WRAPPER_RETRY_TIMEOUT_MS) {
       await new Promise((resolve) => setTimeout(resolve, WRAPPER_RETRY_INTERVAL_MS))
       const refreshed = await this.deps.getForegroundProcess(ptyId)
-      const refreshedRecognition = recognizeAgentProcess(refreshed)
-      if (refreshedRecognition) {
-        return !(
-          suppressClaude && isExpectedAgentProcess(refreshedRecognition.processName, 'claude')
-        )
+      const recognized = recognizeAgentProcess(refreshed)
+      if (recognized) {
+        return !(suppressClaude && isExpectedAgentProcess(recognized.processName, 'claude'))
       }
       if (!refreshed || !isAgentForegroundWrapperProcess(refreshed)) {
         return false
       }
     }
     return false
+  }
+}
+
+function readPtyEvidence(
+  pty: RuntimePtyWorktreeRecord,
+  leaf: RuntimeLeafRecord | null
+): PaneAgentEvidence {
+  const leafTitle = leaf
+    ? getLatestAgentCandidateTitle(
+        { title: leaf.paneTitle, updatedAt: leaf.paneTitleUpdatedAt },
+        { title: leaf.lastOscTitle, updatedAt: leaf.lastOscTitleAt }
+      )
+    : null
+  const leafClassification = classifyAgentTitle(leafTitle)
+  const ptyTitle = getLatestAgentCandidateTitle(
+    { title: pty.title, updatedAt: pty.titleUpdatedAt },
+    { title: pty.lastOscTitle, updatedAt: pty.lastOscTitleAt }
+  )
+  const markerTitle = leafTitle ?? ptyTitle
+  const waitText = buildTerminalWaitText(pty.tailBuffer, pty.tailPartialLine, pty.preview)
+  const management =
+    classifyLatestAgentTitle({ title: pty.managementTitle, updatedAt: pty.managementTitleAt }) ===
+    'management'
+  return {
+    ptyId: pty.ptyId,
+    shown:
+      ptyTitleProvesAgentPresence(pty, leafTitle, leafClassification) ||
+      (leafTitle === null &&
+        ptyTitleProvesAgentPresence(pty, ptyTitle, classifyAgentTitle(ptyTitle))) ||
+      (isOpenCodeNativeTitle(markerTitle) && pty.launchAgent === 'opencode') ||
+      (!isOpenCodeNativeTitle(markerTitle) && isKnownReadyPromptPreview(waitText)),
+    untitledStatus:
+      pty.lastAgentStatus !== null && leafTitle === null && ptyTitle === null && !management,
+    suppressClaude: leafTitle !== null ? leafClassification === 'management' : management
   }
 }

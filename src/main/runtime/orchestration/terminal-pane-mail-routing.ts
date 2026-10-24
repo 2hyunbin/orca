@@ -111,7 +111,6 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     return this.titleObservationSequence
   }
 
-  // Why: title is the tightest agent-presence signal, but a Claude management title is negative evidence for task activity.
   async isTerminalRunningAgent(
     handle: string,
     options?: RuntimeTerminalAgentPresenceOptions
@@ -128,16 +127,12 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
       if (!ptyId || !trackedPty || !this.ptyController) {
         return false
       }
-      let foregroundProcess = await this.ptyController.getForegroundProcess(ptyId)
-      let agent = recognizeAgentProcess(foregroundProcess)?.agent
-      // Why: the cached foreground name can be an executable basename nothing recognizes
-      // (macOS p_comm reports the native Claude installer as `2.1.258`), and treating that
-      // as "no agent" silently downgrades the prompt to unframed chunks, which Claude's
-      // composer truncates. A fresh process-table scan reads the real command line.
-      if (agent === undefined && this.ptyController.confirmForegroundProcess) {
-        foregroundProcess = await this.ptyController.confirmForegroundProcess(ptyId)
-        agent = recognizeAgentProcess(foregroundProcess)?.agent
-      }
+      // Why confirm a shell too: treating an unproven name as "no agent" downgrades the prompt to
+      // unframed chunks, which Claude's composer truncates.
+      const foregroundProcess = await this.terminalAgentPresence.readForegroundProcess(ptyId, {
+        confirmShell: true
+      })
+      const agent = recognizeAgentProcess(foregroundProcess)?.agent
       if (agent !== 'claude' && agent !== 'codex') {
         return false
       }

@@ -7,7 +7,10 @@ import { isStructuredWorkerHandle } from '../../../shared/structured-worker-hand
 import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-address'
 import { resolveStructuredWorkerAuthority } from '../structured-worker-authority'
 import { OrcaRuntimeWithRuntimeId } from './runtime-identity-state'
-import { RuntimeTerminalAgentPresence } from '../runtime-terminal-agent-presence'
+import {
+  RuntimeTerminalAgentPresence,
+  type TerminalAgentPresence
+} from '../runtime-terminal-agent-presence'
 import type { RuntimeNotifier } from '../runtime-notifier-contract'
 import { RuntimeClientEventBus } from '../runtime-client-event-bus'
 import { RuntimeNativeChatDraftResolutions } from '../runtime-native-chat-draft-resolutions'
@@ -57,8 +60,17 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getTrackedPty: (ptyId) => this.ptysById.get(ptyId) ?? null,
     getTabTitle: (tabId) => this.tabs.get(tabId)?.title?.trim() || null,
     getForegroundProcess: (ptyId) => this.ptyController?.getForegroundProcess(ptyId) ?? null,
+    confirmForegroundProcess: (ptyId) =>
+      this.ptyController?.confirmForegroundProcess?.(ptyId) ?? null,
+    reportsAgentStatus: (handle, ptyId) =>
+      this.getPtyProgramActivity(ptyId) !== null ||
+      this.getFreshExplicitAgentStatusForHandle(handle) !== null,
     getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId)
   })
+
+  resolveTerminalAgentPresence(handle: string): Promise<TerminalAgentPresence> {
+    return this.terminalAgentPresence.resolve(handle)
+  }
 
   protected notifier: RuntimeNotifier | null = null
 

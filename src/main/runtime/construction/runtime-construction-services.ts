@@ -125,6 +125,7 @@ export abstract class RuntimeConstructionServices {
     waiterTimeoutMs: number,
     agent: TuiAgent | null
   ): void
+  protected abstract getPtyProgramActivity(ptyId: string): AgentStatus | null
   protected abstract getPtyTitleDisplayClear(
     ptyId: string | null | undefined
   ): TitleDisplayClear | null
