@@ -22,7 +22,7 @@ export function AppBackgroundServices(): React.JSX.Element {
   return (
     <>
       <WorkspacePortScanner enabled={workspaceSessionReady} />
-      {}
+      {/* Keep permission notices available across app surfaces. */}
       <MacosTccPromptNoticeHost />
       {/* Keep agent-status retention subscriptions out of the App render tree. */}
       <RetainedAgentsSyncGate />
