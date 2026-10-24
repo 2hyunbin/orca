@@ -15,6 +15,15 @@ import { createDaemonActiveProviderFixtures } from './pty-ipc-daemon-provider-fi
 import { _setWslCachesForTests } from '../wsl'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { createGlobalSettingsFixture } from '../../shared/global-settings-test-fixture'
+import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import { parseWorkspaceSessionSalvaging } from '../../shared/workspace-session-salvage'
+import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load'
+import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
+import {
+  addWorkspace,
+  emptySession,
+  leaf
+} from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -189,6 +198,103 @@ describe('registerPtyHandlers', () => {
         })
       )
     })
+
+    it.each([
+      { name: 'saved CMD host bypass', shell: 'cmd.exe', host: true, expectedHost: true },
+      { name: 'old omitted choices', shell: undefined, host: undefined, expectedHost: undefined },
+      { name: 'malformed optional choices', shell: 17, host: 'true', expectedHost: undefined }
+    ])(
+      'restores $name through disk validation into the actual spawn',
+      async ({ shell, host, expectedHost }) => {
+        const worktreeId = 'repo-1::C:\\repo'
+        const session = addWorkspace(emptySession(), worktreeId, [
+          {
+            id: 'group-shell',
+            tabs: [
+              {
+                id: 'tab-shell',
+                leaves: [[leaf(1)]],
+                row: { shellOverride: 'cmd.exe', forceHostRuntime: true }
+              }
+            ]
+          }
+        ])
+        const context = { mintId: (seed: string) => seed, mintLeafId: () => leaf(2) }
+        const stored = saveWorkspaceLayout(
+          loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, context)
+        )
+        expect(stored.tabsByWorktree[worktreeId][0]).toMatchObject({
+          shellOverride: 'cmd.exe',
+          forceHostRuntime: true
+        })
+        const disk: unknown = JSON.parse(
+          JSON.stringify({
+            ...stored,
+            tabsByWorktree: {
+              [worktreeId]: stored.tabsByWorktree[worktreeId].map((row) => ({
+                ...row,
+                shellOverride: shell,
+                forceHostRuntime: host
+              }))
+            }
+          })
+        )
+        const parsed = parseWorkspaceSessionSalvaging(disk)
+        if (!parsed.ok) {
+          throw new Error(parsed.error)
+        }
+        expect(parsed.droppedCount).toBe(0)
+        expect(parsed.value.tabsByWorktree[worktreeId]).toHaveLength(1)
+        const restored = loadWorkspaceLayout(
+          LOCAL_EXECUTION_HOST_ID,
+          parsed.value,
+          context
+        ).layout.workspaces[worktreeId].tabs.find((tab) => tab.id === 'tab-shell')
+        if (restored?.kind !== 'terminal') {
+          throw new Error('Saved terminal was not restored')
+        }
+
+        _setWslCachesForTests({ available: true, distros: ['Ubuntu'] })
+        const store = makeProjectRuntimeStore({
+          projectRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
+        })
+        vi.mocked(store.getWorkspaceSession).mockReturnValue(parsed.value)
+        registerPtyHandlers(
+          mainWindow,
+          undefined,
+          undefined,
+          () =>
+            createGlobalSettingsFixture({
+              terminalWindowsShell: 'powershell.exe',
+              terminalWindowsPowerShellImplementation: 'pwsh.exe'
+            }),
+          undefined,
+          store
+        )
+        const result = await handlers.get('pty:spawn')!(null, {
+          cols: 80,
+          rows: 24,
+          worktreeId,
+          tabId: restored.entityId,
+          shellOverride: restored.terminal.shellOverride
+        })
+        const expectedShell = expectedHost ? 'cmd.exe' : 'wsl.exe'
+        const [spawnedShell, spawnArgs] = spawnMock.mock.calls.at(-1)!
+        expect(spawnedShell).toBe(expectedShell)
+        if (expectedHost) {
+          expect(spawnArgs).toEqual(['/K', 'chcp 65001 > nul'])
+        } else {
+          expect(spawnArgs).toEqual(expect.arrayContaining(['-d', 'Ubuntu']))
+        }
+        expect(result).toMatchObject({
+          shellPath: expectedShell,
+          wslDistro: expectedHost ? null : 'Ubuntu'
+        })
+        expect(restored.terminal.shellOverride).toBe(expectedHost ? 'cmd.exe' : undefined)
+        expect(restored.terminal.forceHostRuntime).toBe(expectedHost)
+      }
+    )
+
     it('uses terminalWindowsShell setting over COMSPEC when provided', async () => {
       // Why: COMSPEC always points to cmd.exe on stock Windows, so without the setting the terminal would ignore the user's shell preference.
       process.env.COMSPEC = 'C:\\Windows\\system32\\cmd.exe'
