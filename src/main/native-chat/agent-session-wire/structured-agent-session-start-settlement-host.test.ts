@@ -346,11 +346,13 @@ describe('final logical startup settlement', () => {
     expect(dispatch).not.toHaveBeenCalled()
   })
 
-  it.each([10, 100])(
+  // Leave room for five starts per requester under the saved provider-handle cap.
+  it.each([4, 40])(
     'bounds physical work and retires starts for %i accepted requesters',
     async (count) => {
       retryClock.fake = true
-      const { sessions, runtimeState, conversationDelivery } = host.collaboratorsForTests()
+      const { sessions, runtimeState, conversationDelivery, serialize } =
+        host.collaboratorsForTests()
       const retained = hostTestAttachParams(host.deps.store.getRecord(SESSION)!.lease.runtimeFence)
       expect(await host.attach(CALLER, retained)).toMatchObject({ ok: true })
       const child = sessions.get(SESSION)!.child
@@ -374,6 +376,8 @@ describe('final logical startup settlement', () => {
         )
       })
       expect(await host.create(CALLER, unrelated)).toMatchObject({ ok: true })
+      await serialize(other, async () => {})
+      expect(conversationDelivery.loop.isRunning(other)).toBe(false)
       const otherJournal = sessions.get(other)!.journal
       const frames = Array.from({ length: count }, () => 0)
       const unsubscribe = frames.map((_, index) =>
