@@ -18,6 +18,8 @@ import {
   type ExternalConversationLinkStore,
   type LinkedConversation
 } from './external-conversation-links'
+import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
+import { sameBinding } from './external-conversation-send'
 import type { ConversationKey } from './external-conversation-types'
 
 type ConversationPane = { conversation: ConversationKey; worktreeId: string; paneKey: string }
@@ -48,6 +50,7 @@ export type ConversationWatchListener = (event: ConversationSnapshot | Conversat
 export type ConversationEventsDeps = {
   store: ExternalConversationLinkStore
   readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
+  readBinding: (paneKey: string) => AgentPromptExpectedBinding | null
   /** The detector's pane changes; returns the release. */
   onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
   pendingPrompt: (link: ExternalConversationLink) => PendingPrompt | null
@@ -74,7 +77,10 @@ export class ConversationEvents {
   private readonly listeners = new Set<ConversationWatchListener>()
   private readonly turnStartedAt = new Map<string, number>()
   // Prompts our cancel rejected, by pane: Claude's hooks report no end for that turn.
-  private readonly rejected = new Map<string, { stateStartedAt: number; at: number }>()
+  private readonly rejected = new Map<
+    string,
+    { row: AgentStatusIpcPayload; binding: AgentPromptExpectedBinding; at: number }
+  >()
   private release: (() => void) | null = null
 
   constructor(private readonly deps: ConversationEventsDeps) {}
@@ -117,9 +123,26 @@ export class ConversationEvents {
     })
   }
 
-  /** Our cancel's reject of the prompt `row` shows was accepted at `at`. */
-  rejectedByCancel(paneKey: string, row: AgentStatusIpcPayload, at: number): void {
-    this.rejected.set(paneKey, { stateStartedAt: row.stateStartedAt, at })
+  rejectedByCancel(
+    paneKey: string,
+    row: AgentStatusIpcPayload,
+    binding: AgentPromptExpectedBinding,
+    at: number
+  ): void {
+    if (!this.release || row.agentType !== 'claude' || row.programStatus?.state !== 'blocked') {
+      return
+    }
+    this.rejected.set(paneKey, { row, binding, at })
+    // The idle observation can arrive before the write acknowledgment.
+    this.settleRejected(paneKey)
+  }
+
+  forgetUnlinked(): void {
+    for (const paneKey of this.rejected.keys()) {
+      if (!this.linkedFor(paneKey)) {
+        this.rejected.delete(paneKey)
+      }
+    }
   }
 
   dispose(): void {
@@ -141,12 +164,28 @@ export class ConversationEvents {
     }
     const row = this.deps.readHookRow(paneKey)
     const linked = this.linkedFor(paneKey)
-    if (!row || !linked || row.stateStartedAt !== rejected.stateStartedAt) {
+    const binding = this.deps.readBinding(paneKey)
+    if (
+      !row ||
+      !linked ||
+      linked.link.agent !== 'claude' ||
+      !binding ||
+      !sameBinding(binding, rejected.binding) ||
+      row.agentType !== rejected.row.agentType ||
+      row.state !== rejected.row.state ||
+      row.stateStartedAt !== rejected.row.stateStartedAt ||
+      row.interactivePrompt !== rejected.row.interactivePrompt ||
+      row.toolName !== rejected.row.toolName
+    ) {
       this.rejected.delete(paneKey)
       return
     }
     const activity = row.programStatus
-    if (activity?.state !== 'idle' || activity.observedAt < rejected.at) {
+    if (
+      activity?.state !== 'idle' ||
+      activity.observedAt < rejected.at ||
+      activity.observedAt <= (rejected.row.programStatus?.observedAt ?? 0)
+    ) {
       return
     }
     this.rejected.delete(paneKey)

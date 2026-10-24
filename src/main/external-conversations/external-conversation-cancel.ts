@@ -82,13 +82,14 @@ async function stopLinkedAgent(
     unprovableHost: 'write-unless-shell'
   })
   try {
+    const turn = turns.current(id)
     const interrupted = await interruptWorkingAgent(terminal, readHookRow, link.paneKey, {
       beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
       signal
     })
     switch (interrupted.outcome) {
       case 'accepted':
-        turns.interrupted(id, pane.binding)
+        turns.interrupted(id, pane.binding, turn)
         return interrupted
       case 'unknown':
         return { outcome: 'unknown', reason: 'writer_failed' }
@@ -113,14 +114,15 @@ async function reject(
   signal: AbortSignal
 ): Promise<Delivery> {
   const row = readHookRow(link.paneKey)
+  const binding = bindPane(terminal, link.paneKey)?.binding
   const at = Date.now()
   const delivery = await prompts.answer(terminal, link, {
     promptId,
     optionId: 'reject_once',
     signal
   })
-  if (delivery.outcome === 'accepted' && row) {
-    events?.rejectedByCancel(link.paneKey, row, at)
+  if (delivery.outcome === 'accepted' && row && binding && !signal.aborted) {
+    events?.rejectedByCancel(link.paneKey, row, binding, at)
   }
   return delivery
 }

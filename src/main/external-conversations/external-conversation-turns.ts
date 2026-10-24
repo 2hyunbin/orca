@@ -21,12 +21,7 @@ export type TurnTerminal = FollowUpTerminal &
 
 type Turn = { text: string; binding: AgentPromptExpectedBinding; interrupted: boolean }
 
-/**
- * A conversation's turn writes, and what an interrupted one leaves behind: Claude puts a prompt
- * interrupted before any reply back in its input box, so the next turn would be pasted after it.
- * Like the phone's stale-input marker, our accepted cancel marks the turn, and the next write
- * clears the box first only if it still shows exactly that text. The mark is spent either way.
- */
+// Claude can restore an interrupted prompt; only its next send may clear matching input.
 export class ConversationTurns {
   // Per conversation, the last turn text handed to its agent and the process it went to.
   private readonly turns = new Map<string, Turn>()
@@ -35,9 +30,12 @@ export class ConversationTurns {
     this.turns.set(id, { text, binding, interrupted: false })
   }
 
-  interrupted(id: string, binding: AgentPromptExpectedBinding): void {
-    const turn = this.turns.get(id)
-    if (turn && sameBinding(turn.binding, binding)) {
+  current(id: string): Turn | undefined {
+    return this.turns.get(id)
+  }
+
+  interrupted(id: string, binding: AgentPromptExpectedBinding, turn: Turn | undefined): void {
+    if (turn && this.turns.get(id) === turn && sameBinding(turn.binding, binding)) {
       turn.interrupted = true
     }
   }
@@ -59,7 +57,7 @@ export class ConversationTurns {
     const id = conversationId(key)
     const turn = this.turns.get(id)
     this.turns.delete(id)
-    if (turn?.interrupted && sameBinding(turn.binding, pane.binding)) {
+    if (link.agent === 'claude' && turn?.interrupted && sameBinding(turn.binding, pane.binding)) {
       await clearRestoredPrompt(terminal, link, pane, turn.text, signal)
     }
     const delivery = await deliverFollowUp(terminal, {
@@ -70,7 +68,7 @@ export class ConversationTurns {
       requestId: JSON.stringify([key.source, key.externalId, deliveryId]),
       signal
     })
-    if (delivery.outcome !== 'refused') {
+    if (delivery.outcome === 'accepted' && !signal.aborted) {
       this.wrote(id, text, pane.binding)
     }
     return delivery

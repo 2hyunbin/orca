@@ -15,21 +15,21 @@ const MULTILINE = [
 ].join('\n')
 
 describe('a prompt Claude puts back after an early Escape', () => {
-  it('reads as that prompt when it wraps across rows', async () => {
+  it('cannot prove text equality after application wrapping', async () => {
     const { draft } = await finalReadProjection('claude-interrupt-restores-wrapped-prompt', 120, 40)
     expect(draft).toContain('\n')
-    expect(composerDraftShowsText(draft ?? '', WRAPPED)).toBe(true)
+    expect(composerDraftShowsText(draft ?? '', WRAPPED)).toBe(false)
     expect(composerDraftShowsText(draft ?? '', `${WRAPPED} More.`)).toBe(false)
   })
 
-  it('reads as that prompt when Claude folds the paste into a chip', async () => {
+  it('cannot prove the content of a folded paste', async () => {
     const { draft } = await finalReadProjection(
       'claude-interrupt-restores-multiline-prompt',
       120,
       40
     )
     expect(draft).toMatch(/^\[Pasted text #\d+ \+5 lines\]$/)
-    expect(composerDraftShowsText(draft ?? '', MULTILINE)).toBe(true)
+    expect(composerDraftShowsText(draft ?? '', MULTILINE)).toBe(false)
     expect(composerDraftShowsText(draft ?? '', `${MULTILINE}\nOne more line.`)).toBe(false)
   })
 })

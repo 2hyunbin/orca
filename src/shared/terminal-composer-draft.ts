@@ -1,5 +1,3 @@
-import { countAgentTuiInputLines } from './agent-tui-input-clear'
-
 export type TerminalCursorContext = {
   rows: string[]
   typedRows: string[]
@@ -206,15 +204,7 @@ export function hasTerminalComposerPlaceholder(
   return detectTerminalComposer(context)?.placeholder === true
 }
 
-/**
- * Whether an input box shows `text` as the agent painted it back: soft wraps read as line breaks,
- * and Claude folds a multi-line paste into a `[Pasted text #N +K lines]` chip.
- */
+// A paste chip reveals no content; whitespace changes can be human edits.
 export function composerDraftShowsText(draft: string, text: string): boolean {
-  const flat = (value: string): string => value.replace(/\s+/g, ' ').trim()
-  if (flat(draft) === flat(text)) {
-    return true
-  }
-  const folded = /^\[Pasted text #\d+ \+(\d+) lines\]$/.exec(draft.trim())
-  return folded !== null && Number(folded[1]) === countAgentTuiInputLines(text) - 1
+  return text.length > 0 && draft === text && !/\[Pasted text #\d+/.test(draft)
 }

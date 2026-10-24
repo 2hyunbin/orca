@@ -90,6 +90,7 @@ export class ExternalConversationSeam {
     this.prompts = new ConversationPrompts(deps.readSettings, deps.readHookRow)
     // Cancel removed-workspace lanes; surviving links distinguish same-path twins on other hosts.
     this.releaseRemovals = deps.onWorkspaceRemoved((worktreeId) => {
+      this.events?.forgetUnlinked()
       for (const [id, { key, worktreeId: linkedTo }] of this.linked) {
         if (linkedTo === worktreeId && !findLink(this.deps.store, key)) {
           this.linked.delete(id)
@@ -153,6 +154,7 @@ export class ExternalConversationSeam {
     this.events ??= new ConversationEvents({
       store: this.deps.store,
       readHookRow: this.deps.readHookRow,
+      readBinding: (paneKey) => bindPane(host.terminal, paneKey)?.binding ?? null,
       onAgentPaneChange: this.deps.onAgentPaneChange,
       pendingPrompt: (link) => this.prompts.pending(host.terminal, link),
       ...HOST_CLOCK
@@ -199,6 +201,7 @@ export class ExternalConversationSeam {
             (workspace, paneKey) => {
               const link = { ...key, paneKey, agent, createdAt: Date.now() }
               writeLink(this.deps.store, workspace, link)
+              this.linked.set(conversationId(key), { key, worktreeId: workspace.worktreeId })
               this.events?.linked({ workspace, link })
               this.startedHere.add(conversationId(key))
               this.sessions.capture(key, paneKey)

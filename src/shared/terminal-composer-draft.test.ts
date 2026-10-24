@@ -401,15 +401,19 @@ describe('detectTerminalComposerDraft', () => {
 })
 
 describe('composerDraftShowsText', () => {
-  it('matches across soft wraps, and nothing a person changed', () => {
-    expect(composerDraftShowsText('fix the\nbug now', 'fix the bug now')).toBe(true)
-    expect(composerDraftShowsText('fix the bug now please', 'fix the bug now')).toBe(false)
-    expect(composerDraftShowsText('', 'fix the bug now')).toBe(false)
+  it('requires visible text equality without erasing whitespace edits', () => {
+    expect(composerDraftShowsText('fix the bug', 'fix the bug')).toBe(true)
+    for (const draft of ['fix the\nbug', 'fix  the bug', ' fix the bug', 'fix the bug ', '']) {
+      expect(composerDraftShowsText(draft, 'fix the bug')).toBe(false)
+    }
+    expect(composerDraftShowsText('', '')).toBe(false)
   })
 
-  it('matches Claude’s paste chip only for the same number of lines', () => {
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb\nc')).toBe(true)
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb')).toBe(false)
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines] and more', 'a\nb\nc')).toBe(false)
+  it('cannot identify the content of a paste chip by its line count', () => {
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb\nc')).toBe(false)
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'x\ny\nz')).toBe(false)
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', '[Pasted text #3 +2 lines]')).toBe(
+      false
+    )
   })
 })
