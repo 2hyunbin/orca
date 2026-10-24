@@ -1,4 +1,5 @@
 import type { ExecutionHostId } from '../../../shared/execution-host'
+import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type {
   TerminalLeafMoveRequest,
@@ -90,12 +91,28 @@ export function admitPane(
     // Explicit recreation under the same ID lifts the old pane fence.
     fencedIfLayoutOwner(
       () => partitionsFence([hostId], context.getSession, false),
-      () =>
-        commitPaneChange(
+      () => {
+        // A legacy reattach can land outside the partition that recorded the tab's close.
+        if (
+          admission.type === 'createTerminalTab' &&
+          context
+            .hostIds()
+            .some((id) =>
+              hasClosedTerminalTabRecord(
+                context.getSession(id).closedTerminalTabTombstonesByTabId,
+                admission.tabId,
+                admission.workspace
+              )
+            )
+        ) {
+          return { value: 'tab_closed', persist: false }
+        }
+        return commitPaneChange(
           hostId,
           admitPaneToSession(hostId, context.getSession(hostId), admission),
           context
         )
+      }
     ),
     (outcome) => (outcome === 'admitted' || outcome === 'exists' ? undefined : outcome)
   )

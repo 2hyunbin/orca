@@ -25,6 +25,7 @@ describe('agentJournalLinkageFields', () => {
   it('omits absent members rather than writing them as undefined', () => {
     // An own key set to undefined is still present; absence alone claims root.
     expect(agentJournalLinkageFields({ agentId: 'task-1' })).toEqual({ agentId: 'task-1' })
+    expect(Object.keys(agentJournalLinkageFields({ agentId: 'task-1' }))).toEqual(['agentId'])
     expect(agentJournalLinkageFields(undefined)).toEqual({})
   })
 
