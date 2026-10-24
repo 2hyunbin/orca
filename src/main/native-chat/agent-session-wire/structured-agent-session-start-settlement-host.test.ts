@@ -222,6 +222,9 @@ describe('final logical startup settlement', () => {
       expect(ran).not.toHaveBeenCalled()
       if (ending === 'deadline') {
         expect(await submission(first)).toMatchObject({ dispatchState: 'pending' })
+        await eventually(() =>
+          expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
+        )
         await proveOpen()
         await eventually(async () =>
           expect((await submission(first))?.dispatchState).toBe('accepted')
@@ -299,11 +302,15 @@ describe('final logical startup settlement', () => {
       throw new AgentSessionAcquisitionRefusal('sign in', 'notSignedIn')
     }
     acquire.mockImplementation(refuse)
-    const attached = await host.attach(CALLER, hostTestAttachParams(null))
+    const attached = await host.attach(
+      CALLER,
+      hostTestAttachParams(host.deps.store.getRecord(SESSION)!.lease.runtimeFence)
+    )
     expect(attached).toMatchObject({
       ok: false,
       refusal: { code: 'agent_session_operation_invalid', details: { reason: 'notSignedIn' } }
     })
+    expect(acquire).toHaveBeenCalledTimes(1)
     const direct = acquire.mock.calls.at(-1)![0]
     acquire.mockClear()
     const first = await accept('same launch through a message')
@@ -389,7 +396,9 @@ describe('final logical startup settlement', () => {
         await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
         const firstFlight = runtimeState.startFlights.get(SESSION)!
         for (let n = 0; n < count; n++) {
-          const params = hostTestAttachParams(null)
+          const params = hostTestAttachParams(
+            host.deps.store.getRecord(SESSION)!.lease.runtimeFence
+          )
           expect(await host.attach(CALLER, params)).toMatchObject({ ok: true })
           expect(await host.attach(CALLER, params)).toMatchObject({ ok: true, replayed: true })
         }
