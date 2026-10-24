@@ -162,8 +162,6 @@ function readFirstUserPromptFromDb(db: SyncDatabase, sessionId: string): string 
          ORDER BY time_created ASC, seq ASC
          LIMIT 1`
       )
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the SELECT projects one string data column and better-sqlite3 returns rows synchronously.
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
       .all(sessionId) as { data: string }[]
     const text = rows[0] ? extractOpenCode2MessageText(rows[0].data) : null
     return text ? normalizeFullFirstUserPromptText(text) : null
@@ -229,7 +227,6 @@ export async function parseOpenCode2SqliteSession(args: {
     if (!canReadOpenCode2Sessions(db)) {
       return null
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the query selects the SessionRow columns and the schema guard ran immediately above.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
     const row = db.prepare(buildSessionQuery(db)).get(sessionId) as SessionRow | undefined
     if (!row || row.id !== sessionId) {

@@ -128,7 +128,6 @@ describe('OpenCode status plugin module contract', () => {
       posts.push({ url: String(input), body: JSON.parse(String(init?.body ?? '{}')) })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
       return { ok: true } as Response
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
     }) as unknown as typeof globalThis.fetch
 
     const module = await loadPluginModule()
@@ -167,7 +166,6 @@ describe('OpenCode status plugin module contract', () => {
       posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch returns the Response shape the plugin checks.
       return { ok: true } as Response
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The mocked fetch is assigned to the standard Fetch API shape.
     }) as unknown as typeof globalThis.fetch
 
     const module = await loadPluginModule(_internals.getOpenCode2PluginSource())
@@ -214,7 +212,6 @@ describe('OpenCode status plugin module contract', () => {
       posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
       return { ok: true } as Response
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
     }) as unknown as typeof globalThis.fetch
 
     const module = await loadPluginModule(_internals.getOpenCode2PluginSource())
@@ -267,7 +264,6 @@ describe('OpenCode status plugin module contract', () => {
       posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
       return { ok: true } as Response
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
     }) as unknown as typeof globalThis.fetch
 
     const module = await loadPluginModule(_internals.getOpenCode2PluginSource())
@@ -317,7 +313,6 @@ describe('OpenCode status plugin module contract', () => {
       posts.push({ body: JSON.parse(String(init?.body ?? '{}')) })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
       return { ok: true } as Response
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
     }) as unknown as typeof globalThis.fetch
 
     const module = await loadPluginModule(_internals.getOpenCode2PluginSource())

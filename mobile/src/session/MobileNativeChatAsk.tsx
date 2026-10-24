@@ -83,14 +83,9 @@ export function MobileNativeChatAsk({
 
   const total = prompt.questions.length
   const isLast = index === total - 1
-  const currentAnswered = useMemo(
-    () => isAnswered(index),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selections, otherText, index]
-  )
+  const currentAnswered = useMemo(() => isAnswered(index), [selections, otherText, index])
   const allAnswered = useMemo(
     () => prompt.questions.every((_, i) => isAnswered(i)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [otherText, prompt.questions, selections]
   )
   const canAdvance = !submitting && (isLast ? allAnswered : currentAnswered)
