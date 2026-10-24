@@ -167,6 +167,21 @@ export class RpcDispatcher {
   }
 
   private async invokeUnary(
+    call: AdmittedUnaryCall,
+    options: RpcDispatchStreamingOptions | undefined
+  ): Promise<unknown> {
+    const d3Start = performance.now()
+    try {
+      return await this.invokeUnaryTimed(call, options)
+    } finally {
+      const d3Ms = performance.now() - d3Start
+      if (d3Ms >= 20 || call.request.method.startsWith('session.tabs')) {
+        console.warn(`[d3-rpc] up=${Math.round(process.uptime() * 1000)} ${call.request.method} ${Math.round(d3Ms)}ms`)
+      }
+    }
+  }
+
+  private async invokeUnaryTimed(
     { request, method, params, caller }: AdmittedUnaryCall,
     options: RpcDispatchStreamingOptions | undefined
   ): Promise<unknown> {

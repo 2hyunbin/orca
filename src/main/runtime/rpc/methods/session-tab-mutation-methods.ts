@@ -19,6 +19,7 @@ export const SESSION_TAB_MUTATION_METHODS = [
     permission: 'workspace',
     params: ActivateTab,
     handler: async (params, { runtime, clientKind, pairedDeviceId, clientCapabilities }) => {
+      const d3t0 = performance.now()
       if (clientKind) {
         const visible = projectSessionTabsForClient(
           await runtime.listMobileSessionTabs(params.worktree, pairedDeviceId),
@@ -27,6 +28,7 @@ export const SESSION_TAB_MUTATION_METHODS = [
         )
         assertProjectedSessionTabVisible(visible, params.tabId)
       }
+      const d3t1 = performance.now()
       const result = await runtime.activateMobileSessionTab(
         params.worktree,
         params.tabId,
@@ -42,7 +44,11 @@ export const SESSION_TAB_MUTATION_METHODS = [
           })
         }
       )
+      const d3t2 = performance.now()
       const projected = projectSessionTabsForMutationClient(result, clientKind, clientCapabilities)
+      console.warn(
+        `[d3-activate] list=${Math.round(d3t1 - d3t0)} activate=${Math.round(d3t2 - d3t1)} project=${Math.round(performance.now() - d3t2)} intent=${params.intent ?? '-'}`
+      )
       // One reply's answer, outside the projection: the fallback is never part of the tab snapshot.
       return result.startupCwdFallback
         ? { ...projected, startupCwdFallback: result.startupCwdFallback }

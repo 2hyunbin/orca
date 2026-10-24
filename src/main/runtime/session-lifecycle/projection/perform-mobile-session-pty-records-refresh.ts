@@ -132,10 +132,16 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
   ): Promise<RuntimeMobileSessionTabActivationResult> {
     const navigation = opts.navigation ?? (opts.notifyClients === false ? 'caller' : 'all')
     const targetsHost = navigationTargetsHost(navigation)
+    const d3a = performance.now()
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     let worktreeId = explicitWorktreeId ?? (await this.resolveWorktreeSelector(worktreeSelector)).id
+    const d3b = performance.now()
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId)
+    const d3c = performance.now()
     await this.refreshMobileSessionPtyRecords(worktreeId)
+    console.warn(
+      `[d3-activate-inner] resolve=${Math.round(d3b - d3a)} explicit=${Boolean(explicitWorktreeId)} hydrate=${Math.round(d3c - d3b)} refresh=${Math.round(performance.now() - d3c)}`
+    )
     // Why: the renderer can publish the host's spelling while inventory refresh is pending.
     worktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ?? worktreeId
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
