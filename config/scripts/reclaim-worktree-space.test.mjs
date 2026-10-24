@@ -75,8 +75,13 @@ it('leaves historical caches out of automatic invocations', async () => {
   }
 })
 
-it('forwards an age override only to historical test cache cleanup', async () => {
-  const options = { ...(await fixture()), releaseCacheMinAgeDays: 7, testsStopped: true }
+it('routes independent age overrides only to their cleanup operation', async () => {
+  const options = {
+    ...(await fixture()),
+    releaseCacheMinAgeDays: 7,
+    generatedMinAgeDays: 3,
+    testsStopped: true
+  }
   await reclaimWorktreeSpace(options)
   expect(options.execute.mock.calls[0][0].args).toEqual(
     expect.arrayContaining(['--min-age-days', '7'])
@@ -84,11 +89,21 @@ it('forwards an age override only to historical test cache cleanup', async () =>
   for (const [spec] of options.execute.mock.calls.slice(1)) {
     expect(spec.args).not.toContain('--min-age-days')
   }
+  for (const [spec] of options.execute.mock.calls) {
+    if (spec.args.some((arg) => arg.endsWith('reclaim-worktree-generated-files.mjs'))) {
+      expect(spec.args).toEqual(expect.arrayContaining(['--generated-min-age-days', '3']))
+    } else {
+      expect(spec.args).not.toContain('--generated-min-age-days')
+    }
+  }
 })
 
-it('rejects an invalid cache age before starting cleanup', async () => {
-  const options = { ...(await fixture()), releaseCacheMinAgeDays: -1 }
-  await expect(reclaimWorktreeSpace(options)).rejects.toThrow('--release-cache-min-age-days')
+it.each([
+  ['releaseCacheMinAgeDays', '--release-cache-min-age-days'],
+  ['generatedMinAgeDays', '--generated-min-age-days']
+])('rejects invalid %s before starting cleanup', async (key, flag) => {
+  const options = { ...(await fixture()), [key]: -1 }
+  await expect(reclaimWorktreeSpace(options)).rejects.toThrow(flag)
   expect(options.execute).not.toHaveBeenCalled()
 })
 
