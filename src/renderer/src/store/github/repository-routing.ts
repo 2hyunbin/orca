@@ -9,9 +9,11 @@ import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-t
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { getGitHubRepoLookupIndex } from '../slices/github-repo-lookup-index'
 import {
+  getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
-  parseExecutionHostId
+  parseExecutionHostId,
+  toRuntimeExecutionHostId
 } from '../../../../shared/execution-host'
 
 /** The server-side repo for a request already routed to `target`; `null` when it runs here. */
@@ -23,7 +25,12 @@ export function getRuntimeRepoTarget(
   if (target.kind !== 'environment') {
     return null
   }
-  const repo = getGitHubRepoLookupIndex(state.repos).findByPath(repoPath)
+  const runtimeHostId = toRuntimeExecutionHostId(target.environmentId)
+  const repo =
+    state.repos.find(
+      (candidate) =>
+        candidate.path === repoPath && getRepoExecutionHostId(candidate) === runtimeHostId
+    ) ?? getGitHubRepoLookupIndex(state.repos).findByPath(repoPath)
   return repo ? { target, repo } : null
 }
 
