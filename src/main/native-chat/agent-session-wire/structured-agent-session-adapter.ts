@@ -8,10 +8,6 @@ import type {
 // The host owns journal/lease authority; adapters report delivery uncertainty without guessing.
 
 import type {
-  AgentChildWorkStopAcknowledgement,
-  AgentSessionBackgroundTaskStops
-} from '../../../shared/agent-child-work-stop-targets'
-import type {
   AgentJournalAnsweredTurnIdentity,
   AgentJournalItemIdentity,
   AgentJournalMessageItem,
@@ -305,15 +301,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     replacesGoal: boolean
     signal?: AbortSignal
   }): Promise<{ ok: true } | { ok: false; rejected: string }>
-  /** Stop named tasks only; acknowledge each accepted stop immediately so later batch failures cannot erase it. */
-  stopBackgroundTasks?(input: {
-    sessionId: string
-    fence: number
-    taskIds: readonly string[]
-    acknowledge?: (acknowledgement: AgentChildWorkStopAcknowledgement) => void
-  }): Promise<{ cancelled: boolean; stillRunning?: true }>
-  /** Undefined when no live session exposes stop support. */
-  backgroundTaskStops?(sessionId: string): AgentSessionBackgroundTaskStops | undefined
   /** Derive unanswered retained work from the live child; false without one. */
   holdsDispatch?(sessionId: string): boolean
   /** Captures only this input's pending answer/output in the supplied live acquisition. */
