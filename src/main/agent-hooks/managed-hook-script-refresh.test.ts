@@ -20,6 +20,11 @@ let isolatedUserDataDir = ''
 let previousUserDataPath: string | undefined
 
 beforeEach(() => {
+  vi.stubEnv('GROK_HOME', undefined)
+  vi.stubEnv('KIMI_CODE_HOME', undefined)
+  vi.stubEnv('COPILOT_HOME', undefined)
+  vi.stubEnv('KIRO_HOME', undefined)
+  vi.stubEnv('XDG_CONFIG_HOME', undefined)
   previousUserDataPath = process.env.ORCA_USER_DATA_PATH
   isolatedUserDataDir = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-user-data-'))
   process.env.ORCA_USER_DATA_PATH = isolatedUserDataDir
@@ -32,6 +37,7 @@ afterEach(() => {
     process.env.ORCA_USER_DATA_PATH = previousUserDataPath
   }
   rmSync(isolatedUserDataDir, { recursive: true, force: true })
+  vi.unstubAllEnvs()
 })
 
 const { homedirMock } = vi.hoisted(() => ({
@@ -138,6 +144,33 @@ describe('managed hook script refresh', () => {
       rmSync(home, { recursive: true, force: true })
     }
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'refreshes existing POSIX hook and statusline locale handling without a CLI config',
+    async () => {
+      const home = mkdtempSync(join(tmpdir(), 'orca-hook-locale-refresh-'))
+      homedirMock.mockReturnValue(home)
+      try {
+        const hooksDir = join(home, '.orca', 'agent-hooks')
+        mkdirSync(hooksDir, { recursive: true })
+        for (const name of ['claude-hook.sh', 'claude-statusline.sh']) {
+          writeFileSync(join(hooksDir, name), '#!/bin/sh\ncurl --connect-timeout 0.5\n')
+        }
+        await new ClaudeHookService().refreshManagedScripts()
+        for (const name of ['claude-hook.sh', 'claude-statusline.sh']) {
+          const script = readFileSync(join(hooksDir, name), 'utf8')
+          expect(script).toContain('| LC_ALL= LC_NUMERIC=C curl -sS')
+          expect(script).not.toMatch(/\|\s+curl\b/)
+          expect(statSync(join(hooksDir, name)).mode & 0o777).toBe(0o755)
+        }
+        expect(existsSync(join(home, '.claude'))).toBe(false)
+        expect(readdirSync(hooksDir).sort()).toEqual(['claude-hook.sh', 'claude-statusline.sh'])
+      } finally {
+        homedirMock.mockImplementation(() => process.env.HOME ?? tmpdir())
+        rmSync(home, { recursive: true, force: true })
+      }
+    }
+  )
 
   it('covers every shared launcher script with a refresher', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orca-hook-refresh-coverage-'))
