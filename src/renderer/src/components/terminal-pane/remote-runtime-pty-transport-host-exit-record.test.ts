@@ -63,19 +63,57 @@ function answerShow(terminal: Record<string, unknown>): string[] {
   return shown
 }
 
-async function attachRestoredHostTab(onPtyExit: (ptyId: string, exitCode?: number) => void) {
+async function attachRestoredHostTab(
+  onPtyExit: (ptyId: string, exitCode?: number) => void,
+  onHostReboundExitedPty?: (ptyId: string) => void
+) {
   resolvedPaneHandle = 'terminal-ended'
   const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
   const transport = createRemoteRuntimePtyTransport('hub-env', {
     worktreeId: 'wt-1',
     tabId: 'web-terminal-host-tab-1',
     leafId: 'pane:1',
-    onPtyExit
+    onPtyExit,
+    ...(onHostReboundExitedPty ? { onHostReboundExitedPty } : {})
   })
   transport.attach({ existingPtyId: HOST_TAB_PTY_ID, callbacks: {} })
   await vi.waitFor(() => expect(subscriptionSendBinary).toHaveBeenCalled())
   emitSnapshot(latestSubscribePayload().streamId, 'transcript')
   return transport
+}
+
+async function publishHostSurface(
+  surface: { terminal: string; incarnationId?: string } | null,
+  snapshotVersion: number
+): Promise<void> {
+  const tab = {
+    type: 'terminal' as const,
+    id: 'host-tab-1::pane:1',
+    parentTabId: 'host-tab-1',
+    leafId: 'pane:1',
+    title: 'Terminal',
+    isActive: true
+  }
+  // Why dynamic: the harness resets modules, so the transport's channel is the freshly loaded one.
+  const { queueAcceptedWebSessionTerminalSnapshot } =
+    await import('../../runtime/web-session-terminal-handle-events')
+  queueAcceptedWebSessionTerminalSnapshot(
+    {
+      worktree: 'wt-1',
+      publicationEpoch: 'epoch-ready',
+      snapshotVersion,
+      activeGroupId: null,
+      activeTabId: tab.id,
+      activeTabType: 'terminal',
+      tabs: [
+        surface
+          ? { ...tab, status: 'ready', ...surface }
+          : { ...tab, status: 'pending-handle', terminal: null }
+      ]
+    },
+    'hub-env'
+  )
+  await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 describe('remote runtime pane whose host session already ended (#31539)', () => {
@@ -229,6 +267,37 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(onPtyExit).not.toHaveBeenCalled()
     expect(transport.getRecoveryState?.().phase).not.toBe('ended')
+    transport.destroy?.()
+  })
+
+  it('hands a settled pane back once a host snapshot publishes its new process', async () => {
+    const onHostReboundExitedPty = vi.fn()
+    const transport = await attachRestoredHostTab(vi.fn(), onHostReboundExitedPty)
+    answerShow({ connected: false, verdict: 'exited', incarnationId: 'inc-1' })
+    refuseStream('terminal_handle_stale')
+    await vi.waitFor(() => expect(transport.getRecoveryState?.().phase).toBe('ended'))
+
+    await publishHostSurface({ terminal: 'terminal-ended', incarnationId: 'inc-1' }, 4)
+    await publishHostSurface({ terminal: 'terminal-ended' }, 5)
+    await publishHostSurface(null, 6)
+    expect(onHostReboundExitedPty).not.toHaveBeenCalled()
+
+    await publishHostSurface({ terminal: 'terminal-ended', incarnationId: 'inc-2' }, 7)
+    await publishHostSurface({ terminal: 'terminal-later' }, 8)
+    expect(onHostReboundExitedPty.mock.calls).toEqual([['remote:hub-env@@terminal-ended']])
+    transport.destroy?.()
+  })
+
+  it('hands a settled pane back to a new handle the host binds to it', async () => {
+    const onHostReboundExitedPty = vi.fn()
+    const transport = await attachRestoredHostTab(vi.fn(), onHostReboundExitedPty)
+    answerShow({ connected: false, exitCause: { kind: 'operator_close' } })
+    refuseStream('no_connected_pty')
+    await vi.waitFor(() => expect(transport.getRecoveryState?.().phase).toBe('ended'))
+
+    await publishHostSurface({ terminal: 'terminal-restarted' }, 4)
+
+    expect(onHostReboundExitedPty.mock.calls).toEqual([['remote:hub-env@@terminal-restarted']])
     transport.destroy?.()
   })
 

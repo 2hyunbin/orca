@@ -60,6 +60,7 @@ import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtim
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
 import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
 import { hostRecordsTerminalExit, sameWhenBothKnown } from './remote-terminal-host-exit-record'
+import { watchHostRebindAfterExit } from './remote-terminal-host-rebind-after-exit'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -226,6 +227,7 @@ export function createRemoteRuntimePtyTransport(
     onPtyExit,
     onPtySpawn,
     onPtyRebind,
+    onHostReboundExitedPty,
     onTitleChange,
     onBell,
     onAgentBecameIdle,
@@ -271,6 +273,7 @@ export function createRemoteRuntimePtyTransport(
   let recoveryReplacementPolicy: HostHandleReplacementPolicy = 'reuse'
   let recoveryReplacementPolicyHandle: string | null = null
   let stopWaitingForPublishedHandle: (() => void) | null = null
+  let stopWatchingHostRebind: (() => void) | null = null
   let publishedHandleWaitEpoch: number | null = null
   // Why: a spent auto-recovery window is the evidence that licenses reattaching the fenced handle; explicit retries must not erase it.
   let autoRecoveryWindowSpent = false
@@ -2209,6 +2212,8 @@ export function createRemoteRuntimePtyTransport(
     stopWaitingForPublishedHandle?.()
     stopWaitingForPublishedHandle = null
     publishedHandleWaitEpoch = null
+    stopWatchingHostRebind?.()
+    stopWatchingHostRebind = null
   }
 
   function isCurrentRemoteTerminal(targetHandle: string, targetPtyId: string | null): boolean {
@@ -2276,8 +2281,10 @@ export function createRemoteRuntimePtyTransport(
         return
       }
       remotePtyId ??= exitedPtyId
+      const exitedIncarnationId = terminal.incarnationId ?? authoritativePtyIncarnationId
       const cause = terminal.exitCause
       retireRemoteTerminalId(cause?.kind === 'exited' ? cause.exitCode : undefined)
+      watchForHostRebind(targetHandle, exitedIncarnationId)
     })()
       .catch(() => {})
       .finally(() => {
@@ -2285,6 +2292,34 @@ export function createRemoteRuntimePtyTransport(
           hostExitProbeHandle = null
         }
       })
+  }
+
+  // Why: a restart's new process can land just after the probe read the old one's exit (#31968).
+  function watchForHostRebind(exitedHandle: string, exitedIncarnationId: string | null): void {
+    if (destroyed || !onHostReboundExitedPty || !worktreeId || !tabId) {
+      return
+    }
+    if (!isWebTerminalSurfaceTabId(tabId)) {
+      return
+    }
+    const watchLifecycle = lifecycleEpoch
+    const environmentId = currentRuntimeEnvironmentId
+    stopWatchingHostRebind = watchHostRebindAfterExit(
+      {
+        environmentId,
+        worktreeId,
+        hostTabId: toHostSessionTabId(tabId),
+        leafId: leafId ?? null,
+        exitedHandle,
+        exitedIncarnationId
+      },
+      (nextHandle) => {
+        stopWatchingHostRebind = null
+        if (!destroyed && terminalEnded && watchLifecycle === lifecycleEpoch) {
+          onHostReboundExitedPty(toRemoteRuntimePtyId(nextHandle, environmentId))
+        }
+      }
+    )
   }
 
   async function hostPaneStillHoldsExitedTerminal(
