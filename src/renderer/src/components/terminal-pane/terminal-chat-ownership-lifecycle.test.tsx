@@ -62,7 +62,7 @@ vi.mock('../../store', async () => {
   const { useStore } = await import('zustand')
   const { terminalLayoutEqual } = await import('../../../../shared/terminal-layout-equality')
   mocks.state.setTabLayout = (id, layout) => {
-    if (terminalLayoutEqual(mocks.state.terminalLayoutsByTabId[id], layout)) {
+    if (layout && terminalLayoutEqual(mocks.state.terminalLayoutsByTabId[id], layout)) {
       return
     }
     const layouts = { ...mocks.state.terminalLayoutsByTabId }
