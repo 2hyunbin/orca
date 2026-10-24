@@ -106,19 +106,16 @@ const mailHandoffStoreMethods = {
       ? `AND type NOT IN (${options.excludeTypes.map(() => '?').join(',')})`
       : ''
     // Filter parked/settled owners in SQL so an old prefix cannot hide fresh successor mail.
-    return exposeMessageListTimestamps(
-      readMessages(
-        this.db
-          .prepare(`SELECT * FROM messages
+    const rows = this.db
+      .prepare(`SELECT * FROM messages
     WHERE to_handle = ? AND read = 0 AND delivery_contract = 'current_delivery'
       AND pointer_enter_pending = 0 AND sequence > ? ${exclusions}
       AND (handoff IS NULL OR CASE WHEN json_valid(handoff) THEN
         json_extract(handoff, '$.kind') IN ('structured', 'terminal') AND
         (recovery_used = 0 OR json_extract(handoff, '$.phase') = 'reserved') ELSE 0 END)
     ORDER BY sequence LIMIT ?`)
-          .all(mailbox, options.afterSequence, ...options.excludeTypes, options.limit)
-      )
-    )
+      .all(mailbox, options.afterSequence, ...options.excludeTypes, options.limit)
+    return exposeMessageListTimestamps(readMessages(rows))
   },
 
   reserveMailHandoff(
@@ -171,20 +168,19 @@ const mailHandoffStoreMethods = {
     reference: AutomaticMailHandoff
   ): void {
     runLifecycleWriteTransaction(this.db, 'mail_handoff_receipt', () => {
-      if (!currentAuthority(this, mailbox, reference.authority)) {
-        return
-      }
-      const update = this.db.prepare(`UPDATE messages SET handoff = ?,
+      if (currentAuthority(this, mailbox, reference.authority)) {
+        const update = this.db.prepare(`UPDATE messages SET handoff = ?,
     delivered_at = CASE WHEN ? THEN COALESCE(delivered_at, datetime('now')) ELSE delivered_at END
     WHERE id = ? AND to_handle = ? AND read = 0 AND handoff IS ?`)
-      for (const message of messages) {
-        update.run(
-          JSON.stringify(reference),
-          reference.phase === 'offered' ? 1 : 0,
-          message.id,
-          mailbox,
-          message.handoff ?? null
-        )
+        for (const message of messages) {
+          update.run(
+            JSON.stringify(reference),
+            reference.phase === 'offered' ? 1 : 0,
+            message.id,
+            mailbox,
+            message.handoff ?? null
+          )
+        }
       }
     })
   },
@@ -210,7 +206,15 @@ const mailHandoffStoreMethods = {
   }
 }
 
-export type MailHandoffStoreMethods = typeof mailHandoffStoreMethods
+export type MailHandoffStoreMethods = {
+  mailboxHandoffAuthority: typeof mailHandoffStoreMethods.mailboxHandoffAuthority
+  getAutomaticMailCandidates: typeof mailHandoffStoreMethods.getAutomaticMailCandidates
+  reserveMailHandoff: typeof mailHandoffStoreMethods.reserveMailHandoff
+  isMailHandoffCurrent: typeof mailHandoffStoreMethods.isMailHandoffCurrent
+  recordMailHandoff: typeof mailHandoffStoreMethods.recordMailHandoff
+  recordUnknownMailRead: typeof mailHandoffStoreMethods.recordUnknownMailRead
+  getOpenMailHandoffHandles: typeof mailHandoffStoreMethods.getOpenMailHandoffHandles
+}
 
 export function attachMailHandoffStore(ctor: { prototype: object }): void {
   Object.assign(ctor.prototype, mailHandoffStoreMethods)
