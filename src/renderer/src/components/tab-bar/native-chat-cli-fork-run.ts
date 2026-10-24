@@ -24,19 +24,22 @@ import {
   onRuntimeEnvironmentRevisionsChanged
 } from '@/runtime/runtime-environment-revision'
 import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
-import { resolveTabSessionHistorySubject } from './tab-session-history-switch'
+import {
+  resolveNativeChatCliForkIdentity,
+  type NativeChatCliForkIdentity
+} from './tab-session-history-switch'
 
 const pending = new Map<string, AbortController>()
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach((listener) => listener())
-const keyFor = (subject: NativeChatCliForkSubject) =>
-  `${subject.request.executionHostScope}\0${subject.sessionId}`
+type PendingIdentity = Pick<NativeChatCliForkIdentity, 'executionHostScope' | 'sessionId'>
+const keyFor = (subject: PendingIdentity) => `${subject.executionHostScope}\0${subject.sessionId}`
 const subscribe = (listener: () => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
-export function useNativeChatCliForkPending(subject: NativeChatCliForkSubject | null): boolean {
+export function useNativeChatCliForkPending(subject: PendingIdentity | null): boolean {
   return useSyncExternalStore(
     subscribe,
     () => !!subject && pending.has(keyFor(subject)),
@@ -52,7 +55,7 @@ export async function runNativeChatCliFork(args: {
   commandOverrides?: Partial<Record<AiVaultAgent, string | null>>
 }): Promise<void> {
   const { subject, tab } = args
-  const key = keyFor(subject)
+  const key = keyFor({ ...subject, executionHostScope: subject.request.executionHostScope })
   if (pending.has(key)) {
     return
   }
@@ -67,15 +70,12 @@ export async function runNativeChatCliFork(args: {
     const source = state.unifiedTabsByWorktree[tab.worktreeId]?.find((item) => item.id === tab.id)
     const current =
       source?.contentType === 'agent-session' && source.entityId === subject.sessionId
-        ? resolveTabSessionHistorySubject(state, {
+        ? resolveNativeChatCliForkIdentity(state, {
             tab,
             nativeChat: { sessionId: subject.sessionId, agent: args.agent }
           })
         : null
-    return (
-      current?.kind === 'chat' &&
-      current.request.executionHostScope === subject.request.executionHostScope
-    )
+    return current?.executionHostScope === subject.request.executionHostScope
   }
   if (!isCurrent()) {
     return

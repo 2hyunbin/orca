@@ -17,10 +17,10 @@ const mocks = vi.hoisted(() => ({
   host: 'runtime:peer'
 }))
 vi.mock('./tab-session-history-switch', () => ({
-  resolveTabSessionHistorySubject: () => ({
-    kind: 'chat',
-    request: { executionHostScope: mocks.host }
-  })
+  resolveNativeChatCliForkIdentity: () => ({ executionHostScope: mocks.host }),
+  resolveTabSessionHistorySubject: () => {
+    throw new Error('History projection in currentness')
+  }
 }))
 vi.mock('@/lib/native-chat-cli-fork-preparation', () => ({
   prepareNativeChatCliFork: mocks.prepare
@@ -88,6 +88,8 @@ it('shares pending across menu openings and suppresses dispatch after source ret
   const first = runNativeChatCliFork(args)
   await runNativeChatCliFork(args)
   expect(mocks.prepare).toHaveBeenCalledTimes(1)
+  mocks.listeners.forEach((listener) => listener())
+  expect(mocks.error).not.toHaveBeenCalled()
   closeSource()
   settle(prepared)
   await first
