@@ -79,10 +79,9 @@ async function setup(remote = false) {
   const post = async (payload: Record<string, unknown>, cli = false) => {
     const body = buildBody({ session_id: SESSION, transcript_path: transcript, ...payload })
     if (cli) {
-      const env = desktop.buildPtyEnv()
       const coordinates = relay?.getCoordinates()
-      const port = coordinates?.port ?? env.ORCA_AGENT_HOOK_PORT
-      const token = coordinates?.token ?? env.ORCA_AGENT_HOOK_TOKEN
+      const port = coordinates?.port ?? desktop.buildPtyEnv().ORCA_AGENT_HOOK_PORT
+      const token = coordinates?.token ?? desktop.buildPtyEnv().ORCA_AGENT_HOOK_TOKEN
       const result = await runProcess({
         program: process.platform === 'win32' ? 'curl.exe' : 'curl',
         args: [
@@ -329,6 +328,7 @@ describe('Claude permission result observation', () => {
     async (remote) => {
       const pane = await setup(remote)
       const { lines, tool } = capture('escape')
+      const { lastStatusByPaneKey: rows } = pane.desktop._getStateForTests()
       renameSync(pane.transcript, `${pane.transcript}.unavailable`)
       await pane.post(
         { hook_event_name: 'PermissionRequest', tool_name: tool.name, tool_input: tool.input },
@@ -336,7 +336,7 @@ describe('Claude permission result observation', () => {
       )
       writeFileSync(pane.transcript, `${lines.join('\n')}\n`)
       await pane.tick()
-      expect([pane.row()?.state, pane.row()?.toolUseId]).toEqual(['waiting', undefined])
+      expect([pane.row()?.state, rows.get(PANE)?.toolUseId]).toEqual(['waiting', undefined])
       const second = { ...tool, id: 'late-q2' }
       const q2 = lines.map((raw) =>
         raw.replaceAll(tool.id, second.id).replaceAll('escape2-node-', 'q2-node-')
@@ -345,7 +345,7 @@ describe('Claude permission result observation', () => {
       const flushed = `${q2.join('\n')}\n`
       appendFileSync(pane.transcript, flushed.slice(0, q2[0].length + 80))
       await pane.tick()
-      expect(pane.row()?.toolUseId).toBeUndefined()
+      expect(rows.get(PANE)?.toolUseId).toBeUndefined()
       appendFileSync(pane.transcript, flushed.slice(q2[0].length + 80))
       await pane.tick()
       await pane.tick() // Admit identity first, then the exact settlement through the same matcher.
