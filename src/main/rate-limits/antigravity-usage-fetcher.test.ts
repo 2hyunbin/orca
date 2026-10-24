@@ -224,8 +224,8 @@ describe('fetchAntigravityRateLimits', () => {
     expect(result.error).toContain('did not answer in time')
   })
 
-  it('reports a timeout spent waiting on browser sign-in as signed out', async () => {
-    // Why pinned: agy 1.4.2 prints this and waits 60 s for OAuth, so Orca's kill lands first (#26484).
+  it('cools down a read that reached agy\u2019s browser sign-in', async () => {
+    // Why pinned: agy 1.4.2 opens this OAuth page and waits 60 s, so Orca's 30 s kill lands first (#26484).
     const result = await harness({
       result: processResult({
         timedOut: true,
@@ -236,6 +236,19 @@ describe('fetchAntigravityRateLimits', () => {
 
     expect(result.status).toBe('unavailable')
     expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
+    expect(result.usageMetadata?.retryAtMs).toBe(1_700_000_000_000 + 60 * 60 * 1000)
+  })
+
+  it('does not cool down a signed-out read that fails fast without a browser', async () => {
+    const result = await harness({
+      result: processResult({
+        code: 1,
+        stderr: "Error: authentication required. Run 'agy' to log in, then retry.\n"
+      })
+    }).fetch()
+
+    expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
+    expect(result.usageMetadata?.retryAtMs).toBeUndefined()
   })
 
   it('reports an unreadable payload as a parse failure carrying the exit code', async () => {

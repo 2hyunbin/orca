@@ -59,19 +59,12 @@ export abstract class RateLimitServiceFetchPolicy extends RateLimitServiceFetchT
     )
   }
 
-  // Why only user-directed refreshes may pass: Claude's Retry-After is binding, and a signed-out agy
-  // read starts interactive OAuth that opens a browser sign-in page on every poll (#26484).
+  // Why: Claude's Retry-After and agy's browser sign-in cooldown bind automated checks; user refreshes may pass.
   protected shouldSkipAutomatedFetch(
     provider: ActiveRateLimitProvider,
     limits: ProviderRateLimits | null
   ): boolean {
-    if (provider === 'antigravity') {
-      return (
-        limits?.status === 'unavailable' &&
-        limits.usageMetadata?.failureKind === 'missing-credentials'
-      )
-    }
-    return provider === 'claude' && this.isRetryAfterActive(limits)
+    return (provider === 'claude' || provider === 'antigravity') && this.isRetryAfterActive(limits)
   }
 
   protected resolveClaudeFetchApply(

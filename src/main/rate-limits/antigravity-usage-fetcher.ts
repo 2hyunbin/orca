@@ -6,6 +6,7 @@ import type { ProviderRateLimits, UsageRateLimitFailureKind } from '../../shared
 import {
   ANTIGRAVITY_MIN_USAGE_VERSION,
   ANTIGRAVITY_PROBE_ENV,
+  ANTIGRAVITY_SIGN_IN_PROMPT_COOLDOWN_MS,
   ANTIGRAVITY_USAGE_ARGS,
   ANTIGRAVITY_USAGE_MAX_OUTPUT_BYTES,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
@@ -15,7 +16,10 @@ import {
 } from './antigravity-usage-command'
 import { parseAntigravityUsageStdout, stdoutShowsModelTurn } from './antigravity-usage-response'
 
-import { classifyAntigravityUsageFailure } from './antigravity-usage-error'
+import {
+  classifyAntigravityUsageFailure,
+  stderrShowsInteractiveSignIn
+} from './antigravity-usage-error'
 
 const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
   'rate-limited':
@@ -25,10 +29,6 @@ const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
   server:
     'Antigravity usage is not available right now. The Antigravity API returned a server error.'
 }
-
-// Why "then refresh": automated polls stop while signed out, so only a manual refresh rechecks.
-const SIGNED_OUT_REASON =
-  'Antigravity usage is not available. Sign in with `agy`, then refresh to report this account’s quota.'
 
 const UNSUPPORTED_USAGE_COMMAND_REASON =
   'Antigravity usage is not available. This version of the Antigravity CLI answers `/usage` as a prompt instead of a command, so Orca stopped asking rather than spend quota on it. Update `agy` and restart Orca.'
@@ -178,9 +178,21 @@ export async function fetchAntigravityRateLimits(
     return failed(spawnFailureMessage(error), 'cli-unavailable', now())
   }
 
-  // Why: signed out, agy starts browser OAuth and waits on it until killed — a sign-in, not a slow CLI.
-  if (result.timedOut && classifyAntigravityUsageFailure(result.stderr)?.signedOut) {
-    return unavailable(SIGNED_OUT_REASON, 'missing-credentials', now())
+  if (stderrShowsInteractiveSignIn(result.stderr)) {
+    const at = now()
+    return {
+      ...unavailable(
+        'Antigravity usage is not available. Sign in with `agy`; Orca checks again within an hour, or when you refresh.',
+        'missing-credentials',
+        at
+      ),
+      usageMetadata: {
+        source: 'cli',
+        attemptedSources: ['cli'],
+        failureKind: 'missing-credentials',
+        retryAtMs: at + ANTIGRAVITY_SIGN_IN_PROMPT_COOLDOWN_MS
+      }
+    }
   }
   if (result.timedOut) {
     return failed(
@@ -200,7 +212,11 @@ export async function fetchAntigravityRateLimits(
   if (!reading) {
     const failure = classifyAntigravityUsageFailure(`${result.stdout}\n${result.stderr}`)
     if (failure?.signedOut) {
-      return unavailable(SIGNED_OUT_REASON, failure.failureKind, now())
+      return unavailable(
+        'Antigravity usage is not available. Sign in with `agy` to report this account’s quota.',
+        failure.failureKind,
+        now()
+      )
     }
     if (failure) {
       return failed(
