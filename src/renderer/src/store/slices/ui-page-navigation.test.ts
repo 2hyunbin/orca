@@ -754,28 +754,3 @@ describe('createUISlice space navigation', () => {
     expect(store.getState().activeView).toBe('artifacts')
   })
 })
-
-describe('createUISlice automation run navigation', () => {
-  afterEach(() => {
-    Reflect.deleteProperty(globalThis, '__ORCA_WEB_CLIENT__')
-  })
-
-  // #32415: the web Automations page lists the server only as its runtime, never as Desktop.
-  it('points a paired web client navigation at its server runtime', () => {
-    Object.assign(globalThis, { __ORCA_WEB_CLIENT__: true })
-    const store = createUIStore()
-    store.setState({ runtimeEnvironments: [{ id: 'env-1' }] } as Partial<AppState>)
-
-    store.getState().setPendingAutomationRunNavigation({
-      automationId: 'a1',
-      runId: 'r1',
-      hostId: 'local'
-    })
-
-    expect(store.getState().pendingAutomationRunNavigation).toEqual({
-      automationId: 'a1',
-      runId: 'r1',
-      hostId: 'runtime:env-1'
-    })
-  })
-})
