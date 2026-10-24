@@ -130,8 +130,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     })
 
     const sorted = [...summaries.values()].sort(compareWorktreePs)
-    // Why: the same cap starvation as worktree.list — a host whose rows all sort last gets no
-    // page at all, which is indistinguishable from it having no workspaces (#18104).
+    // Balance the cap across hosts so late-sorting remote rows cannot disappear as apparent empty hosts (#18104).
     return buildWorktreeListingPage(
       sorted,
       limit,
@@ -139,8 +138,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     )
   }
 
-  /** A resolved listing as clients see it: no hidden repo, and imported worktrees only where the
-   *  desktop shows them, through the same visibility gate as worktree.list. */
+  /** Apply the desktop's repo/import visibility gate, matching worktree.list. */
   protected visibleResolvedWorktreeSnapshot(
     snapshot: ResolvedWorktreeSnapshot,
     sourceDefaultsSupported = true
@@ -167,8 +165,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     }
   }
 
-  /** The agent's configured env, with the account a desktop that owns this host's accounts chose
-   *  laid over it, as its own launches here carry. */
+  /** Overlay the owning desktop's selected account on the agent's configured environment. */
   protected structuredAgentLaunchEnv(
     agent: StructuredAgentId,
     settings: Pick<GlobalSettings, 'agentDefaultEnv'>
@@ -183,7 +180,6 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     return this.store?.getRepos() ?? []
   }
 
-  /** What a client may list: the desktop's visible rows, never a retained source. */
   listVisibleRepos(): Repo[] {
     return runtimeVisibleRepos(this.store)
   }
@@ -200,7 +196,6 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     })
   }
 
-  /** The host pushes no phone notification for this workspace; see the module. */
   isWorkspaceNotificationMuted(workspaceId: string): boolean {
     const store = this.store
     return (
@@ -212,8 +207,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     )
   }
 
-  /** The durable record store alone, without the chat host: launch admission needs only its
-   *  ledger. A host installed later is built on this same store. */
+  /** Launch admission opens only the ledger; the chat host later reuses it. */
   async openAgentSessionRecordStore(): Promise<AgentSessionRecordStore> {
     const { store } = await openAgentSessionRecordStoreOnce({
       stateDirectory: getProfileUserDataPath(),
@@ -223,13 +217,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     return store
   }
 
-  /**
-   * Installs the structured agent-session host on first use. Lazy for the same
-   * reason the orchestration DB is: the profile's user-data path is not final
-   * until the app is ready, and a runtime nobody drives a chat session on never
-   * builds the chat host. The record store it sits on may already be open, from
-   * a launch's admission.
-   */
+  /** Defer chat-host creation until needed and userData is final; reuse any record store opened during admission. */
   async ensureStructuredAgentSessionHost(): Promise<void> {
     const logger = createStructuredAgentSessionLogger()
     const nameChat = createStructuredChatNamingHandler(
@@ -255,8 +243,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       claimKeyId: this.agentSessionClaimSigner.keyId,
       // The host's local trace file (the desktop's or orcad's own), plus the console.
       logger,
-      // Resolves folder workspaces as well as git worktrees, so a chat session
-      // in a plain folder lands in the folder rather than failing to resolve.
+      // Resolve folder workspaces too; plain-folder chats must not require a git worktree.
       resolveWorkspacePath: async (workspaceId) =>
         (await this.resolveRuntimeFileTarget(`id:${workspaceId}`)).worktree.path,
       resolveClaudeCommand: (options) =>
@@ -288,8 +275,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       ...(this.prepareCodexCatalogProbeHomeFn
         ? { prepareCodexCatalogProbeHome: this.prepareCodexCatalogProbeHomeFn }
         : {}),
-      // Structured chat has no agent CLI hooks, so this projection is what the first-work
-      // workspace rename listens to instead of `agentStatus:set`.
+      // Structured chat has no CLI hooks; this projection drives first-work renaming.
       onSessionStatusChanged: (summary, options) => {
         this.onStructuredSessionStatusForMail(summary)
         nameChat(summary, options)
@@ -312,8 +298,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         reconcile: (state) => this.mobileNotifications.reconcileStructuredPromptAttention(state),
         now: () => Date.now()
       }),
-      // Read per sweep tick from the orchestration database: a worker whose dispatch is open keeps
-      // its agent running. No database answers no.
+      // Read each sweep: an open Dispatch keeps its worker running; no database means none.
       hasOpenDispatch: (record) =>
         structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record)
     })
