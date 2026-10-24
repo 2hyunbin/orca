@@ -204,7 +204,10 @@ describe('a structured chat launch on a paired server', () => {
     })
     await useAppStore.getState().ensureNativeDetectedAgents()
     mocks.createSupport.mockResolvedValue({ supported: false })
-    const openTerminal = vi.fn(() => ({ surface: { kind: 'host-published' as const } }))
+    const openTerminal = vi.fn(() => ({
+      surface: { kind: 'host-published' as const },
+      pasteDraftAfterLaunch: false
+    }))
     const declined = () =>
       launchStructuredAgentFromNewTab({ plan: plan(), worktreeId, openTerminal })
     await expect(declined()?.structuredSettlement).resolves.toMatchObject({ kind: 'failed' })
