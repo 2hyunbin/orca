@@ -23,6 +23,7 @@ import {
   codexTurnApprovalsAreAutoReviewed,
   reconcileCodexSubagentReviewer
 } from '../../codex-subagent-reviewer'
+import { codexHookThread, isForeignEphemeralCodexThread } from '../../codex-ephemeral-thread'
 import { readFirstString } from '../interactive-tool'
 import type { HookListenerState } from '../listener-state'
 import { resolvePrompt, resolveToolState } from '../prompt-fields'
@@ -170,17 +171,9 @@ export function normalizeCodexEvent(
     return normalizeCodexSubagentLifecycleEvent(state, eventName, paneKey, hookPayload)
   }
 
-  const sessionId = readString(hookPayload, 'session_id')
-  const currentSessionId = state.lastStatusByPaneKey.get(paneKey)?.providerSession?.id
   // Ephemeral side chats share the pane but must not replace its recorded main turn.
-  if (
-    hookPayload.transcript_path === null &&
-    !readString(hookPayload, 'agent_id') &&
-    state.codexSubagentTranscriptByPaneKey.get(paneKey)?.parent.filePath &&
-    sessionId &&
-    currentSessionId &&
-    sessionId !== currentSessionId
-  ) {
+  const thread = codexHookThread(eventName, hookPayload)
+  if (thread && isForeignEphemeralCodexThread(state.lastStatusByPaneKey.get(paneKey), thread)) {
     return null
   }
 
