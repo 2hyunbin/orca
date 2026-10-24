@@ -1,4 +1,4 @@
-import { extractDroppedPtyQueryBytes } from '../../../../shared/terminal-reply-query-extraction'
+import { extractHiddenStartupRendererQueryData } from '../../../../shared/terminal-reply-query-extraction'
 import {
   INITIAL_MODE_2031_REPLY_SCAN_STATE,
   scanMode2031ReplyDecision,
@@ -18,6 +18,14 @@ import type { PtyIpcSession } from '../session'
 
 export function pendingDataCapChars(session: PtyIpcSession): number {
   return terminalOutputBacklogCapChars(session.getSettings?.().terminalScrollbackRows)
+}
+
+export function extractDroppedPtyQueryBytes(data: string): string {
+  if (!data.includes('\x1b')) {
+    return ''
+  }
+  const extracted = extractHiddenStartupRendererQueryData(data, '')
+  return extracted.statelessQueryData + extracted.statefulQueryData + extracted.oscColorQueryData
 }
 
 export function scanDroppedMode2031Data(

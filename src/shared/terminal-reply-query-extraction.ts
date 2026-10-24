@@ -158,12 +158,3 @@ export function isStatelessRendererReplyCsiQuery(sequence: string): boolean {
 export function isStatefulRendererReplyCsiQuery(sequence: string): boolean {
   return sequence === '\x1b[6n' || (sequence.startsWith('\x1b[?') && sequence.endsWith('$p'))
 }
-
-/** Only the query bytes of output a view will never parse, so a responder can still answer them. */
-export function extractDroppedPtyQueryBytes(data: string): string {
-  if (!data.includes('\x1b')) {
-    return ''
-  }
-  const extracted = extractHiddenStartupRendererQueryData(data, '')
-  return extracted.statelessQueryData + extracted.statefulQueryData + extracted.oscColorQueryData
-}

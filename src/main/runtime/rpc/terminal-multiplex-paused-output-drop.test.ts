@@ -12,7 +12,6 @@ import { RuntimeTerminalViewSubscribers } from '../runtime-terminal-view-subscri
 
 async function subscribePausable(capabilities: Record<string, 1>) {
   const listeners: ((data: string, meta?: RuntimeTerminalDataMeta) => void)[] = []
-  const answerQueriesInDiscardedRemoteOutput = vi.fn()
   const viewSubscribers = new RuntimeTerminalViewSubscribers({
     notifyPresenceChanged: () => {},
     hasMobileSubscribers: () => false,
@@ -25,8 +24,7 @@ async function subscribePausable(capabilities: Record<string, 1>) {
       return vi.fn()
     }),
     registerRemoteTerminalViewSubscriber: (ptyId, isOutputPaused) =>
-      viewSubscribers.registerRemote(ptyId, isOutputPaused),
-    answerQueriesInDiscardedRemoteOutput
+      viewSubscribers.registerRemote(ptyId, isOutputPaused)
   })
   await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
   harness.handlers.get(0)?.(
@@ -82,8 +80,6 @@ async function subscribePausable(capabilities: Record<string, 1>) {
     emitOutput,
     dropNotices,
     remoteViewHoldsAuthority,
-    discardedOutputSalvaged: () =>
-      answerQueriesInDiscardedRemoteOutput.mock.calls.map(([, data]) => data).join(''),
     close
   }
 }
@@ -131,24 +127,6 @@ describe('terminal multiplex paused-output drop notice', () => {
     host.setPaused(true)
     await host.close()
     expect(host.remoteViewHoldsAuthority()).toBe(false)
-  })
-
-  // #32944: main yielded these bytes to the view at ingestion, so a pause that discards them must hand their queries back.
-  it('hands the queries of batched output a pause discards to main', async () => {
-    const host = await subscribePausable({ ackOutput: 1, outputPause: 1, outputPauseDropNotice: 1 })
-    host.emitOutput('batched\x1b[c')
-    host.setPaused(true)
-    expect(host.discardedOutputSalvaged()).toBe('batched\x1b[c')
-    await host.close()
-  })
-
-  it('hands the queries of output waiting on the ack window to main when a pause clears it', async () => {
-    const host = await subscribePausable({ ackOutput: 1, outputPause: 1, outputPauseDropNotice: 1 })
-    // Past the 512 KiB initial window, so the query's frame waits unsent for an ack.
-    host.emitOutput(`${'x'.repeat(600 * 1024)}\x1b[c`)
-    host.setPaused(true)
-    expect(host.discardedOutputSalvaged().endsWith('\x1b[c')).toBe(true)
-    await host.close()
   })
 
   it('never sends the frame to a client that did not negotiate it', async () => {

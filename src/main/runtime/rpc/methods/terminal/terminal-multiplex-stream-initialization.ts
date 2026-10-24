@@ -61,10 +61,6 @@ export async function initializeMultiplexStream(
     lastResizeCols: undefined,
     resizeGeneration: 0,
     outputBatcher: createTerminalOutputBatcher((data, meta) => {
-      // Why: a pause flushes bytes main yielded to this view at ingestion into the paused gate.
-      if (stream.outputPaused) {
-        runtime.answerQueriesInDiscardedRemoteOutput(ptyId, data)
-      }
       if (meta?.cwd !== undefined) {
         state.sendFrame(
           request.streamId,
