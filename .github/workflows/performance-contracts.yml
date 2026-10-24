@@ -31,6 +31,7 @@ on:
       - 'src/renderer/src/lib/pane-manager/pane-terminal-output-scheduler-queue-retention.test.ts'
       - 'src/main/claude-usage/scanner-incremental-append.test.ts'
       - 'src/main/claude-usage/store-checkpoint-persistence.test.ts'
+      - 'src/renderer/src/components/editor/monaco-content-sync*.bench.ts'
 
 permissions:
   contents: read
@@ -55,6 +56,10 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
       - name: Run operation-count and retention contracts
         run: pnpm test:perf:contracts --reporter=default --reporter=json --outputFile=performance-contracts.json
+      # Wall-clock budgets are calibrated on one runner class; other OSes would only add noise.
+      - name: Run wall-clock benchmarks
+        if: always() && matrix.os == 'ubuntu-latest'
+        run: pnpm test:perf:benchmarks
       # Source-only scan: identical on every OS, so run it once.
       - name: Audit production performance patterns
         if: always() && matrix.os == 'ubuntu-latest'

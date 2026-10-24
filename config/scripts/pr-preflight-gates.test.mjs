@@ -249,6 +249,7 @@ it('pins every foreground and background step to its selected phase', () => {
     ['Check VM runtime rollback compatibility', staticPhase],
     ['Enforce ratchets', staticPhase],
     ['Check Node runtime pin', staticPhase],
+    ['Check every test file has a runner', staticPhase],
     ['Check root and mobile lock the same shared dependencies', staticPhase],
     ['Decide whether the orcad terminal smoke runs', staticPhase],
     ['Verify the generated RPC params catalog', staticPhase],
