@@ -2,7 +2,7 @@ import type { ClaudeStructuredSessionEvent } from '../../claude/claude-structure
 import { startCodexTurn } from '../../codex/codex-structured-turn-start'
 import { readLiveCodexSessionOptions } from '../../codex/codex-structured-session-options'
 import { optionSession } from '../../codex/codex-structured-option-session.test-fixture'
-import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { CodexAppServerRequestError } from '../../codex/app-server/codex-app-server-request-error'
 import { structuredAgentSessionDrawnValues } from '../../../shared/structured-agent-session-option-snapshot'
 import { structuredAgentSessionCapabilityView } from './structured-agent-session-option-models'
 import { claudeFallbackModelOptions } from '../../claude/claude-structured-session-options'

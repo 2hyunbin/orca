@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
+import { TEST_LEAF_1, TEST_LEAF_2 } from '../persistence-session-fixtures'
 import { ProfileStateWriterError } from '../profile-state/profile-state-writer-errors'
 import { fixture } from './profile-state-delayed-authority-fixture'
 

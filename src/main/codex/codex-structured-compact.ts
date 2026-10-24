@@ -1,6 +1,6 @@
 import type { CodexSession } from './codex-structured-session-state'
 import type { StructuredAgentSessionAdapter } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
-import { isCodexAppServerRequestError } from './codex-app-server-connection'
+import { isCodexAppServerRequestError } from './app-server/codex-app-server-request-error'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { codexDispatchRejection } from './codex-structured-turn-end-settlement'
 

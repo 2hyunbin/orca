@@ -23,7 +23,7 @@ import {
   readDataFile,
   testState,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({

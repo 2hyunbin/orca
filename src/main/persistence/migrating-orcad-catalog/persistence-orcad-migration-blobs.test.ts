@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import type { OrcadMigrationBlobDescriptor } from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
 import { getOrcadMigrationReceivedBlobPath } from './orcad-migration-blob-staging'
 import { manifest } from './persistence-orcad-migration-catalog-fixture'
-import { createStore, testState } from '../../persistence-test-harness'
+import { createStore, testState } from '../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
