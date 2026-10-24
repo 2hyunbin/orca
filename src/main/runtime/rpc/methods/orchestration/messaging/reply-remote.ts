@@ -19,7 +19,13 @@ export async function replyToRemoteRunHome(args: {
   const from = params.from ?? original.to_handle
   const paneKey = runtime.getTerminalPaneKey(from)
   const attachment = paneKey ? db.findActiveRemoteAttachmentForPane(paneKey) : undefined
-  if (!paneKey || !attachment || attachment.home_run_id !== original.run_id) {
+  if (
+    !paneKey ||
+    !attachment ||
+    attachment.home_run_id !== original.run_id ||
+    // Why: another worker of the same Run here must not answer mail sent to this one's Dispatch.
+    original.to_handle !== `dispatch:${attachment.dispatch_id}`
+  ) {
     throw remoteRunHomeUnreachable(db, original.run_id)
   }
   const subject = `Re: ${original.subject}`

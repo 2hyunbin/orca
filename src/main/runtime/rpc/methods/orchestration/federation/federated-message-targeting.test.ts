@@ -225,6 +225,37 @@ describe('orchestration federated message targeting', () => {
     ).resolves.toMatchObject({ ok: false, error: { code: 'run_home_unreachable' } })
     expect(mirrorDb.getInbox().map((message) => message.id)).toEqual([coordinatorMail.id])
   })
+
+  it("refuses a reply to mail sent to another worker's Dispatch of the same Run", async () => {
+    ;({ db, runtime } = attachedRemoteWorker())
+    const mirrorDb = db
+    const otherWorkerMail = mirrorDb.insertMessage({
+      id: 'msg_home_other_worker',
+      runId: 'run-home',
+      from: 'term_coordinator',
+      to: 'dispatch:ctx_other_worker',
+      subject: 'Status?',
+      body: 'How far along?'
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+
+    await expect(
+      dispatcher.dispatch(
+        request('reply_other', 'orchestration.reply', {
+          from: 'term_remote_worker',
+          id: otherWorkerMail.id,
+          body: 'Not mine.'
+        })
+      )
+    ).resolves.toMatchObject({ ok: false, error: { code: 'run_home_unreachable' } })
+    expect(
+      mirrorDb.listFederationRelay({
+        dispatchId: 'ctx_remote_targeting',
+        direction: 'to_home',
+        afterSequence: 0
+      })
+    ).toHaveLength(0)
+  })
 })
 
 /** A worker pane bound to remote Dispatch ctx_remote_targeting, whose Run home is `run-home`. */
