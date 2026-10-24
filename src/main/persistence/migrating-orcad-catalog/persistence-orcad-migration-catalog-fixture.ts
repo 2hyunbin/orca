@@ -1,15 +1,15 @@
-import type { FolderWorkspace } from '../shared/folder-workspace-types'
-import type { Automation, AutomationRun } from '../shared/automations-types'
-import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../shared/orcad-migration/orcad-migration-manifest-validation'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { Automation, AutomationRun } from '../../../shared/automations-types'
+import { ORCAD_MIGRATION_MANIFEST_VERSION } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
 import type {
   OrcadMigrationDormantStatePayload,
   OrcadMigrationManifest
-} from '../shared/orcad-migration/orcad-migration-manifest'
-import type { ProjectGroup } from '../shared/project-group-types'
-import type { Repo } from '../shared/repo-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { computeOrcadMigrationManifestSha256 } from './orcad/orcad-migration-manifest-digest'
+} from '../../../shared/orcad-migration/orcad-migration-manifest'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Repo } from '../../../shared/repo-types'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import { computeOrcadMigrationManifestSha256 } from '../../orcad/orcad-migration-manifest-digest'
 
 export const PROJECT_GROUP: ProjectGroup = {
   id: 'group-1',
