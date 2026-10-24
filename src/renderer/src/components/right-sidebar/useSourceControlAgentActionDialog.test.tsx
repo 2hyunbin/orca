@@ -23,6 +23,14 @@ vi.mock('@/runtime/local-runtime-capabilities', () => ({
 vi.mock('./source-control-launch-agent-args-applicability', () => ({
   sourceControlLaunchAppliesAgentArgs: () => false
 }))
+vi.mock('./use-source-control-launchable-agents', () => ({
+  useSourceControlLaunchableAgents: () => ({
+    detecting: false,
+    refreshAgents: mocks.agents,
+    refreshLaunchableAgents: mocks.agents,
+    launchableAgents: ['claude', 'codex']
+  })
+}))
 vi.mock('./useSavedSourceControlAgentActionAutoStart', () => ({
   useSavedSourceControlAgentActionAutoStart: () => ({ autoLaunchPending: false })
 }))
