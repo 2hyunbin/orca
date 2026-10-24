@@ -85,7 +85,7 @@ it.each(['success', 'budget'] as const)(
             }
           }),
           async () => {
-            await wait(strict ? 14_000 : mode === 'success' ? 14_000 : 60_000)
+            await wait(strict ? 14_000 : mode === 'success' ? 8_000 : 60_000)
             if (strict) {
               throw new AgentModelCatalogProbeError('enterprise policy', 'exit', false, {
                 exitCode: 1,
