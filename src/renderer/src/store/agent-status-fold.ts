@@ -122,7 +122,8 @@ export function createAgentStatusTransaction(
         throw new Error('Live status writes require a transaction')
       }
       if (!stage.draft) {
-        stage.draft = Object.setPrototypeOf({ ...stage.live }, null)
+        stage.draft = { ...stage.live }
+        Object.setPrototypeOf(stage.draft, null)
         noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
       }
       for (const key of edit(stage.draft)) {
@@ -138,7 +139,8 @@ export function createAgentStatusTransaction(
         return
       }
       if (!stage.draft) {
-        stage.draft = Object.setPrototypeOf({ ...stage.live }, null)
+        stage.draft = { ...stage.live }
+        Object.setPrototypeOf(stage.draft, null)
         noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
       }
       stage.dirty.add(paneKey)

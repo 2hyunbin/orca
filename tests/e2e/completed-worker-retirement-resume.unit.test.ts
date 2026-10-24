@@ -1,3 +1,4 @@
+import { getAgentStatusOwner } from '../../src/renderer/src/store/agent-status-commit'
 import { applyAgentStatusPatch } from '../../src/renderer/src/store/agent-status-patch'
 import { getDefaultSettings } from '../../src/shared/constants'
 import path from 'node:path'
@@ -197,7 +198,9 @@ function completeRecordedWorker(
       { tabId: ORIGINAL_TAB_ID, worktreeId: WORKTREE_ID, terminalHandle: TERMINAL_HANDLE },
       { providerSession }
     )
-  expect(useAppStore.getState().agentStatusByPaneKey[ORIGINAL_PANE_KEY]).toMatchObject({
+  expect(
+    getAgentStatusOwner(useAppStore).getState().agentStatusByPaneKey[ORIGINAL_PANE_KEY]
+  ).toMatchObject({
     state: 'done',
     providerSession
   })
@@ -547,7 +550,7 @@ describe('completed background-worker retirement resume matrix', () => {
     await hydrateSession(restartAfterRetirement)
 
     // Case 8: first activation hands back a bare terminal and cannot resurrect authority.
-    const beforeActivation = useAppStore.getState()
+    const beforeActivation = getAgentStatusOwner(useAppStore).getState()
     expect(beforeActivation.everActivatedWorktreeIds.has(WORKTREE_ID)).toBe(false)
     expect(beforeActivation.agentStatusByPaneKey[ORIGINAL_PANE_KEY]).toBeUndefined()
     expect(beforeActivation.sleepingAgentSessionsByPaneKey[ORIGINAL_PANE_KEY]).toBeUndefined()

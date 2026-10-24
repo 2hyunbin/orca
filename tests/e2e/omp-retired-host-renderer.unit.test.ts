@@ -1,5 +1,4 @@
 import { getAgentStatusOwner } from '../../src/renderer/src/store/agent-status-commit'
-import { resetAgentPaneAuthorityAliasesForTests } from '../../src/renderer/src/store/slices/agent-pane-authority'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../../src/main/agent-hooks/server'
 import { toAgentStatusIpcPayload } from '../../src/main/agent-hooks/server/server-status-identity'
@@ -11,14 +10,12 @@ import { createTestStore } from '../../src/renderer/src/store/slices/store-test-
 vi.mock('../../src/main/telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../src/main/telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 afterEach(() => {
-  resetAgentPaneAuthorityAliasesForTests()
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
 const paneKey = makePaneKey('tab-omp', '11111111-1111-4111-8111-111111111111')
 
 function fixture() {
-  resetAgentPaneAuthorityAliasesForTests()
   vi.useFakeTimers()
   const server = new AgentHookServer()
   const store = createTestStore()

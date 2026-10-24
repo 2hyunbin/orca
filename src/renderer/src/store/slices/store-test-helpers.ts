@@ -67,66 +67,66 @@ export {
   makeTabGroup
 } from './store-session-test-harness'
 
-export function createTestStore() {
-  // Why the record middleware: views of one file share a record only through it, as in the app.
-  return create<AppState>()(
-    withAgentStatusCommit(
-      withEditorBufferRecords<AppState>(
-        (...a) => ({
-          ...createRepoSlice(...a),
-          ...createSparsePresetsSlice(...a),
-          ...createWorktreeSlice(...a),
-          ...createTerminalSlice(...a),
-          ...createTabsSlice(...a),
-          ...createUISlice(...a),
-          ...createSettingsSlice(...a),
-          ...createKeybindingsSlice(...a),
-          ...createGitHubSlice(...a),
-          ...createHostedReviewSlice(...a),
-          ...createLinearSlice(...a),
-          ...createPreflightSlice(...a),
-          ...createJiraSlice(...a),
-          ...createEditorSlice(...a),
-          ...createStatsSlice(...a),
-          ...createMemorySlice(...a),
-          ...createWorkspaceSpaceSlice(...a),
-          ...createClaudeUsageSlice(...a),
-          ...createCodexUsageSlice(...a),
-          ...createOpenCodeUsageSlice(...a),
-          ...createMuseUsageSlice(...a),
-          ...createBrowserSlice(...a),
-          ...createRateLimitSlice(...a),
-          ...createSshSlice(...a),
-          ...createRuntimeEnvironmentSshSlice(...a),
-          ...createWslHostsSlice(...a),
-          ...createAgentStatusSlice(...a),
-          ...createPaneForegroundAgentSlice(...a),
-          ...createDiffCommentsSlice(...a),
-          ...createDetectedAgentsSlice(...a),
-          ...createRuntimeDetectedAgentsSlice(...a),
-          ...createWorktreeNavHistorySlice(...a),
-          ...createDictationSlice(...a),
-          ...createWorkspaceCleanupSlice(...a),
-          ...createWorkspaceCleanupBrowseSlice(...a),
-          ...createRuntimeStatusSlice(...a),
-          ...createPullRequestGenerationSlice(...a),
-          ...createCommitMessageGenerationSlice(...a),
-          ...createPinnedTabCloseConfirmSlice(...a),
-          ...createRecentlyClosedTabsSlice(...a),
-          ...createOrcaProfilesSlice(...a),
-          ...createNewIssueDraftSlice(...a),
-          ...createFeedbackDraftSlice(...a),
-          ...createTaskCreationDraftsSlice(...a),
-          ...createRemoteServerUpdatesSlice(...a),
-          ...createTerminalQuickCommandHostsSlice(...a),
-          ...createStructuredSessionLaunchDirectorySlice(...a),
-          ...createStructuredChatSleptAtSlice(...a),
-          ...createWorkspaceAttentionSlice(...a)
-        }),
-        true
-      )
-    )
+// Views of one file share a record through the same middleware as the app.
+const createTestState = withAgentStatusCommit(
+  withEditorBufferRecords<AppState>(
+    (...a) => ({
+      ...createRepoSlice(...a),
+      ...createSparsePresetsSlice(...a),
+      ...createWorktreeSlice(...a),
+      ...createTerminalSlice(...a),
+      ...createTabsSlice(...a),
+      ...createUISlice(...a),
+      ...createSettingsSlice(...a),
+      ...createKeybindingsSlice(...a),
+      ...createGitHubSlice(...a),
+      ...createHostedReviewSlice(...a),
+      ...createLinearSlice(...a),
+      ...createPreflightSlice(...a),
+      ...createJiraSlice(...a),
+      ...createEditorSlice(...a),
+      ...createStatsSlice(...a),
+      ...createMemorySlice(...a),
+      ...createWorkspaceSpaceSlice(...a),
+      ...createClaudeUsageSlice(...a),
+      ...createCodexUsageSlice(...a),
+      ...createOpenCodeUsageSlice(...a),
+      ...createMuseUsageSlice(...a),
+      ...createBrowserSlice(...a),
+      ...createRateLimitSlice(...a),
+      ...createSshSlice(...a),
+      ...createRuntimeEnvironmentSshSlice(...a),
+      ...createWslHostsSlice(...a),
+      ...createAgentStatusSlice(...a),
+      ...createPaneForegroundAgentSlice(...a),
+      ...createDiffCommentsSlice(...a),
+      ...createDetectedAgentsSlice(...a),
+      ...createRuntimeDetectedAgentsSlice(...a),
+      ...createWorktreeNavHistorySlice(...a),
+      ...createDictationSlice(...a),
+      ...createWorkspaceCleanupSlice(...a),
+      ...createWorkspaceCleanupBrowseSlice(...a),
+      ...createRuntimeStatusSlice(...a),
+      ...createPullRequestGenerationSlice(...a),
+      ...createCommitMessageGenerationSlice(...a),
+      ...createPinnedTabCloseConfirmSlice(...a),
+      ...createRecentlyClosedTabsSlice(...a),
+      ...createOrcaProfilesSlice(...a),
+      ...createNewIssueDraftSlice(...a),
+      ...createFeedbackDraftSlice(...a),
+      ...createTaskCreationDraftsSlice(...a),
+      ...createRemoteServerUpdatesSlice(...a),
+      ...createTerminalQuickCommandHostsSlice(...a),
+      ...createStructuredSessionLaunchDirectorySlice(...a),
+      ...createStructuredChatSleptAtSlice(...a),
+      ...createWorkspaceAttentionSlice(...a)
+    }),
+    true
   )
+)
+
+export function createTestStore() {
+  return create<AppState>()(createTestState)
 }
 
 export function makeAgentStatusReadState(

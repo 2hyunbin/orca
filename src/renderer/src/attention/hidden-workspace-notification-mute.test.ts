@@ -1,3 +1,4 @@
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../shared/constants'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
@@ -36,7 +37,10 @@ function setNotifyHiddenWorkspaces(notifyHiddenWorkspaces: boolean): void {
 }
 
 function muted(workspaceId: string): boolean {
-  return isWorkspaceNotificationMutedBySidebarFilters(store.getState(), workspaceId)
+  return isWorkspaceNotificationMutedBySidebarFilters(
+    getAgentStatusOwner(store).getState(),
+    workspaceId
+  )
 }
 
 beforeEach(() => {

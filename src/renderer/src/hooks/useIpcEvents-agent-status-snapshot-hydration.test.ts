@@ -268,8 +268,10 @@ describe('useIpcEvents agent status snapshot integration', () => {
     }
     const transact = store.getState().transactAgentStatuses
     const attempted: AgentStatusBatchUpdate[] = []
-    const transactions = vi.fn(<Result>(operation: Parameters<typeof transact<Result>>[0]) =>
-      transact((transaction) =>
+    const transactions = vi.fn()
+    const instrumentedTransact: typeof transact = (operation) => {
+      transactions()
+      return transact((transaction) =>
         operation({
           ...transaction,
           apply: (update) => {
@@ -278,8 +280,8 @@ describe('useIpcEvents agent status snapshot integration', () => {
           }
         })
       )
-    )
-    store.setState({ transactAgentStatuses: transactions })
+    }
+    store.setState({ transactAgentStatuses: instrumentedTransact })
     stubReactSyncEffect()
     vi.doMock('../store', () => ({ useAppStore: store }))
     stubAuxiliaryModules()

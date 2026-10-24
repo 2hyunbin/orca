@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '../agent-status-observers'
 import { getAgentStatusOwner } from '../agent-status-commit'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import type { AppState } from '@/store/types'
@@ -170,7 +171,7 @@ describe('workspace cleanup enrichment performance', () => {
         counts.retainedAgents += 1
       }
     )
-    const agentStatusByPaneKey = {
+    const agentStatusByPaneKey: AgentStatusReadState['agentStatusByPaneKey'] = {
       [alphaWorking.paneKey]: alphaWorking,
       [betaDone.paneKey]: betaDone
     }

@@ -367,9 +367,10 @@ describe('runtime file opens on the host desktop', () => {
     await openFile({ worktreeId: VIEWED, ...VIEWED_APP_TS, navigation: 'caller' })
 
     expect(screenState(store)).toEqual(before)
-    const snapshot = buildMobileSessionTabSnapshots(store.getState(), false).find(
-      (candidate) => candidate.worktree === VIEWED
-    )
+    const snapshot = buildMobileSessionTabSnapshots(
+      getAgentStatusOwner(store).getState(),
+      false
+    ).find((candidate) => candidate.worktree === VIEWED)
     expect(
       snapshot?.tabs.some(
         (tab) => 'relativePath' in tab && tab.relativePath === VIEWED_APP_TS.relativePath

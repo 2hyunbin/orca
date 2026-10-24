@@ -106,7 +106,7 @@ beforeEach(() => {
 
 describe('the tab menu offers exactly what the Session History row offers', () => {
   it('Switch to Chat for a CLI conversation', () => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusOwner(useAppStore).getState()
     const session = row()
     const subject: TabSessionHistorySubject = {
       kind: 'cli',
@@ -125,7 +125,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
   })
 
   it('nothing for a CLI conversation a native chat already holds', () => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusOwner(useAppStore).getState()
     const owned = row({
       structuredSession: { sessionId: 'orca-chat-1', workspaceId: WORKTREE_ID }
     })
@@ -142,7 +142,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
   })
 
   it("Switch to Chat in the conversation's own worktree when that differs", () => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusOwner(useAppStore).getState()
     const session = row({ cwd: '/repo/sibling' })
     const panel = panelTargets(state, session)
 
@@ -159,7 +159,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
   })
 
   it('Switch to Terminal for a native chat, and nothing once it has no saved turns', () => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusOwner(useAppStore).getState()
     const subject: TabSessionHistorySubject = {
       kind: 'chat',
       sessionId: 'orca-chat-1',
@@ -203,7 +203,7 @@ describe('the tab menu offers exactly what the Session History row offers', () =
         }
       ]
     })
-    const state = useAppStore.getState()
+    const state = getAgentStatusOwner(useAppStore).getState()
     const session = row({ cwd: '/work/notes' })
     const panel = panelTargets(state, session)
 

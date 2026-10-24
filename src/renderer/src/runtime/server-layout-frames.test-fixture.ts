@@ -1,6 +1,5 @@
 import type { StoreApi } from 'zustand'
 import type { AppState } from '../store/types'
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // A paired server for the server layout frame tests: its session.tabs snapshots, its layout in the
@@ -238,7 +237,7 @@ export function createFakeLayoutStreams() {
 export const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 /** What a reattach or an emptied workspace would change: tab ids, groups and pane bindings. */
-export function treeOf(state: AgentStatusReadState, key: string) {
+export function treeOf(state: AppState, key: string) {
   const tabIds = (state.tabsByWorktree[key] ?? []).map((tab) => tab.id)
   return {
     tabIds,

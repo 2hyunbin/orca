@@ -358,7 +358,8 @@ it.each(ALL_TUI_AGENTS)(
             entry: { ...row('done'), agentType: agent },
             worktreeId: 'workspace',
             agentType: agent,
-            retainedAt: 20
+            tab,
+            startedAt: 20
           }
         }
       })

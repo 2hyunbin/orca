@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '../../src/renderer/src/store/agent-status-observers'
+import type { createTestStore } from '../../src/renderer/src/store/slices/store-test-helpers'
+import { getAgentStatusOwner } from '../../src/renderer/src/store/agent-status-commit'
 import { applyAgentStatusPatch } from '../../src/renderer/src/store/agent-status-patch'
 // @vitest-environment happy-dom
 
@@ -39,10 +40,7 @@ import {
 import { countActivityUnread } from '../../src/renderer/src/components/activity/useActivityUnreadCount'
 import { useAgentPaneThreads } from '../../src/renderer/src/components/activity/use-agent-pane-threads'
 
-type TestStore = {
-  getState: () => AgentStatusReadState
-  setState: (state: Partial<AgentStatusReadState> & { testRuntimeOwner?: string | null }) => void
-}
+type TestStore = ReturnType<typeof createTestStore>
 
 const mocks = vi.hoisted(() => {
   const hoisted: { store: TestStore | null; subscribeStatus: Mock; unsubscribe: Mock } = {
@@ -113,7 +111,6 @@ beforeEach(async () => {
     activityClearedAtByPaneKey: {},
     retainedAgentsByPaneKey: {},
     refreshGitHubForWorktreeIfStale: vi.fn(),
-    testRuntimeOwner: null,
     repos: [makeRepo()],
     worktreesByRepo: { [worktree.repoId]: [worktree] },
     unifiedTabsByWorktree: { 'wt-1': [structuredTab] }
@@ -224,7 +221,8 @@ describe("a Codex subagent's answered approval on the settled parent's Activity 
       }
       return latest.session
     }
-    const paneKey = (): string => Object.keys(store().getState().agentStatusByPaneKey)[0] ?? ''
+    const paneKey = (): string =>
+      Object.keys(getAgentStatusOwner(store()).getState().agentStatusByPaneKey)[0] ?? ''
 
     await host.journal.appendItem(
       { provider: 'orca', clientMessageId: 'prompt-1' },
@@ -290,7 +288,7 @@ describe("a Codex subagent's answered approval on the settled parent's Activity 
     expect(activityThreadRowCopy(row).needsAttention).toBe(false)
     expect(row.events.map((event) => event.state)).toEqual(['done', 'blocked', 'done'])
     expect(row.events.map((event) => event.unread)).toEqual([false, false, false])
-    expect(countActivityUnread(store().getState())).toBe(0)
+    expect(countActivityUnread(getAgentStatusOwner(store()).getState())).toBe(0)
     host.translator.dispose()
     host.close()
   })

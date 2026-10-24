@@ -89,7 +89,11 @@ describe('local preflight context worktree lookup', () => {
         id,
         name: id,
         endpoint: '',
-        createdAt: 0
+        createdAt: 0,
+        updatedAt: 0,
+        lastUsedAt: null,
+        runtimeId: null,
+        preferredEndpointId: null
       })),
       runtimeEnvironmentCatalogHydrated: true
     })

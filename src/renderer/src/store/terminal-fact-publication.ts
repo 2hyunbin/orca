@@ -1,14 +1,23 @@
 import type { AppState } from './types'
 import type { AgentStatusReadState } from './agent-status-observers'
 import type { TerminalStoreGet, TerminalStoreSet } from './terminals/terminal-state'
-const sourceKeys = [
-  'tabsByWorktree',
-  'unifiedTabsByWorktree',
-  'runtimePaneTitlesByTabId',
-  'paneForegroundAgentByPaneKey'
-] as const satisfies readonly (keyof AppState)[]
-export type TerminalFactSource = (typeof sourceKeys)[number]
-type TerminalFactRoot = AppState[TerminalFactSource]
+const sourceReaders = {
+  tabsByWorktree(state: Partial<AppState>) {
+    return state.tabsByWorktree
+  },
+  unifiedTabsByWorktree(state: Partial<AppState>) {
+    return state.unifiedTabsByWorktree
+  },
+  runtimePaneTitlesByTabId(state: Partial<AppState>) {
+    return state.runtimePaneTitlesByTabId
+  },
+  paneForegroundAgentByPaneKey(state: Partial<AppState>) {
+    return state.paneForegroundAgentByPaneKey
+  }
+}
+export type TerminalFactSource = keyof typeof sourceReaders
+const sources = Object.entries(sourceReaders)
+type TerminalFactRoot = ReturnType<(typeof sourceReaders)[TerminalFactSource]>
 type TerminalFactOwner = { getState: () => AgentStatusReadState }
 type Hint = {
   before: TerminalFactRoot
@@ -18,11 +27,11 @@ type Hint = {
 }
 const publications = new WeakMap<
   TerminalFactOwner | TerminalStoreGet,
-  Partial<Record<TerminalFactSource, Hint>>
+  Partial<Record<string, Hint>>
 >()
 export function terminalFactKeys(
   get: TerminalStoreGet,
-  source: TerminalFactSource,
+  source: string,
   before: TerminalFactRoot,
   after: TerminalFactRoot
 ): readonly string[] | undefined {
@@ -41,21 +50,21 @@ export function terminalFactSetter(
     try {
       set((state) => {
         const patch = update(state)
-        for (const source of sourceKeys) {
-          const next = patch[source]
-          if (next && next !== state[source]) {
-            slots[source] = { before: state[source], after: next, keys, token }
+        for (const [source, readSource] of sources) {
+          const next = readSource(patch)
+          if (next && next !== readSource(state)) {
+            slots[source] = { before: readSource(state), after: next, keys, token }
           }
         }
         return patch
       })
     } finally {
-      for (const source of sourceKeys) {
+      for (const [source] of sources) {
         if (slots[source]?.token === token) {
           delete slots[source]
         }
       }
-      if (sourceKeys.every((source) => !slots[source])) {
+      if (sources.every(([source]) => !slots[source])) {
         publications.delete(publicationKey(get))
       }
     }
@@ -80,10 +89,10 @@ export function captureTerminalFacts(
   previous: AppState,
   next: AppState
 ): CapturedTerminalFacts {
-  const facts: CapturedTerminalFacts = {}
-  for (const source of sourceKeys) {
-    if (previous[source] !== next[source]) {
-      const keys = terminalFactKeys(get, source, previous[source], next[source])
+  const facts: Record<string, readonly string[]> = {}
+  for (const [source, readSource] of sources) {
+    if (readSource(previous) !== readSource(next)) {
+      const keys = terminalFactKeys(get, source, readSource(previous), readSource(next))
       if (keys) {
         facts[source] = [...keys]
       }

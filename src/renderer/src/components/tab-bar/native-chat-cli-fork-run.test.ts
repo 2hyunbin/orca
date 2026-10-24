@@ -60,6 +60,7 @@ beforeEach(() => {
       'workspace-1': [
         makeUnifiedTab({
           id: 'tab-1',
+          groupId: 'group',
           contentType: 'agent-session',
           entityId: 'chat-1',
           worktreeId: 'workspace-1',
