@@ -75,13 +75,25 @@ describe('orchestration federated message targeting', () => {
         )
       ).resolves.toMatchObject({ ok: true })
     }
+    await expect(
+      dispatcher.dispatch(
+        request('home_ask', 'orchestration.ask', {
+          from: 'term_remote_worker',
+          to: 'run:run-home',
+          question: 'Which branch?',
+          timeoutMs: 0
+        })
+      )
+    ).resolves.toMatchObject({ ok: true, result: { timedOut: true } })
     expect(
-      db.listFederationRelay({
-        dispatchId: 'ctx_remote_targeting',
-        direction: 'to_home',
-        afterSequence: 0
-      })
-    ).toHaveLength(2)
+      db
+        .listFederationRelay({
+          dispatchId: 'ctx_remote_targeting',
+          direction: 'to_home',
+          afterSequence: 0
+        })
+        .map((item) => item.kind)
+    ).toEqual(['status', 'status', 'question'])
     expect(db.getInbox()).toHaveLength(0)
   })
 
@@ -109,9 +121,8 @@ describe('orchestration federated message targeting', () => {
         ok: false,
         error: {
           code: 'run_home_unreachable',
-          message: expect.stringContaining(
-            "Run run-home lives on the computer that coordinates Dispatch ctx_remote_targeting, which isn't reachable"
-          )
+          message:
+            "Run run-home lives on the computer that coordinates it, which isn't reachable from here: this terminal is no longer attached to its Dispatch ctx_remote_targeting. Nothing was sent."
         }
       })
     }
@@ -146,6 +157,74 @@ describe('orchestration federated message targeting', () => {
     ).resolves.toMatchObject({ ok: true })
     expect(db.getInbox().map((message) => message.to_handle)).toEqual([`run:${local.id}`])
   })
+
+  it('delivers to a local Run a loopback remote Dispatch also reports to', async () => {
+    const loopbackDb = new OrchestrationDb(':memory:')
+    db = loopbackDb
+    runtime = new OrcaRuntimeService()
+    runtime.setOrchestrationDb(loopbackDb)
+    vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue('tab_coordinator:leaf_coordinator')
+    const local = loopbackDb.createRun({
+      objective: 'loopback run',
+      coordinatorHandle: 'term_coordinator',
+      coordinatorPaneKey: 'tab_coordinator:leaf_coordinator'
+    })
+    attachRemoteDispatch(loopbackDb, runtime, local.id)
+    const dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+
+    await expect(
+      dispatcher.dispatch(
+        request('loopback_run', 'orchestration.send', {
+          from: 'term_coordinator',
+          run: local.id,
+          subject: 'Hello'
+        })
+      )
+    ).resolves.toMatchObject({ ok: true })
+    expect(loopbackDb.getInbox().map((message) => message.run_id)).toEqual([local.id])
+  })
+
+  it('answers coordinator mail at the Run home, or refuses once the link is lost', async () => {
+    ;({ db, runtime } = attachedRemoteWorker())
+    const mirrorDb = db
+    const coordinatorMail = mirrorDb.insertMessage({
+      id: 'msg_home_control',
+      runId: 'run-home',
+      from: 'term_coordinator',
+      to: 'dispatch:ctx_remote_targeting',
+      subject: 'Status?',
+      body: 'How far along?'
+    })
+    const dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+
+    await expect(
+      dispatcher.dispatch(
+        request('reply_linked', 'orchestration.reply', {
+          from: 'term_remote_worker',
+          id: coordinatorMail.id,
+          body: 'Halfway.'
+        })
+      )
+    ).resolves.toMatchObject({ ok: true, result: { message: { subject: 'Re: Status?' } } })
+    const relayed = mirrorDb.listFederationRelay({
+      dispatchId: 'ctx_remote_targeting',
+      direction: 'to_home',
+      afterSequence: 0
+    })
+    expect(relayed.map((item) => JSON.parse(item.payload).threadId)).toEqual([coordinatorMail.id])
+
+    vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue('tab_other:leaf_other')
+    await expect(
+      dispatcher.dispatch(
+        request('reply_lost', 'orchestration.reply', {
+          from: 'term_remote_worker',
+          id: coordinatorMail.id,
+          body: 'Done.'
+        })
+      )
+    ).resolves.toMatchObject({ ok: false, error: { code: 'run_home_unreachable' } })
+    expect(mirrorDb.getInbox().map((message) => message.id)).toEqual([coordinatorMail.id])
+  })
 })
 
 /** A worker pane bound to remote Dispatch ctx_remote_targeting, whose Run home is `run-home`. */
@@ -153,13 +232,17 @@ function attachedRemoteWorker(): { db: OrchestrationDb; runtime: OrcaRuntimeServ
   const db = new OrchestrationDb(':memory:')
   const runtime = new OrcaRuntimeService()
   runtime.setOrchestrationDb(db)
-  const paneKey = 'tab_worker:leaf_worker'
+  vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue('tab_worker:leaf_worker')
+  attachRemoteDispatch(db, runtime, 'run-home')
+  return { db, runtime }
+}
+
+function attachRemoteDispatch(db: OrchestrationDb, runtime: OrcaRuntimeService, runId: string) {
   const processIncarnation = 'worker_epoch:pty:1'
   const dispatchId = 'ctx_remote_targeting'
-  vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue(paneKey)
   vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue(processIncarnation)
   db.createRemoteDispatchAttachment({
-    runId: 'run-home',
+    runId,
     dispatchId,
     taskId: 'task_remote_targeting',
     homePeerFingerprint: 'home_peer',
@@ -174,7 +257,7 @@ function attachedRemoteWorker(): { db: OrchestrationDb; runtime: OrcaRuntimeServ
   })
   db.prepareRemoteAttachmentAuthority({
     dispatchId,
-    paneKey,
+    paneKey: 'tab_worker:leaf_worker',
     processIncarnation,
     worktreeId: 'repo::remote-worktree',
     terminalHandle: 'term_remote_worker',
@@ -182,12 +265,11 @@ function attachedRemoteWorker(): { db: OrchestrationDb; runtime: OrcaRuntimeServ
     effects: []
   })
   db.markRemoteAttachmentReady(dispatchId)
-  return { db, runtime }
 }
 
 function request(
   id: string,
-  method: 'orchestration.send' | 'orchestration.ask',
+  method: 'orchestration.send' | 'orchestration.ask' | 'orchestration.reply',
   params: Record<string, unknown>
 ): RpcRequest {
   return {

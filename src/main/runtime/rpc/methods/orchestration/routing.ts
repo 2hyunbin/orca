@@ -157,20 +157,29 @@ export function interruptedAcknowledgedCheck(
 }
 
 /**
- * A Run a remote Dispatch here reports to lives on its coordinator's computer; this host's row of
- * that id is only a mirror, and mail written into it reaches no one (#32292).
+ * A `remote` Run row is only this host's mirror of a Run that lives on its coordinator's computer;
+ * mail written into it reaches no one (#32292).
  */
-function rejectRemotelyHomedRun(
+export function rejectRemotelyHomedRun(
   db: ReturnType<OrcaRuntimeService['getOrchestrationDb']>,
   runId: string
 ): void {
-  const attachment = db.findRemoteAttachmentForHomeRun(runId)
-  if (!attachment) {
-    return
+  if (db.getRun(runId)?.home_database === 'remote') {
+    throw remoteRunHomeUnreachable(db, runId)
   }
-  throw new OrchestrationError(
+}
+
+export function remoteRunHomeUnreachable(
+  db: ReturnType<OrcaRuntimeService['getOrchestrationDb']>,
+  runId: string
+): OrchestrationError {
+  const dispatchId = db.findRemoteAttachmentForHomeRun(runId)?.dispatch_id
+  const detached = dispatchId
+    ? `this terminal is no longer attached to its Dispatch ${dispatchId}`
+    : 'this terminal is not attached to one of its Dispatches'
+  return new OrchestrationError(
     'run_home_unreachable',
-    `Run ${runId} lives on the computer that coordinates Dispatch ${attachment.dispatch_id}, which isn't reachable from this terminal. Nothing was sent. Report from the worker terminal of Dispatch ${attachment.dispatch_id} with a plain send (no --to or --run).`
+    `Run ${runId} lives on the computer that coordinates it, which isn't reachable from here: ${detached}. Nothing was sent.`
   )
 }
 

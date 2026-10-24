@@ -29,7 +29,7 @@ export async function sendRemoteMessage(args: {
   remoteAttachment: RemoteAttachment
   processIncarnation?: string | null
   signal?: AbortSignal
-}): Promise<unknown> {
+}) {
   const { params, runtime, db, from, senderPaneKey, remoteAttachment } = args
   rejectFederatedExplicitTarget(params, remoteAttachment.home_run_id)
   assertWorkerCanReport({
