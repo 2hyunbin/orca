@@ -313,7 +313,10 @@ it('finalizes real Claude ingress before forgetting, and recovers only dead unwi
       translator.flush()
       expect((await sink.drained()).ok).toBe(true)
     }
-    const endingTurn = r.rows().find((row) => row.kind === 'item' && row.body.kind === 'turn')
+    const endingScope = translator.currentTurnScope()
+    if (endingScope.kind !== 'turn') {
+      throw new Error('Missing ending turn identity')
+    }
     if (ending === 'exit') {
       translator.handle({ type: 'ended', sessionId: 'chat', reason: 'exited', observedAt: 200 })
     } else if (ending === 'result') {
@@ -354,9 +357,7 @@ it('finalizes real Claude ingress before forgetting, and recovers only dead unwi
       )
     expect(wholes.at(-1)?.seq).toBeLessThan(turnEnd?.seq ?? 0)
     expect(r.rows().filter((row) => row.kind === 'text-delta')).toHaveLength(0)
-    expect(
-      endingTurn?.kind === 'item' ? r.journal.itemBody(endingTurn.itemId) : null
-    ).toMatchObject({
+    expect(r.journal.itemBody(endingScope.turnItemId)).toMatchObject({
       kind: 'turn',
       state: ending === 'result' ? 'completed' : 'interrupted'
     })
@@ -702,7 +703,7 @@ it('terminalizes 257 real-shaped prose/thinking blocks and preserves evicted ret
     expect(translator.pendingStreamedBlocks).toBe(0)
     expect((await sink.drained()).ok).toBe(true)
     const item = r.journal.item(
-      agentJournalItemKey({ provider: 'claude', sessionId: 's', uuid: 'block-0' })
+      agentJournalItemKey({ provider: 'claude', sessionId: 's', uuid: 'block:message:0' })
     )
     expect(item?.body).toMatchObject({
       kind: 'message',

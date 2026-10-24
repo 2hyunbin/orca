@@ -1,3 +1,4 @@
+import { resultFrame, streamedTextTurn } from './claude-streamed-text-turn.test-fixture'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -63,98 +64,6 @@ function message(
   }
 }
 
-// Claude Code 2.1.258 / SDK 0.3.251 capture: only message.id links partial and final frames.
-function streamEvent(uuid: string, event: Record<string, unknown>) {
-  return {
-    type: 'message' as const,
-    sessionId: 'orca-session',
-    message: {
-      type: 'stream_event',
-      uuid,
-      session_id: 'claude-session',
-      parent_tool_use_id: null,
-      event
-    }
-  }
-}
-
-function resultFrame(subtype: string, fields: Record<string, unknown>) {
-  return {
-    type: 'message' as const,
-    sessionId: 'orca-session',
-    message: {
-      type: 'result',
-      subtype,
-      duration_ms: 1200,
-      duration_api_ms: 1100,
-      num_turns: 1,
-      session_id: 'claude-session',
-      uuid: `result-${subtype}`,
-      ...fields
-    }
-  }
-}
-
-function streamedTextTurn(input: {
-  messageId: string
-  startUuid: string
-  finalUuid: string
-  chunks: string[]
-}) {
-  const text = input.chunks.join('')
-  return {
-    start: [
-      streamEvent(`${input.messageId}-message-start`, {
-        type: 'message_start',
-        message: { id: input.messageId, role: 'assistant', content: [] }
-      }),
-      streamEvent(input.startUuid, {
-        type: 'content_block_start',
-        index: 0,
-        content_block: { type: 'text', text: '' }
-      })
-    ],
-    deltas: input.chunks.map((chunk, index) =>
-      streamEvent(`${input.messageId}-delta-${index}`, {
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'text_delta', text: chunk }
-      })
-    ),
-    final: {
-      type: 'message' as const,
-      sessionId: 'orca-session',
-      message: {
-        type: 'assistant',
-        uuid: input.finalUuid,
-        session_id: 'claude-session',
-        parent_tool_use_id: null,
-        message: {
-          id: input.messageId,
-          role: 'assistant',
-          content: [{ type: 'text', text }],
-          stop_reason: null
-        }
-      }
-    },
-    stop: [
-      streamEvent(`${input.messageId}-block-stop`, { type: 'content_block_stop', index: 0 }),
-      streamEvent(`${input.messageId}-message-delta`, {
-        type: 'message_delta',
-        delta: { stop_reason: 'end_turn' }
-      }),
-      streamEvent(`${input.messageId}-message-stop`, { type: 'message_stop' }),
-      resultFrame('success', {
-        is_error: false,
-        result: text,
-        stop_reason: 'end_turn',
-        terminal_reason: 'completed'
-      })
-    ],
-    text
-  }
-}
-
 function assistantMessages<T extends { body: AgentJournalItemBody }>(items: T[]): T[] {
   return items.filter((item) => item.body.kind === 'message' && item.body.role === 'assistant')
 }
@@ -203,10 +112,11 @@ describe('Claude structured journal translation', () => {
       finalUuid: 'assistant-final-1',
       chunks: ['ST', 'REAMOK_ELEC_64E632']
     })
+    // The block's source, which its saved transcript row also carries; never a stream frame's uuid.
     const streamedIdentity = {
       provider: 'claude',
       sessionId: 'claude-session',
-      uuid: 'block-start-1'
+      uuid: 'block:msg_01:0'
     }
 
     for (const event of turn.start) {
@@ -302,13 +212,69 @@ describe('Claude structured journal translation', () => {
 
     const items: AgentJournalRenderItem[] = journal.snapshot().items
     const assistant = assistantMessages(items)
-    expect(assistant.map((item) => item.itemId)).toEqual(['claude:claude-session:count-start'])
+    expect(assistant.map((item) => item.itemId)).toEqual([
+      'claude:claude-session:block%3Amsg_count%3A0'
+    ])
     expect(assistant[0]?.body).toEqual({
       kind: 'message',
       role: 'assistant',
       blocks: [{ type: 'text', text: numbers.join('\n') }]
     })
     expect(providerFrameKinds(items)).toEqual([])
+  })
+
+  it('keeps a refused streamed final unsafe for resume even after a successful retry', async () => {
+    const journal = await openAgentSessionJournal({
+      identity: JOURNAL_IDENTITY,
+      database: openTestJournalHostDatabase(journalRoot)
+    })
+    const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
+    deferred.bind({ journal, fence: 1, publish: vi.fn() })
+    let refuse = false
+    const append = deferred.sink.tryAppendTransition
+    if (!append) {
+      throw new Error('Missing production transition append')
+    }
+    const transition = vi
+      .spyOn(deferred.sink, 'tryAppendTransition')
+      .mockImplementation((input) =>
+        refuse ? { accepted: false, reason: 'backpressure' } : append(input)
+      )
+    const translator = createClaudeJournalTranslator({
+      sink: deferred.sink,
+      schedule: () => () => {}
+    })
+    const turn = streamedTextTurn({
+      messageId: 'refused-source',
+      startUuid: 'refused-frame',
+      finalUuid: 'refused-final',
+      chunks: ['saved prefix', ' and suffix']
+    })
+    for (const event of [...turn.start, ...turn.deltas]) {
+      translator.handle(event)
+    }
+    translator.flush()
+    await expect(deferred.drained()).resolves.toEqual({ ok: true })
+    expect(translator.finalOutputAdmitted).toBe(true)
+    refuse = true
+    translator.handle(turn.final)
+    expect(translator.pendingStreamedBlocks).toBe(1)
+    expect(translator.finalOutputAdmitted).toBe(false)
+    refuse = false
+    for (const event of turn.stop) {
+      translator.handle(event)
+    }
+    await expect(deferred.drained()).resolves.toEqual({ ok: true })
+    expect(translator.pendingStreamedBlocks).toBe(0)
+    expect(translator.currentTurnId).toBeNull()
+    expect(translator.finalOutputAdmitted).toBe(false)
+    expect(assistantMessages(journal.snapshot().items).map((item) => item.body)).toEqual([
+      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: turn.text }] }
+    ])
+    translator.dispose()
+    transition.mockRestore()
+    deferred.close()
+    await journal.close()
   })
 
   it('restores a cancelled prompt as terminal history after reopening the journal', async () => {

@@ -8,11 +8,23 @@ import type { AgentSessionAccountKind } from '../../shared/agent-session-availab
 // What the rest of a Claude session asks of its journal translator.
 
 import type { AgentSessionContextReport } from '../../shared/agent-session-context-usage'
+import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
 import type { ClaudeChildToolQueries } from './claude-child-tool-queries'
 import type { ClaudeContextReportPart, ClaudeContextReportTarget } from './claude-context-facts'
 import type { ClaudeJournalPrompts } from './claude-structured-journal-prompts'
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
 import type { ClaudeCommandStart } from './claude-command-turn'
+
+export type ClaudeJournalTranslatorDeps = {
+  sink: StructuredAgentSessionEventSink
+  bindPromptItemId?: (journalItemId: string, promptKey: string) => void
+  coalesceMs?: number
+  schedule?: AgentSessionDeltaCoalescerDeps['schedule']
+  fallbackIdPrefix?: string
+  onBackgroundTaskJournalFailure?: (error: Error) => void
+  account?: () => AgentSessionAccountKind | undefined
+  goalBackgroundWork?: () => ClaudeGoalBackgroundWork
+}
 
 export type ClaudeJournalTranslator = {
   handle: (event: ClaudeStructuredSessionEvent) => void
@@ -22,6 +34,7 @@ export type ClaudeJournalTranslator = {
   >
   /** Canonical provider turn ID used by the journal row and client Stop requests. */
   readonly currentTurnId: string | null
+  readonly currentTurnScope: () => AgentJournalTurnScope
   readonly commandTurnId: string | null
   beginCommand: (start: ClaudeCommandStart) => void
   forgetCommand: (turnId: string) => void
@@ -38,6 +51,8 @@ export type ClaudeJournalTranslator = {
   readonly pendingStreamedBlocks: number
   /** Advances on conversation activity and accepted sends, invalidating older context requests. */
   readonly contextActivity: number
+  /** Every final snapshot and turn settlement this acquisition tried was admitted. */
+  readonly finalOutputAdmitted: boolean
   markContextActivity: () => void
   subscribeContextUsageRequests: (
     listener: (target: ClaudeContextReportTarget) => void
@@ -52,15 +67,4 @@ export type ClaudeJournalTranslator = {
   /** Size interim estimates with the applied model until its window is measured. */
   modelWritten: (model: string) => void
   dispose: () => void
-}
-
-export type ClaudeJournalTranslatorDeps = {
-  sink: StructuredAgentSessionEventSink
-  bindPromptItemId?: (journalItemId: string, promptKey: string) => void
-  coalesceMs?: number
-  schedule?: AgentSessionDeltaCoalescerDeps['schedule']
-  fallbackIdPrefix?: string
-  onBackgroundTaskJournalFailure?: (error: Error) => void
-  account?: () => AgentSessionAccountKind | undefined
-  goalBackgroundWork?: () => ClaudeGoalBackgroundWork
 }

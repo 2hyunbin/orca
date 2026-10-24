@@ -38,6 +38,7 @@ import { journalClaudeResult, type ClaudeResultJournalContext } from './claude-r
 import { ClaudeAuthenticationFailures } from './claude-authentication-failures'
 import { ClaudeUsageLimits } from './claude-usage-limits'
 import { ClaudeThreadGoal } from './claude-thread-goal'
+import { createClaudeFinalOutputCoverage } from './claude-final-output-coverage'
 
 export type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
 
@@ -46,6 +47,8 @@ export type { ClaudeJournalTranslatorDeps } from './claude-journal-translator-co
 export function createClaudeJournalTranslator(
   deps: ClaudeJournalTranslatorDeps
 ): ClaudeJournalTranslator {
+  const coverage = createClaudeFinalOutputCoverage(deps.sink)
+  deps = { ...deps, sink: coverage.sink }
   let heldStream:
     | { delta: ClaudeStreamedTextDelta; thinking: boolean; retry: () => boolean }
     | undefined
@@ -161,13 +164,6 @@ export function createClaudeJournalTranslator(
     goalBackgroundWork: deps.goalBackgroundWork ?? (() => 'unverifiable')
   }
 
-  const handleMessage = (
-    message: Record<string, unknown>,
-    startsTurn: boolean,
-    observedAt: number,
-    requestedAt?: number
-  ): boolean => journalClaudeMessage(messageContext, message, startsTurn, observedAt, requestedAt)
-
   return {
     handle: (event) => {
       if (event.type === 'ended') {
@@ -239,7 +235,8 @@ export function createClaudeJournalTranslator(
         messageContext.usageLimits.observe(event.message)
         const kind = claudeProviderFrameKind(event.message)
         if (
-          !handleMessage(
+          !journalClaudeMessage(
+            messageContext,
             event.message,
             event.startsTurn === true,
             event.observedAt ?? Date.now(),
@@ -272,6 +269,7 @@ export function createClaudeJournalTranslator(
     get currentTurnId() {
       return turn.id
     },
+    currentTurnScope: turnScope,
     get commandTurnId() {
       return turn.command ? turn.id : null
     },
@@ -292,6 +290,9 @@ export function createClaudeJournalTranslator(
     },
     get contextActivity() {
       return context.activityRevision
+    },
+    get finalOutputAdmitted() {
+      return coverage.admitted
     },
     markContextActivity: () => context.markActivity(),
     subscribeContextUsageRequests: (listener) => context.subscribeReportRequests(listener),
