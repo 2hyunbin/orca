@@ -4,7 +4,7 @@ import {
   createStore,
   writeDataFile,
   readDataFile
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 // Settle unrelated migrations first; only a debounced save proves the repair marked its own state dirty.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'

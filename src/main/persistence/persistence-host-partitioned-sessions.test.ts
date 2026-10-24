@@ -10,8 +10,8 @@ import {
   makeRepo,
   makeWorktreeLineage,
   makeWorkspaceLineage
-} from '../persistence-test-harness'
-import { makeTerminalTab } from '../persistence-session-fixtures'
+} from './persistence-test-harness'
+import { makeTerminalTab } from './persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'

@@ -7,8 +7,8 @@ import {
   readDataFile,
   collectPropertyPaths,
   makeRepo
-} from '../../persistence-test-harness'
-import { makeTerminalTab } from '../../persistence-session-fixtures'
+} from '../persistence-test-harness'
+import { makeTerminalTab } from '../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'

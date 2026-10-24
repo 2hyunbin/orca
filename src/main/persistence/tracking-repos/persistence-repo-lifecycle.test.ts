@@ -7,11 +7,11 @@ import {
   readDataFile,
   makeRepo,
   makeWorktreeLineage
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import {
   makeTerminalTab,
   makeTerminalTab as makeSessionTerminalTab
-} from '../../persistence-session-fixtures'
+} from '../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'

@@ -1,26 +1,22 @@
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import type { Project, ProjectHostSetup } from '../shared/project-types'
-import type { Repo } from '../shared/repo-types'
-import type { WorkspaceLineage, WorktreeLineage } from '../shared/worktree/lineage-types'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { getRepoIdFromWorktreeId } from '../shared/worktree/id'
-import type { PersistedState } from '../shared/persisted-state-types'
-import { getDefaultPersistedState } from '../shared/constants'
-import type { SshRemotePtyLease } from '../shared/ssh-types'
-import { hydrateWorktreeMetaAliasProjection } from './persistence/loading-store/worktree-meta-alias-projection'
-import { Store } from './persistence/loading-store/store'
-import { getDataFile, initDataPath } from './persistence/loading-store/user-data-path'
-import type { StoreRuntimeOptions } from './persistence/loading-store/store-runtime-state'
-import { ProfileStateSqliteAuthority } from './persistence/profile-state/profile-state-sqlite-authority'
-import {
-  openProfileStateDatabaseReadOnly,
-  profileStateDatabaseFile
-} from './persistence/profile-state/profile-state-database'
-import { exportProfileStateJson } from './persistence/profile-state/profile-state-documents'
-
-export { makeTerminalTab } from './persistence-session-fixtures'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
+import type { Project, ProjectHostSetup } from '../../shared/project-types'
+import type { Repo } from '../../shared/repo-types'
+import type { WorkspaceLineage, WorktreeLineage } from '../../shared/worktree/lineage-types'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
+import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import type { PersistedState } from '../../shared/persisted-state-types'
+import { getDefaultPersistedState } from '../../shared/constants'
+import type { SshRemotePtyLease } from '../../shared/ssh-types'
+import { hydrateWorktreeMetaAliasProjection } from './loading-store/worktree-meta-alias-projection'
+import { Store } from './loading-store/store'
+import { getDataFile, initDataPath } from './loading-store/user-data-path'
+import type { StoreRuntimeOptions } from './loading-store/store-runtime-state'
+import { ProfileStateSqliteAuthority } from './profile-state/profile-state-sqlite-authority'
+import { openProfileStateDatabaseReadOnly } from './profile-state/profile-state-database'
+import { profileStateDatabaseFile } from '../../shared/profile-state-storage-paths'
+import { exportProfileStateJson } from './profile-state/profile-state-documents'
 
 export const testState = { dir: '' }
 const stores = new Set<Store>()

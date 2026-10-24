@@ -2,7 +2,7 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

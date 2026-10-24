@@ -19,7 +19,7 @@ import {
   dormantState,
   manifest
 } from './persistence-orcad-migration-catalog-fixture'
-import { createStore, readDataFile, testState, writeDataFile } from '../../persistence-test-harness'
+import { createStore, readDataFile, testState, writeDataFile } from '../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },

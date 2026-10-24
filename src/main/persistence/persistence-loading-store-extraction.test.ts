@@ -7,7 +7,7 @@ import {
   dataFile,
   makeRepo,
   testState
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { createProfileStateStore } from './profile-state/profile-state-store-factory'
 import type * as FsModule from 'node:fs'
