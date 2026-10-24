@@ -23,7 +23,7 @@ const REQUEST = {
   worktreeId: WORKTREE_ID,
   sourceTabId: toWebTerminalSurfaceTabId('host-source'),
   targetTabId: toWebTerminalSurfaceTabId('host-target'),
-  leafId: 'leaf-a',
+  leafId: '11111111-1111-4111-8111-111111111111',
   ptyId: 'remote:web-env-1@@term-1'
 }
 const PLACEMENT = { targetGroupId: 'host-group', index: 0 }
@@ -60,7 +60,7 @@ describe('moveWebRuntimeLeafToNewTab', () => {
         worktree: `id:${WORKTREE_ID}`,
         sourceTabId: 'host-source',
         targetTabId: 'host-target',
-        leafId: 'leaf-a',
+        leafId: '11111111-1111-4111-8111-111111111111',
         targetGroupId: 'host-group',
         index: 0
       }
@@ -93,9 +93,18 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     expect(supports).not.toHaveBeenCalled()
   })
   it('reverts a refused move without stopping its terminal and redraws even an unchanged list', async () => {
-    const closeTab = vi.fn()
-    store.state = { ...store.state, closeTab }
+    const order: string[] = []
+    const closeTab = vi.fn(() => order.push('close'))
+    const transferAgentPaneAuthority = vi.fn(() => order.push('transfer'))
+    store.state = { ...store.state, closeTab, transferAgentPaneAuthority }
     await revertRefusedPaneMove(ENVIRONMENT_ID, REQUEST)
+    // The pane's status and launch records return to the source before the drawn tab goes.
+    expect(transferAgentPaneAuthority).toHaveBeenCalledWith({
+      fromPaneKey: `${REQUEST.targetTabId}:${REQUEST.leafId}`,
+      toPaneKey: `${REQUEST.sourceTabId}:${REQUEST.leafId}`,
+      ptyId: REQUEST.ptyId
+    })
+    expect(order).toEqual(['transfer', 'close'])
     expect(closeTab).toHaveBeenCalledWith(
       REQUEST.targetTabId,
       expect.objectContaining({

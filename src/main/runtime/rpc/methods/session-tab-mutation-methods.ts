@@ -1,6 +1,7 @@
 import { resolveRuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
 import { commitLeafMoveAndRekey } from '../../../ipc/pty/ipc/leaf-move'
 import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { MovedPanePlacement } from '../../session-tabs/headless-pane-move-to-new-tab'
 import { defineMethod } from '../core'
 import {
   assertProjectedSessionTabVisible,
@@ -128,12 +129,13 @@ export const SESSION_TAB_MUTATION_METHODS = [
           leafId: params.leafId
         },
         (move) => commitLeafMoveAndRekey({ store: runtime.requireStore(), runtime }, move),
-        params.targetGroupId
-          ? {
-              targetGroupId: params.targetGroupId,
-              ...(params.index !== undefined ? { index: params.index } : {})
-            }
-          : undefined
+        await resolveMovedPanePlacement(
+          runtime,
+          params,
+          pairedDeviceId,
+          clientKind,
+          clientCapabilities
+        )
       )
     }
   }),
@@ -160,6 +162,40 @@ export const SESSION_TAB_MUTATION_METHODS = [
     }
   })
 ]
+
+/**
+ * The drop position in the host's own order: a client's index counts only the tabs it is shown, as
+ * `session.tabs.move` translates it. A group the client cannot name leaves the tab appended.
+ */
+async function resolveMovedPanePlacement(
+  runtime: OrcaRuntimeService,
+  params: { worktree: string; sourceTabId: string; targetGroupId?: string; index?: number },
+  pairedDeviceId: string | undefined,
+  clientKind: 'mobile' | 'runtime' | undefined,
+  clientCapabilities: Parameters<typeof projectSessionTabsForClient>[2]
+): Promise<MovedPanePlacement | undefined> {
+  const { targetGroupId, index } = params
+  if (!targetGroupId) {
+    return undefined
+  }
+  if (!clientKind || index === undefined) {
+    return { targetGroupId, ...(index !== undefined ? { index } : {}) }
+  }
+  const raw = await runtime.listMobileSessionTabs(params.worktree, pairedDeviceId)
+  try {
+    // The new tab does not exist yet, so its source tab stands in for it; only the index is read.
+    const translated = translateProjectedSessionTabMove(
+      raw,
+      projectSessionTabsForClient(raw, clientKind, clientCapabilities),
+      { kind: 'move-to-group', tabId: params.sourceTabId, targetGroupId, index }
+    )
+    return translated.kind === 'move-to-group' && translated.index !== undefined
+      ? { targetGroupId, index: translated.index }
+      : { targetGroupId }
+  } catch {
+    return undefined
+  }
+}
 
 const projectSessionTabsForMutationClient = projectSessionTabsForClient
 

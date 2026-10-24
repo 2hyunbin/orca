@@ -1,6 +1,7 @@
 import type { TerminalLeafMoveRequest } from '../../../shared/terminal-leaf-move'
 import { SESSION_TABS_MOVE_PANE_TO_NEW_TAB_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
+import { makePaneKey } from '../../../shared/stable-pane-id'
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
@@ -69,14 +70,22 @@ export async function moveWebRuntimeLeafToNewTab(
 }
 
 /**
- * Undoes this window's move after the host kept the pane: the tab the window drew goes without
- * stopping its terminal, and the host's tabs are redrawn even when the host's answer is unchanged.
+ * Undoes this window's move after the host kept the pane: the pane's records go back to the source,
+ * the tab the window drew goes without stopping its terminal, and the host's tabs are redrawn even
+ * when the host's answer is unchanged.
  */
 export async function revertRefusedPaneMove(
   environmentId: string,
   request: TerminalLeafMoveRequest
 ): Promise<void> {
-  useAppStore.getState().closeTab(request.targetTabId, {
+  const state = useAppStore.getState()
+  // The move carried the pane's status and launch records to the new tab; they come back first.
+  state.transferAgentPaneAuthority({
+    fromPaneKey: makePaneKey(request.targetTabId, request.leafId),
+    toPaneKey: makePaneKey(request.sourceTabId, request.leafId),
+    ptyId: request.ptyId
+  })
+  state.closeTab(request.targetTabId, {
     reason: 'cleanup',
     recordInteraction: false,
     captureRecentlyClosed: false,
