@@ -55,7 +55,7 @@ export async function runFolderWorkspaceTitleAutoRename(
     return retry('a WSL move started during generation')
   }
   if (!generated.success) {
-    return retryFailedGeneration(worktreeId, generated, deps, stop, retry)
+    return retryFailedGeneration(worktreeId, generated, deps, retry)
   }
 
   const newDisplayName = humanizeBranchSlug(generated.slug)

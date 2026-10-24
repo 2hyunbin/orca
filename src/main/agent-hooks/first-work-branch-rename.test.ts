@@ -552,7 +552,7 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
     expect(setRenameError).toHaveBeenLastCalledWith(WORKTREE_ID, null)
   })
 
-  it('stops re-running a generation that keeps hitting a usage limit (#9705)', async () => {
+  it('backs off a generation that keeps hitting a usage limit, then recovers (#9705)', async () => {
     const error = "You've hit your session limit · resets 2pm"
     generateBranchNameMock.mockResolvedValue({ success: false, error })
     const { deps, onRenamed, setRenameError } = makeDeps()
@@ -562,11 +562,15 @@ describe('maybeAutoRenameBranchOnFirstWork', () => {
         await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
       }
     }
-    expect(generateBranchNameMock).toHaveBeenCalledTimes(
-      FIRST_WORK_GENERATION_RETRY_DELAYS_MS.length + 1
-    )
+    // 300 working events over an hour; attempts only at minutes 0, 1 (+30s), 3 (+2m) and 33 (+30m).
+    expect(generateBranchNameMock).toHaveBeenCalledTimes(4)
     expect(onRenamed).not.toHaveBeenCalled()
     expect(setRenameError).toHaveBeenLastCalledWith(WORKTREE_ID, error, null)
+
+    generateBranchNameMock.mockResolvedValue({ success: true, slug: 'fix-auth' })
+    clockMs = 63 * 60_000
+    await maybeAutoRenameBranchOnFirstWork(workingEvent(), deps)
+    expect(onRenamed).toHaveBeenCalledWith(REPO_ID)
   })
 
   it('does not raise the failure badge when generation is canceled by the user', async () => {

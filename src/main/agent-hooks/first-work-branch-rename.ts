@@ -245,7 +245,7 @@ async function runAutoRename(
     return retry('a WSL move started during generation')
   }
   if (!generated.success) {
-    return retryFailedGeneration(worktreeId, generated, deps, stop, retry)
+    return retryFailedGeneration(worktreeId, generated, deps, retry)
   }
 
   // Generation can outlive a branch switch or publication.
