@@ -178,6 +178,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
         (await this.resubmitHeldAgentPrompt(ptyId, generation, options, {
           baseline,
           readActivity: () => this.getAgentPromptActivity(handle, ptyId, waitTextCache),
+          prompt: options.promptForSchedule,
           heldBudgetMs: getAgentPromptHeldSubmitBudgetMs(
             writeHostPlatform,
             this.getPtyAgent(ptyId),

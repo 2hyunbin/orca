@@ -96,6 +96,31 @@ export function getAgentPromptHeldSubmitBudgetMs(
   )
 }
 
+const PASTED_CONTENT_PLACEHOLDER = /\[Pasted Content (\d+) chars\]/g
+const HELD_PROMPT_TEXT_MIN_CHARS = 32
+
+/** Whether a composer draft is `prompt` still held, as Codex's paste placeholders or as text. */
+export function isHeldAgentPromptDraft(draft: string | undefined, prompt: string): boolean {
+  if (!draft) {
+    return false
+  }
+  const expected = sanitizeAgentPromptText(prompt).replace(/\r\n?/g, '\n')
+  let pastedChars = 0
+  const literal = draft.replace(PASTED_CONTENT_PLACEHOLDER, (_match, count: string) => {
+    pastedChars += Number(count)
+    return ''
+  })
+  if (pastedChars > 0) {
+    // Why a sum: a burst read with a pause flushes as several placeholders.
+    return pastedChars + [...literal].length >= [...expected].length
+  }
+  const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim()
+  const shown = collapse(draft)
+  const wanted = collapse(expected)
+  // Why a minimum: a short visible fragment could be the user's text that happens to recur.
+  return shown === wanted || (shown.length >= HELD_PROMPT_TEXT_MIN_CHARS && wanted.includes(shown))
+}
+
 export type AgentPromptSubmitDelayOptions = {
   lineSettleMsPerLine?: number
   lineCount?: number

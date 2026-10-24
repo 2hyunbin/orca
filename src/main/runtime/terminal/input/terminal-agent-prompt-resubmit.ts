@@ -1,6 +1,9 @@
 import { OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission } from '../wait/terminal-wait-permission'
 import type { RuntimeAgentPromptWriteOptions } from '../../runtime-terminal-contracts'
-import { AGENT_PROMPT_SUBMIT } from '../../../../shared/agent-prompt-injection'
+import {
+  AGENT_PROMPT_SUBMIT,
+  isHeldAgentPromptDraft
+} from '../../../../shared/agent-prompt-injection'
 import type { AgentPromptActivity } from '../../agent-prompt-submission-verification'
 import {
   isAgentPromptStalledError,
@@ -8,70 +11,97 @@ import {
 } from '../../agent-prompt-submission-verification'
 import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
 
+type HeldAgentPrompt = {
+  baseline: AgentPromptActivity
+  readActivity: () => AgentPromptActivity
+  prompt: string | undefined
+  heldBudgetMs: number
+}
+
 export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission {
   /**
-   * Presses Enter again while the composer still holds the prompt, for agents that can drop the
-   * first one (`submitRetryDelayMs`): a launch composer drawn before Enter is live, or a Windows
-   * paste burst still being read, which takes an early Enter as a newline. Best effort: it never
+   * Presses Enter again for agents that can drop the first one (`submitRetryDelayMs`): once blind
+   * into a launch composer drawn before Enter is live, and on Windows while the composer still
+   * shows this prompt, which an input-record paste burst kept as a newline. Best effort: it never
    * fails a prompt the first Enter submitted.
    */
   protected async resubmitHeldAgentPrompt(
     ptyId: string,
     generation: number,
     options: RuntimeAgentPromptWriteOptions,
-    held: {
-      baseline: AgentPromptActivity
-      readActivity: () => AgentPromptActivity
-      heldBudgetMs: number
-    }
+    held: HeldAgentPrompt
   ): Promise<number> {
     const agent = this.getPtyAgent(ptyId)
     const retryDelayMs = agent ? TUI_AGENT_CONFIG[agent]?.submitRetryDelayMs : undefined
-    if (retryDelayMs === undefined) {
+    const prompt = held.prompt
+    const gated = held.heldBudgetMs > 0 && prompt !== undefined
+    let blind = options.composerReady === true
+    if (retryDelayMs === undefined || (!blind && !gated)) {
       return 0
     }
     const deadline = Date.now() + held.heldBudgetMs
-    // Why blind once: a launch composer the caller saw ready may not be one the draft reader knows.
-    let blind = options.composerReady === true
     let resubmits = 0
+    let gatedResubmits = 0
     try {
       do {
-        try {
-          await verifyAgentPromptSubmission({
-            baseline: held.baseline,
-            readActivity: held.readActivity,
-            allowOutputEvidence: false,
-            timeoutMs: retryDelayMs,
-            signal: options.signal
-          })
+        if (await agentPromptSettledWithin(held, retryDelayMs, options.signal)) {
           return resubmits
-        } catch (error) {
-          if (!isAgentPromptStalledError(error)) {
-            return resubmits
-          }
         }
         this.assertAgentPromptGeneration(ptyId, generation)
-        // Why the draft: a second Enter into whatever the agent opened after taking the prompt
-        // could answer it; a composer still holding text is the only safe target.
-        const holdsDraft =
-          blind || Boolean((await this.readCurrentTerminalWaitScreen(ptyId))?.draft)
-        if (!holdsDraft) {
-          // No draft before any retry may be a burst still being read; after one, it was taken.
-          if (resubmits > 0) {
+        // Why our prompt only: a rotating placeholder, a question overlay or the user's own text
+        // also reads as a draft, and Enter would submit or answer it.
+        const holdsPrompt =
+          blind ||
+          (prompt !== undefined &&
+            isHeldAgentPromptDraft(
+              (await this.readCurrentTerminalWaitScreen(ptyId))?.draft,
+              prompt
+            ))
+        if (!holdsPrompt) {
+          // Gone after a gated retry means it was taken; before one, the burst may still be read.
+          if (gatedResubmits > 0) {
             return resubmits
           }
           continue
         }
-        blind = false
         await options.beforeWrite?.(ptyId)
+        // Why again: the guard can yield while the agent takes the prompt or opens an approval.
+        if (await agentPromptSettledWithin(held, 0, options.signal)) {
+          return resubmits
+        }
         if (!this.ptyController?.write(ptyId, AGENT_PROMPT_SUBMIT, options.inputKind)) {
           return resubmits
         }
         resubmits += 1
-      } while (Date.now() < deadline)
+        if (blind) {
+          blind = false
+        } else {
+          gatedResubmits += 1
+        }
+      } while (gated && Date.now() < deadline)
     } catch {
       // Why: a refused retry leaves the first Enter's verdict to the verification that follows.
     }
     return resubmits
+  }
+}
+
+/** True once a turn started, or a permission prompt or new process makes another Enter unsafe. */
+async function agentPromptSettledWithin(
+  held: HeldAgentPrompt,
+  timeoutMs: number,
+  signal: AbortSignal | undefined
+): Promise<boolean> {
+  try {
+    await verifyAgentPromptSubmission({
+      baseline: held.baseline,
+      readActivity: held.readActivity,
+      allowOutputEvidence: false,
+      timeoutMs,
+      signal
+    })
+    return true
+  } catch (error) {
+    return !isAgentPromptStalledError(error)
   }
 }

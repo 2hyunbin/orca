@@ -500,7 +500,8 @@ describe('agent prompt submission runtime', () => {
   // as a newline, so a dispatch sat in its composer as `[Pasted Content N chars]`.
   it.each([
     { composer: 'still holds the dispatch', draft: '[Pasted Content 9250 chars]', enters: 2 },
-    { composer: 'is empty', draft: undefined, enters: 1 }
+    { composer: 'is empty', draft: undefined, enters: 1 },
+    { composer: "holds the user's own text", draft: 'also fix the readme typo', enters: 1 }
   ])(
     'presses Enter again only while a Windows Codex composer $composer',
     async ({ draft, enters }) => {
@@ -533,6 +534,35 @@ describe('agent prompt submission runtime', () => {
       expect(writes.filter((write) => write === '\r')).toHaveLength(enters)
     }
   )
+
+  it('does not press Enter into a Windows Codex composer showing a rotating placeholder', async () => {
+    vi.useFakeTimers()
+    const { runtime, handle, writes } = await createAgentPromptSubmissionRuntime(
+      () => undefined,
+      'codex'
+    )
+    Object.defineProperty(runtime, 'getPtyWriteHostPlatform', { value: () => 'win32' })
+    // Codex 0.162 after taking a prompt: bold glyph, dim rotating placeholder, dim model footer.
+    runtime.onPtyData(
+      'pty-prompt',
+      '\x1b[2J\x1b[H\x1b[1m›\x1b[22m \x1b7\x1b[2mExplain this codebase\x1b[22m\r\n\r\n\x1b[2m  gpt-5.1 default · ~/repo\x1b[22m\x1b8',
+      Date.now()
+    )
+
+    const submission = runtime.sendTerminalAgentPrompt(handle, 'x'.repeat(9_250), {
+      inputKind: 'driving',
+      acceptQueued: true,
+      requestId: 'windows-codex-placeholder',
+      observationTimeoutMs: 0
+    })
+    await vi.runAllTimersAsync()
+
+    await expect(submission).resolves.toMatchObject({ accepted: true })
+    await expect(runtime['readCurrentTerminalWaitScreen']('pty-prompt')).resolves.toMatchObject({
+      draft: 'Explain this codebase'
+    })
+    expect(writes.filter((write) => write === '\r')).toHaveLength(1)
+  })
 
   // Why: hook rows reach the runtime through this provider, which has no window and no OSC title —
   // the same path a headless `orca serve` host and a minimized desktop window take.
@@ -720,6 +750,7 @@ describe('input original queue, callback and private method contracts', () => {
           readActivity: () => {
             throw new Error('no read before the agent lookup')
           },
+          prompt: undefined,
           heldBudgetMs: 0
         }
       )
