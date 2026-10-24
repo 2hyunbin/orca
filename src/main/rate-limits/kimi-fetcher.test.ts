@@ -237,8 +237,8 @@ describe('fetchKimiRateLimits', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.kimi.ai/coding/v1/usages')
   })
 
-  it('keeps the default slot when config.toml names a key outside credentials/', async () => {
-    fsState.config = '[providers."managed:kimi-code".oauth]\nkey = "oauth/../secrets"'
+  it('derives the slot from the environment like the CLI, ignoring a stale oauth.key', async () => {
+    fsState.config = '[providers."managed:kimi-code".oauth]\nkey = "oauth/kimi-code-env-stale"'
     fsState.credentials = freshCredentials()
     fetchMock.mockResolvedValueOnce(jsonResponse(USAGE_RESPONSE))
 

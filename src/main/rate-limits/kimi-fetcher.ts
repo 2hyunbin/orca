@@ -8,7 +8,7 @@ import type {
 } from '../../shared/rate-limit-types'
 import { parseWslUncPath } from '../../shared/wsl-paths'
 import { getHostKimiHome, type KimiHomeResolution } from '../kimi/kimi-runtime-home'
-import { readKimiManagedProvider } from '../kimi/kimi-managed-provider-config'
+import { resolveKimiCodeRuntimeAuth } from '../kimi/kimi-code-runtime-auth'
 import {
   createAuthFilesystemOperation,
   type SharedAuthFilesystemOperation
@@ -17,9 +17,6 @@ import { classifyThrownUsageRequestError } from './usage-request-failure-kind'
 
 // Why: Kimi Code's managed coding plan exposes subscription usage at
 // `${base}/usages` (see packages/oauth/src/managed-usage.ts in the CLI bundle).
-// Base URL precedence matches the CLI: KIMI_CODE_BASE_URL, then config.toml, then default.
-const KIMI_BASE_URL_OVERRIDE = process.env.KIMI_CODE_BASE_URL
-const DEFAULT_KIMI_BASE_URL = 'https://api.kimi.com/coding/v1'
 const API_TIMEOUT_MS = 10_000
 const CREDENTIALS_READ_TIMEOUT_MS = 5_000
 
@@ -45,7 +42,7 @@ type TextReadResult =
 
 type CredentialsReadResult =
   | Exclude<TextReadResult, { status: 'ok' }>
-  | { status: 'ok'; credentials: KimiCredentials; baseUrl: string | undefined }
+  | { status: 'ok'; credentials: KimiCredentials; usageUrl: string }
 
 function parseCredentials(value: unknown): KimiCredentials | null {
   if (typeof value !== 'object' || value === null) {
@@ -106,15 +103,15 @@ async function readCredentials(kimiHome: string): Promise<CredentialsReadResult>
   const signal = AbortSignal.timeout(CREDENTIALS_READ_TIMEOUT_MS)
   try {
     const config = await getTextRead(kimiHomePath(kimiHome, 'config.toml')).wait(signal)
-    const provider = readKimiManagedProvider(config.status === 'ok' ? config.raw : '')
-    const credentialsPath = kimiHomePath(kimiHome, 'credentials', `${provider.tokenName}.json`)
+    const auth = resolveKimiCodeRuntimeAuth(config.status === 'ok' ? config.raw : '')
+    const credentialsPath = kimiHomePath(kimiHome, 'credentials', `${auth.tokenName}.json`)
     const file = await getTextRead(credentialsPath).wait(signal)
     if (file.status !== 'ok') {
       return file
     }
     const credentials = parseCredentials(JSON.parse(file.raw))
     return credentials
-      ? { status: 'ok', credentials, baseUrl: provider.baseUrl }
+      ? { status: 'ok', credentials, usageUrl: auth.usageUrl }
       : { status: 'error', error: 'Kimi credentials file is invalid' }
   } catch (err) {
     return { status: 'error', error: readErrorMessage(err) }
@@ -339,8 +336,7 @@ export async function fetchKimiRateLimits(options?: {
   }
 
   try {
-    const baseUrl = KIMI_BASE_URL_OVERRIDE ?? readResult.baseUrl ?? DEFAULT_KIMI_BASE_URL
-    const res = await getMainHttpClient().fetch(`${baseUrl.replace(/\/+$/, '')}/usages`, {
+    const res = await getMainHttpClient().fetch(readResult.usageUrl, {
       // Why: identical to the CLI's fetchManagedUsage — bearer token + Accept.
       // No extra User-Agent: the usages endpoint authenticates by token only.
       headers: { Authorization: `Bearer ${creds.access_token}`, Accept: 'application/json' },
