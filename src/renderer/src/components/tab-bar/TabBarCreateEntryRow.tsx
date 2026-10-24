@@ -20,8 +20,7 @@ import { BrowserFavicon } from '@/components/browser-favicon'
 
 export const RESULT_LISTBOX_ID = 'tab-create-entry-results'
 
-// Index-based (not the option id, which may contain spaces/slashes from file
-// paths) so it is always a valid aria-activedescendant IDREF.
+// Use index-based DOM IDs because option paths can contain spaces invalid in aria-activedescendant references.
 export function resultOptionDomId(index: number): string {
   return `tab-create-entry-result-${index}`
 }
@@ -71,8 +70,7 @@ export function EntryActionRow({
         'flex h-6 w-full items-center gap-1.5 rounded-[7px] px-1 text-left text-[11px] leading-5 outline-none disabled:cursor-not-allowed disabled:opacity-50',
         selected
           ? 'bg-black/8 text-accent-foreground dark:bg-white/14'
-          : // Why: CSS :hover still matches a disabled button, so a pending row would
-            // light up under the pointer despite being unactivatable.
+          : // CSS hover also matches disabled buttons; pending rows must not imply activation.
             'text-muted-foreground hover:bg-black/8 hover:text-accent-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:hover:bg-white/14 dark:disabled:hover:bg-transparent'
       )}
       onClick={onClick}
@@ -100,8 +98,7 @@ export function EntryActionRow({
     </button>
   )
 
-  // Only the filename-first rows hide information. Every other row already shows
-  // its detail in full, and STYLEGUIDE.md:162 rules out labelling those.
+  // Only filename-first rows hide detail; full-text rows do not need redundant tooltips.
   if (!presentation.prioritizeFilename) {
     return row
   }
@@ -181,8 +178,7 @@ function getActionPresentation(
     const { entry } = option.option
     const url = formatBrowserHistoryUrl(entry.url)
     return {
-      // Why the title is detail, not label: the label span is shrink-0 whenever a
-      // detail shows, so a variable-length title there would refuse to truncate.
+      // Put variable titles in the truncating detail slot; labels with detail cannot shrink.
       detail: entry.title ? `${entry.title} · ${url}` : url,
       icon: <BrowserFavicon faviconUrl={entry.faviconUrl} className="size-3.5" />,
       label: translate('auto.components.tab.bar.TabBarCreateEntry.openPage', 'Open page'),
