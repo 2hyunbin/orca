@@ -11,6 +11,7 @@ import {
   type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
+import { holdBrowserAttachmentFiles } from '../lib/browser-attachment-files'
 
 export type OsFileDropSequence = { deliveryTail: Promise<void> }
 
@@ -29,6 +30,9 @@ type OsFileDropOwnerOptions<Destination> = {
   sequence: OsFileDropSequence
   canAccept?: boolean | ((event: DragEvent) => boolean)
   captureDestination?: (event: DragEvent) => Destination
+  /** The web client has no file paths; a destination that uploads the bytes itself takes the
+   *  dropped files as held tokens instead of an unresolved-paths refusal. */
+  acceptsBrowserFiles?: boolean
   /** Replaces root liveness for paths; preparation failures still reach onDrop. */
   isDestinationLive?: (context: OsFileDropContext<Destination>) => boolean
   onDrop: (
@@ -157,7 +161,11 @@ export function useOsFileDropOwner<Destination = undefined>(
         // The web fallback proxy fabricates methods absent from the concrete namespace.
         const getPathForFile = fs && 'getPathForFile' in fs ? fs.getPathForFile : undefined
         if (!getPathForFile) {
-          queueDelivery(rejectedDrop('unresolved-paths', files.length))
+          queueDelivery(
+            optionsRef.current.acceptsBrowserFiles
+              ? { paths: holdBrowserAttachmentFiles(files), failures: [] }
+              : rejectedDrop('unresolved-paths', files.length)
+          )
           return
         }
 

@@ -12,6 +12,7 @@ import type {
   PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { withFallback } from '../web/preload-api/web-fallback-api'
+import { takeBrowserAttachmentFile } from '../lib/browser-attachment-files'
 import {
   createOsFileDropSequence,
   useOsFileDropOwner,
@@ -38,6 +39,7 @@ function Owner<Destination = undefined>({
   captureDestination,
   consumer = 'agent',
   isDestinationLive,
+  acceptsBrowserFiles,
   children
 }: {
   onDrop: DropHandler<Destination>
@@ -46,6 +48,7 @@ function Owner<Destination = undefined>({
   sequence?: OsFileDropSequence
   captureDestination?: (event: DragEvent) => Destination
   isDestinationLive?: (context: { destination?: Destination }) => boolean
+  acceptsBrowserFiles?: boolean
   children?: React.ReactNode
 }): React.JSX.Element {
   const ownerElementRef = useRef<HTMLElement | null>(null)
@@ -56,7 +59,8 @@ function Owner<Destination = undefined>({
     canAccept,
     sequence: sequence ?? ownSequence,
     captureDestination,
-    isDestinationLive
+    isDestinationLive,
+    acceptsBrowserFiles
   }
   const ownerRef = useOsFileDropOwner(ownerElementRef, options)
   return (
@@ -314,6 +318,20 @@ describe('useOsFileDropOwner', () => {
       { target: view.getByTestId('owner') }
     )
     expect(getPathForFile).not.toHaveBeenCalled()
+    expect(prepareDroppedPaths).not.toHaveBeenCalled()
+  })
+
+  it('hands a destination that uploads bytes itself the browser files the web client cannot path', async () => {
+    const onDrop = vi.fn<DropHandler>()
+    vi.stubGlobal('api', withFallback({ fs: { prepareDroppedPaths } }, []))
+    const file = new File(['a'], 'a.txt')
+    const view = render(<Owner onDrop={onDrop} acceptsBrowserFiles />)
+    drag(view.getByTestId('owner'), 'drop', [file])
+    await act(async () => undefined)
+    const [prepared] = onDrop.mock.calls[0]!
+    expect(prepared.failures).toEqual([])
+    expect(prepared.paths).toHaveLength(1)
+    expect(takeBrowserAttachmentFile(prepared.paths[0]!)).toBe(file)
     expect(prepareDroppedPaths).not.toHaveBeenCalled()
   })
 
