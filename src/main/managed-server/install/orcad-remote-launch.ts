@@ -1,4 +1,4 @@
-// Detached candidates publish readiness into slot files so deploy can disconnect without owning service lifetime.
+// Redirect detached candidate stdout to its version directory so readiness does not hold SSH open.
 import type { OrcadLaunchEnvEntry } from '../../ssh/orcad-host-transport'
 import {
   ORCAD_LAUNCHER_FILENAME,
@@ -18,6 +18,8 @@ import {
   assertPosixOrcadHost as assertPosixHost,
   ORCAD_LOG_FILENAME,
   ORCAD_PID_FILENAME,
+  ORCAD_LAUNCH_MACHINE_COMMAND,
+  ORCAD_PID_MACHINE_FILENAME,
   ORCAD_READINESS_FILENAME,
   ORCAD_READINESS_MAX_BYTES,
   posixProcessAliveShellFunction
@@ -41,16 +43,15 @@ export type OrcadLaunchSpec = {
   remoteInstallDir: string
   nodePath: string
   fullVersion: string
-  /** Shared across versions, so rollback requires a state snapshot. */
+  /** Shared across versions; rollback requires a snapshot. */
   userDataDir: string
-  /** Explicit bind posture; default callers use loopback through SSH forwarding. */
   bindHost: string
   port: number
-  /** Fence root shared with client-managed idle-shutdown coordination. */
+  /** Shared activation fence; managed SSH launches may idle out. */
   activationRoot: string
 }
 
-/** Managed-launch environment; older servers ignore unknown flags. */
+/** Older orcad versions ignore these launch variables. */
 export function orcadManagedLaunchEnv(
   spec: OrcadLaunchSpec,
   env: NodeJS.ProcessEnv = process.env
@@ -64,12 +65,12 @@ export function orcadManagedLaunchEnv(
   ]
 }
 
-/** WSL without systemd needs setsid; nohup alone dies with the wsl.exe session. */
+/** WSL without systemd kills nohup children with wsl.exe --exec; use a separate session. */
 export type OrcadLaunchDetach = 'nohup' | 'setsid'
 
 const ORCAD_SETSID_PID_WAIT_TRIES = 100
 
-/** Pass bind explicitly so future server defaults cannot change exposure posture. */
+/** Pass bind explicitly so launch policy cannot change with installed-version defaults. */
 export function orcadLaunchCommand(
   host: RemoteHostPlatform,
   spec: OrcadLaunchSpec,
@@ -78,22 +79,22 @@ export function orcadLaunchCommand(
 ): string {
   assertPosixHost(host)
   const dir = quotePosixShell(spec.remoteInstallDir)
-  // Relative artifact paths reduce command size; every use runs after the same-shell cd.
+  // Relative artifact paths reduce command size; every use follows the same-shell cd.
   const readiness = quotePosixShell(ORCAD_READINESS_FILENAME)
   const log = quotePosixShell(ORCAD_LOG_FILENAME)
-  // Absolute PID path is written outside nohup's backgrounded cd/list.
-  const pidFile = quotePosixShell(joinRemotePath(host, spec.remoteInstallDir, ORCAD_PID_FILENAME))
-  // Liveness compares runtime argv against the absolute entry path.
+  // PID writes run outside nohup’s backgrounded cd; reuse one absolute path to stay within command budgets.
+  const pidFile = '"$orcad_pid"'
+  // Liveness matches runtime argv against the absolute entry path.
   const entry = quotePosixShell(
     joinRemotePath(host, spec.remoteInstallDir, ORCAD_LAUNCHER_FILENAME)
   )
   const baseDir = remoteDirname(spec.remoteInstallDir.replace(/\/+$/u, ''), host)
-  // Tighten only managed directories, never unrelated parents of custom slot locations.
+  // Tighten only the managed root, never an unrelated custom-slot parent.
   const privateDirs = [
     ...(remoteBasename(baseDir, host) === RELAY_REMOTE_DIR ? [baseDir] : []),
     spec.remoteInstallDir
   ]
-  // Capture SSH identity before entering the subshell that would discard its variables.
+  // Capture in the launching shell; detached subshell variables do not return here.
   const recordSession = detach === 'nohup' && recordsOrcadLaunchSshSession(host)
   const launchEnv = [
     `ORCA_VERSION=${quotePosixShell(spec.fullVersion)}`,
@@ -101,30 +102,32 @@ export function orcadLaunchCommand(
     ...orcadManagedLaunchEnv(spec).map(([name, value]) => `${name}=${quotePosixShell(value)}`)
   ]
   return [
+    `orcad_pid=${quotePosixShell(joinRemotePath(host, spec.remoteInstallDir, ORCAD_PID_FILENAME))};`,
+    // Record the launching machine before detaching; absent boot identity leaves it unverified.
+    `{ ${ORCAD_LAUNCH_MACHINE_COMMAND};}>"$orcad_pid${ORCAD_PID_MACHINE_FILENAME.slice(ORCAD_PID_FILENAME.length)}" 2>/dev/null;`,
     ...(recordSession ? [captureOrcadLaunchSshSessionCommand()] : []),
-    // Preserve login umask for daemon children that create user files.
+    // Preserve login umask for daemon children creating user files.
     'orcad_login_umask=$(umask);',
-    // Pairing-token artifacts need umask 077 before creation; semicolon keeps the external PID write covered too.
+    // Pairing-token artifacts need umask 077 from creation; semicolon also covers the external PID write.
     'umask 077;',
-    // Tighten prior-build artifacts best-effort; umask cannot repair their existing modes.
+    // Tighten existing artifacts best-effort; umask cannot repair their modes.
     `{ chmod 700 ${privateDirs.map(quotePosixShell).join(' ')} 2>/dev/null || :; } &&`,
     `cd ${dir} &&`,
     `${selectOrcadSlotRuntimeCommand(host, spec.remoteInstallDir, spec.nodePath)} &&`,
-    // Truncate stale readiness so activation cannot accept an earlier process's health.
+    // Truncate so relaunch cannot activate on the previous process’s readiness.
     `: > ${readiness} &&`,
-    // Truncation preserves existing modes; readiness must explicitly become owner-only.
+    // Required: truncating redirects retain old file modes.
     `chmod 600 ${readiness} &&`,
     `{ chmod 600 ${pidFile} ${log} 2>/dev/null || :; } &&`,
-    // Stale stop requests must not terminate the new instance.
     `rm -f ${quotePosixShell(ORCAD_STOP_REQUEST_FILENAME)} &&`,
     ...(detach === 'setsid' ? [`rm -f ${pidFile} &&`] : []),
     ...(detach === 'setsid'
       ? setsidLaunchTail(entry, spec, readiness, log, pidFile, launchEnv, hostEnv)
       : [
-          // Open group redirects under 077 before restoring the daemon's login umask.
+          // Open redirects under 077 before restoring daemon login umask.
           '{ umask "$orcad_login_umask" &&',
           ...launchEnv,
-          // exec preserves $! as the runtime PID; in-place launcher remains identifiable to older clients.
+          // exec keeps $! equal to runtime PID; in-place launcher loading also preserves older clients’ argv checks.
           `exec nohup "$orcad_runtime" ${entry}`,
           `--json --bind ${quotePosixShell(spec.bindHost)} --port ${String(spec.port)};`,
           `} > ${readiness} 2>> ${log} < /dev/null &`,
@@ -137,7 +140,7 @@ export function orcadLaunchCommand(
   ].join(' ')
 }
 
-/** Child writes its own PID because setsid -f exits immediately; BusyBox uses a background non-group-leader fallback. */
+/** setsid -f exits its parent, so the exec child records $$; BusyBox uses background setsid without -f. */
 function setsidLaunchTail(
   entry: string,
   spec: OrcadLaunchSpec,
@@ -149,12 +152,11 @@ function setsidLaunchTail(
 ): string[] {
   return [
     ...launchEnv,
-    // Mark only WSL setsid launches so SSH PATH behavior remains intact.
+    // Only WSL setsid launches receive this marker.
     `${ORCAD_WSL_HOST_ENV}=1`,
     ...hostEnv.map(([name, value]) => `${assertEnvName(name)}=${quotePosixShell(value)}`),
     'sh -c \'orcad_detach() { if setsid -f true >/dev/null 2>&1; then setsid -f "$@"; ' +
       'else setsid "$@" & fi; }; orcad_detach "$@"\' orcad-detach',
-    // Publish PID privately before restoring login umask for user workloads.
     `sh -c 'echo $$ > "$1" && umask "$2" && shift 2 && exec "$@"' orcad-launch ${pidFile}`,
     '"$orcad_login_umask"',
     `"$orcad_runtime" ${entry}`,
@@ -181,17 +183,16 @@ export function readOrcadReadinessCommand(
   const readiness = quotePosixShell(
     joinRemotePath(host, remoteInstallDir, ORCAD_READINESS_FILENAME)
   )
-  // Read one extra byte to distinguish oversized output from a full valid payload.
   return `head -c ${ORCAD_READINESS_MAX_BYTES + 1} ${readiness} 2>/dev/null || true`
 }
 
-/** UNKNOWN cannot prove exit; only confirmed dead processes or never-launched slots permit destructive work. */
+/** LIVE/DEAD/UNKNOWN distinguish proven state from missing/denied identity probes.
+ * No PID or readiness file means NEVER_LAUNCHED, which also proves this slot has no process. */
 export function orcadLivenessProbeCommand(
   host: RemoteHostPlatform,
   remoteInstallDir: string
 ): string {
   if (isWindowsRemoteHost(host)) {
-    // Windows must prove PID and creation time; unanswered identity stays UNKNOWN.
     return orcadWindowsSlotOpCommand(host, remoteInstallDir, 'liveness', [remoteInstallDir])
   }
   const pidFile = quotePosixShell(joinRemotePath(host, remoteInstallDir, ORCAD_PID_FILENAME))
@@ -204,7 +205,7 @@ export function orcadLivenessProbeCommand(
   )
   return [
     posixProcessAliveShellFunction({ refuseUnverifiable: true }),
-    // Detect reused PIDs via slot entry argv; missing ps evidence falls back to conservative liveness.
+    // PID reuse needs argv identity; absent ps leaves conservative liveness checks to decide.
     `orcad_launcher=${launcher}; orcad_server=${server};`,
     'orcad_reused() { args=$(ps -o args= -p "$1" 2>/dev/null) && [ -n "$args" ] && ' +
       'case "$args" in *"$orcad_launcher"* | *"$orcad_server"*) return 1;; *) return 0;; esac; };',
@@ -221,12 +222,12 @@ export const ORCAD_NEVER_LAUNCHED = 'NEVER_LAUNCHED'
 
 export type OrcadLiveness = 'LIVE' | 'DEAD' | 'UNKNOWN' | typeof ORCAD_NEVER_LAUNCHED
 
-/** Unknown or malformed verdicts remain UNKNOWN rather than guessing exit. */
 export function parseOrcadLiveness(output: string): OrcadLiveness {
   const value = output.trim().split('\n').pop()?.trim()
   return value === 'LIVE' || value === 'DEAD' || value === ORCAD_NEVER_LAUNCHED ? value : 'UNKNOWN'
 }
 
+/** Only DEAD/NEVER_LAUNCHED permit lifecycle changes; UNKNOWN proves nothing. */
 export function orcadLivenessProvenExited(liveness: OrcadLiveness): boolean {
   return liveness === 'DEAD' || liveness === ORCAD_NEVER_LAUNCHED
 }
@@ -244,7 +245,7 @@ export type OrcadReadinessParse =
   | { state: 'pending' }
   | { state: 'malformed'; reason: string }
 
-/** Partial final JSON is pending because readiness is appended concurrently; completed malformed lines remain failures. */
+/** Treat an unfinished last line as pending; polling can race a candidate stdout append. */
 export function parseOrcadReadinessOutput(raw: string): OrcadReadinessParse {
   if (Buffer.byteLength(raw, 'utf8') > ORCAD_READINESS_MAX_BYTES) {
     return { state: 'malformed', reason: 'readiness payload exceeds the 256 KiB limit' }
@@ -259,7 +260,7 @@ export function parseOrcadReadinessOutput(raw: string): OrcadReadinessParse {
     try {
       parsed = JSON.parse(trimmed)
     } catch {
-      // Only an unterminated final line can still be mid-write.
+      // Only an unterminated last line can recover from a partial write.
       return index === lines.length - 1
         ? { state: 'pending' }
         : { state: 'malformed', reason: 'readiness line is not valid JSON' }

@@ -1,4 +1,4 @@
-// Windows host-script paths bypass these POSIX-only command builders.
+// Windows operations use the host script; only POSIX command builders use this guard.
 import { isWindowsRemoteHost, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 
 export class OrcadRemoteLaunchUnsupportedError extends Error {
@@ -25,14 +25,19 @@ export const ORCAD_LOG_FILENAME = 'orcad.log'
 export const ORCAD_READINESS_MAX_BYTES = 256 * 1024
 
 export const ORCAD_PID_FILENAME = '.orcad-pid'
+/** Pair the PID with boot ID and node name; shared home paths cannot identify a machine. */
+export const ORCAD_PID_MACHINE_FILENAME = `${ORCAD_PID_FILENAME}-machine`
+/** Emit nothing without a boot ID; launch and later wait compare this identity. */
+export const ORCAD_LAUNCH_MACHINE_COMMAND = 'cat /proc/sys/kernel/random/boot_id&&uname -n'
+
 /** Windows pairs PID with creation time because PID reuse alone cannot identify the process. */
 export const ORCAD_WINDOWS_PROCESS_FILENAME = '.orcad-process.json'
 
-/** kill -0 includes zombies; ps excludes them, while missing ps evidence conservatively retains the process. */
+/** kill -0 includes zombies; ps excludes them, while missing evidence conservatively retains the process. */
 export function posixProcessAliveShellFunction(
   options: { refuseUnverifiable?: boolean } = {}
 ): string {
-  // Permission failures cannot prove exit for destructive lifecycle steps.
+  // Destructive lifecycle steps need explicit absence; permission failures cannot prove exit.
   const probe = options.refuseUnverifiable
     ? 'probe_error=$(LC_ALL=C kill -0 "$1" 2>&1) || { ' +
       'case "$probe_error" in *"No such process"*) return 1;; ' +
