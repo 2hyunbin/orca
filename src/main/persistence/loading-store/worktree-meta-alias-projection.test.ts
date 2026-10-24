@@ -2,7 +2,7 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 /**
  * `setWorktreeMetaForHost` puts one object in both `worktreeMeta` and `worktreeMetaByIdentity`, so
  * a heavy profile serializes every metadata row twice. On a measured 3.64 MB install 1,347 of

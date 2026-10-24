@@ -20,7 +20,10 @@ import { DESKTOP_RPC_CALLER } from '../rpc-caller-identity'
 import { materializeRuntimeLocalWorktree } from '../../runtime-local-worktree-materialization'
 import { createWorktreeCreateTimingRecorder } from '../../../worktree-create-timing'
 import { Store } from '../../../persistence'
-import { createSqliteTestStore, closeTestStores } from '../../../persistence-test-harness'
+import {
+  createSqliteTestStore,
+  closeTestStores
+} from '../../../persistence/persistence-test-harness'
 import { methodNamed, rpcContext, runtimeStub } from './agent-launch.test-fixture'
 
 vi.mock('../../../git/worktree-include-file', () => ({

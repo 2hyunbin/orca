@@ -172,7 +172,7 @@ it.skipIf(process.platform !== 'win32')(
                 }
                 if (control && !checked && output.includes(`${root}>`)) {
                   checked = true
-                  proc.write('echo __ORCA_PARENT_STATUS__:%errorlevel% & echo parent-alive\r')
+                  proc.write('echo __ORCA_PARENT_STATUS__:%errorlevel%& echo parent-alive\r')
                 }
                 if (winningShell === cmd) {
                   const match = output.match(/(?:^|\r?\n)__ORCA_PARENT_STATUS__:(-?\d+)\r?\n/)
@@ -187,11 +187,16 @@ it.skipIf(process.platform !== 'win32')(
                   checked = true
                   proc.write(
                     winningShell === cmd
-                      ? 'echo __ORCA_PARENT_STATUS__:%errorlevel% & echo parent-alive\r'
+                      ? 'echo __ORCA_PARENT_STATUS__:%errorlevel%& echo parent-alive\r'
                       : "[Console]::WriteLine('parent-alive')\r"
                   )
                 }
-                if (checked && /(?:^|\r?\n)parent-alive\r?\n/.test(output)) {
+                if (
+                  checked &&
+                  (winningShell === cmd
+                    ? parentCode !== undefined
+                    : /(?:^|\r?\n)parent-alive\r?\n/.test(output))
+                ) {
                   proc.write('exit\r')
                 }
               })

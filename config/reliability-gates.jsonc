@@ -11,6 +11,87 @@
   },
   "gates": [
     {
+      "id": "terminal-output.resize-parse-barrier",
+      "title": "Resize preserves queued parse barriers and following terminal output",
+      "maturity": "experimental",
+      "protection": "partial",
+      "owner": "terminal-rendering",
+      "layer": "renderer-unit-real-xterm",
+      "surfaces": [
+        "replay parse waits",
+        "output scheduler parse waits",
+        "write-pipeline health probes",
+        "xterm resize"
+      ],
+      "platforms": ["macos", "linux", "windows"],
+      "providers": ["local", "daemon", "ssh", "remote-runtime"],
+      "coveredPlatforms": ["macos"],
+      "coveredProviders": [],
+      "coverageNotes": "Both installed browser and headless xterm packages run real parsing and resize with production replay, scheduler and health code. The shared renderer boundary applies to every provider and workspace kind; native Linux/Windows, live providers, mobile and rendered Electron acceptance are not exercised.",
+      "motivatingLinks": [
+        "https://github.com/stablyai/orca/issues/26950",
+        "https://github.com/stablyai/orca/pull/26956",
+        "https://github.com/xtermjs/xterm.js/pull/6201"
+      ],
+      "invariant": "A resize must preserve every queued byte and invoke parse-barrier callbacks once in FIFO order. Replay and scheduler waits must finish from real parse progress, and a resized live parser must not be certified dead.",
+      "oracle": "Queue a barrier between before and after output, resize synchronously, and require both lines and ordered callbacks. Require replay and scheduler waits before timers advance; require live health after the probe deadline. Preserve partial UTF-8 and escape sequences, repeated no-resize barriers and subsequent writes.",
+      "commands": [
+        "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/xterm-parse-barrier.test.ts"
+      ],
+      "testFiles": ["src/renderer/src/lib/pane-manager/xterm-parse-barrier.test.ts"],
+      "assertionRefs": [
+        {
+          "file": "src/renderer/src/lib/pane-manager/xterm-parse-barrier.test.ts",
+          "assertions": [
+            "fires its callback and keeps the writes queued behind it",
+            "lets a replay wait settle without falling back to its stall probe",
+            "settles the output scheduler wait before its fallback timer",
+            "keeps a resized live terminal healthy after the probe deadline",
+            "preserves partial UTF-8 and escape sequences without writing marker bytes",
+            "completes repeated barriers without a resize and permits subsequent writes"
+          ]
+        }
+      ],
+      "evidenceRuns": [
+        {
+          "date": "2026-10-23",
+          "runner": "local",
+          "platform": "macos",
+          "result": "passed",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/renderer/src/lib/pane-manager/xterm-parse-barrier.test.ts",
+          "durationSeconds": 0.257,
+          "summary": "12 tests pass against installed browser6.1.0-beta.304 and headless6.1.0-beta.303. Replacing only the helper marker with an empty string fails10 tests; the two no-resize controls still pass."
+        }
+      ],
+      "runtimeBudget": {
+        "p95Seconds": 5,
+        "scope": "Focused installed-xterm renderer unit suite"
+      },
+      "flakeHistory": {
+        "status": "not-started",
+        "evidence": "One local focused green run; no soak or cross-platform runtime history."
+      },
+      "redGreenEvidence": {
+        "status": "complete",
+        "evidence": "Current-main production replay, scheduler and health consumers independently fail six real-runtime boundary checks. In the refreshed candidate, replacing only the singleton byte marker with an empty string fails10 of12 checked-in assertions; restoring it passes all12."
+      },
+      "performanceBudget": {
+        "required": true,
+        "evidence": "One shared zero-byte array; no new timers, polling, subprocesses or output bytes. One hundred repeated barriers preserve FIFO without per-call marker allocations."
+      },
+      "promotionCriteria": [
+        "Collect stable CI and soak history across macOS, Linux and Windows.",
+        "Exercise real local, daemon, SSH and paired-runtime panes through resize and restore."
+      ],
+      "knownGaps": [
+        "No DOM, GPU or rendered Electron validation.",
+        "No native Linux/Windows or live provider exercise; mobile terminal implementation is unchanged.",
+        "Daemon headless-emulator async fallback empty-string marker is outside this renderer change; its normal synchronous path bypasses that marker.",
+        "Separate upstream consumed-prefix replay and async-parser resize defects remain outside this workaround."
+      ],
+      "demotionRule": "Keep experimental until runtime history supports promotion; demote if callback ordering, byte preservation or health certification regresses."
+    },
+    {
       "id": "terminal-provider.windows-daemon-registry-package",
       "title": "Relocated Windows daemon retains the registry package runtime",
       "maturity": "experimental",
@@ -9214,7 +9295,7 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime-terminal-close-continuity.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/components/terminal/initial-terminal.test.ts src/renderer/src/lib/worktree-activation-default-tabs.test.ts src/renderer/src/store/slices/terminals-explicit-empty-hydration.test.ts",
-        "pnpm dlx node@24 ./node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-pane-authority.test.ts src/main/ipc/agent-hooks.test.ts src/main/ipc/agent-pane-authority-ownership.test.ts src/main/ipc/pty-management.test.ts src/main/persistence-initial-load.test.ts src/main/persistence-pane-identity-migration.test.ts src/main/persistence-pty-binding-reconciliation.test.ts src/renderer/src/store/slices/agent-pane-authority.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/renderer/src/store/slices/terminal-tab-retirement.test.ts src/renderer/src/store/slices/terminal-tab-retirement-store.test.ts tests/e2e/completed-worker-retirement-resume.unit.test.ts src/renderer/src/components/shared/kill-all-terminal-surfaces.test.ts",
+        "pnpm dlx node@24 ./node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-pane-authority.test.ts src/main/ipc/agent-hooks.test.ts src/main/ipc/agent-pane-authority-ownership.test.ts src/main/ipc/pty-management.test.ts src/main/persistence/persistence-initial-load.test.ts src/main/persistence/terminal-topology/persistence-pane-identity-migration.test.ts src/main/persistence/terminal-topology/persistence-pty-binding-reconciliation.test.ts src/renderer/src/store/slices/agent-pane-authority.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/renderer/src/store/slices/terminal-tab-retirement.test.ts src/renderer/src/store/slices/terminal-tab-retirement-store.test.ts tests/e2e/completed-worker-retirement-resume.unit.test.ts src/renderer/src/components/shared/kill-all-terminal-surfaces.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/pty-descendant-termination.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/runtime/worktree-teardown.test.ts",
         "pnpm run test:e2e -- tests/e2e/terminal-tab-close-restart-persistence.spec.ts --workers=1",
         "pnpm run test:e2e -- tests/e2e/terminal-parked-close-retirement.spec.ts --workers=1",
@@ -9232,9 +9313,9 @@
         "src/main/ipc/agent-hooks.test.ts",
         "src/main/ipc/agent-pane-authority-ownership.test.ts",
         "src/main/ipc/pty-management.test.ts",
-        "src/main/persistence-initial-load.test.ts",
-        "src/main/persistence-pane-identity-migration.test.ts",
-        "src/main/persistence-pty-binding-reconciliation.test.ts",
+        "src/main/persistence/persistence-initial-load.test.ts",
+        "src/main/persistence/terminal-topology/persistence-pane-identity-migration.test.ts",
+        "src/main/persistence/terminal-topology/persistence-pty-binding-reconciliation.test.ts",
         "src/main/pty-descendant-termination.test.ts",
         "src/main/daemon/session.test.ts",
         "src/main/daemon/terminal-host.test.ts",
@@ -12960,7 +13041,7 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/persistence-ssh-targets-and-pane-keys.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/persistence/terminal-topology/persistence-ssh-targets-and-pane-keys.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts --reporter=dot"
         // Historical evidence commands; the override is ignored after the always-on transition.
       ],
@@ -12977,7 +13058,7 @@
         "src/main/ssh/ssh-multiplexer-transport-writer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts",
-        "src/main/persistence-ssh-targets-and-pane-keys.test.ts",
+        "src/main/persistence/terminal-topology/persistence-ssh-targets-and-pane-keys.test.ts",
         "src/wsl-guest/dispatcher-client-writer.test.ts",
         "src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts"
       ],
@@ -13025,7 +13106,7 @@
           ]
         },
         {
-          "file": "src/main/persistence-ssh-targets-and-pane-keys.test.ts",
+          "file": "src/main/persistence/terminal-topology/persistence-ssh-targets-and-pane-keys.test.ts",
           "assertions": [
             "retired per-target source-credit selections are removed during normalization"
           ]
