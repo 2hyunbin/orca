@@ -217,7 +217,16 @@ export class WslHostService {
   }
 
   /** Serve existing connections; reconnect only for visible work, otherwise return a WSL-specific refusal rather than an unreachable-network error. */
-  async ensureForRuntimeCall(environmentId: string): Promise<void> {
+  ensureForRuntimeCall(environmentId: string): Promise<void> {
+    return this.ensureConnected(environmentId, false)
+  }
+
+  /** The user asked for work on this host (a move): like Connect, it may boot the distro. */
+  ensureForUserRequest(environmentId: string): Promise<void> {
+    return this.ensureConnected(environmentId, true)
+  }
+
+  private async ensureConnected(environmentId: string, userRequested: boolean): Promise<void> {
     const record = this.recordForEnvironment(environmentId)
     const connector = this.connector
     if (!record || !connector || (await connector.isReachable(record.distro, environmentId))) {
@@ -227,7 +236,7 @@ export class WslHostService {
     if (refusal || this.removing.has(environmentId)) {
       throw new Error(refusal?.message ?? WSL_HOST_REMOVING_MESSAGE)
     }
-    if (!this.visible.has(environmentId)) {
+    if (!userRequested && !this.visible.has(environmentId)) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
     await connector.connect(record.distro)
