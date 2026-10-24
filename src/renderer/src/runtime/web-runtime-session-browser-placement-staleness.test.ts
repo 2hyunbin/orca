@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -98,9 +99,12 @@ const PRE_UPGRADE_CAPABILITIES = [
 ]
 
 function cacheCapabilities(capabilities: string[]): void {
-  const state = useAppStore.getState() as Record<string, unknown>
+  const state = useAppStore.getState()
   state.runtimeStatusByEnvironmentId = new Map([
-    [ENVIRONMENT_ID, { status: { capabilities }, checkedAt: 1 }]
+    [
+      ENVIRONMENT_ID,
+      { status: { ...createCompatibleRuntimeStatusResponse().result, capabilities }, checkedAt: 1 }
+    ]
   ])
 }
 

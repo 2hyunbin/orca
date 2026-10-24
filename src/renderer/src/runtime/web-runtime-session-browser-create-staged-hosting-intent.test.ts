@@ -1,3 +1,6 @@
+import type { AppState } from '../store/types'
+import { getDefaultSettings } from '../../../shared/constants'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserClientHostPlacementPreference } from '../../../shared/browser-client-host-placement'
@@ -94,18 +97,19 @@ const CLIENT_HOSTING_CAPABILITIES = [
   BROWSER_NETWORK_EXECUTION_HOSTS_RUNTIME_CAPABILITY
 ]
 
-type HarnessState = Record<string, unknown>
+type HarnessState = AppState
 
 /** The runtime status the create reads its capabilities and device scope from. */
 function statusMap(options: {
   capabilities: string[]
   deviceScope?: string
-}): Map<string, unknown> {
+}): AppState['runtimeStatusByEnvironmentId'] {
   return new Map([
     [
       ENVIRONMENT_ID,
       {
         status: {
+          ...createCompatibleRuntimeStatusResponse().result,
           capabilities: options.capabilities,
           ...(options.deviceScope !== undefined ? { deviceScope: options.deviceScope } : {})
         },
@@ -128,13 +132,14 @@ async function stageHandleFor(
     onCreateCall?: (state: HarnessState) => void
   } = {}
 ): Promise<Record<string, unknown>> {
-  const state = useAppStore.getState() as HarnessState
+  const state = useAppStore.getState()
   state.runtimeStatusByEnvironmentId = statusMap({
     capabilities: options.capabilities ?? CLIENT_HOSTING_CAPABILITIES,
     ...(options.deviceScope !== undefined ? { deviceScope: options.deviceScope } : {})
   })
   state.settings = {
-    ...(state.settings as Record<string, unknown>),
+    ...getDefaultSettings('/tmp'),
+    ...state.settings,
     ...(options.clientHostedSetting !== undefined
       ? { browserClientHostedRemoteEnabled: options.clientHostedSetting }
       : {})

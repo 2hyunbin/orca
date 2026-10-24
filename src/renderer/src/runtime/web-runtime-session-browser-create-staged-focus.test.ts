@@ -1,3 +1,6 @@
+import type { AppState } from '../store/types'
+import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -95,16 +98,37 @@ const CLIENT_HOSTING_CAPABILITIES = [
 ]
 
 const UNIFIED_TABS = [
-  { id: OTHER_TAB_ID, entityId: 'other-entity', contentType: 'terminal', groupId: GROUP_ID },
-  { id: STAGED_TAB_ID, entityId: 'staged-workspace', contentType: 'browser', groupId: GROUP_ID }
+  makeUnifiedTab({
+    id: OTHER_TAB_ID,
+    worktreeId: WORKTREE_ID,
+    entityId: 'other-entity',
+    contentType: 'terminal',
+    groupId: GROUP_ID
+  }),
+  makeUnifiedTab({
+    id: STAGED_TAB_ID,
+    worktreeId: WORKTREE_ID,
+    entityId: 'staged-workspace',
+    contentType: 'browser',
+    groupId: GROUP_ID
+  })
 ]
 
 /** The strip with `visibleTabId` on screen. A fresh groups array so the guard re-evaluates. */
-function stateWithVisibleTab(base: Record<string, unknown>, visibleTabId: string): typeof base {
+function stateWithVisibleTab(base: AppState, visibleTabId: string): AppState {
   return {
     ...base,
     runtimeStatusByEnvironmentId: new Map([
-      [ENVIRONMENT_ID, { status: { capabilities: CLIENT_HOSTING_CAPABILITIES }, checkedAt: 1 }]
+      [
+        ENVIRONMENT_ID,
+        {
+          status: {
+            ...createCompatibleRuntimeStatusResponse().result,
+            capabilities: CLIENT_HOSTING_CAPABILITIES
+          },
+          checkedAt: 1
+        }
+      ]
     ]),
     activeGroupIdByWorktree: { [WORKTREE_ID]: GROUP_ID },
     groupsByWorktree: {
@@ -132,7 +156,7 @@ describe('browser create focus intent across the client-host preparation await',
   async function runCreateSwitchingDuringPreparation(options: {
     switchTab: boolean
   }): Promise<{ hostTabId: string } | null | undefined> {
-    const base = useAppStore.getState() as Record<string, unknown>
+    const base = useAppStore.getState()
     const stagedState = stateWithVisibleTab(base, STAGED_TAB_ID)
     const switchedState = stateWithVisibleTab(base, OTHER_TAB_ID)
     let currentState = stagedState
