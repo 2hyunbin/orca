@@ -120,7 +120,35 @@ describe('independent paired runtime SSH access persistence', () => {
     expect(listEnvironments(userDataPath)).toEqual([relinked])
   })
 
-  it('still refuses a new paired device on a linked server, and any new runtime during a link', () => {
+  it('lets an unlink or a lost-completion retry read before a server restart still finish', () => {
+    const prepared = prepare()
+    const args = {
+      expectedEnvironment: prepared,
+      requestId: 'link-request',
+      verifiedRuntimeId: 'host-runtime',
+      verifiedConnection: pairedRuntimeConnectionFromOffer(verifiedPairing),
+      tunnel
+    }
+    const linked = linkVerifiedRuntimeEnvironmentSshAccess(userDataPath, args)
+    markEnvironmentUsed(userDataPath, linked.id, { runtimeId: 'restarted-runtime' })
+    expect(linkVerifiedRuntimeEnvironmentSshAccess(userDataPath, args).sshAccess).toEqual(
+      linked.sshAccess
+    )
+
+    const unlinking = prepareRuntimeEnvironmentSshAccessUnlink(userDataPath, {
+      expectedEnvironment: linked,
+      requestId: 'unlink-request'
+    })
+    markEnvironmentUsed(userDataPath, linked.id, { runtimeId: 'restarted-again' })
+    const unlinked = completeRuntimeEnvironmentSshAccessUnlink(userDataPath, {
+      expectedEnvironment: unlinking,
+      requestId: 'unlink-request'
+    })
+    expect(unlinked.sshAccess).toBeUndefined()
+    expect(unlinked.pendingSshAccessOperation).toBeUndefined()
+  })
+
+  it('still refuses a new paired device on a linked server, and a new runtime during a link', () => {
     const linked = link()
     expect(() =>
       markEnvironmentUsed(userDataPath, linked.id, {

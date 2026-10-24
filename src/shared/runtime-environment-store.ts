@@ -286,9 +286,9 @@ export function markEnvironmentUsed(
   }
   if (runtimeIdChanged || pairedDeviceIdChanged) {
     const current = resolveEnvironmentFromStore(readEnvironmentStore(userDataPath), environment.id)
-    // Why a linked server may take a new runtimeId: orcad mints one at every start, and the reply
-    // authenticated with the pinned pairing. A pending link must still verify the runtime it began on.
-    if (current.pendingSshAccessOperation || (current.sshAccess && pairedDeviceIdChanged)) {
+    // orcad mints a runtimeId per start; only a pending link must keep the runtime it verifies.
+    const intent = current.pendingSshAccessOperation
+    if (intent?.operation === 'link' || (pairedDeviceIdChanged && (current.sshAccess || intent))) {
       throw new RuntimeEnvironmentStoreError(
         'invalid_argument',
         'SSH access operation cannot change the paired runtime identity.'
