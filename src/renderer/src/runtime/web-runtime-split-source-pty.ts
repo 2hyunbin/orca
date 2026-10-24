@@ -30,14 +30,27 @@ export function isHostTabPane(source: WebRuntimeSplitSource): boolean {
   )
 }
 
-/** The split needs the server's terminal for its source pane; until then, say so instead of splitting. */
-export function notifyHostSplitSourceNotStarted(): void {
+/**
+ * Why a server-tab pane did not split. Only the server starts terminals in its tabs, so splitting
+ * here instead would leave a blank pane.
+ */
+export function notifyHostTabSplitRefused(source: WebRuntimeSplitSource): void {
+  const state = useAppStore.getState()
+  const environmentId = runtimeEnvironmentIdUnlessTwin(state, source.worktreeId)
+  const disconnected =
+    !environmentId ||
+    state.runtimeStatusByEnvironmentId.get(environmentId)?.snapshot?.transport === 'disconnected'
   toast.error(
-    translate(
-      'auto.runtime.webRuntimeSession.splitSourceUnpublished',
-      'The pane didn’t split: its terminal hasn’t started on the host yet.'
-    ),
-    // Why an id: repeated presses while the terminal starts must not stack toasts.
-    { id: 'web-runtime-split-source-not-started' }
+    disconnected
+      ? translate(
+          'auto.runtime.webRuntimeSession.remoteHostDisconnected',
+          'The workspace is not connected to a remote Orca host.'
+        )
+      : translate(
+          'auto.runtime.webRuntimeSession.splitSourceUnpublished',
+          'The pane didn’t split: its terminal hasn’t started on the host yet.'
+        ),
+    // Why an id: repeated presses must not stack toasts.
+    { id: 'web-runtime-host-tab-split-refused' }
   )
 }

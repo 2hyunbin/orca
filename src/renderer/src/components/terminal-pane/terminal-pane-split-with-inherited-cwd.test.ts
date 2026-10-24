@@ -16,14 +16,14 @@ const mocks = vi.hoisted(() => {
     splitWebRuntimeTerminal: vi.fn(),
     readHostPublishedSplitSourcePtyId: vi.fn<() => string | null>(),
     isHostTabPane: vi.fn<() => boolean>(),
-    notifyHostSplitSourceNotStarted: vi.fn()
+    notifyHostTabSplitRefused: vi.fn()
   }
 })
 
 vi.mock('@/runtime/web-runtime-split-source-pty', () => ({
   readHostPublishedSplitSourcePtyId: mocks.readHostPublishedSplitSourcePtyId,
   isHostTabPane: mocks.isHostTabPane,
-  notifyHostSplitSourceNotStarted: mocks.notifyHostSplitSourceNotStarted
+  notifyHostTabSplitRefused: mocks.notifyHostTabSplitRefused
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -80,7 +80,7 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     mocks.splitWebRuntimeTerminal.mockReturnValue(false)
     mocks.readHostPublishedSplitSourcePtyId.mockReset().mockReturnValue(null)
     mocks.isHostTabPane.mockReset().mockReturnValue(false)
-    mocks.notifyHostSplitSourceNotStarted.mockReset()
+    mocks.notifyHostTabSplitRefused.mockReset()
   })
 
   describe('a pane of a paired server tab whose own attach has not landed', () => {
@@ -88,9 +88,11 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     const HOST_PTY = 'remote:env-1@@terminal-1'
     const SOURCE = { worktreeId: 'worktree-1', tabId: HOST_TAB, leafId: 'leaf-1' }
 
-    function splitHostTabPane(splitPane: ReturnType<typeof vi.fn>): void {
+    function splitHostTabPane(splitPane: ReturnType<typeof vi.fn>, serverTakesSplit = true): void {
       mocks.isHostTabPane.mockReturnValue(true)
-      mocks.splitWebRuntimeTerminal.mockImplementation((ptyId: string | null) => Boolean(ptyId))
+      mocks.splitWebRuntimeTerminal.mockImplementation(
+        (ptyId: string | null) => serverTakesSplit && Boolean(ptyId)
+      )
       splitTerminalPaneWithInheritedCwd({
         worktreeId: 'worktree-1',
         tabId: HOST_TAB,
@@ -121,13 +123,18 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     })
 
     // A pane split here has no server terminal, and nothing would ever start one.
-    it('says the source has not started instead of splitting here', () => {
+    it.each([
+      ['no terminal yet', null],
+      // e.g. the session to that server is not active.
+      ['a terminal the server cannot take a split for', HOST_PTY]
+    ])('refuses rather than splitting here with %s', (_case, published) => {
+      mocks.readHostPublishedSplitSourcePtyId.mockReturnValue(published)
       const splitPane = vi.fn(() => ({ id: 2 }))
 
-      splitHostTabPane(splitPane)
+      splitHostTabPane(splitPane, false)
 
       expect(splitPane).not.toHaveBeenCalled()
-      expect(mocks.notifyHostSplitSourceNotStarted).toHaveBeenCalledOnce()
+      expect(mocks.notifyHostTabSplitRefused).toHaveBeenCalledOnce()
     })
   })
 

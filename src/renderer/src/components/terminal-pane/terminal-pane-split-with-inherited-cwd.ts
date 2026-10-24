@@ -3,7 +3,7 @@ import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import {
   isHostTabPane,
-  notifyHostSplitSourceNotStarted,
+  notifyHostTabSplitRefused,
   readHostPublishedSplitSourcePtyId
 } from '@/runtime/web-runtime-split-source-pty'
 import type { PtyTransport } from './pty-transport-types'
@@ -57,9 +57,8 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
       return
     }
   }
-  if (!ptyId && isHostTabPane(sourcePane)) {
-    // Only the host starts a terminal in its tab, so a split made here would stay blank.
-    notifyHostSplitSourceNotStarted()
+  if (isHostTabPane(sourcePane)) {
+    notifyHostTabSplitRefused(sourcePane)
     return
   }
   splitLocally(args, () => splitCwd(args, ptyId))
