@@ -1,9 +1,5 @@
-import { launchStateLifecycle } from './structured-agent-session-launch-status'
-export { launchStateLifecycle } from './structured-agent-session-launch-status'
-export {
-  useStructuredAgentSessionLaunchFailure,
-  useStructuredAgentSessionLaunchLifecycle
-} from './structured-agent-session-launch-status'
+import { launchStateLifecycle } from './structured-agent-session-launch-lifecycle'
+export { launchStateLifecycle } from './structured-agent-session-launch-lifecycle'
 
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { StructuredLaunchFailure } from './structured-agent-session-launch-failure'
@@ -35,7 +31,7 @@ import {
   retireStructuredAgentLaunchCancellation
 } from './launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { cancelDesktopCreateOnClose } from './structured-agent-session-desktop-create'
+import { cancelDesktopCreateOnClose } from './structured-agent-session-desktop-create-close'
 import {
   cancelStructuredAgentLaunchOnLocalHost,
   resetStructuredAgentLocalLaunchCancelsForTests

@@ -2,7 +2,9 @@ import type { WorktreeCreationRequest } from './pending-worktree-creation'
 import type { AgentLaunchCancelResult } from '../../../shared/agent-launch-cancellation'
 import { recordHostCreatedLaunchMessage } from './structured-agent-session-host-launch-prompt'
 
-import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
+import { cancelDesktopCreateOnClose } from './structured-agent-session-desktop-create-close'
+export { cancelDesktopCreateOnClose } from './structured-agent-session-desktop-create-close'
+
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 
 import {
@@ -17,7 +19,6 @@ import {
 } from './structured-agent-session-launch-prompt'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 
-import type { DesktopCreateLaunchRecord } from './structured-agent-session-launch-record'
 import {
   deleteStructuredAgentLaunchRecord,
   markStructuredAgentLaunchCancelledPersisted,
@@ -84,39 +85,6 @@ export async function cancelDesktopCreateLaunch(
   } else if (result.result) {
     settleHostCreatedLaunchResult(record.sessionId, record.executionHostId, result.result)
   }
-}
-
-/** Explicit surface close abandons presentation now, independently of host prevention bookkeeping. */
-export function cancelDesktopCreateOnClose(record: DesktopCreateLaunchRecord): void {
-  const target = runtimeRpcTargetForAuthorityKey(record.executionHostId)
-  if (!target) {
-    return
-  }
-  const revision =
-    target.kind === 'environment' ? getRuntimeEnvironmentRevision(target.environmentId) : undefined
-  const current = (): boolean =>
-    target.kind === 'local' ||
-    (revision !== undefined &&
-      getRuntimeEnvironmentRevision(target.environmentId) === revision &&
-      !isRuntimeEnvironmentContinuationPending(target.environmentId, revision))
-  if (!current()) {
-    return
-  }
-  void callRuntimeRpc<AgentLaunchCancelResult>(
-    target,
-    'agent.launchCancel',
-    structuredClone(record.desktopCreate.params),
-    {
-      ...(target.kind === 'environment' ? { expectedEnvironmentPairingRevision: revision } : {}),
-      beforeSend: () => {
-        if (!current()) {
-          throw new Error('agent_session_operation_unknown')
-        }
-      }
-    }
-  ).catch((error: unknown) =>
-    console.warn('[structured-agent-launch] closed surface cancellation unconfirmed', error)
-  )
 }
 
 /** Explicit terminal close retires the same saved owner even after renderer restart. */

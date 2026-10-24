@@ -1,4 +1,16 @@
-import { cancelAgentLaunchOperationInto } from './agent-session-operation-admission'
+import {
+  cancelAgentLaunchOperationInto,
+  admitAgentSessionGlobalOperationInto,
+  admitAgentSessionMutationOperation,
+  evaluateAgentSessionMutationOperation,
+  admitAgentSessionOperationInto,
+  claimAgentSessionOperationInto,
+  admitAndClaimAgentSessionOperationInto,
+  type ClaimAfterAdmission,
+  settleAgentSessionOperationInto,
+  type AgentSessionMutationOperationAdmission,
+  type AgentSessionOperationAdmission
+} from './agent-session-operation-admission'
 /** Durable single-writer session records and their operation ledger, as rows in the host's chat
  *  journal database. */
 
@@ -12,18 +24,6 @@ import {
   type AgentSessionOperationOutcome,
   type AgentSessionOperationRow
 } from '../../shared/agent-session-operation-ledger'
-import {
-  admitAgentSessionGlobalOperationInto,
-  admitAgentSessionMutationOperation,
-  evaluateAgentSessionMutationOperation,
-  admitAgentSessionOperationInto,
-  claimAgentSessionOperationInto,
-  admitAndClaimAgentSessionOperationInto,
-  type ClaimAfterAdmission,
-  settleAgentSessionOperationInto,
-  type AgentSessionMutationOperationAdmission,
-  type AgentSessionOperationAdmission
-} from './agent-session-operation-admission'
 import {
   isAgentSessionClaimKeyVerifiable,
   retireAgentSessionClaimKey

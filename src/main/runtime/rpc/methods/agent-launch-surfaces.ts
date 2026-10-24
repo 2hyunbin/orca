@@ -1,5 +1,5 @@
-import { AgentLaunchFoundingIncompleteError } from '../../../agent-launch/host-founding-attempt'
 import {
+  AgentLaunchFoundingIncompleteError,
   assertHostFoundingNotCancelled,
   type HostFoundingAttempt
 } from '../../../agent-launch/host-founding-attempt'

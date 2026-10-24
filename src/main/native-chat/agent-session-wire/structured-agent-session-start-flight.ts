@@ -1,5 +1,5 @@
 import { agentSessionLeaseAdmitsWriter } from '../../../shared/agent-session-lease-adjudication'
-import { refuse } from '../../../shared/agent-session-wire-refusals'
+import { refuse, refuseUnclassified } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
 import type {
   AgentSessionAttachResult,
@@ -14,7 +14,6 @@ import type {
 // still the session's. A start that loses that check is late: what it spawned is closed, never
 // handed anything.
 
-import { refuseUnclassified } from '../../../shared/agent-session-wire-refusals'
 import { agentSessionWriteNoticeEnglish } from '../../../shared/agent-session-refusal-notice'
 import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt-contract'
 import { randomUUID } from 'node:crypto'

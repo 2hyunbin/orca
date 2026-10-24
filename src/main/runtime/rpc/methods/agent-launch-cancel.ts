@@ -7,13 +7,15 @@ import {
   AgentLaunchCancelledError,
   type AgentLaunchCancelResult
 } from '../../../../shared/agent-launch-cancellation'
-import { agentSessionOperationExpiry } from '../../../../shared/agent-session-operation-ledger'
+import {
+  agentSessionOperationKey,
+  agentSessionOperationExpiry
+} from '../../../../shared/agent-session-operation-ledger'
 import { parseAgentSessionOperationTimestamp } from '../../../../shared/agent-session-host-authority'
 import { isAgentLaunchResult } from '../../../../shared/agent-launch-intent'
 
 import { computeAgentLaunchFingerprint } from '../../../../shared/agent-launch-operation'
 import type { AgentLaunchResult } from '../../../../shared/agent-launch-intent'
-import { agentSessionOperationKey } from '../../../../shared/agent-session-operation-ledger'
 
 import type { RpcContext } from '../core'
 import { agentLaunchOperationCallerKey } from './agent-launch-replay'

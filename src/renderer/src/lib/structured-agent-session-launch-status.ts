@@ -4,15 +4,13 @@ import {
   subscribeStructuredAgentLaunchStatus,
   getStructuredAgentSessionLaunchFailure,
   getStructuredAgentSessionLaunchLifecycle,
+  structuredLaunchIdentity,
+  structuredLaunchStates,
+  type StructuredAgentLaunchStatus,
   type StructuredAgentSessionLaunchLifecycle
 } from './structured-agent-session-launch-registry'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { structuredLaunchesHoldingIdentity } from './structured-agent-session-launch-holders'
-import {
-  structuredLaunchIdentity,
-  structuredLaunchStates,
-  type StructuredAgentLaunchStatus
-} from './structured-agent-session-launch-registry'
 
 /** Whether a chat for this pair is being created here: its own first create, or an adoption. */
 export function getStructuredAgentLaunchStatus(
@@ -66,18 +64,4 @@ export function useStructuredAgentSessionLaunchLifecycle(
   )
 }
 
-import type { StructuredLaunchState } from './structured-agent-session-launch-registry'
-export function launchStateLifecycle(
-  state: StructuredLaunchState
-): StructuredAgentSessionLaunchLifecycle {
-  if (state.cancelled || state.callers.outcome === 'cancelled') {
-    return 'cancelled'
-  }
-  if (state.callers.outcome === 'published') {
-    return 'published'
-  }
-  if (state.visibilityUnknown || state.callers.outcome === 'unknown') {
-    return 'visibility-unknown'
-  }
-  return state.callers.outcome === 'failed' ? 'failed' : 'pending'
-}
+export { launchStateLifecycle } from './structured-agent-session-launch-lifecycle'
