@@ -1,5 +1,6 @@
 import {
   prepareFoundingRequest,
+  unknownFoundingOutcome,
   type StructuredAgentSessionCreateOptions
 } from './structured-agent-session-founding-request'
 export type { StructuredAgentSessionCreateOptions } from './structured-agent-session-founding-request'
@@ -127,14 +128,7 @@ async function foundConversation(
     })
     return {
       ok: false,
-      refusal:
-        replay.decision === 'refuse'
-          ? replay.refusal
-          : refuse(
-              'agent_session_operation_unknown',
-              { reason: 'outcomeUnknown' },
-              'The create outcome is unknown.'
-            )
+      refusal: replay.decision === 'refuse' ? replay.refusal : unknownFoundingOutcome()
     }
   }
   const prepared = replayed
@@ -154,7 +148,7 @@ async function foundConversation(
   if (attempt && replayed && options.firstMessage && !existing) {
     return {
       ok: false,
-      refusal: refuse('agent_session_operation_unknown', { reason: 'outcomeUnknown' })
+      refusal: unknownFoundingOutcome()
     }
   }
   const opened = existing
@@ -210,7 +204,7 @@ async function foundConversation(
             }
             return {
               ok: false,
-              refusal: refuse('agent_session_operation_unknown', { reason: 'outcomeUnknown' })
+              refusal: unknownFoundingOutcome()
             }
           }
         }
@@ -222,7 +216,7 @@ async function foundConversation(
       if (attempt && !attempt.adopted) {
         return {
           ok: false,
-          refusal: refuse('agent_session_operation_unknown', { reason: 'outcomeUnknown' })
+          refusal: unknownFoundingOutcome()
         }
       }
       keepHandle = true
@@ -242,7 +236,7 @@ async function foundConversation(
       if (options.firstMessage && firstMessage?.payloadFingerprint !== expectedFingerprint) {
         return {
           ok: false,
-          refusal: refuse('agent_session_operation_unknown', { reason: 'outcomeUnknown' })
+          refusal: unknownFoundingOutcome()
         }
       }
       if (record) {
@@ -301,7 +295,11 @@ async function foundConversation(
     if (!keepHandle && !existing) {
       await (attempt
         ? session.journal.close().catch((error: unknown) => {
-            deps.logger.warn('closing a failed new chat handle failed', { sessionId, error })
+            deps.logger.warn('closing a failed new chat handle failed', {
+              scope: 'create-journal-close',
+              sessionId,
+              error
+            })
           })
         : session.journal.close())
     }

@@ -605,7 +605,9 @@ it('bounds repeated real startup restoration by its canonical population with no
       await redrawFromMain()
       let visits = 0
       const iterator = Map.prototype[Symbol.iterator]
-      const walk = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* () {
+      const walk = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* (
+        this: Map<unknown, unknown>
+      ) {
         for (const entry of iterator.call(this)) {
           if (
             entry[1] &&
@@ -617,6 +619,7 @@ it('bounds repeated real startup restoration by its canonical population with no
           }
           yield entry
         }
+        return undefined
       })
       try {
         for (let i = 0; i < 3; i++) {

@@ -38,7 +38,7 @@ export type WorktreeCreationRequest = {
     operationId: string
     sessionId: string
     paneKey: string
-    params: AgentLaunchParams
+    params: AgentLaunchParams & { operationId: string }
     target: RuntimeClientTarget
     executionHostId: ExecutionHostId
     pairingRevision?: number

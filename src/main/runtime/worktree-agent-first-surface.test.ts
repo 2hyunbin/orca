@@ -172,7 +172,11 @@ describe('host-created workspaces awaiting their agent chat', () => {
         })
         return {
           worktreeId: workspace.worktreeId,
-          outcome: { kind: 'terminal', handle: terminal.handle, paneKey: terminal.paneKey },
+          outcome: {
+            kind: 'terminal',
+            handle: terminal.handle,
+            paneKey: terminal.paneKey ?? undefined
+          },
           receipt: {
             mode: 'terminal',
             preferred: 'structured',

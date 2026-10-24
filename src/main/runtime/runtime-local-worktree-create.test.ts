@@ -5,6 +5,7 @@ import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import type { Repo } from '../../shared/repo-types'
 import { getDefaultRepoHookSettings } from '../../shared/constants'
+import { WORKTREE_META_PERSISTED_DEFAULTS } from '../../shared/worktree/meta-persisted-defaults'
 import type { RuntimeManagedWorktreeCreateArgs } from './runtime-managed-worktree-create-types'
 import type { AddWorktreeOptions } from '../git/worktree'
 import {
@@ -198,19 +199,44 @@ it('writes a requested identity only at actual checkout materialization, includi
   expect(created.worktree.id).toBe(`repo-1::${worktreePath}`)
   expect(writtenMeta.at(-1)).toMatchObject({ instanceId })
   const { createRuntimeFolderWorktree } = await import('./runtime-folder-worktree-create')
-  const write = vi.fn((_target, meta) => meta)
+  const unexpected = (): never => {
+    throw new Error('unexpected folder-create dependency')
+  }
+  const write = vi.fn((_target: HostWorktreeTarget, meta: Partial<WorktreeMeta>) => ({
+    ...WORKTREE_META_PERSISTED_DEFAULTS,
+    displayName: '',
+    comment: '',
+    isUnread: false,
+    sortOrder: 0,
+    lastActivityAt: 0,
+    ...meta
+  }))
   const folder = await createRuntimeFolderWorktree({
     request: { repoSelector: 'folder', name: 'chat', requestedInstanceId: instanceId },
     repo: { id: 'folder', path: '/folder', displayName: 'Folder', badgeColor: 'blue', addedAt: 1 },
     promisedAgentChat: true,
-    // SAFETY: this no-terminal folder create reaches only the supplied store and catalog callbacks.
     deps: {
-      store: { getSettings: () => ({}), setWorktreeMeta: write },
+      store: {
+        getSettings: () => ({}),
+        setWorktreeMeta: write,
+        getRepos: unexpected,
+        getRepo: unexpected,
+        addRepo: unexpected,
+        updateRepo: unexpected,
+        getAllWorktreeMeta: unexpected,
+        getWorktreeMeta: unexpected,
+        removeWorktreeMeta: unexpected,
+        getGitHubCache: unexpected
+      },
       ptySpawnAvailable: false,
       invalidateResolvedWorktrees: vi.fn(),
       notifyWorktreesChanged: vi.fn(),
-      emitCreated: vi.fn()
-    } as never
+      emitCreated: vi.fn(),
+      createTerminal: unexpected,
+      pasteDraft: unexpected,
+      sendFollowup: unexpected,
+      activate: unexpected
+    }
   })
   expect(folder.worktree.instanceId).toBe(instanceId)
   expect(write).toHaveBeenCalledOnce()

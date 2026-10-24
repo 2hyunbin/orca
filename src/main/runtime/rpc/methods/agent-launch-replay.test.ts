@@ -31,7 +31,9 @@ import {
   openTestAgentSessionRecordStore,
   readPersistedTestAgentSessionStore
 } from '../../agent-session-record-store-test-harness'
-import { MetadataLineageOperations } from '../../../persistence/loading-store/metadata-lineage-operations'
+import { StoreRuntimeState } from '../../../persistence/loading-store/store-runtime-state'
+import { createStoreDomains } from '../../../persistence/loading-store/store-domain-composition'
+import { WORKTREE_META_PERSISTED_DEFAULTS } from '../../../../shared/worktree/meta-persisted-defaults'
 import { getDefaultPersistedState } from '../../../../shared/constants'
 import { canonicalWorktreeIdentity } from '../../../../shared/worktree/identity'
 import type { RpcContext } from '../core'
@@ -97,6 +99,24 @@ const ROTATED_CREDENTIAL_CLIENT: Partial<RpcContext> = {
 let directory: string
 let store: AgentSessionRecordStore
 
+function metadataOwner(state: ReturnType<typeof getDefaultPersistedState>) {
+  const runtime = new StoreRuntimeState({ dataFile: join(directory, 'metadata.json') })
+  runtime.state = state
+  return createStoreDomains(runtime).metadata
+}
+
+function metadataRow(instanceId: string) {
+  return {
+    ...WORKTREE_META_PERSISTED_DEFAULTS,
+    instanceId,
+    displayName: '',
+    comment: '',
+    isUnread: false,
+    sortOrder: 0,
+    lastActivityAt: 0
+  }
+}
+
 type LaunchParams = AgentLaunchFingerprintInput & { operationId?: string }
 
 function createLaunch(overrides: Partial<LaunchParams> = {}): LaunchParams {
@@ -142,12 +162,10 @@ describe('exactly one execution per launch operation', () => {
   it('holds the requested workspace instance through same-operation joins and checks canonical and legacy occupants before creation', async () => {
     const instanceId = '94d38a16-e9db-4e86-b81d-334788958124'
     const state = getDefaultPersistedState('/fixture')
-    // SAFETY: this read-only metadata method uses only runtime.state, no scheduler or session API.
-    const metadata = new MetadataLineageOperations({ state } as never, {} as never, {} as never)
+    const metadata = metadataOwner(state)
     const runtime = runtimeStub()
-    // SAFETY: the launch reads this real metadata owner and its existing settings method only.
     runtime.requireStore.mockReturnValue(
-      Object.assign(metadata, { getSettings: () => STRUCTURED_PREFERENCE }) as never
+      Object.assign(metadata, { getSettings: () => STRUCTURED_PREFERENCE })
     )
     const params = createLaunch({
       operationId: OPERATION_ID,
@@ -203,12 +221,12 @@ describe('exactly one execution per launch operation', () => {
       executionHostId: 'local',
       instanceId
     })
-    state.worktreeMetaByIdentity = { [key]: { instanceId, hostId: 'local' } as never }
+    state.worktreeMetaByIdentity = { [key]: { ...metadataRow(instanceId), hostId: 'local' } }
     await expect(launch(other('ac'), runtime)).rejects.toThrow(
       'Workspace identity is already in use.'
     )
     delete state.worktreeMetaByIdentity[key]
-    state.worktreeMeta['legacy'] = { instanceId } as never
+    state.worktreeMeta['legacy'] = metadataRow(instanceId)
     await expect(launch(other('ad'), runtime)).rejects.toThrow(
       'Workspace identity is already in use.'
     )
@@ -717,17 +735,9 @@ it('carries only an actual resolved workspace on negotiated desktop errors and p
   const replay = methodNamed(AGENT_LAUNCH_METHODS, 'agent.launchReplay')
   const runtime = runtimeStub()
   const metadata = getDefaultPersistedState('/fixture')
-  const owner = new MetadataLineageOperations(
-    // SAFETY: This read-only metadata owner needs only the real persisted state.
-    { state: metadata } as never,
-    // SAFETY: Identity reads never invoke lineage writing collaborators.
-    {} as never,
-    // SAFETY: Identity reads never invoke folder lineage collaborators.
-    {} as never
-  )
+  const owner = metadataOwner(metadata)
   runtime.requireStore.mockReturnValue(
-    // SAFETY: This launch fixture invokes only settings and the real metadata identity read.
-    Object.assign(owner, { getSettings: () => STRUCTURED_PREFERENCE }) as never
+    Object.assign(owner, { getSettings: () => STRUCTURED_PREFERENCE })
   )
   runtime.createManagedWorktree.mockImplementation(async (args) => {
     if (typeof args.initializeSurface !== 'function') {
@@ -805,18 +815,10 @@ it('bounds active instance admission and legacy ownership scans by their actual 
         }
       })
     }
-    const owner = new MetadataLineageOperations(
-      // SAFETY: This read-only metadata owner needs only the real persisted state.
-      { state } as never,
-      // SAFETY: Identity reads never invoke lineage writing collaborators.
-      {} as never,
-      // SAFETY: Identity reads never invoke folder lineage collaborators.
-      {} as never
-    )
+    const owner = metadataOwner(state)
     const runtime = runtimeStub()
     runtime.requireStore.mockReturnValue(
-      // SAFETY: This launch fixture invokes only settings and the real metadata identity read.
-      Object.assign(owner, { getSettings: () => STRUCTURED_PREFERENCE }) as never
+      Object.assign(owner, { getSettings: () => STRUCTURED_PREFERENCE })
     )
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
@@ -837,7 +839,9 @@ it('bounds active instance admission and legacy ownership scans by their actual 
     })
     let activeVisits = 0
     const values = Map.prototype.values
-    const walk = vi.spyOn(Map.prototype, 'values').mockImplementation(function* () {
+    const walk = vi.spyOn(Map.prototype, 'values').mockImplementation(function* (
+      this: Map<unknown, unknown>
+    ) {
       for (const value of values.call(this)) {
         if (
           value &&
@@ -849,6 +853,7 @@ it('bounds active instance admission and legacy ownership scans by their actual 
         }
         yield value
       }
+      return undefined
     })
     const flights = Array.from({ length: size }, (_, i) => {
       const suffix = (size * 1000 + i).toString(16).padStart(12, '0')

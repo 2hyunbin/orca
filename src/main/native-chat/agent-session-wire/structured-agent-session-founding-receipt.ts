@@ -8,7 +8,7 @@ import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-ses
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import type { reserveRequestFor, AgentSessionAttachParams } from './structured-agent-session-attach'
 
-import { performSend } from './structured-agent-session-turns'
+import { performSend, type AgentSessionOperationReceipt } from './structured-agent-session-turns'
 
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 
@@ -85,7 +85,7 @@ export function sendOpeningFoundingMessage(
   callerKey: string,
   fence: number,
   first: NonNullable<StructuredAgentSessionCreateOptions['firstMessage']>,
-  receipt: JournalOperationReceipt
+  receipt: AgentSessionOperationReceipt
 ) {
   const { deps } = context
   const sessionId = params.envelope.sessionId

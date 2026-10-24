@@ -75,7 +75,7 @@ function harness(
     surface: 'chat' as const,
     sessionId: SESSION,
     sessionOptions: { model: 'gpt-5.6-sol', effort: 'medium' },
-    target: { kind: 'create-worktree' as const, create: {} },
+    target: { kind: 'create-worktree' as const, create: { repo: 'id:repo-1' } },
     ...(prompt ? { prompt } : {}),
     operationId: hostTestOperationId()
   }

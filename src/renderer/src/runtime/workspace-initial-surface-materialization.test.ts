@@ -652,14 +652,14 @@ it('bounds real ancillary reveal and final completion binding work with unrelate
     })
     Object.assign(window, { dispatchEvent: vi.fn() })
     registerTerminalPresentationIpcBridge([])
-    const rows: RuntimeMobileSessionTabsResult['tabs'] = Array.from({ length: size }, (_, i) => ({
-      type: 'terminal',
+    const rows = Array.from({ length: size }, (_, i) => ({
+      type: 'terminal' as const,
       id: `default-${i}::${LEAF}`,
       parentTabId: `default-${i}`,
       leafId: LEAF,
       title: '',
       terminal: `default-pty-${i}`,
-      status: 'ready',
+      status: 'ready' as const,
       isActive: i === 0
     }))
     let snapshot: RuntimeMobileSessionTabsResult = {
@@ -759,7 +759,8 @@ it('bounds real ancillary reveal and final completion binding work with unrelate
       recordWebSessionCloseIntent(
         { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
         WORKTREE,
-        'default-2'
+        'default-2',
+        Date.now()
       )
       useAppStore.getState().closeTab('default-2', { reason: 'user' })
       const beforeClose = api.worktrees.updateMeta.mock.calls.length
@@ -797,7 +798,7 @@ it('bounds real ancillary reveal and final completion binding work with unrelate
         snapshotVersion: size + 6,
         tabs: [
           ...snapshot.tabs.map((row) =>
-            row.type === 'terminal' && row.parentTabId === 'default-3'
+            row.type === 'terminal' && row.status === 'ready' && row.parentTabId === 'default-3'
               ? { ...row, terminal: 'duplicate-owner-pty' }
               : row
           ),

@@ -23,7 +23,6 @@ import { computeAgentLaunchFingerprint } from '../../../../shared/agent-launch-o
 import { AGENT_LAUNCH_CANCELLED_CODE } from '../../../../shared/agent-launch-cancellation'
 import { AgentLaunchCancel } from '../../../../shared/rpc-contract/agent-launch-params'
 import type { OrcaRuntimeService } from '../../orca-runtime'
-import type { RuntimeManagedWorktreeCreateArgs } from '../../runtime-managed-worktree-create-types'
 
 const SESSION = 'codex_cancel_contract'
 const cancel = methodNamed(AGENT_LAUNCH_METHODS, 'agent.launchCancel')
@@ -53,16 +52,14 @@ function harness(
     ...runtimeStub(),
     getRuntimeId: () => 'runtime-1',
     openAgentSessionRecordStore: vi.fn(async () => rig.store),
-    openedAgentSessionRecordStore: () => rig.store,
+    openedAgentSessionRecordStore: vi.fn(() => rig.store),
     resolveStructuredAgentSessionCreateIntent: async (input: { envelope: unknown }) => ({
       ...createTestParams(),
       envelope: input.envelope
     }),
     publishStructuredAgentSessionTab: published
   }
-  runtime.createManagedWorktree.mockImplementation(async (raw) => {
-    // SAFETY: the real RPC creator is the sole producer; this fixture implements only its staged callback.
-    const args = raw as RuntimeManagedWorktreeCreateArgs
+  runtime.createManagedWorktree.mockImplementation(async (args) => {
     args.onWorkspaceCreated?.('workspace-1')
     await args.initializeSurface?.({
       worktreeId: 'workspace-1',
@@ -72,7 +69,7 @@ function harness(
     setup()
     entered.resolve()
     await finish.promise
-    return { worktree: { id: 'workspace-1', path: '/task' } }
+    return { worktree: { id: 'workspace-1', path: '/task' }, startupTerminal: undefined }
   })
   const context = rpcContext(runtime, {
     caller: { kind: 'desktop' },
@@ -194,15 +191,18 @@ it.each([
       return commit(proof)
     })
     const enqueue = JournalRowWriter.prototype.enqueueRows
-    vi.spyOn(JournalRowWriter.prototype, 'enqueueRows').mockImplementation(
-      function (plan, proof, receiptRow) {
-        if (!proof) {
-          return enqueue.call(this, plan, proof, receiptRow)
-        }
-        waiting.resolve()
-        return proceed.promise.then(() => enqueue.call(this, plan, proof, receiptRow))
+    vi.spyOn(JournalRowWriter.prototype, 'enqueueRows').mockImplementation(function (
+      this: JournalRowWriter,
+      plan,
+      proof,
+      receiptRow
+    ) {
+      if (!proof) {
+        return enqueue.call(this, plan, proof, receiptRow)
       }
-    )
+      waiting.resolve()
+      return proceed.promise.then(() => enqueue.call(this, plan, proof, receiptRow))
+    })
     const launch = h.call('agent.launchReplay')
     await Promise.race([
       waiting.promise,

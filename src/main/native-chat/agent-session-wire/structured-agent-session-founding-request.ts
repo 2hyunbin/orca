@@ -1,3 +1,4 @@
+import { refuse } from '../../../shared/agent-session-wire'
 import type { HostFoundingAttempt } from '../../agent-launch/host-founding-attempt'
 
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
@@ -21,6 +22,14 @@ export type StructuredAgentSessionCreateOptions = {
   catalogModels?: Parameters<typeof reserveRequestFor>[0]['models']
   /** Called after the durable create, before delivery can start the agent. */
   publishTab?: () => Promise<void>
+}
+
+export function unknownFoundingOutcome() {
+  return refuse(
+    'agent_session_operation_unknown',
+    { reason: 'outcomeUnknown' },
+    'The create outcome is unknown.'
+  )
 }
 
 export async function prepareFoundingRequest(

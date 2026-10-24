@@ -508,7 +508,7 @@ it('keeps lost outer replies unknown through admitted catalog, publication, relo
     )
     rpc.mockResolvedValueOnce({ worktree: { ...row, instanceId: undefined } })
     const merge = vi.spyOn(useAppStore, 'setState').mockImplementation(store.setState)
-    const refresh = vi.spyOn(store.getState(), 'fetchWorktrees').mockResolvedValue(undefined)
+    const refresh = vi.spyOn(store.getState(), 'fetchWorktrees').mockResolvedValue(true)
     let observerThrew = false
     const stopObserver = store.subscribe((state) => {
       if (

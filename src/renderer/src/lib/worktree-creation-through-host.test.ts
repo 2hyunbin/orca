@@ -102,7 +102,7 @@ const capabilities = [
   'agent.launch.surface.v1',
   'agent.launch.desktop-create.v1'
 ]
-const result: AgentLaunchResult = {
+const result = {
   worktreeId: 'wt-1',
   created: { worktree: makeWorktree({ id: 'wt-1', repoId: 'repo-1' }) },
   outcome: { kind: 'structured', sessionId: 'claude_created', handle: 'chat_created' },
@@ -112,7 +112,7 @@ const result: AgentLaunchResult = {
     reason: 'requested',
     detail: 'Chat requested'
   }
-}
+} satisfies AgentLaunchResult
 function request(): WorktreeCreationRequest {
   return {
     repoId: 'repo-1',

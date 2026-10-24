@@ -112,7 +112,8 @@ export function currentDesktopCreate(
   record: DesktopCreateLaunchRecord
 ): DesktopCreateLaunchRecord | undefined {
   const current = readStructuredAgentLaunchRecord(record.sessionId)
-  return current?.desktopCreate?.params === record.desktopCreate.params &&
+  return current?.desktopCreate &&
+    current.desktopCreate.params === record.desktopCreate.params &&
     current.executionHostId === record.executionHostId &&
     !hasStructuredAgentLaunchCancellationTombstonePersisted(record.sessionId)
     ? current

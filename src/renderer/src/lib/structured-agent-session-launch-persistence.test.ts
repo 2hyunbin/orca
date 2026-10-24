@@ -388,7 +388,9 @@ it('loads once and serializes canonical records with linear work for N/10N ordin
       const parse = vi.spyOn(JSON, 'parse')
       let visits = 0
       const iterator = Map.prototype[Symbol.iterator]
-      const walk = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* () {
+      const walk = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* (
+        this: Map<unknown, unknown>
+      ) {
         for (const entry of iterator.call(this)) {
           if (
             entry[1] &&
@@ -400,6 +402,7 @@ it('loads once and serializes canonical records with linear work for N/10N ordin
           }
           yield entry
         }
+        return undefined
       })
       const write = vi.spyOn(localStorage, 'setItem')
       try {

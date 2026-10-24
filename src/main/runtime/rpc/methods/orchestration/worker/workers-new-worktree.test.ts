@@ -11,6 +11,7 @@ import type { RpcRequest } from '../../../core'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { prepareFederationWorkerLaunchOnHost } from './worker-opencode-model-preflight'
 import { FederationAttachStartParams } from '../federation/federation-start-schema'
+import { WORKTREE_META_PERSISTED_DEFAULTS } from '../../../../../../shared/worktree/meta-persisted-defaults'
 
 describe('orchestration new-worktree workers', () => {
   type CreateWorktreeResult = Awaited<ReturnType<OrcaRuntimeService['createManagedWorktree']>>
@@ -116,7 +117,21 @@ describe('orchestration new-worktree workers', () => {
     vi.spyOn(runtime, 'createManagedWorktree').mockImplementation(async (args) => {
       args.onWorkspaceCreated?.('repo::created')
       return {
-        worktree: { id: 'repo::created', repoId: 'repo' },
+        worktree: {
+          ...WORKTREE_META_PERSISTED_DEFAULTS,
+          id: 'repo::created',
+          repoId: 'repo',
+          displayName: '',
+          comment: '',
+          isUnread: false,
+          sortOrder: 0,
+          lastActivityAt: 0,
+          path: '/repo/created',
+          head: 'head',
+          branch: 'created',
+          isBare: false,
+          isMainWorktree: false
+        },
         startupTerminal: { spawned: true, handle: 'term_worker' },
         setupReceipt: {
           requested: state === 'skipped' ? 'skip' : 'run',
@@ -127,7 +142,7 @@ describe('orchestration new-worktree workers', () => {
             options?.setupTerminalHandle ??
             options?.terminals?.find((terminal) => terminal.title === 'Setup')?.handle
         }
-      } as never
+      }
     })
     if (options?.terminals) {
       vi.mocked(runtime.listTerminals).mockResolvedValue({
