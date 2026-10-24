@@ -61,7 +61,10 @@ test('a pane another client moves to a new tab leaves this desktop’s source ta
         await page
           .locator(PANE)
           .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
-      ).find((id) => id !== firstLeafId)!
+      ).find((id) => id !== firstLeafId)
+      if (!movedLeafId) {
+        throw new Error('The split never mounted a second pane')
+      }
 
       let movedHandle = ''
       let hostSourceTabId = ''
@@ -83,8 +86,7 @@ test('a pane another client moves to a new tab leaves this desktop’s source ta
       const readClientTab = (tabId: string): Promise<ClientTabView> =>
         page.evaluate(
           ({ tabId, leafId }) => {
-            const state = window.__store!.getState()
-            const layout = state.terminalLayoutsByTabId[tabId]
+            const layout = window.__store?.getState().terminalLayoutsByTabId[tabId]
             const leaves: string[] = []
             const walk = (node: unknown): void => {
               if (!node || typeof node !== 'object') {

@@ -18,6 +18,7 @@ import {
 } from './web-session-terminal-orphan-recovery-surface-index'
 
 import type { WebTerminalOrphanTopologyState } from './web-session-terminal-orphan-topology'
+import { isPendingHostPaneMoveTarget } from './pending-host-pane-moves'
 
 export type TerminalOrphanRecoveryState = WebTerminalOrphanTopologyState & {
   tabsByWorktree: Record<string, TerminalTab[]>
@@ -161,9 +162,10 @@ export function prepareTerminalOrphanRecovery(
       }
       if (remote?.environmentId === environmentId) {
         // Why: the host publishes this terminal live in another tab, so another client moved its
-        // pane there; this binding is stale, not an orphan to keep in its old tab.
+        // pane there; this binding is stale, not an orphan to keep in its old tab. A pane this
+        // window is moving waits for the host, whose snapshot may predate the move.
         const movedTo = incoming ? undefined : readyTabIdsByHandle.get(remote.handle)
-        if (movedTo && !movedTo.has(tabId)) {
+        if (movedTo && !movedTo.has(tabId) && !isPendingHostPaneMoveTarget(localTab.id, leafId)) {
           continue
         }
         candidates.push({ ...coordinates, handle: remote.handle })

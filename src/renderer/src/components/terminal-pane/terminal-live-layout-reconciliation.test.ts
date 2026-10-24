@@ -289,7 +289,7 @@ describe('selectRetiredPaneIds', () => {
     paneCount: Object.keys(ptyIdsByPane).length,
     paneIdForLeaf: (leafId: string) => (leafId === 'leaf-b' ? 2 : leafId === 'leaf-c' ? 3 : null),
     ptyIdForPane: (paneId: number) => ptyIdsByPane[paneId],
-    isPtyDrawnByAnotherTab: (ptyId: string) => drawnElsewhere.includes(ptyId)
+    isPtyBoundInAnotherTab: (ptyId: string) => drawnElsewhere.includes(ptyId)
   })
   const closed = (paneIds: number[]) => ({ closed: paneIds, moved: [] })
 
@@ -403,7 +403,7 @@ describe('host retirement that lands before the transport teardown', () => {
         paneCount: 2,
         paneIdForLeaf,
         ptyIdForPane: (paneId) => (paneId === 2 ? 'pty-b' : 'pty-a'),
-        isPtyDrawnByAnotherTab: () => false
+        isPtyBoundInAnotherTab: () => false
       }).closed
     ).toEqual([])
 
@@ -419,7 +419,7 @@ describe('host retirement that lands before the transport teardown', () => {
         paneCount: 2,
         paneIdForLeaf,
         ptyIdForPane: (paneId) => (paneId === 2 ? null : 'pty-a'),
-        isPtyDrawnByAnotherTab: () => false
+        isPtyBoundInAnotherTab: () => false
       }).closed
     ).toEqual([2])
   })

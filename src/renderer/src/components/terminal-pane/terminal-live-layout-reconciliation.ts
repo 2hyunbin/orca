@@ -192,27 +192,26 @@ export function isPtyBoundInAnotherTab(
   tabId: string,
   ptyId: string
 ): boolean {
-  return (state.tabsByWorktree[worktreeId] ?? []).some(
-    (tab) =>
-      tab.id !== tabId &&
-      Object.values(state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}).includes(ptyId)
-  )
+  return (state.tabsByWorktree[worktreeId] ?? []).some((tab) => {
+    const layout = tab.id === tabId ? undefined : state.terminalLayoutsByTabId[tab.id]
+    // Why: an off-tree binding is a stale record, not a pane that tab draws.
+    return (
+      !!layout?.root &&
+      collectLeafIds(layout.root).some((leafId) => layout.ptyIdsByLeafId?.[leafId] === ptyId)
+    )
+  })
 }
 
 export type RetiredPaneRemovals = { closed: number[]; moved: number[] }
 
-/** Panes to remove for leaves the host retired. A pane whose transport has no
- *  PTY any more is a ghost to close. A pane still bound to a PTY another tab now
- *  draws was moved there by the host, so it is detached with its PTY left
- *  running. Any other pane, with no transport yet or still bound to a PTY, may
- *  simply not be named by a stale snapshot. The last pane is never removed. */
+/** Ghosts (PTY ended) to close and moved panes (live PTY another tab binds) to detach; never the last pane. */
 export function selectRetiredPaneIds(
   retiredLeafIds: readonly string[],
   view: {
     paneCount: number
     paneIdForLeaf: (leafId: string) => number | null
     ptyIdForPane: (paneId: number) => string | null | undefined
-    isPtyDrawnByAnotherTab: (ptyId: string) => boolean
+    isPtyBoundInAnotherTab: (ptyId: string) => boolean
   }
 ): RetiredPaneRemovals {
   const removals: RetiredPaneRemovals = { closed: [], moved: [] }
@@ -227,7 +226,7 @@ export function selectRetiredPaneIds(
     const ptyId = view.ptyIdForPane(paneId)
     if (ptyId === null) {
       removals.closed.push(paneId)
-    } else if (ptyId && view.isPtyDrawnByAnotherTab(ptyId)) {
+    } else if (ptyId && view.isPtyBoundInAnotherTab(ptyId)) {
       removals.moved.push(paneId)
     }
   }

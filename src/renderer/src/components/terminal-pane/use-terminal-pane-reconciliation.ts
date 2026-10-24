@@ -8,9 +8,9 @@ import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
 import { resolvePaneKeyForManager } from '@/lib/pane-manager/pane-key-resolution'
 import {
   isHostAuthoritativeLayout,
+  isPtyBoundInAnotherTab,
   planTerminalLiveLayoutInsertions,
   planTerminalLiveLayoutRemovals,
-  isPtyBoundInAnotherTab,
   selectRetiredPaneIds,
   trackRetiredLeafIds
 } from './terminal-live-layout-reconciliation'
@@ -18,6 +18,7 @@ import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 import { useTerminalPaneProcessExitActions } from './use-terminal-pane-process-exit-actions'
 import type { TerminalPaneCloseController } from './use-terminal-pane-close-actions'
 import { useAppStore } from '../../store'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 
 export function useTerminalPaneReconciliation(controller: TerminalPaneCloseController) {
   const {
@@ -109,24 +110,24 @@ export function useTerminalPaneReconciliation(controller: TerminalPaneCloseContr
         appliedInsertion = true
       }
     }
-    // Why: the host retired these leaves, so their panes would otherwise outlive the layout:
-    // a pane whose PTY ended stays a blank ghost that takes the tab's next close, and a pane
-    // another client moved to a new tab draws the same live terminal in both tabs. A ghost is
-    // closed the way a user close is; a moved pane is detached and its PTY left to its new tab.
-    // A pane whose PTY is still ending is kept retired and removed on the re-run the transport's
-    // recovery-state change (ptyRecoveryStatesByPaneId) triggers.
+    // Why: a host-retired pane is a ghost once its PTY ended, or another client moved it when another
+    // tab binds its live PTY; one still ending is removed on the ptyRecoveryStatesByPaneId re-run.
     const { closed, moved } = selectRetiredPaneIds(removals, {
       paneCount: manager.getPanes().length,
       paneIdForLeaf: (leafId) => manager.getNumericIdForLeaf(leafId),
       ptyIdForPane: (paneId) => paneTransportsRef.current.get(paneId)?.getPtyId(),
-      isPtyDrawnByAnotherTab: (ptyId) =>
+      isPtyBoundInAnotherTab: (ptyId) =>
         isPtyBoundInAnotherTab(useAppStore.getState(), worktreeId, tabId, ptyId)
     })
     for (const paneId of closed) {
       executeClosePane(paneId)
     }
     for (const paneId of moved) {
-      manager.detachPaneForExternalMove(paneId)
+      const leafId = manager.getLeafId(paneId)
+      if (manager.detachPaneForExternalMove(paneId) && leafId) {
+        // Why: the host publishes the agent under its new tab; this tab's copy would be a stale badge.
+        useAppStore.getState().retireAgentPaneAuthority(makePaneKey(tabId, leafId))
+      }
     }
     if (appliedInsertion) {
       persistLayoutSnapshot()
