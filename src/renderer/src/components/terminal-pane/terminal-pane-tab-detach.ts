@@ -16,7 +16,7 @@ import {
 import {
   moveWebRuntimeLeafToNewTab,
   resolvePaneMoveHost,
-  revertRefusedPaneMove
+  settleHostPaneMove
 } from '@/runtime/web-runtime-leaf-move'
 import { resolveHostTabDropTarget } from '@/runtime/web-runtime-session-tab-move'
 export {
@@ -177,10 +177,8 @@ async function moveLeafToNewTab(
     const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request, placement)
     const applied = applyMove(args, request, false, request.ptyId)
     void hostMove
-      .then((moved) => (moved ? undefined : revertRefusedPaneMove(paneMoveHost, request)))
-      .catch((error: unknown) =>
-        console.warn('[terminal-pane-detach] refused move not reverted', error)
-      )
+      .then((outcome) => settleHostPaneMove(paneMoveHost, request, outcome, applied !== null))
+      .catch((error: unknown) => console.warn('[terminal-pane-detach] move not settled', error))
     return applied
   }
   // Switch point: main moves the pane and names the new tab.

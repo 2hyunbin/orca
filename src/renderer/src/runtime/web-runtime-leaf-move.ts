@@ -30,16 +30,19 @@ export async function resolvePaneMoveHost(worktreeId: string): Promise<string | 
   return supported ? environmentId : null
 }
 
+/** The host's answer to a move; `unknown` when the reply was lost, so the host may have committed. */
+export type HostPaneMoveOutcome = 'moved' | 'refused' | 'unknown'
+
 // Why: leaf-to-tab membership is host-authoritative for remote tabs; a local-only move reverts on the next snapshot.
-/** True once the host committed the move; any other answer leaves the pane where the host had it. */
 export async function moveWebRuntimeLeafToNewTab(
   environmentId: string,
   request: TerminalLeafMoveRequest,
   /** The drop's group and position as the host names them; an older host ignores them and appends. */
   placement: { targetGroupId: string; index?: number }
-): Promise<boolean> {
+): Promise<HostPaneMoveOutcome> {
+  let response: Awaited<ReturnType<ReturnType<typeof captureRuntimeEnvironmentCall>>>
   try {
-    const response = await captureRuntimeEnvironmentCall(environmentId)({
+    response = await captureRuntimeEnvironmentCall(environmentId)({
       method: 'session.tabs.movePaneToNewTab',
       params: {
         worktree: toRuntimeWorktreeSelector(request.worktreeId),
@@ -50,23 +53,85 @@ export async function moveWebRuntimeLeafToNewTab(
       },
       timeoutMs: 15_000
     })
-    const answer = unwrapRuntimeRpcResult(response)
-    const moved =
-      typeof answer === 'object' &&
-      answer !== null &&
-      'status' in answer &&
-      answer.status === 'moved'
-    if (!moved) {
-      console.warn('[web-runtime-session] host did not move the pane', answer)
-    }
-    return moved
   } catch (error) {
     console.warn(
-      '[web-runtime-session] failed to move pane to new tab:',
+      '[web-runtime-session] no answer to the pane move:',
       error instanceof Error ? error.message : String(error)
     )
-    return false
+    return 'unknown'
   }
+  const answer = response.ok ? response.result : response
+  if (
+    typeof answer === 'object' &&
+    answer !== null &&
+    'status' in answer &&
+    answer.status === 'moved'
+  ) {
+    return 'moved'
+  }
+  console.warn('[web-runtime-session] host did not move the pane', answer)
+  return 'refused'
+}
+
+/** Whether the host holds the moved pane in its new tab; null when the host cannot be asked. */
+async function hostHoldsMovedPane(
+  environmentId: string,
+  request: TerminalLeafMoveRequest
+): Promise<boolean | null> {
+  try {
+    const listed: unknown = unwrapRuntimeRpcResult(
+      await captureRuntimeEnvironmentCall(environmentId)({
+        method: 'session.tabs.list',
+        params: { worktree: toRuntimeWorktreeSelector(request.worktreeId) },
+        timeoutMs: 15_000
+      })
+    )
+    const hostTargetTabId = toHostSessionTabId(request.targetTabId)
+    const tabs =
+      typeof listed === 'object' &&
+      listed !== null &&
+      'tabs' in listed &&
+      Array.isArray(listed.tabs)
+        ? listed.tabs
+        : []
+    return tabs.some(
+      (tab: unknown) =>
+        typeof tab === 'object' &&
+        tab !== null &&
+        'parentTabId' in tab &&
+        'leafId' in tab &&
+        tab.parentTabId === hostTargetTabId &&
+        tab.leafId === request.leafId
+    )
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Settles this window with the host's answer. A committed move this window could not draw, and a
+ * lost reply the host turns out to have committed, take the host's tabs; a refusal undoes the move.
+ * A lost reply the host cannot be asked about waits for its next snapshot.
+ */
+export async function settleHostPaneMove(
+  environmentId: string,
+  request: TerminalLeafMoveRequest,
+  outcome: HostPaneMoveOutcome,
+  /** This window moved the pane before the answer. */
+  movedHere: boolean
+): Promise<void> {
+  const committed =
+    outcome === 'unknown' ? await hostHoldsMovedPane(environmentId, request) : outcome === 'moved'
+  if (committed === null || (committed && movedHere)) {
+    return
+  }
+  if (!committed && movedHere) {
+    await revertRefusedPaneMove(environmentId, request)
+    return
+  }
+  await refreshWebRuntimeSessionTabsSnapshot(environmentId, request.worktreeId, {
+    acceptCurrentSnapshot: true
+  })
 }
 
 /**
@@ -74,7 +139,7 @@ export async function moveWebRuntimeLeafToNewTab(
  * the tab the window drew goes without stopping its terminal, and the host's tabs are redrawn even
  * when the host's answer is unchanged.
  */
-export async function revertRefusedPaneMove(
+async function revertRefusedPaneMove(
   environmentId: string,
   request: TerminalLeafMoveRequest
 ): Promise<void> {

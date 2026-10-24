@@ -16,13 +16,13 @@ import {
 const moveOnHost = vi.hoisted(() => vi.fn())
 const paneMoveHost = vi.hoisted(() => vi.fn())
 const moveLocally = vi.hoisted(() => vi.fn())
-const revert = vi.hoisted(() => vi.fn())
+const settle = vi.hoisted(() => vi.fn())
 const dropTarget = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/web-runtime-leaf-move', () => ({
   moveWebRuntimeLeafToNewTab: moveOnHost,
   resolvePaneMoveHost: paneMoveHost,
-  revertRefusedPaneMove: revert
+  settleHostPaneMove: settle
 }))
 vi.mock('@/runtime/web-runtime-session-tab-move', () => ({
   resolveHostTabDropTarget: dropTarget
@@ -56,7 +56,7 @@ function detach(store: ReturnType<typeof createStore>, targetIndex?: number) {
 describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
   beforeEach(() => {
     moveOnHost.mockReset()
-    revert.mockReset().mockResolvedValue(undefined)
+    settle.mockReset().mockResolvedValue(undefined)
     dropTarget.mockReset().mockResolvedValue(HOST_PLACEMENT)
     paneMoveHost.mockReset().mockResolvedValue('env-1')
     moveLocally.mockReset().mockResolvedValue({ status: 'not_held' })
@@ -83,9 +83,9 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     })
     expect(detached?.tab.id).toBe('tab-detached')
     expect(moveLocally).not.toHaveBeenCalled()
-    answer(true)
-    await Promise.resolve()
-    expect(revert).not.toHaveBeenCalled()
+    expect(settle).not.toHaveBeenCalled()
+    answer('moved')
+    await vi.waitFor(() => expect(settle).toHaveBeenCalledWith('env-1', request, 'moved', true))
   })
   itSwitchOff('names the drop to the host in its own group ids', async () => {
     moveOnHost.mockReturnValue(new Promise(() => {}))
@@ -97,14 +97,14 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
       index: 0
     })
   })
-  itSwitchOff('reverts the move in this window when the host refuses it', async () => {
-    moveOnHost.mockResolvedValue(false)
+  itSwitchOff('settles a refusal of a move this window drew', async () => {
+    moveOnHost.mockResolvedValue('refused')
     const store = mirroredStore()
     const { result, detachPaneForExternalMove } = detach(store)
     await result
     expect(moveOnHost).toHaveBeenCalledOnce()
     await vi.waitFor(() =>
-      expect(revert).toHaveBeenCalledWith('env-1', moveOnHost.mock.calls[0][1])
+      expect(settle).toHaveBeenCalledWith('env-1', moveOnHost.mock.calls[0][1], 'refused', true)
     )
     expect(store.createTab).toHaveBeenCalledOnce()
     expect(detachPaneForExternalMove).toHaveBeenCalledOnce()

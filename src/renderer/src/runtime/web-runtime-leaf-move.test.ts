@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   moveWebRuntimeLeafToNewTab,
   resolvePaneMoveHost,
-  revertRefusedPaneMove
+  settleHostPaneMove
 } from './web-runtime-leaf-move'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
@@ -53,7 +53,9 @@ describe('moveWebRuntimeLeafToNewTab', () => {
       result: { status: 'moved', ptyId: 'host-pty-1' }
     })
     stubRuntimeEnvironmentBridge({ call })
-    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(true)
+    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
+      'moved'
+    )
     expect(call.mock.calls[0][0]).toMatchObject({
       method: 'session.tabs.movePaneToNewTab',
       params: {
@@ -66,16 +68,21 @@ describe('moveWebRuntimeLeafToNewTab', () => {
       }
     })
   })
-  it('reports no move when the host refuses it', async () => {
+  it('tells a refusal, which the host answered, from a lost reply', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const call = vi.fn().mockResolvedValue({
-      id: 'm',
-      ok: true,
-      result: { status: 'not_held' }
-    })
+    const call = vi.fn()
     stubRuntimeEnvironmentBridge({ call })
+    call.mockResolvedValueOnce({ id: 'm', ok: true, result: { status: 'not_held' } })
     await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
-      false
+      'refused'
+    )
+    call.mockResolvedValueOnce({ id: 'm', ok: false, error: { code: 'method_not_found' } })
+    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
+      'refused'
+    )
+    call.mockRejectedValueOnce(new Error('timeout'))
+    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
+      'unknown'
     )
   })
   it('names the host only when it advertises committing pane moves', async () => {
@@ -93,11 +100,8 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     expect(supports).not.toHaveBeenCalled()
   })
   it('reverts a refused move without stopping its terminal and redraws even an unchanged list', async () => {
-    const order: string[] = []
-    const closeTab = vi.fn(() => order.push('close'))
-    const transferAgentPaneAuthority = vi.fn(() => order.push('transfer'))
-    store.state = { ...store.state, closeTab, transferAgentPaneAuthority }
-    await revertRefusedPaneMove(ENVIRONMENT_ID, REQUEST)
+    const { order, closeTab, transferAgentPaneAuthority } = withRevertSpies()
+    await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'refused', true)
     // The pane's status and launch records return to the source before the drawn tab goes.
     expect(transferAgentPaneAuthority).toHaveBeenCalledWith({
       fromPaneKey: `${REQUEST.targetTabId}:${REQUEST.leafId}`,
@@ -116,4 +120,50 @@ describe('moveWebRuntimeLeafToNewTab', () => {
       acceptCurrentSnapshot: true
     })
   })
+  it('keeps a move whose lost reply the host turns out to have committed', async () => {
+    const { closeTab } = withRevertSpies()
+    stubRuntimeEnvironmentBridge({ call: vi.fn().mockResolvedValue(hostList('host-target')) })
+    await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'unknown', true)
+    expect(closeTab).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+  })
+  it('reverts a move whose lost reply the host did not commit', async () => {
+    const { closeTab } = withRevertSpies()
+    stubRuntimeEnvironmentBridge({ call: vi.fn().mockResolvedValue(hostList('host-source')) })
+    await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'unknown', true)
+    expect(closeTab).toHaveBeenCalledOnce()
+  })
+  it('waits for the next snapshot when the host cannot be asked about a lost reply', async () => {
+    const { closeTab } = withRevertSpies()
+    stubRuntimeEnvironmentBridge({ call: vi.fn().mockRejectedValue(new Error('offline')) })
+    await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'unknown', true)
+    expect(closeTab).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+  })
+  it('draws the host tabs when the host moved a pane this window could not', async () => {
+    const { closeTab, transferAgentPaneAuthority } = withRevertSpies()
+    await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'moved', false)
+    expect(transferAgentPaneAuthority).not.toHaveBeenCalled()
+    expect(closeTab).not.toHaveBeenCalled()
+    expect(refresh).toHaveBeenCalledWith(ENVIRONMENT_ID, WORKTREE_ID, {
+      acceptCurrentSnapshot: true
+    })
+  })
 })
+
+function withRevertSpies() {
+  const order: string[] = []
+  const closeTab = vi.fn(() => order.push('close'))
+  const transferAgentPaneAuthority = vi.fn(() => order.push('transfer'))
+  store.state = { ...store.state, closeTab, transferAgentPaneAuthority }
+  return { order, closeTab, transferAgentPaneAuthority }
+}
+
+/** A host list holding the moved leaf in the given host tab. */
+function hostList(parentTabId: string) {
+  return {
+    id: 'l',
+    ok: true,
+    result: { tabs: [{ type: 'terminal', parentTabId, leafId: REQUEST.leafId }] }
+  }
+}
