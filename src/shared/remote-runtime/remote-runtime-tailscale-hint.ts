@@ -14,6 +14,8 @@ const IPV4_LITERAL_RE =
 const TAILSCALE_CGNAT_RE = /^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./
 // Pairing also accepts Tailscale’s fd7a:115c:a1e0::/48 IPv6 literals.
 const TAILSCALE_IPV6_RE = /^fd7a:115c:a1e0:/i
+const SAFE_HOST_RE =
+  /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*|[0-9a-f:]+)$/i
 
 function extractHost(endpoint: string): string | null {
   let host: string | null
@@ -30,19 +32,27 @@ function extractHost(endpoint: string): string | null {
   return host.replace(/^\[|\]$/g, '').replace(/\.$/, '') || null
 }
 
-export function isTailscaleEndpoint(endpoint: string | null | undefined): boolean {
-  if (!endpoint) {
-    return false
+/** The endpoint's host when it is a Tailscale address (what `tailscale ping` takes); else null. */
+export function tailscaleHostOfEndpoint(endpoint: string | null | undefined): string | null {
+  const host = endpoint ? extractHost(endpoint) : null
+  // Why strict: the host is pasted into a shell, so only DNS-label or IP-literal characters pass.
+  if (!host || !SAFE_HOST_RE.test(host)) {
+    return null
   }
-  const host = extractHost(endpoint)
-  if (!host) {
-    return false
-  }
-  return (
-    TAILSCALE_MAGIC_DNS_SUFFIX_RE.test(host) ||
+  return TAILSCALE_MAGIC_DNS_SUFFIX_RE.test(host) ||
     (IPV4_LITERAL_RE.test(host) && TAILSCALE_CGNAT_RE.test(host)) ||
     TAILSCALE_IPV6_RE.test(host)
-  )
+    ? host
+    : null
+}
+
+/** A command, never translated: the user pastes it into a shell. */
+export function tailscalePingCommand(host: string): string {
+  return `tailscale ping ${host}`
+}
+
+export function isTailscaleEndpoint(endpoint: string | null | undefined): boolean {
+  return tailscaleHostOfEndpoint(endpoint) !== null
 }
 
 /** Tailnet endpoints need reachability guidance; saved tokens survive restarts, so re-pair only for new devices. */
