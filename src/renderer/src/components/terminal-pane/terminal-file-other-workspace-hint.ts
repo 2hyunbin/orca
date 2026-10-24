@@ -9,8 +9,7 @@ import { getIndexedRepoMap } from '@/store/worktree-repo-index'
 import { openLinkedFileInEditor } from './terminal-file-link-editor-open'
 import { reserveDetectedFilePathOpenTurn } from './terminal-file-open-turn'
 
-// Why a fresh id per hint: sonner applies a dismissal later, so reusing one id would let the
-// previous hint's dismissal remove the hint that replaced it.
+// Use fresh IDs because delayed sonner dismissal could otherwise remove the replacement hint.
 let hintSequence = 0
 let shownHintId: string | null = null
 

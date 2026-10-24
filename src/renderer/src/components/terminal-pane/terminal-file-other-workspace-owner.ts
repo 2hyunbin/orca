@@ -6,12 +6,7 @@ import { useAppStore } from '@/store'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import { isFloatingWorkspaceId } from '../../../../shared/floating-workspace-worktree'
 
-/**
- * A link to a file another workspace on the same host holds. On this computer (local, WSL and
- * folder workspaces) it is viewed here, read-only (#32158), since this computer reads the absolute
- * path directly. SSH and server hosts read files only by workspace-relative path, so their file
- * still opens in the owning workspace, which also reuses a tab already open there.
- */
+/** View other local/WSL/folder workspace files here read-only (#32158); SSH/server reads are workspace-relative, so open in the owning workspace and reuse its tab. */
 export function siblingWorkspaceLink(
   executionHostId: ExecutionHostId,
   absolutePath: string,

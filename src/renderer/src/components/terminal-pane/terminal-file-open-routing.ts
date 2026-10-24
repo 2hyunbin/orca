@@ -132,8 +132,7 @@ export function openDetectedFilePath(
         if (refuseExplicitNonEditorRoute()) {
           return
         }
-        // Why: root workspace switching must work for SSH/runtime paths without
-        // local auth/stat, while still coalescing provider + fallback clicks.
+        // Root workspace switching avoids local auth/stat for SSH/runtime paths while coalescing provider/fallback clicks.
         await Promise.resolve()
         if (!isCurrentOpen()) {
           return
@@ -173,8 +172,7 @@ export function openDetectedFilePath(
     ;({ worktreeId, worktreePath, filePath: mappedFilePath } = owner)
 
     const canOpenWithSystemDefault = shouldOpenTerminalFileWithSystemDefault(fileContext)
-    // Why: a remote workspace's hint and rows promise Orca before the path resolves, and an
-    // explicit group request falls through so the HTML branch can refuse it.
+    // Remote hints promise Orca before resolution; explicit group requests fall through for HTML refusal.
     const pageDestination =
       canOpenWithSystemDefault &&
       !clientLocal &&
@@ -188,8 +186,7 @@ export function openDetectedFilePath(
       ? pageDestination === 'system'
       : openWithSystemDefault
     if (opensWithSystemDefault && canOpenWithSystemDefault) {
-      // Why: Shift+Cmd/Ctrl mirrors URL links by escaping Orca and honoring the
-      // user's OS file associations without adding editor-specific settings.
+      // Shift+Cmd/Ctrl honors OS file associations like URL links.
       const openedWithSystemDefault = await window.api.shell.openFilePath(
         mappedFilePath,
         LOCAL_EXECUTION_HOST_ID
@@ -211,14 +208,12 @@ export function openDetectedFilePath(
 
     // Why: a granted file is readable only through its grant, so it opens in Orca, never as a download.
     if (openWithSystemDefault && !canOpenWithSystemDefault && hostGrantId === null) {
-      // Why: the popover names Shift+Cmd/Ctrl "Download & open with default app", and the OS
-      // cannot launch a remote path, so the direct gesture must reach the same download.
+      // Match the popover’s download-and-open promise; the OS cannot launch a remote path.
       await downloadAndOpenRemoteTerminalFile(fileContext, mappedFilePath)
       return
     }
 
-    // Why: a local HTML file routed to Orca renders in its browser, which also catches a
-    // system-browser open the OS could not launch.
+    // Local HTML opens in Orca’s browser, including fallback when the system browser fails.
     if (isHtmlFilePath(mappedFilePath) && hostGrantId === null) {
       if (canOpenWithSystemDefault) {
         // Why: Orca's browser has no group placement in v1.
@@ -228,8 +223,7 @@ export function openDetectedFilePath(
         openHtmlFileInBrowser(mappedFilePath, worktreeId, clientLocal)
         return
       }
-      // Why: the same gesture renders remote HTML too, through the doc preview; only an
-      // unsupported plan (e.g. a paired doc outside the worktree) falls back to source.
+      // Render remote HTML through doc preview; unsupported plans fall back to source.
       const plan = getWorkspaceFilePreviewPlan(useAppStore.getState(), worktreeId, mappedFilePath)
       if (plan.status === 'doc-preview') {
         if (refuseExplicitNonEditorRoute()) {
@@ -250,8 +244,7 @@ export function openDetectedFilePath(
     let relativePath = mappedFilePath
     if (worktreePath && isPathInsideWorktree(mappedFilePath, worktreePath)) {
       const maybeRelative = toWorktreeRelativePath(mappedFilePath, worktreePath)
-      // Why: a link out of the project keeps its absolute path, so the tab reads it as the file
-      // the user named, before and after a restart, instead of being refused as a project file.
+      // Keep external paths absolute so project-file checks do not reject them now or after restore.
       if (maybeRelative !== null && maybeRelative.length > 0 && !statResult.escapesWorktree) {
         relativePath = maybeRelative
       }
@@ -273,8 +266,7 @@ export function openDetectedFilePath(
     }
 
     if (worktreeId) {
-      // Why: the route may name a folder-workspace key, and the same worktree id can exist
-      // on several hosts — dispatch by workspace shape and keep the resolved host.
+      // Folder-workspace keys and worktree IDs shared across hosts require dispatch by workspace shape and resolved host.
       activateAndRevealWorkspace(worktreeId, {
         providesInitialSurface: true,
         executionHostId: targetExecutionHostId
@@ -287,13 +279,11 @@ export function openDetectedFilePath(
         relativePath,
         worktreeId: worktreeId || '',
         runtimeEnvironmentId: clientLocal ? null : runtimeEnvironmentId,
-        // Why: a tab's owner must match its workspace's to be editable; this one is this computer's,
-        // or another workspace's, which "Open there" edits under its own owner.
+        // Editable tabs must match their workspace owner; Open there uses the owning workspace’s authority.
         ...(clientLocal ? { readOnly: true } : otherWorkspaceViewFields(otherWorkspaceOwner)),
         // Why: the grant is the only authority to read a host file outside its workspaces.
         ...(hostGrantId !== null ? { readOnly: true, terminalArtifactGrantId: hostGrantId } : {}),
-        // Why: absolute SSH paths outside the worktree otherwise look identical
-        // to client-local external files when the editor reloads or restores.
+        // Preserve SSH ownership: absolute remote paths otherwise look client-local on reload/restore.
         ...(relativePath === filePath &&
         fileContext.target.kind === 'local' &&
         fileContext.connectionId

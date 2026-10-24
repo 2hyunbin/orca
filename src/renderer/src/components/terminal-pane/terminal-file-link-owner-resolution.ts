@@ -19,10 +19,7 @@ export type TerminalLinkFileOwner = {
   clientLocal: boolean
 }
 
-/**
- * Who owns a clicked link's file and how it may be read: a host grant, this computer, another
- * workspace on the host (opened there), or the source workspace. Throws when the host cannot answer.
- */
+/** Resolve host grant, client-local, owning-workspace or source-workspace access; host uncertainty rejects rather than falling back locally. */
 export async function resolveTerminalLinkFileOwner(args: {
   fileContext: TerminalFileContext
   worktreeId: string
