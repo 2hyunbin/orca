@@ -125,10 +125,11 @@ describe('codex approval items', () => {
       detail: '{"page_id":"page-1"}',
       resolution: { state: 'pending' }
     })
-    expect(item.options.map((option) => option.id)).toEqual([
-      'accept',
-      'acceptForSession',
-      'cancel'
+    expect(item.options).toEqual([
+      { id: 'accept', label: 'Allow' },
+      { id: 'acceptForSession', label: 'Allow for this session' },
+      // Not "Cancel": the card's close button already means stop the turn.
+      { id: 'cancel', label: 'Deny' }
     ])
   })
 

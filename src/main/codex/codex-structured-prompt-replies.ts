@@ -21,8 +21,6 @@ export {
   CODEX_MCP_ELICITATION_METHOD,
   CODEX_USER_INPUT_METHOD,
   CodexPromptRegistry,
-  codexMcpToolApprovalDecisions,
-  isCodexMcpToolApproval,
   isCodexPromptMethod,
   type CodexPendingPrompt,
   type CodexPromptClaim
@@ -107,7 +105,12 @@ function codexMcpElicitationReply(decision: CodexApprovalDecision): Record<strin
       _meta: decision === 'acceptForSession' ? { persist: 'session' } : null
     }
   }
-  return { action: decision, content: null, _meta: null }
+  // Without this reason Codex cannot tell a user cancel from an interrupted approval.
+  return {
+    action: decision,
+    content: null,
+    _meta: decision === 'cancel' ? { codex_approval_cancellation_reason: 'user' } : null
+  }
 }
 
 /** Accumulate answers until Codex's single reply can include every question. */

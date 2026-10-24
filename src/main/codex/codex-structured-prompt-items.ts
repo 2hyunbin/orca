@@ -12,10 +12,10 @@ import {
   CODEX_FILE_CHANGE_APPROVAL_METHOD,
   CODEX_MCP_ELICITATION_METHOD,
   codexJournalPromptIdPart,
-  codexMcpToolApprovalDecisions,
   encodeCodexJournalQuestionOptionId,
   type CodexApprovalDecision
 } from './codex-structured-prompt-replies'
+import { codexMcpToolApprovalDecisions } from './codex-mcp-tool-approval'
 
 const APPROVAL_DECISION_LABELS: Record<CodexApprovalDecision, string> = {
   accept: 'Allow',
@@ -96,7 +96,8 @@ function codexMcpToolApprovalItem(params: Record<string, unknown>): AgentJournal
     detail: toolParams === undefined ? null : boundJournalPromptText(JSON.stringify(toolParams)),
     options: codexMcpToolApprovalDecisions(params).map((decision) => ({
       id: decision,
-      label: APPROVAL_DECISION_LABELS[decision]
+      // MCP cancel skips only this call and the turn continues, so it reads as Deny, not Stop.
+      label: APPROVAL_DECISION_LABELS[decision === 'cancel' ? 'decline' : decision]
     })),
     resolution: { ...PENDING }
   }

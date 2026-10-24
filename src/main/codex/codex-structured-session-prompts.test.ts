@@ -291,7 +291,11 @@ describe('CodexStructuredSessionAdapter prompts', () => {
           result: {
             action: optionId === 'cancel' ? 'cancel' : 'accept',
             content: null,
-            _meta: optionId === 'acceptForSession' ? { persist: 'session' } : null
+            _meta: {
+              accept: null,
+              acceptForSession: { persist: 'session' },
+              cancel: { codex_approval_cancellation_reason: 'user' }
+            }[optionId]
           }
         }
       ])

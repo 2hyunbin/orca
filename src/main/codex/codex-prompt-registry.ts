@@ -4,7 +4,6 @@ import {
   isCodexMcpToolApproval,
   type CodexMcpToolApprovalDecision
 } from './codex-mcp-tool-approval'
-export { codexMcpToolApprovalDecisions, isCodexMcpToolApproval } from './codex-mcp-tool-approval'
 import {
   MAX_CODEX_PROMPT_JOURNAL_BINDINGS,
   MAX_CODEX_PROMPT_REGISTRY_BYTES,

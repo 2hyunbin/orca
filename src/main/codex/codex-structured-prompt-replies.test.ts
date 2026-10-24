@@ -420,7 +420,10 @@ describe('MCP tool-call approvals', () => {
   it.each([
     ['accept', { action: 'accept', content: null, _meta: null }],
     ['acceptForSession', { action: 'accept', content: null, _meta: { persist: 'session' } }],
-    ['cancel', { action: 'cancel', content: null, _meta: null }]
+    [
+      'cancel',
+      { action: 'cancel', content: null, _meta: { codex_approval_cancellation_reason: 'user' } }
+    ]
   ])('replies to %s in the shape Codex expects', (optionId, reply) => {
     const registry = new CodexPromptRegistry()
     const prompt = registry.register(mcpElicitationRequest(11, MCP_TOOL_APPROVAL))
