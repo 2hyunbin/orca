@@ -3532,7 +3532,11 @@
             "downloadOpenWithDefaultApp": "기본 앱 다운로드 및 열기",
             "downloadOpenFailed": "'{{value0}}'을(를) 다운로드하지 못했습니다.",
             "openInThisGroup": "이 그룹에서 열기",
-            "openInThisGroupRefused": "이 그룹에서 {{value0}}을(를) 열 수 없습니다"
+            "openInThisGroupRefused": "이 그룹에서 {{value0}}을(를) 열 수 없습니다",
+            "fileInOtherWorkspace": "이 파일은 {{value0}}에 있습니다",
+            "fileInAnotherWorkspace": "이 파일은 다른 워크스페이스에 있습니다",
+            "openInOwningWorkspace": "거기서 열기",
+            "openedHereReadOnly": "여기서는 읽기 전용으로 열렸습니다"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "호스트를 사용할 수 없음",
@@ -8053,6 +8057,11 @@
           "191ac34567": "에이전트 오케스트레이션",
           "nestedWorkerDepthTitle": "하위 에이전트 최대 생성 단계",
           "nestedWorkerDepthDescription": "하위 에이전트를 몇 단계까지 생성할 수 있는지 설정합니다. 1이면 조율 에이전트만 하위 에이전트를 생성할 수 있고, 생성된 하위 에이전트는 자신의 하위 에이전트를 생성할 수 없습니다.",
+          "chatErrorEscalationTitle": "채팅 오류를 코디네이터에게 알리기",
+          "chatErrorEscalationDescription": "할당된 에이전트가 턴을 끝내는 오류를 만나면 그 오류를 그대로 할당한 코디네이터에게 보냅니다. 작업은 에이전트에게 계속 할당됩니다. 채팅 UI에서 실행되는 에이전트에서만 작동합니다.",
+          "chatErrorEscalationNeedsChat": "사용하려면 실험적 기능 설정에서 채팅 UI를 켜세요.",
+          "chatErrorEscalationKeywordError": "오류",
+          "chatErrorEscalationKeywordChat": "채팅",
           "7bc082f4de": "설치 명령 복사"
         },
         "OrchestrationSetupCard": {
@@ -15920,6 +15929,7 @@
           "6c4f1a8d2e": "체크 세부 정보를 사용할 수 없습니다."
         },
         "EditorPanelHeader": {
+          "readOnlyBadge": "읽기 전용",
           "fb8331694e": "측면으로 미리보기 열기",
           "4157f3cbf3": "Markdown 미리보기 열기",
           "269ce4842b": "상대 경로 복사",

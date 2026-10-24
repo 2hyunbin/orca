@@ -22,6 +22,7 @@ import {
   readStructuredAgentSessionOlderPage
 } from './structured-agent-session-older-page-read'
 import { startStructuredAgentSessionReadTransport } from './structured-agent-session-read-transport'
+import { createStructuredAgentSessionPRLinkObserver } from './structured-agent-session-pr-link-observer'
 
 import type {
   StructuredAgentSessionReadSnapshot,
@@ -64,18 +65,16 @@ function createReadOwner(
   let captureActiveHistoryReadGuard = (): (() => boolean) => retiredHistoryRead
   const activations = new Set<symbol>()
   const listeners = new Set<() => void>()
+  const observePRLinks = createStructuredAgentSessionPRLinkObserver(sessionId, target)
 
-  const emit = (): void => {
-    for (const listener of listeners) {
-      listener()
-    }
-  }
   const setSnapshot = (next: StructuredAgentSessionReadSnapshot): void => {
     if (next === snapshot) {
       return
     }
     snapshot = next
-    emit()
+    for (const listener of listeners) {
+      listener()
+    }
   }
   const apply = (action: StructuredAgentSessionAction): void => {
     const state = reduceStructuredAgentSession(snapshot.state, action, Date.now())
@@ -87,11 +86,6 @@ function createReadOwner(
         !(action.event.type === 'batch' && action.event.hasNewer))
     if (state !== snapshot.state || current !== snapshot.current) {
       setSnapshot({ ...snapshot, state, current })
-    }
-  }
-  const markStale = (): void => {
-    if (snapshot.current) {
-      setSnapshot({ ...snapshot, current: false })
     }
   }
   const setProviderSession = (providerSession: AgentProviderSessionMetadata | undefined): void => {
@@ -199,7 +193,10 @@ function createReadOwner(
     }
     const transport = startStructuredAgentSessionReadTransport({
       applyRequests: apply,
-      applyEvent: (event, options) => apply({ type: 'event', event, ...options }),
+      applyEvent: (event, options) => {
+        apply({ type: 'event', event, ...options })
+        observePRLinks(event)
+      },
       applyError: (message, refusal) => {
         // Once loaded, a failure with no host refusal attached is treated as lost contact: the
         // transport retries it and the chat stays as it is. A refusal is the host's answer: shown.
@@ -209,7 +206,11 @@ function createReadOwner(
         apply({ type: 'error', message, refusal })
       },
       getCursor: () => snapshot.state.cursor,
-      onContactLost: markStale,
+      onContactLost: () => {
+        if (snapshot.current) {
+          setSnapshot({ ...snapshot, current: false })
+        }
+      },
       onHistoryReadInvalidated: invalidateOlderPages,
       hydrate: snapshot.state.epoch === null ? hydrate : undefined,
       sessionId,

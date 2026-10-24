@@ -3553,7 +3553,11 @@
             "downloadOpenWithDefaultApp": "Téléchargez et ouvrez avec l'application par défaut",
             "downloadOpenFailed": "Échec du téléchargement de « {{value0}} ».",
             "openInThisGroup": "Ouvrir dans ce groupe",
-            "openInThisGroupRefused": "Impossible d'ouvrir {{value0}} dans ce groupe"
+            "openInThisGroupRefused": "Impossible d'ouvrir {{value0}} dans ce groupe",
+            "fileInOtherWorkspace": "Ce fichier se trouve dans {{value0}}",
+            "fileInAnotherWorkspace": "Ce fichier se trouve dans un autre espace de travail",
+            "openInOwningWorkspace": "Ouvrir là-bas",
+            "openedHereReadOnly": "Ouvert ici en lecture seule"
           },
           "TerminalSessionStateSaveFailureDialog": {
             "6bee0c8f17": "Ouvrir l'Analyseur d'espace disque",
@@ -8260,6 +8264,11 @@
           "191ac34567": "Orchestration d'agents",
           "nestedWorkerDepthTitle": "Profondeur du travailleur imbriqué",
           "nestedWorkerDepthDescription": "Combien de générations de travailleurs détachés peuvent engendrer leurs propres travailleurs. 1 maintient l'arborescence des agents à plat : un coordinateur répartit les travailleurs, et ces travailleurs ne répartissent pas.",
+          "chatErrorEscalationTitle": "Prévenir le coordinateur des erreurs du chat",
+          "chatErrorEscalationDescription": "Quand un agent assigné rencontre une erreur qui met fin à son tour, envoie l'erreur exacte au coordinateur qui l'a assigné. La tâche reste assignée à l'agent. Fonctionne uniquement pour les agents dans l'interface de chat.",
+          "chatErrorEscalationNeedsChat": "Activez l'interface de chat dans les paramètres expérimentaux pour l'utiliser.",
+          "chatErrorEscalationKeywordError": "erreur",
+          "chatErrorEscalationKeywordChat": "chat",
           "7bc082f4de": "Copier la commande d'installation"
         },
         "OrchestrationSetupCard": {
@@ -16080,6 +16089,7 @@
           "6c4f1a8d2e": "Les détails de la vérification sont indisponibles."
         },
         "EditorPanelHeader": {
+          "readOnlyBadge": "Lecture seule",
           "fb8331694e": "Ouvrir l'aperçu sur le côté",
           "4157f3cbf3": "Ouvrir l'aperçu Markdown",
           "269ce4842b": "Copier le chemin relatif",

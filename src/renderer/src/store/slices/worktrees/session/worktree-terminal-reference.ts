@@ -1,4 +1,4 @@
-import { getAgentStatusOwner } from '../../../agent-status-commit'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import type { Repo } from '../../../../../../shared/repo-types'
 import {
   getRepoExecutionHostId,
@@ -9,8 +9,10 @@ import { getRuntimeEnvironmentRevision } from '@/runtime/runtime-environment-rev
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet } from '../listing/worktree-slice-types'
 import { branchName } from '@/lib/git-utils'
-import { resolveTerminalNotificationOwner } from '@/attention/notification-subject-owner'
-import { getWorkspaceAttachmentTerminalOrigin } from '@/lib/workspace-attachment-terminal-origin'
+import {
+  getWorkspaceAttachmentObservedOrigin,
+  resolveWorkspaceReferenceObservationOwner
+} from '@/lib/workspace-attachment-observed-origin'
 import { getWorkspaceAttachments } from '../../../../../../shared/workspace-attachments'
 import { getWorkspaceAttachmentKey } from '../../../../../../shared/workspace-attachment-normalization'
 import {
@@ -47,9 +49,12 @@ export function createObserveTerminalGitHubPullRequestLink(
   const confirmations = new PrioritySemaphore(3)
   return (worktreeId, link, context) => {
     const state = getAgentStatusOwner({ getState: get }).getState()
-    const owner = context ? resolveTerminalNotificationOwner(state, worktreeId, context) : null
+    const owner = context
+      ? resolveWorkspaceReferenceObservationOwner(state, worktreeId, context)
+      : null
     const hostId = owner?.executionHostId ?? undefined
-    if (context && (!hostId || (context.executionHostId && context.executionHostId !== hostId))) {
+    const contextHostId = context?.kind === 'agent-session' ? undefined : context?.executionHostId
+    if (context && (!hostId || (contextHostId && contextHostId !== hostId))) {
       return
     }
     const worktree = findKnownWorktreeById(state, worktreeId, hostId)
@@ -76,7 +81,7 @@ export function createObserveTerminalGitHubPullRequestLink(
     const pushBranch = worktree.pushTarget?.branchName
     let confirmedPushBranch: string | undefined
     const origin = context
-      ? getWorkspaceAttachmentTerminalOrigin(state, worktreeId, context, hostId)
+      ? getWorkspaceAttachmentObservedOrigin(state, worktreeId, context, hostId)
       : undefined
     if (context && !origin) {
       return
@@ -86,8 +91,8 @@ export function createObserveTerminalGitHubPullRequestLink(
         return true
       }
       const latest = getAgentStatusOwner({ getState: get }).getState()
-      const latestOwner = resolveTerminalNotificationOwner(latest, worktreeId, context)
-      const latestOrigin = getWorkspaceAttachmentTerminalOrigin(latest, worktreeId, context, hostId)
+      const latestOwner = resolveWorkspaceReferenceObservationOwner(latest, worktreeId, context)
+      const latestOrigin = getWorkspaceAttachmentObservedOrigin(latest, worktreeId, context, hostId)
       return (
         latestOwner?.executionHostId === hostId &&
         Boolean(
