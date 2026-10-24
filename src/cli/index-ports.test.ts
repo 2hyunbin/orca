@@ -215,11 +215,20 @@ describe('orca ports', () => {
   it.each([
     ['a standalone native folder', '/tmp/folder', '/tmp/folder/src'],
     ['a native folder nested in a git worktree', '/tmp/repo/feature/docs', '/tmp/repo/feature/docs']
-  ])('shows the host listeners for %s containing cwd', async (_label, folderPath, cwd) => {
-    queueFixtures(callMock, ...folderCatalog(folderPath), hostScan)
+  ])('refuses %s containing cwd unless --all asks for the host', async (_label, folderPath, cwd) => {
+    queueFixtures(callMock, ...folderCatalog(folderPath))
     const output = captureOutput()
+    const priorExitCode = process.exitCode
 
-    await main(['ports'], cwd)
+    await main(['ports', '--json'], cwd)
+
+    expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
+    expect(output()).toContain('does not tie ports to folder workspaces')
+    expect(process.exitCode).toBe(1)
+    process.exitCode = priorExitCode
+
+    queueFixtures(callMock, ...folderCatalog(folderPath), hostScan)
+    await main(['ports', '--all'], cwd)
 
     expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
     expect(callMock).not.toHaveBeenCalledWith('worktree.list', expect.anything())
@@ -276,7 +285,7 @@ describe('orca ports', () => {
     )
     const output = captureOutput()
 
-    await main(['ports', '--worktree', 'folder:f1'], '/tmp')
+    await main(['ports', '--worktree', 'folder:f1', '--all'], '/tmp')
 
     expect(callMock).toHaveBeenCalledTimes(1)
     expect(output()).toBe('Port scan unavailable: Could not scan the SSH host.\nhost=ssh:box')

@@ -10,12 +10,11 @@ import { normalizeWorktreeSelectorForCaller } from '../selectors'
 
 type PortsTarget = { selector: string; worktreePath: string | null }
 
-// Why: Orca ties listeners only to repo-backed workspaces, so a native folder shows its host's listeners.
 function isNativeFolderSelector(selector: string): boolean {
   return (selector.startsWith('id:') ? selector.slice(3) : selector).startsWith('folder:')
 }
 
-export async function resolvePortsTarget(
+async function resolvePortsTarget(
   ctx: Pick<HandlerContext, 'flags' | 'cwd' | 'client'>,
   options: { needsWorktreePath: boolean }
 ): Promise<PortsTarget> {
@@ -25,8 +24,16 @@ export async function resolvePortsTarget(
     !explicit || explicit === 'active' || explicit === 'current'
       ? await resolveCurrentAgentWorkspaceSelector(cwd, client)
       : await normalizeWorktreeSelectorForCaller(explicit, cwd, client)
-  if (!options.needsWorktreePath || isNativeFolderSelector(selector)) {
+  if (!options.needsWorktreePath) {
     return { selector, worktreePath: null }
+  }
+  // Why refuse: Orca ties listeners only to repo-backed workspaces, and host-wide rows would hand
+  // scripts another workspace's dev server.
+  if (isNativeFolderSelector(selector)) {
+    throw new RuntimeClientError(
+      'invalid_argument',
+      'Orca does not tie ports to folder workspaces yet. Run `orca ports --all` to list every listener on the host.'
+    )
   }
   const shown = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
     worktree: selector
@@ -35,7 +42,7 @@ export async function resolvePortsTarget(
 }
 
 // Why: an older runtime has no host-scoped scan; its raw method_not_found reads as a CLI bug.
-export async function scanPortsOnWorkspaceHost(
+async function scanPortsOnWorkspaceHost(
   client: Pick<HandlerContext['client'], 'call'>,
   selector: string
 ): Promise<RuntimeRpcSuccess<WorkspacePortHostScanResult>> {
@@ -56,7 +63,7 @@ export async function scanPortsOnWorkspaceHost(
 
 // Why the path, not the id: folder workspace instances share one path, and attribution names only
 // the first of them as owner.
-export function selectWorkspacePorts(
+function selectWorkspacePorts(
   scan: WorkspacePortHostScanResult,
   worktreePath: string | null
 ): WorkspacePortHostScanResult {
