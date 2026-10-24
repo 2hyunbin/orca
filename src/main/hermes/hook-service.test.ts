@@ -124,11 +124,15 @@ describe('HermesHookService', () => {
   it.each([
     ['an anchored terminal setting', 'terminal:\n  env: &env {A: "1"}\nshared: *env\n', true],
     ['a malformed passthrough', 'terminal:\n  client_env_passthrough: FOO\n', false],
-    ['a scalar terminal', 'terminal: local\n', false]
-  ])('still enables the plugin beside %s', (_name, input, passesThrough) => {
+    ['a scalar terminal', 'terminal: local\n', false],
+    ['an anchored terminal', 'terminal: &t {backend: local}\nother: *t\n', false],
+    ['a merge key in terminal', 'base: &b {backend: local}\nterminal:\n  <<: *b\n', false],
+    ['an anchored passthrough', 'terminal:\n  client_env_passthrough: &p [A]\nx: *p\n', false]
+  ])('still installs and removes the plugin beside %s', (_name, input, passesThrough) => {
     writeFileSync(join(homeDir, 'config.yaml'), input)
 
-    expect(new HermesHookService().install().state).toBe('installed')
+    const service = new HermesHookService()
+    expect(service.install().state).toBe('installed')
     const { plugins, terminal, ...rest } = parse(
       readFileSync(join(homeDir, 'config.yaml'), 'utf-8')
     )
@@ -140,6 +144,7 @@ describe('HermesHookService', () => {
         ? { ...original, client_env_passthrough: [...HERMES_CLIENT_ENV_PASSTHROUGH] }
         : original
     )
+    expect(service.remove().state).toBe('not_installed')
   })
 
   it('adds the passthrough when a rewritten plugin list runs into a closing comment', () => {

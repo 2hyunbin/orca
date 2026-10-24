@@ -120,6 +120,24 @@ export function updateConfigContent(
   return updateHermesPluginDocument(content ?? '', parsed.config, next)
 }
 
+// Why: the passthrough is best-effort; a terminal section we can't safely edit must not block the plugin.
+function updateWithPluginFallback(
+  content: string | null,
+  updater: (config: HermesConfig) => HermesConfig,
+  pluginOnly: (config: HermesConfig) => HermesConfig
+): { content: string | null; detail?: string } {
+  const next = updateConfigContent(content, updater)
+  return next.content === null ? updateConfigContent(content, pluginOnly) : next
+}
+
+export function installOrcaStatusContent(content: string | null) {
+  return updateWithPluginFallback(content, installOrcaStatusConfig, enablePlugin)
+}
+
+export function removeOrcaStatusContent(content: string | null) {
+  return updateWithPluginFallback(content, removeOrcaStatusConfig, disablePlugin)
+}
+
 export function getConfigEnablement(config: HermesConfig): {
   enabled: boolean
   disabled: boolean
