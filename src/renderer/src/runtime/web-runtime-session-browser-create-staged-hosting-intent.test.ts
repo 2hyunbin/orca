@@ -212,7 +212,7 @@ describe('staged client-hosting intent', () => {
       }
     },
     { name: 'the user turned client hosting off', options: { clientHostedSetting: false } },
-    { name: 'the runtime is a mobile device', options: { deviceScope: 'mobile' } }
+    { name: 'the runtime is a mobile device', options: { deviceScope: 'mobile' as const } }
   ])('leaves the staged handle server-hosted when $name', async ({ options }) => {
     const handle = await stageHandleFor(options)
 
