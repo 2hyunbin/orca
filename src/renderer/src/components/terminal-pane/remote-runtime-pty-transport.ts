@@ -338,8 +338,8 @@ export function createRemoteRuntimePtyTransport(
   let unregisterControlReadyReviver: (() => void) | null = null
   // Why: the pane's retry is waiting on the user's SSH sign-in, not on a lost link.
   let awaitingSshSignIn = false
-  // Why: the caller's spawn finalization (launch config, startup delivery) must see the create
-  // the post-sign-in replay makes, so its connect stays pending instead of resolving as failed.
+  // Why: the caller's spawn finalization (launch config, startup delivery) must see the terminal
+  // recovery binds after sign-in, so its connect stays pending until recovery settles either way.
   let signInConnectWait: PromiseWithResolvers<PtyConnectResult | undefined> | null = null
   function settleSignInConnectWait(result?: PtyConnectResult): void {
     const wait = signInConnectWait
@@ -403,6 +403,8 @@ export function createRemoteRuntimePtyTransport(
     }
     if (recovery.currentPhase === 'idle' || recovery.currentPhase === 'disposed') {
       awaitingSshSignIn = false
+      // Why: a healthy recovery settled it first with the bound terminal; anything else gave up.
+      settleSignInConnectWait()
     }
     if (recovery.currentPhase === 'idle') {
       autoRecoveryWindowSpent = false
@@ -678,6 +680,20 @@ export function createRemoteRuntimePtyTransport(
   }
 
   function markRecoveryHealthy(result?: PtyConnectResult): void {
+    if (signInConnectWait) {
+      settleSignInConnectWait(
+        remotePtyId
+          ? {
+              id: remotePtyId,
+              replay: '',
+              ...(spawnedHandle === handle ? {} : { isReattach: true }),
+              ...(authoritativePtyIncarnationId
+                ? { incarnationId: authoritativePtyIncarnationId }
+                : {})
+            }
+          : undefined
+      )
+    }
     const recoveredErrors = [...surfacedErrorMessages]
     surfacedErrorMessages.clear()
     recovery.markHealthy(result)
@@ -3299,8 +3315,6 @@ export function createRemoteRuntimePtyTransport(
     if (!replay) {
       settleSignInConnectWait()
     }
-    // Why: a replay may only settle the wait it was started for, never a newer connect's.
-    const replayedWait = replay ? signInConnectWait : null
     const expected = recoveryInputHold.expect(restoredInputEndpoint(options.sessionId))
     let result: PtyConnectResult | undefined
     try {
@@ -3312,17 +3326,15 @@ export function createRemoteRuntimePtyTransport(
       }
     }
     const retryOwned = !destroyed && (recovery.isActive || recovery.currentPhase === 'disconnected')
-    if (result === undefined && retryOwned && lastConnectOptions === options) {
-      if (replay) {
-        return undefined
-      }
-      if (awaitingSshSignIn) {
-        signInConnectWait ??= Promise.withResolvers()
-        return signInConnectWait.promise
-      }
-    }
-    if (replayedWait && signInConnectWait === replayedWait) {
-      settleSignInConnectWait(result)
+    if (
+      !replay &&
+      result === undefined &&
+      retryOwned &&
+      awaitingSshSignIn &&
+      lastConnectOptions === options
+    ) {
+      signInConnectWait ??= Promise.withResolvers()
+      return signInConnectWait.promise
     }
     return result
   }

@@ -21,6 +21,7 @@ let transport: PtyTransport | undefined
 
 const {
   runtimeCall,
+  runtimeSubscribe,
   latestSubscribePayload,
   subscribedTerminalHandles,
   emitSnapshot,
@@ -293,6 +294,42 @@ describe('SSH sign-in for a terminal created while the host waits for sign-in', 
     expect(pending.signIn()).toBe(1)
     await vi.waitFor(() => expect(pending.onPtySpawn).toHaveBeenCalledTimes(1))
     expect(pending.onError).not.toHaveBeenCalled()
+  })
+
+  it('settles the original spawn when the stream, not the create, waited for sign-in', async () => {
+    resolvedPaneHandle = 'terminal-1'
+    let signedIn = false
+    const healthySubscribe = runtimeSubscribe.getMockImplementation()
+    runtimeSubscribe.mockImplementation(async (...args: unknown[]) => {
+      if (!signedIn) {
+        throw new Error(pendingErrors[0].message)
+      }
+      return healthySubscribe?.(...args)
+    })
+    const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+    const { reviveRemoteRuntimePtyRecoveriesForEnvironment } =
+      await import('./remote-runtime-pty-recovery-state')
+    const onPtySpawn = vi.fn()
+    const pane = createRemoteRuntimePtyTransport('env-1', {
+      worktreeId: 'wt-1',
+      tabId: 'tab-new',
+      leafId: 'pane:1',
+      onPtySpawn
+    })
+    transport = pane
+    const connected = Promise.resolve(pane.connect({ url: '', cols: 80, rows: 24, callbacks: {} }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pane.getRecoveryState?.().reason).toBe('ssh-sign-in')
+
+    signedIn = true
+    expect(reviveRemoteRuntimePtyRecoveriesForEnvironment('env-1')).toBe(1)
+    await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
+    const { streamId } = latestSubscribePayload()
+    subscriptionCallbacks?.onResponse({ ok: true, result: { type: 'subscribed', streamId } })
+    emitSnapshot(streamId, 'fresh prompt$ ')
+
+    await expect(connected).resolves.toMatchObject({ id: 'remote:env-1@@terminal-1' })
+    expect(onPtySpawn).toHaveBeenCalledTimes(1)
   })
 
   it('stops showing the sign-in wait once sign-in finishes, even while the create still retries', async () => {
