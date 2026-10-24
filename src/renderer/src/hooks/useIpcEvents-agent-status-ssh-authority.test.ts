@@ -11,12 +11,19 @@ import { buildSshAuthorityReconciliationHarness } from './ipc-events-ssh-authori
 function stubDirectSshModules(args: { storeState: StoreLike }): void {
   stubReactSyncEffect()
   stubAuxiliaryModules()
-  vi.doMock('../store', () => ({
-    useAppStore: {
-      subscribe: vi.fn(() => () => {}),
-      getState: () => args.storeState
+  vi.doMock('../store', async () => {
+    const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+    const fixture = {
+      useAppStore: {
+        subscribe: vi.fn(() => () => {}),
+        getState: () => args.storeState
+      }
     }
-  }))
+    const readFixture = fixture.useAppStore.getState
+
+    return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+  })
 }
 
 // Why: end-to-end exercise of startup agent-status restoration through
@@ -39,12 +46,19 @@ describe('useIpcEvents agent status snapshot integration', () => {
     })
 
     stubReactSyncEffect()
-    vi.doMock('../store', () => ({
-      useAppStore: {
-        subscribe: vi.fn(() => () => {}),
-        getState: () => storeState
+    vi.doMock('../store', async () => {
+      const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+      const fixture = {
+        useAppStore: {
+          subscribe: vi.fn(() => () => {}),
+          getState: () => storeState
+        }
       }
-    }))
+      const readFixture = fixture.useAppStore.getState
+
+      return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+    })
     stubAuxiliaryModules()
     vi.stubGlobal(
       'window',

@@ -180,3 +180,30 @@ export function runtimeOwnedRepoState(
     ...extra
   }
 }
+
+export function withAgentStatusFixture<Fixture extends { useAppStore: object }>(
+  fixture: Fixture,
+  readFixture: () => Record<string, unknown>
+): Fixture {
+  const canonical = createTestStore()
+  Object.defineProperty(fixture.useAppStore, 'getState', {
+    get() {
+      applyAgentStatusPatch(canonical, readFixture())
+      return canonical.getState
+    }
+  })
+  if (!('subscribe' in fixture.useAppStore)) {
+    Object.defineProperty(fixture.useAppStore, 'subscribe', { value: () => () => {} })
+  }
+  return fixture
+}
+
+export function createStaticAgentStatusStoreFixture(readFixture: () => Record<string, unknown>) {
+  return withAgentStatusFixture(
+    {
+      useAppStore: <Result>(selector: (state: Record<string, unknown>) => Result): Result =>
+        selector(readFixture())
+    },
+    readFixture
+  )
+}

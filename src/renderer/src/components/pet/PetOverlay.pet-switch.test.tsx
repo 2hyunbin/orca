@@ -18,12 +18,19 @@ const petUrlState = vi.hoisted(() => ({
   idleRow: 0
 }))
 
-vi.mock('../../store', () => ({
-  useAppStore: Object.assign(
-    <T,>(selector: (state: typeof storeState) => T): T => selector(storeState),
-    { getState: () => storeState }
-  )
-}))
+vi.mock('../../store', async () => {
+  const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+  const fixture = {
+    useAppStore: Object.assign(
+      <T,>(selector: (state: typeof storeState) => T): T => selector(storeState),
+      { getState: () => storeState }
+    )
+  }
+  const readFixture = fixture.useAppStore.getState
+
+  return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+})
 
 vi.mock('./usePetUrl', () => ({
   usePetUrl: () => ({

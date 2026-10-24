@@ -45,9 +45,16 @@ describe('runtime host catalog refresh on reposChanged', () => {
         const actual = await vi.importActual<typeof ReactModule>('react')
         return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
       })
-      vi.doMock('../store', () => ({
-        useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-      }))
+      vi.doMock('../store', async () => {
+        const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+        const fixture = {
+          useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
+        }
+        const readFixture = fixture.useAppStore.getState
+
+        return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+      })
       const noopListener = (): (() => void) => () => {}
       const autoStubNamespace = new Proxy(
         {},
@@ -142,9 +149,16 @@ describe('runtime host catalog refresh on reposChanged', () => {
         const actual = await vi.importActual<typeof ReactModule>('react')
         return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
       })
-      vi.doMock('../store', () => ({
-        useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-      }))
+      vi.doMock('../store', async () => {
+        const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+        const fixture = {
+          useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
+        }
+        const readFixture = fixture.useAppStore.getState
+
+        return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+      })
       const noopListener = (): (() => void) => () => {}
       const autoStubNamespace = new Proxy(
         {},
@@ -205,9 +219,16 @@ describe('repo catalog refresh on repos:changed', () => {
       const actual = await vi.importActual<typeof ReactModule>('react')
       return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
     })
-    vi.doMock('../store', () => ({
-      useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-    }))
+    vi.doMock('../store', async () => {
+      const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
+
+      const fixture = {
+        useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
+      }
+      const readFixture = fixture.useAppStore.getState
+
+      return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+    })
     const noopListener = (): (() => void) => () => {}
     const autoStubNamespace = new Proxy(
       {},
