@@ -1,4 +1,9 @@
-import { closeTestStores, testState, createStore, readDataFile } from './persistence-test-harness'
+import {
+  closeTestStores,
+  testState,
+  createStore,
+  readDataFile
+} from '../../persistence-test-harness'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -8,7 +13,7 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'orca-chat-appearance-'))

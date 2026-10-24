@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { PersistedState } from '../shared/persisted-state-types'
-import { getDefaultPersistedState } from '../shared/constants'
-import { createDefaultWorkspaceCleanupBrowseState } from '../shared/workspace-cleanup-browse-state'
+import type { PersistedState } from '../../../shared/persisted-state-types'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { createDefaultWorkspaceCleanupBrowseState } from '../../../shared/workspace-cleanup-browse-state'
 import {
   closeTestStores,
   createSqliteTestStore,
@@ -15,15 +15,15 @@ import {
   writeDataFile,
   readDataFile,
   makeRepo
-} from './persistence-test-harness'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
+} from '../../persistence-test-harness'
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -44,7 +44,7 @@ async function createStore() {
   if (hasCreatedStoreInCase) {
     vi.resetModules()
   }
-  const { setSecretStore } = await import('../shared/secret-store')
+  const { setSecretStore } = await import('../../../shared/secret-store')
   setSecretStore({
     isEncryptionAvailable: () => true,
     encryptString: (plaintext) => Buffer.from(`encrypted:${plaintext}`, 'utf-8'),
@@ -61,18 +61,19 @@ async function createStore() {
     hasCreatedStoreInCase = true
     return createFreshStore()
   }
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   // Reinstall this test’s userData path after resetModules before initializing Store.
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
 }
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 
