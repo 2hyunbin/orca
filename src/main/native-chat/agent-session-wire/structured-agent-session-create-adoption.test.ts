@@ -67,9 +67,10 @@ function anotherSession(params: AgentSessionAttachParams): AgentSessionAttachPar
 
 it('imports adoption at rest and resumes its original provider identity after its source disappears', async () => {
   const params = await adoptedParams()
-  const history = vi.fn(async () => null)
+  const history = vi.fn(async () => ({ data: [], nextCursor: null }))
   const codex = fakeCodex({
     // Codex 0.162 answers excludeTurns resumes with metadata, not historical turns.
+    'thread/turns/list': history,
     'thread/resume': () => ({
       thread: { id: THREAD, turns: [] },
       model: 'gpt-5.4',
@@ -99,7 +100,7 @@ it('imports adoption at rest and resumes its original provider identity after it
       resolveLaunchArgs: () => []
     })
   })
-  await rig.restart({ adapter: Object.assign(adapter, { providerHistoryWindow: history }) })
+  await rig.restart({ adapter })
   expect(await rig.host.create(CALLER, params)).toMatchObject({
     ok: true,
     value: {
