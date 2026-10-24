@@ -242,14 +242,17 @@ describe('Claude structured journal translation', () => {
     expect(providerFrameKinds(state.items)).toEqual([])
   })
 
-  it('journals a count-to-200 stream as one assistant item carrying the complete reply', async () => {
+  it('journals the complete count-to-200 stream even when ordinary admission is full', async () => {
     const journal = await openAgentSessionJournal({
       identity: JOURNAL_IDENTITY,
       database: openTestJournalHostDatabase(journalRoot),
       now: () => 1_700_000_000_000,
       mintEpoch: () => 'epoch-1'
     })
-    const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
+    const deferred = createDeferredStructuredAgentSessionEventSink({
+      ...testEventSinkLogging(),
+      watermarks: { maxQueuedOperations: 32 }
+    })
     deferred.bind({ journal, fence: 1, publish: vi.fn() })
     let scheduled: (() => void) | null = null
     const translator = createClaudeJournalTranslator({
@@ -284,11 +287,18 @@ describe('Claude structured journal translation', () => {
       const run = scheduled as (() => void) | null
       run?.()
     }
+    for (let index = 0; index < 32; index++) {
+      deferred.sink.tryAppendTombstone?.({ provider: 'orca', clientMessageId: `pressure-${index}` })
+    }
+    expect(
+      deferred.sink.tryAppendTombstone?.({ provider: 'orca', clientMessageId: 'refused' })
+    ).toEqual({ accepted: false, reason: 'backpressure' })
     translator.handle(turn.final)
+    expect(translator.pendingStreamedBlocks).toBe(0)
     for (const event of turn.stop) {
       translator.handle(event)
     }
-    await deferred.drained()
+    await expect(deferred.drained()).resolves.toEqual({ ok: true })
 
     const items: AgentJournalRenderItem[] = journal.snapshot().items
     const assistant = assistantMessages(items)

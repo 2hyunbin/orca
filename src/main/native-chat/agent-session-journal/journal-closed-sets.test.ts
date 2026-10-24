@@ -90,7 +90,6 @@ const SNAPSHOT = {
       'queue',
       'submission',
       'text-delta',
-      'text-pruned',
       'tombstone'
     ],
     'row.mutations[].kind': ['item', 'tombstone'],
