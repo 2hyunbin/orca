@@ -245,6 +245,14 @@ describe('shouldUseSystemSshLoopbackRoute', () => {
       { aliasClaimedByConfig: false },
       'win32',
       false
+    ],
+    [
+      'a manual host no Host block claims, which never rewrites its endpoint',
+      createTarget({ source: 'manual', configHost: 'box', host: 'box', jumpHost: 'bastion' }),
+      createResolved({ proxyCommand: undefined }),
+      { aliasClaimedByConfig: false },
+      'win32',
+      true
     ]
   ] as const)('%s → %s', (_name, target, resolved, options, platform, expected) => {
     expect(shouldUseSystemSshLoopbackRoute(target, resolved, options, platform)).toBe(expected)

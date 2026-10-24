@@ -48,7 +48,7 @@ export function shouldUseSystemSshLoopbackRoute(
     return false
   }
   // Why: an unclaimed alias already rewrites HostName/Port to the stored endpoint.
-  if (options.aliasClaimedByConfig === false) {
+  if (options.aliasClaimedByConfig === false && isOpenSshConfigBackedTarget(target)) {
     return false
   }
   const configResolved = configBackedResolution(target, resolved)
