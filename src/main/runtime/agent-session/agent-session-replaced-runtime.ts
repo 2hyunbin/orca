@@ -1,8 +1,8 @@
 // The profile instance lock proves earlier host runtimes lost their pipes; their turns ended even if provider-process death is unproven.
 // Attribute only runtimes this host actually replaced, never terminal claims or unknown owners.
 
-import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-orca-stop'
-import type { AgentSessionStoreState } from './agent-session-store-state'
+import type { AgentSessionOrcaStopCause } from '../../../shared/agent-session-orca-stop'
+import type { AgentSessionStoreState } from '../agent-session-store-state'
 
 export type AgentSessionReplacedRuntime = {
   /** The highest fence a replaced runtime granted; every lower fence was granted before it. */

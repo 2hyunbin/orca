@@ -1,13 +1,13 @@
 /** Share provider-child close/proof between orchestration and worktree teardown; callers retain dispatch cleanup. Only absent host ownership plus a non-live lease after close prove exit; retain unproven sessions for retry. */
 
-import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
-import { getStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
+import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
+import type { OrcaRuntimeService } from '../orca-runtime'
 import { retireSettledStructuredWorkerTab } from './structured-agent-session-tab-retirement'
 import {
   observeStructuredSession,
   structuredSessionCloseSettled
-} from './structured-worker-authority'
+} from '../structured-worker-authority'
 
 export type StructuredAgentSessionCloseOutcome = {
   stopped: boolean
