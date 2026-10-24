@@ -49,6 +49,30 @@ async function terminalLinkPoint(
       if (!pane || !screen) {
         throw new Error('terminal screen unavailable')
       }
+      // Browser splits reflow the grid; target rendered text when the DOM renderer is active.
+      const renderedRows = screen.querySelectorAll('.xterm-rows > div')
+      for (const renderedRow of Array.from(renderedRows).toReversed()) {
+        const column = renderedRow.textContent?.indexOf(link) ?? -1
+        if (column < 0) {
+          continue
+        }
+        let offset = column + Math.floor(link.length / 2)
+        const walker = document.createTreeWalker(renderedRow, NodeFilter.SHOW_TEXT)
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const length = node.textContent?.length ?? 0
+          if (offset >= length) {
+            offset -= length
+            continue
+          }
+          const range = document.createRange()
+          range.setStart(node, offset)
+          range.setEnd(node, offset + 1)
+          const rect = range.getBoundingClientRect()
+          if (rect.width > 0 && rect.height > 0) {
+            return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+          }
+        }
+      }
       const rect = screen.getBoundingClientRect()
       const cell = {
         width: rect.width / pane.terminal.cols,
