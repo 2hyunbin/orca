@@ -42,11 +42,13 @@ export function assertJournalPopulationBounds(
     'legacy-failed-import': input(n, n, n),
     'legacy-irrelevant': input(1),
     'legacy-import-retry': input(n, n, n),
-    'shared-legacy-open': input(n + 1, n),
+    'shared-legacy-seed': input(n, 0, n, n),
+    'shared-legacy-open': input(2 * n, n, n),
     'shared-legacy-point': input(1),
     'shared-legacy-series': input(n),
     'shared-legacy-noncommand-report': input(1),
-    'shared-legacy-relevant': input(1, n),
+    'shared-legacy-relevant-point': input(1, 1),
+    'shared-legacy-relevant': input(n - 1, n - 1),
     // Three real corpus passes: initial prefix, owner-refusal restart, incompatible-format replay.
     // Snapshot/reopen assertions explicitly request nodes/members/source output and cleanup.
     'structural-resume-cleanup': input(3 * tip + 8, 12 * n, 12 * n, 32 * tip),
@@ -150,8 +152,15 @@ export function assertJournalPopulationBounds(
   }
   expect(phases['shared-legacy-open'].failedSql).toBeGreaterThan(0)
   expect(phases['legacy-failed-import'].failedSql).toBeGreaterThan(0)
-  expect(phases['shared-legacy-relevant'].legacyClassifications).toBeGreaterThanOrEqual(n)
-  expect(phases['shared-legacy-relevant'].legacyDirtyMembers).toBe(n)
+  const relevantPoint = phases['shared-legacy-relevant-point']
+  const relevantSeries = phases['shared-legacy-relevant']
+  expect(relevantPoint.legacyClassifications).toBe(1)
+  expect(relevantPoint.legacyDisplayEvaluations).toBe(1)
+  expect(relevantPoint.legacyDirtyMembers).toBe(1)
+  expect(relevantSeries.legacyClassifications).toBe(n - 1)
+  expect(relevantSeries.legacyDisplayEvaluations).toBe(n - 1)
+  expect(relevantSeries.legacyDirtyMembers).toBe(n - 1)
+  expect(relevantPoint.legacyDirtyMembers + relevantSeries.legacyDirtyMembers).toBe(n)
   const structural = phases['structural-resume-cleanup']
   const replay = inputs['structural-resume-cleanup']
   const rowAndDependencyUnits = replay.rows + replay.outputs + replay.lineage
