@@ -188,7 +188,7 @@ it.skipIf(process.platform !== 'win32')(
                   proc.write(
                     winningShell === cmd
                       ? 'echo __ORCA_PARENT_STATUS__:%errorlevel%& echo parent-alive\r'
-                      : "[Console]::WriteLine('parent-alive')\r"
+                      : "[Console]::WriteLine(); [Console]::WriteLine('parent-alive')\r"
                   )
                 }
                 if (
