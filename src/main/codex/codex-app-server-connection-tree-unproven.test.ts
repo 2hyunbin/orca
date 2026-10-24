@@ -98,7 +98,6 @@ describe('Codex process-tree diagnostic after a forced close', () => {
     }
   )
 
-  // The flag keeps its meaning: a forced teardown that did not prove the descendants gone.
   it.each([
     ['unverifiable', true],
     ['live', true],
@@ -117,7 +116,6 @@ describe('Codex process-tree diagnostic after a forced close', () => {
     await vi.advanceTimersByTimeAsync(10_000)
     await expect(closing).resolves.toBe(true)
     expect(connection.processTreeUnproven).toBe(unproven)
-    // A repeat close answers from the memo and keeps the diagnostic.
     await expect(connection.close()).resolves.toBe(true)
     expect(connection.processTreeUnproven).toBe(unproven)
   })
