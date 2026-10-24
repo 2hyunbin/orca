@@ -3,15 +3,18 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getExecutionHostLabel, toSshExecutionHostId } from '../../../../shared/execution-host'
+import {
+  getExecutionHostLabel,
+  toSshExecutionHostId
+} from '../../../../../../shared/execution-host'
 import {
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
-  RUNTIME_PROTOCOL_VERSION,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY
-} from '../../../../shared/protocol-version'
-import type { Project, ProjectHostSetup } from '../../../../shared/project-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { useAppStore } from '../../store'
+} from '../../../../../../shared/worktree-runtime-capabilities'
+import { RUNTIME_PROTOCOL_VERSION } from '../../../../../../shared/protocol-version'
+import type { Project, ProjectHostSetup } from '../../../../../../shared/project-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { useAppStore } from '../../../../store/index'
 import { RepositoryHostSetupsSection } from './RepositoryHostSetupsSection'
 
 let container: HTMLDivElement

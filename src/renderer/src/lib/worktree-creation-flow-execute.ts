@@ -13,11 +13,13 @@ import {
   formatWorkspaceCreateError,
   getWorkspaceCreateErrorToastMessage
 } from '@/lib/workspace-create-error-format'
-import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
+import type { CreatedWorktreeResult } from '@/store/slices/worktrees/create/worktree-create-payload'
 import type { WorktreeCreationRequest } from '@/lib/pending-worktree-creation'
-import { createBrowserUuid } from '@/lib/browser-uuid'
 import { resolveBackendDraftStartup } from '@/lib/worktree-draft-startup-view-mode'
-import { buildWorktreeCreationStartupOpt } from '@/lib/worktree-creation-flow-startup'
+import {
+  hostPlannableAgentLaunch,
+  windowStartupAfterCreate
+} from '@/lib/worktree-creation-host-agent-launch'
 import {
   launchStructuredWorktreeSession,
   type WorktreeCreationStructuredSessionResult
@@ -64,7 +66,8 @@ export async function executeWorktreeCreation(
     preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
   // Named to later steps, so a same-path twin on another host can't blur the owner (L277).
   const onCreationHost = creationHostId ? { executionHostId: creationHostId } : {}
-  let result: CreateWorktreeResult
+  const hostAgentLaunch = hostPlannableAgentLaunch(preparedRequest)
+  let result: CreatedWorktreeResult
   try {
     const provisionedRoot = getProvisionedRootCreateOptions(preparedRequest)
     const backendStartup =
@@ -99,6 +102,7 @@ export async function executeWorktreeCreation(
         preparedRequest.compareBaseRef,
         {
           setupOnly: preparedRequest.setupOnly,
+          ...(hostAgentLaunch ? { hostAgentLaunch } : {}),
           executionHostId: creationHostId,
           ...(preparedRequest.nameWasGenerated ? { nameWasGenerated: true } : {}),
           ...(preparedRequest.displayNameKind
@@ -156,13 +160,8 @@ export async function executeWorktreeCreation(
   await attachEphemeralVmRuntimeToWorkspace(preparedRequest, worktree.id)
 
   const backendSpawned = result.startupTerminal?.spawned === true
-  if (preparedRequest.startupPlan && !backendSpawned && !preparedRequest.startupPlan.launchToken) {
-    // Share one renderer-session token so delayed delivery reaches exactly the pane seeded from this startup.
-    preparedRequest.startupPlan.launchToken = createBrowserUuid()
-  }
-  const startupOpt = structuredLaunch
-    ? undefined
-    : buildWorktreeCreationStartupOpt(preparedRequest, backendSpawned)
+  const windowStartup = windowStartupAfterCreate(preparedRequest, result, backendSpawned)
+  const startupOpt = windowStartup.startup
 
   // Hand off only if still viewing creation/new workspace; preserve later navigation and toast instead (#9944).
   const shouldActivateOnCompletion = isCreatedWorkspaceInView(creationId, worktree.id)
@@ -177,7 +176,7 @@ export async function executeWorktreeCreation(
       activation = activateAndRevealWorktree(worktree.id, {
         sidebarRevealBehavior: 'auto',
         ...onCreationHost,
-        ...(preparedRequest.agent !== null ? { agent: preparedRequest.agent } : {}),
+        ...(windowStartup.agent !== null ? { agent: windowStartup.agent } : {}),
         ...(result.setup ? { setup: result.setup } : {}),
         ...(defaultTabs ? { defaultTabs } : {}),
         ...(startupOpt ? { startup: startupOpt } : {}),
@@ -219,7 +218,7 @@ export async function executeWorktreeCreation(
         try {
           ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id, {
             startup: startupOpt,
-            agent: preparedRequest.agent,
+            agent: windowStartup.agent,
             unknownHostCountIsEmpty: true
           })
         } catch (recoveryError) {
@@ -266,7 +265,7 @@ export async function executeWorktreeCreation(
       try {
         ensureWebRuntimeWorktreeTerminalAfterWake(worktree.id, {
           startup: startupOpt,
-          agent: preparedRequest.agent,
+          agent: windowStartup.agent,
           activate: false,
           // Why: this client just created the workspace, so it starts empty.
           unknownHostCountIsEmpty: true
@@ -322,6 +321,7 @@ export async function executeWorktreeCreation(
     primaryTabId,
     startupTerminalTabId: result.startupTerminal?.tabId,
     backendSpawned,
+    hostPlannedStartup: result.hostPlannedStartup === true,
     focusOnCompletion: shouldActivateOnCompletion
   })
 }

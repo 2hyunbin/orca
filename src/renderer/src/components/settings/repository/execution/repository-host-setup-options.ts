@@ -1,9 +1,15 @@
-import { getExecutionHostLabel, type ExecutionHostId } from '../../../../shared/execution-host'
-import type { ExecutionHostRegistryEntry } from '../../../../shared/execution-host-registry'
-import type { ProjectHostSetup, ProjectHostSetupState } from '../../../../shared/project-types'
+import {
+  getExecutionHostLabel,
+  type ExecutionHostId
+} from '../../../../../../shared/execution-host'
+import type { ExecutionHostRegistryEntry } from '../../../../../../shared/execution-host-registry'
+import type {
+  ProjectHostSetup,
+  ProjectHostSetupState
+} from '../../../../../../shared/project-types'
 import { translate } from '@/i18n/i18n'
 import { getHostSetupUnavailableDetail } from '@/lib/project-host-setup-options'
-import { pickerExecutionHosts } from '../../../../shared/managed-orcad-execution-host'
+import { pickerExecutionHosts } from '../../../../../../shared/managed-orcad-execution-host'
 
 export type SetupHostOption = {
   id: ExecutionHostId

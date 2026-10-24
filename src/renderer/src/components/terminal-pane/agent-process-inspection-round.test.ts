@@ -67,6 +67,7 @@ describe('agent process inspection rounds', () => {
     }
     await vi.advanceTimersByTimeAsync(200)
 
+    expect(started.length).toBeGreaterThan(0)
     expect(started.length).toBeLessThanOrEqual(8)
   })
 

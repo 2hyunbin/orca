@@ -9,6 +9,7 @@ import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { ProfileStateSqliteAuthority } from './profile-state/profile-state-sqlite-authority'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 
 const testState = { dir: '' }
@@ -65,6 +66,19 @@ function dataFile(): string {
   return join(testState.dir, 'orca-data.json')
 }
 
+function persistedRevision(): number {
+  const reader = new ProfileStateSqliteAuthority(
+    join(testState.dir, 'profile-state.db'),
+    'persistence-test'
+  )
+  try {
+    reader.readSerializedState()
+    return reader.revision
+  } finally {
+    reader.close()
+  }
+}
+
 const SECRETS = {
   opencodeSessionCookie: 'cookie-$&-value',
   httpProxyUrl: 'http://user:p@ss@proxy.local:8080'
@@ -97,6 +111,7 @@ describe('persistence single-serialize save guard', () => {
   it('skips the disk write when state is identical, even with secrets set (random-IV cipher)', async () => {
     const store = await seedStoreWithSecrets()
     const stateBefore = readPersistedStateJson(dataFile())
+    const revisionBefore = persistedRevision()
 
     // Net no-op state must hash identically despite random-IV encryption.
     const originalWidth = store.getUI().sidebarWidth
@@ -107,6 +122,7 @@ describe('persistence single-serialize save guard', () => {
     await store.waitForPendingWrite()
 
     expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+    expect(persistedRevision()).toBe(revisionBefore)
   })
 
   it('still writes when state actually changes (including a secret change)', async () => {
@@ -160,19 +176,23 @@ describe('persistence single-serialize save guard', () => {
     expect(persisted.settings.httpProxyUrl).toBe('')
 
     const stateBefore = readPersistedStateJson(dataFile())
+    const revisionBefore = persistedRevision()
     store.updateSettings({ httpProxyUrl: SECRETS.httpProxyUrl })
     vi.advanceTimersByTime(2000)
     await store.waitForPendingWrite()
     expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+    expect(persistedRevision()).toBe(revisionBefore)
   })
 
   it('sync flush also skips on identical state with secrets set', async () => {
     const store = await seedStoreWithSecrets()
     const stateBefore = readPersistedStateJson(dataFile())
+    const revisionBefore = persistedRevision()
 
     store.flushOrThrow()
 
     expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+    expect(persistedRevision()).toBe(revisionBefore)
   })
 
   it('does not serialize the complete profile for a UI domain save', async () => {
@@ -204,6 +224,8 @@ describe('persistence single-serialize save guard', () => {
     }
 
     expect(fullStateSerializations).toBe(0)
+    const reloaded = await createStore()
+    expect(reloaded.getUI().sidebarWidth).toBe(640)
   })
 
   // Ciphertext can equal a user-controlled value; value-based normalization could hash distinct states equally.

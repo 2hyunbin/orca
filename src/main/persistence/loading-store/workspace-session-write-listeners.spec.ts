@@ -5,7 +5,6 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import { TEST_LEAF_1, TEST_LEAF_2 } from '../persistence-session-fixtures'
 import { WorkspaceLayoutStream } from '../../runtime/workspace-layout-stream'
 import { collectLayoutEvents } from '../../runtime/workspace-layout-stream-events.test-fixture'
-import { ProfileStateWriterError } from '../profile-state/profile-state-writer-errors'
 import { fixture } from './profile-state-delayed-authority-fixture'
 import type { Store } from './store'
 
@@ -96,9 +95,9 @@ export function registerWorkspaceSessionWriteListenersTests(): void {
     await step(() => store.setWorkspaceSession(hostSession(store), SSH_HOST))
     await step(async () => {
       authority.failNextWrite()
-      await store
-        .persistPtyBinding({ ...binding, ptyId: 'failed-pty', incarnationId: 'failed' })
-        .catch((error: unknown) => error instanceof ProfileStateWriterError || error)
+      await expect(
+        store.persistPtyBinding({ ...binding, ptyId: 'failed-pty', incarnationId: 'failed' })
+      ).rejects.toThrow('profile_state_write_failed')
     })
     await step(() => store.retirePtyBinding(binding))
     await step(() =>
