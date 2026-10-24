@@ -1,5 +1,6 @@
 import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-path'
 import {
+  composeWorktreeId,
   splitWorktreeId,
   splitWorktreeIdForFilesystem,
   worktreeIdentityKey
@@ -211,7 +212,7 @@ export function joinRepoWorktreeRows(
   if (!isFolderRepo(repo)) {
     const hostId = getRepoExecutionHostId(repo)
     for (const git of scan?.worktrees ?? []) {
-      const id = `${repo.id}::${git.path}`
+      const id = composeWorktreeId(repo.id, git.path)
       const owned =
         readWorktreeMetaForHost(deps.store, id, hostId) ??
         getRepoOwnedWorktreeMeta(repo, id, metaById, repoOwnerCount)

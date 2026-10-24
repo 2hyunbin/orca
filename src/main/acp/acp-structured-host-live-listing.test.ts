@@ -69,7 +69,7 @@ describe('a live Grok listing', () => {
       }
     })
     await rig.settle()
-    await vi.waitFor(async () => expect((await saved()).models).toHaveLength(3))
+    await vi.waitFor(async () => expect(await saved()).toHaveProperty('models.length', 3))
     const observed = await saved()
     expect(observed).toMatchObject({
       origin: 'live-session',
@@ -189,6 +189,9 @@ it.each([
       expect(projectedModelRows).toBe(updates * modelRows * 2)
       expect(saves).toBe(1)
       const saved = catalog.snapshot({ agent: 'grok', sessionId: SESSION })
+      if (saved.origin === 'unknown') {
+        throw new Error('missing saved live catalog')
+      }
       expect(saved.models).toHaveLength(modelRows)
       expect(saved.models[0]).toMatchObject({ id: 'grok-4.7', isDefault: true })
       process.stdout.write(

@@ -16,15 +16,37 @@ import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
 import { getRepoHostIdentityForParts } from '../../../shared/repo-host-identity'
+import type { OrcaRuntimeWithPersistHeadlessTerminalTitle } from '../workspaces/workspace-file-session-targets'
+import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from '../session-graph/session-graph-authority'
+import type { RuntimeWorkspaceCatalog } from '../workspaces/workspace-catalog'
+import type { RuntimeWorkspaceSelectors } from '../workspaces/workspace-selectors'
 
 export abstract class StructuredSessionWorkspaceScope extends OrcaRuntimeWithStructuredSessionAccountHome {
+  protected abstract resolveFolderWorkspaceSelector(
+    ...args: Parameters<
+      OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceSelector']
+    >
+  ): ReturnType<
+    OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceSelector']
+  >
+
+  protected abstract projectCachedWorktrees(
+    ...args: Parameters<RuntimeWorkspaceCatalog['projectCachedWorktrees']>
+  ): ReturnType<RuntimeWorkspaceCatalog['projectCachedWorktrees']>
+
+  protected abstract matchWorktreeSelector(
+    ...args: Parameters<RuntimeWorkspaceSelectors['matchWorktreeSelector']>
+  ): ReturnType<RuntimeWorkspaceSelectors['matchWorktreeSelector']>
+
   protected async resolveStructuredAgentSessionLocation(worktreeSelector: string) {
     const target = await this.resolveRuntimeFileTarget(worktreeSelector)
     return this.structuredAgentSessionLocationForTarget(target)
   }
 
   protected structuredAgentSessionLocationForTarget(
-    target: Awaited<ReturnType<this['resolveRuntimeFileTarget']>>
+    target: Awaited<
+      ReturnType<OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveRuntimeFileTarget']>
+    >
   ) {
     const routing = resolveWorktreeHostRouting(this.store?.getRepos() ?? [], target.worktree)
     if (routing.kind === 'ambiguous') {

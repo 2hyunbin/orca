@@ -345,7 +345,8 @@ describe('a chat at rest, read by the host', () => {
       expect(provider.current).toMatchObject({ effort: 'high', serviceTier: 'rapid' })
       expect(provider.current).not.toHaveProperty('model')
       expect(provider.current).not.toHaveProperty('fastMode')
-      for (const saved of [{}, { model: 'C' }]) {
+      const savedOptions: Record<string, string>[] = [{}, { model: 'C' }]
+      for (const saved of savedOptions) {
         const host = await readAtRest({ options: saved }, [turnBody], true, models, true, provider)
         expect(host.current.serviceTier).toBe('rapid')
         const seed = getAgentSessionOptionCatalog('codex')!

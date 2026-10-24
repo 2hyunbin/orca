@@ -72,7 +72,7 @@ it('keeps a released claim separate while two eligible chats share their first p
   const request = (sessionId: string) => ({
     agent: 'opencode',
     sessionId,
-    inSessionWorkspace: true
+    inSessionWorkspace: true as const
   })
   try {
     const first = service.demand(request(released.sessionId))

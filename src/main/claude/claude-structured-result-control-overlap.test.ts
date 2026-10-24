@@ -16,7 +16,7 @@ it.each(['before-settlement', 'after-settlement'])(
     const report = Promise.withResolvers<unknown>()
     const events: ClaudeStructuredSessionEvent[] = []
     const native = fakeClaude({ routes: { set_model: () => control.promise } })
-    const adapter = await acquired(native, { options: { fastMode: true } }, events)
+    const adapter = await acquired(native, {}, events)
     const connection = native.connections[0]!
     const session = adapter['sessions'].get('session-1')!
     const read = () => adapter.readOptions({ sessionId: 'session-1', fence: 7 })

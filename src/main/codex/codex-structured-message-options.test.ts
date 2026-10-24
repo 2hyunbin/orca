@@ -275,7 +275,9 @@ describe('Codex captured message choices', () => {
   })
 
   it('sends an exact empty snapshot without consulting unknown defaults', async () => {
-    const request = vi.fn(async () => ({ turn: { id: 'unexpected' } }))
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'unexpected' }
+    }))
     const session = optionSession(request)
     session.reportedOptions = {}
     session.options.set('model', 'old-override')

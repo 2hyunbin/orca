@@ -12,7 +12,6 @@ import {
   structuredAgentSessionAttemptFailureParts
 } from '../../../shared/structured-agent-session-rejection-words'
 import { agentSessionWriteNoticeEnglish } from '../../../shared/agent-session-refusal-notice'
-import { agentSessionWriteNoticeText } from '../../../renderer/src/components/native-chat/agent-session-write-notice-text'
 import {
   providerDiagnostic,
   readWholeAgentSessionFailureFact,
@@ -133,6 +132,9 @@ it('rejects a refused choice before prompt input and leaves the next pick saved'
 })
 
 it('carries Claude effort validation through the SDK queue and saved desktop/phone rejection, then recovers', async () => {
+  const { agentSessionWriteNoticeText } = await vi.importActual<{
+    agentSessionWriteNoticeText: typeof agentSessionWriteNoticeEnglish
+  }>('../../../renderer/src/components/native-chat/agent-session-write-notice-text')
   await rig.dispose()
   rig = await createQueuedMessageTestRig({ agent: 'claude', restartable: true })
   const queue = createClaudeUserMessageQueue()

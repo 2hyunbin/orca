@@ -77,6 +77,8 @@ function supportsDurableTerminalPromptDelivery(): boolean {
 }
 
 export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntimeId {
+  protected abstract pruneUnregisteredWorktreeScans(): void
+
   private asRuntimeStatusHost(): RuntimeStatusHost {
     return this as unknown as RuntimeStatusHost
   }

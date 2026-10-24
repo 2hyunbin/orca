@@ -224,7 +224,7 @@ it('catalog-scale settles retired publication chains and bounds Refresh registra
           accountHome: { variable: 'GROK_HOME', path: `/generated-account/${owners}` },
           providerHandleChain: [],
           location: {
-            executionHostId: 'local',
+            executionHostId: 'local' as const,
             wslDistro: null,
             workspaceId: `scale-workspace-${owners}-${index}`,
             workspaceKind: 'folder' as const

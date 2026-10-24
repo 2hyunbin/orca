@@ -111,6 +111,7 @@ describe('original operation through actual nested resolution', () => {
         runListing
       })
       const record = agentSessionRecordFixture({
+        sessionId: 'catalog-scope-session',
         provider: 'claude',
         accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/fixture/account' }
       })
