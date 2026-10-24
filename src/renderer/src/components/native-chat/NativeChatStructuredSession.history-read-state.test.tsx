@@ -7,11 +7,24 @@ import * as cliSwitch from '../tab-bar/native-chat-cli-switch-run'
 import { useAppStore } from '@/store'
 // @vitest-environment happy-dom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 import { NativeChatStructuredSession } from './NativeChatStructuredSession'
+import { TabSessionSwitchHoverAction } from '../tab-bar/TabSessionSwitchHoverAction'
+import { TabSessionSurfaceSwitchMenuItems } from '../tab-bar/TabSessionSurfaceSwitchMenuItems'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+import {
+  readLocalRuntimeCapabilitiesOrUnknown,
+  setLocalRuntimeCapabilitiesForTests
+} from '@/runtime/local-runtime-capabilities'
+import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
+import type { RuntimeStatus } from '../../../../shared/runtime-types'
 
 const { mocks, moduleFactories, resetStructuredSessionMocks } = await vi.hoisted(async () =>
   (await import('./NativeChatStructuredSession.test-harness')).createStructuredSessionMocks()
@@ -290,4 +303,90 @@ it('keeps the recorded OMP reply readable with its CLI switch unavailable', () =
   fireEvent.click(button)
   expect(invoke).not.toHaveBeenCalled()
   expect(mocks.messageListProps?.session).toMatchObject({ sessionId, messages: mocks.messages })
+})
+
+it('gates eligible native header hover and menu switches through capability hydration and live Chat UI updates', async () => {
+  const tab = agentSessionTabFixture('native-controls', 'wt-1', {
+    entityId: '019fd532-7c11-7a90-b6de-4e1a2c3d5f60'
+  })
+  const nativeChat = { sessionId: tab.entityId, agent: 'codex' as const }
+  useAppStore.setState(useAppStore.getInitialState(), true)
+  useAppStore.setState({
+    settings: createGlobalSettingsFixture({ experimentalNativeChat: false }),
+    repos: [makeRepo()],
+    worktreesByRepo: { 'repo-1': [makeWorktree('wt-1', 'native', { path: '/repo' })] },
+    unifiedTabsByWorktree: { 'wt-1': [tab] }
+  })
+  mocks.status = 'ready'
+  setLocalRuntimeCapabilitiesForTests(null)
+  let answer: (status: RuntimeStatus) => void = () => {
+    throw new Error('Capability probe did not start')
+  }
+  const status = new Promise<RuntimeStatus>((resolve) => {
+    answer = resolve
+  })
+  const getStatus = vi.fn(() => status)
+  Object.assign(window, { api: { ...window.api, runtime: { getStatus } } })
+  const switchToCli = vi.spyOn(cliSwitch, 'runNativeChatCliSwitch')
+  render(
+    <TooltipProvider>
+      <NativeChatStructuredSession
+        isVisible
+        isFocusedGroup
+        tabId={tab.id}
+        sessionId={tab.entityId}
+        target={{ kind: 'local' }}
+        agent="codex"
+      />
+      <TabSessionSwitchHoverAction tab={tab} nativeChat={nativeChat} />
+      <DropdownMenu open modal={false}>
+        <DropdownMenuTrigger>Open native tab menu</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <TabSessionSurfaceSwitchMenuItems tab={tab} nativeChat={nativeChat} leadingSeparator />
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </TooltipProvider>
+  )
+  const expectHidden = () => {
+    expect(screen.queryAllByRole('button', { name: 'Switch to CLI', hidden: true })).toHaveLength(0)
+    expect(screen.queryByRole('menuitem', { name: 'Switch to CLI' })).toBeNull()
+    expect(screen.queryByRole('separator')).toBeNull()
+    expect(screen.queryByText('Resume in New Terminal')).toBeNull()
+    expect(screen.getByTestId('message-list')).toBeTruthy()
+  }
+  expect(readLocalRuntimeCapabilitiesOrUnknown()).toBeNull()
+  expectHidden()
+  const response = createCompatibleRuntimeStatusResponse('local')
+  if (!response.ok) {
+    throw new Error('Expected status fixture')
+  }
+  await act(async () => {
+    answer({ ...response.result, capabilities: ['agent-session.structured.switch.v1:codex'] })
+    await status
+  })
+  expect(readLocalRuntimeCapabilitiesOrUnknown()).toContain(
+    'agent-session.structured.switch.v1:codex'
+  )
+  expectHidden()
+  act(() => {
+    useAppStore.setState({
+      settings: createGlobalSettingsFixture({ experimentalNativeChat: true })
+    })
+  })
+  const buttons = screen.getAllByRole('button', { name: 'Switch to CLI', hidden: true })
+  expect(buttons).toHaveLength(2)
+  for (const button of buttons) {
+    expect(button.hasAttribute('disabled')).toBe(false)
+  }
+  expect(
+    screen.getByRole('menuitem', { name: 'Switch to CLI' }).getAttribute('data-disabled')
+  ).toBeNull()
+  act(() => {
+    useAppStore.setState({
+      settings: createGlobalSettingsFixture({ experimentalNativeChat: false })
+    })
+  })
+  expectHidden()
+  expect(getStatus).toHaveBeenCalledOnce()
+  expect(switchToCli).not.toHaveBeenCalled()
 })
