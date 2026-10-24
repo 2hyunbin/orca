@@ -131,7 +131,7 @@ function rig(agent = 'opencode') {
     setWorktreeMeta: writes
   }
   // Compose the same owner methods without creating a service, app, journal or process.
-  const runtimeState: unknown = {
+  const runtimeState = {
     store,
     resolvedWorktrees: new RuntimeResolvedWorktreeCache(),
     worktreeScanCache: new Map(),
@@ -139,7 +139,7 @@ function rig(agent = 'opencode') {
     worktreeScanInFlight: new Map()
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: shipping prototypes are installed immediately below and the fixture supplies their observed dependency slice.
-  const runtime = runtimeState as ScopeFixture
+  const runtime = runtimeState as unknown as ScopeFixture
   for (const owner of [
     OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree,
     RuntimeWorkspaceSelectors,
@@ -224,18 +224,18 @@ function rig(agent = 'opencode') {
       return catalog.read(params)
     }
   }
-  const hostSlice: unknown = {
+  const hostSlice = {
     deps: { store: { getRecord: () => undefined }, modelCatalog: exposed }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the RPC accesses only the installed catalog and record lookup dependencies supplied here.
-  const host = hostSlice as StructuredAgentSessionHost
+  const host = hostSlice as unknown as StructuredAgentSessionHost
   setStructuredAgentSessionHost(host)
   const method = STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS.find(
     (row) => row.name === 'agentSession.modelCatalog'
   )!
-  const contextSlice: unknown = { runtime }
+  const contextSlice = { runtime }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this RPC reads only the composed runtime slice and has no transport dependencies.
-  const context = contextSlice as RpcContext
+  const context = contextSlice as unknown as RpcContext
   const rpc = async (params = {}) =>
     method.handler(method.params!.parse({ agent, worktree: 'name:W2', ...params }), context)
   const current = () => rpc({ savedOnly: true })
