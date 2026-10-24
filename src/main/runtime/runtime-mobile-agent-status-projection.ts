@@ -26,7 +26,7 @@ function workingHookOwnsIdleTitleInterval(
     status.state === 'working' &&
     pty?.lastAgentStatus === 'idle' &&
     !terminalTitleBlocksExplicitAgentStatus(pty.lastOscTitle) &&
-    (codexHookReportsRunningTurn(status) ||
+    (codexHookReportsRunningTurn(status, observedAt, pty) ||
       observedAt >
         Math.max(
           pty.lastAgentStatusRichInvalidatedAtEpochMs ?? 0,
@@ -38,13 +38,19 @@ function workingHookOwnsIdleTitleInterval(
 
 // Why: Codex's title follows the thread it displays, so a /side chat goes idle while the main
 // turn runs; its end arrives by hook or host rollout, and the stale bound covers older hosts.
-function codexHookReportsRunningTurn(status: HookTurnFacts): boolean {
+// A hook from before the PTY's current process describes that process's predecessor.
+function codexHookReportsRunningTurn(
+  status: HookTurnFacts,
+  observedAt: number,
+  pty: RuntimePtyWorktreeRecord | null
+): boolean {
   const mainState = status.mainAgent?.state
   return (
     status.agentType === 'codex' &&
     status.restoredUnconfirmed !== true &&
     mainState !== undefined &&
-    mainState !== 'done'
+    mainState !== 'done' &&
+    observedAt > (pty?.providerGenerationResetAtEpochMs ?? 0)
   )
 }
 
@@ -113,7 +119,7 @@ export function renewRuntimeMobileAgentStatusFromPtyTitle(
     return status
   }
   const richStatusCanOwnTitleInterval =
-    codexHookReportsRunningTurn(status) ||
+    codexHookReportsRunningTurn(status, agentStatusAuthorityObservedAt(status), pty) ||
     pty.lastAgentStatusRichInvalidatedAtEpochMs === null ||
     agentStatusAuthorityObservedAt(status) > pty.lastAgentStatusRichInvalidatedAtEpochMs
   const titleEvidenceAt = pty.lastOscTitleEpochMs

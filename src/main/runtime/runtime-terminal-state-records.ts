@@ -102,6 +102,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   } | null
   lastAgentStatusStartedAtEpochMs: number | null
   lastAgentStatusRichInvalidatedAtEpochMs: number | null
+  /** When a replacement process took over this PTY id; earlier hooks describe its predecessor. */
+  providerGenerationResetAtEpochMs?: number
   lastOscTitle: string | null
   lastOscTitleAt: number | null
   lastOscTitleEpochMs: number | null

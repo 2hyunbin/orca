@@ -75,6 +75,20 @@ describe('paired/mobile Codex status while a /side chat is shown', () => {
     expect(out).toMatchObject({ state: 'waiting', prompt: 'main task please' })
   })
 
+  it('does not carry a running turn across a replacement process on the same PTY', () => {
+    const hookAt = Date.now() - 20_000
+    const out = renewRuntimeMobileAgentStatusFromPtyTitle(runningExec(hookAt, 'codex'), {
+      ...sideChatIdlePty(hookAt),
+      lastOscTitle: null,
+      lastOscTitleEpochMs: null,
+      lastAgentStatus: null,
+      lastAgentStatusStartedAtEpochMs: null,
+      lastAgentStatusRichInvalidatedAtEpochMs: hookAt + 5_000,
+      providerGenerationResetAtEpochMs: hookAt + 5_000
+    })
+    expect(out).toBeNull()
+  })
+
   it('still lets an idle title end the turn of an agent whose title follows that turn', () => {
     const hookAt = Date.now() - 10_000
     const out = renewRuntimeMobileAgentStatusFromPtyTitle(
