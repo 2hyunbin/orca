@@ -175,7 +175,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
           {
             id: 'repo1',
             displayName: 'repo1',
-            badgeColor: null,
+            badgeColor: '#737373',
             sourceRepoIds: ['repo1'],
             createdAt: 1,
             updatedAt: 1,

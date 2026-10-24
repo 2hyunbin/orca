@@ -104,7 +104,7 @@ type HarnessState = AppState
 /** The runtime status the create reads its capabilities and device scope from. */
 function statusMap(options: {
   capabilities: RuntimeStatus['capabilities']
-  deviceScope?: string
+  deviceScope?: RuntimeStatus['deviceScope']
 }): AppState['runtimeStatusByEnvironmentId'] {
   return new Map([
     [
@@ -127,8 +127,8 @@ function statusMap(options: {
  */
 async function stageHandleFor(
   options: {
-    capabilities?: string[]
-    deviceScope?: string
+    capabilities?: RuntimeStatus['capabilities']
+    deviceScope?: RuntimeStatus['deviceScope']
     clientHostedSetting?: boolean
     placementPreference?: BrowserClientHostPlacementPreference
     onCreateCall?: (state: HarnessState) => void
