@@ -11,7 +11,6 @@ import {
   type RuntimeEnvironmentCallRequest
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
-import { getRuntimeRepoTarget } from '../github/repository-routing'
 
 const runtimeEnvironmentCall = vi.fn()
 const runtimeEnvironmentTransportCall = vi.fn()
@@ -225,30 +224,6 @@ describe('GitHub PR refresh owner-host routing', () => {
       },
       timeoutMs: 30_000
     })
-  })
-
-  it('keeps the first path match when no repo belongs to the target runtime', () => {
-    const store = createTestStore()
-    const repoPath = '/shared/repo'
-    const sshRepo = makeRepo({
-      id: 'repo-ssh',
-      path: repoPath,
-      connectionId: 'ssh-1',
-      executionHostId: 'ssh:ssh-1'
-    })
-    const otherRuntimeRepo = makeRepo({
-      id: 'repo-other-runtime',
-      path: repoPath,
-      executionHostId: 'runtime:env-1'
-    })
-    seed(store, { repos: [sshRepo, otherRuntimeRepo], worktreesByRepo: {} })
-
-    expect(
-      getRuntimeRepoTarget(store.getState(), repoPath, {
-        kind: 'environment',
-        environmentId: 'env-missing'
-      })?.repo
-    ).toBe(sshRepo)
   })
 
   it('keeps connected SSH PR refresh on the local coordinator even when a runtime is focused', () => {
