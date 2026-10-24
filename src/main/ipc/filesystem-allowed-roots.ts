@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
-import { computeWorkspaceRoot, getWorktreePathSettings } from './worktree-logic'
+import { computeWorkspaceRootAsync, getWorktreePathSettings } from './worktree-logic'
 import {
   getWorktreeMirrorDistroForRuntime,
   resolveLocalProjectRuntimesForRepos
@@ -116,7 +116,8 @@ export function resolveUnanchoredWorkspaceRoot(
   return hostPath.isAbsolute(workspaceDir) ? hostPath.resolve(workspaceDir) : null
 }
 
-export function getAllowedRoots(store: RuntimeStore): string[] {
+/** Async because a root mirrored into WSL needs the distro's home, and a synchronous probe blocks main. */
+export async function getAllowedRoots(store: RuntimeStore): Promise<string[]> {
   // Rehydrate repos only once per authorization snapshot.
   const repos = store.getRepos()
   const localRepos = filterLocalRepos(repos)
@@ -133,21 +134,20 @@ export function getAllowedRoots(store: RuntimeStore): string[] {
       }
     } else {
       const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, localRepos)
-      for (const repo of localRepos) {
-        roots.push(
-          resolve(
-            computeWorkspaceRoot(
-              repo.path,
-              // Match creation placement, including WSL, so newly created worktrees remain authorized.
-              getWorktreePathSettings(
-                repo,
-                settings,
-                getWorktreeMirrorDistroForRuntime(projectRuntimeByRepoId.get(repo.id))
-              )
+      const workspaceRoots = await Promise.all(
+        localRepos.map((repo) =>
+          computeWorkspaceRootAsync(
+            repo.path,
+            // Match creation placement, including WSL, so newly created worktrees remain authorized.
+            getWorktreePathSettings(
+              repo,
+              settings,
+              getWorktreeMirrorDistroForRuntime(projectRuntimeByRepoId.get(repo.id))
             )
           )
         )
-      }
+      )
+      roots.push(...workspaceRoots.map((root) => resolve(root)))
     }
   }
   return roots
