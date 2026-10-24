@@ -21,8 +21,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           "  onStatus('session_start', (event, ctx) => {",
           '    updateSessionMetadata(ctx)',
           ...(kind === 'pi' ? ['    piUiPromptDepth = 0'] : []),
-          '    // Why: /reload re-registers the active session, but it is not a',
-          '    // turn boundary and must not clear the visible status or unread state.',
+          '    // Reload replaces registration without ending the turn; preserve status and unread state.',
           "    if (event.reason === 'reload') return",
           "    post('session_start')",
           ...(kind === 'pi'
@@ -44,7 +43,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
   const primeDaemonWorkerGuard =
     kind === 'prime-agent'
       ? [
-          '  // Why: Prime loads extensions in both its frontend and event-emitting daemon worker.',
+          '  // Prime loads this in frontend and daemon; only the event-emitting daemon reports.',
           '  if (!process.env.PRIME_AGENT_INTERNAL_DAEMON_WORKER) return'
         ]
       : []
@@ -92,11 +91,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
 
   return [
     ...getAgentStatusInputRedactionSourceLines(),
-    '// Why: pi assistant messages carry content as an array of parts',
-    "// ({ type: 'text', text } / tool_use / tool_result / reasoning). We only",
-    "// surface the concatenated text parts as the visible 'last assistant",
-    "// message' for the dashboard preview — tool_use / reasoning would be",
-    '// noise (the dashboard already shows the active tool name + input).',
+    '// Preview only assistant text; reasoning and tool parts have separate surfaces.',
     'function extractAssistantText(message: unknown): string {',
     "  if (!message || typeof message !== 'object') return ''",
     '  const content = (message as { content?: unknown }).content',
@@ -112,13 +107,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '  return out',
     '}',
     '',
-    '// Preserve ordinary preview data; credential references never leave the agent host.',
-    '// Why: a restarted agent inherits the previous owner PID through env, so a',
-    '// dead owner must be claimable or the pane goes silent for good. Only ESRCH',
-    '// proves the owner is gone -- every other probe result keeps suppression, so',
-    '// a live foreign owner still cannot double-report. Mirrors the tri-state in',
-    '// main/agent-hooks/managed-hook-owner-identity.ts, which this runtime cannot',
-    '// import (the extension loads inside pi/omp with no Orca deps).',
+    '// Reclaim inherited dead owner PIDs only on ESRCH; all other probe results must suppress duplicate reporting.',
     'function isStatusOwnerAlive(pid: string): boolean {',
     '  const parsed = Number(pid)',
     '  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 0x7fffffff) return false',
@@ -131,8 +120,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '  }',
     '}',
     '',
-    "// Why: child agents inherit the lead's pane env; only its process may",
-    '// register status hooks. PID identity keeps in-process reloads reporting.',
+    '// Inherited pane identity permits only the lead process; PID equality retains in-process reloads.',
     'export default function (pi): void {',
     ...primeDaemonWorkerGuard,
     `  const ownerPid = process.env.${ownerEnv}`,
@@ -188,10 +176,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     ...(kind === 'prime-agent' ? [] : getOmpPlanReviewHandlerSourceLines()),
     ...getPiAgentStatusUiPromptHandlerSourceLines(kind),
     ...modelSelectHandler,
-    "  // Why: capture the assistant's final text on each completed message",
-    '  // so the dashboard preview reflects the most recent reply even before',
-    '  // agent_end fires. message_end is the right hook because pi guarantees',
-    '  // it fires after the message is finalized (post-streaming).',
+    '  // message_end finalizes preview text before agent_end, so dashboards see the latest reply sooner.',
     `  onStatus('message_end', (event${ctxParam}) => {`,
     ...captureSessionMetadata,
     "    if (event.message?.role !== 'assistant') return",
@@ -200,10 +185,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     "    post('message_end', { role: 'assistant', text })",
     '  })',
     '',
-    '  // Why: modern Pi stays non-idle across retry/compaction/follow-up work,',
-    '  // while legacy Pi becomes idle after its final agent_end handlers.',
-    '  // OMP instead marks non-terminal agent_end events with willContinue, so it',
-    '  // returns before the recheck timer is ever armed.',
+    '  // Modern Pi stays busy through retry/compaction; OMP willContinue bypasses this legacy-idle recheck.',
     '  const AGENT_END_IDLE_RECHECK_MS = 25',
     '  const AGENT_END_IDLE_RECHECK_MAX_MS = 250',
     '  let agentSettledSupported = false',

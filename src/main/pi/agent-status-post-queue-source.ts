@@ -19,7 +19,7 @@ export function getPiAgentStatusPostQueueSourceLines(kind: PiAgentKind): string[
     '  postQueue.retryTimer = null',
     '}',
     '',
-    '// Why: a queued or scheduled post builds its body later, so it already carries newer state.',
+    '// Queued posts build their body later and already include newer state.',
     'function hasQueuedPost(): boolean {',
     '  return postQueue.pendingPost !== null || postQueue.retryTimer !== null',
     '}',
