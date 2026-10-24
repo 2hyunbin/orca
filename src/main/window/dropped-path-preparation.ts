@@ -8,15 +8,17 @@ import type {
 import {
   DragTempCopyBatch,
   closeDragTempSource,
-  copyCheckedDragTempSource,
-  isDragTempSourceChanged,
   materializeDragTempPaths,
   releaseDragTempBatch,
-  writeCheckedDragTempSource,
-  type CheckedDragTempSource,
   type DragTempCopyItemResult,
   type DragTempCopyEnvironment
 } from './dragged-temp-file-copy'
+import {
+  copyCheckedDragTempSource,
+  isDragTempSourceChanged,
+  writeCheckedDragTempSource,
+  type CheckedDragTempSource
+} from './checked-drag-temp-source'
 import { mayNeedDragTempCopy } from './drag-temp-path'
 
 const DRAG_TEMP_COPY_TIMEOUT_MS = 2 * 60 * 1000
