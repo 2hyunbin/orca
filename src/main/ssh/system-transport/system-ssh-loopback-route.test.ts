@@ -12,9 +12,10 @@ const { existsSyncMock, spawnMock, connectMock, createServerMock, treeKillMock }
   })
 )
 
-vi.mock('../../windows-process-tree-kill', () => ({
-  terminateWindowsProcessTree: treeKillMock
-}))
+vi.mock('@orca/process-host/process-tree-termination', async (importOriginal) => {
+  const actual: Record<string, unknown> = await importOriginal()
+  return { ...actual, signalProcessTree: treeKillMock }
+})
 
 vi.mock('./system-ssh-orphaned-forward', () => ({
   stopOrphanedOrcaSshForward: vi.fn().mockResolvedValue(false)
@@ -322,7 +323,7 @@ describe('startSystemSshLoopbackRoute', () => {
   })
 
   // Why: killing ssh.exe leaves its ProxyCommand child running, still holding the proxy tunnel open.
-  it('stops the whole forward process tree on Windows, falling back to the direct kill', async () => {
+  it('stops the whole forward process tree on Windows, once', async () => {
     const forward = createFakeProcess()
     const probe = createFakeProcess()
     spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
@@ -331,11 +332,11 @@ describe('startSystemSshLoopbackRoute', () => {
     })
     const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
 
-    treeKillMock.mockResolvedValueOnce(false)
+    route.dispose()
     route.dispose()
 
-    expect(treeKillMock).toHaveBeenCalledWith(4242, { site: 'system-ssh-loopback-route' })
-    await vi.waitFor(() => expect(forward.kill).toHaveBeenCalledWith('SIGTERM'))
+    expect(treeKillMock).toHaveBeenCalledExactlyOnceWith(forward)
+    expect(forward.kill).not.toHaveBeenCalled()
   })
 
   it('reports a forward that already exited before anyone listened for it', async () => {
@@ -451,44 +452,6 @@ describe('startSystemSshLoopbackRoute', () => {
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
-  it('disposes a live Windows route once and avoids fallback after child exit', async () => {
-    const forward = createFakeProcess()
-    const probe = createFakeProcess()
-    spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
-      answerProbe(probe, 0)
-      return probe
-    })
-    const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
-    let finishKill = (_stopped: boolean): void => {}
-    treeKillMock.mockImplementationOnce(
-      () =>
-        new Promise<boolean>((resolve) => {
-          finishKill = resolve
-        })
-    )
-    route.dispose()
-    route.dispose()
-    expect(treeKillMock).toHaveBeenCalledTimes(1)
-    forward.exitCode = 255
-    forward.emit('exit', 255)
-    finishKill(false)
-    await Promise.resolve()
-    expect(forward.kill).not.toHaveBeenCalled()
-  })
-  it('uses direct cleanup for a live forward with no PID', async () => {
-    const forward = createFakeProcess()
-    forward.pid = undefined
-    const probe = createFakeProcess()
-    spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
-      answerProbe(probe, 0)
-      return probe
-    })
-    const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
-    route.dispose()
-    route.dispose()
-    expect(treeKillMock).not.toHaveBeenCalled()
-    expect(forward.kill).toHaveBeenCalledExactlyOnceWith('SIGTERM')
-  })
   it('closes a live login probe when its output stream errors', async () => {
     vi.useFakeTimers()
     try {

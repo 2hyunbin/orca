@@ -4,9 +4,12 @@
  * 127.0.0.1 through it instead of re-running the proxy for every exec.
  */
 import type { ChildProcessHandle as ChildProcess } from '@orca/process-host/process-spec'
+import {
+  childProcessHasExited,
+  signalProcessTree
+} from '@orca/process-host/process-tree-termination'
 import { createSshOperationAbortError } from '../connection/ssh-exec-options'
 import type { SshTarget } from '../../../shared/ssh-types'
-import { terminateWindowsProcessTree } from '../../windows-process-tree-kill'
 import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
 import type { SystemSshBuildArgsOptions, SystemSshLoopbackRouteArgs } from './system-ssh-args'
 import { spawnSystemSshCommand } from './system-ssh-command'
@@ -107,7 +110,7 @@ export async function startSystemSshLoopbackRoute(
       args,
       onExit: (callback) => {
         // Why: the forward can exit between the probe and this registration, after 'exit' already fired.
-        if (forward.process.exitCode !== null || forward.process.signalCode !== null) {
+        if (childProcessHasExited(forward.process)) {
           callback()
           return
         }
@@ -128,20 +131,15 @@ function stopLoopbackForward(
   killForward: () => void,
   platform: NodeJS.Platform
 ): void {
-  if (forwardProcess.exitCode !== null || forwardProcess.signalCode !== null) {
+  if (childProcessHasExited(forwardProcess)) {
     return
   }
-  const pid = forwardProcess.pid
-  if (platform !== 'win32' || !pid) {
+  if (platform !== 'win32') {
     killForward()
     return
   }
   // Why: Windows does not end a killed ssh's ProxyCommand child, which would keep the proxy tunnel open.
-  void terminateWindowsProcessTree(pid, { site: 'system-ssh-loopback-route' }).then((stopped) => {
-    if (!stopped && forwardProcess.exitCode === null && forwardProcess.signalCode === null) {
-      killForward()
-    }
-  })
+  void signalProcessTree(forwardProcess).catch(killForward)
 }
 
 function probeLoopbackRoute(
