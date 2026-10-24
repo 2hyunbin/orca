@@ -47,6 +47,7 @@ export function normalizeClaudeEvent(
   ) {
     return normalizeClaudeSubagentLifecycleEvent(state, eventName, paneKey, hookPayload)
   }
+  const previousSessionOwner = state.claudeSessionOwnerByPaneKey.get(paneKey)
   voidClaimsOfReplacedClaudeSession(state, eventName, eventAgentId, paneKey, hookPayload)
   if (eventName === 'SessionStart') {
     // Why: SessionStart is the only signal a resumed session emits before its first prompt
@@ -252,9 +253,16 @@ export function normalizeClaudeEvent(
               : {})
           }
       : undefined
+  // Why: only an established question refresh owns the old ID; a new approval may be unknown.
+  const isQuestionRefresh =
+    isAskUserQuestionWait &&
+    previousLead?.state === 'waiting' &&
+    previousLead.waitingAgentId === eventAgentId &&
+    isAskUserQuestionTool(state.lastToolByPaneKey.get(paneKey)?.toolName) &&
+    (previousSessionOwner === undefined ||
+      previousSessionOwner === state.claudeSessionOwnerByPaneKey.get(paneKey))
   const waitingToolUseId =
-    eventToolUseId ??
-    (eventName === 'PermissionRequest' ? undefined : previousLead?.waitingToolUseId)
+    eventToolUseId ?? (isQuestionRefresh ? previousLead?.waitingToolUseId : undefined)
 
   if (isManualCompactCompletion) {
     // Why: a manual /compact only ever completes at an idle prompt, so a child that exists ONLY as
