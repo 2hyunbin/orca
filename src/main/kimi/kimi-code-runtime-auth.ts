@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { parse as parseToml } from 'smol-toml'
+import { z } from 'zod'
 
 const DEFAULT_OAUTH_HOST = 'https://auth.kimi.com'
 const DEFAULT_BASE_URL = 'https://api.kimi.com/coding/v1'
@@ -10,13 +11,24 @@ export type KimiCodeRuntimeAuth = {
   usageUrl: string
 }
 
-function tableField(table: unknown, key: string): unknown {
-  return typeof table === 'object' && table !== null ? Reflect.get(table, key) : undefined
-}
+const KimiManagedProviderSchema = z.object({
+  base_url: z.string().optional(),
+  oauth: z.object({ oauth_host: z.string().optional() }).optional()
+})
 
-function stringField(table: unknown, key: string): string | undefined {
-  const value = tableField(table, key)
-  return typeof value === 'string' ? value : undefined
+type KimiManagedProviderConfig = z.infer<typeof KimiManagedProviderSchema>
+
+const KimiConfigSchema = z.object({
+  providers: z.object({ 'managed:kimi-code': KimiManagedProviderSchema.optional() }).optional()
+})
+
+function readManagedProviderConfig(configToml: string): KimiManagedProviderConfig | undefined {
+  try {
+    const parsed = KimiConfigSchema.safeParse(parseToml(configToml))
+    return parsed.success ? parsed.data.providers?.['managed:kimi-code'] : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function stripTrailingSlashes(value: string): string {
@@ -32,20 +44,12 @@ export function resolveKimiCodeRuntimeAuth(
   configToml: string,
   env: NodeJS.ProcessEnv = process.env
 ): KimiCodeRuntimeAuth {
-  let provider: unknown
-  try {
-    provider = tableField(parseToml(configToml).providers, 'managed:kimi-code')
-  } catch {
-    provider = undefined
-  }
+  const provider = readManagedProviderConfig(configToml)
   const envBaseUrl = env.KIMI_CODE_BASE_URL
   const envOAuthHost = env.KIMI_CODE_OAUTH_HOST ?? env.KIMI_OAUTH_HOST
   const hasEnvOverride = envBaseUrl !== undefined || envOAuthHost !== undefined
-  const baseUrl =
-    envBaseUrl !== undefined ? stripTrailingSlashes(envBaseUrl) : stringField(provider, 'base_url')
-  const oauthHost = hasEnvOverride
-    ? envOAuthHost
-    : stringField(tableField(provider, 'oauth'), 'oauth_host')
+  const baseUrl = envBaseUrl !== undefined ? stripTrailingSlashes(envBaseUrl) : provider?.base_url
+  const oauthHost = hasEnvOverride ? envOAuthHost : provider?.oauth?.oauth_host
 
   const effectiveHost = stripTrailingSlashes((oauthHost ?? DEFAULT_OAUTH_HOST).trim())
   const effectiveBaseUrl = stripTrailingSlashes(baseUrl ?? DEFAULT_BASE_URL)
