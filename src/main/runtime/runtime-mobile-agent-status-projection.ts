@@ -12,22 +12,31 @@ import { terminalTitleBlocksExplicitAgentStatus } from './runtime-worktree-statu
 import type { HookLiveAgentRow } from './runtime-terminal-contracts'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
+type HookTurnFacts = Pick<AgentStatusEntry, 'state' | 'agentType' | 'mainAgent'>
+
 function workingHookOwnsIdleTitleInterval(
-  state: AgentStatusEntry['state'],
+  status: HookTurnFacts,
   observedAt: number,
   pty: RuntimePtyWorktreeRecord | null
 ): boolean {
   return (
-    state === 'working' &&
+    status.state === 'working' &&
     pty?.lastAgentStatus === 'idle' &&
     !terminalTitleBlocksExplicitAgentStatus(pty.lastOscTitle) &&
-    observedAt >
-      Math.max(
-        pty.lastAgentStatusRichInvalidatedAtEpochMs ?? 0,
-        pty.lastAgentStatusStartedAtEpochMs ?? 0
-      ) &&
+    (codexHookReportsRunningTurn(status) ||
+      observedAt >
+        Math.max(
+          pty.lastAgentStatusRichInvalidatedAtEpochMs ?? 0,
+          pty.lastAgentStatusStartedAtEpochMs ?? 0
+        )) &&
     Date.now() - observedAt <= AGENT_STATUS_STALE_AFTER_MS
   )
+}
+
+// Why: Codex's title follows the thread it displays, so a /side chat goes idle while the main
+// turn runs; that turn's end always arrives by hook or rollout, never by title alone.
+function codexHookReportsRunningTurn(status: HookTurnFacts): boolean {
+  return status.agentType === 'codex' && status.mainAgent?.state === 'working'
 }
 
 // Why: only a completed turn's reply is final; mid-turn hook snapshots carry tool stdout.
@@ -95,6 +104,7 @@ export function renewRuntimeMobileAgentStatusFromPtyTitle(
     return status
   }
   const richStatusCanOwnTitleInterval =
+    codexHookReportsRunningTurn(status) ||
     pty.lastAgentStatusRichInvalidatedAtEpochMs === null ||
     agentStatusAuthorityObservedAt(status) > pty.lastAgentStatusRichInvalidatedAtEpochMs
   const titleEvidenceAt = pty.lastOscTitleEpochMs
@@ -126,9 +136,7 @@ export function renewRuntimeMobileAgentStatusFromPtyTitle(
       (status.state === 'blocked' || status.state === 'waiting'))
   if (!titleConfirmsState) {
     // A repaint of the idle interval preceding this hook is not a new turn boundary.
-    if (
-      workingHookOwnsIdleTitleInterval(status.state, agentStatusAuthorityObservedAt(status), pty)
-    ) {
+    if (workingHookOwnsIdleTitleInterval(status, agentStatusAuthorityObservedAt(status), pty)) {
       return status
     }
     if (
@@ -277,9 +285,7 @@ export function resolveRuntimeHookLiveAgentRow(
   if (live.payload.interactivePrompt != null) {
     return live
   }
-  if (
-    workingHookOwnsIdleTitleInterval(live.payload.state, agentStatusAuthorityObservedAt(live), pty)
-  ) {
+  if (workingHookOwnsIdleTitleInterval(live.payload, agentStatusAuthorityObservedAt(live), pty)) {
     return live
   }
   // This is the pane's only wall-clock title timestamp comparable to when the hook evidence
