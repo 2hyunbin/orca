@@ -13600,7 +13600,8 @@
           "moreLabel": "More actions for {{value0}}",
           "disable": "Disable",
           "enable": "Enable",
-          "remove": "Remove"
+          "remove": "Remove",
+          "openFullAccess": "Turn on in settings"
         },
         "PluginInstallConsent": {
           "install": "Install & enable",
@@ -13617,7 +13618,9 @@
         },
         "PluginSettingsMenu": {
           "label": "Plugin settings",
-          "development": "Development folders…"
+          "development": "Development folders…",
+          "fullAccessLabel": "Allow plugins that run code with full access",
+          "fullAccessDescription": "They run as a normal process with access to your files, network, and other processes."
         },
         "PluginThemeUseNow": {
           "label": "Use now:",
@@ -13631,10 +13634,10 @@
           "next": "Next screenshot"
         },
         "pluginConsentCopy": {
-          "runsWorker": "Runs a worker",
           "addsCommands": "Adds commands",
           "addsPanel": "Adds a panel",
-          "contentOnly": "Content only"
+          "contentOnly": "Content only",
+          "fullAccess": "Full access"
         },
         "PluginContributionActionCommand": {
           "run": "Run",
@@ -13677,6 +13680,9 @@
         "pluginThemeApply": {
           "nowUsing": "Now using {{value0}}",
           "switchBack": "Switch back"
+        },
+        "PluginCatalogGroups": {
+          "fullAccessOff": "Full access · turned off in settings"
         }
       },
       "right": {
