@@ -43,10 +43,10 @@ export abstract class OrcaRuntimeWithPtyControllerInventoryListing extends OrcaR
       this.ptyControllerInventoryGenerationByProvider.set(providerKey, generation)
       pruneOldestMapEntry(this.ptyControllerInventoryGenerationByProvider, 512)
     }
+    // Why one deadline: joining newer listings must not extend a deadline-free read without end.
+    const overallDeadline = deadline ?? Date.now() + PTY_CONTROLLER_LIST_TIMEOUT_MS
     const listBudget = () =>
-      deadline === undefined
-        ? PTY_CONTROLLER_LIST_TIMEOUT_MS
-        : Math.max(1, Math.min(PTY_CONTROLLER_LIST_TIMEOUT_MS, deadline - Date.now()))
+      Math.max(1, Math.min(PTY_CONTROLLER_LIST_TIMEOUT_MS, overallDeadline - Date.now()))
     const listBudgetMs = listBudget()
     const providerListOpts = {
       deadlineMs: Date.now() + Math.max(1, listBudgetMs - PTY_CONTROLLER_LIST_PROVIDER_MARGIN_MS),

@@ -10,6 +10,7 @@ import {
   WORKTREE,
   type InventoryListing
 } from './pty-inventory-lifecycle-fixture'
+import { PTY_CONTROLLER_LIST_TIMEOUT_MS } from './orca-runtime-postlude'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -175,6 +176,28 @@ describe('lifecycle invalidation respects inventory scope and retry bounds', () 
     expect((await without)?.allLivePtyIds).toEqual(new Set(['relisted']))
     expect(list).toHaveBeenCalledTimes(4)
     expect(list.mock.calls[3]?.[1]?.includeForegroundProcessEvidence).toBe(false)
+  })
+
+  it('caps a deadline-free read at one listing budget however many listings it joins', async () => {
+    const first = deferred<PtyProcessInfo[]>()
+    const list = vi
+      .fn<InventoryListing>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValue(new Promise<PtyProcessInfo[]>(() => {}))
+    const { runtime } = createInventoryRuntime(list)
+    let now = 1000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const pending = runtime.read(undefined, 'repo::/tmp/a')
+    void runtime.read(undefined, 'repo::/tmp/b')
+    // The first listing answers just before its budget runs out; the joined one never answers.
+    now = 1000 + PTY_CONTROLLER_LIST_TIMEOUT_MS - 1
+    first.resolve([processRow()])
+    const settled = await Promise.race([
+      pending.then(() => 'settled'),
+      new Promise((resolve) => setTimeout(() => resolve('still waiting'), 500))
+    ])
+    expect(settled).toBe('settled')
+    expect(await pending).toBeNull()
   })
 
   it('allows only one target retry and keeps a second invalidation unknown', async () => {
