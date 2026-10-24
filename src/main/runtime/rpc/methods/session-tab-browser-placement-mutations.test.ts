@@ -92,6 +92,18 @@ describe('session tab browser placement mutations', () => {
       targetGroupId: 'group-1',
       index: 2
     })
+
+    // A group the host does not hold still moves the pane, appended.
+    await dispatch(dispatcher, 'session.tabs.movePaneToNewTab', {
+      worktree: 'id:wt-1',
+      sourceTabId: 'tab-1',
+      targetTabId: 'tab-4',
+      leafId: 'leaf-1',
+      targetGroupId: 'gone-group',
+      index: 0
+    })
+    expect(moveMobileSessionLeafToNewTab).toHaveBeenCalledTimes(2)
+    expect(moveMobileSessionLeafToNewTab.mock.calls[1]?.[3]).toBeUndefined()
   })
 
   it('refuses an old-client close for a projected-out browser page', async () => {

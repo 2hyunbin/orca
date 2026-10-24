@@ -192,8 +192,14 @@ async function resolveMovedPanePlacement(
     return translated.kind === 'move-to-group' && translated.index !== undefined
       ? { targetGroupId, index: translated.index }
       : { targetGroupId }
-  } catch {
-    return undefined
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message === 'target_group_not_found' || error.message === 'invalid_tab_order')
+    ) {
+      return undefined
+    }
+    throw error
   }
 }
 
