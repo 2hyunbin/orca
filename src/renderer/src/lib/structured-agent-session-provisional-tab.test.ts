@@ -450,6 +450,8 @@ it.each(['expiry', 'purge'])('created pane publication: %s', async (order) => {
   } else {
     expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(true)
     list(101)
-    expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(false)
+    expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN
+    )
   }
 })
