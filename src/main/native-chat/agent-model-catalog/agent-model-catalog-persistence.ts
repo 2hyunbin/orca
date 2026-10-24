@@ -10,8 +10,6 @@ import {
 } from './agent-model-catalog-entry'
 import { isStructuredAgentId } from '../../../shared/agent-session-provider-handle-encoding'
 
-// 3: Codex models carry `serviceTiers`; an older file would offer Fast with no tier to send.
-const SCHEMA_VERSION = 3
 const SAVE_COALESCE_MS = 500
 
 export type AgentModelCatalogPersistence = {
@@ -84,26 +82,32 @@ function parseModel(value: unknown): AgentSessionModelOption | null {
   }
 }
 
-function parseListing(value: unknown): AgentModelCatalogListing | null {
+function parseModels(value: unknown): AgentSessionModelOption[] | null {
+  if (!Array.isArray(value) || value.length === 0) {
+    return null
+  }
+  const models = value.map(parseModel)
+  return models.every((model): model is AgentSessionModelOption => model !== null) ? models : null
+}
+
+function parseListing(value: unknown, readModels = parseModels): AgentModelCatalogListing | null {
   const row = asRecord(value)
   if (
     !row ||
     (row.origin !== 'live-session' && row.origin !== 'probe') ||
-    typeof row.at !== 'number' ||
-    !Array.isArray(row.models) ||
-    row.models.length === 0
+    typeof row.at !== 'number'
   ) {
     return null
   }
-  const models = row.models.map(parseModel)
-  if (models.some((model) => model === null)) {
+  const models = readModels(row.models)
+  if (!models) {
     return null
   }
   const support = asRecord(row.fastModeSupport)
   const supported = support?.supported
   const supportReason = text(support?.reason)
   return {
-    models: models.filter((model): model is AgentSessionModelOption => model !== null),
+    models,
     ...(typeof supported === 'boolean'
       ? {
           fastModeSupport: {
@@ -120,13 +124,13 @@ function parseListing(value: unknown): AgentModelCatalogListing | null {
 
 /** Checked reconstruction rather than trust: a field a future schema drops or
  *  reshapes loads as "no entry", never as a corrupt catalog. */
-function parseEntry(value: unknown): AgentModelCatalogEntry | null {
+function parseEntry(value: unknown, readModels = parseModels): AgentModelCatalogEntry | null {
   const row = asRecord(value)
   if (!row || !isStructuredAgentId(row.agent) || typeof row.fingerprint !== 'string') {
     return null
   }
   if (row.agent === 'claude' || row.agent === 'codex') {
-    const display = parseListing(row.discovered) ?? parseListing(row.live)
+    const display = parseListing(row.discovered, readModels) ?? parseListing(row.live, readModels)
     return agentModelCatalogEntry(row.agent, row.fingerprint, display, null, null)
   }
   const configured = asRecord(row.configured)
@@ -138,8 +142,8 @@ function parseEntry(value: unknown): AgentModelCatalogEntry | null {
   return agentModelCatalogEntry(
     row.agent,
     row.fingerprint,
-    parseListing(row.discovered),
-    parseListing(row.live),
+    parseListing(row.discovered, readModels),
+    parseListing(row.live, readModels),
     configuredModelId && typeof configured?.at === 'number'
       ? {
           modelId: configuredModelId,
@@ -152,7 +156,7 @@ function parseEntry(value: unknown): AgentModelCatalogEntry | null {
 }
 
 /** Only the two listings and the configured default are written; the merged view is derived again on load. */
-function persistedEntry(entry: AgentModelCatalogEntry): unknown {
+function persistedEntry(entry: AgentModelCatalogEntry) {
   return {
     agent: entry.agent,
     fingerprint: entry.fingerprint,
@@ -162,11 +166,13 @@ function persistedEntry(entry: AgentModelCatalogEntry): unknown {
   }
 }
 
+export const agentModelCatalogCodec = { parseEntry, parseModels, persistedEntry, asRecord }
+
 /** One paced drain publishes complete generations of the retained source entries. */
 export function createAgentModelCatalogFilePersistence(
   directory: string
 ): AgentModelCatalogPersistence {
-  const file = createAgentModelCatalogJson(directory, parseEntry, persistedEntry, SCHEMA_VERSION)
+  const file = createAgentModelCatalogJson(directory, agentModelCatalogCodec)
   let entries: () => Iterable<AgentModelCatalogEntry> = () => []
   let hydrate = (_rows: AgentModelCatalogEntry[]): void => {}
   let acknowledged: AgentModelCatalogEntry[] = []
@@ -249,7 +255,7 @@ export function createAgentModelCatalogFilePersistence(
       clearTimeout(timer)
       timer = null
     }
-    if (accepted === durable && (!ready || !unchanged(acknowledged))) {
+    if (accepted === durable && (!ready || file.version() === 3 || !unchanged(acknowledged))) {
       accepted++
     }
     if (accepted === durable) {

@@ -31,12 +31,15 @@ vi.mock('@/runtime/host-structured-agents', () => ({
 }))
 
 it.each([
-  ['pi', true],
-  ['opencode2', true],
-  ['grok', false]
+  ['pi', true, 'live'],
+  ['opencode2', true, 'live'],
+  ['grok', false, 'live'],
+  ['pi', true, 'both'],
+  ['opencode2', true, 'both'],
+  ['grok', false, 'both']
 ] as const)(
   '%s upgrade preload preserves account rows without borrowing folder-sensitive inventory',
-  async (agent, expectedFolderScope) => {
+  async (agent, expectedFolderScope, sources) => {
     const directory = await mkdtemp(join(tmpdir(), 'pi-rpc-inventory-preload-'))
     let stop = () => {}
     try {
@@ -76,7 +79,15 @@ it.each([
       const previous = new AgentModelCatalogStore()
       const efforts = [{ value: 'high', label: 'High' }]
       const models = [{ id: 'provider/old', label: 'Old', isDefault: false, efforts }]
-      previous.recordSuccess(key, agent, { origin: 'probe', models }, 'discovery')
+      if (sources === 'both') {
+        previous.recordSuccess(
+          key,
+          agent,
+          { origin: 'probe', models: [{ ...models[0]!, id: 'provider/discovered' }] },
+          'discovery'
+        )
+      }
+      previous.recordSuccess(key, agent, { origin: 'live-session', models }, 'live')
       const entry = previous.get(key)!
       await writeFile(
         join(directory, 'agent-model-catalog.json'),
@@ -85,8 +96,13 @@ it.each([
           entries: [{ agent, fingerprint: key, discovered: entry.discovered, live: entry.live }]
         })
       )
-      const store = new AgentModelCatalogStore()
+      let store = new AgentModelCatalogStore()
       await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+      const schema3 = store.get(key)
+      await store.flushPersistence()
+      store = new AgentModelCatalogStore()
+      await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+      expect(store.get(key)).toEqual(schema3)
       const oldEntry = store.get(key)
       const probe = vi.fn(async () => {
         throw new Error('folder B discovery failed')

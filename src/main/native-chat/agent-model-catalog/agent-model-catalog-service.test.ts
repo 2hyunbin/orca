@@ -53,6 +53,64 @@ const GROK_HOME = (path: string): { variable: 'GROK_HOME'; path: string } => ({
 })
 
 describe('agent model catalog service', () => {
+  it('owns a folder report before queueing and detaches nested store and result answers', async () => {
+    const store = new AgentModelCatalogStore()
+    const pinned = record('/homes/a')
+    const { promise: folder, resolve } = Promise.withResolvers<string | null>()
+    const service = createAgentModelCatalogService({
+      store,
+      getRecord: () => pinned,
+      drivesRecord: () => true,
+      resolveAccountHome: async () => GROK_HOME('/homes/a'),
+      listsInChatFolder: new Set(['grok']),
+      recordWorkspacePath: () => folder,
+      workspaceMayOverrideDefaultModel: async () => false
+    })
+    const model = { ...listing('m').models[0]!, efforts: [{ value: 'high', label: 'High' }] }
+    const incoming = {
+      models: [{ ...model, serviceTiers: [{ value: 'fast', label: 'Fast' }] }],
+      fastModeSupport: { supported: true, reason: 'supported' },
+      configuredDefault: { modelId: 'm', sameModelIds: ['alias'], effort: 'high' }
+    }
+    const expected = structuredClone(incoming)
+    const returned = store.recordSuccess(
+      'direct',
+      'grok',
+      { ...incoming, origin: 'probe' },
+      'live'
+    )!
+    returned.live!.models[0]!.efforts[0]!.label = 'return mutation'
+    service.recordLiveListing(pinned.sessionId, incoming)
+    incoming.models[0]!.efforts[0]!.label = 'changed'
+    incoming.models[0]!.serviceTiers[0]!.label = 'changed'
+    incoming.fastModeSupport.reason = 'changed'
+    incoming.configuredDefault.sameModelIds[0] = 'changed'
+    expect(store.get('direct')!.live!.models).toEqual(expected.models)
+    resolve('/work')
+    const params = {
+      agent: 'grok',
+      sessionId: pinned.sessionId,
+      inSessionWorkspace: true,
+      savedOnly: true
+    } as const
+    const answer = await service.read(params)
+    if (answer.origin === 'unknown') {
+      throw new Error('report not retained')
+    }
+    const key = agentModelCatalogFingerprintForRecord(pinned, '/work')
+    const outward = store.get(key)!
+    answer.models[0]!.efforts[0]!.label = 'answer mutation'
+    answer.fastModeSupport!.reason = 'answer mutation'
+    outward.live!.models[0]!.serviceTiers![0]!.label = 'get mutation'
+    outward.configured!.sameModelIds![0] = 'get mutation'
+    store.get(key)!.models[0]!.efforts[0]!.label = 'get mutation'
+    expect(store.get(key)).toMatchObject({
+      live: { models: expected.models, fastModeSupport: expected.fastModeSupport },
+      configured: { sameModelIds: ['alias'] }
+    })
+    service.stop()
+  })
+
   it('answers unknown and kicks one probe for a session whose key has never listed', async () => {
     const store = new AgentModelCatalogStore()
     const probe = vi.fn(async (_home: AgentSessionAccountHome) => listing('gpt-a'))

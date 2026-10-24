@@ -1,3 +1,4 @@
+import { ownedAgentModelCatalogModels } from './agent-model-catalog-owned-entry'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 import type { AgentSessionUnavailable } from '../../../shared/agent-session-availability'
 import type {
@@ -138,8 +139,10 @@ export function agentModelCatalogResultFromEntry(
   return {
     origin: entry.origin,
     // Without a default the picker names nothing until the chat reports its model.
-    models: models.map((model) => (namesDefault ? { ...model } : { ...model, isDefault: false })),
-    ...(entry.fastModeSupport ? { fastModeSupport: entry.fastModeSupport } : {}),
+    models: structuredClone(models).map((model) =>
+      namesDefault ? model : { ...model, isDefault: false }
+    ),
+    ...(entry.fastModeSupport ? { fastModeSupport: { ...entry.fastModeSupport } } : {}),
     fetchedAt: entry.fetchedAt,
     listingNamesConfiguredModel: namesDefault && namesConfigured
   }
@@ -254,11 +257,11 @@ export function agentModelCatalogEntryWithSuccess(
       identity.agent,
       identity.fingerprint,
       {
-        models: success.models.map((row) => ({ ...row })),
+        models: ownedAgentModelCatalogModels(success.models, previous?.discovered?.models),
         origin: success.origin,
         at,
         complete: success.complete === true,
-        ...(success.fastModeSupport ? { fastModeSupport: success.fastModeSupport } : {})
+        ...(success.fastModeSupport ? { fastModeSupport: { ...success.fastModeSupport } } : {})
       },
       null,
       configuredModel
@@ -276,8 +279,11 @@ export function agentModelCatalogEntryWithSuccess(
     return null
   }
   const listing: AgentModelCatalogListing = {
-    models: models.map((model) => ({ ...model })),
-    ...(success.fastModeSupport ? { fastModeSupport: success.fastModeSupport } : {}),
+    models: ownedAgentModelCatalogModels(
+      models,
+      previous?.[source === 'discovery' ? 'discovered' : 'live']?.models
+    ),
+    ...(success.fastModeSupport ? { fastModeSupport: { ...success.fastModeSupport } } : {}),
     origin: success.origin,
     at
   }

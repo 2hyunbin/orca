@@ -12,12 +12,10 @@ import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-a
 import { agentModelCatalogFingerprintForRecord } from './agent-model-catalog-fingerprint'
 import {
   agentModelCatalogResultFromEntry,
-  retainedAgentModelCatalogModels
+  retainedAgentModelCatalogModels,
+  type AgentModelCatalogEntry,
+  type AgentModelCatalogLiveListing
 } from './agent-model-catalog-entry'
-import type {
-  AgentModelCatalogEntry,
-  AgentModelCatalogLiveListing
-} from './agent-model-catalog-store'
 import {
   catalogFolder,
   recordConfiguredDefault,
@@ -299,6 +297,7 @@ export function createAgentModelCatalogService(
       if (!record || !deps.drivesRecord(record) || independentAgentModelCatalog(record.provider)) {
         return
       }
+      listing = structuredClone(listing)
       if (!deps.listsInChatFolder?.has(record.provider)) {
         saveLiveListing(record, listing, agentModelCatalogFingerprintForRecord(record))
         return

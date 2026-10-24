@@ -1,3 +1,4 @@
+import { readAgentModelCatalogEntry } from './agent-model-catalog-owned-entry'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 export type { AgentModelCatalogProbe } from './agent-model-catalog-discovery'
 import type { AgentModelCatalogPersistence } from './agent-model-catalog-persistence'
@@ -55,7 +56,7 @@ export class AgentModelCatalogStore {
   private readonly failures: AgentModelCatalogFailures
   private readonly refreshes = new Map<string, InFlightListings>()
   private readonly listingWaiters = new AgentModelCatalogListingWaiters(
-    (fingerprint) => this.get(fingerprint),
+    (fingerprint) => readAgentModelCatalogEntry(this.entries, fingerprint),
     (fingerprint) => this.refreshes.has(fingerprint)
   )
   private readonly latestWrittenOrder = new Map<string, number>()
@@ -78,7 +79,7 @@ export class AgentModelCatalogStore {
     const hydrate = (loaded: AgentModelCatalogEntry[]): void => {
       for (const entry of loaded) {
         if (!this.entries.has(entry.fingerprint)) {
-          this.entries.set(entry.fingerprint, entry)
+          this.entries.set(entry.fingerprint, structuredClone(entry))
           if (independentAgentModelCatalog(entry.agent)) {
             this.dueEntries.add(entry.fingerprint)
           }
@@ -94,14 +95,7 @@ export class AgentModelCatalogStore {
   }
 
   get(fingerprint: string): AgentModelCatalogEntry | null {
-    const entry = this.entries.get(fingerprint)
-    if (!entry) {
-      return null
-    }
-    // Refresh recency for the LRU cap.
-    this.entries.delete(fingerprint)
-    this.entries.set(fingerprint, entry)
-    return entry
+    return structuredClone(readAgentModelCatalogEntry(this.entries, fingerprint))
   }
 
   /** Whether any account's catalog of `agent` is saved here. */
@@ -171,7 +165,7 @@ export class AgentModelCatalogStore {
   ): AgentModelCatalogEntry | null {
     const entry = this.writeSuccess(fingerprint, agent, success, source, ++this.nextListingOrder)
     this.listingWaiters.notify(fingerprint)
-    return entry
+    return entry && structuredClone(entry)
   }
 
   private entryFromSuccess(
@@ -281,7 +275,7 @@ export class AgentModelCatalogStore {
       entryFromSuccess: (...args) => this.entryFromSuccess(...args),
       writeSuccess: (...args) => this.writeSuccess(...args),
       recordFailure: (...args) => this.recordFailure(...args)
-    })
+    }).then((entry) => entry && structuredClone(entry))
   }
 
   isListing(fingerprint: string): boolean {
@@ -307,7 +301,9 @@ export class AgentModelCatalogStore {
     waitForChange = false,
     terminal = false
   ): Promise<AgentModelCatalogEntry | null> | null {
-    return this.listingWaiters.wait(fingerprint, waitForChange, terminal)
+    return (
+      this.listingWaiters.wait(fingerprint, waitForChange, terminal)?.then(structuredClone) ?? null
+    )
   }
 
   /** True when a read should kick a background refresh: nothing known or the

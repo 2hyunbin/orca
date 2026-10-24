@@ -102,7 +102,10 @@ describe('independent installed CLI discovery', () => {
       h.read('b', { waitForListing: true })
     ])
     expect(h.run).toHaveBeenCalledTimes(1)
-    expect(h.service.peek('a', true)).toBe(h.service.peek('b', true))
+    const first = h.service.peek('a', true)!
+    expect(first).toEqual(h.service.peek('b', true))
+    first.models[0]!.efforts[0]!.label = 'peek mutation'
+    expect(h.service.peek('b', true)!.models[0]!.efforts[0]!.label).toBe('High')
     expect(await h.read('b')).toMatchObject({
       models: [{ id: 'old', isDefault: true, defaultEffort: 'high' }]
     })
@@ -146,7 +149,7 @@ describe('independent installed CLI discovery', () => {
         { ...listing('partial'), complete: false },
         'discovery'
       )
-      expect(restarted.get(entry.fingerprint)).toBe(entry)
+      expect(restarted.get(entry.fingerprint)).toEqual(entry)
       expect(restarted.verified(entry)).toBe(false)
     }
     h.service.stop()
@@ -157,7 +160,7 @@ describe('independent installed CLI discovery', () => {
     const good = h.service.peek('a')
     h.update({ ...listing('partial', 'partial'), complete: false })
     await h.read('a', { waitForListing: true })
-    expect(h.service.peek('a')).toBe(good)
+    expect(h.service.peek('a')).toEqual(good)
     expect(await h.read()).not.toHaveProperty('listingInProgress')
     expect(h.run).toHaveBeenCalledTimes(2)
     h.update(listing('new'))
