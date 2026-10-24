@@ -130,19 +130,26 @@ export function registerStructuredAgentSessionStart(
             failure: agentSessionFailureFact('hostFault')
           }
         }
-        const expired = isStructuredAgentSessionStartupExpired(acquire.signal.reason)
-        return {
-          ...failedStructuredAgentSessionStart(),
-          ...(expired ? { expired: true as const } : { aborted: true as const })
-        }
+        return failedStructuredAgentSessionStart()
       })
       .then(async (result): Promise<StructuredAgentSessionResumeOutcome> => {
-        if (!result.ok && !result.aborted && (startedFor !== undefined || children.length > 0)) {
-          await context.serialize(sessionId, async () => {
+        if (result.ok) {
+          return result
+        }
+        return context.serialize(sessionId, async () => {
+          const settled = acquire.signal.aborted
+            ? {
+                ...failedStructuredAgentSessionStart(),
+                ...(isStructuredAgentSessionStartupExpired(acquire.signal.reason)
+                  ? { expired: true as const }
+                  : { aborted: true as const })
+              }
+            : result
+          if (!settled.aborted && (startedFor !== undefined || children.length > 0)) {
             const session = context.sessions.get(sessionId)
             if (session) {
               const record = context.deps.store.getRecord(sessionId)
-              const failure = failedStart(record, result)
+              const failure = failedStart(record, settled)
               await recordStructuredAgentSessionStartFailure(
                 { journal: session.journal, fence: record?.lease.runtimeFence ?? 0 },
                 {
@@ -156,9 +163,9 @@ export function registerStructuredAgentSessionStart(
                 startedFor ?? null
               )
             }
-          })
-        }
-        return result
+          }
+          return settled
+        })
       })
       .finally(() => {
         acquire.end()
