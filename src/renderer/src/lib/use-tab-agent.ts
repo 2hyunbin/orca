@@ -219,7 +219,7 @@ export function useTabAgent(tab: TerminalTab, groupId?: string): TerminalAgent |
     () => service.getObservation(tab.worktreeId, tab.id, groupId),
     [service, tab.worktreeId, tab.id, groupId]
   )
-  const hasObservedAgentSignal = useSyncExternalStore(subscribe, read)
+  const hasObservedAgentSignal = useSyncExternalStore(subscribe, read, read)
 
   return resolveTabAgentFromSignals({
     hasObservedAgentSignal,

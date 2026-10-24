@@ -83,7 +83,7 @@ export function useAgentStatusSnapshot(enabled = true): AgentStatusSnapshot {
     [owner, enabled]
   )
   const read = useCallback(() => (enabled ? owner.getSnapshot() : EMPTY_STATUS), [owner, enabled])
-  return useSyncExternalStore(subscribe, read)
+  return useSyncExternalStore(subscribe, read, read)
 }
 
 /** Joined selectors use explicit keys when their live input is a known pane collection. */

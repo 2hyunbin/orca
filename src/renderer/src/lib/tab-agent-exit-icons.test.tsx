@@ -1,6 +1,7 @@
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -66,6 +67,10 @@ it('reads scoped root history across mount, removal, generation reset and new ke
   })
   const service = getTabAgentExitOwner(owner)
   stop = service.start()
+  function Icon() {
+    return <span>{useTabAgent({ ...tab, title: 'zsh' }, 'g0') ?? 'none'}</span>
+  }
+  expect(renderToStaticMarkup(<Icon />)).toBe('<span>none</span>')
   const clear = vi.fn(useAppStore.getState().clearTabLaunchAgent)
   applyAgentStatusPatch(useAppStore, { clearTabLaunchAgent: clear })
   const first = renderHook(() => useTabAgent({ ...tab, title: 'zsh' }, 'g0'))
