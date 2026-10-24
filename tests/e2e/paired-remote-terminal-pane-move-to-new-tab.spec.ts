@@ -4,7 +4,15 @@ import type {
 } from '../../src/shared/runtime-types'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
-import { launchPairedElectronClient } from './helpers/paired-electron-client'
+import {
+  createRuntimeDesktopPairingOffer,
+  launchPairedElectronClient
+} from './helpers/paired-electron-client'
+import {
+  callPairedRuntime,
+  waitForPairedClientWorktree
+} from './helpers/paired-client-host-session'
+import { toWebTerminalSurfaceTabId } from '../../src/shared/terminal-surface-id'
 import { dragPaneOutToTabStrip, waitForBoundPanes } from './helpers/terminal-layout-journeys'
 import { splitActiveTerminalPane } from './helpers/terminal'
 
@@ -141,5 +149,66 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
     }
   } finally {
     await host.dispose()
+  }
+})
+
+// A server with a desktop window keeps its layout in that window and refuses the move; this
+// desktop must put the pane back at once, terminal intact, not keep a tab the server never had.
+test('a pane move the server refuses goes back into its split, terminal intact', async ({
+  orcaPage
+}, testInfo) => {
+  test.setTimeout(200_000)
+  const worktreeId = await orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId)
+  if (!worktreeId) {
+    throw new Error('Window host has no active seeded workspace')
+  }
+  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const desktop = await launchPairedElectronClient(offer, testInfo, 'refused pane move')
+  const page = desktop.page
+  try {
+    await waitForPairedClientWorktree(page, worktreeId)
+    const created = await callPairedRuntime<{ tab: { parentTabId: string } }>(
+      page,
+      desktop.environmentId,
+      'session.tabs.createTerminal',
+      { worktree: `id:${worktreeId}`, activate: false, select: false, navigation: 'caller' }
+    )
+    const sourceTabId = toWebTerminalSurfaceTabId(created.tab.parentTabId)
+    await page.evaluate((id) => window.__store?.getState().setActiveWorktree(id), worktreeId)
+    const sourceTab = page.locator(`${TAB}[data-tab-id="${sourceTabId}"]`)
+    await expect(sourceTab).toBeVisible({ timeout: 30_000 })
+    await sourceTab.click()
+    await waitForBoundPanes(page, 1)
+    const firstLeafId = await page.locator(PANE).first().getAttribute('data-leaf-id')
+    await splitActiveTerminalPane(page, 'vertical')
+    await waitForBoundPanes(page, 2)
+    const leafIds = await page
+      .locator(PANE)
+      .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
+    const movedLeafId = leafIds.find((id) => id !== firstLeafId)!
+    const tabCount = await page.locator(TAB).count()
+    const hostTerminalOf = async (leafId: string): Promise<string | null> => {
+      const { terminals } = await callPairedRuntime<RuntimeTerminalListResult>(
+        page,
+        desktop.environmentId,
+        'terminal.list',
+        { worktree: `id:${worktreeId}` }
+      )
+      return terminals.find((terminal) => terminal.leafId === leafId)?.tabId ?? null
+    }
+    await expect.poll(() => hostTerminalOf(movedLeafId)).toBe(created.tab.parentTabId)
+
+    await dragPaneOutToTabStrip(page, worktreeId, movedLeafId)
+    // The move is asynchronous, so the tab count right after the drop proves nothing; an unrevised
+    // move still shows its extra tab seconds later.
+    await page.waitForTimeout(3_000)
+    await expect(page.locator(TAB)).toHaveCount(tabCount)
+    await expect(page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`)).toHaveCount(1, {
+      timeout: 15_000
+    })
+    await expect(page.locator(PANE)).toHaveCount(2)
+    expect(await hostTerminalOf(movedLeafId)).toBe(created.tab.parentTabId)
+  } finally {
+    await desktop.dispose()
   }
 })

@@ -127,7 +127,13 @@ export const SESSION_TAB_MUTATION_METHODS = [
           targetTabId: params.targetTabId,
           leafId: params.leafId
         },
-        (move) => commitLeafMoveAndRekey({ store: runtime.requireStore(), runtime }, move)
+        (move) => commitLeafMoveAndRekey({ store: runtime.requireStore(), runtime }, move),
+        params.targetGroupId
+          ? {
+              targetGroupId: params.targetGroupId,
+              ...(params.index !== undefined ? { index: params.index } : {})
+            }
+          : undefined
       )
     }
   }),

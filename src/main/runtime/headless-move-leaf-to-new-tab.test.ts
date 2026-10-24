@@ -11,11 +11,25 @@ import { planTerminalLeafMove } from '../persistence/terminal-topology/terminal-
 import type { TerminalLeafMoveRequest } from '../../shared/terminal-leaf-move'
 
 const SIBLING_LEAF_ID = '33333333-3333-4333-8333-333333333333'
+const OTHER_LEAF_ID = '44444444-4444-4444-8444-444444444444'
 async function setup() {
   const base = makeWorkspaceSessionWithHeadlessTerminal()
+  const hostTab = base.tabsByWorktree[TEST_WORKTREE_ID]![0]!
   const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession({
     ...base,
+    tabsByWorktree: {
+      [TEST_WORKTREE_ID]: [
+        hostTab,
+        { ...hostTab, id: 'other-tab', ptyId: 'other-pty', title: 'Other', sortOrder: 1 }
+      ]
+    },
     terminalLayoutsByTabId: {
+      'other-tab': {
+        root: { type: 'leaf', leafId: OTHER_LEAF_ID },
+        activeLeafId: OTHER_LEAF_ID,
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [OTHER_LEAF_ID]: 'other-pty' }
+      },
       'host-tab': {
         root: {
           type: 'split',
@@ -42,11 +56,15 @@ async function setup() {
   await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
   const published: unknown[] = []
   runtime.onMobileSessionTabsChanged((snapshot) => published.push(snapshot))
-  const move = (targetTabId = 'host-new-tab') =>
+  const move = (
+    targetTabId = 'host-new-tab',
+    placement?: Parameters<typeof runtime.moveMobileSessionLeafToNewTab>[3]
+  ) =>
     runtime.moveMobileSessionLeafToNewTab(
       `id:${TEST_WORKTREE_ID}`,
       { sourceTabId: 'host-tab', targetTabId, leafId: SIBLING_LEAF_ID },
-      commit
+      commit,
+      placement
     )
   return { runtime, getSession, published, commit, move }
 }
@@ -80,6 +98,35 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     expect(terminals.find((terminal) => terminal.leafId === SIBLING_LEAF_ID)?.tabId).toBe(
       'host-new-tab'
     )
+  })
+  it('places the new tab where it was dropped in its group, selected', async () => {
+    const { runtime, move } = await setup()
+    const [group] = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabGroups ?? []
+    await move('host-new-tab', { targetGroupId: group!.id, index: 0 })
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(listed.tabGroups?.[0]).toMatchObject({
+      tabOrder: ['host-new-tab', 'host-tab', 'other-tab'],
+      activeTabId: 'host-new-tab'
+    })
+  })
+  it('places the new tab in another group when it was dropped there', async () => {
+    const { runtime, move } = await setup()
+    const [group] = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabGroups ?? []
+    await runtime.moveMobileSessionTab(`id:${TEST_WORKTREE_ID}`, {
+      kind: 'split',
+      tabId: 'other-tab',
+      targetGroupId: group!.id,
+      splitDirection: 'right'
+    })
+    const split = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabGroups ?? []
+    const otherGroup = split.find((candidate) => candidate.tabOrder.includes('other-tab'))!
+    await move('host-new-tab', { targetGroupId: otherGroup.id, index: 0 })
+    const groups = (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabGroups ?? []
+    expect(groups.find((candidate) => candidate.id === otherGroup.id)?.tabOrder).toEqual([
+      'host-new-tab',
+      'other-tab'
+    ])
+    expect(groups.find((candidate) => candidate.id === group!.id)?.tabOrder).toEqual(['host-tab'])
   })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()

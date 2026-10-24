@@ -14,11 +14,11 @@ import {
   toWebTerminalSurfaceTabId
 } from '../../../../shared/terminal-surface-id'
 import {
-  holdDroppedPanePlacement,
   moveWebRuntimeLeafToNewTab,
   resolvePaneMoveHost,
-  settleHostPaneMove
+  revertRefusedPaneMove
 } from '@/runtime/web-runtime-leaf-move'
+import { resolveHostTabDropTarget } from '@/runtime/web-runtime-session-tab-move'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -165,22 +165,21 @@ async function moveLeafToNewTab(
     ptyId: livePtyId
   }
   if (paneMoveHost) {
+    const placement = await resolveHostTabDropTarget(paneMoveHost, {
+      worktreeId: args.worktreeId,
+      tabId: request.targetTabId,
+      targetGroupId: args.targetGroupId,
+      ...(args.targetIndex !== undefined ? { index: args.targetIndex } : {})
+    })
     // Why: the host's snapshot push can land before its reply and would leave nothing to detach, so
     // the window moves first. The call is dispatched before the move's layout pushes, so the host
-    // sees the move first; a refusal is undone by the next snapshot.
-    const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request)
+    // sees the move first.
+    const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request, placement)
     const applied = applyMove(args, request, false, request.ptyId)
-    const placement = holdDroppedPanePlacement(
-      paneMoveHost,
-      request,
-      args.targetIndex === undefined ? null : args.targetGroupId
-    )
     void hostMove
-      .then((moved) =>
-        settleHostPaneMove({ environmentId: paneMoveHost, request, moved, placement })
-      )
+      .then((moved) => (moved ? undefined : revertRefusedPaneMove(paneMoveHost, request)))
       .catch((error: unknown) =>
-        console.warn('[terminal-pane-detach] host move not settled', error)
+        console.warn('[terminal-pane-detach] refused move not reverted', error)
       )
     return applied
   }

@@ -16,17 +16,19 @@ import {
 const moveOnHost = vi.hoisted(() => vi.fn())
 const paneMoveHost = vi.hoisted(() => vi.fn())
 const moveLocally = vi.hoisted(() => vi.fn())
-const settle = vi.hoisted(() => vi.fn())
-const hold = vi.hoisted(() => vi.fn())
+const revert = vi.hoisted(() => vi.fn())
+const dropTarget = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/web-runtime-leaf-move', () => ({
   moveWebRuntimeLeafToNewTab: moveOnHost,
   resolvePaneMoveHost: paneMoveHost,
-  settleHostPaneMove: settle,
-  holdDroppedPanePlacement: hold
+  revertRefusedPaneMove: revert
+}))
+vi.mock('@/runtime/web-runtime-session-tab-move', () => ({
+  resolveHostTabDropTarget: dropTarget
 }))
 const MIRRORED_SOURCE = toWebTerminalSurfaceTabId('host-source')
-const HELD = { order: null, active: true }
+const HOST_PLACEMENT = { targetGroupId: 'host-group', index: 0 }
 const itSwitchOff = it.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)
 function mirroredStore(layoutOf = SOURCE_TAB_ID) {
   const store = createStore()
@@ -54,8 +56,8 @@ function detach(store: ReturnType<typeof createStore>, targetIndex?: number) {
 describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
   beforeEach(() => {
     moveOnHost.mockReset()
-    settle.mockReset().mockResolvedValue(undefined)
-    hold.mockReset().mockReturnValue(HELD)
+    revert.mockReset().mockResolvedValue(undefined)
+    dropTarget.mockReset().mockResolvedValue(HOST_PLACEMENT)
     paneMoveHost.mockReset().mockResolvedValue('env-1')
     moveLocally.mockReset().mockResolvedValue({ status: 'not_held' })
     vi.stubGlobal('window', { api: { pty: { moveLeafToNewTab: moveLocally } } })
@@ -68,8 +70,9 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     const detached = await result
     // The host has not answered yet, and the window already holds the moved pane.
     expect(detachPaneForExternalMove).toHaveBeenCalledOnce()
-    const [environmentId, request] = moveOnHost.mock.calls[0]
+    const [environmentId, request, placement] = moveOnHost.mock.calls[0]
     expect(environmentId).toBe('env-1')
+    expect(placement).toBe(HOST_PLACEMENT)
     expect(request.sourceTabId).toBe(MIRRORED_SOURCE)
     expect(toWebTerminalSurfaceTabId(toHostSessionTabId(request.targetTabId))).toBe(
       request.targetTabId
@@ -80,32 +83,28 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     })
     expect(detached?.tab.id).toBe('tab-detached')
     expect(moveLocally).not.toHaveBeenCalled()
-    expect(settle).not.toHaveBeenCalled()
     answer(true)
-    await vi.waitFor(() =>
-      expect(settle).toHaveBeenCalledWith(
-        expect.objectContaining({ moved: true, placement: HELD, request })
-      )
-    )
+    await Promise.resolve()
+    expect(revert).not.toHaveBeenCalled()
   })
-  itSwitchOff('holds a placed tab where it was dropped before the host answers', async () => {
+  itSwitchOff('names the drop to the host in its own group ids', async () => {
     moveOnHost.mockReturnValue(new Promise(() => {}))
     await detach(mirroredStore(), 0).result
-    expect(hold).toHaveBeenCalledWith(
-      'env-1',
-      expect.objectContaining({ leafId: LEAF_2 }),
-      TARGET_GROUP_ID
-    )
-    expect(settle).not.toHaveBeenCalled()
+    expect(dropTarget).toHaveBeenCalledWith('env-1', {
+      worktreeId: WORKTREE_ID,
+      tabId: expect.any(String),
+      targetGroupId: TARGET_GROUP_ID,
+      index: 0
+    })
   })
-  itSwitchOff('applies the move once when the host refuses it', async () => {
+  itSwitchOff('reverts the move in this window when the host refuses it', async () => {
     moveOnHost.mockResolvedValue(false)
     const store = mirroredStore()
     const { result, detachPaneForExternalMove } = detach(store)
     await result
     expect(moveOnHost).toHaveBeenCalledOnce()
     await vi.waitFor(() =>
-      expect(settle).toHaveBeenCalledWith(expect.objectContaining({ moved: false }))
+      expect(revert).toHaveBeenCalledWith('env-1', moveOnHost.mock.calls[0][1])
     )
     expect(store.createTab).toHaveBeenCalledOnce()
     expect(detachPaneForExternalMove).toHaveBeenCalledOnce()
