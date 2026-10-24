@@ -13,12 +13,12 @@ import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { SourceControlAgentActionDialogProps } from './SourceControlAgentActionDialog'
 import type { UseSourceControlAgentActionDialogResult } from './source-control-agent-action-dialog-result'
-import { ensureLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilities'
 import { sourceControlLaunchAppliesAgentArgs } from './source-control-launch-agent-args-applicability'
+import { useSourceControlLaunchableAgents } from './use-source-control-launchable-agents'
+import { AgentLaunchChoiceCancelled } from '@/lib/host-chat-program-acquisition'
 import { useSavedSourceControlAgentActionAutoStart } from './useSavedSourceControlAgentActionAutoStart'
 import {
   buildSourceControlAgentSaveTargets,
-  detectSourceControlActionAgents,
   buildSourceControlAgentScopeNote,
   buildSourceControlAgentStatusCopy,
   buildSourceControlAgentAvailability
@@ -26,6 +26,7 @@ import {
 import { useSourceControlAgentActionStart } from './useSourceControlAgentActionStart'
 
 const DEFAULT_SAVE_TARGET_VALUE = 'global'
+type DiscoveryOutcome = 'pending' | 'success' | 'cancelled' | 'failed'
 
 export function useSourceControlAgentActionDialog({
   open,
@@ -72,12 +73,11 @@ export function useSourceControlAgentActionDialog({
   const [recipe, setRecipe] = useState(initialRecipe)
   const commandTemplate = recipe.commandInputTemplate ?? '{basePrompt}'
   const agentArgs = recipe.agentArgs ?? ''
-  const [detectedAgents, setDetectedAgents] = useState<TuiAgent[]>([])
-  const [detecting, setDetecting] = useState(false)
   const openCycleRef = useRef(0)
   const wasOpenRef = useRef(false)
   const [openCycle, setOpenCycle] = useState(0)
-  const [detectedOpenCycle, setDetectedOpenCycle] = useState<number | null>(null)
+  // The open cycle's current discovery attempt; only its success may auto-pick or auto-start.
+  const [discovery, setDiscovery] = useState<{ cycle: number; outcome: DiscoveryOutcome }>()
   const saveTargets = useMemo(() => buildSourceControlAgentSaveTargets(repoId), [repoId])
   const [saveLaunchRecipe, setSaveLaunchRecipe] = useState(true)
   const [saveTargetValue, setSaveTargetValue] = useState(defaultSaveTargetValue)
@@ -85,21 +85,14 @@ export function useSourceControlAgentActionDialog({
   const disabledAgents = settings?.disabledTuiAgents
   const connectionUnavailable = Boolean(worktreeId && connectionId === undefined)
 
-  const refreshDetectedAgents = useCallback(async (): Promise<TuiAgent[]> => {
-    if (connectionUnavailable) {
-      setDetectedAgents([])
-      setDetecting(false)
-      return []
-    }
-    setDetecting(true)
-    try {
-      const nextAgents = await detectSourceControlActionAgents(worktreeId, connectionId)
-      setDetectedAgents(nextAgents)
-      return nextAgents
-    } finally {
-      setDetecting(false)
-    }
-  }, [connectionId, connectionUnavailable, worktreeId])
+  const executionHostId = repo ? getRepoExecutionHostId(repo) : undefined
+  const { detecting, refreshAgents, refreshLaunchableAgents, launchableAgents } =
+    useSourceControlLaunchableAgents({
+      target: { worktreeId, repoId, executionHostId },
+      connectionId,
+      connectionUnavailable,
+      active: open
+    })
 
   useEffect(() => {
     if (!open) {
@@ -115,21 +108,29 @@ export function useSourceControlAgentActionDialog({
       setSaveTargetValue(defaultSaveTargetValue)
     }
     wasOpenRef.current = true
-    setDetectedOpenCycle(null)
+    setDiscovery({ cycle, outcome: 'pending' })
     let stale = false
     // Why: whether CLI arguments apply is read synchronously from the local runtime's
     // capabilities; settling them alongside detection keeps the field from appearing for a
     // frame on a launch that turns out to be structured.
-    void Promise.all([refreshDetectedAgents(), ensureLocalRuntimeCapabilities()]).then(() => {
-      if (stale || openCycleRef.current !== cycle) {
-        return
+    void refreshAgents().then(
+      () => {
+        if (stale || openCycleRef.current !== cycle) {
+          return
+        }
+        setDiscovery({ cycle, outcome: 'success' })
+      },
+      (error: unknown) => {
+        if (!stale && openCycleRef.current === cycle) {
+          const cancelled = error instanceof AgentLaunchChoiceCancelled
+          setDiscovery({ cycle, outcome: cancelled ? 'cancelled' : 'failed' })
+        }
       }
-      setDetectedOpenCycle(cycle)
-    })
+    )
     return () => {
       stale = true
     }
-  }, [defaultSaveTargetValue, initialRecipe, open, refreshDetectedAgents])
+  }, [defaultSaveTargetValue, disabledAgents, open, refreshAgents, initialRecipe])
 
   const closeDialog = useCallback(() => onOpenChange(false), [onOpenChange])
 
@@ -138,12 +139,17 @@ export function useSourceControlAgentActionDialog({
       ? recipe.agentId
       : pickSourceControlLaunchAgent({
           defaultAgent: settings?.defaultTuiAgent,
-          detectedAgents,
+          detectedAgents: launchableAgents,
           disabledAgents
         })
   const { agentOptions, selectedAgentUnavailable, hasEnabledAgents } = useMemo(
-    () => buildSourceControlAgentAvailability({ detectedAgents, disabledAgents, selectedAgent }),
-    [detectedAgents, disabledAgents, selectedAgent]
+    () =>
+      buildSourceControlAgentAvailability({
+        detectedAgents: launchableAgents,
+        disabledAgents,
+        selectedAgent
+      }),
+    [launchableAgents, disabledAgents, selectedAgent]
   )
   const commandInput = renderSourceControlActionCommandTemplate(commandTemplate, {
     basePrompt: baseCommandInput
@@ -192,7 +198,7 @@ export function useSourceControlAgentActionDialog({
     launchSource,
     recoveryContext,
     connectionUnavailable,
-    refreshDetectedAgents,
+    refreshDetectedAgents: refreshLaunchableAgents,
     onStart,
     onSaveAgentDefault,
     onLaunchAccepted,
@@ -221,10 +227,12 @@ export function useSourceControlAgentActionDialog({
     [cancelStart, defaultSaveTargetValue, onOpenChange, resetDeliveryPlan]
   )
 
+  const discoveryOutcome = discovery?.cycle === openCycle ? discovery.outcome : 'pending'
   const { autoLaunchPending } = useSavedSourceControlAgentActionAutoStart({
     open,
     openCycle,
-    detectionReady: detectedOpenCycle === openCycle,
+    detectionReady: discoveryOutcome === 'success',
+    detectionFailed: discoveryOutcome === 'cancelled' || discoveryOutcome === 'failed',
     actionId,
     baseCommandInput,
     savedAgentId,
@@ -240,7 +248,7 @@ export function useSourceControlAgentActionDialog({
     connectionUnavailable,
     detecting,
     isStarting,
-    detectedAgents,
+    detectedAgents: launchableAgents,
     disabledAgents,
     onAutoStart: ({ detectedAgents: agentsForLaunch }) =>
       startWithDetectedAgents({

@@ -15,10 +15,11 @@ export function findOptionOccurrence(
   aliases: readonly string[],
   stopAtTerminator: boolean,
   valueOptions: readonly string[] = [],
+  startIndex = 0,
   /** False for a flag that takes no value, so the token after it stays where it is. */
   takesValue = true
 ): { index: number; consumed: number; value?: string } | null {
-  for (let index = 0; index < tokens.length; index += 1) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index]
     if (stopAtTerminator && token === '--') {
       break

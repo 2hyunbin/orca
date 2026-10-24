@@ -18,6 +18,8 @@ type UseSavedSourceControlAgentActionAutoStartArgs = {
   open: boolean
   openCycle: number
   detectionReady: boolean
+  /** This cycle's discovery was cancelled or failed: it verified nothing to start on. */
+  detectionFailed: boolean
   actionId: SourceControlLaunchActionId
   baseCommandInput: string
   savedAgentId?: TuiAgent | null
@@ -133,6 +135,7 @@ export function useSavedSourceControlAgentActionAutoStart({
   open,
   openCycle,
   detectionReady,
+  detectionFailed,
   actionId,
   baseCommandInput,
   savedAgentId,
@@ -218,7 +221,8 @@ export function useSavedSourceControlAgentActionAutoStart({
     matchedSavedReceiptTargetValue &&
     receiptKey &&
     !consideredDifferentReceipt &&
-    !currentReceiptState?.revealed
+    !currentReceiptState?.revealed &&
+    !detectionFailed
   )
 
   useEffect(() => {
@@ -245,6 +249,11 @@ export function useSavedSourceControlAgentActionAutoStart({
     }
     const revealDialog = (): void => {
       setReceiptState({ openCycle, receiptKey, revealed: true })
+    }
+    // Recorded as revealed, so later healthy facts in this cycle never auto-start on another owner.
+    if (detectionFailed) {
+      revealDialog()
+      return
     }
     if (!detectionReady || detecting || isStarting) {
       return
@@ -274,6 +283,7 @@ export function useSavedSourceControlAgentActionAutoStart({
   }, [
     connectionUnavailable,
     detectedAgents,
+    detectionFailed,
     detectionReady,
     detecting,
     disabledAgents,
