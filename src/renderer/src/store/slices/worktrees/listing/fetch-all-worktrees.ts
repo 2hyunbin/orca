@@ -21,6 +21,11 @@ import { mergeFetchedWorktrees } from './fetched-worktree-merge'
 import { notifyRuntimeScopeForbiddenIfNeeded } from './runtime-scope-forbidden-toast'
 import { mapReposForWorktreeRefresh } from './worktree-refresh-pool'
 import { findWslMovedProjectForWorkspace } from '../../../repos/wsl-moved-projects'
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '../../../workspace-record-selectors'
 
 export function createFetchAllWorktrees(
   set: WorktreeSliceSet,
@@ -42,7 +47,7 @@ export function createFetchAllWorktrees(
       await mapReposForWorktreeRefresh(repos, async (r) => {
         try {
           const requestStartedState = get()
-          const requestStartedWorktrees = requestStartedState.worktreesByRepo[r.id]
+          const requestStartedWorktrees = selectWorktreesByRepo(requestStartedState)[r.id]
           const hostId = getRepoExecutionHostId(r)
           const setup = getProjectHostSetupForRepoHost(requestStartedState, r.id, hostId)
           const parsedHost = parseExecutionHostId(hostId)
@@ -66,7 +71,7 @@ export function createFetchAllWorktrees(
           if (refresh.status !== 'admitted') {
             return
           }
-          mergeFetchedWorktrees(set, {
+          mergeFetchedWorktrees(set, get, {
             repoId: r.id,
             hostId,
             ownerWasMissingAtStart: false,
@@ -101,7 +106,7 @@ export function createFetchAllWorktrees(
       > => {
         try {
           const requestStartedState = get()
-          const requestStartedWorktrees = requestStartedState.worktreesByRepo[r.id]
+          const requestStartedWorktrees = selectWorktreesByRepo(requestStartedState)[r.id]
           const hostId = getRepoExecutionHostId(r)
           const setup = getProjectHostSetupForRepoHost(requestStartedState, r.id, hostId)
           const parsedHost = parseExecutionHostId(hostId)
@@ -125,7 +130,7 @@ export function createFetchAllWorktrees(
           if (refresh.status !== 'admitted') {
             return { repoId: r.id, ok: false as const }
           }
-          const outcome = mergeFetchedWorktrees(set, {
+          const outcome = mergeFetchedWorktrees(set, get, {
             repoId: r.id,
             hostId,
             ownerWasMissingAtStart: false,
@@ -188,7 +193,7 @@ export function createFetchAllWorktrees(
     // Why: floating is persisted renderer state, not a repo worktree an authoritative scan returns.
     validIds.add(FLOATING_TERMINAL_WORKTREE_ID)
     // Why: folder workspaces persist tabs under `folder:<id>` keys that authoritative repo scans never return.
-    for (const workspace of get().folderWorkspaces ?? []) {
+    for (const workspace of selectFolderWorkspaces(get()) ?? []) {
       validIds.add(folderWorkspaceKey(workspace.id))
     }
     for (const key of Object.keys(get().restoredRuntimeHostIdByWorkspaceSessionKey ?? {})) {
@@ -204,7 +209,7 @@ export function createFetchAllWorktrees(
         }
       }
     }
-    for (const result of Object.values(get().detectedWorktreesByRepo)) {
+    for (const result of Object.values(selectDetectedWorktreesByRepo(get()))) {
       if (!result.authoritative) {
         continue
       }

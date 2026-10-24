@@ -65,7 +65,7 @@ import {
 } from '../ssh/orcad-migration-catalog-client'
 import { listRemoteOrcadFolderCatalog } from '../ssh/orcad-server-folder-workspaces'
 import { makeTerminalScrollbackSnapshotRef } from '../terminal-scrollback-snapshots'
-import { requestWorktreeSleepFromRenderer } from '../window/worktree-sleep-request-relay'
+import { pauseWorkspacesForProjectMove } from '../window/project-move-pause'
 import { getWslHostService } from '../wsl/wsl-host-service-instance'
 import { readWslGuestPaneProcesses } from '../wsl/wsl-guest-pane-processes'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
@@ -184,12 +184,18 @@ export function createWslMoveDriverDeps(
     sleptSessionPanes: (workspaceIds, reported) =>
       listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds, reported),
     quiesce: {
-      sleepWorkspaces: (workspaceIds) => {
+      sleepWorkspaces: async (workspaceIds) => {
         const window = getTrustedUIRendererWindow()
         if (!window) {
-          return Promise.reject(new Error('renderer_unavailable'))
+          throw new Error('renderer_unavailable')
         }
-        return requestWorktreeSleepFromRenderer(window, workspaceIds, { keepBrowserTabs: true })
+        // Main's pause barrier: keeps browser tabs and waits for the window's session to persist.
+        const outcomes = await pauseWorkspacesForProjectMove(window, runtime, workspaceIds)
+        return {
+          failedWorktreeIds: outcomes
+            .filter((outcome) => outcome.failure || outcome.chatFailed || outcome.vmSuspendFailure)
+            .map((outcome) => outcome.worktreeId)
+        }
       },
       livePtyIds: (workspaceIds) =>
         runtime.listWslMoveLiveTerminals(workspaceIds).map((terminal) => terminal.ptyId),

@@ -36,7 +36,6 @@ import {
   getWorkItemMock,
   getPullRequestPushTargetMock,
   getEffectiveHooksMock,
-  createIssueCommandRunnerScriptMock,
   createSetupRunnerScriptMock,
   getEffectiveHooksFromConfigMock,
   getDefaultTabsLaunchMock,
@@ -52,7 +51,6 @@ import {
   computeWorktreePathMock,
   ensurePathWithinWorkspaceMock,
   gitExecFileAsyncMock,
-  getSshFilesystemProviderMock,
   deleteWorktreeHistoryDirMock,
   advertisedUrlWatcherForgetWorktreeMock,
   pruneCleanupScanSnapshotMock,
@@ -115,7 +113,6 @@ export function setupWorktreeHandlers(): WorktreeRuntimeStub {
     getEffectiveHooksFromConfigMock,
     getDefaultTabsLaunchMock,
     parseOrcaYamlMock,
-    createIssueCommandRunnerScriptMock,
     createSetupRunnerScriptMock,
     buildPosixRunnerScriptMock,
     buildWindowsRunnerScriptMock,
@@ -128,7 +125,6 @@ export function setupWorktreeHandlers(): WorktreeRuntimeStub {
     computeWorktreePathMock,
     ensurePathWithinWorkspaceMock,
     gitExecFileAsyncMock,
-    getSshFilesystemProviderMock,
     mainWindow.webContents.send,
     store.getRepos,
     store.getRepo,
@@ -262,13 +258,6 @@ export function setupWorktreeHandlers(): WorktreeRuntimeStub {
   )
   createSetupRunnerScriptMock.mockReturnValue({
     runnerScriptPath: '/workspace/repo/.git/orca/setup-runner.sh',
-    envVars: {
-      ORCA_ROOT_PATH: '/workspace/repo',
-      ORCA_WORKTREE_PATH: '/workspace/improve-dashboard'
-    }
-  })
-  createIssueCommandRunnerScriptMock.mockReturnValue({
-    runnerScriptPath: '/workspace/repo/.git/orca/issue-command-runner.sh',
     envVars: {
       ORCA_ROOT_PATH: '/workspace/repo',
       ORCA_WORKTREE_PATH: '/workspace/improve-dashboard'

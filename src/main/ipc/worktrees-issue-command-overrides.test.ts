@@ -4,11 +4,7 @@ import { join } from 'node:path'
 import * as issueCommandFile from '../issue-command-file'
 import * as projectGitOptions from '../project-runtime-git-options'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  createIssueCommandRunnerScriptMock,
-  addWorktreeMock,
-  listWorktreesMock
-} from './worktrees-test-module-mocks'
+import { addWorktreeMock, listWorktreesMock } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
@@ -34,9 +30,6 @@ vi.mock('../github/client', async () =>
 )
 vi.mock('../source-control/hosted-review', async () =>
   (await import('./worktrees-test-module-mocks')).hostedReviewModuleMock()
-)
-vi.mock('../providers/ssh-filesystem-dispatch', async () =>
-  (await import('./worktrees-test-module-mocks')).sshFilesystemDispatchModuleMock()
 )
 vi.mock('./worktree-symlinks', async () =>
   (await import('./worktrees-test-module-mocks')).worktreeSymlinksModuleMock()
@@ -174,30 +167,6 @@ describe('registerWorktreeHandlers', () => {
       resolveOptions.mockRestore()
       write.mockRestore()
     }
-  })
-
-  it('creates an issue-command runner for an existing repo/worktree pair', async () => {
-    const result = await handlers['hooks:createIssueCommandRunner'](null, {
-      repoId: 'repo-1',
-      worktreePath: '/workspace/improve-dashboard',
-      command: 'codex exec "long command"'
-    })
-
-    expect(createIssueCommandRunnerScriptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'repo-1' }),
-      '/workspace/improve-dashboard',
-      'codex exec "long command"',
-      {},
-      // Why: issue runners take the resolved setup shell; it is undefined off Windows.
-      undefined
-    )
-    expect(result).toMatchObject({
-      runnerScriptPath: '/workspace/repo/.git/orca/issue-command-runner.sh',
-      envVars: {
-        ORCA_ROOT_PATH: '/workspace/repo',
-        ORCA_WORKTREE_PATH: '/workspace/improve-dashboard'
-      }
-    })
   })
 
   it('rejects SSH issue-command writes, which this process does not serve', async () => {

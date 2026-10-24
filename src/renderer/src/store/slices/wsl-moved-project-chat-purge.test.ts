@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { makeTab, makeUnifiedTab } from './store-session-test-harness'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
+import { makeDetectedResult, qualifyDetectedResult } from './worktrees-detected-listing-fixtures'
 import {
   createTestStore,
   mockApi,
@@ -24,7 +25,9 @@ const repoA = { id: 'repoA', path: '/repos/a', displayName: 'a', badgeColor: '#0
 it("keeps a moved project's chat workspace through the startup purge, and purges a stale one", async () => {
   const store = createTestStore()
   const wtA = makeWorktree({ id: 'repoA::/a/wt1', repoId: 'repoA', path: '/a/wt1' })
-  mockApi.worktrees.list.mockResolvedValue([wtA])
+  mockApi.worktrees.listDetected.mockImplementation(async (args) =>
+    qualifyDetectedResult(args, makeDetectedResult('repoA', [wtA]))
+  )
   const chat = makeUnifiedTab({
     id: 'structured-agent-session-chat-1',
     worktreeId: MOVED,

@@ -64,7 +64,6 @@ export const getWorkItemMock: ModuleMock = vi.fn()
 export const getPullRequestPushTargetMock: ModuleMock = vi.fn()
 export const getEffectiveHooksMock: Mock<(repo?: unknown, worktreePath?: string) => unknown> =
   vi.fn()
-export const createIssueCommandRunnerScriptMock: ModuleMock = vi.fn()
 export const createSetupRunnerScriptMock: ModuleMock = vi.fn()
 export const getEffectiveHooksFromConfigMock: ModuleMock = vi.fn()
 export const getDefaultTabsLaunchMock: ModuleMock = vi.fn()
@@ -82,7 +81,6 @@ export const loadHooksMock: ModuleMock = vi.fn()
 export const computeWorktreePathMock: Mock<typeof computeWorktreePath> = vi.fn()
 export const ensurePathWithinWorkspaceMock: StringArgMock = vi.fn()
 export const gitExecFileAsyncMock: GitArgvMock = vi.fn()
-export const getSshFilesystemProviderMock: ModuleMock = vi.fn()
 export const deleteWorktreeHistoryDirMock: ModuleMock = vi.fn()
 export const advertisedUrlWatcherForgetWorktreeMock: ModuleMock = vi.fn()
 export const pruneCleanupScanSnapshotMock: ModuleMock = vi.fn().mockResolvedValue(undefined)
@@ -155,10 +153,6 @@ export const hostedReviewModuleMock = () => ({
   getHostedReviewForBranch: getHostedReviewForBranchMock
 })
 
-export const sshFilesystemDispatchModuleMock = () => ({
-  getSshFilesystemProvider: getSshFilesystemProviderMock
-})
-
 export const worktreeSymlinksModuleMock = (): {
   createWorktreeCopiedPaths: ModuleMock
   createWorktreeLinkedPaths: ModuleMock
@@ -189,7 +183,6 @@ export const setupRunnerScriptTextModuleMock = (actual: Record<string, unknown>)
 
 export const worktreeRunnerScriptModuleMock = (actual: Record<string, unknown>) => ({
   ...actual,
-  createIssueCommandRunnerScript: createIssueCommandRunnerScriptMock,
   createSetupRunnerScript: createSetupRunnerScriptMock,
   resolveSetupRunnerShell: resolveSetupRunnerShellMock
 })

@@ -157,7 +157,9 @@ export const WORKSPACE_SESSION_DISPOSITIONS = {
   closedTerminalTabTombstonesByTabId: moveDisposition(34, {
     rewriteDesktopCopy: true,
     note: 'Laid over the host partition by host-session-seed, with the host worktree id.'
-  })
+  }),
+  // Names terminals of the host the project leaves, as the incarnation map does.
+  closedTerminalPanesByPaneKey: { disposition: 'drop-pty-binding', item: 36 }
 } as const satisfies Record<keyof WorkspaceSessionState, WslMoveFieldDisposition>
 
 /** Nested PTY bindings dropped wherever they appear in moved session rows (item 36). */
