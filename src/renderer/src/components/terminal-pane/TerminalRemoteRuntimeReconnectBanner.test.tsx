@@ -142,6 +142,23 @@ describe('SSH sign-in wait', () => {
 })
 
 describe('CalmRemoteRuntimeReconnectBanner', () => {
+  it('drops a resolved sign-in card at once instead of holding stale copy', () => {
+    vi.useFakeTimers()
+    const props = { environmentId: 'env-1', heldByServer: false, onReconnect: vi.fn() }
+    const { rerender } = render(
+      <CalmRemoteRuntimeReconnectBanner
+        {...props}
+        recovery={{ phase: 'disconnected' }}
+        awaitingSignIn
+      />
+    )
+    expect(screen.getByText('Waiting for SSH sign-in')).toBeInTheDocument()
+
+    rerender(<CalmRemoteRuntimeReconnectBanner {...props} recovery={null} />)
+
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('stays quiet through a reconnect a 400 ms relay finishes, then says it with a Tailscale hint', () => {
     vi.useFakeTimers()
     const { rerender } = render(

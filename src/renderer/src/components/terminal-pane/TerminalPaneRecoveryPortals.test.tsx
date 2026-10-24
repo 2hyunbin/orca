@@ -148,4 +148,28 @@ describe('TerminalPaneRecoveryPortals', () => {
       document.querySelectorAll('[data-terminal-remote-runtime-reconnect-banner="ssh-sign-in"]')
     ).toHaveLength(1)
   })
+
+  it('never shows two notices when the speaker hides and returns during an ongoing outage', async () => {
+    vi.useFakeTimers()
+    const { TerminalPaneRecoveryPortals } = await import('./TerminalPaneRecoveryPortals')
+    const leftPane = document.createElement('div')
+    const rightPane = document.createElement('div')
+    document.body.append(leftPane, rightPane)
+    const left = controllerFor([leftPane])
+    const right = controllerFor([rightPane])
+    const surfaces = (l: TerminalPaneController) => (
+      <>
+        <TerminalPaneRecoveryPortals controller={l} />
+        <TerminalPaneRecoveryPortals controller={right} />
+      </>
+    )
+    const view = render(surfaces(left))
+    act(() => vi.advanceTimersByTime(CALM_STATUS_REVEAL_DELAY_MS * 2))
+    const notices = () => view.container.querySelectorAll('[data-remote-server-outage-notice]')
+
+    view.rerender(surfaces({ ...left, isVisible: false }))
+    view.rerender(surfaces({ ...left, isVisible: true }))
+
+    expect(notices()).toHaveLength(1)
+  })
 })

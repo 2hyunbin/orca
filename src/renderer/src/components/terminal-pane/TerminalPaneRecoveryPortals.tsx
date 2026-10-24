@@ -88,7 +88,9 @@ export function TerminalPaneRecoveryPortals({
   const revealed = useCalmStatusReveal(notice.speaks, false, notice.since)
   // Why gated on canSpeak: the hold is for a server that answered, not for a surface that lost its
   // turn (hidden, sign-in, WSL), whose own cards must not land under a lingering notice.
-  const noticeReveal = canSpeak ? revealed : { visible: false, downSince: null }
+  // Why not while another surface owns an ongoing outage: two notices would show until the hold ends.
+  const noticeReveal =
+    canSpeak && (notice.speaks || !serverDown) ? revealed : { visible: false, downSince: null }
   usePublishRemoteServerNoticeShowing(noticeEnvironmentId, noticeReveal.visible)
   if (showSshReconnectOverlay) {
     return null

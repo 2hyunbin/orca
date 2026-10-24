@@ -153,6 +153,7 @@ export function CalmRemoteRuntimeReconnectBanner({
   if (recovery && recovery !== lastRecovery) {
     setLastRecovery(recovery)
   }
+  const [lastNeededAction, setLastNeededAction] = useState(false)
   const active = recovery !== null
   const [recoveringSince, setRecoveringSince] = useState<number | null>(null)
   useLayoutEffect(() => {
@@ -164,10 +165,14 @@ export function CalmRemoteRuntimeReconnectBanner({
       Boolean(props.awaitingSignIn) ||
       Boolean(props.wslHostUnavailable) ||
       Boolean(props.pairingRefused))
+  if (active && needsAction !== lastNeededAction) {
+    setLastNeededAction(needsAction)
+  }
   // Why the pane's own start: a pane still down when the server notice ends speaks at once.
   const reveal = useCalmStatusReveal(active && !heldByServer, needsAction, recoveringSince)
   const shown = recovery ?? lastRecovery
-  if (heldByServer || !reveal.visible || !shown) {
+  // Why a resolved action card goes at once: its copy would describe a state that no longer holds.
+  if (heldByServer || !reveal.visible || !shown || (!active && lastNeededAction)) {
     return null
   }
   return (
