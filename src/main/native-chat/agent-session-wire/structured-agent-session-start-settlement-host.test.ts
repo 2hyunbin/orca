@@ -57,9 +57,10 @@ beforeEach(async () => {
 
 afterEach(() => vi.useRealTimers())
 
-async function accept(text: string): Promise<string> {
+async function accept(text: string, options?: Readonly<Record<string, string>>): Promise<string> {
   const body = hostTestMessage(text)
-  const params = { envelope: envelope('agentSession.send', { body }), body }
+  const fields = { body, ...(options ? { options } : {}) }
+  const params = { envelope: envelope('agentSession.send', fields), ...fields }
   expect(await host.send(CALLER, params)).toMatchObject({ ok: true })
   return params.envelope.clientOperationId
 }
@@ -298,6 +299,13 @@ describe('final logical startup settlement', () => {
   })
 
   it('preserves pinned launch inputs and failure words through direct and flight-owned starts', async () => {
+    const options = { model: 'gpt-5', effort: 'high' }
+    await host.deps.store.replaceSessionOptions({
+      sessionId: SESSION,
+      fence: host.deps.store.getRecord(SESSION)!.lease.runtimeFence,
+      options,
+      now: Date.now()
+    })
     const refuse = async () => {
       throw new AgentSessionAcquisitionRefusal('sign in', 'notSignedIn')
     }
@@ -312,8 +320,9 @@ describe('final logical startup settlement', () => {
     })
     expect(acquire).toHaveBeenCalledTimes(1)
     const direct = acquire.mock.calls.at(-1)![0]
+    expect(direct.options).toEqual(options)
     acquire.mockClear()
-    const first = await accept('same launch through a message')
+    const first = await accept('same launch through a message', options)
     await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
     const flight = acquire.mock.calls[0]![0]
     expect({
@@ -342,6 +351,19 @@ describe('final logical startup settlement', () => {
     async (count) => {
       retryClock.fake = true
       const { sessions, runtimeState, conversationDelivery } = host.collaboratorsForTests()
+      const retained = hostTestAttachParams(host.deps.store.getRecord(SESSION)!.lease.runtimeFence)
+      expect(await host.attach(CALLER, retained)).toMatchObject({ ok: true })
+      const child = sessions.get(SESSION)!.child
+      expect(child).toBeTruthy()
+      for (let n = 0; n < count; n++) {
+        expect(await host.attach(CALLER, retained)).toMatchObject({ ok: true, replayed: true })
+        expect(sessions.get(SESSION)!.child).toBe(child)
+      }
+      expect(acquire).toHaveBeenCalledTimes(1)
+      await host.close(SESSION, 'evict')
+      expect(runtimeState.currentEventSink(SESSION)).toBeUndefined()
+      acquire.mockClear()
+      openGates.clear()
       const other = 'unrelated-chat'
       const unrelated = hostTestAttachParams(null, {
         providerHandle: undefined,
@@ -394,16 +416,8 @@ describe('final logical startup settlement', () => {
         }
         const successor = [await accept('successor first'), await accept('successor second')]
         await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
-        const firstFlight = runtimeState.startFlights.get(SESSION)!
-        for (let n = 0; n < count; n++) {
-          const params = hostTestAttachParams(
-            host.deps.store.getRecord(SESSION)!.lease.runtimeFence
-          )
-          expect(await host.attach(CALLER, params)).toMatchObject({ ok: true })
-          expect(await host.attach(CALLER, params)).toMatchObject({ ok: true, replayed: true })
-        }
         expect(acquire).toHaveBeenCalledTimes(1)
-        expect(firstFlight.children).toHaveLength(1)
+        expect(runtimeState.startFlights.get(SESSION)!.children).toHaveLength(1)
         const settlements = vi.spyOn(sessions.get(SESSION)!.journal, 'appendLifecycleBatch')
         for (let n = 0; n < count; n++) {
           await eventually(() => expect(acquire).toHaveBeenCalledTimes(n * 5 + 1))
