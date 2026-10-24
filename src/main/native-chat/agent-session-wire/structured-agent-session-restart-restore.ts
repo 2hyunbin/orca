@@ -21,6 +21,7 @@ import {
   type JournalRestFacts
 } from '../agent-session-journal/journal-row-table'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
+import { structuredAgentSessionOwnerEnded } from './structured-agent-session-current-work'
 
 /** Lease probes are the slow part; journal facts are two index lookups per chat. */
 const LEASE_RECONCILE_CONCURRENCY = 4
@@ -31,7 +32,7 @@ const LISTING_YIELD_EVERY = 32
 const UNWRITTEN = Symbol('unwritten')
 
 export type StructuredAgentSessionRestartListingDeps = {
-  store: Pick<AgentSessionRecordStore, 'listRecords'>
+  store: Pick<AgentSessionRecordStore, 'listRecords' | 'getRecord' | 'replacedRuntime'>
   journalDatabase: Pick<JournalHostDatabase, 'db' | 'readOnly'>
   logger: StructuredAgentSessionLogger
   // Lease bookkeeping. Neither throws: listing grants no writer, so bookkeeping must not block it.
@@ -82,14 +83,18 @@ export async function listStructuredAgentSessionsOnRestart(
   })
   const workingAtTeardown = await input.readWorkingAtTeardown()
   // In the restore's order, so the tabs keep the order they were saved in.
-  for (const [index, record] of records.entries()) {
+  for (const [index, listed] of records.entries()) {
     if (index % LISTING_YIELD_EVERY === 0) {
       await yieldToEventLoop()
+    }
+    const record = input.store.getRecord(listed.sessionId)
+    if (!record) {
+      continue
     }
     // A read or a send mid-restore already opened it, and published the journal's own row.
     const rest = input.hasSession(record.sessionId)
       ? null
-      : readRest(input, record.sessionId, workingAtTeardown)
+      : readRest(input, record, workingAtTeardown)
     if (rest !== UNWRITTEN) {
       input.onListed(record, rest)
     }
@@ -99,19 +104,25 @@ export async function listStructuredAgentSessionsOnRestart(
 /** The chat's rest facts; null when they cannot be read, which keeps its tab for a read to explain. */
 function readRest(
   input: StructuredAgentSessionRestartListingDeps,
-  sessionId: string,
+  record: AgentSessionRecord,
   workingAtTeardown: ReadonlySet<string>
 ): (JournalRestFacts & { interrupted: boolean }) | null | typeof UNWRITTEN {
   // A newer Orca's database: its chats are only that build's to read.
   if (input.journalDatabase.readOnly) {
     return null
   }
+  const { sessionId } = record
   try {
     const rest = readJournalRestFacts(input.journalDatabase.db, sessionId)
     return rest
       ? {
           ...rest,
-          interrupted: rest.openTurn !== null || (!rest.known && workingAtTeardown.has(sessionId))
+          interrupted:
+            structuredAgentSessionOwnerEnded(
+              record.lease,
+              input.store.replacedRuntime(sessionId)
+            ) &&
+            (rest.openTurn !== null || (!rest.known && workingAtTeardown.has(sessionId)))
         }
       : UNWRITTEN
   } catch (error) {

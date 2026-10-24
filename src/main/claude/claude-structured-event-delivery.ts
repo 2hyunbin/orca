@@ -1,4 +1,7 @@
-import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
+import {
+  finishChildWorkAdmission,
+  type ChildWorkAdmission
+} from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import { claudePromptCardWritten } from './claude-child-work-evidence'
 import {
   resetClaudeRetiredModel,
@@ -47,42 +50,72 @@ export function emitClaudeStructuredSessionEvent({
   if (session && retired !== null) {
     resetClaudeRetiredModel(session, deps, event.sessionId, retired)
   }
-  const admission = publishChildWork(
+  let admission = publishChildWork(
     event.sessionId,
     session,
     event.type === 'message' ? event.message : null
   )
-  const display = (): void => {
-    const notify = (): void => {
-      try {
-        deps.onEvent?.(event)
-      } catch (error) {
-        deps.logger?.warn('Claude event observer failed', { scope: 'claude-event', error })
-      }
+  let notified = false
+  const notify = (): void => {
+    if (notified) {
+      return
     }
+    notified = true
+    try {
+      deps.onEvent?.(event)
+    } catch (error) {
+      deps.logger?.warn('Claude event observer failed', { scope: 'claude-event', error })
+    }
+  }
+  const display = (): ChildWorkAdmission => {
     if (session?.events?.tryAppendTransition) {
-      session.events.tryAppendTransition({
+      const result = session.events.tryAppendTransition({
         steps: [],
         lifecycle: false,
         publish: false,
         onPublished: notify
       })
-    } else {
-      notify()
+      return result.accepted ? result : { ...result, retry: display }
     }
+    notify()
+    return { accepted: true }
   }
+  let notification: ChildWorkAdmission | undefined
   if (!admission.accepted && session?.retryChildWork) {
     const retry = session.retryChildWork
-    session.retryChildWork = () => {
+    const resume = (): ChildWorkAdmission => {
       const result = retry()
       if (result.accepted) {
         session.retryChildWork = undefined
-        display()
+        notification = display()
       }
       return result
     }
+    session.retryChildWork = resume
+    admission = { ...admission, retry: resume }
   } else if (admission.accepted) {
-    display()
+    notification = display()
+  }
+  if (event.type === 'ended') {
+    // Physical exit must survive a refused semantic suffix; successful delivery keeps queue order.
+    void Promise.resolve().then(async () => {
+      let result = await finishChildWorkAdmission(admission, session?.events)
+      if (result.ok) {
+        result = await finishChildWorkAdmission(notification, session?.events)
+      }
+      if (!result.ok) {
+        notify()
+        try {
+          deps.logger?.warn('Claude exit work ended unwritten', {
+            scope: 'claude-child-work',
+            sessionId: event.sessionId,
+            error: result.error
+          })
+        } catch (error) {
+          console.warn('[claude-exit] exit work reporter failed', error)
+        }
+      }
+    })
   }
   // A prompt blocks its child only after the journal has written its card.
   void claudePromptCardWritten(session, event)

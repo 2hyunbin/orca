@@ -1,4 +1,7 @@
-import type { StructuredAgentSessionAtRest } from './structured-agent-session-status-summary'
+import {
+  atRestStructuredStatusSummary,
+  type StructuredAgentSessionAtRest
+} from './structured-agent-session-status-summary'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { isStructuredAgentSessionCommandEntry } from '../../../shared/structured-agent-session-command-entry'
@@ -10,6 +13,7 @@ import { projectStructuredAgentSessionStatusState } from '../../../shared/struct
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
   structuredAgentSessionCurrentWork,
+  structuredAgentSessionReplacedRuntimeEnded,
   type StructuredAgentSessionWorkEvidence
 } from './structured-agent-session-current-work'
 import { newestAcceptedSendKey } from './structured-agent-session-status-child-work'
@@ -188,25 +192,16 @@ export class StructuredAgentSessionJournalProjections {
         this.restored.delete(id)
       } else {
         presentation.baseline = version
-        const lease = record.lease
-        const replaced = this.replacedRuntime?.(id)
-        const ended =
-          lease.claimStatus === 'released' ||
-          !!lease.deathEvidence?.runtimeEnd ||
-          (lease.claimStatus !== 'conflicted' && replaced && lease.runtimeFence <= replaced.fence)
-        if (!ended) {
-          return state
-        }
         const rest = presentation.rest
+        const saved = atRestStructuredStatusSummary(record, rest, { now: () => rest.lastSavedAt })
         return {
           ...state,
           summary: {
             ...state.summary,
-            status:
-              rest.interrupted || (rest.known !== false && rest.lastSequence > 1) ? 'idle' : null,
-            turnOutcome: rest.interrupted ? 'cancellation' : undefined,
-            restoredInterruption: rest.interrupted ? true : undefined,
-            statusStartedAt: rest.openTurn?.since ?? rest.lastSavedAt
+            status: saved.status,
+            turnOutcome: saved.turnOutcome,
+            restoredInterruption: saved.restoredInterruption,
+            statusStartedAt: saved.statusStartedAt
           }
         }
       }
@@ -216,10 +211,9 @@ export class StructuredAgentSessionJournalProjections {
     const fence = cut && journal.itemFence(cut.itemId)
     const ended =
       !liveChild &&
-      (record.lease.claimStatus === 'released' ||
-        !!record.lease.deathEvidence?.runtimeEnd ||
-        (record.lease.claimStatus !== 'conflicted' &&
-          replaced &&
+      (!!record.lease.deathEvidence?.runtimeEnd ||
+        (replaced &&
+          structuredAgentSessionReplacedRuntimeEnded(record.lease, replaced) &&
           fence !== undefined &&
           fence !== null &&
           fence <= replaced.fence))

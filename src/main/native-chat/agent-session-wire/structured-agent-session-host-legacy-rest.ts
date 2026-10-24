@@ -1,5 +1,9 @@
 import { JournalLegacyRestInitializer } from '../agent-session-journal/journal-legacy-rest-initializer'
-import { structuredAgentSessionReplacedRuntimeEnded } from './structured-agent-session-current-work'
+import { orderedLegacyRestCandidates } from './structured-agent-session-legacy-candidates'
+import {
+  structuredAgentSessionReplacedRuntimeEnded,
+  structuredAgentSessionOwnerEnded
+} from './structured-agent-session-current-work'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionConversations } from './structured-agent-session-conversations'
 import type { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
@@ -11,17 +15,7 @@ export function createHostLegacyRestInitializer(
 ): JournalLegacyRestInitializer {
   return new JournalLegacyRestInitializer({
     database: deps.journalDatabase,
-    candidates: () => {
-      const visible = new Set(deps.store.listVisibleSessionIds())
-      return deps.store
-        .listRecords()
-        .sort(
-          (a, b) =>
-            Number(visible.has(b.sessionId)) - Number(visible.has(a.sessionId)) ||
-            b.updatedAt - a.updatedAt
-        )
-        .map((record) => record.sessionId)
-    },
+    candidates: () => orderedLegacyRestCandidates(deps.store),
     owner: (id) => {
       const record = deps.store.getRecord(id)
       if (!record || sessions.get(id)?.child) {
@@ -40,8 +34,16 @@ export function createHostLegacyRestInitializer(
           ])
         : null
     },
-    initialized: (id, facts) =>
-      clientDelivery.publishAtRest(id, { ...facts, interrupted: facts.openTurn !== null }),
+    initialized: (id, facts) => {
+      const record = deps.store.getRecord(id)
+      clientDelivery.publishAtRest(id, {
+        ...facts,
+        interrupted:
+          facts.openTurn !== null &&
+          !!record &&
+          structuredAgentSessionOwnerEnded(record.lease, deps.store.replacedRuntime(id))
+      })
+    },
     failed: (sessionId, error) =>
       deps.logger.warn('initializing saved chat status failed', {
         scope: 'legacy-rest',

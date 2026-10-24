@@ -1,4 +1,5 @@
 import { StructuredAgentSessionStatusWork } from './structured-agent-session-status-work'
+import { structuredAgentSessionOwnerEnded } from './structured-agent-session-current-work'
 // The host's answer to "what is every structured session doing", fanned out to session lists.
 //
 // A client used to learn whether a turn was running by replaying the journal through its own
@@ -195,7 +196,14 @@ export class StructuredAgentSessionStatusFeed {
   publishAtRest(sessionId: string, rest: StructuredAgentSessionAtRest): void {
     const record = this.deps.getRecord(sessionId)
     if (record) {
-      this.projections.noteRestart(sessionId, rest)
+      if (
+        rest.known !== false ||
+        rest.interrupted ||
+        structuredAgentSessionOwnerEnded(record.lease, this.deps.replacedRuntime?.(sessionId)) ||
+        (rest.known !== false && !rest.openTurn && record.lease.claimStatus === 'released')
+      ) {
+        this.projections.noteRestart(sessionId, rest)
+      }
       if (this.deps.sessions.has(sessionId)) {
         this.publish(sessionId)
         return

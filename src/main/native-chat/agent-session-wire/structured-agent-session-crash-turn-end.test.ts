@@ -219,13 +219,17 @@ describe('a turn a crash cut short mid-tool', () => {
     expect(host.hasSession(SESSION)).toBe(false)
     expect(host.readStatusSummary(SESSION)).toMatchObject({
       status: 'idle',
-      turnOutcome: 'interruption',
+      turnOutcome: 'cancellation',
+      restoredInterruption: true,
+      statusStartedAt: TOOL_STARTED_AT - 2_000,
       latestPrompt: ''
     })
     expect(await settledTurn()).toMatchObject(INTERRUPTED_TURN)
     expect(host.readStatusSummary(SESSION)).toMatchObject({
       status: 'idle',
-      turnOutcome: 'interruption',
+      turnOutcome: 'cancellation',
+      restoredInterruption: true,
+      statusStartedAt: TOOL_STARTED_AT - 2_000,
       latestPrompt: 'run the loop'
     })
   })
@@ -367,13 +371,14 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
       published
         .filter((summary) => summary.sessionId === SESSION && summary.turnOutcome)
         .map((summary) => summary.turnOutcome)
-    // The sidebar's red Failed until seen; the turn folds as "Worked for 27s" beside its notice row.
-    expect(outcomes()).toEqual(['interruption'])
+    // Restored Interrupted is news at its saved time; the turn keeps its worked duration.
+    expect(outcomes()).toEqual(['cancellation'])
+    expect(published.at(-1)?.restoredInterruption).toBe(true)
 
     await host.reconcileRestartLeases()
     await drainSession()
 
-    expect(outcomes().at(-1)).toBe('interruption')
+    expect(outcomes().at(-1)).toBe('cancellation')
     const [timing] = selectStructuredAgentTurnTimings(
       (await host.journalSnapshot(SESSION)).items
     ).values()

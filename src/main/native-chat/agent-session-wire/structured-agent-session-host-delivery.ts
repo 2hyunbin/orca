@@ -64,6 +64,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   cacheReacquisition?: (
     sessionId: string
   ) => StructuredAgentSessionConversationOpenOptions['cacheReacquisition']
+  onDeathEvidence?: (sessionId: string) => void
   /** Claims the queued head's start during its ordered preparation. */
   startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   deliveryOrder: StructuredAgentSessionDeliveryOrder
@@ -194,6 +195,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
   // A chat open before its owner's death was proven revises what its open settled. Queued, never
   // awaited: the writer can hold this session's serialize (an attach recovering its lease).
   const stopResettling = deps.store.onDeathEvidence((sessionId) => {
+    input.onDeathEvidence?.(sessionId)
     const session = sessions.get(sessionId)
     // A user close already settles and retires this handle; its next open re-derives any proof.
     if (session && session.child?.close?.cause !== 'user-close') {

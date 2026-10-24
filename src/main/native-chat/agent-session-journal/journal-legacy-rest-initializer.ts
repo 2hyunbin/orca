@@ -20,10 +20,13 @@ export class JournalLegacyRestInitializer {
   private running: Promise<void> | undefined
   private stopped = false
   private readonly attempted = new Set<string>()
+  private discovery?: Iterator<string | undefined>
+  private readonly reconsidered = new Set<string>()
+  private candidate?: string
   constructor(
     private readonly deps: {
       database: JournalHostDatabase
-      candidates: () => readonly string[]
+      candidates: () => Iterable<string | undefined>
       /** Null means an owner is still live/foreign/unproved; a stable value is its actual source guard. */
       owner: (sessionId: string) => string | null
       initialized: (
@@ -33,6 +36,11 @@ export class JournalLegacyRestInitializer {
       failed: (sessionId: string, error: unknown) => void
     }
   ) {}
+
+  /** Existing committed owner proof can make a formerly foreign candidate eligible. */
+  reconsider(sessionId: string): void {
+    this.reconsidered.add(sessionId)
+  }
 
   advance(canWork: () => boolean): Promise<void> | undefined {
     if (this.running || this.stopped || this.deps.database.readOnly || !canWork()) {
@@ -76,20 +84,49 @@ export class JournalLegacyRestInitializer {
     if (tip < 1) {
       return null
     }
-    return { ...projection, tip, guard: JSON.stringify([3, sessionId, projection, tip, owner]) }
+    return { ...projection, tip, guard: JSON.stringify([4, sessionId, projection, tip, owner]) }
   }
   private async run(canWork: () => boolean): Promise<void> {
+    await yieldToForeground()
+    if (this.stopped || !canWork()) {
+      return
+    }
     const scratch = (this.scratch ??= new JournalStructuralScratch(
       join(this.deps.database.stateDirectory, 'journal-rest-upgrade-scratch.db')
     ))
-    const checkpoint = scratch.load<JournalStructuralCheckpoint>()
-    const candidates = new Set([
-      ...(checkpoint?.sessionId ? [checkpoint.sessionId] : []),
-      ...this.deps.candidates()
-    ])
-    for (const sessionId of candidates) {
+    if (!this.discovery) {
+      this.discovery = this.deps.candidates()[Symbol.iterator]()
+      this.candidate = scratch.load<JournalStructuralCheckpoint>()?.sessionId
+    }
+    let examined = 0
+    while (!this.stopped) {
+      if (examined++ === 32) {
+        examined = 1
+        await yieldToForeground()
+      }
+      if (!canWork()) {
+        return
+      }
+      if (!this.candidate) {
+        const retry = this.reconsidered.values().next()
+        if (!retry.done) {
+          this.reconsidered.delete(retry.value)
+          this.candidate = retry.value
+        } else {
+          const next = this.discovery.next()
+          if (next.done) {
+            return
+          }
+          this.candidate = next.value
+        }
+      }
+      const sessionId = this.candidate
+      if (sessionId === undefined) {
+        continue
+      }
       const source = this.source(sessionId)
       if (!source || this.attempted.has(source.guard)) {
+        this.candidate = undefined
         continue
       }
       let saved = scratch.load<JournalStructuralCheckpoint>()
@@ -106,7 +143,7 @@ export class JournalLegacyRestInitializer {
           }
           const current = this.source(sessionId)
           if (current?.guard !== source.guard) {
-            break
+            return
           }
           const started = performance.now()
           let bytes = 0
@@ -197,6 +234,7 @@ export class JournalLegacyRestInitializer {
         this.attempted.add(source.guard)
         this.deps.failed(sessionId, error)
       }
+      this.candidate = undefined
       if (this.stopped) {
         return
       }

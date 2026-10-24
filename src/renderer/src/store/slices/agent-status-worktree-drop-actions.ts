@@ -67,7 +67,7 @@ export function createAgentStatusWorktreeDropActions(
               allowedPaneKeys.has(paneKey) &&
               entry.state === 'done' &&
               entry.agentType !== undefined &&
-              !agentTurnEligibleForAttention(entry)
+              agentTurnEligibleForAttention(entry)
             ) {
               retainedEvidence.set(
                 paneKey,

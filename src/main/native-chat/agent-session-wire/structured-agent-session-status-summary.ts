@@ -13,6 +13,7 @@ import { agentSessionPinnedLaunchDirectory } from '../../runtime/agent-session-r
 import { isAgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionStatusFeedDeps } from './structured-agent-session-status-feed-deps'
 import { structuredStatusSummariesEqual } from './structured-agent-session-status-summary-equality'
+import { structuredAgentSessionOwnerUnverifiable } from './structured-agent-session-current-work'
 
 export function structuredAgentSessionStatusSummary({
   sessionId,
@@ -97,17 +98,28 @@ export function atRestStructuredStatusSummary(
   deps: Pick<StructuredAgentSessionStatusFeedDeps, 'namingFailure' | 'now'>
 ): AgentSessionStatusSummary {
   // Sequence 1 is the epoch row: a chat with nothing after it has never been sent anything.
+  const unconfirmed =
+    !rest.interrupted &&
+    !!rest.openTurn &&
+    (record.lease.claimStatus === 'released' ||
+      structuredAgentSessionOwnerUnverifiable({ record, child: null }))
   const status =
-    rest.interrupted || (rest.known !== false && rest.lastSequence > 1) ? ('idle' as const) : null
+    unconfirmed ||
+    rest.interrupted ||
+    (!rest.openTurn && rest.known !== false && rest.lastSequence > 1)
+      ? ('idle' as const)
+      : null
   return {
     sessionId: record.sessionId,
     workspaceId: record.location.workspaceId,
     agent: record.provider,
     status,
     latestPrompt: '',
-    ...(status && rest.interrupted
-      ? { turnOutcome: 'cancellation' as const, restoredInterruption: true as const }
-      : {}),
+    ...(unconfirmed
+      ? { turnOutcome: 'unconfirmed' as const }
+      : status && rest.interrupted
+        ? { turnOutcome: 'cancellation' as const, restoredInterruption: true as const }
+        : {}),
     ...(status ? { statusStartedAt: rest.openTurn?.since ?? rest.lastSavedAt } : {}),
     ...structuredSummaryRecordFields(record, deps.namingFailure?.(record.sessionId)),
     updatedAt: rest.lastSavedAt || deps.now()

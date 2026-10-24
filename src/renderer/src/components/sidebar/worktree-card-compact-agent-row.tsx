@@ -41,10 +41,7 @@ export function getCompactAgentSecondary(
   if (presentation.attention) {
     return programStatusAttentionLine(presentation.attention)
   }
-  const verdictLine = agentVerdictStatusLine(
-    agent.entry,
-    agent.tab?.contentType === 'agent-session'
-  )
+  const verdictLine = agentVerdictStatusLine(agent.entry)
   if (verdictLine) {
     return verdictLine
   }

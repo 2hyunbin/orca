@@ -375,14 +375,19 @@ describe('already-wedged profiles become usable on load', () => {
       // What the sidebar reads: every status this restart published says the chat is not working.
       expect(published.filter((summary) => summary.sessionId === SESSION)).not.toEqual([])
       expect(published.map((summary) => summary.status)).not.toContain('working')
-      // A crash is not something the user did: a proven one reads as an interruption and an
-      // unprovable one as unconfirmed, so no reader files it as a cancellation the user knows about.
-      // Until the chat is opened its row reads Interrupted: only the open's settle can tell.
-      const outcome = verdict.state === 'interrupted' ? 'interruption' : 'unconfirmed'
+      // Only a proven restart is Interrupted news; an unprobeable owner remains unconfirmed.
+      const outcome = verdict.state === 'interrupted' ? 'cancellation' : 'unconfirmed'
       expect(published.at(-1)?.turnOutcome).toBe(outcome)
-      expect(new Set(published.map((summary) => summary.turnOutcome))).toEqual(
-        new Set(['interruption', outcome])
-      )
+      expect(published.at(-1)?.restoredInterruption).toBe(remote ? undefined : true)
+      expect(published.at(-1)?.statusStartedAt).toBe(SEEDED_TURN_STARTED_AT)
+      if (remote) {
+        expect(
+          restoredJournal()
+            .snapshot()
+            .items.find((item) => readAgentJournalTurn(item.body))?.recoveredAt
+        ).toEqual(expect.any(Number))
+      }
+      expect(new Set(published.map((summary) => summary.turnOutcome))).toEqual(new Set([outcome]))
     }
   )
 

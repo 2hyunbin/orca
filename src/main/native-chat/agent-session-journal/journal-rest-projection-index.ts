@@ -1,53 +1,17 @@
 import type { AgentSessionSemanticWork } from '../../../shared/agent-session-semantic-work'
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
 import { compareAgentJournalItems } from '../../../shared/agent-session-journal-position'
-import { JournalMutationMap } from './journal-mutation-map'
+import { WorkBucket, type Work } from './journal-work-bucket'
 import type { JournalRestFacts } from './journal-row-table'
 
 export type Request = { item: AgentJournalRenderItem; anchor: string; retired?: true }
 
-export type Work = { fact: NonNullable<JournalRestFacts['openTurn']>; item: AgentJournalRenderItem }
 export type JournalStructuralStorage = {
   map<K, V, Stored = V>(
     name: string,
     codec?: { encode: (value: V) => Stored; decode: (value: Stored) => V }
   ): Map<K, V>
   set<T>(name: string): Set<T>
-}
-
-export class WorkBucket {
-  constructor(
-    public entries = new Map<string, Work>(),
-    public head?: Work,
-    readonly key = ''
-  ) {}
-  fork(): WorkBucket {
-    const next = new WorkBucket()
-    next.entries = new JournalMutationMap(this.entries)
-    next.head = this.head
-    return next
-  }
-  update(key: string, work: Work | undefined): void {
-    const previous = this.entries.get(key)
-    if (work) {
-      this.entries.set(key, work)
-    } else {
-      this.entries.delete(key)
-    }
-    if (previous && previous.item.itemId === this.head?.item.itemId) {
-      this.head = work
-      if (!work || compareAgentJournalItems(previous.item, work.item) !== 0) {
-        this.head = undefined
-        for (const candidate of this.entries.values()) {
-          if (!this.head || compareAgentJournalItems(candidate.item, this.head.item) < 0) {
-            this.head = candidate
-          }
-        }
-      }
-    } else if (work && (!this.head || compareAgentJournalItems(work.item, this.head.item) < 0)) {
-      this.head = work
-    }
-  }
 }
 
 /** A compact index of canonical requests, including finished heads that supersede older cuts. */
@@ -85,10 +49,10 @@ export class JournalRestProjectionIndex {
     this.submissionWork = storage.map('submissionWork')
     this.origins = storage.map('origins')
     this.cuts = storage.map('cuts', {
-      encode: (bucket: WorkBucket) => ({ key: bucket.key, head: bucket.head }),
-      decode: (value) => new WorkBucket(storage.map(`bucket:${value.key}`), value.head, value.key)
+      encode: (bucket: WorkBucket) => ({ key: bucket.key, ...bucket.checkpoint() }),
+      decode: (value) => new WorkBucket(storage, value.key, value)
     })
-    this.active = new WorkBucket(storage.map('active'), saved?.active)
+    this.active = new WorkBucket(storage, 'active', saved?.active)
     if (saved) {
       this.latest = saved.latest
       this.floor = saved.floor
@@ -105,7 +69,7 @@ export class JournalRestProjectionIndex {
       dirty: this.dirty,
       revision: this.revision,
       legacy: this.legacy,
-      active: this.active.head
+      active: this.active.checkpoint()
     }
   }
 
@@ -124,9 +88,7 @@ export class JournalRestProjectionIndex {
   }
 
   protected updateCut(anchor: string, key: string, work: Work | undefined): void {
-    const bucket =
-      this.cuts.get(anchor) ??
-      new WorkBucket(this.storage?.map(`bucket:${anchor}`), undefined, anchor)
+    const bucket = this.cuts.get(anchor) ?? new WorkBucket(this.storage, `cut:${anchor}`)
     bucket.update(key, work)
     this.cuts.set(anchor, bucket)
   }

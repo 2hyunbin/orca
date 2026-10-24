@@ -252,7 +252,7 @@ export function structuralJournalState(
     'submissions',
     undefined,
     (key, value, previous) => {
-      if (previous) {
+      if (previous && previous.payloadFingerprint !== value?.payloadFingerprint) {
         scratch.map(`fingerprint:${previous.payloadFingerprint}`).delete(key)
       }
       if (value) {

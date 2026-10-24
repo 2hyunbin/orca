@@ -123,6 +123,8 @@ export class AgentSessionRecordStore {
 
   listRecords = (): AgentSessionRecord[] => [...this.state.records.values()]
 
+  iterateRecords = (): IterableIterator<AgentSessionRecord> => this.state.records.values()
+
   /** The runtimes this one replaced for a chat, as found at load; absent for a chat it began. */
   replacedRuntime = (sessionId: string) => this.transactions.replacedRuntimes.get(sessionId)
 

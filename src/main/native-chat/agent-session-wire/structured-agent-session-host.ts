@@ -1,5 +1,4 @@
 import { createHostLegacyRestInitializer } from './structured-agent-session-host-legacy-rest'
-import type { JournalLegacyRestInitializer } from '../agent-session-journal/journal-legacy-rest-initializer'
 import { structuredJournalBackgroundReady } from './structured-agent-session-registry'
 import type { AgentSessionRewindParams } from '../../../shared/agent-session-rewind'
 import { rewindStructuredAgentSession } from './structured-agent-session-rewind'
@@ -73,7 +72,7 @@ export class StructuredAgentSessionHost {
   )
   private readonly subscribers = this.clientDelivery.subscribers
   private readonly tasks = new StructuredAgentSessionTaskQueue(() => this.lifetime?.residency)
-  private readonly legacyRest: JournalLegacyRestInitializer
+  private readonly legacyRest: ReturnType<typeof createHostLegacyRestInitializer>
   private readonly runtimeState: StructuredAgentSessionHostRuntimeState
   private readonly reconcileLeases: ReturnType<typeof createRestartReconciler>
   private readonly restore: ReturnType<typeof reveal.createStructuredAgentSessionHostRestore>
@@ -116,6 +115,10 @@ export class StructuredAgentSessionHost {
       // Quit drains a delivery start before it evicts, so the child it produces is stopped.
       trackStart: (start) => this.tasks.trackAttach(start),
       cacheReacquisition: (id) => this.lifetime?.residency.cacheReacquisition(id),
+      onDeathEvidence: (id) => {
+        this.legacyRest?.reconsider(id)
+        this.advanceLegacyRest()
+      },
       startProviderChild: (sessionId, startedFor) =>
         agentStart.claimStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
@@ -294,9 +297,7 @@ export class StructuredAgentSessionHost {
     }).finally(() => this.clientDelivery.closeAll())
   }
 
-  private mutationContext = (): ReturnType<
-    typeof createStructuredAgentSessionHostMutationContext
-  > =>
+  private mutationContext = () =>
     createStructuredAgentSessionHostMutationContext({
       ...this.attachContext(),
       lifetime: this.lifetime,

@@ -174,7 +174,7 @@ export function createExpiredChildStop(host: {
   sessions: StructuredAgentSessionConversations
   serialize: <T>(id: string, task: () => Promise<T>) => Promise<T>
 }) {
-  return (sessionId: string, expired: StructuredAgentSessionProviderChildIdentity): void => {
+  return (sessionId: string, expired: StructuredAgentSessionProviderChildIdentity | null): void => {
     void host
       .serialize(sessionId, async () => {
         const child = host.sessions.get(sessionId)?.child

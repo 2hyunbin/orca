@@ -6,6 +6,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journa
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
+import { WorkBucket } from './journal-work-bucket'
 import { JournalLegacyRestInitializer } from './journal-legacy-rest-initializer'
 import {
   JournalStructuralScratch,
@@ -23,7 +24,7 @@ const sessionId = 'legacy-upgrade'
 const since = 1_800_000_000_000
 const identity = (turnId: string) =>
   ({ provider: 'codex', threadId: 'thread', turnId, ordinal: 0 }) as const
-const open = () =>
+const open = (now = () => since) =>
   openAgentSessionJournal({
     identity: {
       sessionId,
@@ -33,7 +34,7 @@ const open = () =>
       providerHandle: codexProviderHandle('thread')
     },
     database: openTestJournalHostDatabase(root),
-    now: () => since
+    now
   })
 const unknown = () =>
   openTestJournalHostDatabase(root)
@@ -219,6 +220,97 @@ it.each([64, 640])(
   }
 )
 
+it('preserves equal-time claimant order through a dispatch checkpoint and implicit echo', async () => {
+  const journal = await open(() => 100)
+  const body = { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'same' }] } as const
+  for (const clientMessageId of ['A', 'B']) {
+    await journal.appendSubmission({
+      clientMessageId,
+      body,
+      payloadFingerprint: agentSessionSendBodyFingerprint(sessionId, body),
+      handoverRecorded: true,
+      fence: 1
+    })
+  }
+  await journal.resolveDispatch({
+    clientMessageId: 'A',
+    fence: 1,
+    state: 'pending',
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE
+  })
+  const dispatched = journal.cursor().sequence
+  for (let i = 0; i < 32; i++) {
+    await journal.appendItem(
+      { ...identity('prefix'), ordinal: 1 },
+      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `prefix ${i}` }] },
+      { fence: 1 }
+    )
+  }
+  const echo = { ...identity('echo'), ordinal: 1 }
+  await journal.appendItem(echo, body, { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE })
+  const echoed = journal.cursor().sequence
+  await journal.appendItem(
+    identity('echo'),
+    {
+      kind: 'turn',
+      turnId: 'echo',
+      state: 'completed',
+      outcome: 'success',
+      startedAt: 100,
+      userItemId: agentJournalItemKey(echo)
+    },
+    { fence: 1 }
+  )
+  await journal.resolveDispatch({
+    clientMessageId: 'B',
+    fence: 1,
+    state: 'rejected',
+    reason: 'not sent'
+  })
+  expect(journal.submission('A')?.providerItemId).toBe(agentJournalItemKey(echo))
+  expect(journal.submission('B')?.providerItemId).toBeNull()
+  expect(journal.restFact()).toBeNull()
+  expect(facts()).toMatchObject({ known: true, openTurn: null })
+  await journal.close()
+  unknown()
+  const failed = vi.fn()
+  const published = vi.fn()
+  const make = () =>
+    new JournalLegacyRestInitializer({
+      database: openTestJournalHostDatabase(root),
+      candidates: () => [sessionId],
+      owner: () => 'ended',
+      initialized: published,
+      failed
+    })
+  const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+  const first = make()
+  await first.advance(() => (scratch.load<JournalStructuralCheckpoint>()?.cursor ?? 0) < dispatched)
+  first.close()
+  const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
+  expect(checkpoint.cursor).toBeGreaterThanOrEqual(dispatched)
+  expect(checkpoint.cursor).toBeLessThan(echoed)
+  expect([
+    ...scratch
+      .map<string, unknown>(`fingerprint:${agentSessionSendBodyFingerprint(sessionId, body)}`)
+      .keys()
+  ]).toEqual(['A', 'B'])
+  scratch.close()
+  closeTestJournalHostDatabases()
+  const resumed = make()
+  await resumed.advance(() => true)
+  resumed.close()
+  expect(failed).not.toHaveBeenCalled()
+  expect(published).toHaveBeenCalledOnce()
+  expect(published.mock.calls[0]?.[1]).toMatchObject({ known: true, openTurn: null })
+  expect(facts()).toMatchObject({ known: true, openTurn: null })
+  const reopened = await open(() => 100)
+  expect(reopened.restFact()).toBeNull()
+  expect(reopened.submission('A')?.providerItemId).toBe(agentJournalItemKey(echo))
+  expect(reopened.submission('B')?.providerItemId).toBeNull()
+  await reopened.close()
+})
+
 it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
   'leaves newer authority and unsupported/failed evidence untouched: %s',
   async (race) => {
@@ -234,10 +326,33 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
     let owner: string | null = 'ended'
     const publish = vi.fn()
     const failed = vi.fn()
+    let checks = 0
     const initializer = new JournalLegacyRestInitializer({
       database,
       candidates: () => [sessionId],
-      owner: () => owner,
+      owner: () => {
+        if (++checks === 2) {
+          if (race === 'owner') {
+            owner = null
+          }
+          if (race === 'tip') {
+            database.db
+              .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
+              .run(sessionId)
+          }
+          if (race === 'epoch') {
+            database.db
+              .prepare('UPDATE journal_sessions SET epoch = ? WHERE session_id = ?')
+              .run('replacement-wins', sessionId)
+          }
+          if (race === 'pair') {
+            database.db
+              .prepare('UPDATE journal_sessions SET open_turn_since = 0 WHERE session_id = ?')
+              .run(sessionId)
+          }
+        }
+        return owner
+      },
       initialized: publish,
       failed
     })
@@ -262,30 +377,7 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
         .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 1')
         .run(sessionId)
     }
-    let checks = 0
-    await initializer.advance(() => {
-      if (++checks === 2) {
-        if (race === 'owner') {
-          owner = null
-        }
-        if (race === 'tip') {
-          database.db
-            .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
-            .run(sessionId)
-        }
-        if (race === 'epoch') {
-          database.db
-            .prepare('UPDATE journal_sessions SET epoch = ? WHERE session_id = ?')
-            .run('replacement-wins', sessionId)
-        }
-        if (race === 'pair') {
-          database.db
-            .prepare('UPDATE journal_sessions SET open_turn_since = 0 WHERE session_id = ?')
-            .run(sessionId)
-        }
-      }
-      return true
-    })
+    await initializer.advance(() => true)
     initializer.close()
     expect(publish).not.toHaveBeenCalled()
     expect(facts()?.known).toBe(race === 'pair')
@@ -294,3 +386,190 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
     }
   }
 )
+
+it('bounds independent linked request retirement and checkpoint replay at N and 10N', async () => {
+  const measurements = []
+  for (const count of [16, 160]) {
+    let updates = 0
+    let depth = 0
+    let indexOperations = 0
+    const originalUpdate = WorkBucket.prototype.update
+    const update = vi
+      .spyOn(WorkBucket.prototype, 'update')
+      .mockImplementation(function (key, value) {
+        updates++
+        depth++
+        try {
+          return originalUpdate.call(this, key, value)
+        } finally {
+          depth--
+        }
+      })
+    const keyed = (['get', 'set', 'delete'] as const).map((method) => {
+      const original = Map.prototype[method]
+      return vi.spyOn(Map.prototype, method).mockImplementation(function (...args) {
+        if (depth) {
+          indexOperations++
+        }
+        return Reflect.apply(original, this, args)
+      })
+    })
+    const allExec = vi.spyOn(Object.getPrototypeOf(openTestJournalHostDatabase(root).db), 'exec')
+    const allSql = vi.spyOn(Object.getPrototypeOf(openTestJournalHostDatabase(root).db), 'prepare')
+    const journal = await open()
+    for (let i = 0; i < count; i++) {
+      await journal.appendSubmission({
+        clientMessageId: `linked-${count}-${i}`,
+        payloadFingerprint: `${count}-${i}`,
+        body: { kind: 'message', role: 'user', blocks: [] },
+        fence: 1,
+        handoverRecorded: true
+      })
+      await journal.appendItem(
+        identity(`linked-${count}-${i}`),
+        {
+          kind: 'turn',
+          turnId: `linked-${count}-${i}`,
+          userItemId: `orca:linked-${count}-${i}`,
+          state: 'running',
+          startedAt: since
+        },
+        { fence: 1 }
+      )
+    }
+    const expectedAt = new Map([[journal.cursor().sequence, journal.restFact()]])
+    const prefix = journal.cursor().sequence
+    for (let i = 0; i < 32; i++) {
+      await journal.appendItem(
+        { ...identity('checkpoint-gap'), ordinal: 1 },
+        { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `${i}` }] },
+        { fence: 1 }
+      )
+    }
+    expectedAt.set(journal.cursor().sequence, journal.restFact())
+    let mapVisits = 0
+    const values = Map.prototype.values
+    const visits = vi.spyOn(Map.prototype, 'values').mockImplementation(function* () {
+      for (const value of values.call(this)) {
+        mapVisits++
+        yield value
+      }
+    })
+    for (let i = 0; i < count; i++) {
+      await journal.appendItem(
+        identity(`linked-${count}-${i}`),
+        {
+          kind: 'turn',
+          turnId: `linked-${count}-${i}`,
+          userItemId: `orca:linked-${count}-${i}`,
+          state: 'completed',
+          outcome: 'success',
+          startedAt: since
+        },
+        { fence: 1 }
+      )
+      const expected =
+        i + 1 === count
+          ? null
+          : {
+              itemId: agentJournalItemKey(identity(`linked-${count}-${i + 1}`)),
+              since
+            }
+      expect(journal.restFact()).toEqual(expected)
+      expect(facts()?.openTurn).toEqual(expected)
+      expectedAt.set(journal.cursor().sequence, expected)
+    }
+    visits.mockRestore()
+    expect(journal.restFact()).toBeNull()
+    const tip = journal.cursor().sequence
+    await journal.close()
+    unknown()
+    const database = openTestJournalHostDatabase(root)
+    const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+    const initialized = vi.fn()
+    const failed = vi.fn()
+    const make = () =>
+      new JournalLegacyRestInitializer({
+        database,
+        candidates: () => [sessionId],
+        owner: () => 'ended',
+        initialized,
+        failed
+      })
+    const first = make()
+    await first.advance(() => (scratch.load<JournalStructuralCheckpoint>()?.cursor ?? 0) < prefix)
+    first.close()
+    const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
+    const cursor = checkpoint.cursor
+    expect(checkpoint.rest.active.head?.fact).toEqual(expectedAt.get(prefix))
+    expect(cursor).toBeGreaterThanOrEqual(prefix)
+    expect(cursor).toBeLessThan(tip)
+    const resumed = make()
+    const resumeStart = allSql.mock.calls.length
+    const committedHeads: JournalStructuralCheckpoint[] = []
+    await resumed.advance(() => {
+      const saved = scratch.load<JournalStructuralCheckpoint>()
+      if (saved) {
+        committedHeads.push(saved)
+      }
+      return true
+    })
+    const structuralVisits = allSql.mock.calls.filter(([query]) =>
+      String(query).includes('SELECT id,key,value FROM relations')
+    ).length
+    const mainRows = allSql.mock.calls
+      .slice(resumeStart)
+      .filter(([query]) => String(query).includes('ORDER BY seq ASC LIMIT')).length
+    const structuralSql = allSql.mock.calls.filter(([query]) =>
+      /relations|checkpoint|context_clears/.test(String(query))
+    ).length
+    for (const saved of committedHeads) {
+      const expected =
+        saved.cursor <= prefix + 32 ? expectedAt.get(prefix) : expectedAt.get(saved.cursor)
+      expect(expected).not.toBeUndefined()
+      expect(saved.rest.active.head?.fact ?? null).toEqual(expected)
+    }
+    expect(committedHeads.length).toBeGreaterThan(0)
+    const structuralExec = allExec.mock.calls.reduce(
+      (total, [query]) =>
+        total +
+        String(query)
+          .split(';')
+          .filter((part) => part.trim()).length,
+      0
+    )
+    allSql.mockRestore()
+    allExec.mockRestore()
+    update.mockRestore()
+    keyed.forEach((spy) => spy.mockRestore())
+    // A sift visits at most two children and one parent per level and writes two keyed records.
+    // Overlay/base accesses and both writer passes are included in these measured update calls.
+    const levels = 1 + Math.ceil(Math.log2(Math.max(2, count)))
+    expect(indexOperations).toBeLessThanOrEqual(32 * updates * levels)
+    // Includes reducer relations, setup/checkpoint/reopen, not just heap cursor reads.
+    expect(structuralSql + structuralExec).toBeLessThanOrEqual(256 * (updates + tip) * levels)
+    resumed.close()
+    scratch.close()
+    expect(failed).not.toHaveBeenCalled()
+    expect(initialized).toHaveBeenCalledOnce()
+    expect(facts()).toMatchObject({ known: true, openTurn: null })
+    expect(mainRows).toBe(tip - cursor + 1)
+    measurements.push({
+      count,
+      mapVisits,
+      structuralVisits,
+      mainRows,
+      indexOperations,
+      structuralSql,
+      structuralExec,
+      updates
+    })
+  }
+  console.log('R3 linked scaling', measurements)
+  expect(measurements[1].indexOperations).toBeLessThanOrEqual(20 * measurements[0].indexOperations)
+  expect(measurements[1].structuralSql).toBeLessThanOrEqual(20 * measurements[0].structuralSql)
+  expect.soft(measurements[1].mapVisits).toBeLessThanOrEqual(20 * measurements[0].mapVisits)
+  expect
+    .soft(measurements[1].structuralVisits)
+    .toBeLessThanOrEqual(20 * measurements[0].structuralVisits)
+})

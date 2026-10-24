@@ -50,10 +50,7 @@ function stateDotTooltipLabel(
   now: number
 ): string {
   if (dotState === 'interrupted') {
-    return (
-      agentVerdictStatusLine(agent.entry, agent.tab?.contentType === 'agent-session') ??
-      agentStateLabel(dotState)
-    )
+    return agentVerdictStatusLine(agent.entry) ?? agentStateLabel(dotState)
   }
   // Why: report the observation, not a verdict on the agent — the elapsed gap is what
   // lets the user apply context Orca has no way to know (a long build, a slow download).
@@ -351,10 +348,7 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
       <DashboardAgentRowMessage
         expanded={expanded}
         isInterrupted={isInterrupted}
-        stoppedByUser={agentVerdictNamesUserStop(
-          agent.entry,
-          agent.tab?.contentType === 'agent-session'
-        )}
+        stoppedByUser={agentVerdictNamesUserStop(agent.entry)}
         lastAssistantMessage={lastAssistantMessage}
       />
     </div>

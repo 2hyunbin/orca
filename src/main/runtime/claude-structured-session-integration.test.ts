@@ -678,7 +678,31 @@ describe('a structured Claude session over agentSession.*', () => {
     expect(claude.live().calls.filter((entry) => entry.subtype === 'stop_task')).toEqual([
       { subtype: 'stop_task', params: { taskId: 'task-two' } }
     ])
-    expect(itemsOf(stream)).toEqual(itemsBeforeTaskStop)
+    const stoppedWork = itemsBeforeTaskStop.filter(
+      (item) =>
+        item.body.kind === 'semantic-work' &&
+        item.body.source.kind === 'child' &&
+        item.body.source.handleId === 'task-two'
+    )
+    expect(stoppedWork).toHaveLength(1)
+    const scope = stoppedWork[0].turnScope
+    const frontier = scope?.kind === 'turn' ? scope.turnItemId : null
+    expect(frontier).toBeTruthy()
+    expect(itemsOf(stream)).toEqual(
+      itemsBeforeTaskStop.map((item) => {
+        if (item === stoppedWork[0]) {
+          return {
+            ...item,
+            revision: item.revision + 1,
+            body: { ...item.body, phase: 'interrupted', afterRequest: frontier }
+          }
+        }
+        // The existing fallback republishes the still-live sibling without changing its saved facts.
+        return item.itemId === 'orca:subagent%3Atask-one'
+          ? { ...item, revision: item.revision + 1 }
+          : item
+      })
+    )
     // The acknowledged stop ends the record it reached, and only that one.
     const subject = childWork.at(-1)![0]
     expect(

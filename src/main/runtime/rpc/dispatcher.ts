@@ -1,3 +1,4 @@
+import { classifyRuntimeLongPoll } from '../runtime-rpc/runtime-rpc-long-poll'
 import { beginStructuredJournalForeground } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   buildRegistry,
@@ -174,6 +175,9 @@ export class RpcDispatcher {
     call: AdmittedUnaryCall,
     options: RpcDispatchStreamingOptions | undefined
   ): Promise<unknown> {
+    if (classifyRuntimeLongPoll(call.request)) {
+      return this.invokeUnary(call, options)
+    }
     const finishForeground = beginStructuredJournalForeground()
     try {
       return await this.invokeUnary(call, options)

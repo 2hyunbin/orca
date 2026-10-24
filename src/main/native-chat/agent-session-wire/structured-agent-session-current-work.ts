@@ -82,13 +82,22 @@ export function structuredAgentSessionLiveFence(
 
 /** An owner not yet reconciled, or latched in recovery, that this process holds no child for: it
  *  may still be running, so its turn is unverifiable, and nothing it left is current work. */
-function structuredAgentSessionOwnerUnverifiable(evidence: StructuredAgentSessionWorkEvidence) {
+export function structuredAgentSessionOwnerUnverifiable(
+  evidence: StructuredAgentSessionWorkEvidence
+) {
   const lease = evidence.record?.lease
   return (
     (lease?.unreconciled === true || lease?.handoffStage === 'recovering') &&
     evidence.child !== undefined &&
     evidence.child?.fence !== lease.runtimeFence
   )
+}
+
+export function structuredAgentSessionOwnerEnded(
+  lease: AgentSessionRecord['lease'],
+  replaced: StructuredAgentSessionWorkEvidence['replaced']
+): boolean {
+  return !!lease.deathEvidence || structuredAgentSessionReplacedRuntimeEnded(lease, replaced)
 }
 
 /** Whether a runtime this one replaced granted the lease's generation, which is then over. A
