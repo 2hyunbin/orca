@@ -43,6 +43,7 @@ import type * as PtyControllerContract from '../runtime-pty-controller-contract'
 import type { RuntimeClientEventBus } from '../runtime-client-event-bus'
 import type { RuntimeRepoSelector } from '../runtime-repo-selector'
 import type { PtyPane, PtyPaneSource } from '../terminal/surface/pty-pane-query'
+import type { PtyLaneMailboxTarget } from '../terminal/query/pty-terminal-summary'
 
 export abstract class RuntimeConstructionServices {
   abstract getOrchestrationDb(): OrchestrationDb
@@ -120,6 +121,8 @@ export abstract class RuntimeConstructionServices {
     record: TerminalHandleRecord
     leaf: RuntimeLeafRecord
   }
+  protected abstract getOrchestrationMailboxLeafForHandle(handle: string): OrchestrationMailboxLeaf
+  protected abstract getPtyLaneMailboxTarget(leafKey: string): PtyLaneMailboxTarget | null
   protected abstract startTuiIdleVisibleReadProbe(
     waiter: TerminalWaiter,
     waiterTimeoutMs: number,

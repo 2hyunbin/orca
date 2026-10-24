@@ -19,6 +19,13 @@ import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import type { OrchestrationMailboxLeaf } from '../../orchestration/mailbox-owner'
+
+export type PtyLaneMailboxTarget = {
+  leaf: OrchestrationMailboxLeaf
+  pty: RuntimePtyWorktreeRecord
+  handle: string
+}
 
 export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
   protected abstract bindPtyIncarnationHandle(
@@ -119,6 +126,49 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
       throw new Error('terminal_handle_stale')
     }
     return { record, leaf }
+  }
+
+  /** The mailbox pane a handle names: its graph leaf, else its pane-less PTY's (headless serve). */
+  protected getOrchestrationMailboxLeafForHandle(handle: string): OrchestrationMailboxLeaf {
+    const live = this.getLivePtyForHandle(handle)
+    const target = live && this.getPtyLaneMailboxTargetForPty(live.pty)
+    return target?.handle === handle ? target.leaf : this.getLiveLeafForHandle(handle).leaf
+  }
+
+  /** A pane no window publishes; the graph's leaf, when present, stays authoritative. */
+  protected getPtyLaneMailboxTarget(leafKey: string): PtyLaneMailboxTarget | null {
+    const split = leafKey.indexOf('::')
+    if (split === -1 || this.leaves.has(leafKey)) {
+      return null
+    }
+    const paneKey = makePaneKey(leafKey.slice(0, split), leafKey.slice(split + 2))
+    const target = this.getPtyLaneMailboxTargetForPty(this.getPtyRecordForPaneKey(paneKey))
+    return target && this.getLeafKey(target.leaf.tabId, target.leaf.leafId) === leafKey
+      ? target
+      : null
+  }
+
+  protected getPtyLaneMailboxTargetForPty(
+    pty: RuntimePtyWorktreeRecord | null | undefined
+  ): PtyLaneMailboxTarget | null {
+    const pane = parsePaneKey(this.paneOfPty(pty).paneKey ?? '')
+    if (!pty?.connected || !pane || this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId))) {
+      return null
+    }
+    const handle = this.handleByPtyId.get(pty.ptyId)
+    if (!handle || this.getLivePtyForHandle(handle)?.pty !== pty) {
+      return null
+    }
+    const leaf: OrchestrationMailboxLeaf = {
+      tabId: pane.tabId,
+      leafId: pane.leafId,
+      ptyId: pty.ptyId,
+      writable: true,
+      lastAgentStatus: pty.lastAgentStatus,
+      lastAgentStatusObservedLive: pty.lastAgentStatusObservedLive,
+      lastOscTitle: pty.lastOscTitle
+    }
+    return { leaf, pty, handle }
   }
 
   protected getLivePtyForHandle(handle: string): {
