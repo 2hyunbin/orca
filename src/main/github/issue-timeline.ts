@@ -145,50 +145,86 @@ function parseRestTimelineEventLines(stdout: string): RestTimelineEvent[] {
   return events
 }
 
+function parseLastTimelinePage(stdout: string): number {
+  const match = /^link:.*<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="last"/im.exec(stdout)
+  return match ? Number(match[1]) : 1
+}
+
+function mapTimelinePage(stdout: string): {
+  items: GitHubIssueTimelineItem[]
+  eventCount: number
+} {
+  const events = parseRestTimelineEventLines(stdout)
+  const items = events
+    .map(mapRestTimelineEvent)
+    .filter((item): item is GitHubIssueTimelineItem => item !== null)
+  return { items, eventCount: events.length }
+}
+
 export async function getIssueTimelineItems(
   repository: GitHubApiRepository,
   issueNumber: number,
   ghOptions: GitHubRepoExecOptions
 ): Promise<GitHubIssueTimelineItem[]> {
+  const fetchPage = async (page: number): Promise<string | null> => {
+    if (repositoryRateLimitGuard(repository, 'core', ghOptions).blocked) {
+      return null
+    }
+    noteRepositoryRateLimitSpend(repository, 'core', 1, ghOptions)
+    const { stdout } = await ghExecFileAsync(
+      [
+        'api',
+        // Page 1 headers carry rel="last", so long timelines can read their newest pages.
+        ...(page === 1 ? ['--include'] : []),
+        '--cache',
+        '60s',
+        `repos/${repository.owner}/${repository.repo}/issues/${issueNumber}/timeline?per_page=${GITHUB_REST_PAGE_SIZE}&page=${page}`,
+        '--jq',
+        '.[] | @json'
+      ],
+      { ...ghOptions, ...githubHostExecOptions(repository) }
+    )
+    return stdout
+  }
   try {
+    let stdout = await fetchPage(1)
+    if (stdout === null) {
+      return []
+    }
+    const lastPage = parseLastTimelinePage(stdout)
+    if (lastPage > MAX_ISSUE_TIMELINE_PAGES) {
+      return await getNewestTimelineItems(fetchPage, lastPage)
+    }
     const items: GitHubIssueTimelineItem[] = []
-    for (
-      let page = 1;
-      items.length < MAX_ISSUE_TIMELINE_ITEMS && page <= MAX_ISSUE_TIMELINE_PAGES;
-      page += 1
-    ) {
-      if (repositoryRateLimitGuard(repository, 'core', ghOptions).blocked) {
-        return items
-      }
-      noteRepositoryRateLimitSpend(repository, 'core', 1, ghOptions)
-      const { stdout } = await ghExecFileAsync(
-        [
-          'api',
-          '--cache',
-          '60s',
-          `repos/${repository.owner}/${repository.repo}/issues/${issueNumber}/timeline?per_page=${GITHUB_REST_PAGE_SIZE}&page=${page}`,
-          '--jq',
-          '.[] | @json'
-        ],
-        { ...ghOptions, ...githubHostExecOptions(repository) }
-      )
-      const pageEvents = parseRestTimelineEventLines(stdout)
-      for (const event of pageEvents) {
-        const item = mapRestTimelineEvent(event)
-        if (!item) {
-          continue
-        }
-        items.push(item)
-        if (items.length === MAX_ISSUE_TIMELINE_ITEMS) {
-          break
-        }
-      }
-      if (pageEvents.length < GITHUB_REST_PAGE_SIZE) {
+    for (let page = 1; stdout !== null; page += 1) {
+      const { items: pageItems, eventCount } = mapTimelinePage(stdout)
+      items.push(...pageItems.slice(0, MAX_ISSUE_TIMELINE_ITEMS - items.length))
+      if (items.length === MAX_ISSUE_TIMELINE_ITEMS || eventCount < GITHUB_REST_PAGE_SIZE) {
         break
       }
+      stdout = await fetchPage(page + 1)
     }
     return items
   } catch {
     return []
   }
+}
+
+async function getNewestTimelineItems(
+  fetchPage: (page: number) => Promise<string | null>,
+  lastPage: number
+): Promise<GitHubIssueTimelineItem[]> {
+  const pages: GitHubIssueTimelineItem[][] = []
+  let itemCount = 0
+  const oldestPage = lastPage - MAX_ISSUE_TIMELINE_PAGES + 2
+  for (let page = lastPage; page >= oldestPage && itemCount < MAX_ISSUE_TIMELINE_ITEMS; page -= 1) {
+    const stdout = await fetchPage(page)
+    if (stdout === null) {
+      break
+    }
+    const { items } = mapTimelinePage(stdout)
+    pages.unshift(items)
+    itemCount += items.length
+  }
+  return pages.flat().slice(-MAX_ISSUE_TIMELINE_ITEMS)
 }

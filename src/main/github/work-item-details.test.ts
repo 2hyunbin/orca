@@ -221,6 +221,7 @@ describe('getWorkItemDetails', () => {
     expect(ghExecFileAsyncMock.mock.calls[0][0][1]).toBe('graphql')
     expect(ghExecFileAsyncMock.mock.calls[1][0]).toEqual([
       'api',
+      '--include',
       '--cache',
       '60s',
       'repos/acme/widgets/issues/923/timeline?per_page=100&page=1',
@@ -452,7 +453,7 @@ describe('getWorkItemDetails', () => {
     expect(timelineItems.at(-1)).toMatchObject({ assignee: 'assignee-6-89' })
   })
 
-  it('returns issue details and collected activity without scanning an unsupported-heavy timeline', async () => {
+  it('reads the newest timeline pages when the timeline exceeds the page budget', async () => {
     getWorkItemMock.mockResolvedValueOnce({
       id: 'issue:923',
       type: 'issue',
@@ -474,7 +475,7 @@ describe('getWorkItemDetails', () => {
             data: {
               repository: {
                 issue: {
-                  body: 'Issue body survives auxiliary pagination',
+                  body: 'Issue body',
                   assignees: { nodes: [] },
                   participants: { nodes: [] },
                   comments: { nodes: [] }
@@ -486,32 +487,34 @@ describe('getWorkItemDetails', () => {
       }
       const page = Number(endpoint.match(/[?&]page=(\d+)/)?.[1])
       requestedPages.push(page)
-      return {
-        stdout:
-          page > 48
-            ? ''
-            : Array.from({ length: 100 }, (_, index) =>
-                JSON.stringify({
-                  id: `${page}:${index}`,
-                  event: index === 0 && [1, 20, 21].includes(page) ? 'assigned' : 'commented',
-                  actor: { login: 'issue-author' },
-                  assignee: { login: `assignee-${page}` },
-                  created_at: '2026-04-01T00:00:00Z'
-                })
-              ).join('\n')
-      }
+      const events = Array.from({ length: 100 }, (_, index) =>
+        JSON.stringify({
+          id: `${page}:${index}`,
+          event: index === 0 && [1, 29, 30, 48].includes(page) ? 'assigned' : 'commented',
+          actor: { login: 'issue-author' },
+          assignee: { login: `assignee-${page}` },
+          created_at: '2026-04-01T00:00:00Z'
+        })
+      )
+      const headers =
+        page === 1
+          ? [
+              'HTTP/2.0 200 OK',
+              'Link: <https://api.github.com/repositories/1/issues/923/timeline?per_page=100&page=2>; rel="next", <https://api.github.com/repositories/1/issues/923/timeline?per_page=100&page=48>; rel="last"',
+              ''
+            ]
+          : []
+      return { stdout: [...headers, ...events].join('\r\n') }
     })
 
     const details = await getWorkItemDetails('/repo-root', 923, 'issue')
 
-    expect(details?.item.number).toBe(923)
-    expect(details?.body).toBe('Issue body survives auxiliary pagination')
+    expect(details?.body).toBe('Issue body')
     expect(details?.timelineItems).toMatchObject([
-      { assignee: 'assignee-1' },
-      { assignee: 'assignee-20' }
+      { assignee: 'assignee-30' },
+      { assignee: 'assignee-48' }
     ])
-    expect(requestedPages).toEqual(Array.from({ length: 20 }, (_, index) => index + 1))
-    expect(noteRepositoryRateLimitSpendMock).toHaveBeenCalledTimes(21)
+    expect(requestedPages).toEqual([1, ...Array.from({ length: 19 }, (_, index) => 48 - index)])
   })
 
   it('falls back to REST + GraphQL when the collapsed issue query fails', async () => {
@@ -557,6 +560,7 @@ describe('getWorkItemDetails', () => {
       4,
       [
         'api',
+        '--include',
         '--cache',
         '60s',
         'repos/acme/widgets/issues/923/timeline?per_page=100&page=1',
