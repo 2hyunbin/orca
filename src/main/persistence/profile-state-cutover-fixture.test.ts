@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
@@ -20,6 +20,7 @@ import {
   closeTestStores,
   createStore,
   dataFile,
+  readPersistedStateJson,
   testState,
   writeDataFile
 } from './persistence-test-harness'
@@ -99,7 +100,7 @@ describe('profile-state cutover fixture', () => {
     ])
     expect(store.getSettings().opencodeSessionCookie).toBe('fixture-secret')
 
-    const persisted: unknown = JSON.parse(readFileSync(dataFile(), 'utf-8'))
+    const persisted: unknown = JSON.parse(readPersistedStateJson(dataFile()))
     expect(persisted).toHaveProperty('futureTopLevelExtension', {
       keep: 'forward-compatible',
       nullable: null

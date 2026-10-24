@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { QUICK_COMMAND_SEARCH_QUERY_MAX_LENGTH, QuickCommandsList } from './QuickCommandsList'
 
 vi.mock('react-native', () => ({
@@ -40,14 +40,13 @@ vi.mock('../components/MobileAgentIcon', () => ({ MobileAgentIcon: 'MobileAgentI
 describe('QuickCommandsList search', () => {
   let renderer: ReactTestRenderer | null = null
 
-  beforeEach(() => {})
-
   afterEach(() => {
     act(() => renderer?.unmount())
     renderer = null
   })
 
   it('keeps an active filter clearable when only one command remains', async () => {
+    const onQueryChange = vi.fn()
     await act(async () => {
       renderer = create(
         createElement(QuickCommandsList, {
@@ -58,7 +57,7 @@ describe('QuickCommandsList search', () => {
           loading: false,
           disabled: false,
           error: null,
-          onQueryChange: vi.fn(),
+          onQueryChange,
           onLaunch: vi.fn(),
           onEdit: vi.fn(),
           onDelete: vi.fn(),
@@ -70,6 +69,8 @@ describe('QuickCommandsList search', () => {
     const search = renderer!.root.findByType('TextInput')
     expect(search.props.value).toBe('missing')
     expect(search.props.maxLength).toBe(QUICK_COMMAND_SEARCH_QUERY_MAX_LENGTH)
+    act(() => search.props.onChangeText(''))
+    expect(onQueryChange).toHaveBeenCalledExactlyOnceWith('')
   })
 
   it('omits idle search chrome for a single command', async () => {
