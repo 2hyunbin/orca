@@ -72,10 +72,8 @@ export function TerminalPaneResumeInChatButton({
       <TooltipTrigger asChild>
         <Button
           type="button"
-          variant="ghost"
+          variant="pane-title"
           size="icon-xs"
-          // Same class as split so it shares the hover/active reveal.
-          className="pane-title-split-trigger"
           aria-label={label}
           disabled={!source || pending || capability === undefined}
           // Not `disabled`: the tooltip has to say why.

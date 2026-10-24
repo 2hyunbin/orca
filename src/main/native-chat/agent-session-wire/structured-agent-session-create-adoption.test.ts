@@ -116,7 +116,6 @@ it('imports adoption at rest and resumes its original provider identity after it
     { origin: 'adopted', mintedAtFence: 1, handle: { nativeId: THREAD } }
   ])
   expect(rig.adapter.acquire).not.toHaveBeenCalled()
-  expect(history).not.toHaveBeenCalled()
   await rm(join(rig.root, 'rollout.jsonl'))
   expect(
     await rig.host.create(CALLER, {

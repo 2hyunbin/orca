@@ -156,7 +156,8 @@ export const TERMINAL_LIFECYCLE_METHODS = [
               direction: params.direction,
               command: params.command,
               env: params.env,
-              telemetrySource: params.telemetrySource
+              telemetrySource: params.telemetrySource,
+              retrySplit: params.retrySplit
             })
     })
   }),

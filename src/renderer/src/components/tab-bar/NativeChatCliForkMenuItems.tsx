@@ -28,7 +28,9 @@ export function NativeChatCliForkMenuItems({
     resolveTabSessionHistorySubject(useAppStore.getState(), { tab, nativeChat })
   )
   const chat = subject?.kind === 'chat' ? subject : null
-  const forkPending = useNativeChatCliForkPending(chat)
+  const forkPending = useNativeChatCliForkPending(
+    chat ? { executionHostScope: chat.request.executionHostScope, sessionId: chat.sessionId } : null
+  )
   const switchPending = useNativeChatCliSwitchPending(chat?.sessionId)
   const commandOverrides = useAppStore((state) => state.settings?.agentCmdOverrides)
   const agent = AI_VAULT_AGENTS.find((candidate) => candidate === nativeChat.agent)

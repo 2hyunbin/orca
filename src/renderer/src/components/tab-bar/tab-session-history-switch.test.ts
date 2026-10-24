@@ -13,23 +13,15 @@ import { resolveCliChatResumeSource } from './cli-chat-resume-source'
 import { applyProviderSessionOnlyUpdate } from '@/hooks/ipc-events/agent-status-partial-updates'
 import type { AiVaultListArgs, AiVaultSession } from '../../../../shared/ai-vault-types'
 import { getDefaultSettings } from '../../../../shared/constants'
-import {
-  STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
-  STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
-} from '../../../../shared/protocol-version'
-import {
-  claimAiVaultForcedRescan,
-  resetAiVaultForcedRescanThrottleForTest
-} from '../right-sidebar/ai-vault-session-refresh'
-import {
-  cacheAiVaultSessionList,
-  readCachedAiVaultSessionList
-} from '../right-sidebar/ai-vault-session-list-request'
+import * as protocol from '../../../../shared/protocol-version'
+import * as sessionRefresh from '../right-sidebar/ai-vault-session-refresh'
+import * as listCache from '../right-sidebar/ai-vault-session-list-request'
 import {
   canPaneOfferResumeInNewChat,
   findTabSessionHistoryRow,
   lookupTabSessionHistoryRow,
   resolveTabSessionHistorySubject,
+  resolveNativeChatCliForkIdentity,
   resolveTabSessionSwitch,
   type TabSessionHistorySubject
 } from './tab-session-history-switch'
@@ -56,8 +48,8 @@ vi.mock('./cli-chat-resume-feedback', () => ({ switchIntoOwner: mocks.switchOwne
 vi.mock('@/runtime/local-runtime-capabilities', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readLocalRuntimeCapabilitiesOrUnknown: () => [
-    STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
-    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
+    protocol.STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
+    protocol.STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
   ]
 }))
 vi.mock('@/runtime/host-structured-agents', async (importOriginal) => ({
@@ -178,7 +170,7 @@ const cliSubject: TabSessionHistorySubject = {
 }
 
 beforeEach(() => {
-  resetAiVaultForcedRescanThrottleForTest()
+  sessionRefresh.resetAiVaultForcedRescanThrottleForTest()
   mocks.resumeState = { blocked: false, worktreeId: WORKTREE_ID }
   mocks.platform = 'darwin'
   mocks.resumeInChat.mockReset()
@@ -230,6 +222,25 @@ describe('resolveTabSessionHistorySubject', () => {
       executionHostId: 'local'
     })
   })
+  it.each(['local', 'runtime:server-1', 'ssh:dev-box', null] as const)(
+    'keeps lightweight native eligibility and the public request on workspace host %s',
+    (executionHostId) => {
+      const state = makeState({}, executionHostId ? { executionHostId } : {})
+      if (!executionHostId) {
+        state.repos = []
+      }
+      const args = {
+        tab: { id: 'chat-tab', worktreeId: WORKTREE_ID },
+        nativeChat: { sessionId: 'chat-1', agent: 'claude' as const }
+      }
+      const expected = executionHostId === 'ssh:dev-box' ? null : executionHostId
+      const identity = resolveNativeChatCliForkIdentity(state, args)
+      const full = resolveTabSessionHistorySubject(state, args)
+      expect(identity?.executionHostScope ?? null).toBe(expected)
+      expect(full?.request.executionHostScope ?? null).toBe(expected)
+    }
+  )
+
   it('finds a native chat tab by the chat it shows', () => {
     expect(
       resolveTabSessionHistorySubject(makeState(), {
@@ -674,20 +685,20 @@ describe('lookupTabSessionHistoryRow', () => {
       force: undefined,
       requestToken: 't'
     })
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
+    expect(listCache.readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
   })
 
   it("leaves the panel's cached list as it was, even after a forced rescan", async () => {
-    cacheAiVaultSessionList(PANEL_REQUEST, listResult([row({ id: 'panel-row' })]), {
+    listCache.cacheAiVaultSessionList(PANEL_REQUEST, listResult([row({ id: 'panel-row' })]), {
       replaceHostEntries: false
     })
     const listSessions = vi.fn(async (_args: AiVaultListArgs) => listResult([emptyRow]))
     await lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
 
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)?.sessions.map((s) => s.id)).toEqual([
-      'panel-row'
-    ])
+    expect(
+      listCache.readCachedAiVaultSessionList(PANEL_REQUEST)?.sessions.map((s) => s.id)
+    ).toEqual(['panel-row'])
   })
 
   it('rescans once on a miss, from the shared forced-rescan budget', async () => {
@@ -728,7 +739,7 @@ describe('lookupTabSessionHistoryRow', () => {
       isCancelled: () => !menuOpen
     })
     expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(claimAiVaultForcedRescan()).toBe(true)
+    expect(sessionRefresh.claimAiVaultForcedRescan()).toBe(true)
   })
 
   it('forces no scan on a remote Orca server', async () => {
@@ -751,11 +762,11 @@ describe('lookupTabSessionHistoryRow', () => {
       lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
     ).resolves.toMatchObject({ structuredSession: { sessionId: 'orca-chat-1' } })
     expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(claimAiVaultForcedRescan()).toBe(true)
+    expect(sessionRefresh.claimAiVaultForcedRescan()).toBe(true)
   })
 
   it('forces a rescan for a click even while the budget is spent, and takes the budget', async () => {
-    expect(claimAiVaultForcedRescan()).toBe(true)
+    expect(sessionRefresh.claimAiVaultForcedRescan()).toBe(true)
     const listSessions = vi
       .fn()
       .mockResolvedValueOnce(listResult([emptyRow]))
@@ -765,13 +776,13 @@ describe('lookupTabSessionHistoryRow', () => {
       lookupTabSessionHistoryRow(cliSubject, listSessions, clickOptions)
     ).resolves.toMatchObject({ messageCount: 2 })
     expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
-    resetAiVaultForcedRescanThrottleForTest()
+    sessionRefresh.resetAiVaultForcedRescanThrottleForTest()
     await lookupTabSessionHistoryRow(
       cliSubject,
       vi.fn().mockResolvedValue(listResult([])),
       clickOptions
     )
-    expect(claimAiVaultForcedRescan()).toBe(false)
+    expect(sessionRefresh.claimAiVaultForcedRescan()).toBe(false)
   })
 
   it('reports no answer when the lookup is cancelled', async () => {
@@ -780,7 +791,7 @@ describe('lookupTabSessionHistoryRow', () => {
       lookupTabSessionHistoryRow(cliSubject, listSessions, lookupOptions)
     ).resolves.toBeUndefined()
     expect(listSessions).toHaveBeenCalledTimes(1)
-    expect(readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
+    expect(listCache.readCachedAiVaultSessionList(PANEL_REQUEST)).toBeNull()
   })
 })
 
@@ -824,7 +835,9 @@ it('uses one same-pane evidence order in History, the pane action and its feasib
   const isClaude = (agent: unknown): agent is 'claude' => agent === 'claude'
   const state = useAppStore.getState()
   const pane = { worktreeId: WORKTREE_ID, paneKey }
-  const collected = collectAgentPaneConversations(state, isClaude, { allPanes: true })
+  const collected = collectAgentPaneConversations(state, isClaude, {
+    allPanes: true
+  })
   expect(collected).toHaveLength(1)
   expect(collected[0].providerSession.id).toBe('C')
   const layouts = { ...state.terminalLayoutsByTabId }

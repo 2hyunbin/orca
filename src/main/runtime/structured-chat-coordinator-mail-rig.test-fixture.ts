@@ -262,6 +262,7 @@ beforeEach(async () => {
     resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
     ...scriptedCodexTransport(codex.openConnection),
     // The same calls the runtime's own host install makes.
+    onRequestFailure: (failure) => runtime.onStructuredRequestFailureForErrorMail(failure),
     onSessionStatusChanged: (summary) => runtime.onStructuredSessionStatusForMail(summary),
     onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId),
     hasOwedSwitchWork: (record) =>

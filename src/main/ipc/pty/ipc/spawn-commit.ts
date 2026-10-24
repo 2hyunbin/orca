@@ -12,7 +12,7 @@ import { resumeSpawnRefusal, savedResumeResult } from '../host-env/saved-resume-
 export async function commitPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpawnResult> {
   return commitPtyWithOpenCodePromptIntent(ctx, () => {
     const args = ctx.args
-    // Why: args.worktreeId/sessionId arrive as untrusted IPC strings (type unenforced at the boundary); bound them so malformed/oversized values can't pollute registerPty's maps.
+    // Bound untrusted IPC identity strings before they enter runtime registration maps.
     const worktreeId =
       typeof args.worktreeId === 'string' &&
       args.worktreeId.length > 0 &&

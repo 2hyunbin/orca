@@ -21,6 +21,7 @@ import { disposeWebgl } from './pane-webgl-renderer'
 import { clearPendingSplitScrollRestore, scheduleSplitScrollRestore } from './pane-split-scroll'
 import { reattachWebglIfNeeded } from './pane-webgl-reattach'
 import { toPublicPane } from './pane-public-view'
+import { findClosedPaneSuccessor } from './pane-close-focus-successor'
 import { releaseTerminalScrollIntentKey } from './terminal-scroll-intent-key-store'
 
 type MovedPaneSplitState = {
@@ -193,6 +194,8 @@ function teardownManagedPane(
     return
   }
   const closedLeafId = pane.leafId
+  const successor =
+    args.activePaneId === args.paneId ? findClosedPaneSuccessor(pane.container, args.panes) : null
   args.releasePaneIdentity(args.paneId)
   removePaneContainer(args, pane)
   if (reason === 'close' || reason === 'remove') {
@@ -201,7 +204,7 @@ function teardownManagedPane(
     // must still be able to restore it.
     releaseTerminalScrollIntentKey(closedLeafId)
   }
-  const nextActivePaneId = activateReplacementPane(args)
+  const nextActivePaneId = activateReplacementPane(args, successor)
   applyPaneOpacity(args.panes.values(), nextActivePaneId, args.styleOptions)
   for (const p of args.panes.values()) {
     safeFit(p)
@@ -262,11 +265,15 @@ function removePaneContainer(args: CloseManagedPaneArgs, pane: ManagedPaneIntern
   }
 }
 
-function activateReplacementPane(args: CloseManagedPaneArgs): number | null {
+function activateReplacementPane(
+  args: CloseManagedPaneArgs,
+  successor: ManagedPaneInternal | null
+): number | null {
   if (args.activePaneId !== args.paneId) {
     return args.activePaneId
   }
-  const next = args.panes.values().next().value as ManagedPaneInternal | undefined
+  const next =
+    successor && args.panes.has(successor.id) ? successor : args.panes.values().next().value
   const nextActivePaneId = next?.id ?? null
   args.setActivePaneId(nextActivePaneId)
   next?.terminal.focus()

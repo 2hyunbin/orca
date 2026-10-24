@@ -41,10 +41,8 @@ describe('AgentSessionResumeClaims', () => {
   it('keeps a lost-reply attempt held unless a retry of the same request binds', () => {
     const { claims, exits } = makeClaims()
     claims.claim(SESSION, 'tab:a', 'request-1')?.settleFailure(true, new Error('reply lost'))
-    // A retry's known refusal cannot account for its earlier ambiguous dispatch.
-    claims
-      .claim(SESSION, 'tab:a', 'request-1')
-      ?.bind('plain-shell', { agentResumeRefused: 'chat-home' })
+    // Proof that this share dispatched no agent cannot account for the earlier lost reply.
+    claims.claim(SESSION, 'tab:a', 'request-1')?.settleFailure(false)
     expect(exits.has('plain-shell')).toBe(false)
     expect(claims.claim(SESSION, 'tab:b')).toBeNull()
     // Another request's spawn accounts only for itself.
