@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { findRunnerDrift, findUncollectedTestFiles } from './check-test-file-runners.mjs'
+import { classifyPrJobs } from './pr-code-change-scope.mjs'
 
-const RUNNERS = [{ name: 'unit', include: ['src/**/*.test.ts'] }]
+const RUNNERS = [{ name: 'unit', include: ['src/**/*.test.ts'], exclude: ['src/live.test.ts'] }]
 const SUITE = "import { it } from 'vitest'\nit('works', () => {})\n"
 
 describe('findUncollectedTestFiles', () => {
-  it('reports test files no runner include matches, whatever their naming', () => {
+  it('reports test files no runner collects, whatever their naming', () => {
     const sources = new Map([
       ['src/a.test.ts', SUITE],
+      ['src/live.test.ts', SUITE],
       ['src/orphan.spec.tsx', SUITE],
       ['src/budget.bench.ts', SUITE],
       ['tools/lease-check.mjs', "import { test } from 'node:test'\ntest('holds', () => {})\n"],
       ['src/not-a-test.ts', 'export const value = 1\n']
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
+      'src/live.test.ts',
       'src/orphan.spec.tsx',
       'src/budget.bench.ts',
       'tools/lease-check.mjs'
@@ -26,30 +29,59 @@ describe('findUncollectedTestFiles', () => {
       ['src/page.case.spec.ts', `import './page-harness.spec'\n${SUITE}`],
       ['src/page-harness.spec.ts', 'export const harness = {}\n'],
       ['src/page.dropped.spec.ts', `import './page-harness.spec'\n${SUITE}`],
-      ['src/types.test.ts', "import type {\n  Shape\n} from './page.typed.spec'\n"],
-      ['src/page.typed.spec.ts', `export type Shape = 1\n${SUITE}`]
+      [
+        'src/types.test.ts',
+        [
+          "import type {\n  Shape\n} from './typed-import.spec'",
+          "import { type Inline } from './inline-type.spec'",
+          "export type { Shape } from './typed-export.spec'",
+          'export type Alias = Record<string, number>',
+          "export { run } from './after-alias.spec'"
+        ].join('\n')
+      ],
+      ['src/typed-import.spec.ts', SUITE],
+      ['src/inline-type.spec.ts', SUITE],
+      ['src/typed-export.spec.ts', SUITE],
+      ['src/after-alias.spec.ts', SUITE]
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
       'src/page.dropped.spec.ts',
-      'src/page.typed.spec.ts'
+      'src/typed-import.spec.ts',
+      'src/inline-type.spec.ts',
+      'src/typed-export.spec.ts'
     ])
   })
 })
 
 describe('findRunnerDrift', () => {
-  it('reports a runner whose config no longer contains the include it mirrors', () => {
+  it('reports a runner whose sources no longer contain the include it mirrors', () => {
     const runners = [
-      { name: 'kept', source: 'a.config.ts', mirrors: ["'src/**/*.test.ts'"] },
-      { name: 'changed', source: 'b.config.ts', mirrors: ["'src/**/*.test.ts'"] },
-      { name: 'deleted', source: 'c.config.ts', mirrors: ['x'] }
+      { name: 'kept', sources: ['a.config.ts'], mirrors: ["'src/**/*.test.ts'"] },
+      { name: 'split', sources: ['a.config.ts', 'b.config.ts'], mirrors: ["'src/**/*.spec.ts'"] },
+      { name: 'changed', sources: ['b.config.ts'], mirrors: ["'src/**/*.test.ts'"] },
+      { name: 'deleted', sources: ['c.config.ts'], mirrors: [] }
     ]
     const files = {
       'a.config.ts': "include: ['src/**/*.test.ts']",
       'b.config.ts': "include: ['src/**/*.spec.ts']"
     }
     expect(findRunnerDrift(runners, (file) => files[file] ?? null)).toEqual([
-      `changed: b.config.ts no longer contains "'src/**/*.test.ts'"`,
-      `deleted: c.config.ts no longer contains "x"`
+      `changed: b.config.ts no longer contain "'src/**/*.test.ts'"`,
+      'deleted: c.config.ts is missing'
     ])
   })
+})
+
+// Why: cloud/ is outside the lint and format trees, so only these paths bring the check to a cloud-only diff.
+it('runs the static job when a cloud diff adds a test or edits its runner', () => {
+  const routed = (file) => classifyPrJobs([file]).static_analysis
+  expect(
+    [
+      'cloud/apps/push/src/new-case.spec.ts',
+      'cloud/packages/push-contract/src/contract.test.ts',
+      'cloud/package.json',
+      'cloud/apps/relay/vitest.config.ts'
+    ].filter((file) => !routed(file))
+  ).toEqual([])
+  expect(routed('cloud/apps/relay/src/index.ts')).toBe(false)
 })

@@ -289,7 +289,7 @@ it.each([
     mobile_dependencies: true
   },
   {
-    changed: ['cloud/package.json'],
+    changed: ['cloud/apps/relay/src/index.ts'],
     static_analysis: false,
     typecheck: false,
     mobile_dependencies: false

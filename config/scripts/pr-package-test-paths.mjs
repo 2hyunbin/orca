@@ -17,6 +17,15 @@ export const LINUX_PACKAGE_TESTS = [
   'src/main/browser/browser-popup-background-compatibility.electron.test.ts'
 ]
 
+// Why: cloud/ is neither linted nor format-checked, so without this a cloud-only diff skips the
+// static job's check-test-file-runners.mjs and lands an orphaned test or a dropped runner green.
+const CLOUD_TEST_RUNNER_INPUT =
+  /^cloud\/(?:.+\.(?:test|spec|e2e|bench)\.[cm]?[jt]sx?|(?:.+\/)?(?:package\.json|vitest\.config\.ts))$/
+
+export function isCloudTestRunnerInput(file) {
+  return CLOUD_TEST_RUNNER_INPUT.test(file)
+}
+
 // The package (windows) job's "Test Windows-specific boundaries" step runs exactly these files.
 export const WINDOWS_BOUNDARY_TESTS = [
   'src/main/zcode/zcode-plan-api-key-store-native-windows.test.ts',
