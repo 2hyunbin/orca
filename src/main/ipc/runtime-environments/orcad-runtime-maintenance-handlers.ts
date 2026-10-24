@@ -10,7 +10,7 @@ import { requiredString } from './orcad-runtime-lifecycle-handlers'
 
 export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadActionOptions): void {
   const actions = createManagedOrcadActions(options)
-  // Why: the CLI reaches these same actions over runtime RPC (managedServer.*).
+  // CLI runtime RPC uses these same managedServer actions.
   registerManagedServerActions(actions)
   ipcMain.handle(
     'runtimeEnvironments:updateOrcad',

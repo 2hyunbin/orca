@@ -1,4 +1,3 @@
-/** The managed-server actions behind both the Managed servers settings and runtime RPC. */
 import {
   cancelManagedOrcadStop,
   forgetManagedOrcadEnvironment,
@@ -31,11 +30,8 @@ export type ManagedOrcadActionOptions = {
   getUserDataPath: () => string
   getActiveEnvironmentId: () => string | null | undefined
   invalidateTransport: (environmentId: string) => Promise<void> | void
-  /** Drops the SSH host's stale update/serving notes once an update verified its server. */
   clearHostServerNotes: (sshTargetId: string, environmentId: string) => void
-  /** Drops the SSH host's stale managed-server state once its server is unlinked. */
   clearHostServerStatus: (sshTargetId: string) => void
-  /** Holds what an unlinked server leaves in the profile. */
   store: RemovedServerStore
 }
 
@@ -53,7 +49,6 @@ export function createManagedOrcadActions(
     status: (selector) => getManagedOrcadRuntimeStatus(userDataPath(), selector),
     update: async (selector, force) => {
       const result = await updateManagedOrcadEnvironment(userDataPath(), { selector, force })
-      // Why: a restarted orcad drops the old connection; reconnect on the new one.
       if (result.outcome === 'updated') {
         await options.invalidateTransport(result.environment.id)
       }
@@ -100,7 +95,6 @@ export function createManagedOrcadActions(
   }
 }
 
-/** Desktop-only: the host status line offers it when the launching SSH session ended (#25934). */
 export async function restartManagedOrcad(
   options: ManagedOrcadActionOptions,
   selector: string
@@ -112,14 +106,13 @@ export async function restartManagedOrcad(
   return result
 }
 
-/** Desktop-only: the host status line offers it when a start refused a possibly stale lock (#32177). */
 export async function reclaimManagedOrcadStaleLock(
   options: ManagedOrcadActionOptions,
   selector: string,
   request: OrcadManagedStaleLockReclaimRequest
 ): Promise<OrcadManagedStaleLockReclaimResult> {
   const result = await runManagedOrcadStaleLockReclaim(options.getUserDataPath(), selector, request)
-  // Even unstarted: the reconnect's own start replaces the note that offered this.
+  // Reconnect also replaces stale-lock feedback when no process had started.
   if (result.status === 'reclaimed') {
     await reconnectRestartedManagedOrcad(options, result.environmentId)
   }
@@ -130,7 +123,6 @@ async function reconnectRestartedManagedOrcad(
   options: ManagedOrcadActionOptions,
   environmentId: string
 ): Promise<void> {
-  // Why: the restarted orcad dropped the old connection; reconnect on the new one.
   await options.invalidateTransport(environmentId)
   const environment = resolveEnvironment(options.getUserDataPath(), environmentId)
   const targetId = getOrcadSshDeployment(environment)?.sshTargetId

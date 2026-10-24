@@ -91,7 +91,7 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       _event,
       args: { name: string; pairingCode: string }
     ): { environment: PublicKnownRuntimeEnvironment } => {
-      // Why refuse, not refresh: nothing here proves the code works before it would replace one that does.
+      // An unverified code must not replace a working pairing.
       const environment = addEnvironmentFromPairingCode(getUserDataPath(), args)
       clearRuntimeEnvironmentManualDisconnect(environment.id)
       return { environment: redactRuntimeEnvironment(environment) }
@@ -150,7 +150,7 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       const runtimeLayer = { userDataPath: getUserDataPath(), invalidateTransport }
       disconnectRuntimeEnvironmentForUser(environment.id, runtimeLayer)
       closeLegacySelectorTransport(args.selector, environment.id)
-      // Why: otherwise Settings keeps showing the managed host's SSH connection as live (#30085).
+      // Also clear the managed host SSH connection shown in Settings (#30085).
       await disconnectManagedHostOfEnvironmentForUser(environment, runtimeLayer)
       return { disconnected: redactRuntimeEnvironment(environment) }
     }
@@ -249,7 +249,7 @@ function registerPassiveCallHandler(getUserDataPath: () => string): void {
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
       }
-      // Why here: every renderer call to a paired host passes this one handler.
+      // Every renderer request to a paired host passes this account environment boundary.
       const accounts = await withWslOrcadAccountEnv({
         environmentId: environment.id,
         method: args.method,

@@ -41,8 +41,6 @@ describe('waiting for a launched candidate', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
 
-  // BUG-17: one failed read of the readiness file failed the launch, and the activation then
-  // stopped a candidate that went ready a moment later.
   it('retries a failed readiness read instead of failing the launch', async () => {
     mockExec
       .mockResolvedValueOnce('1786\n')

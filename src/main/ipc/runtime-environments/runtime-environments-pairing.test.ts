@@ -217,7 +217,6 @@ describe('registerRuntimeEnvironmentHandlers', () => {
     })
     expect(activeRuntimeEnvironmentId).toBeNull()
     expect(closeRemoteRuntimeRequestConnectionMock).toHaveBeenCalledWith(added.environment.id)
-    // A removed server's session partition and layout snapshot go too.
     expect(store.removeWorkspaceSessionHost).toHaveBeenCalledWith(
       `runtime:${encodeURIComponent(added.environment.id)}`
     )
@@ -583,9 +582,7 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   it('marks environments owned by ephemeral VM runtimes in the public list', async () => {
     registerRuntimeEnvironmentHandlers(store as never)
 
-    // The ephemeral-VM provision flow persists `source: 'ephemeral-vm'` directly
-    // on the environment record (ephemeral-vm.ts), so the public list reads it
-    // straight from the record rather than cross-referencing the VM runtime store.
+    // Provisioning records ephemeral-vm source directly; listing must not depend on the VM runtime store.
     const added = environmentStore.addEnvironmentFromPairingCode(userDataPath, {
       name: 'orca VM abc12345',
       pairingCode: pairingCode(),

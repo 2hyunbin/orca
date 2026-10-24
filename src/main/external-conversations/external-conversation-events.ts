@@ -30,7 +30,7 @@ export type ConversationEvent =
   | (ConversationPane & { kind: 'turn-started'; at: number })
   | (ConversationPane & {
       kind: 'turn-ended'
-      /** The host's recorded verdict on the turn; null when it recorded none. */
+      /** Host verdict; null means none was recorded. */
       stopReason: AgentTurnOutcome | null
       lastAssistantMessage?: string
       at: number
@@ -51,14 +51,13 @@ export type ConversationEventsDeps = {
   store: ExternalConversationLinkStore
   readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
   readBinding: (paneKey: string) => AgentPromptExpectedBinding | null
-  /** The detector's pane changes; returns the release. */
   onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
   pendingPrompt: (link: ExternalConversationLink) => PendingPrompt | null
   setTimer: (run: () => void, delayMs: number) => { cancel: () => void }
   now: () => number
 }
 
-/** The real clock and an unref'd timer, so a pending finish never holds the process open. */
+// Pending finishes must not keep the process alive.
 export const HOST_CLOCK: Pick<ConversationEventsDeps, 'setTimer' | 'now'> = {
   setTimer: (run, delayMs) => {
     const timer = setTimeout(run, delayMs)
@@ -68,11 +67,7 @@ export const HOST_CLOCK: Pick<ConversationEventsDeps, 'setTimer' | 'now'> = {
   now: Date.now
 }
 
-/**
- * Linked agents' turns and prompts for connector watchers. Turn news is the phone push's own
- * (`TerminalAgentTurnNews`), and a finish counts only when the idle verdict automations use agrees.
- * Subscribed only while someone watches.
- */
+/** Watch-scoped turn news shares mobile push detection and automation completion verdicts. */
 export class ConversationEvents {
   private readonly listeners = new Set<ConversationWatchListener>()
   private readonly turnStartedAt = new Map<string, number>()
@@ -105,7 +100,7 @@ export class ConversationEvents {
       }
     }
     this.listeners.add(listener)
-    // After subscribing, so a change while the snapshot is read is not missed.
+    // Subscribe before reading the snapshot to avoid losing intervening changes.
     listener(this.snapshot())
     return () => {
       this.listeners.delete(listener)
@@ -235,7 +230,7 @@ export class ConversationEvents {
       }
       return
     }
-    // A hook-reported `done` since this turn began; a reused pane's earlier one is not this turn's.
+    // Only done signals since this turn began count; reused panes can retain earlier verdicts.
     const verdict = judgeIdleAgentTurn(
       {
         rows: [item.row],
@@ -277,7 +272,7 @@ export class ConversationEvents {
 
   private emit(event: ConversationEvent): void {
     for (const listener of this.listeners) {
-      // One watcher's failure must not cost the others the event.
+      // Isolate listener failures so other watchers still receive the event.
       try {
         listener(event)
       } catch (error) {

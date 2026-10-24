@@ -15,15 +15,12 @@ afterEach(() => {
   }
 })
 
-// BUG-17: under host load each poll's reads outlasted its sleep, so a counted loop ran past the
-// client's 30 s exec timeout and the launch was failed while the candidate was still starting.
 describe.skipIf(process.platform === 'win32')('the host-side readiness wait', () => {
   it('ends by its wall-clock deadline however slow each poll is', async () => {
     const root = mkdtempSync(join(tmpdir(), 'orcad-readiness-wait-'))
     roots.push(root)
     const bin = join(root, 'bin')
     mkdirSync(bin)
-    // A host where every `wc` takes half a second.
     writeFileSync(join(bin, 'wc'), '#!/bin/sh\nsleep 0.5\nexec /usr/bin/wc "$@"\n')
     chmodSync(join(bin, 'wc'), 0o755)
     const slot = join(root, 'slot')
@@ -36,7 +33,7 @@ describe.skipIf(process.platform === 'win32')('the host-side readiness wait', ()
       env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` },
       timeoutMs: 30_000
     })
-    // A counted loop would take about 8 x (0.25 s + 1 s) here.
+    // Counted polling would take about 8 × (0.25 s + 1 s), exceeding the client timeout.
     expect(Date.now() - startedAt).toBeLessThan(4_500)
   })
 

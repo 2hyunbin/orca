@@ -246,8 +246,6 @@ export async function getIssueComments(
     return nodes.map((node) => ({
       id: node.id,
       body: node.body ?? '',
-      // Why: rawRequest returns createdAt as an ISO string already; do not
-      // re-serialize (the SDK model path used .toISOString() on a parsed Date).
       createdAt: node.createdAt ?? '',
       user: node.user
         ? {

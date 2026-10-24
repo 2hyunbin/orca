@@ -218,7 +218,6 @@ describe('WSL hosts with the internal gate closed', () => {
     expect(registeredWslHostChannels().sort()).toEqual([...WSL_HOST_HANDLER_CHANNELS].sort())
     expect(store.onSettingsChanged).toHaveBeenCalledTimes(1)
 
-    // Registering again (another window) reuses the service and its one settings listener.
     mocks.handle.mockClear()
     startApp()
     expect(mocks.createFakeConnector).toHaveBeenCalledTimes(1)
