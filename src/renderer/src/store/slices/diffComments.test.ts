@@ -31,7 +31,6 @@ const mockApi = {
     set: vi.fn().mockResolvedValue(undefined)
   },
   worktrees: {
-    list: vi.fn().mockResolvedValue([]),
     create: vi.fn().mockResolvedValue({}),
     remove: vi.fn().mockResolvedValue(undefined),
     updateMeta
@@ -150,6 +149,7 @@ function seed(
   worktreeOverrides: Partial<Worktree> = {}
 ): void {
   store.setState({
+    repos: [{ id: REPO, path: '/path/repo', displayName: 'repo', badgeColor: '#000', addedAt: 0 }],
     worktreesByRepo: { [REPO]: [{ ...makeWorktree(comments), ...worktreeOverrides }] }
   })
 }

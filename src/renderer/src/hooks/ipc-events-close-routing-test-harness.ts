@@ -178,6 +178,9 @@ export async function useIpcEventsForCloseRouting({
         onActivateWorktree: () => () => {},
         onCreateTerminal: () => () => {},
         onRequestTerminalCreate: () => () => {},
+        onPublishAgentLaunchTab: () => () => {},
+        onRevealTerminalPane: () => () => {},
+        onAgentLaunchPaneVerdict: () => () => {},
         onRequestTerminalTabMount: () => () => {},
         replyTerminalCreate: () => {},
         onSplitTerminal: () => () => {},
@@ -213,11 +216,12 @@ export async function useIpcEventsForCloseRouting({
           return () => {}
         },
         respondTerminalTabClose,
-        onSleepWorktree: () => () => {},
+        onWorkspaceSleep: () => () => {},
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
         onRequestTabCreate: () => () => {},
+        onRequestRemoteCliBrowserScope: () => () => {},
         replyTabCreate: () => {},
         onRequestTabClose: (listener: RequestTabCloseListener) => {
           if (requestTabCloseListenerRef) {
@@ -257,9 +261,7 @@ export async function useIpcEventsForCloseRouting({
         getZoomLevel: () => 0,
         set: vi.fn()
       },
-      settings: {
-        onChanged: () => () => {}
-      },
+      settings: { onChanged: () => () => {} },
       updater: {
         getStatus: () => Promise.resolve({ state: 'idle' }),
         onStatus: () => () => {},
@@ -268,6 +270,7 @@ export async function useIpcEventsForCloseRouting({
       browser: {
         onGuestLoadFailed: () => () => {},
         onOpenLinkInOrcaTab: () => () => {},
+        onSessionProfilesChanged: () => () => {},
         onNavigationUpdate: () => () => {},
         onActivateView: () => () => {},
         onPaneFocus: () => () => {}

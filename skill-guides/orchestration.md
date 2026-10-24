@@ -40,8 +40,11 @@ absence included, is a checkpoint.
 | A message carries a legacy authority label                                                                                                     | Compatibility operator  | Load the legacy contract reference before any lifecycle mutation               |
 | No live preamble and no explicit supervision                                                                                                   | Ordinary terminal agent | Do not emit lifecycle messages; use `orca-cli` for terminal/worktree work      |
 
-Model or effort selection does not make a handoff supervised. Never substitute a
-non-Orca subagent tool when Orca orchestration provenance was requested.
+Model or effort selection does not make a handoff supervised: `orca-cli`'s
+`worktree create --agent` and `agent launch` take `--model` and `--effort`, and
+open a chat or a terminal per the user's Chat UI setting, as `worker-start` does.
+Never substitute a non-Orca subagent tool when Orca orchestration provenance was
+requested.
 
 ## Authority and safety floor
 
@@ -113,6 +116,8 @@ Use `task-create` plus `worker-start --task <task_id>` for planned fan-out with
 dependencies or a retry of a known Task. Use dependencies only for real ordering
 and prefer parallel waves over chains deeper than three or four steps; nested
 workers obey the depth limit, and a new Run does not reset the caller's depth.
+A dispatched worker starts its own helpers with `worker-start --spec` on the Run
+it works for, without `run-create`; the helpers report to that worker.
 
 A consuming `check` names its caller with `--terminal <handle>`, never `--from`;
 omit it inside the coordinator's own Orca terminal. It returns the bound Run's

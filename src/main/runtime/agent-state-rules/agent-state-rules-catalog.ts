@@ -4,6 +4,7 @@ import claude from './claude.json'
 import cline from './cline.json'
 import codex from './codex.json'
 import cursor from './cursor.json'
+import dsh from './dsh.json'
 import gemini from './gemini.json'
 import hermes from './hermes.json'
 import omp from './omp.json'
@@ -41,6 +42,7 @@ export const BUNDLED_AGENT_STATE_RULE_FILES: readonly AgentStateRulesFile[] =
     cline,
     codex,
     cursor,
+    dsh,
     gemini,
     hermes,
     omp,

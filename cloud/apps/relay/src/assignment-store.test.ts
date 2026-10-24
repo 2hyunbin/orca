@@ -1750,7 +1750,8 @@ describe('RelayAssignmentStore', () => {
     const first = await store.assign(identity)
     const second = await store.assign(identity)
 
-    expect(second).toEqual(first)
+    expect(first.placed).toBe(true)
+    expect(second).toEqual({ ...first, placed: undefined })
     expect(await cellReservations(database!)).toEqual({ 'cell-a': 1, 'cell-b': 0 })
   })
 
@@ -2474,6 +2475,39 @@ describe('RelayAssignmentStore', () => {
       inProgress: 0,
       completed: 1
     })
+  })
+
+  it('logs the drift reconciliation corrects, once, after it commits', async () => {
+    const store = await setup(() => 100, [
+      { id: 'cell-a', url: 'https://relay-a.example.com', capacityRequests: 10 },
+      { id: 'cell-b', url: 'https://relay-b.example.com', capacityRequests: 10 }
+    ])
+    const grant = await store.assign({ userId: 'user-a', relayHostId: 'host000000000001' })
+    await database!.query(`UPDATE relay_cells SET reserved_requests = 5 WHERE cell_id = ?`, [
+      grant.cellId
+    ])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    let lines: string[]
+    try {
+      await store.cellEvacuationStatus('cell-a', 'cell-b', true)
+      await store.cellEvacuationStatus('cell-a', 'cell-b', true)
+    } finally {
+      lines = warn.mock.calls.map((call) => String(call[0]))
+      warn.mockRestore()
+    }
+
+    const drift = lines
+      .filter((line) => line.includes('orca_relay_reservation_drift'))
+      .map((line) => JSON.parse(line) as unknown)
+    expect(drift).toEqual([
+      {
+        event: 'orca_relay_reservation_drift',
+        cellId: grant.cellId,
+        reservedRequests: 5,
+        leaseUnits: 1
+      }
+    ])
   })
 
   it('blocks aggregate fenced completion on assignment accounting mismatch', async () => {

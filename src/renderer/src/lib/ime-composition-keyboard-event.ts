@@ -24,6 +24,9 @@ type ImeEnterGestureEvent = Pick<
   'key' | 'keyCode' | 'nativeEvent' | 'preventDefault' | 'shiftKey'
 > & { altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }
 
+// Hangul has no candidate step, so the Enter that commits it is the user's own Enter.
+const HANGUL_ONLY = /^\p{Script=Hangul}+$/u
+
 /**
  * Why: the confirming Enter of a CJK composition arrives as two keydowns, and the
  * two orderings differ by platform. Windows/Linux redispatch the unmarked
@@ -36,8 +39,9 @@ export function useImeEnterGestureOwnership(): {
   isComposing: () => boolean
   ownsKeyDown: (event: ImeEnterGestureEvent) => boolean
   onKeyUp: (event: ImeEnterGestureEvent) => void
+  onCompositionEnd: (committedText?: string) => void
   reset: () => void
-  setComposing: (active: boolean) => void
+  setComposing: (active: boolean, committedText?: string) => void
 } {
   const stateRef = useRef<{ composing: boolean; pendingEnter: object | null }>({
     composing: false,
@@ -47,6 +51,16 @@ export function useImeEnterGestureOwnership(): {
   return useMemo(() => {
     const reset = (): void => {
       stateRef.current = { composing: false, pendingEnter: null }
+    }
+    const expirePendingEnter = (): void => {
+      const pendingEnter = stateRef.current.pendingEnter
+      if (pendingEnter) {
+        requestAnimationFrame(() => {
+          if (stateRef.current.pendingEnter === pendingEnter) {
+            stateRef.current.pendingEnter = null
+          }
+        })
+      }
     }
     // Shift+Enter is a newline, never a submit — it must never be owned or swallowed.
     const isPlainEnter = (event: ImeEnterGestureEvent): boolean =>
@@ -59,13 +73,21 @@ export function useImeEnterGestureOwnership(): {
       isComposing: () => stateRef.current.composing,
       ownsKeyDown: (event: ImeEnterGestureEvent): boolean => {
         const markedEnter =
-          (event.nativeEvent.isComposing || stateRef.current.composing) &&
+          (isImeOwnedKeyboardEvent(event) || stateRef.current.composing) &&
           (isPlainEnter(event) ||
             (event.key === 'Enter' && event.keyCode === 229) ||
             (event.key === 'Process' && event.keyCode === 229))
         if (markedEnter) {
           stateRef.current.pendingEnter = {}
           return true
+        }
+        // Continued typing ends the confirmation even when hidden renderers delay the frame.
+        if (
+          !stateRef.current.composing &&
+          !isImeOwnedKeyboardEvent(event) &&
+          !['Enter', 'Shift', 'Control', 'Alt', 'Meta'].includes(event.key)
+        ) {
+          stateRef.current.pendingEnter = null
         }
         if (
           stateRef.current.pendingEnter &&
@@ -83,30 +105,27 @@ export function useImeEnterGestureOwnership(): {
         }
         return false
       },
-      onKeyUp: (event: ImeEnterGestureEvent): void => {
-        // A Process/229 keyup means the IME finished without redispatching, so the
-        // gesture is over immediately.
-        if (event.key === 'Process' && event.keyCode === 229) {
+      onKeyUp: (): void => {
+        // Any keyup can precede the redispatch, including an IME-owned Process/229 release.
+        expirePendingEnter()
+      },
+      onCompositionEnd: (committedText = '') => {
+        const compositionWasActive = stateRef.current.composing
+        stateRef.current.composing = false
+        if (HANGUL_ONLY.test(committedText)) {
           stateRef.current.pendingEnter = null
-          return
-        }
-        // Every other keyup expires on the NEXT FRAME, never synchronously. Enter/13
-        // because macOS delivers keyup before the unmarked redispatch; anything else
-        // because IMEs reporting Process/229 on every key (Pinyin candidate selection)
-        // release a non-Enter key, and a Process-only clear left the carry armed and ate
-        // the user's next real Enter.
-        const pendingEnter = stateRef.current.pendingEnter
-        if (pendingEnter) {
-          requestAnimationFrame(() => {
-            if (stateRef.current.pendingEnter === pendingEnter) {
-              stateRef.current.pendingEnter = null
-            }
-          })
+        } else if (compositionWasActive && !stateRef.current.pendingEnter) {
+          // IBus can finish composition before its only unmarked confirming Enter.
+          stateRef.current.pendingEnter = {}
+          expirePendingEnter()
         }
       },
       reset,
-      setComposing: (active: boolean) => {
+      setComposing: (active: boolean, committedText = '') => {
         stateRef.current.composing = active
+        if (!active && HANGUL_ONLY.test(committedText)) {
+          stateRef.current.pendingEnter = null
+        }
       }
     }
   }, [])

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentStatusEntry } from '../../../shared/agent-status-types'
+import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../shared/terminal-tab-types'
 import {
   DEFAULT_AGENT_HIBERNATION_IDLE_MS,
@@ -99,6 +100,21 @@ describe('agent sleep planner', () => {
       )
     ).toEqual([])
     expect(plannedWorktrees(snapshot({ foregroundTerminalTabIds: ['tab-1'] }))).toEqual([])
+  })
+
+  it('never plans automatic hibernation for a floating-workspace pane', () => {
+    expect(plannedWorktrees(snapshot())).toEqual(['wt-bg'])
+    const floating = entry({ worktreeId: FLOATING_TERMINAL_WORKTREE_ID })
+    expect(
+      plannedWorktrees(
+        snapshot({
+          tabsByWorktree: {
+            [FLOATING_TERMINAL_WORKTREE_ID]: [tab('tab-1', FLOATING_TERMINAL_WORKTREE_ID)]
+          },
+          agentStatusByPaneKey: { [floating.paneKey]: floating }
+        })
+      )
+    ).toEqual([])
   })
 
   it('requires done resumable provider-session entries', () => {
@@ -773,6 +789,15 @@ describe('idle clock anchors on stateStartedAt, not updatedAt', () => {
         })
       )[0]!.signature
     const baseline = sigFor(base)
+    expect(
+      sigFor(
+        entry({
+          stateStartedAt: OLD,
+          updatedAt: OLD,
+          providerSession: { key: 'session_id', id: 'session-2' }
+        })
+      )
+    ).not.toBe(baseline)
     // updatedAt held constant throughout, so today's signature would NOT change.
     expect(sigFor(entry({ stateStartedAt: OLD, updatedAt: OLD, agentType: 'codex' }))).not.toBe(
       baseline

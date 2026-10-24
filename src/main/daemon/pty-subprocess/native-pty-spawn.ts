@@ -5,6 +5,7 @@ import {
 } from '../../providers/macos-tcc-login-shell'
 import type { WindowsShellSpawnAttempt } from '../../providers/windows-shell-fallback-chain'
 import { assignHostProcessToKillOnCloseJob } from '../../windows/windows-pty-job'
+import { wrapPtySpawnInTerminalScope } from '../terminal-scopes-runtime'
 
 async function loadNodePty(): Promise<typeof pty> {
   return import('node-pty')
@@ -18,7 +19,6 @@ export type SpawnedDaemonPty = {
   reportsChildExitStatus: boolean
 }
 
-/** Walks the Windows PowerShell -> cmd.exe fallback chain when ConPTY rejects the primary shell. */
 export async function spawnNativeDaemonPty(args: {
   shellPath: string
   shellArgs: string[]
@@ -37,9 +37,10 @@ export async function spawnNativeDaemonPty(args: {
     cwd: string
   ): Promise<pty.IPty> => {
     args.signal?.throwIfAborted()
-    const wrapped = wrapShellSpawnForMacosTccAttribution(shellPath, shellArgs, args.env)
+    const tcc = wrapShellSpawnForMacosTccAttribution(shellPath, shellArgs, args.env)
+    const wrapped = wrapPtySpawnInTerminalScope(tcc.file, tcc.args, args.env)
     const nodePty = await loadNodePty()
-    // Why: children inherit job membership, so the host job must exist before the first Windows PTY.
+    // Establish the host job before spawning so Windows PTYs inherit membership.
     if (process.platform === 'win32') {
       assignHostProcessToKillOnCloseJob()
     }
@@ -48,12 +49,12 @@ export async function spawnNativeDaemonPty(args: {
       cols: args.cols,
       rows: args.rows,
       cwd,
-      env: args.env,
-      // Why: bundled ConPTY has the wrap-marker behavior xterm expects.
+      env: wrapped.env,
+      // Bundled ConPTY provides the wrap-marker behavior xterm expects.
       ...(process.platform === 'win32' ? { useConptyDll: true } : {})
     })
-    reportsChildExitStatus = hostReportsChildExitStatus(wrapped.file)
-    args.onMacosTccSpawnStrategy?.(wrapped.file === shellPath ? 'direct' : 'wrapped')
+    reportsChildExitStatus = hostReportsChildExitStatus(tcc.file)
+    args.onMacosTccSpawnStrategy?.(tcc.file === shellPath ? 'direct' : 'wrapped')
     return proc
   }
 
@@ -86,7 +87,6 @@ export async function spawnNativeDaemonPty(args: {
         }
       } catch {
         args.signal?.throwIfAborted()
-        // This fallback shell also failed -- try the next link in the chain.
       }
     }
     throw primaryErr

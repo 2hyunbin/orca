@@ -37,8 +37,8 @@ export const DISPATCH_REJECTED_HOST_RESTARTED = 'host_restarted_before_delivery'
  *  Read only, like the one above. */
 export const DISPATCH_REJECTED_PROVIDER_CLOSED = 'provider_closed_before_delivery'
 
-/** Restart reconciliation found the send absent from a provider history it could trust. Rows
- *  written before rows carried a fact hold it as their reason; released clients printed it. */
+/** Legacy marker: an older host's restart guess that the send was absent from provider history.
+ *  Read only, like the ones above; released clients printed it. */
 export const DISPATCH_REJECTED_NOT_DELIVERED = 'not_delivered'
 
 /** True for the internal transport marker, false for a provider's own words. Legacy-reason half
@@ -86,15 +86,23 @@ const KIND_CATEGORY = {
   providerStartFailed: 'startFailed',
   startFailed: 'startFailed',
   notSignedIn: 'startFailed',
+  cliMissing: 'startFailed',
   historyTooLarge: 'startFailed',
   managedAccountEnvOverride: 'startFailed',
   accountSwitchInProgress: 'startFailed',
   managedAccountUnsupported: 'startFailed',
+  launchFolderMissing: 'startFailed',
+  historyInOtherAccount: 'startFailed',
+  claudeAccountFolderMissing: 'startFailed',
+  claudeAccountSetupFailed: 'startFailed',
+  agentCommandNotRunnable: 'startFailed',
+  runtimeNotInstalled: 'startFailed',
   restartFailed: 'startFailed',
   providerRejected: 'content',
   attachmentInvalid: 'content',
   attachmentUnreadable: 'content',
   emptyMessage: 'content',
+  commandUnavailable: 'content',
   commandRefused: 'content',
   queueFull: 'transport',
   writeFailed: 'transport',
@@ -111,15 +119,23 @@ const KIND_VERDICT = {
   providerStartFailed: 'failure',
   startFailed: 'failure',
   notSignedIn: 'failure',
+  cliMissing: 'failure',
   historyTooLarge: 'failure',
   managedAccountEnvOverride: 'failure',
   accountSwitchInProgress: 'failure',
   managedAccountUnsupported: 'failure',
+  launchFolderMissing: 'failure',
+  historyInOtherAccount: 'failure',
+  claudeAccountFolderMissing: 'failure',
+  claudeAccountSetupFailed: 'failure',
+  agentCommandNotRunnable: 'failure',
+  runtimeNotInstalled: 'failure',
   restartFailed: 'failure',
   providerRejected: 'failure',
   attachmentInvalid: 'failure',
   attachmentUnreadable: 'failure',
   emptyMessage: 'failure',
+  commandUnavailable: 'failure',
   commandRefused: 'failure',
   queueFull: 'failure',
   writeFailed: 'failure',
@@ -168,7 +184,7 @@ export function classifyDispatchRejection(
   return { category: KIND_CATEGORY[kind], verdict: KIND_VERDICT[kind], kind }
 }
 
-/** A Stop withdrew it before it ran: it will not land, and only its sender can send it again. */
+/** A Stop withdrew it before it ran: it will not land, and only a person can send it again. */
 export function dispatchWasWithdrawn(
   submission: Pick<AgentJournalSubmission, 'dispatchState' | 'reason' | 'rejection'> | undefined
 ): boolean {

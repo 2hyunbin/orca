@@ -1,4 +1,4 @@
-import { spawnProcess } from '../shared/child-process/run-process'
+import { spawnProcess } from '@orca/process-host'
 
 export const LINUX_LID_SLEEP_ASSERTION_RETRY_MS = 30_000
 
@@ -72,8 +72,7 @@ export class LinuxLidSleepAssertion {
 
     let child: SystemdInhibitProcess
     try {
-      // logind's lid switch handling ignores ordinary sleep inhibitors on many systems,
-      // so Linux needs both a sleep lock and a handle-lid-switch lock.
+      // logind may ignore sleep inhibitors for lid events; acquire both locks.
       child = this.spawn(
         'systemd-inhibit',
         [

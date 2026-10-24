@@ -3,9 +3,12 @@ import type { DirCache } from './file-explorer-types'
 import type { FileExplorerDirLoadTracker } from './file-explorer-dir-load-tracker'
 import {
   fileExplorerEntriesToTreeNodes,
+  keepOpenedDirectoryLinks,
+  clearFailedOpenedDirectoryLink,
   type FileExplorerDirectoryListing
 } from './file-explorer-directory-listing'
 import { forEachWithConcurrency } from '../../../../shared/map-with-concurrency'
+import { describeFileExplorerReadError } from './file-explorer-read-error'
 import {
   clearFileExplorerDirsLoading,
   markFileExplorerDirsLoading,
@@ -95,7 +98,7 @@ export async function refreshFileExplorerExpandedDirs({
     }
 
     setDirCache((prev) => {
-      const next = { ...prev }
+      let next = { ...prev }
       for (const result of currentResults) {
         next[result.dirPath] =
           result.cache.error !== undefined
@@ -104,7 +107,20 @@ export async function refreshFileExplorerExpandedDirs({
                 children: prev[result.dirPath]?.children ?? [],
                 error: result.cache.error
               }
-            : result.cache
+            : {
+                ...result.cache,
+                children: keepOpenedDirectoryLinks(
+                  prev[result.dirPath]?.children,
+                  result.cache.children,
+                  prev
+                )
+              }
+      }
+      // Why: a parent may have preserved a link before this wave learned its target is gone.
+      for (const result of currentResults) {
+        if (result.cache.error !== undefined) {
+          next = clearFailedOpenedDirectoryLink(next, result.dirPath)
+        }
       }
       return next
     })
@@ -168,7 +184,7 @@ export async function refreshFileExplorerExpandedDirs({
         }
       } catch (error) {
         if (dirLoadTracker.isCurrent(loadToken)) {
-          cache = { children: [], error: error instanceof Error ? error.message : String(error) }
+          cache = { children: [], error: describeFileExplorerReadError(error) }
         }
       }
       settleRead(cache ? { dirPath, cache } : undefined)

@@ -139,6 +139,10 @@ export function EditorContent({
     const details = checkRunDetails.details
     return (
       <CheckRunDetailsPanel
+        key={JSON.stringify([activeFile.id, viewStateScopeId, checkRunDetails.contextKey])}
+        tabId={activeFile.id}
+        viewStateScopeId={viewStateScopeId}
+        contextKey={checkRunDetails.contextKey}
         check={checkRunDetails.check}
         details={details}
         loading={checkRunDetails.loading}
@@ -176,6 +180,7 @@ export function EditorContent({
         key={viewStateScopeId}
         file={activeFile}
         viewStateKey={diffViewStateKey}
+        viewStateScopeId={viewStateScopeId}
       />
     )
   }
@@ -212,9 +217,9 @@ export function EditorContent({
     const previewContent = editBuffers[previewSourceFileId] ?? fileContent.content
     return (
       <div className="min-h-0 flex-1">
-        <MarkdownPreviewSizeGate previewTabId={activeFile.id} content={previewContent}>
+        <MarkdownPreviewSizeGate content={previewContent}>
           <MarkdownPreview
-            key={viewStateScopeId}
+            key={`${viewStateScopeId}:${markdownPreviewViewStateKey}`}
             content={previewContent}
             filePath={activeFile.filePath}
             sourceFileId={previewSourceFileId}

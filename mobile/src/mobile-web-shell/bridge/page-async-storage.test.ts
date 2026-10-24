@@ -88,11 +88,9 @@ describe('a write the page makes', () => {
     // Held locally it would answer a later read with a value no other screen in the app can see —
     // a pin that looks set and is not, which is the failure the grant exists to avoid. Dropped
     // rather than rejected: ruling 33.4, and the case at the end of this file says why.
-    await expect(
-      pageAsyncStorage.setItem('orca:mobileWebShellEnabled', 'true')
-    ).resolves.toBeUndefined()
+    await expect(pageAsyncStorage.setItem('orca:hosts', 'true')).resolves.toBeUndefined()
     expect(writes).toEqual([])
-    await expect(pageAsyncStorage.getItem('orca:mobileWebShellEnabled')).resolves.toBeNull()
+    await expect(pageAsyncStorage.getItem('orca:hosts')).resolves.toBeNull()
   })
 
   it('carries each pair of a multi-write up to the first it cannot, and no further', async () => {
@@ -177,20 +175,23 @@ describe('what the page will not keep', () => {
       unhandled.push(reason)
     }
     process.on('unhandledRejection', record)
-    const oversized = 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS + 1)
-    const refusal = await refusalOf(
-      pageAsyncStorage.multiSet([
-        ['orca:mobileStructuredSendOperations:v1', oversized],
-        ['orca:custom-accessory-keys', oversized]
-      ])
-    )
-    // Two turns, which is when an orphaned rejection is reported.
-    await new Promise((resolve) => setImmediate(resolve))
-    process.off('unhandledRejection', record)
-    expect(unhandled).toEqual([])
-    // The first pair is the one the caller is told about, and neither reached the wire.
-    expect(refusal.key).toBe('orca:mobileStructuredSendOperations:v1')
-    expect(writes).toEqual([])
+    try {
+      const oversized = 'x'.repeat(PAGE_STORAGE_MAX_VALUE_CHARS + 1)
+      const refusal = await refusalOf(
+        pageAsyncStorage.multiSet([
+          ['orca:mobileStructuredSendOperations:v1', oversized],
+          ['orca:custom-accessory-keys', oversized]
+        ])
+      )
+      // Two turns, which is when an orphaned rejection is reported.
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+      // The first pair is the one the caller is told about, and neither reached the wire.
+      expect(refusal.key).toBe('orca:mobileStructuredSendOperations:v1')
+      expect(writes).toEqual([])
+    } finally {
+      process.off('unhandledRejection', record)
+    }
   })
 
   it('still keeps a value exactly at the bound, so the refusal above discriminates', async () => {

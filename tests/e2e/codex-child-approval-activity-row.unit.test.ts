@@ -58,11 +58,6 @@ vi.mock('@/store', async () => {
   return { useAppStore }
 })
 
-vi.mock('@/lib/worktree-runtime-owner', () => ({
-  getRuntimeEnvironmentIdForWorktree: (state: { testRuntimeOwner?: string | null }) =>
-    state.testRuntimeOwner ?? null
-}))
-
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: vi.fn(),
   subscribeStructuredAgentSession: vi.fn(),
@@ -73,6 +68,7 @@ import { StructuredAgentSessionStatusBridge } from '../../src/renderer/src/compo
 import { resetStructuredAgentSessionStatusFeedsForTests } from '../../src/renderer/src/runtime/structured-agent-session-status-feed'
 import { createStructuredAgentSessionLogger } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-logger'
 import { testEventSinkLogging } from '../../src/main/native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import { codexProviderHandle } from '../../src/shared/agent-session-provider-handle-encoding'
 
 const SESSION = 'codex-child-approval'
 const CODEX_THREAD = 'thread-parent'
@@ -114,6 +110,7 @@ beforeEach(async () => {
     acknowledgedAgentsByPaneKey: {},
     activityClearedAtByPaneKey: {},
     retainedAgentsByPaneKey: {},
+    refreshGitHubForWorktreeIfStale: vi.fn(),
     testRuntimeOwner: null,
     repos: [makeRepo()],
     worktreesByRepo: { [worktree.repoId]: [worktree] },
@@ -139,7 +136,7 @@ async function openHost() {
       workspaceId: 'wt-1',
       hostId: 'local',
       agent: 'codex',
-      providerHandle: { kind: 'codex', threadId: CODEX_THREAD }
+      providerHandle: codexProviderHandle(CODEX_THREAD)
     },
     now: tick,
     stateDirectory: join(root, SESSION)

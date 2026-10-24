@@ -23,11 +23,7 @@ describe('detectInstalledBrowsers — Comet', () => {
   const originalHome = process.env.HOME
 
   beforeEach(() => {
-    // Why: browser-cookie-import.ts uses destructured named imports from
-    // 'node:fs' which are bound at module-load time. Without vi.resetModules(),
-    // only the first test's vi.doMock takes effect — subsequent tests see the
-    // cached module with the first mock still applied. resetModules must run
-    // BEFORE each doMock so the next import() picks up the fresh mock factory.
+    // Reset cached imports before installing each filesystem mock.
     vi.resetModules()
     Object.defineProperty(process, 'platform', { value: 'darwin' })
     process.env.HOME = '/Users/test'
@@ -219,6 +215,66 @@ describe('detectInstalledBrowsers — Comet', () => {
     const { detectInstalledBrowsers } = await import('./browser-cookie-import')
     const detected = detectInstalledBrowsers()
     expect(detected.find((b) => b.family === 'comet')).toBeUndefined()
+  })
+})
+
+describe('detectInstalledBrowsers — Comet on Windows', () => {
+  const originalPlatform = process.platform
+  const originalLocalAppData = process.env.LOCALAPPDATA
+
+  const localAppData = 'C:\\Users\\test\\AppData\\Local'
+  const cometRoot = `${slashPath(localAppData)}/Perplexity/Comet/User Data`
+
+  beforeEach(() => {
+    vi.resetModules()
+    Object.defineProperty(process, 'platform', { value: 'win32' })
+    process.env.LOCALAPPDATA = localAppData
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform })
+    if (originalLocalAppData === undefined) {
+      delete process.env.LOCALAPPDATA
+    } else {
+      process.env.LOCALAPPDATA = originalLocalAppData
+    }
+    vi.restoreAllMocks()
+  })
+
+  function mockCometInstallAt(rootPath: string): void {
+    vi.doMock('node:fs', async () => {
+      const actual = await vi.importActual<typeof fsModule>('node:fs')
+      return {
+        ...actual,
+        existsSync: (p: string) =>
+          slashPath(p) === `${rootPath}/Local State` ||
+          slashPath(p) === `${rootPath}/Default/Network/Cookies`,
+        readFileSync: (p: string) => {
+          if (typeof p === 'string' && slashPath(p) === `${rootPath}/Local State`) {
+            return JSON.stringify({ profile: { info_cache: { Default: { name: 'Default' } } } })
+          }
+          throw new Error(`Unexpected fixture read: ${p}`)
+        }
+      }
+    })
+  }
+
+  it('detects Comet under the Perplexity vendor directory', async () => {
+    mockCometInstallAt(cometRoot)
+
+    const { detectInstalledBrowsers } = await import('./browser-cookie-import')
+    const comet = detectInstalledBrowsers().find((b) => b.family === 'comet')
+
+    expect(comet).toBeDefined()
+    expect(slashPath(comet?.cookiesPath ?? '')).toBe(`${cometRoot}/Default/Network/Cookies`)
+  })
+
+  it('does not detect a Comet data directory sitting directly under LOCALAPPDATA', async () => {
+    mockCometInstallAt(`${slashPath(localAppData)}/Comet/User Data`)
+
+    const { detectInstalledBrowsers } = await import('./browser-cookie-import')
+
+    expect(detectInstalledBrowsers().find((b) => b.family === 'comet')).toBeUndefined()
   })
 })
 

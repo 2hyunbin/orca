@@ -15,6 +15,7 @@ import { readAgentSessionHistory } from '../native-chat/agent-session-wire/agent
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { CodexJournalGoals } from './codex-structured-journal-goals'
 import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import { codexProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 
 const THREAD = '01a08cc2-f96e-76d0-bb74-88b9bc0b03fc'
 const IDENTITY: AgentSessionJournalIdentity = {
@@ -22,7 +23,7 @@ const IDENTITY: AgentSessionJournalIdentity = {
   workspaceId: 'workspace-1',
   hostId: 'host-1',
   agent: 'codex',
-  providerHandle: { kind: 'codex', threadId: THREAD }
+  providerHandle: codexProviderHandle(THREAD)
 }
 
 let root: string | null = null
@@ -54,8 +55,6 @@ function goalFrame(goal: Record<string, unknown> = {}) {
   }
 }
 
-/** The host's own sink bound to a real journal. Its publish is what a subscriber
- *  receives: the page after the cursor it had caught up to. */
 function journalSink(journal: AgentSessionJournal) {
   const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
   const published: AgentSessionHistoryPage[] = []
@@ -80,7 +79,6 @@ function journalSink(journal: AgentSessionJournal) {
   return {
     sink: deferred.sink,
     drained: () => deferred.drained(),
-    /** A subscriber caught up to the journal's head from here on. */
     subscribe: () => {
       subscriberCursor = journal.cursor()
     },
@@ -110,7 +108,6 @@ describe('codex goal accounting revisions', () => {
     )
     subscribe()
 
-    // A tick inside the revision interval is not worth a persisted row, or a publish.
     goals.handle({
       threadId: THREAD,
       method: 'thread/goal/updated',
@@ -141,8 +138,6 @@ describe('codex goal accounting revisions', () => {
       timeUsedSeconds: 45,
       updatedAt: 1789068033_000
     })
-    // The write reaches a caught-up subscriber as one live page carrying the
-    // revised row under its original sequence, not a second goal row.
     expect(published).toEqual([
       expect.objectContaining({
         items: [
@@ -174,7 +169,7 @@ describe('codex goal accounting revisions', () => {
     const resumed = new CodexJournalGoals(second.sink, () => ({
       turnScope: AGENT_JOURNAL_THREAD_SCOPE
     }))
-    // Only a few seconds more: a resume snapshot still refreshes, since no live tick follows.
+    // Resume snapshots refresh even inside the live revision interval.
     const snapshot = goalFrame({ timeUsedSeconds: 3, updatedAt: 1789067991 })
     resumed.handle({ threadId: THREAD, method: 'thread/goal/updated', params: snapshot })
     await second.drained()

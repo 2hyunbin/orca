@@ -3,9 +3,9 @@ import {
   AgentJournalItemBodySchema,
   isAdmissibleAgentJournalItemBody,
   isAdmissibleAgentJournalMessageBody,
-  isAdmissibleAgentJournalRenderItem,
-  isAdmissibleAgentJournalSubmission
+  isAdmissibleAgentJournalRenderItem
 } from './agent-session-journal-schemas'
+import { isAdmissibleAgentJournalSubmission } from './agent-session-journal-submission-schema'
 import type {
   AgentJournalItemBody,
   AgentJournalRenderItem,
@@ -23,6 +23,18 @@ const RESOLUTION = {
 // Canonical fixtures are typed: if a shape here stops compiling, the schema
 // audit below is validating the wrong model.
 const CANONICAL_BODIES: AgentJournalItemBody[] = [
+  {
+    kind: 'message',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Inspecting the request' }]
+  },
+  {
+    kind: 'message',
+    role: 'reasoning',
+    blocks: [{ type: 'text', text: 'Inspecting the request' }],
+    state: 'completed',
+    completedAt: 2_000
+  },
   {
     kind: 'message',
     role: 'user',
@@ -111,7 +123,7 @@ describe('canonical admission', () => {
     const item: AgentJournalRenderItem = {
       itemId: 'codex:t:turn:0',
       revision: 1,
-      body: CANONICAL_BODIES[0] as AgentJournalItemBody,
+      body: { kind: 'message', role: 'user', blocks: [] },
       sequence: 1,
       observedAt: 1_000,
       recovered: true
@@ -220,7 +232,7 @@ describe('nested corruption is rejected', () => {
     const base = {
       itemId: 'codex:t:turn:0',
       revision: 1,
-      body: CANONICAL_BODIES[0] as AgentJournalItemBody,
+      body: { kind: 'message', role: 'user', blocks: [] },
       sequence: 1,
       observedAt: 1_000
     }
@@ -308,6 +320,7 @@ describe('optional notice metadata', () => {
   it.each([
     {},
     { presentation: 'compaction' },
+    { presentation: 'compaction-skipped', tone: 'warning' },
     { presentation: 'plan-document' },
     { tone: 'warning' },
     { tone: 'error' },
@@ -398,8 +411,8 @@ describe('optional tool annotations', () => {
     ).toBe(true)
     const padded = AgentJournalItemBodySchema.safeParse({ ...body, callId: ' call-1 ' })
     expect(padded.success).toBe(true)
-    if (padded.success && padded.data.kind === 'tool-call') {
-      expect(padded.data.callId).toBe(' call-1 ')
+    if (padded.success) {
+      expect(padded.data).toMatchObject({ kind: 'tool-call', callId: ' call-1 ' })
     }
   })
   it('admits explicit MCP identity without constraining the raw name', () => {
@@ -477,6 +490,14 @@ describe('thread goal fields', () => {
     ).toBe(true)
     expect(
       isAdmissibleAgentJournalItemBody({
+        kind: 'message',
+        role: 'reasoning',
+        blocks: [],
+        state: 'paused'
+      })
+    ).toBe(true)
+    expect(
+      isAdmissibleAgentJournalItemBody({
         kind: 'status',
         text: 'Goal archived',
         threadGoal: { state: 'archived' }
@@ -495,6 +516,8 @@ describe('thread goal fields', () => {
     for (const body of [
       { kind: 'message', role: 'user', blocks: [], sentAs: 5 },
       { kind: 'message', role: 'user', blocks: [], sentAs: '' },
+      { kind: 'message', role: 'reasoning', blocks: [], state: '' },
+      { kind: 'message', role: 'reasoning', blocks: [], completedAt: 'later' },
       { kind: 'status', text: 'Goal set', threadGoal: { state: 'set' } },
       {
         kind: 'status',

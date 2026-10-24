@@ -3,13 +3,7 @@ import {
   createSqliteTestStore,
   readPersistedStateJson
 } from './persistence-test-harness'
-// STA-3442: httpProxyUrl is the only network setting stored via safeStorage.
-// On macOS a keychain reset/denial makes decryptString throw at load, and the
-// raw ciphertext then masqueraded as a configured proxy: applyElectronProxySettings
-// silently fell back to DIRECT and the garbage re-persisted forever. These tests
-// pin the recovery contract: undecryptable values stay sealed (never applied
-// or destroyed), plaintext values survive as the upgrade path, and safeStorage
-// failures cannot expose the proxy secret or kill unrelated saves.
+// Keep undecryptable proxy secrets sealed and unapplied; preserve plaintext upgrades and unrelated saves (STA-3442).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { existsSync, mkdirSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -19,7 +13,7 @@ import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-port
 
 const testState = { dir: '' }
 
-vi.mock('./ssh/ssh-config-parser', () => ({
+vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -46,7 +40,6 @@ vi.mock('./telemetry/cohort-classifier', () => ({
 }))
 
 async function createStore() {
-  vi.resetModules()
   const { setSecretStore } = await import('../shared/secret-store')
   setSecretStore({
     isEncryptionAvailable: () => {
@@ -69,8 +62,6 @@ async function createStore() {
     describeProtectionGap: () => null
   })
   const { Store, initDataPath } = await import('./persistence')
-  // Why here: userData resolves through AppEnvironment, and this must point at this
-  // file's temp dir rather than the global fake's shared one, after resetModules.
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
@@ -113,7 +104,6 @@ describe('httpProxyUrl secret recovery (STA-3442)', () => {
     const persisted = JSON.parse(readPersistedStateJson(dataFile())) as {
       settings: { httpProxyUrl: string; httpProxyBypassRules: string }
     }
-    // On disk the URL is ciphertext (base64 of the mock's enc: payload), never plaintext.
     expect(persisted.settings.httpProxyUrl).not.toBe(PROXY_URL)
     expect(Buffer.from(persisted.settings.httpProxyUrl, 'base64').toString('utf-8')).toMatch(
       /^enc:/
@@ -148,15 +138,13 @@ describe('httpProxyUrl secret recovery (STA-3442)', () => {
     await seedConfiguredProxy()
     const originalCiphertext = JSON.parse(readPersistedStateJson(dataFile())).settings.httpProxyUrl
 
-    // Keychain reset/denial: every decrypt now fails.
     cipherState.decryptAlwaysThrows = true
     const reloaded = await createStore()
 
     expect(reloaded.getSettings().httpProxyUrl).toBe('')
-    // Bypass rules are not encrypted and must survive.
     expect(reloaded.getSettings().httpProxyBypassRules).toBe(BYPASS_RULES)
 
-    // Unrelated durable changes must not erase ciphertext that can recover later.
+    // Unrelated saves must retain ciphertext that may decrypt after keychain recovery.
     reloaded.updateSettings({ httpProxyBypassRules: 'localhost' })
     vi.advanceTimersByTime(2000)
     await reloaded.waitForPendingWrite()

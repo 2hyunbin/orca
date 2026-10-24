@@ -1,5 +1,4 @@
-import type { CommandSpec } from '../args'
-import { GLOBAL_FLAGS } from '../args'
+import { GLOBAL_FLAGS, type CommandSpec } from '../args'
 import { ORCHESTRATION_WORKER_COMMAND_SPECS } from './orchestration-worker-specs'
 
 export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
@@ -233,7 +232,7 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     identityFlagRoles: { from: 'caller' },
     notes: [
       'From an active Dispatch, a new question defaults to its owning Run mailbox.',
-      'Timeout leaves the question pending; resume with the original message ID.'
+      '--timeout-ms accepts 1 to 1800000 ms per wait (default 600000 = 10 minutes, max 30 minutes); larger values are rejected. Timeout leaves the question pending; resume with the original message ID.'
     ]
   },
   {
@@ -293,6 +292,7 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
   },
   {
     path: ['orchestration', 'reset'],
+    destructive: true,
     summary: 'Reset one explicit orchestration state scope',
     usage:
       'orca orchestration reset (--all | --tasks | --messages) [--retry-request <id>] [--json]',

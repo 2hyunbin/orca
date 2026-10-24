@@ -1,4 +1,5 @@
 import type { TuiAgent } from './tui-agent'
+import type { GlobalSettings } from './global-settings-types'
 import { isTuiAgent } from './tui-agent-config'
 
 // Keep this order in sync with the desktop agent catalog. It defines the
@@ -18,6 +19,7 @@ export const TUI_AGENT_AUTO_PICK_ORDER = [
   'muse',
   'dsh',
   'qoder',
+  'qoder-cn',
   'zcode',
   'pi',
   'omp',
@@ -46,7 +48,8 @@ export const TUI_AGENT_AUTO_PICK_ORDER = [
   'hermes',
   'devin',
   'openclaw',
-  'codebuddy'
+  'codebuddy',
+  'jcode'
 ] as const satisfies readonly TuiAgent[]
 
 // Why: fresh installs should expose Claude Agent Teams in agent pickers; the
@@ -56,14 +59,19 @@ export const DEFAULT_DISABLED_TUI_AGENTS = [] as const satisfies readonly TuiAge
 export function pickTuiAgent(
   preferred: TuiAgent | 'blank' | null | undefined,
   detected: Iterable<TuiAgent>,
-  disabled?: Iterable<unknown> | null
+  disabled?: Iterable<unknown> | null,
+  chosenUsable?: (agent: TuiAgent) => boolean
 ): TuiAgent | null {
   if (preferred === 'blank') {
     return null
   }
   const disabledSet = new Set(normalizeDisabledTuiAgents(disabled))
   const detectedSet = detected instanceof Set ? detected : new Set(detected)
-  if (preferred && detectedSet.has(preferred) && !disabledSet.has(preferred)) {
+  if (
+    preferred &&
+    (detectedSet.has(preferred) || chosenUsable?.(preferred)) &&
+    !disabledSet.has(preferred)
+  ) {
     return preferred
   }
   for (const agent of TUI_AGENT_AUTO_PICK_ORDER) {
@@ -95,6 +103,24 @@ export function haveSameDisabledTuiAgents(left: unknown, right: unknown): boolea
 
 export function isTuiAgentEnabled(agent: TuiAgent, disabled?: Iterable<unknown> | null): boolean {
   return !normalizeDisabledTuiAgents(disabled).includes(agent)
+}
+
+export function buildAgentAvailabilitySettingsUpdate(
+  settings: Pick<GlobalSettings, 'defaultTuiAgent' | 'disabledTuiAgents'>,
+  id: TuiAgent,
+  enabled: boolean
+): Pick<GlobalSettings, 'disabledTuiAgents'> & Partial<Pick<GlobalSettings, 'defaultTuiAgent'>> {
+  const latestDisabled = normalizeDisabledTuiAgents(settings.disabledTuiAgents)
+  const nextDisabled = enabled
+    ? latestDisabled.filter((agent) => agent !== id)
+    : latestDisabled.includes(id)
+      ? latestDisabled
+      : [...latestDisabled, id]
+
+  return {
+    disabledTuiAgents: nextDisabled,
+    ...(settings.defaultTuiAgent === id && !enabled ? { defaultTuiAgent: null } : {})
+  }
 }
 
 export function filterEnabledTuiAgents<T extends TuiAgent>(

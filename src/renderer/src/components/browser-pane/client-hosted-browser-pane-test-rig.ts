@@ -42,9 +42,6 @@ export function installClientHostedPaneApi(overrides?: {
     configurable: true,
     value: {
       browser: {
-        onDownloadRequested: inert,
-        onDownloadProgress: inert,
-        onDownloadFinished: inert,
         onPopup: inert,
         onPermissionDenied: inert,
         onContextMenuRequested: inert,
@@ -56,6 +53,7 @@ export function installClientHostedPaneApi(overrides?: {
       },
       ui: {
         onFocusBrowserAddressBar: inert,
+        onShowBrowserHistory: inert,
         onFindInBrowserPage: inert,
         onBrowserHistoryNavigate: inert,
         onReloadBrowserPage: inert,

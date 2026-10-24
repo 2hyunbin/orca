@@ -1,12 +1,22 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
 import { writeManagedScript } from '../agent-hooks/installer-utils'
-import { restoreManagedScript, scriptStillExists } from '../agent-hooks/managed-hook-script-refresh'
+import { getLockedExecutableAsidePath } from '../agent-hooks/locked-executable-rename'
+import {
+  refreshManagedScriptIfPresent,
+  restoreManagedScript,
+  scriptStillExists
+} from '../agent-hooks/managed-hook-script-refresh'
 import {
   buildWindowsHookEnvironmentGuardLines,
   buildWindowsHookStdinDrainEpilogue
 } from '../agent-hooks/hook-stdin-contract'
+import {
+  resolveBundledWindowsNativeHookExecutable,
+  WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME
+} from '../agent-hooks/windows-native-hook-executable'
 import { WINDOWS_CLAUDE_BACKGROUND_JOB_GUARD } from './hook-script'
 
 const PAYLOAD_FILE_NAME = 'claude-hook-impl.cmd'
@@ -15,13 +25,41 @@ export function getWindowsClaudeHookPayloadPath(entryPath: string): string {
   return join(dirname(entryPath), PAYLOAD_FILE_NAME)
 }
 
+export function getWindowsClaudeHookExecutablePath(entryPath: string): string {
+  return join(dirname(entryPath), WINDOWS_NATIVE_HOOK_EXECUTABLE_NAME)
+}
+
+/** Copy bytes unchanged to preserve Authenticode; return null to register the .cmd fallback. */
+export function installWindowsClaudeHookExecutable(entryPath: string): string | null {
+  const destination = getWindowsClaudeHookExecutablePath(entryPath)
+  try {
+    rmSync(getLockedExecutableAsidePath(destination), { force: true })
+  } catch {
+    // Leave a locked aside for a later install.
+  }
+  const source = resolveBundledWindowsNativeHookExecutable()
+  try {
+    if (source) {
+      writeManagedScript(destination, readFileSync(source), { moveLockedTargetAside: true })
+      return destination
+    }
+  } catch {
+    // Locked executable and aside files can block replacement.
+  }
+  // Existing executable builds all support the claude command.
+  return existsSync(destination) ? destination : null
+}
+
 export function getWindowsClaudeHookFileStatus(
   status: AgentHookInstallStatus,
-  entryPath: string
+  entryPath: string,
+  exeRegistered: boolean
 ): AgentHookInstallStatus {
   if (
     status.state === 'installed' &&
-    (!existsSync(entryPath) || !existsSync(getWindowsClaudeHookPayloadPath(entryPath)))
+    (!existsSync(entryPath) ||
+      !existsSync(getWindowsClaudeHookPayloadPath(entryPath)) ||
+      (exeRegistered && !existsSync(getWindowsClaudeHookExecutablePath(entryPath))))
   ) {
     return { ...status, state: 'partial', detail: 'Managed Claude hook script is missing' }
   }
@@ -56,11 +94,20 @@ export async function refreshWindowsClaudeHookFiles(
   entryPath: string,
   payload: string
 ): Promise<void> {
-  // A surviving entry is Orca-owned; creating a missing one stays install()'s presence-gated job.
+  const bundledHook = resolveBundledWindowsNativeHookExecutable()
+  if (bundledHook) {
+    const executable = getWindowsClaudeHookExecutablePath(entryPath)
+    await readFile(bundledHook)
+      .then((bytes) =>
+        refreshManagedScriptIfPresent(executable, bytes, { moveLockedTargetAside: true })
+      )
+      .catch(() => {})
+  }
+  // Refresh only surviving entries; creating a missing entry requires installation.
   if (!(await scriptStillExists(entryPath))) {
     return
   }
-  // Publish the payload first so a failed migration leaves the previous single-file hook intact.
+  // Publish payload first so a failed migration preserves the old single-file hook.
   await restoreManagedScript(getWindowsClaudeHookPayloadPath(entryPath), payload)
   await restoreManagedScript(entryPath, getWindowsClaudeHookEntry())
 }

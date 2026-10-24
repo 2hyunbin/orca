@@ -6,11 +6,6 @@ import {
 import { resolveGenerationTarget } from './first-work-generation-target'
 import type { FirstWorkBranchRenameDeps } from './first-work-branch-rename'
 
-/**
- * Non-git folder workspaces have no branch to rename; the first-work hook
- * instead generates a workspace title. Shares the branch-name generation
- * machinery and the caller's stop/retry verdict semantics.
- */
 export async function runFolderWorkspaceTitleAutoRename(
   worktreeId: string,
   prompt: string,
@@ -19,6 +14,9 @@ export async function runFolderWorkspaceTitleAutoRename(
   stop: (reason: string, clearError?: boolean) => true,
   retry: (reason: string) => false
 ): Promise<boolean> {
+  if (deps.isFolderWorkspaceWslMoveBlocked?.(worktreeId) === true) {
+    return retry('a WSL move is taking the workspace')
+  }
   if (deps.isPendingFirstAgentMessageRename?.(worktreeId) !== true) {
     return stop('folder workspace is not pending title rename', true)
   }
@@ -34,12 +32,7 @@ export async function runFolderWorkspaceTitleAutoRename(
     deps.setRenameError(worktreeId, resolvedParams.error)
     return stop(`no generation agent: ${resolvedParams.error}`)
   }
-  const target = await resolveGenerationTarget(
-    folderPath,
-    resolvedParams.params.agentId,
-    null,
-    deps
-  )
+  const target = await resolveGenerationTarget(folderPath, resolvedParams.params.agentId, deps)
   if (!target) {
     deps.setRenameError(worktreeId, 'Could not prepare the workspace-name generation environment.')
     return retry('could not prepare generation environment')
@@ -56,6 +49,9 @@ export async function runFolderWorkspaceTitleAutoRename(
     deps.getCurrentDisplayName(worktreeId) !== originalDisplayName
   ) {
     return stop('folder workspace changed during generation', true)
+  }
+  if (deps.isFolderWorkspaceWslMoveBlocked?.(worktreeId) === true) {
+    return retry('a WSL move started during generation')
   }
   if (!generated.success) {
     if (!generated.canceled) {
