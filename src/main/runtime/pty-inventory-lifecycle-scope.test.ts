@@ -113,6 +113,23 @@ describe('lifecycle invalidation respects inventory scope and retry bounds', () 
     expect(runtime.capture('ssh:a@@child').incarnationId).toBe(SUCCESSOR)
   })
 
+  it('joins a newer aggregate listing instead of re-listing past it', async () => {
+    const first = deferred<PtyProcessInfo[]>()
+    const second = deferred<PtyProcessInfo[]>()
+    const list = vi
+      .fn<InventoryListing>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    const { runtime } = createInventoryRuntime(list)
+    const a = runtime.read(undefined, 'repo::/tmp/a')
+    const b = runtime.read(undefined, 'repo::/tmp/b')
+    first.resolve([processRow('stale-listing')])
+    second.resolve([processRow()])
+    expect((await a)?.allLivePtyIds).toEqual(new Set([PTY]))
+    expect((await b)?.allLivePtyIds).toEqual(new Set([PTY]))
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
   it('allows only one target retry and keeps a second invalidation unknown', async () => {
     const first = deferred<PtyProcessInfo[]>()
     const second = deferred<PtyProcessInfo[]>()
