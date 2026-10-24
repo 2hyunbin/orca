@@ -2,7 +2,10 @@ import type { AgentSessionExecutionLocation } from '../../shared/agent-session-r
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { isTuiAgent } from '../../shared/tui-agent-config'
-import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
+import {
+  resolveTuiAgentLaunchEnv,
+  type AgentLaunchProfileSettings
+} from '../../shared/tui-agent-launch-defaults'
 import {
   checkAgentCliVersion,
   launchableRelease,
@@ -32,7 +35,8 @@ type LaunchEnvironmentSettings = Pick<
   GlobalSettings,
   'agentDefaultEnv' | 'nativeChatInheritShellEnvironment' | 'nativeChatShellEnvironmentVariables'
 > &
-  Partial<Pick<GlobalSettings, 'agentCmdOverrides'>>
+  Partial<Pick<GlobalSettings, 'agentCmdOverrides'>> &
+  AgentLaunchProfileSettings
 
 /** What the check reads from the runtime asking it. */
 type LaunchSettingsRuntime = { requireStore(): { getSettings(): LaunchEnvironmentSettings } }
@@ -99,7 +103,7 @@ export async function resolveHostStructuredAgentLaunchEnvironment(
 ): Promise<Record<string, string>> {
   return {
     ...(await resolveHostAgentBaseEnvironment(settings)),
-    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) : {})
+    ...(isTuiAgent(agent) ? resolveTuiAgentLaunchEnv(agent, settings) : {})
   }
 }
 
@@ -118,9 +122,7 @@ export async function structuredAgentHostLaunchSources(
 }> {
   const settings = runtime.requireStore().getSettings()
   const policy = nativeChatShellEnvironmentPolicy(settings)
-  const overlay = isTuiAgent(agent)
-    ? { ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) }
-    : {}
+  const overlay = isTuiAgent(agent) ? { ...resolveTuiAgentLaunchEnv(agent, settings) } : {}
   const environment = createStructuredAgentEnvironmentResolvers({
     prewarm: false,
     processEnvironment: { ...process.env },

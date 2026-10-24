@@ -38,7 +38,6 @@ import {
 export function createAgentModelCatalogService(
   deps: AgentModelCatalogServiceDeps
 ): AgentModelCatalogService {
-  // One per host: stopping it ends every listing this service started.
   const lifetime = new AbortController()
   const admission = new PrioritySemaphore(2)
 
@@ -157,11 +156,10 @@ export function createAgentModelCatalogService(
         return
       }
       let fingerprint: string
-      // The account a probe lists under; null where this host cannot spawn one natively.
       let probeHome: AgentSessionAccountHome | null
       if (scoped) {
         fingerprint = agentModelCatalogFingerprintForRecord(scoped, folder)
-        // Probes spawn natively; a WSL-pinned record has no host-side lister.
+        // Native probes cannot list a WSL-pinned account.
         probeHome =
           scoped.location.executionHostId === 'local' && scoped.location.wslDistro === null
             ? scoped.accountHome

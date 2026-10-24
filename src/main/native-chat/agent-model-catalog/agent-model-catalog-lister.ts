@@ -19,12 +19,9 @@ import type {
 } from './agent-model-catalog-discovery'
 import type { AgentModelCatalogStore } from './agent-model-catalog-store'
 
-/** Who lists, by identity: a live session's per-spawn handle, or the session-less probe. */
 export type AgentModelCatalogLister = AgentModelCatalogSessionAccess | AgentModelCatalogProbe
 
-/** A live session's handle into the store, pinned at spawn to the account home
- *  THAT child launched under — an account switched afterwards must never
- *  receive or poison this session's listing. */
+/** Pin listings to the spawned child's account so later selections cannot receive its results. */
 export type AgentModelCatalogSessionAccess = {
   store: AgentModelCatalogStore
   fingerprint: string
@@ -103,7 +100,7 @@ export function refreshAgentModelCatalogListing(input: {
     input.listingWaiters.notify(fingerprint)
   }
   const order = input.nextListingOrder()
-  // Agent, outcome and duration only: a slow listing shows in the trace log without its content.
+  // Trace timing/outcome without exposing listing contents.
   const span = startSpan('agentModelCatalog.discovery', {
     attributes: { agent, lister: typeof lister === 'function' ? 'probe' : 'session' }
   })
@@ -116,7 +113,7 @@ export function refreshAgentModelCatalogListing(input: {
       }
       span.setAttribute('models', success.models.length)
       span.end()
-      // An older lister still receives its own result, but cannot replace a newer discovery.
+      // Superseded callers receive their results without overwriting newer discovery.
       const superseded =
         (input.latestWrittenOrder.get(fingerprint) ?? 0) > order && input.entries.has(fingerprint)
       if (superseded && success.origin === 'probe') {
@@ -169,7 +166,7 @@ export function scopedAgentModelCatalogLister(input: {
   return async () => {
     const release = legacy ? () => {} : await admission.acquire(0, signal)
     const deadline = new AbortController()
-    // Retries share this body budget; bounded provider teardown is awaited before settlement.
+    // Share the retry budget and await bounded provider teardown before settling.
     const timer = legacy ? setTimeout(() => deadline.abort(), 30_000) : undefined
     const attemptSignal = AbortSignal.any([signal, deadline.signal])
     try {

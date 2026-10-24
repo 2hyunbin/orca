@@ -10,9 +10,6 @@ import {
   type AgentModelCatalogSuccess
 } from './agent-model-catalog-store'
 
-// A live session lists every turn; the account-level discovery is the only source of the configured
-// default. These pin that the first can never starve, outrun or erase the second.
-
 const HOME: AgentSessionAccountHome = { variable: 'GROK_HOME', path: '/homes/grok' }
 
 const RECORD = {
@@ -45,7 +42,6 @@ function discovery(defaultModel: string): AgentModelCatalogSuccess {
   }
 }
 
-/** What a running Grok chat reports: no default, and the model it switched to. */
 const LIVE: AgentSessionModelOption[] = [
   { id: 'grok-4', label: 'grok-4', isDefault: false, efforts: EFFORTS },
   { id: 'grok-3-mini', label: 'grok-3-mini', isDefault: false, efforts: EFFORTS },
@@ -103,7 +99,7 @@ describe('a live listing beside the account-level discovery', () => {
     const read = await run.read()
     expect(read?.listingNamesConfiguredModel).toBe(true)
     expect(await run.defaultOf()).toBe('grok-4')
-    // The session's newer membership stays, with the default effort discovery named.
+    // Preserve newer live membership while learning default effort from discovery.
     expect(read?.models.map((model) => model.id)).toEqual(['grok-4', 'grok-3-mini', 'grok-code'])
     expect(read?.models[0]?.defaultEffort).toBe('high')
   })
@@ -123,7 +119,6 @@ describe('a live listing beside the account-level discovery', () => {
     expect(await run.defaultOf()).toBe('grok-4')
     expect(run.probes).toHaveBeenCalledTimes(1)
 
-    // The user changes the account's default while chats keep listing every minute.
     configured = 'grok-3-mini'
     for (let minute = 0; minute < 11; minute++) {
       run.advance(60_000)

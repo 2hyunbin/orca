@@ -41,7 +41,7 @@ export function structuredAgentSessionDisplayPermission(
     : structuredAgentSessionPermissionFromCatalog(deps, record, listing)
 }
 
-/** Null for an agent whose chats offer no modes, or one this runtime did not register. */
+/** null for unregistered agents or agents without permission modes. */
 export async function structuredAgentSessionLaunchPermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents' | 'modelCatalog'>,
   record: AgentSessionRecord,

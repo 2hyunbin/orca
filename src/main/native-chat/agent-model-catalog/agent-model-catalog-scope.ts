@@ -17,7 +17,7 @@ import {
 } from './agent-model-catalog-discovery'
 import { sessionWorkspacePath } from './agent-model-catalog-workspace'
 
-/** Launch configuration determines discovery scope; a chat's choices never participate. */
+/** Discovery follows launch configuration, never session picks. */
 export async function resolveAgentModelCatalogScope(
   deps: AgentModelCatalogServiceDeps,
   params: Parameters<AgentModelCatalogService['read']>[0],
@@ -45,7 +45,6 @@ export async function resolveAgentModelCatalogScope(
   const probe = deps.probes?.[params.agent]
   if (params.legacy) {
     const fingerprint = agentModelCatalogScopeFingerprint(base, 'legacy-account')
-    // Only a listing runs the resolution, and it may wait on a shell rerun.
     const resolved =
       params.savedOnly || !deps.store.probeDue(fingerprint)
         ? null

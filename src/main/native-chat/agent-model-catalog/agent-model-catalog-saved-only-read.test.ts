@@ -15,9 +15,6 @@ import {
 import { AgentModelCatalogUnavailableError } from './agent-model-catalog-unavailable'
 import { agentReadsProjectModelConfig } from './agent-project-model-override'
 
-// A client preloads every agent's saved list through `savedOnly`: the answer comes from what the
-// host saved, and no listing, probe or re-check of a held reason starts.
-
 const HOME = { variable: 'GROK_HOME', path: '/homes/grok' } as const
 const FINGERPRINT = agentModelCatalogFingerprint({
   agent: 'grok',
@@ -145,7 +142,7 @@ describe('a saved-only catalog read', () => {
       listingNamesConfiguredModel: true,
       defaultHoldsInEveryWorkspace: true
     })
-    // OpenCode's listing names no default, and a project's own config may pick its model.
+    // Project config can pick OpenCode's default even when model listings name none.
     const opencode = rig('opencode')
     const opencodeKey = agentModelCatalogFingerprint({
       agent: 'opencode',

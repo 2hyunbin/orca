@@ -57,7 +57,6 @@ export function readBoundChildRewind(
   )
 }
 
-/** The attach's last commit: its child, if it has one, becomes the session's. */
 export async function publishAttachedChild(
   context: StructuredAgentSessionAttachContext,
   sessionId: string,
@@ -77,11 +76,10 @@ export async function publishAttachedChild(
     return false
   }
   const { acquisitionGeneration, owner, fence, current, eventSink } = bound
-  // A re-attach to a live child keeps the mode that child was launched with.
+  // Retained children keep their original launch mode.
   const permissionMode =
     owner === 'acquired' ? attempt.startup?.permissionMode : current?.permissionMode
   const startedFor = owner === 'acquired' ? input.startedFor : current?.startedFor
-  // A replayed create over a chat at rest has no child to index.
   const child =
     owner === 'acquired'
       ? {
@@ -123,7 +121,7 @@ export async function publishAttachedChild(
   context.runtimeState.adoptEventSink(sessionId, candidate.sink)
   attempt.committed = candidate.sink === input.attemptSink
   indexProviderChild(conversation, candidate.child)
-  // An exit that landed while the start ran outside the serialize ends the child it now indexed.
+  // Apply exits observed during background startup after indexing the matching child.
   const exited = context.runtimeState.startFlights.takeExit(sessionId, candidate.child)
   const indexed = conversation.child
   if (exited && indexed) {

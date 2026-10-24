@@ -96,7 +96,7 @@ describe('agent model catalog service', () => {
   it('keeps an unsupported pinned record unknown without probing another account', async () => {
     const store = new AgentModelCatalogStore()
     const probe = vi.fn(async (_home: AgentSessionAccountHome) => listing('gpt-a'))
-    // A Codex record pinning Claude's variable: its path is not a Codex home to probe under.
+    // A foreign account-home variable cannot authorize a Codex probe.
     const pinned = { ...record('/x'), accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/x' } }
     const drivesRecord = vi.fn(() => false)
     const service = createAgentModelCatalogService({
@@ -118,7 +118,6 @@ describe('agent model catalog service', () => {
 
   it('an account switch with no record reads and prewarms the NEW account, never the old entry', async () => {
     const store = new AgentModelCatalogStore()
-    // The old account listed under its own fingerprint before the switch.
     const oldFingerprint = selectedHomeFingerprint('/homes/old')
     store.recordSuccess(oldFingerprint, 'grok', listing('gpt-old'), 'discovery')
     const probe = vi.fn(async () => listing('gpt-new'))
@@ -145,7 +144,6 @@ describe('agent model catalog service', () => {
       const result = await service.read({ agent: 'grok', waitForListing: true })
       expect(result.origin === 'unknown' ? null : result.models[0]!.id).toBe('gpt-new')
     })
-    // The new listing landed under the new selection's key; the old entry is untouched.
     expect(store.get(selectedHomeFingerprint('/homes/new'))!.models[0]!.id).toBe('gpt-new')
     expect(store.get(oldFingerprint)!.models[0]!.id).toBe('gpt-old')
   })

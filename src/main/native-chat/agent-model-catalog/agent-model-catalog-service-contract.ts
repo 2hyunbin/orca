@@ -11,20 +11,14 @@ import type {
 import type { AgentModelCatalogWorkspaceDeps } from './agent-model-catalog-workspace'
 export type AgentModelCatalogServiceDeps = AgentModelCatalogWorkspaceDeps & {
   getRecord: (sessionId: string) => AgentSessionRecord | undefined
-  /** Whether this build can start the record's agent as the record pins it; a record it cannot
-   *  names no account a probe may start that agent's CLI under. */
+  /** Unlaunchable records cannot authorize probing their account with a different host binary. */
   drivesRecord: (record: AgentSessionRecord) => boolean
-  /** The account home a structured launch for this agent would pin right now —
-   *  the SAME resolver the create path fills `record.accountHome` with, so a
-   *  record-less read can never answer from another account's listing. */
+  /** Share the launch resolver so recordless reads use the account a new chat would pin. */
   resolveAccountHome: (agent: string) => Promise<AgentSessionAccountHome>
-  /** Session-less listers, one per agent that has one on this host. */
   probes?: Readonly<Partial<Record<string, AgentModelCatalogProbe>>>
-  /** Agents whose listing marks the model the account is configured to run as its default. */
   listingNamesConfiguredModel?: ReadonlySet<string>
-  /** False for an agent whose model no project config can pick; its default holds everywhere. */
+  /** False means project configuration cannot override the account default. */
   agentReadsProjectModelConfig?: (agent: string) => boolean
-  /** Whether this host keeps any chat of the agent; with a saved catalog, what marks it in use. */
   hasChatRecords?: (agent: string) => boolean
 }
 
@@ -59,7 +53,6 @@ export type AgentModelCatalogService = {
    *  whose catalog for the account a new chat would pin is missing or old, so a picker never meets
    *  a cold catalog. Resolves once those listings settle. */
   prewarm: () => Promise<void>
-  /** The host is going away: start no listing, and stop the ones running. */
   stop: () => void
   /** A chat under this record's account proved its start: a held reason is re-checked sooner. */
   providerStarted: (record: AgentSessionRecord, source?: () => boolean) => void

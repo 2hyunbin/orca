@@ -5,7 +5,6 @@ import type {
 } from './agent-model-catalog-service-contract'
 import { agentModelCatalogFingerprint } from './agent-model-catalog-fingerprint'
 
-/** The catalog a new chat of `agent` would read: the account a launch would pin right now. */
 export async function newChatCatalogKey(
   deps: AgentModelCatalogServiceDeps,
   agent: string,
@@ -47,7 +46,7 @@ export async function prewarmAgentModelCatalog(
     return
   }
   const probes = deps.probes ?? {}
-  // An agent never used here waits for its first chat, which shows the quiet placeholder.
+  // Unused agents wait for their first chat instead of spawning speculative probes.
   const used = Object.keys(probes).filter(
     (agent) =>
       !deps.listsInChatFolder?.has(agent) &&

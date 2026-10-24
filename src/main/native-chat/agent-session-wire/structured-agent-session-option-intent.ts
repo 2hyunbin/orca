@@ -1,5 +1,3 @@
-// A pick is kept only when the chat's agent takes it, and is recorded as intent for the next start.
-
 import { refuse, type AgentSessionOptionResult } from '../../../shared/agent-session-wire'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
@@ -15,7 +13,6 @@ import {
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import { pickAgentSessionOption } from '../../runtime/agent-session-record-options'
 
-/** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
   agents: Pick<StructuredAgentRegistry, 'definition'>,
   provider: string,
@@ -29,7 +26,6 @@ function acceptsOptionPick(
     : definition?.restingOptions.acceptsKey(key) === true
 }
 
-/** Initial explicit picks follow the same rules as a pick made while the chat is at rest. */
 export function structuredAgentSessionOptionOverridesRefusal(
   agents: Pick<StructuredAgentRegistry, 'definition'>,
   provider: string,
@@ -76,7 +72,7 @@ export async function recordStructuredAgentSessionOptionIntent(
   if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
     const permissionMode = input.value
     await deps.store.replaceSessionOptions({ sessionId, fence, permissionMode, now: ctx.now() })
-    // The answer still names the mode among the options, as the wire always has.
+    // Preserve the wire’s permission mode within options.
     options = { ...record.options, [input.key]: input.value }
   } else {
     const picked = { sessionId, fence, ...input, models: undefined, now: ctx.now() }

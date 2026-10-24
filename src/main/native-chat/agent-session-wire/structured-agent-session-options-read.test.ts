@@ -21,7 +21,6 @@ import {
 } from '../../../shared/structured-agent-session-options'
 import { structuredAgentSessionSendSelection } from '../../../shared/structured-agent-session-option-view'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
-// A chat's options at rest come from the host catalog without waiting on a listing.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -128,7 +127,6 @@ describe('options at rest', () => {
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
-    // A new chat that has sent nothing runs that default, which its first send pins.
     expect(older.current).toEqual({
       model: 'gpt-account',
       defaulted: [],
@@ -176,7 +174,6 @@ describe('options at rest', () => {
     const running = await read()
     expect(running.listedModelIds).toEqual(resting.listedModelIds)
     expect(resting.listedModelIds).toEqual(['gpt-5.5'])
-    // The saved model shows over the child's fallback, and is the chat's own.
     expect(running.current).toMatchObject({ model: 'gpt-unlisted', defaulted: [] })
   })
 
@@ -220,7 +217,7 @@ describe('options at rest', () => {
       expect(result.models).toEqual([])
       expect(result.current).not.toHaveProperty('model')
       record.options = { model: 'later-model', effort: 'off' }
-      // Only Codex is registered here, and a mode is stated only for a registered agent's chat.
+      // Unregistered agents must not report a permission mode.
       expect((await read()).current).toEqual({
         model: 'later-model',
         effort: 'off',
@@ -298,10 +295,10 @@ describe('a chat at rest, read by the host', () => {
   it.each<[string, RestingFacts, AgentJournalItemBody[], boolean, string[]]>([
     ['started here names its default as its own', {}, [], false, []],
     ['taken from history', { providerHandleChain: [{ origin: 'adopted' }] }, [], true, ['model']],
-    // A context clear hides the turn from the newest-turn read, not from history.
+    // Context clear hides the newest turn, not its historical existence.
     ['with a turn before a context clear', {}, [turn], true, ['model']],
     ['after a rewind', { rewind: { phase: 'completed' } }, [], true, ['model']],
-    // A journal founded afresh proves nothing for a chat whose agent already ran.
+    // A replacement journal cannot prove the agent never ran.
     ['whose journal went missing', { providerHandleChain: created }, [], false, ['model']]
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
@@ -540,7 +537,7 @@ describe('a chat at rest, read by the host', () => {
 
   it.each([
     ['another model offers', listed, 'default'],
-    // Codex lists no Flex; a Flex from the user's config runs as configured.
+    // Unlisted Codex Flex remains configured without inferred catalog support.
     ['no model lists', listed.slice(0, 1), 'flex']
   ])(
     'names the tier the model runs where %s it, and keeps the saved one',
@@ -616,7 +613,6 @@ describe('a chat at rest, read by the host', () => {
     // A turn that ran on another model, recorded late, fills nothing, though b offers its effort.
     expect(chat.ran('a', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
     expect(chat.ran('b', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
-    // A catalog that later drops it, or a pick, keeps the saved value.
     chat.ran('b', { effort: 'low' }, [])
     await chat.pick('serviceTier', 'priority')
     expect(chat.record().options).toEqual({ model: 'b', effort: 'high', serviceTier: 'priority' })
