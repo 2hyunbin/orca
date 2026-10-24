@@ -83,7 +83,7 @@ async function setupOpenCode2Status(ctx) {
     reportingOpenCodeMajor = 2;
     if (await tuiReportsPaneLifecycle()) return noop;
     const controller = new AbortController();
-    // Wrap bare OpenCode 2 session records for shared lineage lookup’s data.id contract.
+    // Wrap bare OpenCode 2 session records for shared lineage lookup's data.id contract.
     const client = { session: { get: async (input, options) => { const result = await ctx.session.get(input, options); return result && typeof result.id === "string" ? { data: result } : result; } } };
     // Hot reload disposes plugins while turns continue.
     hooks = await OrcaOpenCodeStatusPlugin({ client, sessionsOutliveDispose: true });
@@ -105,7 +105,7 @@ async function setupOpenCode2Status(ctx) {
     return async () => {
       try {
         controller.abort();
-        // Finish every owner’s cleanup even if an earlier disposer fails.
+        // Finish every owner's cleanup even if an earlier disposer fails.
         try {
           await promptRegistration?.dispose?.();
         } finally {

@@ -233,7 +233,7 @@ async function setupOpenCode2Tui(ctx) {
         }
       }
       if (event.type === "session.inbox.enqueued") {
-        // TUI lacks the server’s session.hook prompt callback.
+        // TUI lacks the server's session.hook prompt callback.
         const item = properties.item;
         if (sessionID !== root || item?.type !== "user" || typeof item.payload?.text !== "string" || !item.payload.text) return;
         const prompt = { text: item.payload.text, messageID: properties.inboxID };
@@ -245,7 +245,7 @@ async function setupOpenCode2Tui(ctx) {
         // MessagePart implies Working in Orca and must not bury Needs input.
         if (memory.last.startsWith("waiting:")) return;
         const part = { role: "assistant", text: properties.text, messageID: properties.assistantMessageID, sessionID: root, factoryID };
-        // Queue reply previews after this turn’s start, prompt and Busy.
+        // Queue reply previews after this turn's start, prompt and Busy.
         void enqueueLifecycle(() => queueAssistantPart({ ...part, authorityRevision: stateArrivalRevision }));
       }
     }

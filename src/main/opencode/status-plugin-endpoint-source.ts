@@ -1,6 +1,6 @@
 export function getStatusPluginEndpointSource(): string[] {
   return [
-    '// Warn once per plugin process; Orca’s own warning guards live in a different process.',
+    "// Warn once per plugin process; Orca's own warning guards live in a different process.",
     'let warnedBadEndpoint = false;',
     '',
     '// Stat before parsing each post: streaming parts are frequent, endpoint rewrites are rare.',

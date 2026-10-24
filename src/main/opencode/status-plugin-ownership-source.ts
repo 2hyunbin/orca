@@ -11,7 +11,7 @@ export function getStatusPluginOwnershipSource(): string[] {
     '}',
     '',
     'function attentionKey(factoryID, hookEventName, requestID, sourceSessionID) {',
-    '  // Session/factory-scoped tuples prevent reused request IDs from hiding another owner’s blocker.',
+    "  // Session/factory-scoped tuples prevent reused request IDs from hiding another owner's blocker.",
     '  return JSON.stringify([factoryID, hookEventName, requestID, sourceSessionID || ""]);',
     '}',
     '',
