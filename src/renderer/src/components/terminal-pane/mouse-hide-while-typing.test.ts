@@ -72,7 +72,6 @@ describe('installMouseHideWhileTyping', () => {
     disposable.dispose()
 
     expect(container.style.cursor).toBe('')
-    // After dispose, mousemove should not crash and cursor stays restored.
     container.dispatchEvent(new Event('mousemove'))
     expect(container.style.cursor).toBe('')
     expect(container.removeEventListener).toHaveBeenCalledWith('mousemove', expect.any(Function))
