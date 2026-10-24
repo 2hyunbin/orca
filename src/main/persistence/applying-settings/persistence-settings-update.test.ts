@@ -615,16 +615,21 @@ describe('Store', () => {
 
   it('updateSettings deep-merges and clamps notification custom sound volume', async () => {
     const store = await createStore()
-    const updated = store.updateSettings({
+    store.updateSettings({
       notifications: {
         ...store.getSettings().notifications,
-        customSoundVolume: -20
+        enabled: false,
+        customSoundPath: '/sounds/custom.wav'
       }
+    })
+    const updated = store.updateSettings({
+      // @ts-expect-error -- Partial notification patches can arrive from older clients.
+      notifications: { customSoundVolume: -20 }
     })
 
     expect(updated.notifications.customSoundVolume).toBe(0)
-    expect(updated.notifications.enabled).toBe(true)
-    expect(updated.notifications.customSoundPath).toBeNull()
+    expect(updated.notifications.enabled).toBe(false)
+    expect(updated.notifications.customSoundPath).toBe('/sounds/custom.wav')
   })
 
   it('updateSettings toggles editorAutoSave', async () => {
