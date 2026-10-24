@@ -153,10 +153,14 @@ describe('muted workspace attention', () => {
         settlesTurn: true,
         hasFreshActivityEvidence: true
       },
-      createTerminalAttentionSurface(store.getState())
+      createTerminalAttentionSurface(getAgentStatusOwner(store).getState())
     )
     expect(decision).toEqual({ admitted: false, cause: 'muted-workspace' })
-    expect(createStructuredAttentionSurface(store.getState()).isWorkspaceMuted(CLI_ID)).toBe(true)
+    expect(
+      createStructuredAttentionSurface(getAgentStatusOwner(store).getState()).isWorkspaceMuted(
+        CLI_ID
+      )
+    ).toBe(true)
   })
 
   it('writes no bell marker for a muted workspace, and still does for a visible one', () => {
