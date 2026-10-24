@@ -46,7 +46,31 @@ describe('remote runtime resume probe', () => {
     await vi.advanceTimersByTimeAsync(24_999)
     expect(onDead).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
-    expect(onDead).toHaveBeenCalledTimes(1)
+    expect(onDead).toHaveBeenCalledExactlyOnceWith('wake_probe_timeout')
+  })
+
+  it('measures round trips from the oldest unanswered ping', async () => {
+    const onRoundTrip = vi.fn()
+    const monitor = startRemoteRuntimeSocketLiveness({
+      ping: () => true,
+      onDead: vi.fn(),
+      onRoundTrip
+    })
+    monitors.push(monitor)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(350)
+    monitor.notePong()
+    monitor.notePong()
+    expect(onRoundTrip).toHaveBeenCalledExactlyOnceWith(350)
+
+    // A ping left unanswered through a network change is not timed against the probe's pong.
+    await vi.advanceTimersByTimeAsync(10_000)
+    await vi.advanceTimersByTimeAsync(5_000)
+    probeAllRemoteRuntimeSocketsNow()
+    await vi.advanceTimersByTimeAsync(200)
+    monitor.notePong()
+    expect(onRoundTrip).toHaveBeenLastCalledWith(200)
   })
 
   it('gives a network-change probe a full window even with an older keepalive unanswered', async () => {

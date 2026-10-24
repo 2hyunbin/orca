@@ -25,8 +25,13 @@ export const REMOTE_RUNTIME_SOCKET_RESUME_PROBE_DEADLINE_MS = 8_000
 // Why: inbound data this recent suggests the path survived; the regular keepalive still covers a miss.
 export const REMOTE_RUNTIME_SOCKET_RESUME_PROBE_RECENT_ACTIVITY_MS = 3_000
 
+/** Why the monitor gave up: the regular keepalive window, or one a wake/online probe started. */
+export type RemoteRuntimeSocketDeathCause = 'keepalive_timeout' | 'wake_probe_timeout'
+
 export type RemoteRuntimeSocketLivenessMonitor = {
   noteActivity: () => void
+  /** A pong arrived; also measures round-trip time against the oldest unanswered ping. */
+  notePong: () => void
   /** Ping now; declare the socket dead unless anything arrives within the liveness window. */
   probeNow: (deadlineMs?: number) => void
   stop: () => void
@@ -48,7 +53,8 @@ export function probeAllRemoteRuntimeSocketsNow(
 export function startRemoteRuntimeSocketLiveness(args: {
   /** Returns false when nothing was sent, e.g. the socket is still connecting. */
   ping: () => boolean
-  onDead: () => void
+  onDead: (cause: RemoteRuntimeSocketDeathCause) => void
+  onRoundTrip?: (rttMs: number) => void
   options?: RemoteRuntimeSocketLivenessOptions
   now?: () => number
 }): RemoteRuntimeSocketLivenessMonitor {
@@ -60,6 +66,7 @@ export function startRemoteRuntimeSocketLiveness(args: {
   let probeSentAt: number | null = null
   let activitySinceResumeProbe = false
   let lastActivityAt: number | null = null
+  let unansweredPingAt: number | null = null
   let resumeProbeTimer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
 
@@ -73,12 +80,14 @@ export function startRemoteRuntimeSocketLiveness(args: {
     // Why: sleep and background throttling age sockets without giving them a chance to answer.
     if (tickElapsedMs < 0 || tickElapsedMs > pingIntervalMs * 1.5) {
       probeSentAt = tickAt
+      // Why: a pong for a ping sent before the stall would report the stall as round-trip time.
+      unansweredPingAt = null
       tryPing()
       return
     }
     if (probeSentAt !== null && tickAt - probeSentAt > livenessTimeoutMs) {
       stop()
-      args.onDead()
+      args.onDead('keepalive_timeout')
       return
     }
     if (probeSentAt === null) {
@@ -119,6 +128,8 @@ export function startRemoteRuntimeSocketLiveness(args: {
       return
     }
     activitySinceResumeProbe = false
+    // Why: a ping left from before the wake or network change would report the outage as RTT.
+    unansweredPingAt = null
     // Why: a socket still connecting has no path to probe yet; a deadline with no ping could kill it mid-handshake.
     if (!tryPing()) {
       return
@@ -131,7 +142,7 @@ export function startRemoteRuntimeSocketLiveness(args: {
       tryPing()
       armResumeProbeTimer(now(), deathDelayMs, deadlineMs, () => {
         stop()
-        args.onDead()
+        args.onDead('wake_probe_timeout')
       })
     })
   }
@@ -169,18 +180,32 @@ export function startRemoteRuntimeSocketLiveness(args: {
 
   function tryPing(): boolean {
     try {
-      return args.ping()
+      const sent = args.ping()
+      if (sent && unansweredPingAt === null) {
+        unansweredPingAt = now()
+      }
+      return sent
     } catch {
       // Why: ping() can throw while a socket is mid-teardown; the probe deadline still settles it.
       return true
     }
   }
 
+  function noteActivity(): void {
+    probeSentAt = null
+    activitySinceResumeProbe = true
+    lastActivityAt = now()
+  }
+
   const monitor: RemoteRuntimeSocketLivenessMonitor = {
-    noteActivity: () => {
-      probeSentAt = null
-      activitySinceResumeProbe = true
-      lastActivityAt = now()
+    noteActivity,
+    notePong: () => {
+      noteActivity()
+      const rttMs = unansweredPingAt === null ? null : now() - unansweredPingAt
+      unansweredPingAt = null
+      if (rttMs !== null && rttMs >= 0) {
+        args.onRoundTrip?.(rttMs)
+      }
     },
     probeNow,
     stop
