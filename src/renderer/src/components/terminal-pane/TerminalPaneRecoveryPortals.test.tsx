@@ -169,7 +169,10 @@ describe('TerminalPaneRecoveryPortals', () => {
 
     view.rerender(surfaces({ ...left, isVisible: false }))
     view.rerender(surfaces({ ...left, isVisible: true }))
+    expect(notices()).toHaveLength(1)
 
+    outage.environmentId = null
+    view.rerender(surfaces({ ...left, isVisible: true }))
     expect(notices()).toHaveLength(1)
   })
 })

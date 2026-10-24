@@ -88,9 +88,18 @@ export function TerminalPaneRecoveryPortals({
   const revealed = useCalmStatusReveal(notice.speaks, false, notice.since)
   // Why gated on canSpeak: the hold is for a server that answered, not for a surface that lost its
   // turn (hidden, sign-in, WSL), whose own cards must not land under a lingering notice.
-  // Why not while another surface owns an ongoing outage: two notices would show until the hold ends.
+  // Why: a surface that lost the lead while the server is still down handed its notice to
+  // another; only the leader when the outage ends may hold, so a handoff never shows two.
+  const [handedOff, setHandedOff] = useState(false)
+  if (notice.speaks && handedOff) {
+    setHandedOff(false)
+  } else if (!notice.speaks && serverDown && revealed.visible && !handedOff) {
+    setHandedOff(true)
+  }
   const noticeReveal =
-    canSpeak && (notice.speaks || !serverDown) ? revealed : { visible: false, downSince: null }
+    canSpeak && !handedOff && (notice.speaks || !serverDown)
+      ? revealed
+      : { visible: false, downSince: null }
   usePublishRemoteServerNoticeShowing(noticeEnvironmentId, noticeReveal.visible)
   if (showSshReconnectOverlay) {
     return null
