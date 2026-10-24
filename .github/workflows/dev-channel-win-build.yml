@@ -95,6 +95,17 @@ on:
         required: true
         type: string
 
+      stage_only:
+        description: Package unsigned artifacts without publishing a release
+        required: false
+        type: boolean
+        default: true
+      orcad_template:
+        description: Ship the qualified orcad template built by this run
+        required: false
+        type: boolean
+        default: true
+
       fast_release:
         description: Use Blacksmith for unsigned Windows builds
         type: boolean
@@ -111,7 +122,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  orcad-template:
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/qualified-orcad-template.yml
+    with:
+      ref: ${{ inputs.ref }}
+      fast_runners: true
+
   build-win:
+    needs: orcad-template
     if: github.repository == 'stablyai/orca'
     # Why the same environment as the mac workflows: this needs the App token
     # that can write to the dev-channel repos, and it should be reachable from
@@ -447,3 +468,14 @@ jobs:
           retention-days: 3
           compression-level: 0
           overwrite: true
+
+      - name: Retain unpacked Windows QA app
+        if: inputs.stage_only
+        uses: actions/upload-artifact@v7
+        with:
+          name: qa-windows-unpacked-${{ inputs.ref }}
+          path: dist/win-unpacked/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
