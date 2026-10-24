@@ -198,6 +198,31 @@ export function clearRecentRuntimeCompatibilityFailure(
     // Why: a saved endpoint can reconnect to a different runtime version; its predecessor's
     // positive capability verdict must not route a structured request to the replacement.
     runtimeCompatibilityChecks.delete(trimmed)
+    // Why (STA-11921): the host publishes a probe's answer before settling it, so the detached
+    // pending probe can never record it; the answer itself is the proof synchronous readers need.
+    if (
+      observedStatus &&
+      cached.failedAt === null &&
+      !cached.provenCompatible &&
+      isRuntimeStatusCompatible(observedStatus)
+    ) {
+      rememberRuntimeEnvironmentCompatibility(trimmed, {
+        check: Promise.resolve(),
+        failedAt: null,
+        provenCompatible: true,
+        status: observedStatus,
+        statusCheckedAt: Date.now()
+      })
+    }
+  }
+}
+
+function isRuntimeStatusCompatible(status: RuntimeStatus): boolean {
+  try {
+    assertRuntimeStatusCompatible(status)
+    return true
+  } catch {
+    return false
   }
 }
 

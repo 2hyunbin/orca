@@ -5,6 +5,7 @@ import {
   assertRuntimeEnvironmentCapability,
   clearRecentRuntimeCompatibilityFailure,
   clearRuntimeCompatibilityCacheForTests,
+  readCachedRuntimeEnvironmentCapability,
   runtimeEnvironmentSupportsCapability
 } from './runtime-rpc-client'
 import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from './runtime-rpc-result'
@@ -737,6 +738,35 @@ describe('runtime RPC client routing', () => {
         'Project setup is unavailable.'
       )
     ).rejects.toThrow('Project setup is unavailable.')
+  })
+
+  it('keeps a probe its own status publication answered readable synchronously (STA-11921)', async () => {
+    const status: RuntimeStatus = {
+      runtimeId: 'remote-runtime',
+      rendererGraphEpoch: 1,
+      graphStatus: 'ready',
+      authoritativeWindowId: 1,
+      liveTabCount: 0,
+      liveLeafCount: 0,
+      runtimeProtocolVersion: RUNTIME_PROTOCOL_VERSION,
+      minCompatibleRuntimeClientVersion: MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION,
+      capabilities: ['agent-session.host-authority.v1']
+    }
+    // The host status owner publishes a verified snapshot before it settles the request's waiter.
+    runtimeEnvironmentCall.mockImplementation(async () => {
+      await Promise.resolve()
+      clearRecentRuntimeCompatibilityFailure('env-published', status)
+      return { id: 'status', ok: true, result: status, _meta: { runtimeId: 'remote-runtime' } }
+    })
+
+    await expect(
+      runtimeEnvironmentSupportsCapability('env-published', 'agent-session.host-authority.v1')
+    ).resolves.toBe(true)
+
+    expect(
+      readCachedRuntimeEnvironmentCapability('env-published', 'agent-session.host-authority.v1')
+    ).toBe(true)
+    expect(runtimeEnvironmentCall).toHaveBeenCalledTimes(1)
   })
 
   it('marks remote UI-owned runtime calls so feature interaction tracking can ignore them', async () => {
