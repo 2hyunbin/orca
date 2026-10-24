@@ -8,24 +8,21 @@ import type { AgentStatusEntry } from '@/store/slices/agent-status'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { Tab } from '../../../shared/tab-types'
 import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
-import { makeTab, makeWorktree } from '@/store/slices/store-test-helpers'
+import { makeTab, makeUnifiedTab, makeWorktree } from '@/store/slices/store-test-helpers'
 import type { AppState } from '@/store/types'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { getTabAgentExitOwner } from './tab-agent-exit-owner'
 
 const leaf = '11111111-1111-4111-8111-111111111111'
 const pane = makePaneKey('tab', leaf)
-const tab: TerminalTab = {
+const tab: TerminalTab = makeTab({
   id: 'tab',
   worktreeId: 'workspace',
   ptyId: 'pty-a',
   title: 'zsh',
   launchAgent: 'codex',
-  customTitle: null,
-  color: null,
-  sortOrder: 0,
   createdAt: 0
-}
+})
 const row = (state: AgentStatusEntry['state']): AgentStatusEntry => ({
   paneKey: pane,
   agentType: 'codex',
@@ -38,18 +35,17 @@ const row = (state: AgentStatusEntry['state']): AgentStatusEntry => ({
 function setup(titles?: readonly string[], patch?: Partial<AppState>) {
   const store = createStore(createAppState)
   const status = getAgentStatusOwner(store)
-  const items: Tab[] = (titles ?? []).map((label, n) => ({
-    id: `item-${n}`,
-    entityId: tab.id,
-    contentType: 'terminal',
-    worktreeId: tab.worktreeId,
-    groupId: `g${n}`,
-    label,
-    customLabel: null,
-    color: null,
-    sortOrder: n,
-    createdAt: 0
-  }))
+  const items: Tab[] = (titles ?? []).map((label, n) =>
+    makeUnifiedTab({
+      id: `item-${n}`,
+      entityId: tab.id,
+      worktreeId: tab.worktreeId,
+      groupId: `g${n}`,
+      label,
+      sortOrder: n,
+      createdAt: 0
+    })
+  )
   store.setState({
     tabsByWorktree: { workspace: [tab] },
     ptyIdsByTabId: { tab: ['pty-a'] },

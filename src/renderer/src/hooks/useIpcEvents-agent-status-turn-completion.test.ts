@@ -34,17 +34,9 @@ describe('useIpcEvents agent status turn completion', () => {
 
     stubReactSyncEffect()
     vi.doMock('../store', async () => {
-      const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
-
-      const fixture = {
-        useAppStore: {
-          subscribe: vi.fn(() => () => {}),
-          getState: () => storeState
-        }
-      }
-      const readFixture = fixture.useAppStore.getState
-
-      return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+      const { createStaticAgentStatusStoreFixture } =
+        await import('@/store/slices/store-test-helpers')
+      return createStaticAgentStatusStoreFixture(() => storeState)
     })
     vi.doMock('./agent-hook-completion-notifications', () => ({
       observeAgentHookCompletionForNotification,

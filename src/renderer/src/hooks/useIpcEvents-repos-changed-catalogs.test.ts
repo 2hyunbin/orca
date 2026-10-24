@@ -46,14 +46,9 @@ describe('runtime host catalog refresh on reposChanged', () => {
         return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
       })
       vi.doMock('../store', async () => {
-        const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
-
-        const fixture = {
-          useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-        }
-        const readFixture = fixture.useAppStore.getState
-
-        return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+        const { createStaticAgentStatusStoreFixture } =
+          await import('@/store/slices/store-test-helpers')
+        return createStaticAgentStatusStoreFixture(() => state)
       })
       const noopListener = (): (() => void) => () => {}
       const autoStubNamespace = new Proxy(
@@ -150,14 +145,9 @@ describe('runtime host catalog refresh on reposChanged', () => {
         return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
       })
       vi.doMock('../store', async () => {
-        const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
-
-        const fixture = {
-          useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-        }
-        const readFixture = fixture.useAppStore.getState
-
-        return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+        const { createStaticAgentStatusStoreFixture } =
+          await import('@/store/slices/store-test-helpers')
+        return createStaticAgentStatusStoreFixture(() => state)
       })
       const noopListener = (): (() => void) => () => {}
       const autoStubNamespace = new Proxy(
@@ -220,14 +210,9 @@ describe('repo catalog refresh on repos:changed', () => {
       return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
     })
     vi.doMock('../store', async () => {
-      const { withAgentStatusFixture } = await import('@/store/slices/store-test-helpers')
-
-      const fixture = {
-        useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => state }
-      }
-      const readFixture = fixture.useAppStore.getState
-
-      return withAgentStatusFixture(fixture, () => readFixture() ?? {})
+      const { createStaticAgentStatusStoreFixture } =
+        await import('@/store/slices/store-test-helpers')
+      return createStaticAgentStatusStoreFixture(() => state)
     })
     const noopListener = (): (() => void) => () => {}
     const autoStubNamespace = new Proxy(

@@ -1,3 +1,4 @@
+import { makeTab, makeUnifiedTab } from '@/store/slices/store-test-helpers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react'
@@ -28,29 +29,25 @@ afterEach(() => {
 
 it('reads scoped root history across mount, removal, generation reset and new keyed panes', () => {
   vi.useFakeTimers()
-  const tab: TerminalTab = {
+  const tab: TerminalTab = makeTab({
     id: 'icons',
     ptyId: null,
     worktreeId: 'wt',
     title: 'zsh',
     launchAgent: 'codex',
-    customTitle: null,
-    color: null,
-    sortOrder: 0,
     createdAt: 0
-  }
-  const items: Tab[] = ['codex', 'zsh'].map((label, n) => ({
-    id: `item-${n}`,
-    entityId: tab.id,
-    contentType: 'terminal',
-    worktreeId: 'wt',
-    groupId: `g${n}`,
-    label,
-    customLabel: null,
-    color: null,
-    sortOrder: n,
-    createdAt: 0
-  }))
+  })
+  const items: Tab[] = ['codex', 'zsh'].map((label, n) =>
+    makeUnifiedTab({
+      id: `item-${n}`,
+      entityId: tab.id,
+      worktreeId: 'wt',
+      groupId: `g${n}`,
+      label,
+      sortOrder: n,
+      createdAt: 0
+    })
+  )
   applyAgentStatusPatch(useAppStore, {
     tabsByWorktree: { wt: [tab] },
     ptyIdsByTabId: { icons: ['pty-a'] },
