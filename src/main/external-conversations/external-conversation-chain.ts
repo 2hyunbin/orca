@@ -9,8 +9,8 @@ type Lane = {
   controller: AbortController
   signal: AbortSignal
   tail: Promise<unknown>
-  // Every item's end: aborted queued items end at once, while the head may still be finishing.
-  settled: Promise<unknown>
+  // Aborted followers settle before the running item, so the tail cannot prove it ended.
+  running: Promise<Delivery> | null
 }
 
 export function refusalOf(signal: AbortSignal): ConnectorRefusal {
@@ -25,6 +25,9 @@ export class ConversationChain {
 
   enqueue(id: string, run: (signal: AbortSignal) => Promise<Delivery>): Promise<Delivery> {
     const lane = this.lanes.get(id) ?? this.openLane(id)
+    if (lane.signal.aborted) {
+      return Promise.resolve(refused(refusalOf(lane.signal)))
+    }
     const previous = lane.tail
     const turn = new Promise<void>((resolve) => {
       const onAbort = (): void => resolve()
@@ -34,32 +37,44 @@ export class ConversationChain {
         resolve()
       })
     })
-    const result = turn.then(() =>
-      lane.signal.aborted ? refused(refusalOf(lane.signal)) : run(lane.signal)
-    )
+    const result = turn.then(() => {
+      if (lane.signal.aborted) {
+        return refused(refusalOf(lane.signal))
+      }
+      const running = run(lane.signal)
+      lane.running = running
+      return running.finally(() => {
+        lane.running = null
+        if (lane.signal.aborted && this.lanes.get(id) === lane) {
+          this.lanes.delete(id)
+        }
+      })
+    })
     const tail = result.catch(() => undefined)
     lane.tail = tail
-    lane.settled = Promise.all([lane.settled, tail])
     void tail.then(() => {
-      if (this.lanes.get(id) === lane && lane.tail === tail) {
+      if (this.lanes.get(id) === lane && lane.tail === tail && !lane.running) {
         this.lanes.delete(id)
       }
     })
     return result
   }
 
-  /**
-   * With laneSignal, cancel only that lane so a replacement lane remains untouched. Returns when the
-   * cancelled lane's work has all ended, or null when there was none.
-   */
-  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): Promise<unknown> | null {
+  /** Resolves true if no running work could publish; laneSignal protects a replacement lane. */
+  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): Promise<boolean> | null {
     const lane = this.lanes.get(id)
     if (!lane || (laneSignal && lane.signal !== laneSignal)) {
       return null
     }
-    this.lanes.delete(id)
     lane.controller.abort(reason)
-    return lane.settled
+    if (!lane.running) {
+      this.lanes.delete(id)
+      return Promise.resolve(true)
+    }
+    return lane.running.then(
+      (delivery) => delivery.outcome === 'refused',
+      () => false
+    )
   }
 
   private openLane(id: string): Lane {
@@ -68,7 +83,7 @@ export class ConversationChain {
       controller,
       signal: AbortSignal.any([this.signal, controller.signal]),
       tail: Promise.resolve(),
-      settled: Promise.resolve()
+      running: null
     }
     this.lanes.set(id, lane)
     return lane

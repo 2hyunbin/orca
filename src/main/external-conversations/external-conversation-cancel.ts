@@ -1,3 +1,4 @@
+import { withTimeout } from '../../shared/promise-timeout-fallback'
 import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import { createLaunchedAgentWriteGuard } from '../runtime/launched-agent-write-guard'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
@@ -15,6 +16,9 @@ import {
   type ConversationKey,
   type Delivery
 } from './external-conversation-types'
+
+// Refuse rather than claim cancellation when a host operation ignores abort.
+export const CANCEL_SETTLE_TIMEOUT_MS = 5_000
 
 export type CancelTerminal = PromptTerminal & Pick<OrcaRuntimeService, 'getPtyLivenessVerdict'>
 
@@ -43,12 +47,23 @@ export async function cancelConversation(
   const id = conversationId(key)
   const settling = seam.chain.cancel(id, 'conversation_cancelled')
   // A launch that already published its agent links it before ending, so look only after that.
-  await settling
+  const headRefused = settling
+    ? await withTimeout<boolean | null>(settling, CANCEL_SETTLE_TIMEOUT_MS, null)
+    : false
+  if (signal.aborted) {
+    return refused('connectors_disabled')
+  }
+  if (headRefused === null) {
+    return refused('agent_not_reachable')
+  }
   const linked = findLink(seam.store, key)
   if (!linked) {
-    // A start that ended unlinked reached no agent, so settling it stopped everything.
-    if (settling) {
+    // Only a refused start proves no unlinked agent needs stopping.
+    if (headRefused) {
       return { outcome: 'accepted' }
+    }
+    if (settling) {
+      return refused('agent_not_reachable')
     }
     throw new Error('external_conversation_not_found')
   }

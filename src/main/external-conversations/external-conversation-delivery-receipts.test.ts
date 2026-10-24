@@ -71,6 +71,16 @@ describe('DeliveryReceipts ledger capacity', () => {
       outcome: 'refused',
       reason: 'delivery_backlog_full'
     })
+    for (const method of ['connector.send', 'connector.start'] as const) {
+      await expect(receipts.run(KEY, method, method, [], never)).resolves.toEqual({
+        outcome: 'refused',
+        reason: 'delivery_backlog_full'
+      })
+    }
+    expect(db.countPendingMutationReceipts(['connector:dev'])).toBe(
+      CONNECTOR_PENDING_RECEIPT_LIMIT + CONNECTOR_CANCEL_RECEIPT_RESERVE
+    )
+    expect(db.beginMutationReceipt(ORDINARY).disposition).toBe('started')
     db.close()
   })
 
