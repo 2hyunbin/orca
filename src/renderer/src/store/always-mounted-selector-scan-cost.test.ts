@@ -1,3 +1,4 @@
+import type { AgentStatusEntry } from '@/store/slices/agent-status-contract'
 import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
 import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
@@ -84,7 +85,12 @@ describe('local preflight context worktree lookup', () => {
       repos: makeRepoRows(repoReads),
       worktreesByRepo,
       projects: [],
-      runtimeEnvironments,
+      runtimeEnvironments: runtimeEnvironments.map(({ id }) => ({
+        id,
+        name: id,
+        endpoint: '',
+        createdAt: 0
+      })),
       runtimeEnvironmentCatalogHydrated: true
     })
     worktreeReads.count = 0
@@ -285,9 +291,9 @@ describe('project runtime session summary', () => {
       {
         ...state,
         agentStatusByPaneKey: {
-          'tab-0-0-0:leaf': { state: 'working', tabId: 'tab-0-0-0' },
-          'tab-1-0-0:leaf': { state: 'working', tabId: 'tab-1-0-0' },
-          'tab-0-1-0:leaf': { state: 'done', tabId: 'tab-0-1-0' }
+          'tab-0-0-0:leaf': statusRow('tab-0-0-0', 'working'),
+          'tab-1-0-0:leaf': statusRow('tab-1-0-0', 'working'),
+          'tab-0-1-0:leaf': statusRow('tab-0-1-0', 'done')
         }
       },
       'repo-0'
@@ -296,3 +302,16 @@ describe('project runtime session summary', () => {
     expect(summary.activeTaskCount).toBe(1)
   })
 })
+
+function statusRow(tabId: string, state: AgentStatusEntry['state']): AgentStatusEntry {
+  return {
+    tabId,
+    paneKey: `${tabId}:leaf`,
+    state,
+    agentType: 'codex',
+    prompt: '',
+    updatedAt: 1,
+    stateStartedAt: 1,
+    stateHistory: []
+  }
+}

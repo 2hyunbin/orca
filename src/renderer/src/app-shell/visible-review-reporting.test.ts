@@ -74,7 +74,7 @@ describe('review surface visibility union', () => {
 
 describe('review report selector work', () => {
   it('does not rebuild candidates or serialize on unrelated agent updates', () => {
-    const current = state().getState()
+    const current = getAgentStatusOwner(state()).getState()
     const select = createVisibleReviewReportIdentitySelector()
     const stringify = vi.spyOn(JSON, 'stringify')
     try {
@@ -82,9 +82,8 @@ describe('review report selector work', () => {
       const initialSerializations = stringify.mock.calls.length
       expect(initialSerializations).toBeGreaterThan(0)
       for (let tick = 0; tick < 1_000; tick++) {
-        expect(select({ ...current, agentStatusByPaneKey: {}, agentStatusEpoch: tick })).toBe(
-          initial
-        )
+        const statusOnly = { ...current, agentStatusByPaneKey: {}, agentStatusEpoch: tick }
+        expect(select(statusOnly)).toBe(initial)
       }
       expect(stringify).toHaveBeenCalledTimes(initialSerializations)
     } finally {
@@ -93,7 +92,7 @@ describe('review report selector work', () => {
   })
 
   it('recomputes for every relevant input without retaining the whole state', () => {
-    const current = state().getState()
+    const current = getAgentStatusOwner(state()).getState()
     const updates: Partial<AgentStatusReadState>[] = [
       { activeView: 'settings' },
       { activeWorktreeId: 'card' },

@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../../shared/constants'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -106,7 +107,10 @@ export function registerAgentStatusToolAssistantFieldsTests(): void {
       const store = createTestStore()
       const setGeneratedTabTitleFromAgentPrompt = vi.fn()
       applyAgentStatusPatch(store, {
-        settings: { ...store.getState().settings, tabAutoGenerateTitle: true },
+        settings: {
+          ...(store.getState().settings ?? getDefaultSettings('/tmp')),
+          tabAutoGenerateTitle: true
+        },
         setGeneratedTabTitleFromAgentPrompt
       })
       store

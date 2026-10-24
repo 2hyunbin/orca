@@ -62,7 +62,8 @@ beforeEach(() => {
           id: 'tab-1',
           contentType: 'agent-session',
           entityId: 'chat-1',
-          worktreeId: 'workspace-1'
+          worktreeId: 'workspace-1',
+          executionHostId: 'runtime:peer'
         })
       ]
     }
@@ -88,7 +89,7 @@ it('shares pending across menu openings and suppresses dispatch after source ret
   const first = runNativeChatCliFork(args)
   await runNativeChatCliFork(args)
   expect(mocks.prepare).toHaveBeenCalledTimes(1)
-  mocks.listeners.forEach((listener) => listener())
+  useAppStore.setState({ activeWorktreeId: 'workspace-1' })
   expect(mocks.error).not.toHaveBeenCalled()
   closeSource()
   settle(prepared)

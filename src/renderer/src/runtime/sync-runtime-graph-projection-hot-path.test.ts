@@ -1,3 +1,4 @@
+import type { AgentStatusEntry } from '@/store/slices/agent-status-contract'
 import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -37,7 +38,7 @@ const {
 
 // ── Reference implementations: the pre-change bodies, kept verbatim ────────────────────
 
-type MainAgentStatus = AgentStatusReadState['agentStatusByPaneKey'][string]['mainAgent']
+type MainAgentStatus = Record<string, AgentStatusEntry>[string]['mainAgent']
 function mainAgentKey(mainAgent: MainAgentStatus) {
   return mainAgent ? [mainAgent.state, mainAgent.outcome ?? null, mainAgent.stateStartedAt] : null
 }
@@ -101,7 +102,7 @@ function referenceBrowserProjection(state: AgentStatusReadState): string {
 }
 
 /** The pre-change agent-status serialization, including its `localeCompare` sort. */
-function referenceAgentStatusProjection(map: AgentStatusReadState['agentStatusByPaneKey']): string {
+function referenceAgentStatusProjection(map: Record<string, AgentStatusEntry>): string {
   return JSON.stringify(
     Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -307,7 +308,7 @@ describe('agent-status projection sort', () => {
       return seed.toString(16).padStart(8, '0')
     }
     const paneKeys = Array.from({ length: 500 }, () => `${nextHex()}-${nextHex()}:${nextHex()}`)
-    const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
+    const map: Record<string, AgentStatusEntry> = {}
     for (const [index, paneKey] of paneKeys.entries()) {
       map[paneKey] = makeAgentStatusEntry({ paneKey, prompt: `prompt ${index}` })
     }
@@ -341,7 +342,7 @@ describe('agent-status projection sort', () => {
   })
 
   it('is deterministic for keys where locale and code-unit order disagree', () => {
-    const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
+    const map: Record<string, AgentStatusEntry> = {}
     for (const paneKey of ['b:leaf', 'A:leaf', 'a:leaf', 'á:leaf', 'B:leaf']) {
       map[paneKey] = makeAgentStatusEntry({ paneKey })
     }

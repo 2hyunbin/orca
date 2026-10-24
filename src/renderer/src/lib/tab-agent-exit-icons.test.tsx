@@ -29,6 +29,7 @@ it('reads scoped root history across mount, removal, generation reset and new ke
   vi.useFakeTimers()
   const tab: TerminalTab = {
     id: 'icons',
+    ptyId: null,
     worktreeId: 'wt',
     title: 'zsh',
     launchAgent: 'codex',

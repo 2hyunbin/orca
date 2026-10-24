@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../../shared/constants'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -34,7 +35,7 @@ function seedWorkspace(store: ReturnType<typeof createTestStore>): void {
     },
     ptyIdsByTabId: { 'tab-1': ['pty-1'] },
     settings: {
-      ...store.getState().settings,
+      ...(store.getState().settings ?? getDefaultSettings('/tmp')),
       experimentalAgentHibernation: true,
       agentHibernationIdleMs: DEFAULT_AGENT_HIBERNATION_IDLE_MS
     }

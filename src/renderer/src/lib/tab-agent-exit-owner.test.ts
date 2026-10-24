@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../shared/constants'
 import { ALL_TUI_AGENTS } from '../../../shared/tui-agent-display-names'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStore } from 'zustand/vanilla'
@@ -356,6 +357,7 @@ it.each(ALL_TUI_AGENTS)(
           [pane]: {
             entry: { ...row('done'), agentType: agent },
             worktreeId: 'workspace',
+            agentType: agent,
             retainedAt: 20
           }
         }
@@ -372,7 +374,10 @@ it('uses real hook and generated-title publications without clearing a working l
   store.setState({
     clearTabLaunchAgent: clear,
     setGeneratedTabTitlesFromAgentPrompts: generated,
-    settings: { ...store.getState().settings, tabAutoGenerateTitle: true }
+    settings: {
+      ...(store.getState().settings ?? getDefaultSettings('/tmp')),
+      tabAutoGenerateTitle: true
+    }
   })
   store
     .getState()

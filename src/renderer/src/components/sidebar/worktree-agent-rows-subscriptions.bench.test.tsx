@@ -1,3 +1,4 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // @vitest-environment happy-dom
@@ -70,7 +71,10 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
         function VisibleProbe({ index }: { index: number }) {
           const rows = useWorktreeAgentRows(`wt-${index}`, true)
           useWorktreeAgentRows(`wt-${index}`, false)
-          useAppStore(useShallow((state) => selectAgentRowsUnread(state, rows)))
+          useAgentStatusSelector(
+            useShallow((state) => selectAgentRowsUnread(state, rows)),
+            rows.map((row) => row.paneKey)
+          )
           renders += 1
           return null
         }

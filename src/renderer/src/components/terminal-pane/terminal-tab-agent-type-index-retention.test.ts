@@ -47,8 +47,8 @@ describe('terminal tab agent type source lifetime', () => {
       }
       applyAgentStatusPatch(store, { agentStatusByPaneKey: statuses })
       expect(select(statuses, 'tab-1')).toEqual({ 'leaf-a': 'claude' })
-      const unsubscribe = store.subscribe((state) => {
-        select(state.agentStatusByPaneKey, 'tab-1')
+      const unsubscribe = getAgentStatusOwner(store).subscribeAggregate(() => {
+        select(getAgentStatusOwner(store).getSnapshot(), 'tab-1')
       })
       selectLiveTabAgentPanes(statuses, 'tab-1')
       selectTabBar({ agentStatusByPaneKey: statuses, settings: { experimentalNativeChat: true } })

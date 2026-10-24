@@ -55,12 +55,26 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => mockStoreState,
+    getState: () => {
+      const { agentStatusByPaneKey: _live, ...app } = mockStoreState
+      return app
+    },
     subscribe: (listener: (state: StoreState) => void) => {
       storeSubscribers.push(listener)
       return () => {
         storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
       }
+    }
+  }
+}))
+
+vi.mock('@/store/agent-status', () => ({
+  getAgentStatusState: () => mockStoreState,
+  getAgentStatusEntry: (key: string) => mockStoreState.agentStatusByPaneKey[key],
+  subscribeAgentStatusState: (listener: (state: StoreState) => void) => {
+    storeSubscribers.push(listener)
+    return () => {
+      storeSubscribers = storeSubscribers.filter((entry) => entry !== listener)
     }
   }
 }))
@@ -158,6 +172,7 @@ describe('command-finished drop and a Done that lands after it', () => {
     vi.useFakeTimers()
     const { connectPanePty } = await import('./pty-connection')
     const { createTestStore } = await import('@/store/slices/store-test-helpers')
+    const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
     vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
     const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
     const transport = createMockTransport('pty-opencode-run')
@@ -205,7 +220,7 @@ describe('command-finished drop and a Done that lands after it', () => {
       setStatus: (state) => {
         realStore.getState().setAgentStatus(paneKey, { state, prompt: '', agentType: 'opencode' })
         mockStoreState.agentStatusByPaneKey[paneKey] =
-          realStore.getState().agentStatusByPaneKey[paneKey]
+          getAgentStatusOwner(realStore).getSnapshot()[paneKey]
       }
     }
   }

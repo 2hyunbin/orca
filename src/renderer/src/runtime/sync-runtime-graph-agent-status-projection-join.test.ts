@@ -1,4 +1,4 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AgentStatusEntry } from '@/store/slices/agent-status-contract'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -23,8 +23,8 @@ function makeEntry(index: number, overrides: Record<string, unknown> = {}): neve
   } as never
 }
 
-function mapOf(indices: readonly number[]): AgentStatusReadState['agentStatusByPaneKey'] {
-  const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
+function mapOf(indices: readonly number[]): Record<string, AgentStatusEntry> {
+  const map: Record<string, AgentStatusEntry> = {}
   for (const index of indices) {
     map[`tab-${index}:leaf-0`] = makeEntry(index)
   }
@@ -32,9 +32,7 @@ function mapOf(indices: readonly number[]): AgentStatusReadState['agentStatusByP
 }
 
 /** A collection refresh can replace its container while preserving the rows. */
-function respread(
-  map: AgentStatusReadState['agentStatusByPaneKey']
-): AgentStatusReadState['agentStatusByPaneKey'] {
+function respread(map: Record<string, AgentStatusEntry>): Record<string, AgentStatusEntry> {
   return { ...map }
 }
 

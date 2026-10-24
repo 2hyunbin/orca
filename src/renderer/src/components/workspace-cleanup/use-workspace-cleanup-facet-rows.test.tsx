@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../../shared/constants'
 import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
@@ -17,8 +18,8 @@ import { makeFacetCandidate } from './workspace-cleanup-facet.test.fixture'
 const holders = vi.hoisted<{ state: AgentStatusReadState | null }>(() => ({ state: null }))
 const counts = vi.hoisted(() => ({ facetCounts: 0, measured: 0, queries: 0 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: <T,>(selector: (state: AgentStatusReadState) => T): T => {
+vi.mock('@/store/agent-status', () => ({
+  useAgentStatusSelector: <T,>(selector: (state: AgentStatusReadState) => T): T => {
     if (!holders.state) {
       throw new Error('Missing test state')
     }
@@ -63,7 +64,7 @@ function makeState(): AgentStatusReadState {
     worktreesByRepo: {},
     hostedReviewCache: {},
     repos: [],
-    settings: {},
+    settings: getDefaultSettings('/tmp'),
     workspaceStatuses: cloneDefaultWorkspaceStatuses(),
     lastVisitedAtByWorktreeId: {},
     agentStatusByPaneKey: {},

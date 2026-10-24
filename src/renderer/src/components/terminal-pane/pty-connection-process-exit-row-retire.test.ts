@@ -60,12 +60,26 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => mockStoreState,
+    getState: () => {
+      const { agentStatusByPaneKey: _live, ...app } = mockStoreState
+      return app
+    },
     subscribe: (listener: (state: StoreState) => void) => {
       storeSubscribers.push(listener)
       return () => {
         storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
       }
+    }
+  }
+}))
+
+vi.mock('@/store/agent-status', () => ({
+  getAgentStatusState: () => mockStoreState,
+  getAgentStatusEntry: (key: string) => mockStoreState.agentStatusByPaneKey[key],
+  subscribeAgentStatusState: (listener: (state: StoreState) => void) => {
+    storeSubscribers.push(listener)
+    return () => {
+      storeSubscribers = storeSubscribers.filter((entry) => entry !== listener)
     }
   }
 }))
@@ -178,9 +192,10 @@ async function seedHookRow(
 ): Promise<AgentStatusEntry> {
   // Why the real slice: the row must carry the acceptedStatusSeq a real accepted hook stamps.
   const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
   const realStore = createTestStore()
   realStore.getState().setAgentStatus(paneKey, { state, prompt: 'ship it', agentType })
-  const row = realStore.getState().agentStatusByPaneKey[paneKey]
+  const row = getAgentStatusOwner(realStore).getSnapshot()[paneKey]
   mockStoreState.agentStatusByPaneKey[paneKey] = row
   return row
 }

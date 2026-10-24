@@ -87,13 +87,18 @@ describe('buildMobileSessionTabSnapshots', () => {
     const state = makeState({
       worktreesByRepo: {
         'repo-1': [
-          { id: 'wt-duplicate', repoId: 'repo-1', hostId: 'local', instanceId: 'local-instance' },
-          {
+          makeWorktree({
+            id: 'wt-duplicate',
+            repoId: 'repo-1',
+            hostId: 'local',
+            instanceId: 'local-instance'
+          }),
+          makeWorktree({
             id: 'wt-duplicate',
             repoId: 'repo-1',
             hostId: 'ssh:ssh-1',
             instanceId: 'ssh-instance'
-          }
+          })
         ]
       },
       tabsByWorktree: {

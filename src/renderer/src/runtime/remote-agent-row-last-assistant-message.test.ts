@@ -1,3 +1,5 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 /**
  * #12906 / STA-3596: on a paired (remote) runtime the sidebar agent row renders
  * its identity line and its status subtitle, but the last-assistant-message line
@@ -44,13 +46,10 @@ import {
 
 // Why: web-session-tabs-sync imports the app-level store singleton; this
 // harness drives a createTestStore instance instead, like its sibling suites.
-vi.mock('../store', () => ({
-  useAppStore: {
-    setState: vi.fn(),
-    getState: vi.fn(() => ({})),
-    subscribe: vi.fn(() => () => {})
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  return { useAppStore: createTestStore() }
+})
 
 const WT = 'repo1::/path/wt1'
 const ENV = 'remote-env-1'
@@ -148,9 +147,9 @@ function applyHostSnapshot(
   now: number
 ): boolean {
   vi.setSystemTime(now)
-  const state = store.getState()
+  const state = getAgentStatusOwner(store).getState()
   const patch = applyFreshWebSessionTabsSnapshot(state, snapshot, ENV, now)
-  store.setState(patch)
+  applyAgentStatusPatch(store, patch)
   return patch !== state
 }
 
@@ -191,7 +190,7 @@ function seedPairedClientStore(): TestStore {
 /** The value both agent-row renderers read, keyed by pane. Byte-identical to
  *  useWorktreeAgentRows' inputs, minus React. */
 function observeRowMessages(store: TestStore, now: number): Record<string, string | undefined> {
-  const state = store.getState()
+  const state = getAgentStatusOwner(store).getState()
   const tabs = state.tabsByWorktree[WT] ?? []
   const rows = buildWorktreeAgentRows({
     tabs,

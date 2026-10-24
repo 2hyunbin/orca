@@ -822,6 +822,8 @@ describe('useNativeChatLiveSession — notFound retry (#8401)', () => {
     applyAgentStatusPatch(useAppStore, {
       agentStatusByPaneKey: {
         [PANE]: {
+          paneKey: PANE,
+          agentType: 'codex',
           state: 'working',
           prompt: '',
           stateHistory: [],

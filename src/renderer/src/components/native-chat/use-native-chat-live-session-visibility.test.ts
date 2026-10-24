@@ -124,6 +124,8 @@ describe('useNativeChatLiveSession visibility', () => {
     applyAgentStatusPatch(useAppStore, {
       agentStatusByPaneKey: {
         [BASE_ARGS.paneKey]: {
+          paneKey: BASE_ARGS.paneKey,
+          agentType: 'codex',
           state: 'working',
           prompt: '',
           stateHistory: [],

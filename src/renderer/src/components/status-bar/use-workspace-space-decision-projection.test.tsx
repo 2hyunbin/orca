@@ -1,9 +1,8 @@
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
-import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { useStore } from 'zustand'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -22,10 +21,9 @@ import { getWorkspaceSpaceWorktreeIdentity } from './workspace-space-delete-sele
 
 let store: ReturnType<typeof createTestStore>
 vi.mock('../../store', () => ({
-  useAppStore: Object.assign(
-    <Result,>(selector: (state: AgentStatusReadState) => Result) => useStore(store, selector),
-    { getState: () => getAgentStatusOwner(store).getState() }
-  )
+  get useAppStore() {
+    return store
+  }
 }))
 
 function row(
@@ -116,7 +114,7 @@ describe('mounted Space decision projection', () => {
     seed(Array.from({ length: 20 }, (_, i) => row(`w${i}`)))
     let liveProbes = 0,
       retainedProbes = 0
-    const live: AgentStatusReadState['agentStatusByPaneKey'] = {}
+    const live: Record<string, AgentStatusEntry> = {}
     const retained: AgentStatusReadState['retainedAgentsByPaneKey'] = {}
     for (let i = 0; i < 10; i += 1) {
       const paneKey = `w${i}-tab:legacy`
@@ -286,12 +284,34 @@ describe('mounted Space decision projection', () => {
       }
     }
     applyAgentStatusPatch(store, {
-      agentStatusByPaneKey: new Proxy<AgentStatusReadState['agentStatusByPaneKey']>({}, trap),
+      agentStatusByPaneKey: {},
       migrationUnsupportedByPtyId: new Proxy<AgentStatusReadState['migrationUnsupportedByPtyId']>(
         {},
         trap
       ),
       retainedAgentsByPaneKey: new Proxy<AgentStatusReadState['retainedAgentsByPaneKey']>({}, trap)
+    })
+    const live = getAgentStatusOwner(store).getSnapshot()
+    const values = Object.values,
+      entries = Object.entries,
+      keys = Object.keys
+    vi.spyOn(Object, 'values').mockImplementation((value) => {
+      if (value === live) {
+        throw new Error('empty analysis enumerated live status')
+      }
+      return values(value)
+    })
+    vi.spyOn(Object, 'entries').mockImplementation((value) => {
+      if (value === live) {
+        throw new Error('empty analysis enumerated live status')
+      }
+      return entries(value)
+    })
+    vi.spyOn(Object, 'keys').mockImplementation((value) => {
+      if (value === live) {
+        throw new Error('empty analysis enumerated live status')
+      }
+      return keys(value)
     })
     expect(mountProjection().result.current.decisionDetailsByWorktreeId.size).toBe(0)
   })

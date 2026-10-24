@@ -1,3 +1,4 @@
+import { getDefaultSettings } from '../../../../shared/constants'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -260,7 +261,10 @@ describe('setAgentStatuses', () => {
       })
     )
     applyAgentStatusPatch(store, {
-      settings: { ...store.getState().settings, tabAutoGenerateTitle: true },
+      settings: {
+        ...(store.getState().settings ?? getDefaultSettings('/tmp')),
+        tabAutoGenerateTitle: true
+      },
       tabsByWorktree
     })
     applyAgentStatusPatch(store, { unifiedTabsByWorktree })

@@ -79,7 +79,7 @@ function setup(size: number) {
           root: { type: 'leaf', leafId: leaf },
           activeLeafId: leaf,
           expandedLeafId: null,
-          ptyIdsByLeafId: { [leaf]: tab.ptyId }
+          ptyIdsByLeafId: { [leaf]: tab.ptyId ?? null }
         }
       ])
     ),

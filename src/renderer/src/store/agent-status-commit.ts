@@ -61,7 +61,7 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
   let mirrorBoundaries = new Map<string, HostWorkingClientBoundary>()
   let authority = createAgentPaneAuthority()
   let observations = new AgentStatusObservationSequencer(createAgentStatusAuthorityId('renderer'))
-  let live: AgentStatusSnapshot = {}
+  let live: AgentStatusSnapshot = Object.setPrototypeOf({}, null)
   let stage: StatusStage | null = null
   let pending: { app: AppState; accept: () => void } | null = null
   let appDepth = 0

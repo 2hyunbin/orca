@@ -31,7 +31,7 @@ function storeState(): AgentStatusReadState {
     acknowledgedAgentsByPaneKey: {},
     agentStatusEpoch: 0,
     // A slice the counts never read: writing it is what "unrelated store write" means.
-    unreadCountsByWorktree: {}
+    unreadTerminalTabs: {}
   })
 }
 
@@ -128,7 +128,7 @@ describe('agent bucket count input gate', () => {
 
     const unrelated = {
       ...state,
-      unreadCountsByWorktree: {}
+      unreadTerminalTabs: {}
     }
     expect(selectAgentBucketCountState(unrelated)).toBe(first)
 

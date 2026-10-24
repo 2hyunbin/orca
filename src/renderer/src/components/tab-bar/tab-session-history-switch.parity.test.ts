@@ -1,8 +1,9 @@
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import type { AppState } from '@/store/types'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getIndexedAllWorktrees } from '@/store/worktree-repo-index'
 import { makeRepo, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
@@ -58,7 +59,7 @@ function row(overrides: Partial<AiVaultSession> = {}): AiVaultSession {
   }
 }
 
-function makeState(): AppState {
+function makeState(): AgentStatusReadState {
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState({
     activeRepoId: 'repo-1',
@@ -72,11 +73,11 @@ function makeState(): AppState {
       ]
     }
   })
-  return useAppStore.getState()
+  return getAgentStatusOwner(useAppStore).getState()
 }
 
 /** What AiVaultPanel + AiVaultVirtualRow compute for this row while WORKTREE_ID is active. */
-function panelTargets(state: AppState, session: AiVaultSession) {
+function panelTargets(state: AgentStatusReadState, session: AiVaultSession) {
   const { result } = renderHook(() =>
     useAiVaultPanelSessionResume({
       sessions: [session],

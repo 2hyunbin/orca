@@ -1,3 +1,5 @@
+import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/dashboard/useDashboardData'
+import { getDefaultSettings } from '../../../../shared/constants'
 import { renderToStaticMarkup as renderMarkup } from 'react-dom/server'
 import { useAppStore } from '@/store'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
@@ -31,7 +33,7 @@ const activationMocks = vi.hoisted(() => ({
 
 function renderToStaticMarkup(element: Parameters<typeof renderMarkup>[0]): string {
   applyAgentStatusPatch(useAppStore, {
-    agentActivityDisplayMode: mockAgentActivityDisplayMode,
+    agentActivityDisplayMode: mockAgentActivityDisplayMode ?? 'compact',
     acknowledgedAgentsByPaneKey: {},
     retainedAgentsByPaneKey: {},
     cacheTimerByKey: mockCacheTimerByKey,
@@ -53,7 +55,7 @@ function renderToStaticMarkup(element: Parameters<typeof renderMarkup>[0]): stri
     tabsByWorktree: {},
     terminalLayoutsByTabId: {},
     settings: {
-      ...useAppStore.getState().settings,
+      ...(useAppStore.getState().settings ?? getDefaultSettings('/tmp')),
       promptCacheTimerEnabled: mockPromptCacheTimerEnabled,
       promptCacheTtlMs: mockPromptCacheTtlMs
     }
