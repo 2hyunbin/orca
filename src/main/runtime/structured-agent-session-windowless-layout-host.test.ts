@@ -3,7 +3,7 @@ import { codexProviderHandle } from '../../shared/agent-session-provider-handle-
 import { publishCommittedPtySpawn } from '../ipc/pty/spawn-commit-publication'
 import type { PtySpawnCommitInput } from '../ipc/pty/spawn-commit-assembly'
 import { createRuntimePtySpawnState } from '../ipc/pty/runtime/spawn-state'
-import type { PtyRuntimeControllerDeps } from '../ipc/pty/runtime/controller-deps'
+import { createPtySpawnCommitDependencies } from '../persistence/loading-store/pty-spawn-commit-dependencies-fixture'
 import { unregisterPty } from '../memory/pty-registry'
 import { AgentSessionStoreTransactions } from './agent-session-store-transactions'
 import * as storeDraft from './agent-session-store-draft'
@@ -366,6 +366,7 @@ it.each([
         }
         yield item
       }
+      return undefined
     })
   }
   const find = Array.prototype.find
@@ -387,9 +388,8 @@ it.each([
       verdict: 'admitted' as const
     }
   }
-  const ports = { runtime, sendPtySpawnedToRenderer: vi.fn() }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this publication uses only these ports; it never starts a process.
-  const spawnState = createRuntimePtySpawnState(ports as PtyRuntimeControllerDeps, {
+  const ports = createPtySpawnCommitDependencies(runtime)
+  const spawnState = createRuntimePtySpawnState(ports, {
     cols: 80,
     rows: 24,
     resumeOrigin: 'switch',

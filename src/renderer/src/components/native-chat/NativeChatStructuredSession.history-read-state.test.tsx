@@ -1,5 +1,6 @@
 import recordedOmpReply from '../../../../main/acp/fixtures/omp-v17-reply-without-thought.jsonl?raw'
-import { SessionNotificationSchema } from '../../../../main/acp/generated/acp-protocol.generated'
+import { z } from 'zod'
+import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 import { makeRepo, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { agentSessionTabFixture } from './native-chat-workspace-test-fixtures'
 import * as cliSwitch from '../tab-bar/native-chat-cli-switch-run'
@@ -246,29 +247,30 @@ afterEach(() => {
 }
 
 it('keeps the recorded OMP reply readable with its CLI switch unavailable', () => {
+  const chunk = z.object({
+    sessionId: z.string(),
+    update: z.object({
+      sessionUpdate: z.literal('agent_message_chunk'),
+      content: z.object({ type: z.literal('text'), text: z.string() })
+    })
+  })
   const frames = recordedOmpReply
     .trim()
     .split('\n')
-    .map((line) => SessionNotificationSchema.safeParse(JSON.parse(line).message.params))
+    .map((line) => chunk.safeParse(JSON.parse(line).message.params))
     .flatMap((result) => (result.success ? [result.data] : []))
-  const text = frames
-    .flatMap(({ update }) =>
-      update.sessionUpdate === 'agent_message_chunk' && update.content.type === 'text'
-        ? [update.content.text]
-        : []
-    )
-    .join('')
+  const text = frames.map(({ update }) => update.content.text).join('')
   expect(text).toContain('marker recorded')
+  const { sessionId } = frames[0]
   const tab = agentSessionTabFixture('omp-capture', 'wt-1', {
     agentSessionAgent: 'omp',
-    entityId: frames[0].sessionId
+    entityId: sessionId
   })
   mocks.messages = [{ id: 'recorded-omp', role: 'assistant', blocks: [{ type: 'text', text }] }]
   useAppStore.setState({
-    settings: { ...useAppStore.getState().settings, experimentalNativeChat: true },
+    settings: createGlobalSettingsFixture({ experimentalNativeChat: true }),
     repos: [makeRepo()],
     worktreesByRepo: { 'repo-1': [makeWorktree('wt-1', 'recorded', { path: '/repo' })] },
-    tabsByWorktree: {},
     unifiedTabsByWorktree: { 'wt-1': [tab] }
   })
   const invoke = vi.spyOn(cliSwitch, 'runNativeChatCliSwitch')
@@ -287,7 +289,5 @@ it('keeps the recorded OMP reply readable with its CLI switch unavailable', () =
   expect(button.hasAttribute('disabled')).toBe(true)
   fireEvent.click(button)
   expect(invoke).not.toHaveBeenCalled()
-  expect(mocks.messageListProps).toMatchObject({
-    session: { sessionId: frames[0].sessionId, messages: mocks.messages }
-  })
+  expect(mocks.messageListProps?.session).toMatchObject({ sessionId, messages: mocks.messages })
 })
