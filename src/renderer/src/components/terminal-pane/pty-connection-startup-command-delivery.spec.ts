@@ -193,7 +193,11 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       )
       transportFactoryQueue.push(transport)
       storeFixture.patch({ repos: [{ id: 'repo1', connectionId: 'ssh-a' }] })
-      storeFixture.patch({ sshConnectionStates: new Map([['ssh-a', { status: 'connected' }]]) })
+      storeFixture.patch({
+        sshConnectionStates: new Map([
+          ['ssh-a', { targetId: 'ssh-a', status: 'connected', error: null, reconnectAttempt: 0 }]
+        ])
+      })
 
       connectPanePty(
         createPane(1) as never,

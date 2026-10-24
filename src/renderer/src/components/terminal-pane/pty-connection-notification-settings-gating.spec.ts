@@ -331,7 +331,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: true
           }
         }
@@ -389,7 +389,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: false
           }
         }
@@ -400,7 +400,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: true
           }
         }
@@ -459,7 +459,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: false
           }
         }
@@ -469,7 +469,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: true
           }
         }
@@ -532,7 +532,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: false
           }
         }
@@ -584,7 +584,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: false
           }
         }
@@ -594,7 +594,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: true
           }
         }
@@ -654,7 +654,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
         settings: {
           ...storeFixture.read().settings,
           notifications: {
-            ...storeFixture.read().settings.notifications,
+            ...storeFixture.read().settings?.notifications,
             agentTaskComplete: true
           }
         }

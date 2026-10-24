@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from '../../runtime/runtime-compatibility-test-fixture'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -192,7 +193,7 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
       })
       storeFixture.read().runtimeStatusByEnvironmentId.set(servedBy, {
         checkedAt: Date.now(),
-        status: { capabilities: [] }
+        status: { ...createCompatibleRuntimeStatusResponse().result, capabilities: [] }
       })
     }
 

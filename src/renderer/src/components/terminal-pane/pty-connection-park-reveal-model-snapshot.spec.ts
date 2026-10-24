@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from '../../runtime/runtime-compatibility-test-fixture'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushAsyncTicks } from './pty-connection-test-async'
@@ -81,7 +82,10 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
             'env-1',
             {
               checkedAt: Date.now(),
-              status: { capabilities: ['terminal.paired-parking.v1'] }
+              status: {
+                ...createCompatibleRuntimeStatusResponse().result,
+                capabilities: ['terminal.paired-parking.v1']
+              }
             }
           ]
         ])

@@ -480,7 +480,13 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           agentType: 'unknown' as const,
           stateHistory: []
         }
-        storeFixture.read().retainedAgentsByPaneKey[paneKey] = { agentType: 'claude' }
+        storeFixture.read().retainedAgentsByPaneKey[paneKey] = {
+          agentType: 'claude',
+          entry: unknownStatus,
+          worktreeId: 'wt-1',
+          tab: storeFixture.read().tabsByWorktree['wt-1'][0],
+          startedAt: Date.now()
+        }
         storeFixture.setStatus(paneKey, unknownStatus)
 
         connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)

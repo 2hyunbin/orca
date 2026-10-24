@@ -2,7 +2,8 @@ import type { StoreApi } from 'zustand'
 import type { AppState } from '../store/types'
 import { getDefaultSettings } from '../../../shared/constants'
 import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import { clearRuntimeCompatibilityCacheForTests } from './runtime-rpc-client'
@@ -15,7 +16,7 @@ export const RUNTIME_EXECUTION_HOST_ID = toRuntimeExecutionHostId(ENVIRONMENT_ID
 export const WORKTREE_ID = 'repo::/worktree'
 export const FOCUS_LEAF_ID = '11111111-1111-4111-8111-111111111111'
 
-type SessionMock = ReturnType<typeof vi.fn>
+type SessionMock = Mock
 
 /** Mock surface every web-runtime-session test file declares via `vi.hoisted`. */
 export type WebRuntimeSessionMocks = {
@@ -138,7 +139,16 @@ export function stubBrowserTabCreateEnvironment(
       activeRuntimeEnvironmentId: ENVIRONMENT_ID
     },
     runtimeStatusByEnvironmentId: new Map([
-      [ENVIRONMENT_ID, { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }]
+      [
+        ENVIRONMENT_ID,
+        {
+          status: {
+            ...createCompatibleRuntimeStatusResponse().result,
+            capabilities: ['browser.screencast.v1']
+          },
+          checkedAt: 1
+        }
+      ]
     ]),
     activeWorktreeId: WORKTREE_ID,
     activeWorkspaceExecutionHostId: RUNTIME_EXECUTION_HOST_ID,
@@ -156,6 +166,8 @@ export function stubBrowserTabCreateEnvironment(
       [WORKTREE_ID]: [
         makeUnifiedTab({
           id: 'local-editor-tab',
+          worktreeId: WORKTREE_ID,
+          groupId: 'group-1',
           entityId: '/worktree/index.html',
           contentType: 'editor'
         })

@@ -293,6 +293,8 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         worktreeId: 'wt-1',
         agent: 'codex',
         providerSession: { key: 'session_id', id: 'sess-1' },
+        prompt: '',
+        state: 'working',
         capturedAt: 1,
         updatedAt: 1
       }
@@ -353,6 +355,8 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         worktreeId: 'wt-1',
         agent: 'codex',
         providerSession: { key: 'session_id', id: 'sess-1' },
+        prompt: '',
+        state: 'working',
         capturedAt: 1,
         updatedAt: 1
       }

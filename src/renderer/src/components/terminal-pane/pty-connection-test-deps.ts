@@ -91,7 +91,13 @@ export function buildPaneConnectionDeps(
     syncPanePtyLayoutBinding: vi.fn((paneId: number, ptyId: string | null) => {
       const layout = fixture.read().terminalLayoutsByTabId?.['tab-1']
       if (layout) {
-        layout.ptyIdsByLeafId = { ...layout.ptyIdsByLeafId, [leafIdForPane(paneId)]: ptyId }
+        const bindings = { ...layout.ptyIdsByLeafId }
+        if (ptyId === null) {
+          delete bindings[leafIdForPane(paneId)]
+        } else {
+          bindings[leafIdForPane(paneId)] = ptyId
+        }
+        layout.ptyIdsByLeafId = bindings
       }
     }),
     clearExitedPanePtyLayoutBinding: vi.fn(),

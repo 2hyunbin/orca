@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from '../../runtime/server-layout-frames.test-fixture'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -110,7 +111,10 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/srv/stale-worktree' }]
         },
         repos: storeFixture.read().repos.map((repo) => ({ ...repo, executionHostId: undefined })),
-        runtimeEnvironments: [{ id: 'hub-a' }, { id: 'hub-b' }],
+        runtimeEnvironments: [
+          runtimeEnvironment('hub-a', 'hub-a', 1),
+          runtimeEnvironment('hub-b', 'hub-b', 1)
+        ],
         runtimeEnvironmentCatalogHydrated: true,
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
       })

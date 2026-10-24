@@ -39,7 +39,8 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../store', async () => {
   const { createTestStore } = await import('@/store/slices/store-test-helpers')
   const useAppStore = createTestStore()
-  const { getDefaultSettings } = await import('../../../../shared/constants')
+  const { getDefaultSettings, getDefaultVoiceSettings } =
+    await import('../../../../shared/constants')
   const settings = getDefaultSettings('/tmp')
   useAppStore.setState({
     tabsByWorktree: {},
@@ -47,7 +48,7 @@ vi.mock('../../store', async () => {
     dictationState: 'idle',
     settings: {
       ...settings,
-      voice: { ...settings.voice, enabled: false },
+      voice: { ...getDefaultVoiceSettings(), enabled: false },
       nativeChatSessionOptions: {}
     },
     updateSettings: vi.fn(),

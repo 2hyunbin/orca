@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -89,6 +90,7 @@ describe('web runtime browser client placement', () => {
           ENVIRONMENT_ID,
           {
             status: {
+              ...createCompatibleRuntimeStatusResponse().result,
               capabilities: [
                 BROWSER_SCREENCAST_RUNTIME_CAPABILITY,
                 BROWSER_TAB_CREATE_KNOWN_ID_RUNTIME_CAPABILITY,

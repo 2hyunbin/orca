@@ -181,6 +181,7 @@ describe('moveWebRuntimeSessionTab', () => {
         [WORKTREE_ID]: [
           {
             id: 'group-right',
+            worktreeId: WORKTREE_ID,
             activeTabId: 'local-only-unified',
             tabOrder: ['local-only-unified', 'local-terminal-unified']
           }
@@ -238,6 +239,7 @@ describe('moveWebRuntimeSessionTab', () => {
         [WORKTREE_ID]: [
           {
             id: 'desktop-split-group',
+            worktreeId: WORKTREE_ID,
             activeTabId: 'local-terminal-unified',
             tabOrder: ['local-only-unified', 'local-terminal-unified', 'local-browser-unified']
           }
@@ -288,9 +290,15 @@ describe('moveWebRuntimeSessionTab', () => {
       setActiveWorktree: mocks.setActiveWorktree,
       groupsByWorktree: {
         [WORKTREE_ID]: [
-          { id: 'desktop-source', activeTabId: 'local-third', tabOrder: ['local-third'] },
+          {
+            id: 'desktop-source',
+            worktreeId: WORKTREE_ID,
+            activeTabId: 'local-third',
+            tabOrder: ['local-third']
+          },
           {
             id: 'desktop-split-group',
+            worktreeId: WORKTREE_ID,
             activeTabId: 'local-moved',
             tabOrder: ['local-split-off', 'local-moved']
           }

@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -92,7 +93,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     useAppStore.setState({
       settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
-        [ENVIRONMENT_ID, { status: { capabilities: [] }, checkedAt: 1 }]
+        [
+          ENVIRONMENT_ID,
+          {
+            status: { ...createCompatibleRuntimeStatusResponse().result, capabilities: [] },
+            checkedAt: 1
+          }
+        ]
       ])
     })
     const runtimeCall = vi.fn()
@@ -140,6 +147,7 @@ describe('createWebRuntimeSessionBrowserTab', () => {
           ENVIRONMENT_ID,
           {
             status: {
+              ...createCompatibleRuntimeStatusResponse().result,
               capabilities: ['browser.screencast.v1', 'browser.tab-create-known-id.v1']
             },
             checkedAt: 1
@@ -187,6 +195,7 @@ describe('createWebRuntimeSessionBrowserTab', () => {
           ENVIRONMENT_ID,
           {
             status: {
+              ...createCompatibleRuntimeStatusResponse().result,
               capabilities: ['browser.screencast.v1', 'browser.tab-create-known-id.v1']
             },
             checkedAt: 1

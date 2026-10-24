@@ -165,7 +165,9 @@ describe('a pane on an unconverted SSH row', () => {
         .read()
         .repos.map((repo) => ({ ...repo, connectionId: 'conn-1', executionHostId: undefined })),
       sshTargetLabels: new Map([['conn-1', 'server']]),
-      sshConnectionStates: new Map([['conn-1', { status: 'disconnected' }]])
+      sshConnectionStates: new Map([
+        ['conn-1', { targetId: 'conn-1', status: 'disconnected', error: null, reconnectAttempt: 0 }]
+      ])
     })
     await installTerminalTestGlobals()
     const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
@@ -217,7 +219,9 @@ describe('a pane on an unconverted SSH row', () => {
     mountUnservedPane(1)
     storeFixture.patch({
       sshTargetLabels: undefined,
-      sshConnectionStates: new Map([['conn-1', { status: 'connected' }]])
+      sshConnectionStates: new Map([
+        ['conn-1', { targetId: 'conn-1', status: 'connected', error: null, reconnectAttempt: 0 }]
+      ])
     })
     mountUnservedPane(2)
     await flushAsyncTicks(10)

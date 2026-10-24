@@ -1,3 +1,6 @@
+import type { AppState } from '../store/types'
+import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -230,13 +233,18 @@ describe('createWebRuntimeSessionBrowserTab', () => {
 
     const pendingCreate = createWebRuntimeSessionBrowserTab({ worktreeId: WORKTREE_ID })
     await vi.waitFor(() => expect(listener).not.toBeNull())
-    const editorBState = {
+    const editorBState: AppState = {
       ...state,
       activeFileIdByWorktree: { [WORKTREE_ID]: '/worktree/other.html' },
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...state.unifiedTabsByWorktree[WORKTREE_ID],
           {
+            ...makeUnifiedTab({
+              id: 'other-editor-tab',
+              worktreeId: WORKTREE_ID,
+              groupId: 'group-1'
+            }),
             id: 'other-editor-tab',
             entityId: '/worktree/other.html',
             contentType: 'editor'
@@ -286,13 +294,18 @@ describe('createWebRuntimeSessionBrowserTab', () => {
 
     const pendingCreate = createWebRuntimeSessionBrowserTab({ worktreeId: WORKTREE_ID })
     await vi.waitFor(() => expect(runtimeCall).toHaveBeenCalledTimes(2))
-    const editorBState = {
+    const editorBState: AppState = {
       ...state,
       activeFileIdByWorktree: { [WORKTREE_ID]: '/worktree/other.html' },
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...state.unifiedTabsByWorktree[WORKTREE_ID],
           {
+            ...makeUnifiedTab({
+              id: 'other-editor-tab',
+              worktreeId: WORKTREE_ID,
+              groupId: 'group-1'
+            }),
             id: 'other-editor-tab',
             entityId: '/worktree/other.html',
             contentType: 'editor'
@@ -317,22 +330,22 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   it.each([
     {
       label: 'worktree',
-      leave: (state: Record<string, unknown>) => ({
+      leave: (state: AppState) => ({
         ...state,
         activeWorktreeId: 'repo::/other-worktree'
       }),
-      returnToStart: (state: Record<string, unknown>) => ({
+      returnToStart: (state: AppState) => ({
         ...state,
         activeWorktreeId: WORKTREE_ID
       })
     },
     {
       label: 'runtime owner',
-      leave: (state: Record<string, unknown>) => ({
+      leave: (state: AppState) => ({
         ...state,
-        activeWorkspaceExecutionHostId: 'local'
+        activeWorkspaceExecutionHostId: 'local' as const
       }),
-      returnToStart: (state: Record<string, unknown>) => ({
+      returnToStart: (state: AppState) => ({
         ...state,
         activeWorkspaceExecutionHostId: RUNTIME_EXECUTION_HOST_ID
       })
@@ -382,7 +395,7 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     let focusState = {
       ...useAppStore.getState(),
       activeWorktreeId: 'landing',
-      activeWorkspaceExecutionHostId: 'local'
+      activeWorkspaceExecutionHostId: 'local' as const
     }
     useAppStore.setState(focusState)
     mocks.setActiveWorktree.mockImplementation((worktreeId, executionHostId) => {
@@ -441,7 +454,16 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     useAppStore.setState({
       settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
-        [ENVIRONMENT_ID, { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }]
+        [
+          ENVIRONMENT_ID,
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
+        ]
       ]),
       activeWorktreeId: WORKTREE_ID,
       activeWorkspaceExecutionHostId: RUNTIME_EXECUTION_HOST_ID,
@@ -517,7 +539,16 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     useAppStore.setState({
       settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
-        [ENVIRONMENT_ID, { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }]
+        [
+          ENVIRONMENT_ID,
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
+        ]
       ]),
       activeWorktreeId,
       activeWorkspaceExecutionHostId: null,

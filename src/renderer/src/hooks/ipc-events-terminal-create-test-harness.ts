@@ -26,7 +26,7 @@ export async function setupTerminalCreateSurfacing(
   const store = createTestStore()
   const createTab = vi.fn(
     (_worktreeId: string, _groupId?: string, _tabType?: string, options?: { id?: string }) => ({
-      ...makeTab({ id: options?.id ?? 'tab-new' })
+      ...makeTab({ id: options?.id ?? 'tab-new', worktreeId: _worktreeId })
     })
   )
   const setActiveView = vi.fn()
@@ -41,7 +41,7 @@ export async function setupTerminalCreateSurfacing(
   const registerAgentLaunchConfig = vi.fn()
   const clearAgentLaunchConfig = vi.fn()
   const updateTabPtyId = vi.fn()
-  const setTabLayout = vi.fn()
+  const setTabLayout = vi.fn<AppState['setTabLayout']>()
   const setTabBarOrder = vi.fn()
   const replyTerminalCreate = vi.fn()
   const dispatchEvent = vi.fn()
@@ -88,7 +88,6 @@ export async function setupTerminalCreateSurfacing(
     terminalLayoutsByTabId: store.getState().terminalLayoutsByTabId,
     fetchRepos: vi.fn(),
     fetchWorktrees: vi.fn(),
-    activeModal: null,
     closeModal: vi.fn(),
     openModal: vi.fn(),
     activeWorktreeId: 'wt-1',
@@ -127,7 +126,7 @@ export async function setupTerminalCreateSurfacing(
       }
     }
   })
-  setTabLayout.mockImplementation((tabId: string, layout: unknown) => {
+  setTabLayout.mockImplementation((tabId, layout) => {
     store.getState().terminalLayoutsByTabId[tabId] = layout
   })
   const createTerminalListenerRef: ListenerRef<(data: TerminalCreateListenerPayload) => void> = {

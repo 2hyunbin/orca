@@ -1,3 +1,4 @@
+import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
 import type { AppState } from '../store/types'
 import { getDefaultSettings } from '../../../shared/constants'
 import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
@@ -235,6 +236,11 @@ describe('materialization wait group', () => {
         state.unifiedTabsByWorktree = {
           [WORKTREE_ID]: [
             {
+              ...makeUnifiedTab({
+                id: 'staged-unified-tab',
+                worktreeId: WORKTREE_ID,
+                groupId: SPLIT_GROUP_ID
+              }),
               id: 'staged-unified-tab',
               entityId: STAGED_WORKSPACE_ID,
               contentType: 'browser',

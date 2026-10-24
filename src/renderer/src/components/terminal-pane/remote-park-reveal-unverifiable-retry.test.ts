@@ -1,3 +1,4 @@
+import { createCompatibleRuntimeStatusResponse } from '../../runtime/runtime-compatibility-test-fixture'
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TERMINAL_PAIRED_PARKING_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
@@ -144,7 +145,13 @@ function pairedParkingHostStatus(): StoreState['runtimeStatusByEnvironmentId'] {
   return new Map([
     [
       'env-1',
-      { checkedAt: 1, status: { capabilities: [TERMINAL_PAIRED_PARKING_RUNTIME_CAPABILITY] } }
+      {
+        checkedAt: 1,
+        status: {
+          ...createCompatibleRuntimeStatusResponse().result,
+          capabilities: [TERMINAL_PAIRED_PARKING_RUNTIME_CAPABILITY]
+        }
+      }
     ]
   ])
 }

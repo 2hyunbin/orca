@@ -1,3 +1,4 @@
+import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -225,7 +226,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     storeSubscribers = []
     storeFixture = await createInitialStoreState()
     storeFixture.patch({
-      rememberSleepingAgentSession: vi.fn((record: { paneKey: string }) => {
+      rememberSleepingAgentSession: vi.fn((record: SleepingAgentSessionRecord) => {
         storeFixture.read().sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
       })
     })

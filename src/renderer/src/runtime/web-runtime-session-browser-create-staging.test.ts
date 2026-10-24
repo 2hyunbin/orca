@@ -1,3 +1,5 @@
+import { makeBrowserTab, makeUnifiedTab } from '../store/slices/store-session-test-harness'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
@@ -91,7 +93,10 @@ function advertiseKnownPageId(): void {
       [
         ENVIRONMENT_ID,
         {
-          status: { capabilities: ['browser.screencast.v1', 'browser.tab-create-known-id.v1'] },
+          status: {
+            ...createCompatibleRuntimeStatusResponse().result,
+            capabilities: ['browser.screencast.v1', 'browser.tab-create-known-id.v1']
+          },
           checkedAt: 1
         }
       ]
@@ -117,11 +122,16 @@ function closeStagedWorkspace(workspaceId: string): void {
 function mirrorHostPage(workspaceId: string, remotePageId: string): void {
   const state = useAppStore.getState()
   state.browserPagesByWorkspace[workspaceId] = [
-    { id: remotePageId, workspaceId, url: 'https://example.com/' }
+    {
+      ...makeBrowserTab({ id: remotePageId, worktreeId: WORKTREE_ID, url: 'https://example.com/' }),
+      workspaceId,
+      url: 'https://example.com/'
+    }
   ]
   state.browserTabsByWorktree[WORKTREE_ID] = [
     ...(state.browserTabsByWorktree[WORKTREE_ID] ?? []),
     {
+      ...makeBrowserTab({ id: workspaceId, worktreeId: WORKTREE_ID, url: 'https://example.com/' }),
       id: workspaceId,
       worktreeId: WORKTREE_ID,
       activePageId: remotePageId,
@@ -134,7 +144,13 @@ function mirrorHostPage(workspaceId: string, remotePageId: string): void {
   }
   state.unifiedTabsByWorktree[WORKTREE_ID] = [
     ...(state.unifiedTabsByWorktree[WORKTREE_ID] ?? []),
-    { id: `${workspaceId}-tab`, entityId: workspaceId, contentType: 'browser' }
+    makeUnifiedTab({
+      id: `${workspaceId}-tab`,
+      worktreeId: WORKTREE_ID,
+      groupId: 'group-1',
+      entityId: workspaceId,
+      contentType: 'browser'
+    })
   ]
 }
 
@@ -258,11 +274,24 @@ describe('createWebRuntimeSessionBrowserTab optimistic staging', () => {
         // its own ids; keeping the staged tab too would leave two tabs for one page.
         const state = useAppStore.getState()
         state.browserPagesByWorkspace['mirrored-workspace'] = [
-          { id: 'mirrored-page', workspaceId: 'mirrored-workspace', url: 'https://example.com/' }
+          {
+            ...makeBrowserTab({
+              id: 'mirrored-page',
+              worktreeId: WORKTREE_ID,
+              url: 'https://example.com/'
+            }),
+            workspaceId: 'mirrored-workspace',
+            url: 'https://example.com/'
+          }
         ]
         state.browserTabsByWorktree[WORKTREE_ID] = [
           ...(state.browserTabsByWorktree[WORKTREE_ID] ?? []),
           {
+            ...makeBrowserTab({
+              id: 'mirrored-workspace',
+              worktreeId: WORKTREE_ID,
+              url: 'https://example.com/'
+            }),
             id: 'mirrored-workspace',
             worktreeId: WORKTREE_ID,
             activePageId: 'mirrored-page',
@@ -575,10 +604,23 @@ describe('createWebRuntimeSessionBrowserTab optimistic staging', () => {
   it('leaves rows a snapshot already adopted alone when the unwind runs', () => {
     const state = useAppStore.getState()
     state.browserPagesByWorkspace['adopted-workspace'] = [
-      { id: 'adopted-page', workspaceId: 'adopted-workspace', url: 'https://example.com/' }
+      {
+        ...makeBrowserTab({
+          id: 'adopted-page',
+          worktreeId: WORKTREE_ID,
+          url: 'https://example.com/'
+        }),
+        workspaceId: 'adopted-workspace',
+        url: 'https://example.com/'
+      }
     ]
     state.browserTabsByWorktree[WORKTREE_ID] = [
       {
+        ...makeBrowserTab({
+          id: 'adopted-workspace',
+          worktreeId: WORKTREE_ID,
+          url: 'https://example.com/'
+        }),
         id: 'adopted-workspace',
         worktreeId: WORKTREE_ID,
         activePageId: 'adopted-page',

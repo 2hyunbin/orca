@@ -1,3 +1,6 @@
+import { getDefaultSettings } from '../../../shared/constants'
+import { TEST_REPO, makeWorktree } from '../store/slices/store-test-helpers'
+import { runtimeEnvironment } from './server-layout-frames.test-fixture'
 import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setWebRuntimeTabProps } from './web-runtime-terminal-actions'
@@ -180,11 +183,11 @@ describe('setWebRuntimeTabProps', () => {
   it('does not push an unstamped row to the focused server', () => {
     vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
     useAppStore.setState({
-      settings: { activeRuntimeEnvironmentId: ENVIRONMENT_ID },
-      runtimeEnvironments: [{ id: ENVIRONMENT_ID }],
+      settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
+      runtimeEnvironments: [runtimeEnvironment(ENVIRONMENT_ID, ENVIRONMENT_ID, 1)],
       runtimeEnvironmentCatalogHydrated: true,
-      repos: [{ id: REPO_ID }],
-      worktreesByRepo: { [REPO_ID]: [{ id: WORKTREE_ID, repoId: REPO_ID }] }
+      repos: [{ ...TEST_REPO, id: REPO_ID }],
+      worktreesByRepo: { [REPO_ID]: [makeWorktree({ id: WORKTREE_ID, repoId: REPO_ID })] }
     })
     const runtimeCall = vi.fn()
     stubRuntimeEnvironmentBridge({ call: runtimeCall })

@@ -1,3 +1,5 @@
+import { makeBrowserTab } from '../store/slices/store-session-test-harness'
+import { createCompatibleRuntimeStatusResponse } from './runtime-compatibility-test-fixture'
 import { useAppStore } from '../store'
 import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -95,12 +97,28 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     useAppStore.setState({
       settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
-        [ENVIRONMENT_ID, { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }]
+        [
+          ENVIRONMENT_ID,
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
+        ]
       ]),
       activeWorktreeId: WORKTREE_ID,
       browserPagesByWorkspace: {
         'host-browser-workspace': [
-          { id: 'host-browser-page', workspaceId: 'host-browser-workspace' }
+          {
+            ...makeBrowserTab({
+              id: 'host-browser-page',
+              worktreeId: WORKTREE_ID,
+              url: 'https://example.com/'
+            }),
+            workspaceId: 'host-browser-workspace'
+          }
         ]
       },
       remoteBrowserPageHandlesByPageId: {
@@ -249,7 +267,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,
-          { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
         ])
       )
     })
@@ -338,7 +362,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,
-          { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
         ])
       )
     })
@@ -388,7 +418,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,
-          { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }
+          {
+            status: {
+              ...createCompatibleRuntimeStatusResponse().result,
+              capabilities: ['browser.screencast.v1']
+            },
+            checkedAt: 1
+          }
         ])
       )
     })

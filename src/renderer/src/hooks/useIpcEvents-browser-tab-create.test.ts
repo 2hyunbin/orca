@@ -39,7 +39,6 @@ describe('useIpcEvents browser tab create routing', () => {
       fetchRepos: vi.fn(),
       fetchWorktrees: vi.fn(),
       setActiveView: vi.fn(),
-      activeModal: null,
       closeModal: vi.fn(),
       openModal: vi.fn(),
       activeWorktreeId: 'wt-1',
@@ -103,6 +102,7 @@ describe('useIpcEvents browser tab create routing', () => {
         'wt-1': [
           makeUnifiedTab({
             id: 'unified-active',
+            worktreeId: 'wt-1',
             groupId: 'group-1',
             contentType: 'browser',
             entityId: 'workspace-active'
@@ -113,7 +113,7 @@ describe('useIpcEvents browser tab create routing', () => {
         (
           _worktreeId: string,
           _url: string,
-          options: { activate?: boolean; browserPageId?: string }
+          options: { activate?: boolean; browserPageId?: string } = {}
         ) => {
           const pageId = options.browserPageId ?? 'page-new'
           const workspace = makeBrowserTab({

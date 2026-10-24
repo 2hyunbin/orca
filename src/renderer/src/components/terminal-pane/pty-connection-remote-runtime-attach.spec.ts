@@ -1,3 +1,4 @@
+import { runtimeEnvironment } from '../../runtime/server-layout-frames.test-fixture'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -472,11 +473,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'legacy-hub' }
       })
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ worktreeId }) as never
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps({ worktreeId }))
 
       // Why: the client stamps every server row on arrival, so an unstamped row is this machine's.
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
@@ -527,7 +524,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
-        runtimeEnvironments: [{ id: 'hub-a' }],
+        runtimeEnvironments: [runtimeEnvironment('hub-a', 'hub-a', 1)],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
       })
 
@@ -608,7 +605,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
-        runtimeEnvironments: [{ id: 'hub-a' }],
+        runtimeEnvironments: [runtimeEnvironment('hub-a', 'hub-a', 1)],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
       })
 

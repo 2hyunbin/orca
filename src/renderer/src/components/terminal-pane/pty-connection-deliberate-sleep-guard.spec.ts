@@ -1,3 +1,4 @@
+import { makeUnifiedTab } from '@/store/slices/store-session-test-harness'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushAsyncTicks } from './pty-connection-test-async'
@@ -167,7 +168,15 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         activeWorktreeId: 'wt-other',
         tabsByWorktree: { 'wt-1': [{ id: 'tab-entity', ptyId: null, generation: 3 }] },
         getTab: (id: string) =>
-          id === 'unified-1' ? { id, contentType: 'terminal', entityId: 'tab-entity' } : null
+          id === 'unified-1'
+            ? makeUnifiedTab({
+                id,
+                worktreeId: 'wt-1',
+                groupId: 'group-1',
+                contentType: 'terminal',
+                entityId: 'tab-entity'
+              })
+            : null
       })
       markWorktreeSleepIntent('wt-1')
       const deps = createDeps({ tabId: 'unified-1', isVisibleRef: { current: false } })
