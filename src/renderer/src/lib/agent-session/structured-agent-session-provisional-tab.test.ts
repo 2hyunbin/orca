@@ -1,31 +1,31 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useAppStore } from '@/store'
-import type * as launchModule from './launch-structured-agent-session'
-import type { AgentSessionLaunchPlan } from './agent-session-launch-plan'
-import { adoptAgentSessionLaunchVerdict } from './agent-session-launch-plan'
+import { useAppStore } from '@/store/index'
+import type * as launchModule from '../structured-agent-session-launch-create-call'
+import type { AgentSessionLaunchPlan } from '../agent-session-launch-plan'
+import { adoptAgentSessionLaunchVerdict } from '../agent-session-launch-plan'
 import { beginStructuredAgentSessionProvisionalLaunch } from './structured-agent-session-provisional-tab'
-import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
+import { StructuredAgentSessionCreateRefusalError } from '../structured-agent-session-launch-errors'
 import { act, renderHook } from '@testing-library/react'
 import { useNativeChatProvisionalLaunch } from '@/components/native-chat/use-native-chat-provisional-launch'
 import {
   getStructuredAgentSessionLaunchFailure,
   resetStructuredAgentLaunchRegistryForTests
-} from './structured-agent-session-launch-registry'
+} from '../structured-agent-session-launch-registry'
 import { structuredSessionNotices } from '@/components/native-chat/native-chat-structured-session-notices'
-import type { AgentTerminalLaunchCompletion } from './structured-agent-session-launch-admission'
+import type { AgentTerminalLaunchCompletion } from '../structured-agent-session-launch-admission'
 import {
   addNativeChatPendingAttachment,
   clearNativeChatPendingAttachmentsForTests
 } from '@/components/native-chat/native-chat-pending-attachment-cache'
 import { applyStructuredSessionTabSnapshots } from '@/runtime/local-structured-session-tabs-sync/snapshot-apply'
 import { makeEmptyHostSnapshot } from '@/runtime/host-session-mirror-frame-fixtures'
-import * as unlisted from './structured-agent-session-unlisted-created-chats'
+import * as unlisted from '../structured-agent-session-unlisted-created-chats'
 import { buildFullWorktreePurgeState } from '@/store/slices/worktrees/teardown/worktree-purge-state'
-import type { TerminalTab } from '../../../shared/terminal-tab-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
-import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
+import { structuredAgentSessionTabId } from '../../../../shared/structured-agent-session-projection'
 import {
   drawTabsFromMain,
   type TabsDrawnFromMain
@@ -44,12 +44,12 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
 )
 
 const mocks = vi.hoisted(() => ({ text: '', focus: vi.fn(), toast: vi.fn(), launch: vi.fn() }))
-vi.mock('./launch-structured-agent-session', async (original) => ({
+vi.mock('../structured-agent-session-launch-create-call', async (original) => ({
   ...(await original<typeof launchModule>()),
   launchStructuredAgentSession: mocks.launch
 }))
 vi.mock('sonner', () => ({ toast: { info: mocks.toast, error: vi.fn() } }))
-vi.mock('./focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi.fn() }))
+vi.mock('../focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi.fn() }))
 vi.mock('@/components/native-chat/native-chat-composer-draft-store', () => ({
   readNativeChatComposerDraft: () => ({ text: mocks.text, images: [] }),
   resolveNativeChatComposerDraftOwner: () => undefined,
@@ -450,6 +450,8 @@ it.each(['expiry', 'purge'])('created pane publication: %s', async (order) => {
   } else {
     expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(true)
     list(101)
-    expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(false)
+    expect(store().unifiedTabsByWorktree['wt-1']?.some((t) => t.id === chat.id)).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN
+    )
   }
 })

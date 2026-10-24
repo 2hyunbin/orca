@@ -14,6 +14,7 @@ import { isTerminalLeafId, makePaneKey } from '../../shared/stable-pane-id'
 import { resolveTerminalTabTitle } from '../../shared/tab-title-resolution'
 import { indexAgentStatusRowsByPaneKey } from '../agent-hooks/agent-status-pane-index'
 import {
+  demoteRuntimeMobileAgentStatus,
   renewRuntimeMobileAgentStatusFromPtyTitle,
   selectRuntimeHookAgentRowForPane
 } from './runtime-mobile-agent-status-projection'
@@ -234,20 +235,7 @@ export function projectRuntimeMobileSessionTabs(
       : // Idle titles drop stale working spinners but retain transcript identity for native chat.
         normalizedTabAgentStatus?.agentType != null
         ? {
-            agentStatus: {
-              state: 'done' as const,
-              prompt: '',
-              updatedAt: statusPty?.lastOscTitleEpochMs ?? normalizedTabAgentStatus.updatedAt,
-              stateStartedAt:
-                statusPty?.lastAgentStatusStartedAtEpochMs ??
-                normalizedTabAgentStatus.stateStartedAt,
-              paneKey: normalizedTabAgentStatus.paneKey,
-              stateHistory: [],
-              agentType: normalizedTabAgentStatus.agentType,
-              ...(normalizedTabAgentStatus.providerSession
-                ? { providerSession: normalizedTabAgentStatus.providerSession }
-                : {})
-            }
+            agentStatus: demoteRuntimeMobileAgentStatus(normalizedTabAgentStatus, statusPty)
           }
         : null
     // PTY handles survive renderer graph syncs; epoch-bound leaf handles do not.

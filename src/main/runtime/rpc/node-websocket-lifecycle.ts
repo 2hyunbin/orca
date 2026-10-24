@@ -32,7 +32,7 @@ export function attachNodeWebSocketLifecycle(args: {
 }): void {
   const { ws } = args
   let finalized = false
-  const onPong = (): void => args.heartbeat.noteAlive(ws)
+  const onPong = (): void => args.heartbeat.notePong(ws)
   const onMessage = (data: WebSocket.RawData, isBinary: boolean): void => {
     // Every inbound frame proves life, including frames during active requests.
     args.heartbeat.noteAlive(ws)
@@ -89,6 +89,7 @@ export function attachNodeWebSocketLifecycle(args: {
   ws.on('error', onError)
   // Install ownership before heartbeat ticks can see this socket.
   args.heartbeatConnections.add(ws)
+  args.heartbeat.track(ws)
   args.heartbeat.noteAlive(ws)
   if (args.heartbeatConnections.size === 1) {
     // Pre-auth timeout owns unauthenticated sockets; start probes after E2EE binds identity to avoid handshake control frames.

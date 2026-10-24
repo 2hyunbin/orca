@@ -33,7 +33,7 @@ function claudeStatus(state: AgentStatusEntry['state'], updatedAt: number): Agen
   }
 }
 
-function parkedOnPromptPty(hookAt: number): unknown {
+function parkedOnPromptPty(hookAt: number) {
   return {
     ptyId: 'pty-1',
     lastAgentStatus: 'idle',
@@ -67,20 +67,25 @@ describe('mobile/paired projection for a pane pending a human answer', () => {
     expect(out?.state).toBe('done')
   })
 
-  it('still lets an idle title retire a fresh `working`', () => {
+  // Repainting an idle interval begun before the hook does not establish a new boundary.
+  it('keeps a fresh `working` hook after the idle interval began', () => {
     const hookAt = Date.now()
     const out = renewFromPtyTitle()(claudeStatus('working', hookAt), parkedOnPromptPty(hookAt), {
       preserveQuestionUnderShellTitle: true
     })
-    expect(out?.state).toBe('done')
+    expect(out?.state).toBe('working')
   })
 
-  it('does not let replay delivery time make old working evidence outrank a newer title', () => {
+  it('does not let replay delivery time outrank a newer title state transition', () => {
     const hookAt = Date.now() - 1_000
     const replayedAt = Date.now()
+    const transitionPty = {
+      ...parkedOnPromptPty(hookAt),
+      lastAgentStatusRichInvalidatedAtEpochMs: hookAt + 1
+    }
     const out = renewFromPtyTitle()(
       { ...claudeStatus('working', replayedAt), evidenceObservedAt: hookAt },
-      parkedOnPromptPty(hookAt),
+      transitionPty,
       { preserveQuestionUnderShellTitle: true }
     )
 
@@ -91,7 +96,7 @@ describe('mobile/paired projection for a pane pending a human answer', () => {
   it('still lets a working title retire a fresh `waiting`', () => {
     const hookAt = Date.now()
     const workingTitlePty = {
-      ...(parkedOnPromptPty(hookAt) as Record<string, unknown>),
+      ...parkedOnPromptPty(hookAt),
       lastAgentStatus: 'working',
       lastOscTitle: '⠋ Claude'
     }
