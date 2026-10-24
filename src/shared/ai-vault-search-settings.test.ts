@@ -1,24 +1,26 @@
 import { expect, it } from 'vitest'
 import {
   AiVaultSearchSettingsSchema,
-  DEFAULT_AI_VAULT_SEARCH_SETTINGS,
   resolveAiVaultSearchSettings,
   sameAiVaultSearchSettings
 } from './ai-vault-search-settings'
 
 // Default off: indexing reads all machine transcripts and requires recorded opt-in.
 it('reads anything that is not an explicit opt-in as off', () => {
-  expect(resolveAiVaultSearchSettings(undefined)).toEqual(DEFAULT_AI_VAULT_SEARCH_SETTINGS)
-  expect(resolveAiVaultSearchSettings({})).toEqual(DEFAULT_AI_VAULT_SEARCH_SETTINGS)
-  expect(resolveAiVaultSearchSettings({ aiVaultSearch: null })).toEqual(
-    DEFAULT_AI_VAULT_SEARCH_SETTINGS
-  )
-  expect(resolveAiVaultSearchSettings({ aiVaultSearch: { enabled: 'yes' } })).toEqual(
-    DEFAULT_AI_VAULT_SEARCH_SETTINGS
-  )
-  expect(resolveAiVaultSearchSettings({ aiVaultSearch: 'on' })).toEqual(
-    DEFAULT_AI_VAULT_SEARCH_SETTINGS
-  )
+  expect(resolveAiVaultSearchSettings(undefined)).toEqual({ enabled: false, historyDays: null })
+  expect(resolveAiVaultSearchSettings({})).toEqual({ enabled: false, historyDays: null })
+  expect(resolveAiVaultSearchSettings({ aiVaultSearch: null })).toEqual({
+    enabled: false,
+    historyDays: null
+  })
+  expect(resolveAiVaultSearchSettings({ aiVaultSearch: { enabled: 'yes' } })).toEqual({
+    enabled: false,
+    historyDays: null
+  })
+  expect(resolveAiVaultSearchSettings({ aiVaultSearch: 'on' })).toEqual({
+    enabled: false,
+    historyDays: null
+  })
 })
 
 it('normalizes a history bound and drops anything that is not one', () => {
@@ -56,7 +58,7 @@ it('accepts what it produces and refuses what it does not', () => {
   expect(AiVaultSearchSettingsSchema.safeParse({ historyDays: null }).success).toBe(false)
 })
 
-it('treats an unchanged policy as unchanged so a re-save never restarts the index', () => {
+it('compares both enabled state and history bounds', () => {
   expect(
     sameAiVaultSearchSettings(
       { enabled: true, historyDays: 30 },
