@@ -117,31 +117,67 @@ describe('liveness', () => {
     expect(orcadLivenessBlocksGc(parseOrcadLiveness(output))).toBe(blocks)
   })
 
-  // Real host (win-lowspec): after a distro reboot the probe's own shell took the recorded PID.
-  it.skipIf(process.platform === 'win32')(
-    'calls a recorded PID held by the probe shell itself dead, and a live orcad live',
-    async () => {
-      const slot = mkdtempSync(join(tmpdir(), 'orcad-liveness-'))
-      const probe = orcadLivenessProbeCommand(posix, slot)
-      try {
-        const self = spawnSync('sh', ['-c', `echo $$ > '${slot}/.orcad-pid'; ${probe}`], {
-          encoding: 'utf8'
-        })
-        expect(parseOrcadLiveness(self.stdout)).toBe('DEAD')
+  // Real host (win-lowspec): after a distro restart the probe's own shell took the recorded PID.
+  describe.skipIf(process.platform === 'win32')(
+    'a recorded PID after a restart (real shell)',
+    () => {
+      const probeIn = (slot: string, script: string): string =>
+        spawnSync('sh', ['-c', script], { encoding: 'utf8' }).stdout
 
-        writeFileSync(join(slot, 'orcad.js'), 'setInterval(() => {}, 1000)\n')
-        const orcad = spawn(process.execPath, [join(slot, 'orcad.js')], { stdio: 'ignore' })
+      async function withSlot(run: (slot: string, probe: string) => Promise<void>): Promise<void> {
+        const slot = mkdtempSync(join(tmpdir(), 'orcad-liveness-'))
         try {
-          writeFileSync(join(slot, '.orcad-pid'), `${orcad.pid}\n`)
-          await new Promise((resolve) => setTimeout(resolve, 200))
-          const live = spawnSync('sh', ['-c', probe], { encoding: 'utf8' })
-          expect(parseOrcadLiveness(live.stdout)).toBe('LIVE')
+          await run(slot, orcadLivenessProbeCommand(posix, slot))
         } finally {
-          orcad.kill()
+          rmSync(slot, { recursive: true, force: true })
         }
-      } finally {
-        rmSync(slot, { recursive: true, force: true })
       }
+
+      async function waitForArgs(pid: number | undefined, needle: string): Promise<void> {
+        for (let i = 0; i < 100; i++) {
+          const args = spawnSync('ps', ['-o', 'args=', '-p', String(pid)], { encoding: 'utf8' })
+          if (args.stdout.includes(needle)) {
+            return
+          }
+          await new Promise((resolve) => setTimeout(resolve, 20))
+        }
+        throw new Error(`process ${pid} never showed ${needle}`)
+      }
+
+      it('calls dead a PID held by the probe shell or the shell wrapping it', async () => {
+        await withSlot(async (slot, probe) => {
+          const own = probeIn(slot, `echo $$ > '${slot}/.orcad-pid'; ${probe}`)
+          expect(parseOrcadLiveness(own)).toBe('DEAD')
+          const wrapped = probeIn(
+            slot,
+            `echo $$ > '${slot}/.orcad-pid'; sh -c ${JSON.stringify(probe).replace(/\$/g, '\\$')}`
+          )
+          expect(parseOrcadLiveness(wrapped)).toBe('DEAD')
+        })
+      })
+
+      it('keeps a live orcad, and the waiting shell of an older launcher, live', async () => {
+        await withSlot(async (slot, probe) => {
+          const entry = join(slot, 'orcad.js')
+          writeFileSync(entry, 'setInterval(() => {}, 1000)\n')
+          const orcad = spawn(process.execPath, [entry], { stdio: 'ignore' })
+          // Before `exec` landed in the launcher, the recorded PID was a shell waiting on node.
+          const waiting = spawn('sh', ['-c', `'${process.execPath}' '${entry}'; :`], {
+            stdio: 'ignore'
+          })
+          try {
+            await waitForArgs(orcad.pid, 'orcad.js')
+            writeFileSync(join(slot, '.orcad-pid'), `${orcad.pid}\n`)
+            expect(parseOrcadLiveness(probeIn(slot, probe))).toBe('LIVE')
+            await waitForArgs(waiting.pid, 'orcad.js')
+            writeFileSync(join(slot, '.orcad-pid'), `${waiting.pid}\n`)
+            expect(parseOrcadLiveness(probeIn(slot, probe))).toBe('LIVE')
+          } finally {
+            orcad.kill()
+            waiting.kill()
+          }
+        })
+      })
     }
   )
 
