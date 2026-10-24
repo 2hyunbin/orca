@@ -136,7 +136,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
 
@@ -167,7 +167,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         parseCallback = callback
       })
 
@@ -203,7 +203,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -242,7 +242,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -281,7 +281,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -324,7 +324,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -362,7 +362,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -400,7 +400,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 

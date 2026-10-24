@@ -10,6 +10,7 @@ import { RESET_GRAPHIC_RENDITION } from '../../../../shared/terminal-mode-reset-
 import { flushAsyncTicks } from './pty-connection-test-async'
 import { UUID_RE } from './pty-connection-test-constants'
 import {
+  terminalWriteText,
   LEAF_1,
   createMockTransport,
   createPane,
@@ -314,7 +315,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
         expect.stringContaining('--- session restored ---'),
         expect.any(Function)
       )
-      const writeCalls = pane.terminal.write.mock.calls.map(([data]) => data)
+      const writeCalls = pane.terminal.write.mock.calls.map(([data]) => terminalWriteText(data))
       expect(writeCalls.findIndex((data) => data.includes('--- session restored ---'))).toBe(-1)
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledTimes(1)
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledWith(1, 'restored')

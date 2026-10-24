@@ -126,6 +126,14 @@ export function computeWorkspaceRoot(
   )
 }
 
+/** Whether the workspace root mirrors into a WSL home, which only a wsl.exe probe can resolve. */
+export function workspaceRootMirrorsIntoWsl(
+  repoPath: string,
+  settings: { workspaceDir: string; wslMirrorDistro?: string }
+): boolean {
+  return mirrorDistroForWorkspaceRoot(repoPath, settings) !== undefined
+}
+
 function mirrorDistroForWorkspaceRoot(
   repoPath: string,
   settings: { workspaceDir: string; wslMirrorDistro?: string }

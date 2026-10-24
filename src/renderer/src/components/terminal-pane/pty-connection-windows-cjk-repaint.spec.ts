@@ -86,7 +86,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -119,7 +119,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
 
         const pane = createPane(1)
         let parseCallback: (() => void) | undefined
-        pane.terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        pane.terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           parseCallback = callback
         })
 
@@ -153,7 +153,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
 
@@ -189,7 +189,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
 
@@ -224,7 +224,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
 
@@ -265,7 +265,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -303,7 +303,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -340,7 +340,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -376,7 +376,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -414,7 +414,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -453,7 +453,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           _core?: { refresh: typeof refresh }
         }
         terminal._core = { refresh }
-        terminal.write = vi.fn((_data: string, callback?: () => void) => {
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
           callback?.()
         })
 
@@ -493,7 +493,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         }
         terminal._core = { refresh: synchronousRefresh }
         terminal.refresh = debouncedRefresh
-        terminal.write = vi.fn((_data: string, callback?: () => void) => callback?.())
+        terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => callback?.())
         const manager = createManager(1)
         manager.hasWebglRenderer.mockReturnValue(true)
 

@@ -16,6 +16,7 @@ import {
   configureTerminalFocusMode
 } from './pty-connection-test-dom'
 import {
+  terminalWriteText,
   createMockTransport,
   createPane,
   captureCallbackTerminalWrites,
@@ -107,7 +108,8 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const pane = createPane(1)
       pane.terminal.buffer.active.viewportY = 42
       pane.terminal.buffer.active.baseY = 100
-      pane.terminal.write.mockImplementation((data: string, callback?: () => void) => {
+      pane.terminal.write.mockImplementation((data: string | Uint8Array, callback?: () => void) => {
+        data = terminalWriteText(data)
         if (data.includes('snapshot-state')) {
           pane.terminal.buffer.active.viewportY = 0
         }
@@ -271,7 +273,7 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
         _core?: { refresh: typeof refresh }
       }
       terminal._core = { refresh }
-      terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
       const manager = createManager(1)
@@ -468,7 +470,7 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue.push(transport)
 
       const pane = createPane(1)
-      pane.terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      pane.terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
       const manager = createManager(1)
@@ -505,7 +507,7 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue.push(transport)
 
       const pane = createPane(1)
-      pane.terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      pane.terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         callback?.()
       })
       const manager = createManager(1)
@@ -537,7 +539,7 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
 
       const pane = createPane(1)
       const pendingParses: (() => void)[] = []
-      pane.terminal.write = vi.fn((_data: string, callback?: () => void) => {
+      pane.terminal.write = vi.fn((_data: string | Uint8Array, callback?: () => void) => {
         if (callback) {
           pendingParses.push(callback)
         }
