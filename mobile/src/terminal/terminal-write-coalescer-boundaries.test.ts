@@ -17,7 +17,7 @@ vi.mock('lucide-react-native', () => ({ RefreshCw: 'RefreshCw' }))
 let activeRenderer: ReactTestRenderer | undefined
 
 function createTerminalController() {
-  const delivered: Array<TerminalWebViewCommand & { id: number }> = []
+  const delivered: (TerminalWebViewCommand & { id: number })[] = []
   let controller: ReturnType<typeof useTerminalWebViewController> | undefined
   const transport = {
     post: (command: TerminalWebViewCommand & { id: number }) => {
