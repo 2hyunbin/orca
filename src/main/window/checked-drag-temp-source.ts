@@ -51,17 +51,18 @@ export async function writeCheckedDragTempSource(
       throw new DropCopyError('changed')
     }
     await writeFile(destPath, read.buffer, { flag: 'wx', mode: 0o600, signal })
-  } else {
-    await pipeline(
-      readCheckedDragTempSource(source),
-      createWriteStream(destPath, {
-        flags: 'wx',
-        mode: 0o600,
-        highWaterMark: COPY_HIGH_WATER_MARK
-      }),
-      { signal }
-    )
+    // The bytes are in memory and already proven against the source snapshot.
+    return
   }
+  await pipeline(
+    readCheckedDragTempSource(source),
+    createWriteStream(destPath, {
+      flags: 'wx',
+      mode: 0o600,
+      highWaterMark: COPY_HIGH_WATER_MARK
+    }),
+    { signal }
+  )
   const written = await lstat(destPath)
   if (
     written.size !== source.size ||

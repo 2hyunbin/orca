@@ -294,14 +294,13 @@ describe('materializeDragTempPaths', () => {
     expect(await copyDirs()).toHaveLength(2)
   })
 
-  it('rejects a source that changes mid-copy and leaves no copy behind', async () => {
+  it('keeps proven buffered bytes when the source changes after reading', async () => {
     const source = await dragTempFile('shot.png', 'png')
     fsFaults.beforeCopyWrite = () => appendFileSync(source, '-grown')
 
-    expect(await materializeDragTempPaths([source], env)).toEqual([
-      { sourcePath: source, status: 'failed', reason: 'changed' }
-    ])
-    expect(await readdir(env.copyRoot)).toEqual([])
+    const [result] = await materializeDragTempPaths([source], env)
+    expect(await readFile(importedPath(result), 'utf8')).toBe('png')
+    expect(await readFile(source, 'utf8')).toBe('png-grown')
   })
 
   it('reports a full disk as a reason token, logging the errno, and leaves no copy behind', async () => {
