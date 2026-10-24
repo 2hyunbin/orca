@@ -4,14 +4,25 @@ import { requestTerminalPaneRecovery } from '../terminal-pane-recovery'
 import type { IpcPtyTransportOptions } from '../pty-transport-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
+/**
+ * Plain shells hold keys typed before their PTY binds (a first spawn can wait seconds on the host).
+ * Why not panes with startup work: held keys would flush ahead of the startup command or an agent
+ * resume, so a typed prompt would run as a shell command or corrupt the launch line.
+ */
+function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
+  if (session.deps.cwdPromise || session.deps.preconnectInput?.length) {
+    return true
+  }
+  return !session.paneStartup && !session.getSleepingRecordForPane(useAppStore.getState())
+}
+
 /** The spawn/attach options a pane hands its PTY transport. */
 export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPtyTransportOptions {
   return {
     terminalKittyKeyboardProtocol:
       session.pane.terminal.options.vtExtensions?.kittyKeyboard === true,
     cwd: session.deps.cwd,
-    // Why: a first spawn can wait seconds on the host (cold WSL, agent launch prep); keys typed meanwhile must reach the PTY.
-    bufferInputUntilConnect: true,
+    ...(holdsInputUntilConnect(session) ? { bufferInputUntilConnect: true } : {}),
     ...(session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }
       : {}),

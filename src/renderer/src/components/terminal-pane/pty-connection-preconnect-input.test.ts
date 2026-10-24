@@ -1,11 +1,13 @@
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectPanePty } from './pty-connection'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import {
   createManager,
   createMockTransport,
   createPane,
+  leafIdForPane,
   type MockTransport
 } from './pty-connection-test-pane-fixtures'
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
@@ -78,11 +80,13 @@ vi.mock('./pty-transport', () => ({
   })
 }))
 
-function connectPlainPane(): ReturnType<typeof connectPanePty> {
+function connectPlainPane(
+  overrides: Record<string, unknown> = {}
+): ReturnType<typeof connectPanePty> {
   const connectArgs = [
     createPane(1),
     createManager(1),
-    buildPaneConnectionDeps(() => mockStoreState)
+    buildPaneConnectionDeps(() => mockStoreState, overrides)
   ]
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
   return connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
@@ -111,6 +115,32 @@ describe('connectPanePty pre-connect input', () => {
     await flushAsyncTicks(20)
 
     expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBe(true)
+    binding.dispose()
+  })
+
+  // Why: held keys would flush ahead of the startup command, so a typed prompt would run in the shell.
+  it('keeps today’s drop for a pane with a startup command', async () => {
+    transportFactoryQueue.push(createMockTransport('pty-1'))
+
+    const binding = connectPlainPane({ startup: { command: 'claude' } })
+    await flushAsyncTicks(20)
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBeUndefined()
+    binding.dispose()
+  })
+
+  it('keeps today’s drop for a pane that resumes a sleeping agent', async () => {
+    const paneKey = makePaneKey('tab-1', leafIdForPane(1))
+    mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] = {
+      paneKey,
+      tabId: 'tab-1',
+      worktreeId: 'wt-1'
+    }
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane()
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBeUndefined()
     binding.dispose()
   })
 
