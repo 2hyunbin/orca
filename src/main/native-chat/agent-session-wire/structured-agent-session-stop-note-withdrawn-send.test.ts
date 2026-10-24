@@ -1,5 +1,4 @@
-// A Stop that ends the child after its interrupt failed: its row reports on the run it stopped, so
-// one whose child end took back the send it found still records the Stop request.
+// Accepted Stop retains its request note even when child exit takes back the send.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

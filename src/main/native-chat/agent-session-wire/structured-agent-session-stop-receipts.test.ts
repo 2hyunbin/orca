@@ -1,7 +1,3 @@
-// A Stop is saved before it acts: its receipt, its Stop event and every send it withdraws commit
-// first, and only then does it interrupt. One that cannot be saved acts on nothing; a retry of its id
-// is answered from the receipt; a failure after the save is a note, never a rewritten answer.
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
@@ -67,7 +63,6 @@ it('does not treat completed submission history as a send in an empty reinitiali
   ).toEqual([])
 })
 
-/** Every Stop event in the live epoch, with where it landed, oldest first. */
 function stopEvents(): { sequence: number; event: JournalStopEvent }[] {
   const since = journal().readSince({ epoch: journal().epoch, sequence: 0 })
   if (!since.ok) {
@@ -78,7 +73,6 @@ function stopEvents(): { sequence: number; event: JournalStopEvent }[] {
   )
 }
 
-/** The provider's row for a turn, as it lands while the agent works. */
 async function turnRow(turnId: string, state: 'running' | 'interrupted'): Promise<void> {
   await journal().appendItem(
     { provider: 'codex', threadId: 'thread-1', turnId, ordinal: 900 },
@@ -96,7 +90,6 @@ async function turnRow(turnId: string, state: 'running' | 'interrupted'): Promis
   )
 }
 
-/** A person's send accepted behind the working turn, not yet handed over. */
 async function queuedSend(text: string): Promise<string> {
   const { id, result } = rig.send(text)
   await result
@@ -120,7 +113,6 @@ it('is saved before it interrupts, and a retry of its id never stops the newer t
     value: { cancelled: true }
   })
   const [mark] = stopEvents()
-  // The receipt points at the Stop's own event, which names the turn live as it was accepted.
   expect(mark?.event).toMatchObject({ turnId: 'turn-1' })
   expect(receipt(id)).toMatchObject({
     verdict: 'readable',
@@ -129,7 +121,6 @@ it('is saved before it interrupts, and a retry of its id never stops the newer t
       result: { kind: 'journal-row', epoch: journal().epoch, sequence: mark?.sequence }
     }
   })
-  // Saved before it interrupted, and never rewritten after.
   expect(atInterrupt).toEqual(receipt(id))
   await turnRow('turn-1', 'interrupted')
   await rig.settleAccepted(working, 'stopped')
@@ -153,7 +144,6 @@ it('is saved before it interrupts, and a retry of its id never stops the newer t
   expect(rig.cancelTurn).toHaveBeenCalledTimes(2)
 })
 
-// Round 1: a late Stop acted on newer work while the next message was handed over.
 it('answers a Stop naming a turn already over as a no-op, withdrawing nothing a newer turn queued', async () => {
   await rig.workingSend()
   await turnRow('turn-new', 'running')
@@ -202,7 +192,6 @@ it('refuses in plain words when it cannot be saved, interrupting and withdrawing
   expect(await rig.drafts()).toEqual([])
 })
 
-// Round 3: the fold after COMMIT threw, and the saved Stop read as not saved and never acted.
 it('interrupts and answers from its receipt when its write throws after the commit', async () => {
   await rig.workingSend()
   const id = opId()
@@ -236,7 +225,6 @@ describe('a background-task Stop', () => {
     invocation: { invocationId: 'spawn-task-1', generation: 1 }
   }
 
-  /** Every status row's words and fact, in journal order. */
   function failureNotes(): { text: string; failure?: unknown }[] {
     return journal()
       .snapshot()
@@ -311,7 +299,6 @@ describe('a background-task Stop', () => {
         ok: true,
         value: { turnId: 'background-tasks', cancelled: false }
       })
-      // Saved before it asks the agent.
       expect(atStop()).toMatchObject({ verdict: 'readable', receipt: { result: { kind: 'stop' } } })
       expect(failureNotes()).toEqual([note])
 

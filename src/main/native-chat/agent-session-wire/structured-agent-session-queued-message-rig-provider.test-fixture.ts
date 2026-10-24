@@ -1,6 +1,3 @@
-// The scripted provider behind the queued-message rig: the adapter double the host drives, and
-// the events it writes back as the provider would.
-
 import { vi, type Mock } from 'vitest'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
@@ -18,13 +15,11 @@ import {
 export type QueuedRigProviderOptions = {
   rewind?: NonNullable<StructuredAgentSessionAdapter['rewind']>
   recoverRewind?: NonNullable<StructuredAgentSessionAdapter['recoverRewind']>
-  /** A child started for a chat whose chain already names a thread resumes it, so a chat whose
-   *  child closed or died can start another. */
+  /** Resume the saved thread on later children after close/death. */
   restartable?: true
-  /** Every child stays starting: it never answers its start, so it is handed nothing. */
+  /** Startup never answers; queued input cannot run. */
   starting?: true
-  /** A Stop's end of the child waits, as every shipping adapter's does, for the work it stopped
-   *  to end (no running turn, no unanswered send), or for the grace to run out. */
+  /** Wait for stopped work to end or grace expiry before closing the child. */
   windsDown?: true
   /** The model its child reports running; otherwise the agent's own `default`. */
   reportsModel?: string
@@ -39,16 +34,14 @@ export function createQueuedRigProvider(
   options: QueuedRigProviderOptions,
   host: () => StructuredAgentSessionHost
 ) {
-  // Admitted: the message is written and unanswered, so the session owes work
-  // until the test settles it.
+  // Admitted sends owe work until explicitly settled.
   const dispatch: Mock<StructuredAgentSessionAdapter['dispatch']> = vi.fn(async () => ({
     state: 'admitted' as const
   }))
-  // Every start the host asks for; one `holdNextStart` holds stays in its spawn until released.
   const starts: Mock<() => void> = vi.fn()
   let startHold: Promise<void> | null = null
   let startFailure: Error | null = null
-  // The provider's receipt of a /compact; its end arrives later, as `finishCompact` writes it.
+  // Acceptance precedes the later finishCompact turn-end event.
   const compact: Mock<NonNullable<StructuredAgentSessionAdapter['compact']>> = vi.fn(async () => ({
     state: 'accepted' as const,
     providerIdentity: null
@@ -136,7 +129,6 @@ export function createQueuedRigProvider(
 
   const adapter = options.starting ? scripted : startsWhenPublished(scripted, host)
 
-  /** What the provider's translator writes when a /compact's turn ends, as a success. */
   function finishCompact(): void {
     const { command } = compact.mock.calls.at(-1)![0]
     events!.appendLifecycleBatch!(
@@ -153,19 +145,16 @@ export function createQueuedRigProvider(
     )
   }
 
-  /** Holds the next start in its spawn, with what it was asked for still queued, until released. */
   function holdNextStart(): () => void {
     let release = (): void => {}
     startHold = new Promise<void>((resolve) => (release = resolve))
     return () => release()
   }
 
-  /** Fails the next start in its spawn, as an agent that cannot start does. */
   function failNextStart(error: Error): void {
     startFailure = error
   }
 
-  /** The event sink the provider writes through. */
   function providerEvents(): StructuredAgentSessionEventSink {
     if (!events) {
       throw new Error('no provider bound')

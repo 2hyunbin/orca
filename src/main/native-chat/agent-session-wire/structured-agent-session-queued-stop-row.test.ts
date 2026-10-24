@@ -1,6 +1,3 @@
-// A handed-over card may have reached the agent: Stop never queues it again, and the
-// shared transcript keeps it as sent while the cards behind it still wait and resume.
-
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
@@ -47,7 +44,6 @@ function journal(sessionId = HOST_TEST_SESSION) {
   return open
 }
 
-/** No drain step converts the cards, and the published pause names `reason` (null: none shown). */
 async function expectHeld(reason: string | null, ...draftIds: string[]): Promise<void> {
   await vi.advanceTimersByTimeAsync(250)
   for (const draftId of draftIds) {
@@ -56,7 +52,6 @@ async function expectHeld(reason: string | null, ...draftIds: string[]): Promise
   expect(await rig.queuePause()).toEqual(reason === null ? null : { reason })
 }
 
-/** A Stop's withdrawal as the provider writes it, naming the turn it was answered into if any. */
 function withdraw(clientMessageId: string, answeredInTurn?: AgentJournalAnsweredTurnIdentity) {
   return rig.host.settleLateDispatch({
     sessionId: HOST_TEST_SESSION,
@@ -73,7 +68,6 @@ async function send(clientMessageId: string) {
   )
 }
 
-/** How the shared projection every client runs draws this send, or null when it hides it. */
 async function drawn(clientMessageId: string) {
   const { items, submissions } = await rig.host.journalSnapshot(HOST_TEST_SESSION)
   const message = projectStructuredAgentSessionMessages(items, [], submissions).find(
@@ -91,8 +85,7 @@ it('a card handed over and stopped before the agent confirms it reads as sent, n
   await rig.sendNow(steered)
   await eventually(async () => expect((await rig.handoff(steered))?.handedOverAt).toBeDefined())
   const steer = await rig.handoffId(steered)
-  // Codex ends the stopped turn without taking the steer: the agent may have it, nothing proves
-  // it did not.
+
   await rig.stop()
   await withdraw(steer, {
     turn: {
@@ -110,11 +103,10 @@ it('a card handed over and stopped before the agent confirms it reads as sent, n
     { messageId: opening, state: 'waiting' },
     { messageId: last, state: 'waiting' }
   ])
-  // The turn's message, unconfirmed, as an old client's projection draws it too.
+
   expect(await send(steer)).toMatchObject({ dispatchState: 'unknown', recovered: true })
   expect(await drawn(steer)).toEqual({ stoppedBeforeStart: undefined })
 
-  // Resume hands the next card over; a Stop before its turn opens takes it back, unconfirmed.
   expect(await rig.resume()).toMatchObject({ ok: true, value: { resumed: true } })
   await eventually(async () => expect((await rig.handoff(opening))?.handedOverAt).toBeDefined())
   const opener = await rig.handoffId(opening)
@@ -122,7 +114,7 @@ it('a card handed over and stopped before the agent confirms it reads as sent, n
   await withdraw(opener)
   await expectHeld('stopped', last)
   expect(await rig.drafts()).toEqual([{ messageId: last, state: 'waiting' }])
-  // Drawn as a person's own send a Stop took back.
+
   expect(await send(opener)).toMatchObject({ dispatchState: 'rejected' })
   expect(await drawn(opener)).toEqual({ stoppedBeforeStart: true })
 
@@ -133,7 +125,7 @@ it('a card handed over and stopped before the agent confirms it reads as sent, n
     steer,
     'rejected'
   ])
-  // Neither stopped card can come back, so a reopen holds nothing.
+
   await rig.restartHostProcess()
   await rig.queuePause()
   expect(structuredQueuePauses(journal()).map((pause) => pause.reason)).not.toContain('restarted')
