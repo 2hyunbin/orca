@@ -1,12 +1,12 @@
 /** Unproven closes must restore previously visible tabs: hiding before failed close must not leave a running conversation absent from the durable restore index. */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { recordingStructuredAgentSessionLogger } from '../../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 
 const hostRef: { current: unknown } = { current: null }
 
-vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
+vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry', () => ({
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 

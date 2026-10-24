@@ -15,7 +15,7 @@ import {
   type AgentSessionReserveResult
 } from './agent-session-reservation-admission'
 import type { AgentSessionStoreState } from './agent-session-store-state'
-import { setAgentSessionTabVisibility } from './agent-session-tab-table'
+import { setAgentSessionTabVisibility } from './agent-session/agent-session-tab-table'
 
 /** Use create admission without requiring owner acquisition. */
 export function commitAgentSessionFounding(

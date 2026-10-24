@@ -18,7 +18,10 @@ import {
   isReadableAgentSessionStoreTab,
   isReadableRetiredAgentSessionClaimKey
 } from './agent-session-store-row-rules'
-import { AgentSessionTabTable, type PersistedAgentSessionTab } from './agent-session-tab-table'
+import {
+  AgentSessionTabTable,
+  type PersistedAgentSessionTab
+} from './agent-session/agent-session-tab-table'
 
 /** Never-recorded differs from recorded-empty; legacy fallback cannot infer this from row count (#17439). */
 const SESSION_TABS_RECORDED = 'session_tabs_recorded'

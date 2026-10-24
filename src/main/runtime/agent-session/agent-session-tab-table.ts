@@ -1,6 +1,6 @@
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
-import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
-import type { AgentSessionStoreState } from './agent-session-store-state'
+import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
+import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
+import type { AgentSessionStoreState } from '../agent-session-store-state'
 
 /** Tab membership defines visibility; tab and session ids form a one-to-one mapping. */
 export class AgentSessionTabTable {

@@ -1,9 +1,9 @@
 // Seed legacy restored chats in one transaction: a partial index would read complete on next launch and lose the remaining tabs.
 
-import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
-import type { Tab } from '../../shared/tab-types'
+import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
+import type { Tab } from '../../../shared/tab-types'
 import type { ChatTabChange } from './agent-session-tab-layout'
-import { savedSessionId } from './saved-structured-agent-session-restoration'
+import { savedSessionId } from '../saved-structured-agent-session-restoration'
 
 type TabIndexHost = Pick<
   StructuredAgentSessionHost,
