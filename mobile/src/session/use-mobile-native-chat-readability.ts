@@ -64,9 +64,7 @@ export function useMobileNativeChatReadability(
           return
         }
         const accepted = nativeChatRepoListRead.interpret(response)
-        const repos = accepted.accepted
-          ? ((accepted.value as MobileRuntimeRepoSummary[]) ?? [])
-          : []
+        const repos: MobileRuntimeRepoSummary[] = accepted.accepted ? accepted.value : []
         const repoId = getRepoIdFromMobileWorktreeId(worktreeId)
         const repo = repos.find((candidate) => candidate.id === repoId)
         setState({
