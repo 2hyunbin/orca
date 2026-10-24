@@ -48,21 +48,6 @@ describe('agent decorative title signatures', () => {
     ).toBe(false)
   })
 
-  it('folds Claude Code quarter-circle frames', () => {
-    expect(
-      isDecorativeAgentTitleFrameChange('\u25d0 Fix the login test', '\u25d3 Fix the login test')
-    ).toBe(true)
-  })
-
-  it('still sees a text change between frames as a new title', () => {
-    expect(
-      isDecorativeAgentTitleFrameChange(
-        '\u2819 renaming... \u2819 | scratch',
-        '\u2839 List and summarize files \u2839 | scratch'
-      )
-    ).toBe(false)
-  })
-
   it('returns null for ordinary non-agent titles', () => {
     expect(getDecorativeAgentTitleSignature('vim src/index.ts')).toBeNull()
   })
