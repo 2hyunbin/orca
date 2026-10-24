@@ -9,9 +9,9 @@
  * inside a transaction, which is what makes the record and its operation row land together.
  */
 
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
-import { assertAgentSessionOptionsAdmitted } from './agent-session-record-options'
-import { chatAgentsShareConversations } from '../../shared/structured-agent-cli-conversation-adoption'
+import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
+import { assertAgentSessionOptionsAdmitted } from '../../agent-session-record-options'
+import { chatAgentsShareConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import {
   agentSessionOperationKey,
   evaluateAgentSessionOperation,
@@ -19,37 +19,39 @@ import {
   pruneAgentSessionOperationRows,
   type AgentSessionOperationDecision,
   type AgentSessionOperationRow
-} from '../../shared/agent-session-operation-ledger'
+} from '../../../../shared/agent-session-operation-ledger'
 import {
   agentSessionLeaseIsReleased,
   agentSessionLeaseOwnerVerdict,
   evaluateAgentSessionAcquisition,
   type AgentSessionOwnerProbe
-} from '../../shared/agent-session-lease-adjudication'
+} from '../../../../shared/agent-session-lease-adjudication'
 import {
   agentSessionExecutionLocationsEqual,
   isAgentSessionLaunchEnv,
   isAgentSessionOptions,
-  type AgentSessionAccountHome,
   type AgentSessionExecutionLocation,
   type AgentSessionLaunchArgs,
   type AgentSessionLaunchEnv,
   type AgentSessionRecord
-} from '../../shared/agent-session-record'
-import { isAgentSessionLaunchArgs } from '../../shared/agent-session-launch-args'
-import { isAgentSessionSurfaceTabId } from '../../shared/agent-session-surface-tab-id'
-import {
-  agentSessionProviderHandleRoot,
-  type StructuredAgentId,
-  type AgentSessionProviderHandleLink
-} from '../../shared/agent-session-provider-handle'
+} from '../../../../shared/agent-session-record'
+import { isAgentSessionLaunchArgs } from '../../../../shared/agent-session-launch-args'
+import { isAgentSessionSurfaceTabId } from '../../../../shared/agent-session-surface-tab-id'
+import { agentSessionProviderHandleRoot } from '../../../../shared/agent-session-provider-handle-encoding'
+import type {
+  StructuredAgentId,
+  AgentSessionProviderHandleLink
+} from '../../../../shared/agent-session-provider-handle'
 import {
   reserveAgentSessionOwner,
   type AgentSessionReservation
 } from './agent-session-lease-transitions'
-import type { AgentSessionStoreState } from './agent-session-store-state'
-import { agentSessionRecordIdentityFields } from './agent-session-record-founding'
-import { agentSessionAccountHomesEqual } from '../../shared/agent-session-account-home'
+import type { AgentSessionStoreState } from '../../agent-session-store-state'
+import { agentSessionRecordIdentityFields } from '../../agent-session-record-founding'
+import {
+  agentSessionAccountHomesEqual,
+  type AgentSessionAccountHome
+} from '../../../../shared/agent-session-account-home'
 
 export type AgentSessionReserveRequest = {
   /** Host-resolved floating directory committed with the first owner reservation. */

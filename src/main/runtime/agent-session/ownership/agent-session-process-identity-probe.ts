@@ -12,13 +12,13 @@ import { readFile } from 'node:fs/promises'
 import type {
   AgentSessionOwnerProbe,
   AgentSessionProcessIdentityField
-} from '../../shared/agent-session-lease-adjudication'
-import type { AgentSessionProcessIdentity } from '../../shared/agent-session-record'
+} from '../../../../shared/agent-session-lease-adjudication'
+import type { AgentSessionProcessIdentity } from '../../../../shared/agent-session-record'
 import { runProcess } from '@orca/process-host'
 import {
   isWindowsProcessStartTimeAvailable,
   readWindowsProcessIdentityTableFresh
-} from '../windows/windows-process-table'
+} from '../../../windows/windows-process-table'
 
 /** Start times drift by scheduler granularity and clock reads; compare with a tolerance. */
 export const PROCESS_START_TIME_TOLERANCE_MS = 2_000

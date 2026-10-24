@@ -14,16 +14,16 @@ import {
   type AgentSessionOperationDecision,
   type AgentSessionOperationOutcome,
   type AgentSessionOperationRow
-} from '../../shared/agent-session-operation-ledger'
+} from '../../../../shared/agent-session-operation-ledger'
 import {
   admitAgentSessionMutation,
   agentSessionLedgerRefusal,
   type AgentSessionMutationAdmission
-} from '../../shared/agent-session-mutation-envelope'
-import type { AgentSessionMutationEnvelope } from '../../shared/agent-session-wire'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import type { AgentSessionStoreState } from './agent-session-store-state'
-import { AgentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
+} from '../../../../shared/agent-session-mutation-envelope'
+import type { AgentSessionMutationEnvelope } from '../../../../shared/agent-session-wire'
+import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
+import type { AgentSessionStoreState } from '../../agent-session-store-state'
+import { AgentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 
 export type AgentSessionOperationAdmission = {
   callerKey: string

@@ -1,15 +1,17 @@
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
+import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 import {
   agentSessionProviderHandleChainHead,
-  agentSessionProviderHandleRoot,
   agentSessionProviderHandlesEqual,
   appendAgentSessionProviderHandleLink,
   isAgentSessionProviderHandleChain,
   type AgentSessionProviderHandle,
   type AgentSessionProviderHandleLink
-} from '../../shared/agent-session-provider-handle'
-import { agentSessionProviderHandleBelongsTo } from '../../shared/agent-session-provider-handle-encoding'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
+} from '../../../../shared/agent-session-provider-handle'
+import {
+  agentSessionProviderHandleBelongsTo,
+  agentSessionProviderHandleRoot
+} from '../../../../shared/agent-session-provider-handle-encoding'
+import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 
 export function recordAgentSessionProviderHandle(args: {
   record: AgentSessionRecord

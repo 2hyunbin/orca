@@ -9,8 +9,8 @@
 import {
   adjudicateAgentSessionRestart,
   type AgentSessionOwnerProbe
-} from '../../shared/agent-session-lease-adjudication'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
+} from '../../../../shared/agent-session-lease-adjudication'
+import type { AgentSessionRecord } from '../../../../shared/agent-session-record'
 import { withLease } from './agent-session-lease-transitions'
 
 /** Apply one restart adjudication. Never consults deadlines — only proof moves a lease. */

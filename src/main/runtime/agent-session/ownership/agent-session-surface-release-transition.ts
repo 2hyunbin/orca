@@ -8,14 +8,14 @@
 // The fence still moves, so the next owner is a new generation: an attach or settlement still
 // holding the stopped owner's fence is refused as stale rather than acting on its successor.
 
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
+import { agentSessionRefusalError } from '../../../../shared/agent-session-wire-refusals'
 import {
   MAX_AGENT_SESSION_DEATH_DETAIL_CHARS,
   type AgentSessionRecord
-} from '../../shared/agent-session-record'
-import { nextAgentSessionFence } from '../../shared/agent-session-next-fence'
+} from '../../../../shared/agent-session-record'
+import { nextAgentSessionFence } from '../../../../shared/agent-session-next-fence'
 import { assertFence, withLease } from './agent-session-lease-transitions'
-import type { AgentSessionRecordStore } from './agent-session-record-store'
+import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 
 export type AgentSessionRecordTransitionStore = Pick<AgentSessionRecordStore, 'transitionHandoff'>
 

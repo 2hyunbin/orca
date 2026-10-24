@@ -7,7 +7,7 @@ const { isWindowsProcessStartTimeAvailable, readWindowsProcessIdentityTableFresh
   })
 )
 
-vi.mock('../windows/windows-process-table', async (importOriginal) => ({
+vi.mock('../../../windows/windows-process-table', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   isWindowsProcessStartTimeAvailable,
   readWindowsProcessIdentityTableFresh
