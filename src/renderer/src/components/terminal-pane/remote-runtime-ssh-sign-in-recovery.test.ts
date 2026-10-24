@@ -120,7 +120,7 @@ describe.each([
     )
   )('restores original-terminal I/O for $name $timing', async (failure) => {
     const { pane, onData, onError, signIn } = await mountAwaitingPane(tabId, failure)
-    expect(pane.getRecoveryState?.().phase).toBe('backoff')
+    expect(pane.getRecoveryState?.()).toMatchObject({ phase: 'backoff', reason: 'ssh-sign-in' })
     expect(subscribedTerminalHandles()).toEqual([])
 
     if (failure.late) {
@@ -181,5 +181,133 @@ describe.each([
 
     expect(subscribedTerminalHandles()).toEqual([])
     expect(runtimeCall).toHaveBeenCalledTimes(callsAfterTeardown)
+  })
+})
+
+async function mountNewPaneAwaitingSignIn(failure: { message: string }) {
+  let signedIn = false
+  const healthyCall = runtimeCall.getMockImplementation()
+  runtimeCall.mockImplementation(async (request: { method: string; params?: unknown }) => {
+    if (!signedIn) {
+      throw new Error(failure.message)
+    }
+    return healthyCall?.(request)
+  })
+  const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
+  const { reviveRemoteRuntimePtyRecoveriesForEnvironment } =
+    await import('./remote-runtime-pty-recovery-state')
+  const onError = vi.fn()
+  const onPtySpawn = vi.fn()
+  const pane = createRemoteRuntimePtyTransport('env-1', {
+    worktreeId: 'wt-1',
+    tabId: 'tab-new',
+    leafId: 'pane:1',
+    onPtySpawn
+  })
+  transport = pane
+  await pane.connect({
+    url: '',
+    cols: 80,
+    rows: 24,
+    callbacks: { onError }
+  })
+  return {
+    pane,
+    onError,
+    onPtySpawn,
+    createCalls: () =>
+      runtimeCall.mock.calls.filter(([request]) => request.method === 'terminal.create'),
+    signIn: () => {
+      signedIn = true
+      return reviveRemoteRuntimePtyRecoveriesForEnvironment('env-1')
+    }
+  }
+}
+
+describe('SSH sign-in for a terminal created while the host waits for sign-in', () => {
+  it.each(
+    pendingErrors.flatMap((failure) =>
+      [false, true].map((late) => ({
+        ...failure,
+        late,
+        timing: late ? 'after the recovery deadline' : 'before the recovery deadline'
+      }))
+    )
+  )('waits for sign-in and then starts for $name $timing', async (failure) => {
+    const { pane, onError, onPtySpawn, signIn } = await mountNewPaneAwaitingSignIn(failure)
+    expect(pane.getRecoveryState?.()).toMatchObject({
+      phase: 'backoff',
+      reason: 'ssh-sign-in'
+    })
+    expect(onError).not.toHaveBeenCalled()
+
+    if (failure.late) {
+      await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+      expect(pane.getRecoveryState?.()).toMatchObject({
+        phase: 'disconnected',
+        reason: 'ssh-sign-in'
+      })
+    }
+
+    expect(signIn()).toBe(1)
+    await vi.waitFor(() => expect(latestSubscribePayload().terminal).toBe('terminal-1'))
+    const { streamId } = latestSubscribePayload()
+    subscriptionCallbacks?.onResponse({
+      ok: true,
+      result: { type: 'subscribed', streamId }
+    })
+    emitSnapshot(streamId, 'fresh prompt$ ')
+
+    expect(onPtySpawn).toHaveBeenCalledTimes(1)
+    expect(onPtySpawn).toHaveBeenCalledWith('remote:env-1@@terminal-1')
+    expect(pane.isConnected()).toBe(true)
+    expect(pane.getRecoveryState?.().reason).toBeUndefined()
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('starts after a sign-in that was cancelled and completed later', async () => {
+    const failure = { message: pendingErrors[0].message }
+    const pending = await mountNewPaneAwaitingSignIn(failure)
+    failure.message = pendingErrors[2].message
+    await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+    expect(pending.pane.getRecoveryState?.()).toMatchObject({
+      phase: 'disconnected',
+      reason: 'ssh-sign-in'
+    })
+
+    expect(pending.signIn()).toBe(1)
+    await vi.waitFor(() => expect(pending.onPtySpawn).toHaveBeenCalledTimes(1))
+    expect(pending.onError).not.toHaveBeenCalled()
+  })
+
+  it.each(['destroy', 'disconnect'] as const)(
+    'spawns nothing after sign-in once the pending terminal is closed (%s)',
+    async (teardown) => {
+      const { pane, onPtySpawn, signIn, createCalls } = await mountNewPaneAwaitingSignIn(
+        pendingErrors[0]
+      )
+      const createsBeforeClose = createCalls().length
+      pane[teardown]?.()
+
+      expect(signIn()).toBe(0)
+      await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+
+      expect(createCalls()).toHaveLength(createsBeforeClose)
+      expect(onPtySpawn).not.toHaveBeenCalled()
+      expect(subscribedTerminalHandles()).toEqual([])
+    }
+  )
+
+  it('still reports rejected credentials instead of waiting', async () => {
+    const { pane, onError, signIn, createCalls } = await mountNewPaneAwaitingSignIn({
+      message: 'All configured authentication methods failed'
+    })
+    expect(onError).toHaveBeenCalledWith('All configured authentication methods failed')
+    expect(pane.getRecoveryState?.().reason).toBeUndefined()
+    const createsAfterFailure = createCalls().length
+
+    expect(signIn()).toBe(0)
+    await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
+    expect(createCalls()).toHaveLength(createsAfterFailure)
   })
 })

@@ -336,6 +336,8 @@ export function createRemoteRuntimePtyTransport(
   const disconnectedInputGrace = createRemoteRuntimeDisconnectedInputGrace()
   let previousRecoveryPhase: RemoteRuntimePtyRecoveryPhase = 'idle'
   let unregisterControlReadyReviver: (() => void) | null = null
+  // Why: the pane's retry is waiting on the user's SSH sign-in, not on a lost link.
+  let awaitingSshSignIn = false
   // Why registered only while recovering: detach and destroy go idle, so a discarded transport is never retained.
   function syncControlReadyReviver(): void {
     const wantsRevival = recovery.isActive || recovery.currentPhase === 'disconnected'
@@ -377,6 +379,9 @@ export function createRemoteRuntimePtyTransport(
       // Why: cached pixels may remain, but no stream from the exhausted epoch may keep delivering or accepting terminal traffic.
       subscriptionGeneration += 1
       closeMultiplexedStream()
+    }
+    if (recovery.currentPhase === 'idle' || recovery.currentPhase === 'disposed') {
+      awaitingSshSignIn = false
     }
     if (recovery.currentPhase === 'idle') {
       autoRecoveryWindowSpent = false
@@ -609,13 +614,20 @@ export function createRemoteRuntimePtyTransport(
                 : connected && attachmentReady
                   ? 'connected'
                   : 'offline'
+    const ownership =
+      (recovery.isActive && recovery.hasOwnerRefresh) || surfacedErrorMessages.has(ownerChanged)
+    const awaitingSignIn =
+      awaitingSshSignIn &&
+      (phase === 'recovering' || phase === 'backoff' || phase === 'disconnected')
     return {
       phase,
       epoch: recovery.currentEpoch,
       attempt: recovery.attemptCount,
-      ...((recovery.isActive && recovery.hasOwnerRefresh) || surfacedErrorMessages.has(ownerChanged)
+      ...(ownership
         ? { reason: 'ownership' as const }
-        : {})
+        : awaitingSignIn
+          ? { reason: 'ssh-sign-in' as const }
+          : {})
     }
   }
 
@@ -1367,6 +1379,7 @@ export function createRemoteRuntimePtyTransport(
         if (!isRecoverableRemoteRuntimeConnectionError(clientError)) {
           throw error
         }
+        awaitingSshSignIn = false
         if (kind === 'agent-session') {
           agentSessionRequiresHostAuthorityReplay = true
         } else {
@@ -3198,6 +3211,7 @@ export function createRemoteRuntimePtyTransport(
         // Why: no handle is bound yet, so the resubscribe path cannot own this retry; replay attach
         // instead of latching in 'connecting' with nothing armed (#18495).
         connecting = false
+        awaitingSshSignIn = isSshSignInPendingTerminalError(runtimeTerminalErrorMessage(error))
         scheduleConnectRetryAfterRecoverableFailure()
         if (handle && isRemoteTerminalStaleMessage(runtimeTerminalErrorMessage(error))) {
           retireIfHostRecordsExit(handle, remotePtyId ?? options.existingPtyId ?? null)
@@ -3530,7 +3544,13 @@ export function createRemoteRuntimePtyTransport(
         } else if (isRemoteTerminalGoneMessage(message)) {
           recovery.cancel()
           handleRemoteTerminalError(error)
+        } else if (isSshSignInPendingTerminalError(message)) {
+          // Why: main refused before dispatch, so nothing was created; the control-ready revival
+          // replays this create once sign-in finishes (#31942).
+          awaitingSshSignIn = true
+          scheduleConnectRetryAfterRecoverableFailure()
         } else if (isRecoverablePaneBindingError(error)) {
+          awaitingSshSignIn = false
           scheduleConnectRetryAfterRecoverableFailure()
         } else {
           recovery.cancel()

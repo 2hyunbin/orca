@@ -3526,7 +3526,10 @@
             "disconnectedTitle": "Remote runtime disconnected",
             "retryingBody": "Orca está reintentando automáticamente. Este terminal se reanudará si vuelve la conexión.",
             "disconnectedBody": "Se detuvieron los reintentos automáticos. Vuelva a conectarse para reanudar esta sesión de terminal.",
-            "reconnectButton": "Reconnect"
+            "reconnectButton": "Reconnect",
+            "signInTitle": "Esperando el inicio de sesión SSH",
+            "signInBody": "Esta terminal continuará sola cuando inicies sesión en el host.",
+            "signInButton": "Iniciar sesión"
           },
           "TerminalRestoringPlaceholder": {
             "restoring": "Restaurando terminal…"

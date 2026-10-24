@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader2, ServerOff } from 'lucide-react'
+import { KeyRound, Loader2, ServerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import type { PtyTransportRecoveryState } from './pty-transport-types'
@@ -38,7 +38,8 @@ export function TerminalRemoteRuntimeReconnectBanner({
   phase,
   onReconnect,
   wslHostUnavailable = null,
-  pairingRefused = false
+  pairingRefused = false,
+  awaitingSignIn = false
 }: {
   phase: VisibleRecoveryPhase
   onReconnect: () => void
@@ -46,9 +47,14 @@ export function TerminalRemoteRuntimeReconnectBanner({
   wslHostUnavailable?: WslHostUnavailableReason | null
   /** The pane's managed server refuses this desktop and pairing again over SSH failed. */
   pairingRefused?: boolean
+  /** Main refused because the SSH host is waiting for the user to sign in; it resumes after. */
+  awaitingSignIn?: boolean
 }): React.JSX.Element {
   if (wslHostUnavailable) {
     return <WslHostUnavailableBanner reason={wslHostUnavailable} />
+  }
+  if (awaitingSignIn && !pairingRefused) {
+    return <SshSignInWaitBanner onSignIn={onReconnect} />
   }
   const retrying = phase !== 'disconnected' && !pairingRefused
 
@@ -116,6 +122,45 @@ export function TerminalRemoteRuntimeReconnectBanner({
   )
 }
 
+function SshSignInWaitBanner({ onSignIn }: { onSignIn: () => void }): React.JSX.Element {
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center"
+      data-terminal-remote-runtime-reconnect-banner="ssh-sign-in"
+    >
+      <div
+        className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-md border border-border bg-card/95 px-3 py-3 text-card-foreground shadow-xs backdrop-blur-[1px]"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
+          <KeyRound className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">
+            {translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInTitle',
+              'Waiting for SSH sign-in'
+            )}
+          </div>
+          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+            {translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInBody',
+              'This terminal continues by itself once you sign in to the host.'
+            )}
+          </div>
+        </div>
+        <Button size="sm" onClick={onSignIn}>
+          {translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInButton',
+            'Sign in'
+          )}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 /** Keyed per pane: holds a retrying banner back until recovery outlasts the delay. */
 export function DelayedRemoteRuntimeReconnectBanner({
   epoch,
@@ -125,6 +170,7 @@ export function DelayedRemoteRuntimeReconnectBanner({
 }): React.JSX.Element | null {
   const revealed = useRemoteRuntimeRecoveryBannerRevealed(
     props.phase === 'disconnected' ||
+      Boolean(props.awaitingSignIn) ||
       Boolean(props.wslHostUnavailable) ||
       Boolean(props.pairingRefused)
   )

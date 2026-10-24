@@ -3695,7 +3695,10 @@
             "disconnectedTitle": "Runtime distant déconnecté",
             "retryingBody": "Orca réessaie automatiquement. Ce terminal reprendra si la connexion revient.",
             "disconnectedBody": "Les tentatives automatiques sont interrompues. Reconnectez-vous pour reprendre cette session de terminal.",
-            "reconnectButton": "Reconnecter"
+            "reconnectButton": "Reconnecter",
+            "signInTitle": "En attente de la connexion SSH",
+            "signInBody": "Ce terminal reprend tout seul dès que vous vous connectez à l’hôte.",
+            "signInButton": "Se connecter"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "Hôte indisponible",

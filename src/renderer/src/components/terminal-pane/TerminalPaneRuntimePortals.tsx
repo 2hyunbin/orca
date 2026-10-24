@@ -189,6 +189,7 @@ export function TerminalPaneRecoveryPortals({
         if (!recoveryState || recoveryState.reason === 'ownership') {
           return null
         }
+        const awaitingSignIn = recoveryState.reason === 'ssh-sign-in'
         return createPortal(
           <DelayedRemoteRuntimeReconnectBanner
             // Why per pane, not per epoch: a Reconnect click opens a new epoch and must not hide the banner again.
@@ -196,13 +197,18 @@ export function TerminalPaneRecoveryPortals({
             epoch={recoveryState.epoch}
             phase={recoveryState.phase}
             onReconnect={() => {
+              const transport = paneTransportsRef.current.get(pane.id)
               const retry = (): void => {
-                paneTransportsRef.current.get(pane.id)?.retryRecovery?.()
+                transport?.retryRecovery?.()
               }
-              // Why connect first: it asks Orca to pair again, which a pane retry alone does not.
-              if (pairingRefusedEnvironmentId) {
+              // Why connect first: it asks Orca to pair again, or opens the SSH sign-in, which a
+              // pane retry alone does not.
+              const connectEnvironmentId =
+                pairingRefusedEnvironmentId ??
+                (awaitingSignIn ? (transport?.getRuntimeEnvironmentId?.() ?? null) : null)
+              if (connectEnvironmentId) {
                 void window.api.runtimeEnvironments
-                  .connect({ selector: pairingRefusedEnvironmentId })
+                  .connect({ selector: connectEnvironmentId })
                   .catch(() => undefined)
                   .finally(retry)
                 return
@@ -211,6 +217,7 @@ export function TerminalPaneRecoveryPortals({
             }}
             wslHostUnavailable={wslHostUnavailable}
             pairingRefused={pairingRefusedEnvironmentId !== null}
+            awaitingSignIn={awaitingSignIn}
           />,
           pane.container,
           `remote-runtime-reconnect-${pane.id}`

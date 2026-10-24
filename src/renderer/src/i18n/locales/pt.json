@@ -15652,7 +15652,10 @@
             "disconnectedBody": "As tentativas automáticas foram interrompidas. Reconecte para retomar esta sessão de terminal.",
             "reconnectButton": "Reconectar",
             "pairingRefusedTitle": "Este host não aceita mais este computador",
-            "pairingRefusedBody": "O Orca não conseguiu parear com ele novamente via SSH. Nada no host foi interrompido. Reconecte para tentar novamente."
+            "pairingRefusedBody": "O Orca não conseguiu parear com ele novamente via SSH. Nada no host foi interrompido. Reconecte para tentar novamente.",
+            "signInTitle": "Aguardando login SSH",
+            "signInBody": "Este terminal continua sozinho quando você entrar no host.",
+            "signInButton": "Entrar"
           },
           "TerminalPane": {
             "ac112e9036": "Remover título",

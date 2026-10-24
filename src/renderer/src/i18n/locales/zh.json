@@ -3511,7 +3511,10 @@
             "disconnectedTitle": "远程运行时已断开连接",
             "retryingBody": "Orca 正在自动重试。如果连接恢复，此终端将恢复。",
             "disconnectedBody": "自动重试已停止。重新连接以恢复此终端会话。",
-            "reconnectButton": "重新连接"
+            "reconnectButton": "重新连接",
+            "signInTitle": "正在等待 SSH 登录",
+            "signInBody": "登录到主机后，此终端会自动继续。",
+            "signInButton": "登录"
           },
           "TerminalLinkActionPopover": {
             "openLink": "打开链接",
