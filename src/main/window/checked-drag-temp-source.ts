@@ -1,6 +1,6 @@
 import { createWriteStream, type Stats } from 'node:fs'
 import { lstat, mkdtemp, rm, writeFile, type FileHandle } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
@@ -25,6 +25,29 @@ export type CheckedDragTempSource = {
   size: number
 }
 
+export async function readCheckedDragTempSourceBytes(
+  source: CheckedDragTempSource,
+  signal?: AbortSignal
+): Promise<Buffer> {
+  const read = await readNodeFileHandleWithinLimit(
+    source.handle,
+    AGENT_SESSION_ATTACHMENT_MAX_BYTES,
+    {
+      regularFileOnly: true,
+      signal,
+      window: { offset: 0, length: source.size }
+    }
+  ).finally(async () => {
+    if (!isSameSnapshot(await source.handle.stat(), source.snapshot)) {
+      throw new DropCopyError('changed')
+    }
+  })
+  if (!isSameSnapshot(read.stats, source.snapshot)) {
+    throw new DropCopyError('changed')
+  }
+  return read.buffer
+}
+
 /** Copies the checked source into `destPath` from offset 0, then proves the bytes are the ones
  *  opened: written size and the handle's stat must still match the open-time snapshot. */
 export async function writeCheckedDragTempSource(
@@ -34,23 +57,8 @@ export async function writeCheckedDragTempSource(
 ): Promise<void> {
   // Reading bytes from the checked handle copies no xattrs, unlike cp, ditto or clonefile.
   if (source.size <= AGENT_SESSION_ATTACHMENT_MAX_BYTES) {
-    const read = await readNodeFileHandleWithinLimit(
-      source.handle,
-      AGENT_SESSION_ATTACHMENT_MAX_BYTES,
-      {
-        regularFileOnly: true,
-        signal,
-        window: { offset: 0, length: source.size }
-      }
-    ).finally(async () => {
-      if (!isSameSnapshot(await source.handle.stat(), source.snapshot)) {
-        throw new DropCopyError('changed')
-      }
-    })
-    if (!isSameSnapshot(read.stats, source.snapshot)) {
-      throw new DropCopyError('changed')
-    }
-    await writeFile(destPath, read.buffer, { flag: 'wx', mode: 0o600, signal })
+    const bytes = await readCheckedDragTempSourceBytes(source, signal)
+    await writeFile(destPath, bytes, { flag: 'wx', mode: 0o600, signal })
     // The bytes are in memory and already proven against the source snapshot.
     return
   }
@@ -122,6 +130,32 @@ export async function copyCheckedDragTempSource(
       throw error
     }
     return classifyFailure(source.sourcePath, error)
+  }
+}
+
+export async function stageCapturedDragTempBytes(
+  sourcePath: string,
+  bytes: Buffer,
+  env: DragTempCopyEnvironment,
+  batch: DragTempCopyBatch,
+  signal?: AbortSignal
+): Promise<DragTempCopyItemResult> {
+  let directory: string | undefined
+  try {
+    signal?.throwIfAborted()
+    directory = await createCopyDirectory(env.copyRoot, batch)
+    signal?.throwIfAborted()
+    const destPath = join(directory, basename(sourcePath))
+    await writeFile(destPath, bytes, { flag: 'wx', mode: 0o600, signal })
+    signal?.throwIfAborted()
+    return { sourcePath, status: 'imported', destPath, byteLength: bytes.length, directory }
+  } catch (error) {
+    if (directory) {
+      batch.directories.delete(directory)
+      await rm(directory, { recursive: true, force: true }).catch(() => undefined)
+    }
+    signal?.throwIfAborted()
+    return classifyFailure(sourcePath, error)
   }
 }
 

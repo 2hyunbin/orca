@@ -20,6 +20,7 @@ import {
   DropCopyError,
   errorCode,
   isSameSnapshot,
+  readCheckedDragTempSourceBytes,
   type CheckedDragTempSource
 } from './checked-drag-temp-source'
 
@@ -49,6 +50,7 @@ export type DragTempCopyItemResult =
     }
   /** Checked and held open, unread: a local chat writes it straight into its store. */
   | { sourcePath: string; status: 'opened'; source: CheckedDragTempSource }
+  | { sourcePath: string; status: 'buffered'; bytes: Buffer }
   /** Left as the original path, which only main's children can open. */
   | { sourcePath: string; status: 'uncopied'; reason: 'too-large' | 'storage-full' }
   | { sourcePath: string; status: 'failed'; reason: NativeFileDropCopyFailureReason }
@@ -57,8 +59,11 @@ export class DragTempCopyBatch {
   readonly completed = new Map<string, DragTempCopyItemResult>()
   readonly directories = new Set<string>()
   readonly opened = new Set<CheckedDragTempSource>()
-  /** Files at or under this size are held open instead of copied; -1 for none. */
-  constructor(readonly openMaxBytes = -1) {}
+  remainingMemory: number
+  /** Local-chat file cap and initial batch memory budget; -1 disables both. */
+  constructor(readonly openMaxBytes = -1) {
+    this.remainingMemory = openMaxBytes
+  }
 }
 
 export function getDragTempCopyRoot(appTempRoot: string): string {
@@ -179,6 +184,12 @@ export async function materializeDragTempPath(
         handle,
         snapshot: opened,
         size
+      }
+      if (size <= batch.remainingMemory) {
+        const bytes = await readCheckedDragTempSourceBytes(source, signal)
+        signal?.throwIfAborted()
+        batch.remainingMemory -= size
+        return { result: { sourcePath, status: 'buffered', bytes }, copiedBytes: size }
       }
       if (size <= batch.openMaxBytes) {
         // Why unread: the chat store writes it once, straight from this handle.

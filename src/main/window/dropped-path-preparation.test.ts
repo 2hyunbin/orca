@@ -120,6 +120,7 @@ describe('dropped path preparation through the shared copy queue', () => {
       expect((await xattr(['-w', 'com.orca.test-marker', '1', source])).code).toBe(0)
     }
     const write = vi.spyOn(store, 'storeWith')
+    const bufferedWrite = vi.spyOn(store, 'storeFile')
     vi.mocked(open).mockClear()
     const result = await enqueue({ paths: [source, source, reused, large], consumer: 'local-chat' })
     expect(result.failures).toEqual([])
@@ -129,11 +130,12 @@ describe('dropped path preparation through the shared copy queue', () => {
     expect(await readFile(result.paths[0], 'utf8')).toBe('image')
     expect((await readFile(result.paths[3])).equals(bytes)).toBe(true)
     expect(write).toHaveBeenCalledTimes(2)
+    expect(bufferedWrite).toHaveBeenCalledTimes(1)
     // Only the earlier terminal drop's copy: nothing was staged in the temp folder.
     expect(await readdir(env.copyRoot)).toHaveLength(1)
     expect(await readFile(sibling, 'utf8')).toBe('keep')
     if (process.platform !== 'win32') {
-      expect((await stat(result.paths[0])).mode & 0o777).toBe(0o600)
+      expect((await stat(result.paths[3])).mode & 0o777).toBe(0o600)
     }
     if (process.platform === 'darwin') {
       expect((await xattr([result.paths[0]])).stdout).not.toContain('com.orca.test-marker')
@@ -144,6 +146,20 @@ describe('dropped path preparation through the shared copy queue', () => {
       join(provider, 'TemporaryItems', 'NSIRD_test', 'shot.png'),
       join(provider, 'TemporaryItems', 'NSIRD_test', 'large.png')
     ])
+  })
+
+  it('captures bytes and closes the source before requesting the chat store', async () => {
+    const { source, env, store } = await realDrop()
+    const getStore = vi.fn(async () => {
+      expect(open).toHaveBeenCalledTimes(1)
+      expect((await vi.mocked(open).mock.results[0].value).fd).toBe(-1)
+      await writeFile(source, 'changed after capture')
+      return store
+    })
+    const result = await localQueue(env, getStore)({ paths: [source], consumer: 'local-chat' })
+    expect(result.failures).toEqual([])
+    expect(getStore).toHaveBeenCalledTimes(1)
+    expect(await readFile(result.paths[0], 'utf8')).toBe('image')
   })
 
   it('copies a file over the chat attachment limit privately without waiting for the chat host', async () => {
@@ -158,7 +174,7 @@ describe('dropped path preparation through the shared copy queue', () => {
   })
 
   it.each(['SECOND-rewritten', 'x'])(
-    'keeps a provider-removed file and refuses a rewrite to %s',
+    'keeps captured bytes after provider removal or rewrite to %s',
     async (rewritten) => {
       const { source, env, store } = await realDrop()
       const second = join(dirname(source), 'second.png')
@@ -176,12 +192,11 @@ describe('dropped path preparation through the shared copy queue', () => {
       await writeFile(second, rewritten)
       release.resolve(null)
       const result = await pending
-      expect(result.paths).toHaveLength(2)
-      expect(result.paths[0]).toBe(result.paths[1])
+      expect(result.paths).toHaveLength(3)
+      expect(result.paths[0]).toBe(result.paths[2])
       expect(await readFile(result.paths[0], 'utf8')).toBe('image')
-      expect(result.failures).toEqual([
-        expect.objectContaining({ pathCount: 1, commonReason: 'changed' })
-      ])
+      expect(await readFile(result.paths[1], 'utf8')).toBe('second')
+      expect(result.failures).toEqual([])
     }
   )
 
@@ -190,9 +205,10 @@ describe('dropped path preparation through the shared copy queue', () => {
     async (mode) => {
       const { source, env, store } = await realDrop()
       if (mode === 'write fails') {
-        vi.spyOn(store, 'storeWith').mockRejectedValueOnce(new Error('EIO'))
+        vi.spyOn(store, 'storeFile').mockRejectedValueOnce(new Error('EIO'))
       }
       const enqueue = localQueue(env, async () => {
+        await rm(source)
         if (mode === 'refused') {
           throw new Error('host refused')
         }
@@ -209,31 +225,35 @@ describe('dropped path preparation through the shared copy queue', () => {
     }
   )
 
-  it('keeps an unlinked provider file after the store destination write fails', async () => {
+  it('keeps an unlinked over-budget source after the store destination write fails', async () => {
     const { source, env, store } = await realDrop()
+    const buffered = join(dirname(source), 'buffered.png')
+    await writeFile(buffered, Buffer.alloc(AGENT_SESSION_ATTACHMENT_MAX_BYTES))
     const storeWith = store.storeWith.bind(store)
-    const write = vi.spyOn(store, 'storeWith').mockImplementationOnce((name, writePart) =>
-      storeWith(name, async (partPath) => {
-        await rm(source)
-        // The real writer must fail at its destination, after taking the source handle.
-        await mkdir(partPath)
-        await writePart(partPath)
-      })
+    const write = vi.spyOn(store, 'storeWith').mockImplementation((name, writePart) =>
+      name !== 'shot.png'
+        ? storeWith(name, writePart)
+        : storeWith(name, async (partPath) => {
+            await rm(source)
+            // The real writer must fail at its destination, after taking the source handle.
+            await mkdir(partPath)
+            await writePart(partPath)
+          })
     )
     const result = await localQueue(
       env,
       async () => store
     )({
-      paths: [source],
+      paths: [buffered, source],
       consumer: 'local-chat'
     })
-    await expect(write.mock.results[0].value).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(write.mock.results[1].value).rejects.toMatchObject({ code: 'EEXIST' })
     expect(result.failures).toEqual([])
-    expect(dirname(dirname(result.paths[0]))).toBe(env.copyRoot)
-    expect(await readFile(result.paths[0], 'utf8')).toBe('image')
-    expect(await readdir(store.rootDir)).toEqual([])
-    expect(vi.mocked(open)).toHaveBeenCalledTimes(1)
-    expect((await vi.mocked(open).mock.results[0].value).fd).toBe(-1)
+    expect(dirname(dirname(result.paths[1]))).toBe(env.copyRoot)
+    expect(await readFile(result.paths[1], 'utf8')).toBe('image')
+    expect(await readdir(store.rootDir)).toHaveLength(1)
+    expect(vi.mocked(open)).toHaveBeenCalledTimes(2)
+    expect((await vi.mocked(open).mock.results[1].value).fd).toBe(-1)
   })
 
   it('opens and stores each unique source once as drop size grows tenfold', async () => {
