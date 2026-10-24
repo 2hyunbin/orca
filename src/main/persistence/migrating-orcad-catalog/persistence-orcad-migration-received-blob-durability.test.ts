@@ -6,20 +6,20 @@ import { join } from 'node:path'
 import {
   ORCAD_MIGRATION_BLOB_CHUNK_BYTES,
   type OrcadMigrationBlobDescriptor
-} from '../shared/orcad-migration/orcad-migration-blob-transfer'
-import type { OrcadMigrationManifest } from '../shared/orcad-migration/orcad-migration-manifest'
-import { getOrcadMigrationReceivedBlobPath } from './persistence/migrating-orcad-catalog/orcad-migration-blob-staging'
+} from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
+import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orcad-migration-manifest'
+import { getOrcadMigrationReceivedBlobPath } from './orcad-migration-blob-staging'
 import {
   commitStagedOrcadMigrationCatalogDurably,
   getOrcadMigrationCatalogState
-} from './runtime/orcad-migration-catalog-import'
+} from '../../runtime/orcad-migration-catalog-import'
 import {
   DORMANT_LEAF_ID,
   DORMANT_WORKTREE_ID,
   dormantState,
   manifest
 } from './persistence-orcad-migration-catalog-fixture'
-import { createStore, readDataFile, testState, writeDataFile } from './persistence-test-harness'
+import { createStore, readDataFile, testState, writeDataFile } from '../../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -30,7 +30,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 type Store = ReturnType<typeof createStore>
 

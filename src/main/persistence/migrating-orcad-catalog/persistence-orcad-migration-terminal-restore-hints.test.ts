@@ -3,15 +3,15 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OrcadMigrationBlobDescriptor } from '../shared/orcad-migration/orcad-migration-blob-transfer'
-import type { OrcadMigrationManifest } from '../shared/orcad-migration/orcad-migration-manifest'
-import { getOrcadMigrationReceivedBlobPath } from './persistence/migrating-orcad-catalog/orcad-migration-blob-staging'
-import { buildWslMoveRestoreHintsBlob } from './persistence/moving-wsl-projects/wsl-move-restore-hints-blob'
+import type { OrcadMigrationBlobDescriptor } from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
+import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orcad-migration-manifest'
+import { getOrcadMigrationReceivedBlobPath } from './orcad-migration-blob-staging'
+import { buildWslMoveRestoreHintsBlob } from '../moving-wsl-projects/wsl-move-restore-hints-blob'
 import {
   commitStagedOrcadMigrationCatalogDurably,
   getOrcadMigrationCatalogState
-} from './runtime/orcad-migration-catalog-import'
-import { folderWorkspaceKey } from '../shared/workspace-scope'
+} from '../../runtime/orcad-migration-catalog-import'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import {
   DORMANT_LEAF_ID,
   DORMANT_WORKTREE_ID,
@@ -20,7 +20,7 @@ import {
   dormantState,
   manifest as baseManifest
 } from './persistence-orcad-migration-catalog-fixture'
-import { createStore, testState } from './persistence-test-harness'
+import { createStore, testState } from '../../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -31,7 +31,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 const FOLDER_LEAF_ID = '22222222-2222-4222-8222-222222222222'
 const PANE = `tab-dormant:${DORMANT_LEAF_ID}`
