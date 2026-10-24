@@ -171,13 +171,16 @@ it.each([64, 640])(
         initialized: published,
         failed
       })
-    let ready = 0
+    const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+    const savedItems = scratch.map('items')
+    expect(scratch.load()).toBeUndefined()
+    expect(savedItems.size).toBe(0)
     const first = make()
-    await first.advance(() => ++ready <= 2)
+    await first.advance(() => !scratch.load<JournalStructuralCheckpoint>() || savedItems.size === 0)
     expect(facts()?.known).toBe(false)
     first.close()
-    const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
     const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
+    expect(checkpoint.sessionId).toBe(sessionId)
     expect(checkpoint.cursor).toBeGreaterThan(0)
     expect(checkpoint.cursor).toBeLessThan(size)
     expect(scratch.map('items').size).toBeGreaterThan(0)
