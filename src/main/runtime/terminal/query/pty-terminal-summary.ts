@@ -157,13 +157,20 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     if (!pty?.connected || !this.servesHeadlessMailboxLane()) {
       return null
     }
-    const pane = parsePaneKey(this.paneOfPty(pty).paneKey ?? '')
+    const paneKey = this.paneOfPty(pty).paneKey
+    const pane = parsePaneKey(paneKey ?? '')
     if (
       !pane ||
       this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId)) ||
       this.getLeavesForPty(pty.ptyId).length > 0
     ) {
       return null
+    }
+    // Two live PTYs claiming one pane (a retained predecessor) leave no owner to type into.
+    for (const other of this.ptysById.values()) {
+      if (other !== pty && other.connected && this.paneOfPty(other).paneKey === paneKey) {
+        return null
+      }
     }
     const handle = this.handleByPtyId.get(pty.ptyId)
     if (!handle || this.getLivePtyForHandle(handle)?.pty !== pty) {

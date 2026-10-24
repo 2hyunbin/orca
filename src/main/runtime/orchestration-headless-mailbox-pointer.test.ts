@@ -6,7 +6,10 @@ import {
   createRuntime,
   PANE_KEY,
   pointerCount,
-  PTY_ID
+  PTY_ID,
+  TAB_ID,
+  LEAF_ID,
+  WORKTREE_ID
 } from './orchestration-mailbox-notification-test-harness'
 
 type Host = 'headless' | 'window-empty-graph' | 'window-graph-unavailable'
@@ -95,6 +98,21 @@ describe('headless orchestration mailbox pointer', () => {
 
     await vi.advanceTimersByTimeAsync(3_050)
     expect(pointerCount(write)).toBe(1)
+    db.close()
+  })
+
+  it('types into no PTY while two live PTYs claim the coordinator pane', async () => {
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    runtime.registerPty('pty-mailbox-replacement', WORKTREE_ID, null, {
+      tabId: TAB_ID,
+      leafId: LEAF_ID,
+      incarnationId: 'mailbox-replacement-incarnation'
+    })
+    await runtime.listTerminals()
+    await goIdle(runtime)
+    sendRunMail()
+    await vi.advanceTimersByTimeAsync(3_500)
+    expect(pointerCount(write)).toBe(0)
     db.close()
   })
 
