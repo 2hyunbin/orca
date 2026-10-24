@@ -1,3 +1,4 @@
+import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BROWSER_CLIENT_AUTOMATION_RUNTIME_CAPABILITY,
@@ -40,13 +41,14 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  vi.spyOn(useAppStore, 'subscribe').mockImplementation(mocks.subscribe)
+  return { useAppStore }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
   getWebSessionTabsTrackingGeneration: mocks.getWebSessionTabsTrackingGeneration
@@ -120,7 +122,7 @@ function stateWithVisibleTab(base: Record<string, unknown>, visibleTabId: string
 }
 
 describe('browser create focus intent across the client-host preparation await', () => {
-  beforeEach(() => stubBrowserTabCreateEnvironment(mocks))
+  beforeEach(() => stubBrowserTabCreateEnvironment(mocks, useAppStore))
   afterEach(() => resetBrowserTabCreateEnvironment())
 
   /**
@@ -130,11 +132,11 @@ describe('browser create focus intent across the client-host preparation await',
   async function runCreateSwitchingDuringPreparation(options: {
     switchTab: boolean
   }): Promise<{ hostTabId: string } | null | undefined> {
-    const base = mocks.getState() as Record<string, unknown>
+    const base = useAppStore.getState() as Record<string, unknown>
     const stagedState = stateWithVisibleTab(base, STAGED_TAB_ID)
     const switchedState = stateWithVisibleTab(base, OTHER_TAB_ID)
     let currentState = stagedState
-    mocks.getState.mockImplementation(() => currentState)
+    useAppStore.setState(currentState)
 
     let guardListener:
       | ((state: typeof stagedState, previous: typeof stagedState) => void)
@@ -181,6 +183,7 @@ describe('browser create focus intent across the client-host preparation await',
     if (options.switchTab) {
       // The user clicks another tab while the desktop host is still being prepared.
       currentState = switchedState
+      useAppStore.setState(currentState)
       guardListener?.(switchedState, stagedState)
     }
     releasePreparation()

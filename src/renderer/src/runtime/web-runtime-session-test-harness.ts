@@ -1,3 +1,7 @@
+import type { StoreApi } from 'zustand'
+import type { AppState } from '../store/types'
+import { getDefaultSettings } from '../../../shared/constants'
+import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
 import { vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
@@ -123,10 +127,14 @@ export function makeSnapshot(): RuntimeMobileSessionTabsResult {
   }
 }
 
-export function stubBrowserTabCreateEnvironment(mocks: WebRuntimeSessionMocks): void {
+export function stubBrowserTabCreateEnvironment(
+  mocks: WebRuntimeSessionMocks,
+  store: StoreApi<AppState>
+): void {
   vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
-  mocks.getState.mockReturnValue({
+  store.setState({
     settings: {
+      ...getDefaultSettings('/tmp'),
       activeRuntimeEnvironmentId: ENVIRONMENT_ID
     },
     runtimeStatusByEnvironmentId: new Map([
@@ -146,11 +154,11 @@ export function stubBrowserTabCreateEnvironment(mocks: WebRuntimeSessionMocks): 
     activeGroupIdByWorktree: {},
     unifiedTabsByWorktree: {
       [WORKTREE_ID]: [
-        {
+        makeUnifiedTab({
           id: 'local-editor-tab',
           entityId: '/worktree/index.html',
           contentType: 'editor'
-        }
+        })
       ]
     },
     createBrowserTab: mocks.createBrowserTab,
@@ -162,6 +170,7 @@ export function stubBrowserTabCreateEnvironment(mocks: WebRuntimeSessionMocks): 
     focusBrowserTabInWorktree: mocks.focusBrowserTabInWorktree,
     setActiveWorktree: mocks.setActiveWorktree
   })
+  mocks.getState.mockImplementation(store.getState)
   mocks.setState.mockImplementation((updater: (state: unknown) => unknown) => {
     updater({
       state: 'before',

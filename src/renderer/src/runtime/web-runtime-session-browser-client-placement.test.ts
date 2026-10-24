@@ -1,3 +1,4 @@
+import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BROWSER_CLIENT_AUTOMATION_RUNTIME_CAPABILITY,
@@ -39,13 +40,14 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  vi.spyOn(useAppStore, 'subscribe').mockImplementation(mocks.subscribe)
+  return { useAppStore }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
   getWebSessionTabsTrackingGeneration: mocks.getWebSessionTabsTrackingGeneration
@@ -79,9 +81,9 @@ vi.mock('./web-runtime-browser-materialization', () => ({
 
 describe('web runtime browser client placement', () => {
   beforeEach(() => {
-    stubBrowserTabCreateEnvironment(mocks)
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    stubBrowserTabCreateEnvironment(mocks, useAppStore)
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map([
         [
           ENVIRONMENT_ID,
@@ -174,10 +176,10 @@ describe('web runtime browser client placement', () => {
     })
     const runtimeCall = successfulCreateCalls()
     stubRuntimeApi(preparePlacement, runtimeCall)
-    let currentState = { ...mocks.getState(), materialized: false }
+    let currentState = { ...useAppStore.getState(), materialized: false }
     let publishStoreState: ((state: typeof currentState) => void) | undefined
     const unsubscribe = vi.fn()
-    mocks.getState.mockImplementation(() => currentState)
+    useAppStore.setState(currentState)
     mocks.subscribe.mockImplementation((listener: (state: typeof currentState) => void) => {
       publishStoreState = listener
       return unsubscribe
@@ -192,6 +194,7 @@ describe('web runtime browser client placement', () => {
     })
     await vi.waitFor(() => expect(publishStoreState).toBeTypeOf('function'))
     currentState = { ...currentState, materialized: true }
+    useAppStore.setState(currentState)
     publishStoreState?.(currentState)
 
     await expect(creation).resolves.toBe(true)

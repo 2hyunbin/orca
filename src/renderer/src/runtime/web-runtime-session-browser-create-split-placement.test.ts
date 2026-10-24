@@ -1,3 +1,5 @@
+import { useAppStore } from '../store'
+import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
 import { peekWebSessionFocusIntent } from './web-session-focus-intent'
@@ -35,13 +37,14 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  vi.spyOn(useAppStore, 'subscribe').mockImplementation(mocks.subscribe)
+  return { useAppStore }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
@@ -81,7 +84,7 @@ afterEach(() => resetWebSessionCloseIntentForTests())
 
 describe('createWebRuntimeSessionBrowserTab', () => {
   beforeEach(() => {
-    stubBrowserTabCreateEnvironment(mocks)
+    stubBrowserTabCreateEnvironment(mocks, useAppStore)
   })
 
   afterEach(() => {
@@ -89,8 +92,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('creates an unfocused browser while preserving its requested split', async () => {
-    mocks.getState.mockReturnValue({
-      settings: { activeRuntimeEnvironmentId: ENVIRONMENT_ID },
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
         [ENVIRONMENT_ID, { status: { capabilities: ['browser.screencast.v1'] }, checkedAt: 1 }]
       ]),
@@ -241,8 +244,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('keeps a split reserved after ownership moves to an overlapping browser creation', async () => {
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,
@@ -330,8 +333,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('transfers empty-split cleanup when both overlapping creations fail', async () => {
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,
@@ -380,8 +383,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('rechecks split reservations after delayed host rollback', async () => {
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map(
         [ENVIRONMENT_ID, SECOND_ENVIRONMENT_ID].map((environmentId) => [
           environmentId,

@@ -1,3 +1,5 @@
+import { useAppStore } from '../store'
+import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createWebRuntimeSessionBrowserTab } from './web-runtime-browser-creation'
 import { resetWebSessionCloseIntentForTests } from './web-session-close-intent'
@@ -32,13 +34,14 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  vi.spyOn(useAppStore, 'subscribe').mockImplementation(mocks.subscribe)
+  return { useAppStore }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
@@ -78,7 +81,7 @@ afterEach(() => resetWebSessionCloseIntentForTests())
 
 describe('createWebRuntimeSessionBrowserTab', () => {
   beforeEach(() => {
-    stubBrowserTabCreateEnvironment(mocks)
+    stubBrowserTabCreateEnvironment(mocks, useAppStore)
   })
 
   afterEach(() => {
@@ -86,8 +89,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('rejects before RPC when the selected runtime does not advertise screencast', async () => {
-    mocks.getState.mockReturnValue({
-      settings: { activeRuntimeEnvironmentId: ENVIRONMENT_ID },
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/tmp'), activeRuntimeEnvironmentId: ENVIRONMENT_ID },
       runtimeStatusByEnvironmentId: new Map([
         [ENVIRONMENT_ID, { status: { capabilities: [] }, checkedAt: 1 }]
       ])
@@ -130,8 +133,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('cleans up a known page identity when the create acknowledgement is lost', async () => {
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map([
         [
           ENVIRONMENT_ID,
@@ -177,8 +180,8 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('materializes an owner-pinned tab without waiting for its navigation', async () => {
-    mocks.getState.mockReturnValue({
-      ...mocks.getState(),
+    useAppStore.setState({
+      ...useAppStore.getState(),
       runtimeStatusByEnvironmentId: new Map([
         [
           ENVIRONMENT_ID,
@@ -280,10 +283,10 @@ describe('createWebRuntimeSessionBrowserTab', () => {
   })
 
   it('waits for an acknowledged server page to reach the renderer store', async () => {
-    let currentState = { ...mocks.getState(), materialized: false }
+    let currentState = { ...useAppStore.getState(), materialized: false }
     let publishStoreState: ((state: typeof currentState) => void) | undefined
     const unsubscribe = vi.fn()
-    mocks.getState.mockImplementation(() => currentState)
+    useAppStore.setState(currentState)
     mocks.subscribe.mockImplementation((listener: (state: typeof currentState) => void) => {
       publishStoreState = listener
       return unsubscribe
@@ -307,6 +310,7 @@ describe('createWebRuntimeSessionBrowserTab', () => {
     })
     await vi.waitFor(() => expect(publishStoreState).toBeTypeOf('function'))
     currentState = { ...currentState, materialized: true }
+    useAppStore.setState(currentState)
     publishStoreState?.(currentState)
 
     await expect(creation).resolves.toBe(true)

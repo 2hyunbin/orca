@@ -1,3 +1,5 @@
+import { useAppStore } from '../store'
+import { getDefaultSettings } from '../../../shared/constants'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { moveWebRuntimeSessionTab } from './web-runtime-session-tab-move'
 import { resetWebSessionFocusIntentForTests } from './web-session-focus-intent'
@@ -29,13 +31,12 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  return { useAppStore: createTestStore() }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
@@ -77,8 +78,9 @@ afterEach(() => resetWebSessionCloseIntentForTests())
 describe('moveWebRuntimeSessionTab', () => {
   beforeEach(() => {
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
-    mocks.getState.mockReturnValue({
+    useAppStore.setState({
       settings: {
+        ...getDefaultSettings('/tmp'),
         activeRuntimeEnvironmentId: ENVIRONMENT_ID
       },
       setActiveWorktree: mocks.setActiveWorktree
@@ -169,8 +171,9 @@ describe('moveWebRuntimeSessionTab', () => {
   })
 
   it('counts only host-backed tabs for mirrored move-to-group indexes', async () => {
-    mocks.getState.mockReturnValue({
+    useAppStore.setState({
       settings: {
+        ...getDefaultSettings('/tmp'),
         activeRuntimeEnvironmentId: ENVIRONMENT_ID
       },
       setActiveWorktree: mocks.setActiveWorktree,
@@ -225,8 +228,9 @@ describe('moveWebRuntimeSessionTab', () => {
   })
 
   it('names a group this desktop split off by the host group its other tabs sit in', async () => {
-    mocks.getState.mockReturnValue({
+    useAppStore.setState({
       settings: {
+        ...getDefaultSettings('/tmp'),
         activeRuntimeEnvironmentId: ENVIRONMENT_ID
       },
       setActiveWorktree: mocks.setActiveWorktree,
@@ -276,8 +280,9 @@ describe('moveWebRuntimeSessionTab', () => {
   })
 
   it('falls back to the desktop id while a just-split group still records its old server group', async () => {
-    mocks.getState.mockReturnValue({
+    useAppStore.setState({
       settings: {
+        ...getDefaultSettings('/tmp'),
         activeRuntimeEnvironmentId: ENVIRONMENT_ID
       },
       setActiveWorktree: mocks.setActiveWorktree,

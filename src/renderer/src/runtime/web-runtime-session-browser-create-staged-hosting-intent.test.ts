@@ -1,3 +1,4 @@
+import { useAppStore } from '../store'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserClientHostPlacementPreference } from '../../../shared/browser-client-host-placement'
 import {
@@ -40,13 +41,14 @@ const mocks = vi.hoisted(() => ({
   hasMaterializedWebRuntimeBrowserPage: vi.fn()
 }))
 
-vi.mock('../store', () => ({
-  useAppStore: {
-    getState: mocks.getState,
-    setState: mocks.setState,
-    subscribe: mocks.subscribe
-  }
-}))
+vi.mock('../store', async () => {
+  const { createTestStore } = await import('../store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  vi.spyOn(useAppStore, 'subscribe').mockImplementation(mocks.subscribe)
+  return { useAppStore }
+})
+
+beforeEach(() => useAppStore.setState(useAppStore.getInitialState(), true))
 vi.mock('./web-session-tabs-sync/tracking-lifecycle', () => ({
   acceptReplayedWebSessionTabsSnapshot: mocks.acceptReplayedWebSessionTabsSnapshot,
   getWebSessionTabsTrackingGeneration: mocks.getWebSessionTabsTrackingGeneration
@@ -126,7 +128,7 @@ async function stageHandleFor(
     onCreateCall?: (state: HarnessState) => void
   } = {}
 ): Promise<Record<string, unknown>> {
-  const state = mocks.getState() as HarnessState
+  const state = useAppStore.getState() as HarnessState
   state.runtimeStatusByEnvironmentId = statusMap({
     capabilities: options.capabilities ?? CLIENT_HOSTING_CAPABILITIES,
     ...(options.deviceScope !== undefined ? { deviceScope: options.deviceScope } : {})
@@ -164,7 +166,7 @@ async function stageHandleFor(
 }
 
 describe('staged client-hosting intent', () => {
-  beforeEach(() => stubBrowserTabCreateEnvironment(mocks))
+  beforeEach(() => stubBrowserTabCreateEnvironment(mocks, useAppStore))
   afterEach(() => resetBrowserTabCreateEnvironment())
 
   it('marks the staged handle client-hosted when the create will be', async () => {
@@ -213,7 +215,7 @@ describe('staged client-hosting intent', () => {
 })
 
 describe('materialization wait group', () => {
-  beforeEach(() => stubBrowserTabCreateEnvironment(mocks))
+  beforeEach(() => stubBrowserTabCreateEnvironment(mocks, useAppStore))
   afterEach(() => resetBrowserTabCreateEnvironment())
 
   /** Group ids the create asked `hasMaterializedWebRuntimeBrowserPage` about. */
