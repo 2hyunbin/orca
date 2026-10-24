@@ -344,6 +344,23 @@ describe('startSystemSshLoopbackRoute', () => {
     expect(spawnedArgs(0)).toContain('ServerAliveCountMax=3')
   })
 
+  // Why: a password or passphrase login would otherwise raise an extra prompt right after connect.
+  it('never lets the background forward or probe ask for credentials', async () => {
+    const forward = createFakeProcess()
+    const probe = createFakeProcess()
+    spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
+      answerProbe(probe, 0)
+      return probe
+    })
+
+    await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
+
+    for (const call of [0, 1]) {
+      expect(spawnedArgs(call)).toContain('BatchMode=yes')
+      expect(spawnedArgs(call)).not.toContain('BatchMode=no')
+    }
+  })
+
   it('skips the route for a security-key identity, whose every login asks for a touch', async () => {
     securityKeyMock.mockResolvedValueOnce(true)
 

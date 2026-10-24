@@ -105,7 +105,8 @@ export async function startSystemSshLoopbackRoute(
     0,
     'localhost',
     getLoopbackRouteSshdPort(target, resolved),
-    { ...options, keepAlive: true },
+    // Why nonInteractive: this optional background login must fail silently, never ask for credentials.
+    { ...options, keepAlive: true, nonInteractive: true },
     signal
   )
   let disposed = false
