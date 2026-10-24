@@ -11808,7 +11808,7 @@
       "src/shared/remote-runtime/requests/remote-runtime-subscription-connect-bound.test.ts": 658,
       "src/shared/remote-runtime/requests/remote-runtime-subscription-frame-router.test.ts": 282,
       "src/shared/remote-runtime/requests/remote-runtime-subscription-request.test.ts": 668,
-      "src/shared/remote-runtime-tailscale-hint.test.ts": 47,
+      "src/shared/remote-runtime/remote-runtime-tailscale-hint.test.ts": 47,
       "src/shared/remote-runtime-transport-error-agreement.test.ts": 297,
       "src/shared/renderer-restart-preparation.test.ts": 163,
       "src/shared/repo-badge-color.test.ts": 233,
