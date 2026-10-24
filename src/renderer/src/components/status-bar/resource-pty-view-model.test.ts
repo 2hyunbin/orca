@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildResourcePtyRows, groupResourcePtyRows } from './resource-pty-view-model'
 import type { PtyListedSession } from '../../../../shared/pty-listed-session'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
@@ -269,16 +269,51 @@ describe('local PTY view model', () => {
     ])
   })
 
-  it('joins and groups 1,000 sessions in memory', () => {
-    const start = performance.now()
-    const rows = buildResourcePtyRows({
+  it.each([1_000, 10_000])('joins and sorts %i sessions with bounded comparison work', (count) => {
+    const workspaceCount = count / 10
+    const inputs = {
       ...base(),
-      sessions: Array.from({ length: 1_000 }, (_, index) =>
-        session(`pty-${index}`, { title: `Terminal ${index}` })
+      repos: Array.from({ length: 20 }, (_, index) => ({
+        ...makeRepo(),
+        id: `repo-${index}`,
+        displayName: `Project ${index}`
+      })),
+      worktrees: Array.from({ length: workspaceCount }, (_, index) =>
+        makeWorktree(`workspace-${index}`, `Workspace ${index}`, {
+          repoId: `repo-${index % 20}`,
+          lastActivityAt: index % 7
+        })
+      ),
+      sessions: Array.from({ length: count }, (_, index) =>
+        session(`pty-${(index * 7919) % count}`, {
+          worktreeId: `workspace-${index % workspaceCount}`
+        })
       )
-    })
-    const groups = groupResourcePtyRows(rows)
-    expect(groups[0]?.workspaces[0]?.rows).toHaveLength(1_000)
-    console.info(`PTY model 1,000 rows: ${(performance.now() - start).toFixed(2)}ms`)
+    }
+    const start = performance.now()
+    const rows = buildResourcePtyRows(inputs)
+    const elapsedJoin = performance.now() - start
+    const comparisons = vi.spyOn(String.prototype, 'localeCompare')
+    const normalizations = vi.spyOn(String.prototype, 'toLocaleLowerCase')
+    try {
+      const groups = groupResourcePtyRows(rows)
+      const elapsedSort = performance.now() - start - elapsedJoin
+      expect(normalizations).toHaveBeenCalledTimes(workspaceCount + 20)
+      expect(comparisons.mock.calls.length).toBeLessThan(2 * count * Math.ceil(Math.log2(count)))
+      expect(
+        groups.flatMap((group) => group.workspaces.flatMap((workspace) => workspace.rows))
+      ).toHaveLength(count)
+      for (const group of groups) {
+        expect(group.workspaces.map((workspace) => workspace.lastActivityAt)).toEqual(
+          group.workspaces.map((workspace) => workspace.lastActivityAt).toSorted((a, b) => b - a)
+        )
+      }
+      console.info(
+        `PTY ${count}: join ${elapsedJoin.toFixed(2)}ms, sort ${elapsedSort.toFixed(2)}ms`
+      )
+    } finally {
+      comparisons.mockRestore()
+      normalizations.mockRestore()
+    }
   })
 })
