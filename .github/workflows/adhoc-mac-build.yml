@@ -438,7 +438,9 @@ jobs:
           retry_wait_seconds: 30
           command: pnpm install --frozen-lockfile --cpu=current,x64,arm64
 
+      # Why: older refs predate the source build and package the pinned download instead.
       - name: Build and verify the patched terminal runtimes
+        if: hashFiles('config/scripts/build-darwin-terminal-node.mjs') != ''
         timeout-minutes: 180
         run: |
           pnpm run build:packages
@@ -539,7 +541,7 @@ jobs:
           timeout_minutes: 45
           max_attempts: 2
           retry_wait_seconds: 30
-          command: node config/scripts/ensure-native-runtime.mjs --runtime=electron && ORCA_MAC_ADHOC=1 pnpm exec electron-builder --config config/electron-builder.config.cjs --mac dmg zip --${{ matrix.arch }} --publish never
+          command: if [ ! -f config/scripts/build-darwin-terminal-node.mjs ]; then node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON config/scripts/pinned-node-downloads.mjs darwin-arm64 darwin-x64; fi && node config/scripts/ensure-native-runtime.mjs --runtime=electron && ORCA_MAC_ADHOC=1 pnpm exec electron-builder --config config/electron-builder.config.cjs --mac dmg zip --${{ matrix.arch }} --publish never
         env:
           ORCA_ADHOC_BUILD_VERSION: ${{ needs.orcad-template-support.outputs.version }}
           ORCA_BUILD_COMMIT: ${{ needs.orcad-template-support.outputs.commit }}

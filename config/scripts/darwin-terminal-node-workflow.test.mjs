@@ -61,6 +61,15 @@ it.each(['adhoc', 'daily', 'hourly', 'release'])(
     if (channel === 'daily') {
       expect(steps[build].if).toBe("steps.freshness.outputs.should_build == 'true'")
     }
+    if (channel === 'adhoc' || channel === 'release') {
+      // Older refs and tags have no source-build recipe and must keep the pinned download.
+      expect(steps[build].if).toBe(
+        "hashFiles('config/scripts/build-darwin-terminal-node.mjs') != ''"
+      )
+      expect(steps[packaging].with.command).toMatch(
+        /^if \[ ! -f config\/scripts\/build-darwin-terminal-node\.mjs \]; then node .*pinned-node-downloads\.mjs darwin-arm64 darwin-x64; fi && /
+      )
+    }
   }
 )
 
