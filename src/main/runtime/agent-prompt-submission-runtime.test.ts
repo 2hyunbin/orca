@@ -496,6 +496,44 @@ describe('agent prompt submission runtime', () => {
     })
   })
 
+  // #11343: Windows Codex reads a paste as key events and takes an Enter that reaches it mid-burst
+  // as a newline, so a dispatch sat in its composer as `[Pasted Content N chars]`.
+  it.each([
+    { composer: 'still holds the dispatch', draft: '[Pasted Content 9250 chars]', enters: 2 },
+    { composer: 'is empty', draft: undefined, enters: 1 }
+  ])(
+    'presses Enter again only while a Windows Codex composer $composer',
+    async ({ draft, enters }) => {
+      vi.useFakeTimers()
+      let submitted = false
+      const { runtime, handle, writes } = await createAgentPromptSubmissionRuntime(
+        (runtime, data) => {
+          if (data !== '\r' || writes.filter((write) => write === '\r').length < 2) {
+            return
+          }
+          submitted = true
+          runtime.onPtyData('pty-prompt', '\x1b]0;Codex working\x07', Date.now())
+        },
+        'codex'
+      )
+      Object.defineProperty(runtime, 'getPtyWriteHostPlatform', { value: () => 'win32' })
+      Object.defineProperty(runtime, 'readCurrentTerminalWaitScreen', {
+        value: async () => ({ lines: [], draft: submitted ? undefined : draft })
+      })
+
+      const submission = runtime.sendTerminalAgentPrompt(handle, 'x'.repeat(9_250), {
+        inputKind: 'driving',
+        acceptQueued: true,
+        requestId: 'windows-codex-dispatch',
+        observationTimeoutMs: 0
+      })
+      await vi.runAllTimersAsync()
+
+      await expect(submission).resolves.toMatchObject({ accepted: true })
+      expect(writes.filter((write) => write === '\r')).toHaveLength(enters)
+    }
+  )
+
   // Why: hook rows reach the runtime through this provider, which has no window and no OSC title —
   // the same path a headless `orca serve` host and a minimized desktop window take.
 })
@@ -666,7 +704,25 @@ describe('input original queue, callback and private method contracts', () => {
     })
     Object.defineProperty(target, 'getPtyAgent', { value: read })
     await expect(
-      target['resubmitAgentPromptAfterRetryDelay'](PTY, 1, { inputKind: 'driving' })
+      target['resubmitHeldAgentPrompt'](
+        PTY,
+        1,
+        { inputKind: 'driving' },
+        {
+          baseline: {
+            generation: 1,
+            permissionSequence: 0,
+            workingSequence: 0,
+            explicitWorkingStartedAt: null,
+            outputSequence: 0,
+            status: null
+          },
+          readActivity: () => {
+            throw new Error('no read before the agent lookup')
+          },
+          heldBudgetMs: 0
+        }
+      )
     ).resolves.toBe(0)
     expect(read).toHaveBeenCalledOnce()
   })

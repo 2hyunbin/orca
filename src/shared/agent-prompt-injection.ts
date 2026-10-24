@@ -1,4 +1,5 @@
 import { countAgentTuiInputLines } from './agent-tui-input-clear'
+import { AGENT_PROMPT_EFFECT_TIMEOUT_MS } from './orchestration-timing-budgets'
 import { iterateTerminalInputChunks, TERMINAL_INPUT_CHUNK_MAX_BYTES } from './terminal-input'
 import type { TerminalAgent } from './terminal-agent'
 import { isTuiAgent, TUI_AGENT_CONFIG } from './tui-agent-config'
@@ -69,6 +70,30 @@ export function getMaxTerminalPasteBytesForIngestMs(
   const bytesPerMs =
     platform === 'win32' ? WINDOWS_CONPTY_INGEST_BYTES_PER_MS : DEFAULT_PASTE_INGEST_BYTES_PER_MS
   return Math.floor(budgetMs * bytesPerMs)
+}
+
+// Why: a TUI reading Windows console input records consumes a paste one key event at a time, and
+// Codex 0.162.1 on a low-spec Win11 host took 5.1 s for 1,849 chars and 21.1 s for 9,249 (~2.3 ms/char).
+const WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR = 3
+
+/** How long a held prompt may still be in an input-record TUI's paste burst after its Enter. */
+export function getAgentPromptHeldSubmitBudgetMs(
+  platform: NodeJS.Platform,
+  agent: TerminalAgent | null | undefined,
+  charCount: number
+): number {
+  if (
+    platform !== 'win32' ||
+    !isTuiAgent(agent) ||
+    !TUI_AGENT_CONFIG[agent].windowsInputRecordPasteNewline
+  ) {
+    return 0
+  }
+  // Why capped: the wait sits inside the dispatch and worker-start RPC budgets.
+  return Math.min(
+    Math.max(0, charCount) * WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR,
+    AGENT_PROMPT_EFFECT_TIMEOUT_MS
+  )
 }
 
 export type AgentPromptSubmitDelayOptions = {
