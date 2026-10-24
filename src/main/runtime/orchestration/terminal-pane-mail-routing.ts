@@ -120,9 +120,7 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
       }
       // Why confirm a shell too: treating an unproven name as "no agent" downgrades the prompt to
       // unframed chunks, which Claude's composer truncates.
-      const foreground = await this.terminalAgentPresence.readForeground(ptyId, {
-        confirmShell: true
-      })
+      const foreground = await this.terminalAgentPresence.readForeground(ptyId)
       const agent = foreground.kind === 'agent' ? foreground.agent : undefined
       if (agent !== 'claude' && agent !== 'codex') {
         return false
