@@ -1,11 +1,9 @@
-import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
-import type {
-  TerminalLeafMoveRequest,
-  TerminalLeafMoveResult
-} from '../../../shared/terminal-leaf-move'
+import type { TerminalLeafMoveRequest } from '../../../shared/terminal-leaf-move'
+import { SESSION_TABS_MOVE_PANE_TO_NEW_TAB_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
+import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
@@ -13,21 +11,31 @@ import {
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
 
-// Why: leaf-to-tab membership is host-authoritative for remote tabs; a local-only move reverts on the next snapshot.
-export async function moveWebRuntimeLeafToNewTab(
-  request: TerminalLeafMoveRequest
-): Promise<TerminalLeafMoveResult | null> {
+/** The runtime that commits this worktree's pane moves itself; null keeps the move in this window. */
+export async function resolvePaneMoveHost(worktreeId: string): Promise<string | null> {
   const environmentId = runtimeEnvironmentIdUnlessTwin(
     useAppStore.getState(),
-    request.worktreeId,
+    worktreeId,
     'move a pane to a new tab on its host'
   )
   if (!environmentId || !isWebRuntimeSessionActive(environmentId)) {
     return null
   }
-  const callEnvironment = captureRuntimeEnvironmentCall(environmentId)
+  const supported = await runtimeEnvironmentSupportsCapability(
+    environmentId,
+    SESSION_TABS_MOVE_PANE_TO_NEW_TAB_RUNTIME_CAPABILITY
+  ).catch(() => false)
+  return supported ? environmentId : null
+}
+
+// Why: leaf-to-tab membership is host-authoritative for remote tabs; a local-only move reverts on the next snapshot.
+/** True once the host committed the move; any other answer leaves the pane where the host had it. */
+export async function moveWebRuntimeLeafToNewTab(
+  environmentId: string,
+  request: TerminalLeafMoveRequest
+): Promise<boolean> {
   try {
-    const response = await callEnvironment({
+    const response = await captureRuntimeEnvironmentCall(environmentId)({
       method: 'session.tabs.movePaneToNewTab',
       params: {
         worktree: toRuntimeWorktreeSelector(request.worktreeId),
@@ -37,15 +45,21 @@ export async function moveWebRuntimeLeafToNewTab(
       },
       timeoutMs: 15_000
     })
-    const result = unwrapRuntimeRpcResult(response as RuntimeRpcResponse<TerminalLeafMoveResult>)
-    // The host names its own pty; this window keeps the mirrored id it already attached to.
-    return result.status === 'moved' ? { status: 'moved', ptyId: request.ptyId } : result
+    const answer = unwrapRuntimeRpcResult(response)
+    const moved =
+      typeof answer === 'object' &&
+      answer !== null &&
+      'status' in answer &&
+      answer.status === 'moved'
+    if (!moved) {
+      console.warn('[web-runtime-session] host did not move the pane', answer)
+    }
+    return moved
   } catch (error) {
-    // Why: an older host lacks the method; not_held keeps today's local-only move.
     console.warn(
       '[web-runtime-session] failed to move pane to new tab:',
       error instanceof Error ? error.message : String(error)
     )
-    return { status: 'not_held' }
+    return false
   }
 }

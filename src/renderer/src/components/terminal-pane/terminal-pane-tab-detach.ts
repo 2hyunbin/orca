@@ -13,7 +13,7 @@ import {
   isWebTerminalSurfaceTabId,
   toWebTerminalSurfaceTabId
 } from '../../../../shared/terminal-surface-id'
-import { moveWebRuntimeLeafToNewTab } from '@/runtime/web-runtime-leaf-move'
+import { moveWebRuntimeLeafToNewTab, resolvePaneMoveHost } from '@/runtime/web-runtime-leaf-move'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -143,37 +143,28 @@ async function moveLeafToNewTab(
     return null
   }
 
-  args.persistLayoutSnapshot()
-  // Why: a mirrored host tab's local id derives from the host id, so the next snapshot finds this tab.
   const livePtyId = args.livePtyId ?? persistedPtyId ?? null
-  const hostedByRuntime =
+  const paneMoveHost =
     !ORCA_LAYOUT_OWNER_IS_MAIN && livePtyId !== null && isWebTerminalSurfaceTabId(args.sourceTabId)
+      ? await resolvePaneMoveHost(args.worktreeId)
+      : null
+  args.persistLayoutSnapshot()
   const request: TerminalLeafMoveRequest = {
     worktreeId: args.worktreeId,
     sourceTabId: args.sourceTabId,
-    targetTabId: hostedByRuntime
+    // Why: a mirrored host tab's local id derives from the host id, so the next snapshot finds this tab.
+    targetTabId: paneMoveHost
       ? toWebTerminalSurfaceTabId(createBrowserUuid())
       : createBrowserUuid(),
     leafId,
     ptyId: livePtyId
   }
-  if (hostedByRuntime) {
+  if (paneMoveHost) {
     // Why: the host's snapshot push can land before its reply and would leave nothing to detach, so
     // the window moves first. The call is dispatched before the move's layout pushes, so the host
     // sees the move first; a refusal is undone by the next snapshot.
-    const hostMove = moveWebRuntimeLeafToNewTab(request)
-    const applied = applyMove(args, request, false, request.ptyId)
-    void hostMove.then(
-      (answer) => {
-        if (answer && answer.status !== 'moved') {
-          console.warn('[terminal-pane-detach] host did not move the pane', answer)
-        }
-      },
-      (error: unknown) => {
-        console.warn('[terminal-pane-detach] host did not answer the move', error)
-      }
-    )
-    return applied
+    void moveWebRuntimeLeafToNewTab(paneMoveHost, request)
+    return applyMove(args, request, false, request.ptyId)
   }
   // Switch point: main moves the pane and names the new tab.
   const answer = await (

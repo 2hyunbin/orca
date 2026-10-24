@@ -9,14 +9,17 @@ import {
 } from './terminal-pane-tab-detach-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
+  isWebTerminalSurfaceTabId,
   toHostSessionTabId,
   toWebTerminalSurfaceTabId
 } from '../../../../shared/terminal-surface-id'
 const moveOnHost = vi.hoisted(() => vi.fn())
+const paneMoveHost = vi.hoisted(() => vi.fn())
 const moveLocally = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/web-runtime-leaf-move', () => ({
-  moveWebRuntimeLeafToNewTab: moveOnHost
+  moveWebRuntimeLeafToNewTab: moveOnHost,
+  resolvePaneMoveHost: paneMoveHost
 }))
 const MIRRORED_SOURCE = toWebTerminalSurfaceTabId('host-source')
 const itSwitchOff = it.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)
@@ -45,6 +48,7 @@ function detach(store: ReturnType<typeof createStore>) {
 describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
   beforeEach(() => {
     moveOnHost.mockReset()
+    paneMoveHost.mockReset().mockResolvedValue('env-1')
     moveLocally.mockReset().mockResolvedValue({ status: 'not_held' })
     vi.stubGlobal('window', { api: { pty: { moveLeafToNewTab: moveLocally } } })
   })
@@ -56,7 +60,8 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     const detached = await result
     // The host has not answered yet, and the window already holds the moved pane.
     expect(detachPaneForExternalMove).toHaveBeenCalledOnce()
-    const request = moveOnHost.mock.calls[0][0]
+    const [environmentId, request] = moveOnHost.mock.calls[0]
+    expect(environmentId).toBe('env-1')
     expect(request.sourceTabId).toBe(MIRRORED_SOURCE)
     expect(toWebTerminalSurfaceTabId(toHostSessionTabId(request.targetTabId))).toBe(
       request.targetTabId
@@ -67,17 +72,29 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     })
     expect(detached?.tab.id).toBe('tab-detached')
     expect(moveLocally).not.toHaveBeenCalled()
-    answer({ status: 'moved', ptyId: request.ptyId })
+    answer(true)
   })
   itSwitchOff('applies the move once when the host refuses it', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    moveOnHost.mockResolvedValue({ status: 'refused', reason: 'pty_mismatch' })
+    moveOnHost.mockResolvedValue(false)
     const store = mirroredStore()
     const { result, detachPaneForExternalMove } = detach(store)
     await result
-    await vi.waitFor(() => expect(warn).toHaveBeenCalled())
+    expect(moveOnHost).toHaveBeenCalledOnce()
     expect(store.createTab).toHaveBeenCalledOnce()
     expect(detachPaneForExternalMove).toHaveBeenCalledOnce()
     expect(store.closeTab).not.toHaveBeenCalled()
   })
+  itSwitchOff(
+    'moves only in this window under a local id when the host predates the RPC',
+    async () => {
+      paneMoveHost.mockResolvedValue(null)
+      const store = mirroredStore()
+      const { result } = detach(store)
+      await result
+      expect(moveOnHost).not.toHaveBeenCalled()
+      const request = moveLocally.mock.calls[0][0]
+      expect(isWebTerminalSurfaceTabId(request.targetTabId)).toBe(false)
+      expect(vi.mocked(store.createTab).mock.calls[0][3]).not.toHaveProperty('mirroredHostTab')
+    }
+  )
 })

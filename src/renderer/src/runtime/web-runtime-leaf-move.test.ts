@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { moveWebRuntimeLeafToNewTab } from './web-runtime-leaf-move'
+import { moveWebRuntimeLeafToNewTab, resolvePaneMoveHost } from './web-runtime-leaf-move'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 const ENVIRONMENT_ID = 'web-env-1'
 const WORKTREE_ID = 'repo::/worktree'
 const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }))
+const supports = vi.hoisted(() => vi.fn())
 vi.mock('../store', () => ({ useAppStore: { getState: () => store.state } }))
+vi.mock('./runtime-rpc-client', () => ({ runtimeEnvironmentSupportsCapability: supports }))
 const REQUEST = {
   worktreeId: WORKTREE_ID,
   sourceTabId: toWebTerminalSurfaceTabId('host-source'),
@@ -15,6 +17,7 @@ const REQUEST = {
 }
 describe('moveWebRuntimeLeafToNewTab', () => {
   beforeEach(() => {
+    supports.mockReset()
     store.state = {
       repos: [{ id: 'repo', executionHostId: `runtime:${ENVIRONMENT_ID}` }],
       worktreesByRepo: {
@@ -30,17 +33,14 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     }
   })
   afterEach(() => vi.unstubAllGlobals())
-  it('asks the host to move the pane by host tab ids and keeps the mirrored pty id', async () => {
+  it('asks the host to move the pane by host tab ids', async () => {
     const call = vi.fn().mockResolvedValue({
       id: 'm',
       ok: true,
       result: { status: 'moved', ptyId: 'host-pty-1' }
     })
     stubRuntimeEnvironmentBridge({ call })
-    await expect(moveWebRuntimeLeafToNewTab(REQUEST)).resolves.toEqual({
-      status: 'moved',
-      ptyId: REQUEST.ptyId
-    })
+    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST)).resolves.toBe(true)
     expect(call.mock.calls[0][0]).toMatchObject({
       method: 'session.tabs.movePaneToNewTab',
       params: {
@@ -51,7 +51,7 @@ describe('moveWebRuntimeLeafToNewTab', () => {
       }
     })
   })
-  it('falls back to a local-only move when the host lacks the method', async () => {
+  it('reports no move when the host refuses it', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const call = vi.fn().mockResolvedValue({
       id: 'm',
@@ -59,13 +59,20 @@ describe('moveWebRuntimeLeafToNewTab', () => {
       error: { code: 'method_not_found', message: 'method_not_found' }
     })
     stubRuntimeEnvironmentBridge({ call })
-    await expect(moveWebRuntimeLeafToNewTab(REQUEST)).resolves.toEqual({ status: 'not_held' })
+    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST)).resolves.toBe(false)
   })
-  it('returns null for a worktree no runtime hosts', async () => {
+  it('names the host only when it advertises committing pane moves', async () => {
+    stubRuntimeEnvironmentBridge({ call: vi.fn() })
+    supports.mockResolvedValue(true)
+    await expect(resolvePaneMoveHost(WORKTREE_ID)).resolves.toBe(ENVIRONMENT_ID)
+    supports.mockResolvedValue(false)
+    await expect(resolvePaneMoveHost(WORKTREE_ID)).resolves.toBeNull()
+  })
+  it('names no host for a worktree no runtime hosts', async () => {
     store.state = { repos: [], worktreesByRepo: {} }
-    const call = vi.fn()
-    stubRuntimeEnvironmentBridge({ call })
-    await expect(moveWebRuntimeLeafToNewTab(REQUEST)).resolves.toBeNull()
-    expect(call).not.toHaveBeenCalled()
+    supports.mockResolvedValue(true)
+    stubRuntimeEnvironmentBridge({ call: vi.fn() })
+    await expect(resolvePaneMoveHost(WORKTREE_ID)).resolves.toBeNull()
+    expect(supports).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,7 @@
-import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-types'
+import type {
+  RuntimeMobileSessionTabsResult,
+  RuntimeTerminalListResult
+} from '../../src/shared/runtime-types'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
@@ -88,6 +91,15 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
           { timeout: 15_000, message: 'the server never moved the pane' }
         )
         .toEqual([firstLeafId, movedLeafId].toSorted())
+      const hostTabOfMovedLeaf = Object.entries(await readHost()).find(([, leaves]) =>
+        leaves.includes(movedLeafId)
+      )?.[0]
+      const { terminals } = (
+        await host.client.call<RuntimeTerminalListResult>('terminal.list', { worktree })
+      ).result
+      expect(terminals.find((terminal) => terminal.leafId === movedLeafId)?.tabId).toBe(
+        hostTabOfMovedLeaf
+      )
 
       // Switching back to the source tab must not pull the pane back into its split.
       await page.locator(`${TAB}[data-tab-id="${sourceTabId}"]`).click()
