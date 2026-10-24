@@ -5,62 +5,195 @@
 import { dirname, join } from 'node:path'
 import { runProcess } from '@orca/process-host'
 import type { SshTarget } from '../../../shared/ssh-types'
-import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
+import { parseSshGOutput } from '../config/ssh-g-config-resolution'
 import { requiresSystemSshForSecurityKey } from '../ssh-transport-selection'
-import {
-  buildSshArgs,
-  type SystemSshBuildArgsOptions,
-  type SystemSshLoopbackRouteArgs
-} from './system-ssh-args'
+import { buildSshArgs, type SystemSshBuildArgsOptions } from './system-ssh-args'
 import { findSystemSsh } from './system-ssh-binary'
 
 const LOOPBACK_ROUTE_ADMISSION_TIMEOUT_MS = 5_000
 
 // Why: these are exactly what the route rewrites; any other difference means ssh_config matched
 // differently once HostName became 127.0.0.1 (e.g. `Match host`), so commands would change identity.
+// ControlPath only matters for multiplexing, which Windows OpenSSH cannot do, and `%C` differs by host.
 const ROUTE_REWRITTEN_SSH_G_KEYS = new Set([
   'hostname',
   'port',
   'hostkeyalias',
   'proxycommand',
-  'proxyjump'
+  'proxyjump',
+  'controlpath'
 ])
+const IDENTITY_SSH_G_KEYS = ['identityfile', 'certificatefile']
+// Why bounded: a hop's own ProxyJump is followed, and ssh_config can loop.
+const MAX_JUMP_HOPS = 8
 
-export type LoopbackRouteAdmission = { admitted: true } | { admitted: false; reason: string }
+/** On admission, where the forward must land and the known_hosts name OpenSSH uses for it. */
+export type LoopbackRouteAdmission =
+  | { admitted: true; sshdPort: number; hostKeyAlias: string }
+  | { admitted: false; reason: string }
 
 export async function admitSystemSshLoopbackRoute(
   target: SshTarget,
-  resolved: SshResolvedConfig | null,
-  options: SystemSshBuildArgsOptions,
-  route: SystemSshLoopbackRouteArgs
+  options: SystemSshBuildArgsOptions
 ): Promise<LoopbackRouteAdmission> {
   const sshPath = findSystemSsh()
   if (!sshPath) {
-    return { admitted: false, reason: 'no system ssh binary' }
+    return refuse('no system ssh binary')
   }
-  const [direct, routed] = await Promise.all([
-    readEffectiveSshConfig(sshPath, buildSshArgs(target, { ...options, loopbackRoute: undefined })),
-    readEffectiveSshConfig(sshPath, buildSshArgs(target, { ...options, loopbackRoute: route }))
-  ])
-  if (!direct || !routed) {
-    return { admitted: false, reason: 'ssh -G failed' }
+  const direct = await readEffectiveSshConfig(
+    sshPath,
+    buildSshArgs(target, { ...options, loopbackRoute: undefined })
+  )
+  const endpoint = direct ? readDialledEndpoint(direct) : null
+  if (!direct || !endpoint) {
+    return refuse('ssh -G failed')
+  }
+  // Why port 1: the real local port is not bound yet, and the port is a rewritten key anyway.
+  const routed = await readEffectiveSshConfig(
+    sshPath,
+    buildSshArgs(target, {
+      ...options,
+      loopbackRoute: { localPort: 1, hostKeyAlias: endpoint.hostKeyAlias }
+    })
+  )
+  if (!routed || !isRewrittenToLoopback(routed)) {
+    return refuse('route options did not take effect')
   }
   const drifted = findConfigDrift(direct, routed)
   if (drifted.length > 0) {
-    return { admitted: false, reason: `route changes ${drifted.join(', ')}` }
+    return refuse(`route changes ${drifted.join(', ')}`)
   }
   // Why: every security-key login asks for a touch, so the forward and probe would add unprompted ones.
-  if (await requiresSystemSshForSecurityKey(target, resolved)) {
-    return { admitted: false, reason: 'security-key identity file' }
+  if (await mayAskForSecurityKey(sshPath, direct)) {
+    return refuse('may use a security key')
   }
-  if (await agentMayHoldSecurityKey(sshPath, direct)) {
-    return { admitted: false, reason: 'agent may hold a security key' }
+  const hopRefusal = await checkJumpHops(sshPath, direct, options)
+  return hopRefusal ? refuse(hopRefusal) : { admitted: true, ...endpoint }
+}
+
+function refuse(reason: string): LoopbackRouteAdmission {
+  return { admitted: false, reason }
+}
+
+/** The sshd the direct route reaches, as OpenSSH resolved it — the forward must land on the same one. */
+export function readDialledEndpoint(
+  direct: Map<string, string[]>
+): { sshdPort: number; hostKeyAlias: string } | null {
+  const hostname = direct.get('hostname')?.[0]
+  const sshdPort = Number(direct.get('port')?.[0] ?? '22')
+  if (!hostname || !Number.isInteger(sshdPort) || sshdPort <= 0) {
+    return null
   }
-  return { admitted: true }
+  const alias = direct.get('hostkeyalias')?.[0]
+  const hostKeyAlias =
+    alias && alias.toLowerCase() !== 'none'
+      ? alias
+      : sshdPort === 22
+        ? hostname
+        : `[${hostname}]:${sshdPort}`
+  return { sshdPort, hostKeyAlias }
+}
+
+function isRewrittenToLoopback(routed: Map<string, string[]>): boolean {
+  const proxyCommand = routed.get('proxycommand')?.[0]?.toLowerCase()
+  const proxyJump = routed.get('proxyjump')?.[0]?.toLowerCase()
+  return (
+    routed.get('hostname')?.[0] === '127.0.0.1' &&
+    (proxyCommand === undefined || proxyCommand === 'none') &&
+    (proxyJump === undefined || proxyJump === 'none')
+  )
+}
+
+/** Identity files (with `%` tokens unresolvable here) or agent keys that could need a touch. */
+async function mayAskForSecurityKey(
+  sshPath: string,
+  config: Map<string, string[]>
+): Promise<boolean> {
+  const identityValues = IDENTITY_SSH_G_KEYS.flatMap((key) => config.get(key) ?? [])
+  if (identityValues.some(hasPercentToken)) {
+    return true
+  }
+  const resolved = parseSshGOutput(serializeSshGLines(config))
+  // Why config-backed: then the check reads exactly the IdentityFile list `ssh -G` reported.
+  const configBacked: SshTarget = {
+    id: 'loopback-admission',
+    label: 'loopback-admission',
+    host: 'loopback-admission',
+    configHost: 'loopback-admission',
+    port: 22,
+    username: '',
+    source: 'ssh-config'
+  }
+  return (
+    (await requiresSystemSshForSecurityKey(configBacked, resolved)) ||
+    (await agentMayHoldSecurityKey(sshPath, config))
+  )
+}
+
+/** The forward also logs in to every ProxyJump hop, whose ssh does not inherit BatchMode. */
+async function checkJumpHops(
+  sshPath: string,
+  direct: Map<string, string[]>,
+  options: SystemSshBuildArgsOptions
+): Promise<string | null> {
+  const pending = listJumpHosts(direct)
+  const seen = new Set<string>()
+  while (pending.length > 0) {
+    const jump = pending.shift()!
+    if (seen.has(jump)) {
+      continue
+    }
+    seen.add(jump)
+    if (seen.size > MAX_JUMP_HOPS) {
+      return 'jump chain too long to check'
+    }
+    const hop = await readEffectiveSshConfig(sshPath, buildJumpHostSshGArgs(jump, options))
+    if (!hop) {
+      return `ssh -G failed for jump host ${jump}`
+    }
+    if (await mayAskForSecurityKey(sshPath, hop)) {
+      return `jump host ${jump} may use a security key`
+    }
+    pending.push(...listJumpHosts(hop))
+  }
+  return null
+}
+
+/** The ProxyJump chain a route takes, as OpenSSH resolved it (including a manual `-J`). */
+export function listJumpHosts(config: Map<string, string[]>): string[] {
+  const configured = config.get('proxyjump')?.[0]
+  if (!configured || configured.toLowerCase() === 'none') {
+    return []
+  }
+  return configured
+    .split(',')
+    .map((jump) => jump.trim())
+    .filter(Boolean)
+}
+
+/** `[user@]host[:port]` or `ssh://[user@]host[:port]` as `ssh -G` destination args. */
+export function buildJumpHostSshGArgs(jump: string, options: SystemSshBuildArgsOptions): string[] {
+  const spec = jump.replace(/^ssh:\/\//i, '')
+  const at = spec.lastIndexOf('@')
+  const user = at === -1 ? '' : spec.slice(0, at)
+  const hostPort = spec.slice(at + 1)
+  const match = /^\[(.+)\](?::(\d+))?$/.exec(hostPort) ?? /^([^:]+)(?::(\d+))?$/.exec(hostPort)
+  const host = match?.[1] ?? hostPort
+  const port = match?.[2]
+  return [
+    ...(options.configFile ? ['-F', options.configFile] : []),
+    ...(port ? ['-p', port] : []),
+    '--',
+    user ? `${user}@${host}` : host
+  ]
+}
+
+function serializeSshGLines(config: Map<string, string[]>): string {
+  return [...config].flatMap(([key, values]) => values.map((value) => `${key} ${value}`)).join('\n')
 }
 
 /** Each `ssh -G` line keyed by option; repeated options (IdentityFile, SendEnv…) keep every value. */
-export function parseSshGLines(stdout: string): Map<string, string[]> {
+function parseSshGLines(stdout: string): Map<string, string[]> {
   const options = new Map<string, string[]>()
   for (const rawLine of stdout.split(/\r?\n/)) {
     const line = rawLine.trim()
@@ -74,6 +207,10 @@ export function parseSshGLines(stdout: string): Map<string, string[]> {
   return options
 }
 
+/**
+ * Settings the route would change. A `%` token counts even when both outputs match: `ssh -G`
+ * leaves some unexpanded, and a routed login expands `%h` to 127.0.0.1.
+ */
 export function findConfigDrift(
   direct: Map<string, string[]>,
   routed: Map<string, string[]>
@@ -81,8 +218,16 @@ export function findConfigDrift(
   const keys = new Set([...direct.keys(), ...routed.keys()])
   return [...keys]
     .filter((key) => !ROUTE_REWRITTEN_SSH_G_KEYS.has(key))
-    .filter((key) => (direct.get(key) ?? []).join('\n') !== (routed.get(key) ?? []).join('\n'))
+    .filter((key) => {
+      const directValue = (direct.get(key) ?? []).join('\n')
+      const routedValue = (routed.get(key) ?? []).join('\n')
+      return directValue !== routedValue || hasPercentToken(directValue)
+    })
     .sort()
+}
+
+function hasPercentToken(value: string): boolean {
+  return value.replaceAll('%%', '').includes('%')
 }
 
 /**

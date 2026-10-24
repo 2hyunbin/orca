@@ -35,7 +35,11 @@ vi.mock('../config/ssh-g-config-resolution', async (importOriginal) =>
 )
 // Why: admission would otherwise run this machine's ssh -G and ssh-add.
 vi.mock('../system-transport/system-ssh-loopback-route-admission', () => ({
-  admitSystemSshLoopbackRoute: async () => ({ admitted: true })
+  admitSystemSshLoopbackRoute: async () => ({
+    admitted: true,
+    sshdPort: 22,
+    hostKeyAlias: 'example.com'
+  })
 }))
 vi.mock('../system-transport/system-ssh-loopback-route', async (importOriginal) => ({
   ...(await importOriginal()),

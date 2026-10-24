@@ -3,7 +3,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import type { SshTarget } from '../../../shared/ssh-types'
-import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
 import {
   admitSystemSshLoopbackRoute,
   agentListingMayHoldSecurityKey
@@ -19,25 +18,6 @@ const target: SshTarget = {
   username: '',
   source: 'ssh-config'
 }
-// Why an empty identity list: the security-key check must not read this machine's ~/.ssh.
-const resolved: SshResolvedConfig = {
-  hostname: 'devbox.internal',
-  port: 22,
-  identityFile: [],
-  identitiesOnly: false,
-  forwardAgent: false,
-  proxyJump: 'bastion',
-  proxyUseFdpass: false,
-  controlMaster: 'no',
-  controlPersist: 'no',
-  userKnownHostsFiles: [],
-  globalKnownHostsFiles: [],
-  strictHostKeyChecking: 'ask',
-  hashKnownHosts: false,
-  updateHostKeys: 'no'
-}
-const route = { localPort: 1, hostKeyAlias: 'devbox.internal' }
-
 // Real OpenSSH: the drift is in how ssh_config matches, which only OpenSSH can answer.
 describe.skipIf(findSystemSsh() === null)('admitSystemSshLoopbackRoute with real ssh -G', () => {
   const dir = mkdtempSync(join(tmpdir(), 'orca-loopback-admission-'))
@@ -63,9 +43,86 @@ describe.skipIf(findSystemSsh() === null)('admitSystemSshLoopbackRoute with real
       ].join('\n')
     )
 
-    await expect(
-      admitSystemSshLoopbackRoute(target, resolved, { configFile }, route)
-    ).resolves.toEqual({ admitted: false, reason: 'route changes user' })
+    await expect(admitSystemSshLoopbackRoute(target, { configFile })).resolves.toEqual({
+      admitted: false,
+      reason: 'route changes user'
+    })
+  })
+
+  it('refuses a route under which a %h token would expand to 127.0.0.1', async () => {
+    const configFile = writeConfig(
+      'percent-token',
+      [
+        'Host devbox',
+        '  HostName devbox.internal',
+        '  ProxyJump bastion',
+        '  IdentityAgent none',
+        '  IdentityFile ~/.ssh/id_%h',
+        ''
+      ].join('\n')
+    )
+
+    await expect(admitSystemSshLoopbackRoute(target, { configFile })).resolves.toMatchObject({
+      admitted: false,
+      reason: expect.stringContaining('identityfile')
+    })
+  })
+
+  it('refuses a route whose jump host signs with a security key', async () => {
+    const skKey = join(dir, 'bastion_sk')
+    writeFileSync(
+      `${skKey}.pub`,
+      'sk-ssh-ed25519@openssh.com AAAAGnNrLXNzaC1lZDI1NTE5QG9wZW5zc2guY29t bastion\n'
+    )
+    const configFile = writeConfig(
+      'jump-sk',
+      [
+        'Host devbox',
+        '  HostName devbox.internal',
+        '  ProxyJump bastion',
+        '  IdentityAgent none',
+        'Host bastion',
+        `  IdentityFile ${skKey}`,
+        '  IdentitiesOnly yes',
+        '  IdentityAgent none',
+        ''
+      ].join('\n')
+    )
+
+    await expect(admitSystemSshLoopbackRoute(target, { configFile })).resolves.toEqual({
+      admitted: false,
+      reason: 'jump host bastion may use a security key'
+    })
+  })
+
+  // Why: OpenSSH still applies a manual host's own Host block, so the forward must use what it resolved.
+  it("takes a manual target's sshd and known_hosts name from its Host block", async () => {
+    const configFile = writeConfig(
+      'manual-remap',
+      [
+        'Host myhost',
+        '  HostName 10.0.0.5',
+        '  Port 2200',
+        '  IdentityAgent none',
+        'Host bastion',
+        '  IdentityFile /nonexistent/orca-admission-key',
+        '  IdentityAgent none',
+        ''
+      ].join('\n')
+    )
+    const manual: SshTarget = {
+      ...target,
+      host: 'myhost',
+      configHost: 'myhost',
+      source: 'manual',
+      jumpHost: 'bastion'
+    }
+
+    await expect(admitSystemSshLoopbackRoute(manual, { configFile })).resolves.toEqual({
+      admitted: true,
+      sshdPort: 2200,
+      hostKeyAlias: '[10.0.0.5]:2200'
+    })
   })
 
   it('admits a route that changes only how the host is reached', async () => {
@@ -77,13 +134,18 @@ describe.skipIf(findSystemSsh() === null)('admitSystemSshLoopbackRoute with real
         '  User route_user',
         '  ProxyJump bastion',
         '  IdentityAgent none',
+        'Host bastion',
+        '  IdentityFile /nonexistent/orca-admission-key',
+        '  IdentityAgent none',
         ''
       ].join('\n')
     )
 
-    await expect(
-      admitSystemSshLoopbackRoute(target, resolved, { configFile }, route)
-    ).resolves.toEqual({ admitted: true })
+    await expect(admitSystemSshLoopbackRoute(target, { configFile })).resolves.toEqual({
+      admitted: true,
+      sshdPort: 22,
+      hostKeyAlias: 'devbox.internal'
+    })
   })
 })
 

@@ -40,7 +40,12 @@ export function shouldUseSystemSshLoopbackRoute(
   options: SystemSshBuildArgsOptions,
   platform: NodeJS.Platform = process.platform
 ): boolean {
-  if (platform !== 'win32' || target.systemSshConnectionReuse === false) {
+  // Why opt-in: ssh_config can key settings on the real host name, which the route rewrites.
+  if (
+    platform !== 'win32' ||
+    target.systemSshProxyConnectionReuse !== true ||
+    target.systemSshConnectionReuse === false
+  ) {
     return false
   }
   // Why: Kerberos derives the service principal from the dialled host name, which becomes 127.0.0.1.
@@ -57,28 +62,6 @@ export function shouldUseSystemSshLoopbackRoute(
     : Boolean(target.proxyCommand || target.jumpHost)
 }
 
-/** Known-hosts name OpenSSH would have used for the proxied route, so trust carries over. */
-export function getLoopbackRouteHostKeyAlias(
-  target: SshTarget,
-  resolved: SshResolvedConfig | null
-): string {
-  const configResolved = configBackedResolution(target, resolved)
-  if (configResolved?.hostKeyAlias) {
-    return configResolved.hostKeyAlias
-  }
-  const host = configResolved?.hostname || target.host
-  const port = getLoopbackRouteSshdPort(target, resolved)
-  return port === 22 ? host : `[${host}]:${port}`
-}
-
-/** The sshd port the proxied route reaches, which the forward must target on the remote side. */
-export function getLoopbackRouteSshdPort(
-  target: SshTarget,
-  resolved: SshResolvedConfig | null
-): number {
-  return configBackedResolution(target, resolved)?.port || target.port || 22
-}
-
 // Why: Orca dials manual targets by their stored endpoint; `ssh -G` ran on the label, not that host.
 function configBackedResolution(
   target: SshTarget,
@@ -89,27 +72,22 @@ function configBackedResolution(
 
 export async function startSystemSshLoopbackRoute(
   target: SshTarget,
-  resolved: SshResolvedConfig | null,
   options: SystemSshBuildArgsOptions,
   platform: NodeJS.Platform = process.platform,
   signal?: AbortSignal
 ): Promise<SystemSshLoopbackRoute> {
   signal?.throwIfAborted()
-  const hostKeyAlias = getLoopbackRouteHostKeyAlias(target, resolved)
-  // Why port 1: admission ignores the port the route rewrites; the real one is not bound yet.
-  const admission = await admitSystemSshLoopbackRoute(target, resolved, options, {
-    localPort: 1,
-    hostKeyAlias
-  })
+  const admission = await admitSystemSshLoopbackRoute(target, options)
   if (!admission.admitted) {
     throw new Error(`System SSH loopback route skipped: ${admission.reason}`)
   }
+  const { sshdPort, hostKeyAlias } = admission
   signal?.throwIfAborted()
   const forward = await startSystemSshPortForwardProcess(
     target,
     0,
     'localhost',
-    getLoopbackRouteSshdPort(target, resolved),
+    sshdPort,
     // Why nonInteractive: this optional background login must fail silently, never ask for credentials.
     { ...options, keepAlive: true, nonInteractive: true },
     signal

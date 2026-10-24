@@ -108,6 +108,38 @@ export function SshHostAdvancedFields({
               )}
             />
           </div>
+          {navigator.userAgent.includes('Windows') ? (
+            <div className="flex items-start justify-between gap-4 py-1 text-xs">
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <Label className="text-xs font-medium">
+                  {translate(
+                    'auto.components.settings.SshTargetForm.proxyConnectionReuse',
+                    'Reuse one proxy connection'
+                  )}
+                </Label>
+                <p className="text-muted-foreground">
+                  {translate(
+                    'auto.components.settings.SshTargetForm.proxyConnectionReuseHelp',
+                    "Faster connects through slow ProxyCommand or ProxyJump hosts. Only enable if your ssh_config doesn't rely on host-specific Match or %h rules."
+                  )}
+                </p>
+              </div>
+              <SettingsSwitch
+                checked={form.systemSshProxyConnectionReuse}
+                disabled={disabled || !form.systemSshConnectionReuse}
+                onChange={() =>
+                  onFormChange((f) => ({
+                    ...f,
+                    systemSshProxyConnectionReuse: !f.systemSshProxyConnectionReuse
+                  }))
+                }
+                ariaLabel={translate(
+                  'auto.components.settings.SshTargetForm.proxyConnectionReuse',
+                  'Reuse one proxy connection'
+                )}
+              />
+            </div>
+          ) : null}
           <div className="flex items-start justify-between gap-4 py-1 text-xs">
             <div className="min-w-0 flex-1 space-y-0.5">
               <Label className="text-xs font-medium">

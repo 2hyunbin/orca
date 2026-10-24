@@ -36,11 +36,9 @@ vi.mock('net', () => ({ connect: connectMock, createServer: createServerMock }))
 
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
-import { buildSshArgs, getSystemSshBuildArgsFromOperationOptions } from './system-ssh-args'
+import { buildSshArgs } from './system-ssh-args'
 import { buildSystemSshPortForwardArgs } from './system-ssh-forward-process'
 import {
-  getLoopbackRouteHostKeyAlias,
-  getLoopbackRouteSshdPort,
   shouldUseSystemSshLoopbackRoute,
   startSystemSshLoopbackRoute
 } from './system-ssh-loopback-route'
@@ -59,6 +57,7 @@ function createTarget(overrides?: Partial<SshTarget>): SshTarget {
     port: 22,
     username: '',
     source: 'ssh-config',
+    systemSshProxyConnectionReuse: true,
     ...overrides
   }
 }
@@ -193,12 +192,6 @@ describe('buildSshArgs with a loopback route', () => {
     expect(args).not.toContain('HostName=127.0.0.1')
     expect(args).not.toContain(`Port=${FREE_PORT}`)
   })
-
-  it('carries the route into file-transfer operations', () => {
-    expect(getSystemSshBuildArgsFromOperationOptions({ loopbackRoute: ROUTE })).toEqual({
-      loopbackRoute: ROUTE
-    })
-  })
 })
 
 describe('shouldUseSystemSshLoopbackRoute', () => {
@@ -216,6 +209,14 @@ describe('shouldUseSystemSshLoopbackRoute', () => {
       'a direct host on Windows',
       createTarget(),
       createResolved({ proxyCommand: undefined }),
+      {},
+      'win32',
+      false
+    ],
+    [
+      'a host that has not opted in',
+      createTarget({ systemSshProxyConnectionReuse: undefined }),
+      createResolved(),
       {},
       'win32',
       false
@@ -259,42 +260,6 @@ describe('shouldUseSystemSshLoopbackRoute', () => {
   })
 })
 
-describe('getLoopbackRouteHostKeyAlias', () => {
-  it("keeps the known_hosts name OpenSSH used for the proxied route's host and port", () => {
-    expect(
-      getLoopbackRouteHostKeyAlias(createTarget(), createResolved({ hostname: 'i-0abc' }))
-    ).toBe('i-0abc')
-    expect(
-      getLoopbackRouteHostKeyAlias(
-        createTarget(),
-        createResolved({ hostname: 'i-0abc', port: 2222 })
-      )
-    ).toBe('[i-0abc]:2222')
-  })
-
-  // Why: `ssh -G` ran on a manual target's label, so its port and hostname name some other host.
-  it("uses a manual target's stored endpoint, not the label's ssh_config", () => {
-    const manual = createTarget({
-      source: 'manual',
-      configHost: undefined,
-      host: 'box',
-      port: 2222,
-      jumpHost: 'bastion'
-    })
-    const labelConfig = createResolved({ hostname: 'dev box', port: 22, proxyCommand: undefined })
-
-    expect(getLoopbackRouteHostKeyAlias(manual, labelConfig)).toBe('[box]:2222')
-    expect(getLoopbackRouteSshdPort(manual, labelConfig)).toBe(2222)
-    expect(shouldUseSystemSshLoopbackRoute(manual, labelConfig, {}, 'win32')).toBe(true)
-  })
-
-  it("prefers the user's own HostKeyAlias", () => {
-    expect(
-      getLoopbackRouteHostKeyAlias(createTarget(), createResolved({ hostKeyAlias: 'pinned' }))
-    ).toBe('pinned')
-  })
-})
-
 describe('startSystemSshLoopbackRoute', () => {
   beforeEach(() => {
     existsSyncMock.mockReset().mockImplementation((p: string) => p === SYSTEM_SSH_PATH)
@@ -302,7 +267,9 @@ describe('startSystemSshLoopbackRoute', () => {
     connectMock.mockReset().mockImplementation(createListeningSocket)
     createServerMock.mockReset().mockImplementation(createFakeServer)
     treeKillMock.mockReset().mockResolvedValue(true)
-    admissionMock.mockReset().mockResolvedValue({ admitted: true })
+    admissionMock
+      .mockReset()
+      .mockResolvedValue({ admitted: true, sshdPort: 22, hostKeyAlias: 'devbox' })
   })
 
   it('opens the forward over the real proxy, then proves a login over the route', async () => {
@@ -315,7 +282,6 @@ describe('startSystemSshLoopbackRoute', () => {
 
     const route = await startSystemSshLoopbackRoute(
       createTarget(),
-      createResolved(),
       { loopbackRoute: { localPort: 1, hostKeyAlias: 'stale' } },
       'linux'
     )
@@ -329,6 +295,25 @@ describe('startSystemSshLoopbackRoute', () => {
     expect(forward.kill).not.toHaveBeenCalled()
   })
 
+  it('lands the forward on the sshd and known_hosts name the direct route resolved', async () => {
+    admissionMock.mockResolvedValueOnce({
+      admitted: true,
+      sshdPort: 2200,
+      hostKeyAlias: '[10.0.0.5]:2200'
+    })
+    const forward = createFakeProcess()
+    const probe = createFakeProcess()
+    spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
+      answerProbe(probe, 0)
+      return probe
+    })
+
+    const route = await startSystemSshLoopbackRoute(createTarget(), {}, 'linux')
+
+    expect(spawnedArgs(0)).toContain(`127.0.0.1:${FREE_PORT}:localhost:2200`)
+    expect(route.args.hostKeyAlias).toBe('[10.0.0.5]:2200')
+  })
+
   // Why: no ControlMaster watches the held forward, so a silently dead proxy must end it.
   it('holds the forward with server-alive probes', async () => {
     const forward = createFakeProcess()
@@ -338,7 +323,7 @@ describe('startSystemSshLoopbackRoute', () => {
       return probe
     })
 
-    await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
+    await startSystemSshLoopbackRoute(createTarget(), {}, 'linux')
 
     expect(spawnedArgs(0)).toContain('ServerAliveInterval=15')
     expect(spawnedArgs(0)).toContain('ServerAliveCountMax=3')
@@ -353,7 +338,7 @@ describe('startSystemSshLoopbackRoute', () => {
       return probe
     })
 
-    await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
+    await startSystemSshLoopbackRoute(createTarget(), {}, 'win32')
 
     for (const call of [0, 1]) {
       expect(spawnedArgs(call)).toContain('BatchMode=yes')
@@ -364,9 +349,9 @@ describe('startSystemSshLoopbackRoute', () => {
   it('starts no forward when admission refuses the route', async () => {
     admissionMock.mockResolvedValueOnce({ admitted: false, reason: 'route changes user' })
 
-    await expect(
-      startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
-    ).rejects.toThrow('route changes user')
+    await expect(startSystemSshLoopbackRoute(createTarget(), {}, 'win32')).rejects.toThrow(
+      'route changes user'
+    )
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
@@ -378,9 +363,9 @@ describe('startSystemSshLoopbackRoute', () => {
       return probe
     })
 
-    await expect(
-      startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
-    ).rejects.toThrow('loopback route probe failed (exit 255)')
+    await expect(startSystemSshLoopbackRoute(createTarget(), {}, 'linux')).rejects.toThrow(
+      'loopback route probe failed (exit 255)'
+    )
     expect(forward.kill).toHaveBeenCalledWith('SIGTERM')
   })
 
@@ -393,7 +378,7 @@ describe('startSystemSshLoopbackRoute', () => {
       return socket
     })
 
-    const pending = startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
+    const pending = startSystemSshLoopbackRoute(createTarget(), {}, 'linux')
     setImmediate(() => {
       forward.stderr.write('kex_exchange_identification: Connection closed by remote host\n')
       forward.emit('exit', 255)
@@ -411,7 +396,7 @@ describe('startSystemSshLoopbackRoute', () => {
       answerProbe(probe, 0)
       return probe
     })
-    const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
+    const route = await startSystemSshLoopbackRoute(createTarget(), {}, 'win32')
 
     route.dispose()
     route.dispose()
@@ -427,7 +412,7 @@ describe('startSystemSshLoopbackRoute', () => {
       answerProbe(probe, 0)
       return probe
     })
-    const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
+    const route = await startSystemSshLoopbackRoute(createTarget(), {}, 'linux')
     forward.exitCode = 255
     forward.emit('exit', 255)
 
@@ -443,7 +428,7 @@ describe('startSystemSshLoopbackRoute', () => {
       answerProbe(probe, 0)
       return probe
     })
-    const route = await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
+    const route = await startSystemSshLoopbackRoute(createTarget(), {}, 'win32')
     if (reason === 'exit') {
       forward.exitCode = 255
     } else {
@@ -463,13 +448,7 @@ describe('startSystemSshLoopbackRoute', () => {
       spawnMock.mockReturnValueOnce(forward)
       connectMock.mockReturnValue(socket)
       const controller = new AbortController()
-      const pending = startSystemSshLoopbackRoute(
-        createTarget(),
-        createResolved(),
-        {},
-        'linux',
-        controller.signal
-      )
+      const pending = startSystemSshLoopbackRoute(createTarget(), {}, 'linux', controller.signal)
       const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
       await vi.advanceTimersByTimeAsync(50)
       expect(connectMock).toHaveBeenCalledTimes(1)
@@ -495,13 +474,7 @@ describe('startSystemSshLoopbackRoute', () => {
       const probe = createFakeProcess()
       spawnMock.mockReturnValueOnce(forward).mockReturnValueOnce(probe)
       const controller = new AbortController()
-      const pending = startSystemSshLoopbackRoute(
-        createTarget(),
-        createResolved(),
-        {},
-        'linux',
-        controller.signal
-      )
+      const pending = startSystemSshLoopbackRoute(createTarget(), {}, 'linux', controller.signal)
       const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
       await vi.advanceTimersByTimeAsync(50)
       expect(spawnMock).toHaveBeenCalledTimes(2)
@@ -520,13 +493,7 @@ describe('startSystemSshLoopbackRoute', () => {
     createServerMock.mockReturnValueOnce(server)
     server.listen.mockImplementationOnce(() => server)
     const controller = new AbortController()
-    const pending = startSystemSshLoopbackRoute(
-      createTarget(),
-      createResolved(),
-      {},
-      'linux',
-      controller.signal
-    )
+    const pending = startSystemSshLoopbackRoute(createTarget(), {}, 'linux', controller.signal)
     controller.abort()
     server.emit('listening')
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
@@ -539,7 +506,7 @@ describe('startSystemSshLoopbackRoute', () => {
       const forward = createFakeProcess()
       const probe = createFakeProcess()
       spawnMock.mockReturnValueOnce(forward).mockReturnValueOnce(probe)
-      const pending = startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
+      const pending = startSystemSshLoopbackRoute(createTarget(), {}, 'linux')
       const rejected = expect(pending).rejects.toThrow('probe output failed')
       await vi.advanceTimersByTimeAsync(50)
       probe.stdout.emit('error', new Error('probe output failed'))

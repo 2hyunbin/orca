@@ -690,13 +690,7 @@ export class SshConnection {
         this.systemSshLoopbackRouteAbortController = null
       }
     }
-    startSystemSshLoopbackRoute(
-      this.target,
-      this.systemSshResolvedConfig,
-      options,
-      process.platform,
-      controller.signal
-    ).then(
+    startSystemSshLoopbackRoute(this.target, options, process.platform, controller.signal).then(
       (route) => {
         settle()
         if (
