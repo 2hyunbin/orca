@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Tab } from '../../../shared/tab-types'
+import type { Tab } from '../../../../shared/tab-types'
 
 const mocks = vi.hoisted(() => ({
   activateTab: vi.fn(),
@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
   state: { unifiedTabsByWorktree: {} } as Record<string, unknown>
 }))
 
-vi.mock('@/store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: { getState: () => mocks.state }
 }))
 
@@ -18,7 +18,7 @@ vi.mock('@/components/native-chat/use-native-chat-composer-reveal-focus', () => 
   requestNativeChatComposerFocus: mocks.requestNativeChatComposerFocus
 }))
 
-vi.mock('./worktree-runtime-owner', () => ({
+vi.mock('../worktree-runtime-owner', () => ({
   runtimeEnvironmentIdOrLocalUnlessTwin: () => 'env-1'
 }))
 
