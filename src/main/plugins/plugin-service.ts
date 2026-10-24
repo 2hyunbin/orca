@@ -32,6 +32,7 @@ import {
 } from './workers/plugin-worker-reconciliation'
 import type { PluginRunState } from './workers/plugin-supervisor'
 import {
+  fullAccessError,
   isPluginApproved,
   livePluginActivationState,
   snapshotPluginConsentLists
@@ -208,7 +209,8 @@ export class PluginService {
       this.contentPacksReady &&
       this.activationState(plugin) === 'approved' &&
       !this.contentPacks.error(plugin.pluginKey) &&
-      !this.options.getPluginKillListEntry?.(plugin.pluginKey)
+      !this.options.getPluginKillListEntry?.(plugin.pluginKey) &&
+      !fullAccessError(plugin, this.options.isFullAccessAllowed)
     )
   }
 
@@ -220,6 +222,7 @@ export class PluginService {
     const blocked = this.options.getPluginKillListEntry?.(pluginKey)
     return (
       (blocked ? `Blocked by Orca's plugin safety list: ${blocked.reason}` : null) ??
+      fullAccessError(this.findValidPlugin(pluginKey), this.options.isFullAccessAllowed) ??
       this.contentPacks.error(pluginKey) ??
       this.workerController.activationError(pluginKey)
     )
