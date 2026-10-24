@@ -178,7 +178,7 @@ export class RuntimeManagedWorktreeQueries {
         })
       }
       workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
-      pruneLineageForMissingRepoWorktrees(store as unknown as Store, repo, scan.worktrees, {
+      pruneLineageForMissingRepoWorktrees(store, repo, scan.worktrees, {
         workspaceLineage
       })
     }
