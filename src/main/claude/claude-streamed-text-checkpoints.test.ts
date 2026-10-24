@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type {
+  AgentJournalItemBody,
   AgentJournalItemIdentity,
   AgentJournalProducerLinkage
 } from '../../shared/agent-session-journal-types'
@@ -202,4 +203,55 @@ describe('claude streamed text checkpoints', () => {
     expect(rows).toEqual([])
     expect(store.pending).toBe(0)
   })
+})
+
+it('preserves meaningful whitespace and omits blank thinking on fallback completion', async () => {
+  const { createClaudeStreamedThinking } = await import('./claude-streamed-thinking')
+  for (const chunks of [
+    ['    ', 'code'],
+    ['code', '   '],
+    ['  ', '  ']
+  ]) {
+    const expected = chunks.join('')
+    const rows: AgentJournalItemBody[] = []
+    const thinking = createClaudeStreamedThinking({
+      sink: {
+        appendItem: (_, body) => rows.push(body),
+        appendTombstone: () => undefined,
+        publish: () => undefined
+      },
+      producer: unconsultedProducer,
+      turnScope: () => ({ kind: 'thread' }),
+      schedule: () => () => undefined
+    })
+    const observe = (event: unknown) =>
+      thinking.observe({ type: 'stream_event', session_id: 's', uuid: 'frame', event }, 100)
+    observe({ type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } })
+    observe({
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'thinking', thinking: '' }
+    })
+    for (const delta of chunks) {
+      observe({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'thinking_delta', thinking: delta }
+      })
+      thinking.flush()
+    }
+    expect(thinking.finishOpen(200)).toBe(true)
+    expect(thinking.pending).toBe(0)
+    if (expected.trim()) {
+      expect(rows.at(-1)).toMatchObject({
+        role: 'reasoning',
+        state: 'completed',
+        completedAt: 200,
+        blocks: [{ type: 'text', text: expected }]
+      })
+    } else {
+      expect(rows).toEqual([])
+    }
+    thinking.dispose()
+  }
 })

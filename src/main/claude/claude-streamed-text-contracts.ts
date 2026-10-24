@@ -45,7 +45,8 @@ export type ClaudePreparedTextEnd = {
   identity: AgentJournalItemIdentity
   startedAt?: number
   scope: string | null
-  text: string | undefined
+  readonly text: string | undefined
+  hasText: boolean
   step: (
     body: AgentJournalItemBody,
     options: StructuredAgentSessionItemAppendOptions,

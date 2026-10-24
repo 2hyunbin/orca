@@ -108,7 +108,6 @@ export function claudeStreamedTextStep(
   options: StructuredAgentSessionItemAppendOptions,
   finish: boolean
 ): StructuredAgentSessionTransitionStep {
-  const complete = window && !window.source ? window.text() : undefined
   if (deps.prepareText) {
     const suffix = (window?.suffix ?? '') + held
     const measured = extendAgentSessionTextSource(
@@ -143,6 +142,7 @@ export function claudeStreamedTextStep(
       }
     )
   }
+  const complete = window && !window.source ? window.text() : undefined
   const text =
     complete === undefined
       ? undefined

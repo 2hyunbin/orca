@@ -117,7 +117,7 @@ export class CodexJournalItems {
       !codexJournalItem(item).body &&
       this.deps.sink.prepareText
     ) {
-      const admission = this.streams.finish(event.threadId, turnId, receivedAt, item.id)
+      const admission = this.streams.finish(event.threadId, turnId, receivedAt, item)
       if (admission.accepted) {
         this.streams.forget(event.threadId, item.id)
         this.activeItems.delete(itemKey)

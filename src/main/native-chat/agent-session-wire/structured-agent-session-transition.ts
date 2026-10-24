@@ -134,10 +134,7 @@ function transitionAppend(
             step.kind === 'item'
               ? {
                   kind: 'item',
-                  resolve: () => {
-                    const resolved = step.resolve(journal)
-                    return resolved
-                  },
+                  resolve: () => step.resolve(journal),
                   options: {
                     ...structuredAgentSessionJournalAppendOptions(fence, step.options),
                     reservedBytes: step.reservedBytes

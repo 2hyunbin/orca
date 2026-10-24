@@ -114,11 +114,10 @@ export function createAgentSessionDeltaCoalescer(
     const stream = streams.get(key)
     if (stream) {
       stream.dirty = false
-      stream.admittedLength = stream.textLength
-      stream.pending = []
       const source = deps.source?.(key)
       if (source) {
         stream.source = source
+        stream.pending = []
         stream.chunks = []
         stream.retainedBytes = 0
         stream.textLength = 0
@@ -126,6 +125,9 @@ export function createAgentSessionDeltaCoalescer(
         stream.admittedLength = 0
         stream.cuts = { blocks: [], count: 0 }
         stream.lastCodeUnit = Number.NaN
+      } else if (!deps.source) {
+        stream.admittedLength = stream.textLength
+        stream.pending = []
       }
     }
   }

@@ -292,12 +292,13 @@ export function createCodexStructuredItemStreams(
       const key = codexStructuredItemKey(threadId, itemId)
       forgetState(key)
     },
-    finish: (threadId, turnId, at, itemId) =>
+    finish: (threadId, turnId, at, item) =>
       finishCodexStreams(deps, states, producers, coalescer, forgetState, {
         threadId,
         turnId,
         at,
-        itemId
+        item,
+        historyImport: deps.historyImport
       }),
     flush,
     dispose: () => {

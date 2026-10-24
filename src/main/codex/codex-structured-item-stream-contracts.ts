@@ -61,7 +61,7 @@ export type CodexStructuredItemStreams = {
     threadId?: string,
     turnId?: string | null,
     at?: number,
-    itemId?: string
+    item?: CodexThreadItem
   ) => CodexStructuredItemStreamAdmission
   flush: () => boolean
   dispose: () => void

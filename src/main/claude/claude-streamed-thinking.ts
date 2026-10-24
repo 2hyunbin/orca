@@ -65,8 +65,11 @@ export function createClaudeStreamedThinking(deps: {
     block: ClaudePreparedTextEnd,
     ended?: ClaudeStreamedBlockEnd
   ): boolean => {
+    if (!block.hasText) {
+      return true
+    }
     const body = journalReasoningBody(
-      block.text ?? 'x',
+      deps.sink.prepareText ? 'x' : (block.text ?? ''),
       ended ? endedJournalReasoning(ended.completedAt) : { state: 'running' }
     )
     const options = {
@@ -76,7 +79,7 @@ export function createClaudeStreamedThinking(deps: {
     }
     return (
       body !== null &&
-      (block.text !== undefined && !deps.sink.tryAppendTransition
+      (!deps.sink.tryAppendTransition && block.text !== undefined
         ? appendClaudeStreamedWhole(deps.sink, block.identity, body, options)
         : appendClaudePreparedSteps(deps.sink, [block.step(body, options, ended !== undefined)]))
     )
@@ -191,7 +194,10 @@ export function createClaudeStreamedThinking(deps: {
       const pending = checkpoints.prepareFinish(undefined, extra)
       return {
         steps: pending.flatMap((block) => {
-          const body = journalReasoningBody('x', endedJournalReasoning(completedAt))
+          const body = journalReasoningBody(
+            block.hasText ? 'x' : '',
+            endedJournalReasoning(completedAt)
+          )
           return body
             ? [
                 block.step(body, {

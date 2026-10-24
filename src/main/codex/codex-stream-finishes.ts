@@ -6,7 +6,10 @@ import type {
 import type { CodexItemStreamRetention } from './codex-item-stream-retention'
 import type { AgentSessionDeltaCoalescer } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import { codexStructuredItemKey } from './codex-structured-item-stream-bounds'
-import { codexStreamingJournalItem } from './codex-structured-item-translation'
+import {
+  codexStreamingJournalItem,
+  type CodexThreadItem
+} from './codex-structured-item-translation'
 import { appendCodexLifecycleItem, publishCodexLifecycle } from './codex-structured-journal-sink'
 import {
   endedJournalReasoning,
@@ -16,24 +19,37 @@ import type { StructuredAgentSessionEventSink } from '../native-chat/agent-sessi
 import type { StructuredAgentSessionTransitionStep } from '../native-chat/agent-session-wire/structured-agent-session-transition'
 import { interruptedCodexItemBody } from './codex-unfinished-item-body'
 
+type CodexStreamFinishSelection = {
+  threadId?: string
+  turnId?: string | null
+  at?: number
+  item?: CodexThreadItem
+  historyImport?: true
+}
+
 export function prepareCodexStreamFinishes(
   sink: StructuredAgentSessionEventSink,
-  select: { threadId?: string; turnId?: string | null; at?: number; itemId?: string }
+  select: CodexStreamFinishSelection
 ): StructuredAgentSessionTransitionStep[] {
   if (!sink.prepareText) {
     return []
   }
-  return (sink.liveTexts?.() ?? []).flatMap((source) => {
+  const selected = select.item
+    ? sink.liveText?.(
+        codexLiveTextKey(select.threadId!, select.turnId ?? null, select.item, select.historyImport)
+      )
+    : undefined
+  const sources = select.item ? (selected ? [selected] : []) : (sink.liveTexts?.() ?? [])
+  return sources.flatMap((source) => {
     const live = source.live
     if (!live) {
       return []
     }
-    const [provider, , thread, turn, , item] = JSON.parse(live.key)
+    const [provider, , thread, turn] = JSON.parse(live.key)
     if (
       provider !== 'codex' ||
       (select.threadId !== undefined && select.threadId !== thread) ||
-      (select.turnId !== undefined && select.turnId !== turn) ||
-      (select.itemId !== undefined && select.itemId !== item)
+      (select.turnId !== undefined && select.turnId !== turn)
     ) {
       return []
     }
@@ -61,9 +77,9 @@ export function finishCodexStreams(
   producers: ReadonlyMap<string, { threadId: string; turnId: string | null }>,
   coalescer: Pick<AgentSessionDeltaCoalescer, 'snapshot'>,
   forget: (key: string) => void,
-  select: { threadId?: string; turnId?: string | null; at?: number; itemId?: string }
+  select: CodexStreamFinishSelection
 ): CodexStructuredItemStreamAdmission {
-  const { threadId, turnId, at, itemId } = select
+  const { threadId, turnId, at, item } = select
   const release = () => {
     for (const [key, producer] of producers) {
       const state = states.get(key)
@@ -72,7 +88,7 @@ export function finishCodexStreams(
         (deps.sink.prepareText || state.startedAt === undefined) &&
         (threadId === undefined || threadId === producer.threadId) &&
         (turnId === undefined || turnId === producer.turnId) &&
-        (itemId === undefined || itemId === state.item.id)
+        (item === undefined || (item.id === state.item.id && item.type === state.item.type))
       ) {
         forget(key)
       }
@@ -97,7 +113,7 @@ export function finishCodexStreams(
         state.startedAt !== undefined ||
         (threadId !== undefined && threadId !== producer.threadId) ||
         (turnId !== undefined && turnId !== producer.turnId) ||
-        (itemId !== undefined && itemId !== state.item.id) ||
+        (item !== undefined && (item.id !== state.item.id || item.type !== state.item.type)) ||
         (state.item.type !== 'agentMessage' && state.item.type !== 'reasoning')
       ) {
         continue

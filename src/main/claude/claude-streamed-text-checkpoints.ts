@@ -134,23 +134,20 @@ export function createClaudeStreamedTextCheckpoints(
       return undefined
     }
     const window = coalescer.window(key)
-    const complete = window && !window.source ? window.text() : undefined
+    const held = extra && agentJournalItemKey(extra.identity) === key ? extra.text : ''
     return {
       identity: record.identity,
       startedAt: record.startedAt,
       scope: record.scope,
-      text: complete,
+      get text() {
+        return window && !window.source ? window.text() : undefined
+      },
+      hasText:
+        (window?.hasText ?? (deps.source?.(record.identity)?.length ?? 0) > 0) ||
+        held.trim().length > 0,
       options: producerOptions(key),
       step: (body, options, finish = true) =>
-        claudeStreamedTextStep(
-          deps,
-          record.identity,
-          window,
-          extra && agentJournalItemKey(extra.identity) === key ? extra.text : '',
-          body,
-          options,
-          finish
-        ),
+        claudeStreamedTextStep(deps, record.identity, window, held, body, options, finish),
       forget: () => drop(key)
     }
   }
@@ -260,7 +257,7 @@ export function createClaudeProseCheckpoints(
     prepareText: deps.sink.prepareText,
     persistDelta: createClaudeStreamedTextAdmission(deps.sink, turnScope),
     persistPrepared: (block, ended) =>
-      block.text !== undefined && !deps.sink.prepareText
+      !deps.sink.prepareText && block.text !== undefined
         ? appendClaudeStreamedWhole(
             deps.sink,
             block.identity,

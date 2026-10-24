@@ -332,3 +332,394 @@ it('credits flushed resident bytes until forget and does not recharge a returnin
   coalescer.dispose()
   deferred.close()
 })
+
+it('preserves skipped whitespace through real provider ingress, unsupplied completion and reopen', async () => {
+  const { createClaudeJournalTranslator } =
+    await import('../../claude/claude-structured-journal-translation')
+  const { createCodexJournalTranslator } =
+    await import('../../codex/codex-structured-journal-translation')
+  const { openProviderTimelineRig, closeProviderTimelineRigs, messageText, providerItemId } =
+    await import('../agent-session-timeline/provider-timeline-assembler-test-support')
+  try {
+    for (const chunks of [
+      ['    ', 'code'],
+      ['code', '   '],
+      ['  ', '  ']
+    ]) {
+      const expected = chunks.join('')
+      for (const provider of ['claude', 'codex', 'timeline']) {
+        if (provider === 'timeline') {
+          const r = await openProviderTimelineRig({ schedule: () => () => undefined })
+          for (const text of chunks) {
+            expect(
+              r.assembler.apply({
+                type: 'text.delta',
+                item: { id: 'm' },
+                channel: 'assistant',
+                text
+              }).admission.accepted
+            ).toBe(true)
+            r.assembler.flush()
+            await r.rows()
+          }
+          const key = providerItemId('item', 'm')
+          expect(messageText((await r.row(key))?.body)).toBe(expected.trim() ? expected : undefined)
+          expect(
+            r.assembler.apply({ type: 'text.close', item: { id: 'm' } }).admission.accepted
+          ).toBe(true)
+          const reopened = await r.reopenJournal()
+          expect(messageText(reopened.itemBody(key))).toBe(expected.trim() ? expected : undefined)
+          continue
+        }
+        const r = await rig(),
+          errors = vi.fn()
+        const deferred = createDeferredStructuredAgentSessionEventSink({
+          sessionId: 'chat',
+          logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+        })
+        deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+        const claude = createClaudeJournalTranslator({
+          sink: deferred.sink,
+          schedule: () => () => undefined
+        })
+        const codex = createCodexJournalTranslator({
+          sink: deferred.sink,
+          schedule: () => () => undefined,
+          primaryThreadId: () => 'thread'
+        })
+        const frame = (event: unknown) =>
+          claude.handle({
+            type: 'message',
+            sessionId: 'chat',
+            observedAt: 100,
+            message: { type: 'stream_event', session_id: 's', uuid: 'frame', event }
+          })
+        const notify = (method: string, params: unknown) =>
+          expect(
+            codex.handle({
+              type: 'notification',
+              sessionId: 'chat',
+              threadId: 'thread',
+              method,
+              params
+            }).accepted
+          ).toBe(true)
+        if (provider === 'claude') {
+          frame({ type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } })
+          frame({
+            type: 'content_block_start',
+            index: 0,
+            content_block: { type: 'thinking', thinking: '' }
+          })
+        } else {
+          notify('turn/started', { turn: { id: 'turn' } })
+        }
+        for (const delta of chunks) {
+          if (provider === 'claude') {
+            frame({
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'thinking_delta', thinking: delta }
+            })
+            claude.flush()
+          } else {
+            notify('item/reasoning/textDelta', { itemId: 'r', turnId: 'turn', delta })
+            codex.flush()
+          }
+          expect((await deferred.drained()).ok).toBe(true)
+        }
+        const messages = () =>
+          r.journal.snapshot().items.filter((item) => item.body.kind === 'message')
+        // No authoritative final has had an opportunity to repair this value.
+        expect(
+          messages().map((item) => (item.body.kind === 'message' ? item.body.blocks : []))
+        ).toEqual(expected.trim() ? [[{ type: 'text', text: expected }]] : [])
+        if (provider === 'claude') {
+          claude.handle({ type: 'ended', sessionId: 'chat', reason: 'exited', observedAt: 200 })
+        } else {
+          notify('item/completed', {
+            turnId: 'turn',
+            item: { id: 'r', type: 'reasoning', text: [], summary: [] }
+          })
+        }
+        expect((await deferred.drained()).ok).toBe(true)
+        const final = messages()
+        expect(final.map((item) => (item.body.kind === 'message' ? item.body.blocks : []))).toEqual(
+          expected.trim() ? [[{ type: 'text', text: expected }]] : []
+        )
+        await r.journal.close()
+        const reopened = await journals.open(r.settings)
+        expect(reopened.snapshot().items.filter((item) => item.body.kind === 'message')).toEqual(
+          final
+        )
+        expect(errors).not.toHaveBeenCalled()
+        claude.dispose()
+        codex.dispose()
+        deferred.close()
+      }
+    }
+  } finally {
+    await closeProviderTimelineRigs()
+  }
+})
+
+it('keeps skipped and refused suffix ownership through unbound start and completion', async () => {
+  const r = await rig(),
+    errors = vi.fn()
+  const deferred = createDeferredStructuredAgentSessionEventSink({
+    sessionId: 'chat',
+    logger: { error: errors, warn: vi.fn(), info: vi.fn() },
+    watermarks: { maxQueuedOperations: 1 }
+  })
+  const sink = deferred.sink
+  expect(sink.tryAppendItem?.(identityOf('blocker'), body('blocker'), options).accepted).toBe(true)
+  const stream = createAgentSessionDeltaCoalescer({
+    source: () => sink.textSource?.(identity),
+    schedule: () => () => undefined,
+    emit: () => false,
+    emitDelta: (_, window) =>
+      !window.hasText ||
+      appendStructuredAgentSessionTextWindow(sink, identity, body(''), window, options)
+  })
+  stream.append(itemId, '    ')
+  expect(stream.flushAll()).toBe(true)
+  expect(sink.textSource?.(identity)).toBeUndefined()
+  stream.append(itemId, 'code')
+  expect(stream.flushAll()).toBe(false)
+  expect(stream.window(itemId)?.suffix).toBe('    code')
+  deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+  expect((await deferred.drained()).ok).toBe(true)
+  deferred.unbind()
+  expect(stream.flushAll()).toBe(true)
+  expect(sink.textSource?.(identity)?.length).toBe(8)
+  expect(stream.window(itemId)?.suffix).toBe('')
+  const finish = sink.prepareText?.(
+    identity,
+    body(''),
+    { baseLength: 8, suffix: '' },
+    { ...options, streamText: { operation: 'finish', field: 0, baseLength: 8, suffix: '' } }
+  )
+  if (!finish) {
+    throw new Error('missing finish')
+  }
+  expect(
+    sink.tryAppendTransition?.({ steps: [finish], lifecycle: true, publish: true, finalTail: true })
+      .accepted
+  ).toBe(true)
+  stream.forget(itemId)
+  deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+  expect((await deferred.drained()).ok).toBe(true)
+  expect(r.journal.itemBody(itemId)).toEqual(body('    code'))
+  expect(r.rows().filter((row) => row.kind === 'item' && row.itemId === itemId)).toHaveLength(2)
+  expect(sink.textSource?.(identity)).toBeUndefined()
+  expect(replayJournal(r.database.db, 'chat')?.state.items.get(itemId)?.body).toEqual(
+    body('    code')
+  )
+  expect(errors).not.toHaveBeenCalled()
+  stream.dispose()
+  deferred.close()
+})
+
+it('finishes selected Codex reasoning by raw key at N and 10N without enumerating siblings', async () => {
+  const { createCodexJournalTranslator } =
+    await import('../../codex/codex-structured-journal-translation')
+  const { codexLiveTextKey } = await import('../../codex/codex-thread-item-identity')
+  for (const n of [30, 300]) {
+    const r = await rig(),
+      errors = vi.fn()
+    const deferred = createDeferredStructuredAgentSessionEventSink({
+      sessionId: 'chat',
+      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+    })
+    deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+    const translator = createCodexJournalTranslator({
+      sink: deferred.sink,
+      schedule: () => () => undefined,
+      primaryThreadId: () => 'thread'
+    })
+    const send = (method: string, params: unknown) =>
+      expect(
+        translator.handle({
+          type: 'notification',
+          sessionId: 'chat',
+          threadId: 'thread',
+          method,
+          params
+        }).accepted
+      ).toBe(true)
+    send('turn/started', { turn: { id: 'turn' } })
+    for (let k = 0; k <= n; k++) {
+      send('item/reasoning/textDelta', { itemId: `r-${k}`, turnId: 'turn', delta: `reason-${k}` })
+      translator.flush()
+      expect((await deferred.drained()).ok).toBe(true)
+    }
+    const general = vi.spyOn(deferred.sink, 'liveTexts')
+    const keyed = vi.spyOn(deferred.sink, 'liveText')
+    let productionLookups = 0
+    for (let k = 0; k < n; k++) {
+      const raw = codexLiveTextKey('thread', 'turn', { type: 'reasoning', id: `r-${k}` })
+      const identity = deferred.sink.liveText?.(raw)?.live?.identity
+      expect(identity).toBeDefined()
+      const beforeCompletion = keyed.mock.calls.length
+      send('item/completed', {
+        turnId: 'turn',
+        item: { id: `r-${k}`, type: 'reasoning', text: [], summary: [] }
+      })
+      expect((await deferred.drained()).ok).toBe(true)
+      productionLookups += keyed.mock.calls.length - beforeCompletion
+      if (!identity) {
+        throw new Error('missing selected identity')
+      }
+      expect(r.journal.itemBody(agentJournalItemKey(identity))).toMatchObject({
+        role: 'reasoning',
+        blocks: [{ type: 'text', text: `reason-${k}` }],
+        state: 'completed'
+      })
+      expect(deferred.sink.liveText?.(raw)).toBeUndefined()
+    }
+    expect(general).not.toHaveBeenCalled()
+    expect(productionLookups).toBeLessThanOrEqual(3 * n)
+    console.info('selected Codex completion operations', {
+      n,
+      generalCalls: general.mock.calls.length,
+      generalPopulationVisits: 0,
+      productionLookups,
+      keyedLookupsIncludingTestProbes: keyed.mock.calls.length
+    })
+    expect(
+      deferred.sink.liveText?.(
+        codexLiveTextKey('thread', 'turn', { type: 'reasoning', id: `r-${n}` })
+      )?.live?.body
+    ).toMatchObject({ state: 'running' })
+    expect(errors).not.toHaveBeenCalled()
+    translator.dispose()
+    deferred.close()
+  }
+})
+
+it('selects pending Codex completion by thread, turn, type and live/history namespace before bind', async () => {
+  const { createCodexJournalTranslator } =
+    await import('../../codex/codex-structured-journal-translation')
+  const { codexLiveTextKey } = await import('../../codex/codex-thread-item-identity')
+  const { journalReasoningBody } = await import('./journal-reasoning-row')
+  for (const historyImport of [undefined, true] as const) {
+    const r = await rig(),
+      errors = vi.fn()
+    const deferred = createDeferredStructuredAgentSessionEventSink({
+      sessionId: 'chat',
+      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+    })
+    const variants = [
+      ['thread', 'turn', 'reasoning', historyImport],
+      ['sibling-thread', 'turn', 'reasoning', historyImport],
+      ['thread', 'sibling-turn', 'reasoning', historyImport],
+      ['thread', 'turn', 'agentMessage', historyImport],
+      ['thread', 'turn', 'reasoning', historyImport ? undefined : true]
+    ] as const
+    const sources = variants.map(([thread, turn, type, namespace], k) => {
+      const raw = codexLiveTextKey(thread, turn, { type, id: 'same-id' }, namespace)
+      const id = identityOf(`collision-${k}`)
+      const reasoning = journalReasoningBody('x', { state: 'running' })
+      if (!reasoning) {
+        throw new Error('missing reasoning body')
+      }
+      expect(
+        deferred.sink.tryAppendStreamedItem?.(id, reasoning, {
+          ...options,
+          rawTextKey: raw,
+          streamText: { operation: 'start', field: 0, baseLength: 0, suffix: `text-${k}` }
+        }).accepted
+      ).toBe(true)
+      expect(deferred.sink.liveText?.(raw)?.live?.identity).toEqual(id)
+      return { raw, id }
+    })
+    const translator = createCodexJournalTranslator({
+      sink: deferred.sink,
+      historyImport,
+      schedule: () => () => undefined
+    })
+    const general = vi.spyOn(deferred.sink, 'liveTexts')
+    expect(
+      translator.handle({
+        type: 'notification',
+        sessionId: 'chat',
+        threadId: 'thread',
+        method: 'item/completed',
+        params: {
+          turnId: 'turn',
+          item: { type: 'reasoning', id: 'same-id', text: [], summary: [] }
+        }
+      }).accepted
+    ).toBe(true)
+    expect(general).not.toHaveBeenCalled()
+    deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+    expect((await deferred.drained()).ok).toBe(true)
+    for (const [k, source] of sources.entries()) {
+      expect(r.journal.itemBody(agentJournalItemKey(source.id))).toMatchObject({
+        blocks: [{ type: 'text', text: `text-${k}` }],
+        state: k === 0 ? 'completed' : 'running'
+      })
+      expect(deferred.sink.liveText?.(source.raw) !== undefined).toBe(k !== 0)
+    }
+    expect(errors).not.toHaveBeenCalled()
+    translator.dispose()
+    deferred.close()
+  }
+})
+
+it('materializes a cold Claude whole only for its fallback consumer, allowing suffix assembly', async () => {
+  const { createClaudeStreamedTextCheckpoints } =
+    await import('../../claude/claude-streamed-text-checkpoints')
+  for (const prepared of [true, false]) {
+    const r = await rig(),
+      errors = vi.fn()
+    const deferred = createDeferredStructuredAgentSessionEventSink({
+      sessionId: 'chat',
+      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+    })
+    const cp = createClaudeStreamedTextCheckpoints({
+      ...(prepared
+        ? { source: deferred.sink.textSource, prepareText: deferred.sink.prepareText }
+        : {}),
+      schedule: () => () => undefined,
+      producer: {
+        linkageFor: () => ({ kind: 'root' }),
+        settledLinkageFor: () => ({ kind: 'root' })
+      },
+      persist: () => true
+    })
+    const chunk = 'COLD-JOIN'.repeat(8192)
+    cp.append(identity, chunk)
+    const original = Array.prototype.join
+    let assemblies = 0
+    const spy = vi.spyOn(Array.prototype, 'join').mockImplementation(function (separator) {
+      if (this[0] === chunk) {
+        assemblies++
+      }
+      return original.call(this, separator)
+    })
+    let steps
+    try {
+      const blocks = cp.prepareFinish()
+      expect(assemblies).toBe(1)
+      expect(blocks[0].hasText).toBe(true)
+      steps = [blocks[0].step(body(''), options)]
+      if (prepared) {
+        expect(assemblies).toBe(1)
+      } else {
+        expect(assemblies).toBeGreaterThan(1)
+      }
+    } finally {
+      spy.mockRestore()
+    }
+    expect(
+      deferred.sink.tryAppendTransition?.({ steps, lifecycle: true, publish: true }).accepted
+    ).toBe(true)
+    deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
+    expect((await deferred.drained()).ok).toBe(true)
+    expect(r.journal.itemBody(itemId)).toEqual(body(chunk))
+    expect(errors).not.toHaveBeenCalled()
+    cp.dispose()
+    deferred.close()
+  }
+})
