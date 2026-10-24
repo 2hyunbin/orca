@@ -447,7 +447,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-false-cc')
-        storeFixture.read().setAgentStatus.mockClear()
+        vi.mocked(storeFixture.read().setAgentStatus).mockClear()
 
         handler._dispatchTerminalSideEffectBatchForTest({
           ptyId: 'pty-fact-false-cc',
@@ -486,7 +486,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-retained-false-cc')
-        storeFixture.read().setAgentStatus.mockClear()
+        vi.mocked(storeFixture.read().setAgentStatus).mockClear()
 
         handler._dispatchTerminalSideEffectBatchForTest({
           ptyId: 'pty-fact-retained-false-cc',

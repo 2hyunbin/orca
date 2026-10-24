@@ -64,7 +64,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
           settings: {
             ...storeFixture.read().settings,
             terminalMainSideEffectAuthority: true
-          } as StoreState['settings']
+          }['settings']
         })
       }
 
@@ -235,7 +235,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         // 2026-07-13 fossil-pane incident: bytes drop while hidden, pipeline certified dead, cert recovery empty — reveal must re-kick it.
         enableMainAuthority()
         const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-        storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
+        storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery })
         const { _resetTerminalPaneRecoveryForTests } = await import('./terminal-pane-recovery')
         _resetTerminalPaneRecoveryForTests()
         const deps = createDeps({ isVisibleRef: { current: false } })
@@ -490,7 +490,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
           settings: {
             ...storeFixture.read().settings,
             terminalHiddenDeliveryGate: false
-          } as StoreState['settings']
+          }['settings']
         })
         const deps = createDeps({ isVisibleRef: { current: false } })
         const { transport, dataCallback } = await connectHiddenPane(deps)

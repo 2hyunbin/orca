@@ -72,7 +72,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
         ...storeFixture.read(),
         repos: [{ id: 'repo1', connectionId: 'conn-1' }],
         sshConnectionStates: new Map([['conn-1', { status: 'connected' }]])
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)

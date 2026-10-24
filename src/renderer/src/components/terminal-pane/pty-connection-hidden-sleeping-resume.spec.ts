@@ -77,7 +77,7 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
           ...record
         }
       }
-    } as StoreState)
+    })
   }
 
   function connectHiddenPane(restoredPtyId: string | null): {
@@ -151,7 +151,7 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
         }
       })
       await installTerminalTestGlobals()
-      connectPanePtyRef = (await import('./pty-connection')).connectPanePty
+      connectPanePtyRef = storeFixture.own(await import('./pty-connection')).connectPanePty
       ;(await mainLayoutApplyTransport()).reset()
       // Switch on: main's start of the pane binds it to `pty-main`.
       await mainStartsPaneAs({

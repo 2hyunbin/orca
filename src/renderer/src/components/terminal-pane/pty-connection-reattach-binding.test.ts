@@ -177,7 +177,7 @@ describe('connectPanePty', () => {
       settings: {
         ...storeFixture.read().settings
       }
-    } as StoreState)
+    })
     const pane = createPane(2)
     const manager = createManager(2)
     const deps = createDeps({
@@ -450,7 +450,7 @@ describe('connectPanePty', () => {
           ptyIdsByLeafId: { [LEAF_1]: 'tab-pty' }
         }
       }
-    } as StoreState)
+    })
     const deps = createDeps({ paneTransportsRef })
 
     connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
@@ -489,7 +489,7 @@ describe('connectPanePty', () => {
           ptyIdsByLeafId: { [LEAF_2]: 'terminal-old' }
         }
       }
-    } as StoreState)
+    })
     const deps = createDeps({ paneTransportsRef })
 
     connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
@@ -567,7 +567,7 @@ describe('connectPanePty', () => {
           ptyIdsByLeafId: { [LEAF_1]: eagerPtyId }
         }
       }
-    } as StoreState)
+    })
     const deps = createDeps({
       restoredLeafId: LEAF_1,
       restoredPtyIdByLeafId: { [LEAF_1]: eagerPtyId }
@@ -628,7 +628,7 @@ describe('connectPanePty', () => {
         'tab-1': ['tab-pty'],
         'tab-2': [otherTabPtyId]
       }
-    } as StoreState)
+    })
     const deps = createDeps({
       restoredLeafId: LEAF_1,
       restoredPtyIdByLeafId: { [LEAF_1]: otherTabPtyId }
@@ -679,7 +679,7 @@ describe('connectPanePty', () => {
           identity: { agentType: 'claude' }
         }
       }
-    } as StoreState)
+    })
     const deps = createDeps()
 
     const pane = createPane(1)
@@ -712,7 +712,7 @@ describe('connectPanePty', () => {
       settings: {
         ...storeFixture.read().settings
       }
-    } as StoreState)
+    })
     const pane = createPane(2)
     const manager = createManager(2)
     const deps = createDeps({

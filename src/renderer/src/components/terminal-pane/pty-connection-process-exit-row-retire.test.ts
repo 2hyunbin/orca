@@ -207,7 +207,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     storeSubscribers = []
     storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
-    storeFixture.read().dropAgentStatus.mockImplementation((paneKey: string) => {
+    vi.mocked(storeFixture.read().dropAgentStatus).mockImplementation((paneKey: string) => {
       storeFixture.setStatus(paneKey, undefined)
     })
   })
@@ -235,7 +235,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
 
     expect(storeFixture.read().dropAgentStatus).toHaveBeenCalledWith(paneKey)
     // No `paneRemoved`: the pane outlived the agent, so main keeps the resume identity.
-    expect(storeFixture.read().dropAgentStatus.mock.calls).toEqual([[paneKey]])
+    expect(vi.mocked(storeFixture.read().dropAgentStatus).mock.calls).toEqual([[paneKey]])
     expect(window.api.agentStatus.reconcileEndedProcess).toHaveBeenCalledWith(paneKey)
     expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toBeUndefined()
   })
@@ -339,7 +339,7 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     left.confirmExit('claude')
     await flushAsyncTicks()
 
-    expect(storeFixture.read().dropAgentStatus.mock.calls).toEqual([[left.paneKey]])
+    expect(vi.mocked(storeFixture.read().dropAgentStatus).mock.calls).toEqual([[left.paneKey]])
     expect(vi.mocked(window.api.agentStatus.reconcileEndedProcess).mock.calls).toEqual([
       [left.paneKey]
     ])

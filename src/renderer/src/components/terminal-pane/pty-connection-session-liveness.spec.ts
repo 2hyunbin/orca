@@ -46,7 +46,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           ptyIdsByLeafId: { [LEAF_2]: 'unverifiable-pty' }
         }
       }
-    } as StoreState)
+    })
     return createDeps({
       restoredLeafId: LEAF_2,
       restoredPtyIdByLeafId: { [LEAF_2]: 'unverifiable-pty' }

@@ -121,7 +121,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
               updatedAt: 1
             }
           }
-        } as StoreState)
+        })
         const pane = createPane(2)
         const manager = createManager(2)
         const deps = createDeps({
@@ -251,7 +251,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
               updatedAt: 1
             }
           }
-        } as StoreState)
+        })
         const deps = createDeps({
           restoredLeafId: LEAF_2,
           restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
@@ -329,7 +329,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
       Object.assign(storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey] ?? {}, { state })
       const pane = createPane(2)
       const manager = createManager(2)
@@ -395,7 +395,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps({

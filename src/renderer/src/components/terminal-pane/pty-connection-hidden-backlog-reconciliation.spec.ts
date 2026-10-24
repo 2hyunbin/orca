@@ -59,7 +59,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
           settings: {
             ...storeFixture.read().settings,
             terminalMainSideEffectAuthority: true
-          } as StoreState['settings']
+          }['settings']
         })
       }
 
@@ -386,7 +386,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
             settings: {
               ...storeFixture.read().settings,
               terminalHiddenDeliveryGate: false
-            } as StoreState['settings']
+            }['settings']
           })
           const { pane, dataCallback, transport, deps } = await restoreVisiblePaneToBaseline()
           transport.sendInput.mockClear()

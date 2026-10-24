@@ -83,7 +83,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -121,7 +121,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -171,7 +171,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
             ptyIdsByLeafId: {}
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.terminal.rows = 4
@@ -237,7 +237,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.terminal.rows = destinationRows

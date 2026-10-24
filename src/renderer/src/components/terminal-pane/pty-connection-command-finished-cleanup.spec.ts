@@ -183,7 +183,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
-      storeFixture.read().clearAgentLaunchConfig.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
         delete storeFixture.read().agentLaunchConfigByPaneKey[key]
       })
 
@@ -236,7 +236,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
-      storeFixture.read().clearAgentLaunchConfig.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
         delete storeFixture.read().agentLaunchConfigByPaneKey[key]
       })
 
@@ -409,7 +409,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       storeFixture.setStatus(paneKey, row)
       // The real dismissal removes the row and runs the slice's own teardown; mirror both, or the
       // ordering this test exists to pin is never exercised.
-      storeFixture.read().dropAgentStatus.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().dropAgentStatus).mockImplementation((key: string) => {
         storeFixture.setStatus(key, undefined)
         realStore.dropAgentStatus(key)
       })
@@ -645,7 +645,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
-      storeFixture.read().clearAgentLaunchConfig.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
         delete storeFixture.read().agentLaunchConfigByPaneKey[key]
       })
 
@@ -689,7 +689,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
-      storeFixture.read().clearAgentLaunchConfig.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
         delete storeFixture.read().agentLaunchConfigByPaneKey[key]
       })
 

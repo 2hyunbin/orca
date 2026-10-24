@@ -83,7 +83,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         settings: {
           ...storeFixture.read().settings
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -150,7 +150,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       connectPanePty(
@@ -192,7 +192,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 120, rows: 40 }))
@@ -232,7 +232,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.container.getBoundingClientRect = vi.fn(() => createRect(0, 0))
@@ -273,7 +273,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 120, rows: 40 }))
@@ -314,7 +314,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 120, rows: 40 }))
@@ -355,7 +355,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 120, rows: 40 }))
@@ -397,7 +397,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
         }
-      } as StoreState)
+      })
 
       // createPane opens the pane at 120x40, deliberately different from the daemon snapshot's 80x24 grid.
       const pane = createPane(1)
@@ -452,7 +452,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => undefined) as never
       const { parseCallbacks, writes } = captureCallbackTerminalWrites(pane)
@@ -510,7 +510,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
       const pane = createPane(1)
       let xtermContainerDisplay = 'none'
       const xtermContainer = new EventTarget() as HTMLElement
@@ -565,7 +565,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
       const pane = createPane(1)
       let xtermContainerDisplay = 'none'
       const xtermContainer = new EventTarget() as HTMLElement
@@ -623,7 +623,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
       const pane = createPane(1)
       pane.terminal.buffer.active.baseY = 100
       pane.terminal.buffer.active.viewportY = 80

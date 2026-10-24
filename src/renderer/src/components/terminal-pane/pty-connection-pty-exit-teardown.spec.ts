@@ -66,7 +66,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
           launchConfig
         }
       }
-    } as StoreState)
+    })
     return launchConfig
   }
 

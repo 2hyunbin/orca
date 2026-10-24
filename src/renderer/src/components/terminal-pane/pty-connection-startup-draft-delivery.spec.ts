@@ -108,7 +108,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
           mock: { calls: [(data: string) => void][] }
         }
       ).mock.calls[0]?.[0]('USER_DRAFT')
-      ;(storeFixture.read().recordTerminalInput as ReturnType<typeof vi.fn>).mockClear()
+      vi.mocked(storeFixture.read().recordTerminalInput).mockClear()
       await vi.advanceTimersByTimeAsync(waitMs)
       expect(transport.sendInputAccepted).not.toHaveBeenCalled()
       capturedDataCallback.current?.('\x1b[?2004h\x1b[2K› ')

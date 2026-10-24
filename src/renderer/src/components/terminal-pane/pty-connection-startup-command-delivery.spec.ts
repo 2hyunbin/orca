@@ -201,7 +201,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
         createDeps({ startup: { command: 'command-code --trust' } }) as never
       )
       await flushAsyncTicks()
-      storeFixture.read().setAgentStatus.mockClear()
+      vi.mocked(storeFixture.read().setAgentStatus).mockClear()
       storeFixture.patch({ ptyIdsByTabId: { 'tab-1': [oldPtyId, newPtyId] } })
       storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: newPtyId }
 
@@ -340,9 +340,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       capturedDataCallback.current?.('❯ Fix the spinner\r\n\x1b[35m✻ Threading...\x1b[0m')
 
       expect(storeFixture.read().setAgentStatus).not.toHaveBeenCalled()
-      expect(
-        (storeFixture.read().agentStatusByPaneKey[paneKey] as { state?: unknown })?.state
-      ).toBe('done')
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]?.state).toBe('done')
     })
 
     it('starts a new Command Code turn after done when TUI output carries a different prompt', async () => {

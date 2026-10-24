@@ -184,7 +184,8 @@ export function registerPtyConnectionForegroundRoutingConfirmationTests(): void 
         expect(
           storeFixture.read().paneForegroundAgentByPaneKey[cacheKey]?.routingConfirmationPending
         ).toBe(true)
-        const publishesAfterFirst = storeFixture.read().setPaneForegroundAgent.mock.calls.length
+        const publishesAfterFirst = vi.mocked(storeFixture.read().setPaneForegroundAgent).mock.calls
+          .length
 
         // A pending entry is not trusted evidence: further requests must not republish it.
         binding.requestWindowsShiftEnterReconfirmation()
@@ -192,7 +193,7 @@ export function registerPtyConnectionForegroundRoutingConfirmationTests(): void 
         await vi.advanceTimersByTimeAsync(1_000)
         await flushAsyncTicks()
 
-        expect(storeFixture.read().setPaneForegroundAgent.mock.calls.length).toBe(
+        expect(vi.mocked(storeFixture.read().setPaneForegroundAgent).mock.calls.length).toBe(
           publishesAfterFirst
         )
       })

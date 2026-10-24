@@ -161,7 +161,7 @@ describe('restored snapshot baseline shortfall (STA-5179)', () => {
       settings: {
         ...storeFixture.read().settings,
         terminalMainSideEffectAuthority: true
-      } as StoreState['settings']
+      }['settings']
     })
     const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-id')

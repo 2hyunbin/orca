@@ -129,7 +129,7 @@ export function registerPtyConnectionForegroundAgentRoutingTests(): void {
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,

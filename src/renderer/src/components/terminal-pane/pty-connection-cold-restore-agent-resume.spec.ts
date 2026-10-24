@@ -100,7 +100,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             }
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -201,7 +201,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             providerSession: { key: 'session_id', id: "codex-session-1's" }
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -285,7 +285,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -380,7 +380,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -453,7 +453,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             updatedAt: 2
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -544,7 +544,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             updatedAt: 2
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)

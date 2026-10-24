@@ -84,7 +84,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'hub-a'
         }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -112,7 +112,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         runtimeEnvironments: [{ id: 'hub-a' }, { id: 'hub-b' }],
         runtimeEnvironmentCatalogHydrated: true,
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -149,7 +149,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'focused-runtime'
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -197,7 +197,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'focused-runtime'
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -227,7 +227,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null }]
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const { writes } = captureCallbackTerminalWrites(pane)
@@ -253,7 +253,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState)
+      })
 
       const paneTransports = new Map([[1, existingTransport]])
       const pane = createPane(2)

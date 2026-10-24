@@ -68,7 +68,7 @@ export function registerPtyConnectionRestartReplacementTests(): void {
       const deps = createDeps({ isVisibleRef: { current: opts.visible } })
       const pane = createPane(2)
       const paneKey = `tab-1:${leafIdForPane(2)}`
-      storeFixture.read().removeAgentStatus.mockImplementation((key: string) => {
+      vi.mocked(storeFixture.read().removeAgentStatus).mockImplementation((key: string) => {
         storeFixture.setStatus(key, undefined)
       })
       storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey] = {

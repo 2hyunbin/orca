@@ -157,7 +157,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
               ptyIdsByLeafId: {}
             }
           }
-        } as StoreState)
+        })
 
         connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         await vi.advanceTimersByTimeAsync(20)
@@ -616,7 +616,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
               storeFixture.read().agentLaunchConfigByPaneKey[key] = { launchConfig, identity }
             }
           )
-        storeFixture.read().clearAgentLaunchConfig.mockImplementation((key: string) => {
+        vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
           delete storeFixture.read().agentLaunchConfigByPaneKey[key]
         })
 

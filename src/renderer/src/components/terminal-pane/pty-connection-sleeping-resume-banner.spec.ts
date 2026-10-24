@@ -104,7 +104,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -230,7 +230,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -318,7 +318,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
         agentStatusByPaneKey: {},
         sleepingAgentSessionsByPaneKey: { [paneKey]: sleepingRecord },
         suppressedPtyExitIds: { 'fresh-pty': true }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -408,7 +408,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const deps = createDeps({
         restoredLeafId: LEAF_2,

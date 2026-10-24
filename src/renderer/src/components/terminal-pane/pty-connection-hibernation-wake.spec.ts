@@ -802,7 +802,7 @@ export function registerPtyConnectionHibernationWakeTests(): void {
       }
       await flushAsyncTicks()
       expect(userInputListeners.size).toBeGreaterThan(0)
-      ;(storeFixture.read().recordTerminalInput as ReturnType<typeof vi.fn>).mockClear()
+      vi.mocked(storeFixture.read().recordTerminalInput).mockClear()
 
       // A focus-out report forwarded to the PTY must not count as activity.
       sendTerminalInputThroughPane(pane, '\x1b[O')
@@ -831,7 +831,7 @@ export function registerPtyConnectionHibernationWakeTests(): void {
 
       connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
-      ;(storeFixture.read().recordTerminalInput as ReturnType<typeof vi.fn>).mockClear()
+      vi.mocked(storeFixture.read().recordTerminalInput).mockClear()
 
       sendTerminalInputThroughPane(pane, 'x')
       expect(storeFixture.read().recordTerminalInput).toHaveBeenCalledTimes(1)

@@ -143,7 +143,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState)
+      })
       const pane = createPane(1)
       const transport = createMockTransport('pty-omp-gemini-cwd')
       transportFactoryQueue.push(transport)
@@ -198,7 +198,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
         }
-      } as StoreState)
+      })
       const pane1 = createPane(1)
       const pane2 = createPane(2)
       const transport1 = createMockTransport('pty-split-owner-1')
@@ -258,7 +258,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState)
+      })
       const pane = createPane(1)
       const transport = createMockTransport('pty-reused-done-row')
       transportFactoryQueue.push(transport)
@@ -296,7 +296,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState)
+      })
       const pane = createPane(1)
       const transport = createMockTransport('pty-reused-stale-row')
       transportFactoryQueue.push(transport)

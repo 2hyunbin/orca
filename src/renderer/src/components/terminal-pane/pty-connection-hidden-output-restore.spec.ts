@@ -447,7 +447,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         agentType: 'claude'
       })
       expect(storeFixture.read().setAgentStatus).toHaveBeenCalledTimes(1)
-      storeFixture.read().setAgentStatus.mockClear()
+      vi.mocked(storeFixture.read().setAgentStatus).mockClear()
       factsHandler._dispatchTerminalSideEffectBatchForTest({
         ptyId: remotePtyId,
         seq: hidden.length,

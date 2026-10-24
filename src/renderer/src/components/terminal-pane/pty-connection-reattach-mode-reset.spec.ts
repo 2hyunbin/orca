@@ -99,7 +99,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
-      } as StoreState)
+      })
       const pane = createPane(1)
       pane.terminal.buffer.active.viewportY = 40
       pane.terminal.buffer.active.baseY = 100
@@ -149,7 +149,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -662,7 +662,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         runtimePaneTitlesByTabId: {
           'tab-1': { 1: 'zsh' }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const textarea = {} as HTMLTextAreaElement
@@ -799,7 +799,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         settings: {
           ...storeFixture.read().settings
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)

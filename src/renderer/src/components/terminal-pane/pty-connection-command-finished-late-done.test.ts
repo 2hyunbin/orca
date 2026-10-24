@@ -187,7 +187,7 @@ describe('command-finished drop and a Done that lands after it', () => {
     await vi.advanceTimersByTimeAsync(20)
     await flushAsyncTicks()
     const realStore = createTestStore()
-    storeFixture.read().dropAgentStatus.mockImplementation((key: string) => {
+    vi.mocked(storeFixture.read().dropAgentStatus).mockImplementation((key: string) => {
       storeFixture.setStatus(key, undefined)
     })
     return {
@@ -285,7 +285,7 @@ describe('command-finished drop and a Done that lands after it', () => {
       pane.setEntry({ state: 'working', programStatus: { state: 'working', observedAt: 1_000 } })
       pane.finishCommand()
       await vi.advanceTimersByTimeAsync(350 + 1200 + 6000)
-      storeFixture.read().dropAgentStatus.mockClear()
+      vi.mocked(storeFixture.read().dropAgentStatus).mockClear()
       pane.setEntry({ ...brewDone, updatedAt: 3_000, stateStartedAt: 3_000 })
 
       pane.typeKey('l')

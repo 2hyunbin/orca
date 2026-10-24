@@ -164,6 +164,7 @@ describe('a pane on an unconverted SSH row', () => {
       repos: storeFixture
         .read()
         .repos.map((repo) => ({ ...repo, connectionId: 'conn-1', executionHostId: undefined })),
+      sshTargetLabels: new Map([['conn-1', 'server']]),
       sshConnectionStates: new Map([['conn-1', { status: 'disconnected' }]])
     })
     await installTerminalTestGlobals()

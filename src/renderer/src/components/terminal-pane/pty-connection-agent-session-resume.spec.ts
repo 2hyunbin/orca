@@ -119,7 +119,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
             launchConfig
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -234,7 +234,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
             ptyIdsByLeafId: {}
           }
         }
-      } as StoreState)
+      })
 
       const binding = connectPanePty(
         createPane(1) as never,
@@ -264,9 +264,10 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         )
         expect(storeFixture.read().clearAgentLaunchConfig).toHaveBeenCalledWith(paneKey)
 
-        const registerOrder =
-          storeFixture.read().registerAgentLaunchConfig.mock.invocationCallOrder[0]
-        const clearOrder = storeFixture.read().clearAgentLaunchConfig.mock.invocationCallOrder[0]
+        const registerOrder = vi.mocked(storeFixture.read().registerAgentLaunchConfig).mock
+          .invocationCallOrder[0]
+        const clearOrder = vi.mocked(storeFixture.read().clearAgentLaunchConfig).mock
+          .invocationCallOrder[0]
         expect(registerOrder).toBeDefined()
         expect(clearOrder).toBeDefined()
         expect(registerOrder!).toBeLessThan(clearOrder!)
@@ -315,10 +316,10 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
           }
         },
         agentLaunchConfigByPaneKey: {
-          [paneKey]: { launchConfig }
+          [paneKey]: { launchConfig, identity: { agentType: 'codex' } }
         },
         sleepingAgentSessionsByPaneKey: {}
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -414,7 +415,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
                 : {})
             }
           }
-        } as StoreState)
+        })
 
         connectPanePty(
           createPane(1) as never,
@@ -512,7 +513,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
             }
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -606,7 +607,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)

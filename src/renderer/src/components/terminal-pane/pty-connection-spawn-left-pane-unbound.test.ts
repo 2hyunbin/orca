@@ -214,7 +214,7 @@ describe('fresh spawn leaves a local pane unbound', () => {
   it('settles the tab recovery attempt as a success when the spawn binds a PTY', async () => {
     const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const settleTerminalTabRecovery = vi.fn()
-    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
+    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery })
     const transport = createMockTransport('pty-bound')
     transportFactoryQueue.push(transport)
 
@@ -234,7 +234,7 @@ describe('fresh spawn leaves a local pane unbound', () => {
   it('settles the attempt as failed before asking for the remount', async () => {
     const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const settleTerminalTabRecovery = vi.fn()
-    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
+    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery })
     const transport = createMockTransport()
     transport.connect.mockImplementation(async () => null)
     transportFactoryQueue.push(transport)

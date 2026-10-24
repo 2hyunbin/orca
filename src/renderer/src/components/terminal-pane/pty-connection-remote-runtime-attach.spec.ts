@@ -105,7 +105,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         settings: {
           ...storeFixture.read().settings
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -140,7 +140,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => callback?.())
@@ -181,7 +181,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState)
+      })
       const pane = createPane(2)
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
 
@@ -261,7 +261,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => callback?.())
@@ -336,7 +336,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-2'
         }
-      } as StoreState)
+      })
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -374,7 +374,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }]
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -415,7 +415,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             }
           ]
         }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -445,7 +445,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'stale-hub' }
-      } as StoreState)
+      })
 
       connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
 
@@ -467,7 +467,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         },
         repos: [{ id: 'repo1', connectionId: null }],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'legacy-hub' }
-      } as StoreState)
+      })
 
       connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
 
@@ -494,7 +494,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }]
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -522,7 +522,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
         runtimeEnvironments: [{ id: 'hub-a' }],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -547,7 +547,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-local', repoId: 'repo1', path: '/tmp/wt-local', hostId: 'local' }]
         },
         repos: []
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -576,7 +576,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-remote', repoId: 'repo1', path: '/tmp/orca-docker-relay-perf-repo' }]
         },
         repos: []
-      } as StoreState)
+      })
 
       const deps = createDeps({
         worktreeId: 'wt-remote',
@@ -603,7 +603,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
         runtimeEnvironments: [{ id: 'hub-a' }],
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState)
+      })
 
       connectPanePty(
         createPane(1) as never,
@@ -653,7 +653,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             executionHostId: 'runtime:hub-env'
           }
         ]
-      } as StoreState)
+      })
       const deps = createDeps({
         restoredLeafId: LEAF_1,
         restoredPtyIdByLeafId: { [LEAF_1]: hostPtyId }

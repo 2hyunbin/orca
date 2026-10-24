@@ -87,7 +87,8 @@ export async function createInitialStoreState() {
       }
       bindings.clear()
     },
-    read: () => ({ ...owner.getState(), ...spies }),
+    actions: spies,
+    read: owner.getState,
     patch: (patch: AgentStatusPatch) => applyAgentStatusPatch(store, patch),
     setStatus: (key: string, entry: AgentStatusEntry | undefined) =>
       owner.transact((transaction) => transaction.setEntry(key, entry))

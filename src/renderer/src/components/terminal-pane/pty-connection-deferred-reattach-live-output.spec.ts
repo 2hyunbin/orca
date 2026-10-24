@@ -82,7 +82,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -124,7 +124,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
             providerSession: { key: 'session_id', id: 'codex-session-1' }
           }
         }
-      } as StoreState)
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)

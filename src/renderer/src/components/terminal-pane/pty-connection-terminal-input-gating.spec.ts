@@ -66,6 +66,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
     it('does not enumerate every worktree tab for ordinary input without Codex restart notices', async () => {
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
+      let inputStarted = false
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -76,8 +77,11 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
             'wt-2': [{ id: 'tab-2', ptyId: 'pty-other' }]
           },
           {
-            ownKeys() {
-              throw new Error('tabsByWorktree should not be enumerated')
+            ownKeys(target) {
+              if (inputStarted) {
+                throw new Error('tabsByWorktree should not be enumerated')
+              }
+              return Reflect.ownKeys(target)
             }
           }
         ),
@@ -99,7 +103,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
+      inputStarted = true
       ;(onDataHandler as (data: string) => void)('a')
+      inputStarted = false
 
       expect(transport.sendInput).toHaveBeenCalledWith('a', 'query-reply')
     })
@@ -107,6 +113,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
     it('uses the current worktree tab for Codex stale fallback without enumerating all worktrees', async () => {
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
+      let inputStarted = false
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -117,8 +124,11 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
             'wt-2': [{ id: 'tab-2', ptyId: 'pty-other' }]
           },
           {
-            ownKeys() {
-              throw new Error('tabsByWorktree should not be enumerated')
+            ownKeys(target) {
+              if (inputStarted) {
+                throw new Error('tabsByWorktree should not be enumerated')
+              }
+              return Reflect.ownKeys(target)
             }
           }
         ),
@@ -142,7 +152,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
+      inputStarted = true
       ;(onDataHandler as (data: string) => void)('a')
+      inputStarted = false
 
       expect(transport.sendInput).toHaveBeenCalledWith('a', 'query-reply')
     })
@@ -150,6 +162,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
     it('blocks stale Codex fallback input from the current worktree tab without enumerating all worktrees', async () => {
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
+      let inputStarted = false
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -160,8 +173,11 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
             'wt-2': [{ id: 'tab-2', ptyId: 'pty-other' }]
           },
           {
-            ownKeys() {
-              throw new Error('tabsByWorktree should not be enumerated')
+            ownKeys(target) {
+              if (inputStarted) {
+                throw new Error('tabsByWorktree should not be enumerated')
+              }
+              return Reflect.ownKeys(target)
             }
           }
         ),
@@ -185,7 +201,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
+      inputStarted = true
       ;(onDataHandler as (data: string) => void)('a')
+      inputStarted = false
 
       expect(transport.sendInput).not.toHaveBeenCalled()
     })
@@ -709,7 +727,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { _resetTerminalPaneRecoveryForTests } = await import('./terminal-pane-recovery')
       _resetTerminalPaneRecoveryForTests()
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery })
       const transport = createMockTransport('daemon-pty')
       let writeUnavailable: (() => void) | undefined
       transport.connect.mockImplementation(
@@ -735,7 +753,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { _resetTerminalPaneRecoveryForTests } = await import('./terminal-pane-recovery')
       _resetTerminalPaneRecoveryForTests()
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery })
       const transport = createMockTransport('daemon-pty')
       let writeUnavailable: (() => void) | undefined
       transport.connect.mockImplementation(
@@ -774,7 +792,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { settleTerminalWriteStallWatch, WRITE_PIPELINE_STALL_CHECK_MS } =
         await import('@/lib/pane-manager/terminal-write-pipeline-health')
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery })
       const transport = createMockTransport('pty-wedged')
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
