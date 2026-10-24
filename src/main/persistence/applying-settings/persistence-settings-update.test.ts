@@ -98,7 +98,7 @@ describe('Store', () => {
     expect(updated.branchPrefix).toBe('git-username')
   })
 
-  it('persists the agent skill sharing capability as an exact boolean', async () => {
+  it('normalizes the agent skill sharing capability to an exact boolean', async () => {
     const store = await createStore()
 
     expect(store.updateSettings({ agentSkillSharingEnabled: true }).agentSkillSharingEnabled).toBe(
