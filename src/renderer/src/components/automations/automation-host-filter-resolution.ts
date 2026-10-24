@@ -97,6 +97,10 @@ function resolveAbsentEntry(
   host: StableAutomationCatalogRef,
   hydration: AutomationCatalogHydrationEvidence
 ): AutomationHostFilterResolution {
+  if (host.authority.kind === 'desktop' && hydration.desktopAliasEnvironmentId !== undefined) {
+    // The desktop authority is the same runtime as a saved one, so none of its keys is a host.
+    return fallBackToAllHosts()
+  }
   const authorityKey = automationAuthorityCatalogKey(host.authority)
   if (hydration.unavailableAuthorityKeys.has(authorityKey)) {
     return retain(filter, null, 'unavailable')

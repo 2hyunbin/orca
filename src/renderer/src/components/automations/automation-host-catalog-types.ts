@@ -108,6 +108,11 @@ export type AutomationHostCatalogInput = {
   desktop: AutomationDesktopAuthorityInput
   /** Saved runtime environments — projected even while offline. */
   runtimes: readonly AutomationRuntimeAuthorityInput[]
+  /**
+   * The saved runtime that *is* the desktop authority: a paired web client's local
+   * transport is its server's, so projecting both would list every record twice.
+   */
+  desktopAliasEnvironmentId?: string
   /** Gates Runtime+Self absence; a failed catalog read settles without hydrating. */
   runtimeCatalogSettled: boolean
   /** Stable keys still referenced by a stored automation, cached row, persisted filter, or tombstone. */
@@ -117,6 +122,8 @@ export type AutomationHostCatalogInput = {
 /** Positive-evidence gates for absence. Missing data is never removal (invariant 4). */
 export type AutomationCatalogHydrationEvidence = {
   runtimeCatalogSettled: boolean
+  /** Set while the desktop authority is folded into this runtime; its keys then name no host. */
+  desktopAliasEnvironmentId?: string
   desktopSshHydrated: boolean
   runtimeSshHydratedByEnvironmentId: ReadonlyMap<string, boolean>
   savedRuntimeEnvironmentIds: ReadonlySet<string>
