@@ -58,11 +58,11 @@ describe('independent paired runtime SSH access persistence', () => {
     })
   }
 
-  function link(expectedEnvironment = seed()) {
+  function link(expectedEnvironment = seed(), verifiedRuntimeId = 'host-runtime') {
     return linkVerifiedRuntimeEnvironmentSshAccess(userDataPath, {
       expectedEnvironment: prepare(expectedEnvironment),
       requestId: 'link-request',
-      verifiedRuntimeId: 'host-runtime',
+      verifiedRuntimeId,
       verifiedConnection: pairedRuntimeConnectionFromOffer(verifiedPairing),
       tunnel,
       now: 90
@@ -103,6 +103,39 @@ describe('independent paired runtime SSH access persistence', () => {
     expect(unlinked.sshAccess).toBeUndefined()
     expect(unlinked.connectionDependency).toBeUndefined()
     expect(listEnvironments(userDataPath)).toEqual([unlinked])
+  })
+
+  it('keeps SSH access across a server restart and relinks after an unlink (#32957)', () => {
+    const linked = link()
+    markEnvironmentUsed(userDataPath, linked.id, { runtimeId: 'restarted-runtime' })
+    const restarted = listEnvironments(userDataPath)[0]!
+    expect(restarted.runtimeId).toBe('restarted-runtime')
+    expect(restarted.sshAccess).toEqual(linked.sshAccess)
+    expect(getPreferredPairingOffer(restarted)).toEqual(verifiedPairing)
+
+    const unlinked = unlink(restarted)
+    markEnvironmentUsed(userDataPath, unlinked.id, { runtimeId: 'restarted-again' })
+    const relinked = link(listEnvironments(userDataPath)[0], 'restarted-again')
+    expect(relinked.sshAccess?.requestId).toBe('link-request')
+    expect(listEnvironments(userDataPath)).toEqual([relinked])
+  })
+
+  it('still refuses a new paired device on a linked server, and any new runtime during a link', () => {
+    const linked = link()
+    expect(() =>
+      markEnvironmentUsed(userDataPath, linked.id, {
+        runtimeId: 'restarted-runtime',
+        pairedDeviceId: 'another-client',
+        pairingDeviceToken: pairing.deviceToken
+      })
+    ).toThrow('cannot change')
+    expect(listEnvironments(userDataPath)).toEqual([linked])
+
+    const pending = prepare(unlink(linked))
+    expect(() =>
+      markEnvironmentUsed(userDataPath, pending.id, { runtimeId: 'restarted-runtime' })
+    ).toThrow('cannot change')
+    expect(listEnvironments(userDataPath)).toEqual([pending])
   })
 
   it('refuses a link whose verification raced with re-pairing', () => {
