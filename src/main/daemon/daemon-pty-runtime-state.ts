@@ -1,4 +1,5 @@
 import { DaemonClient } from './client'
+import { DaemonPtyInputClosedIncarnations } from './daemon-pty-input-closed-incarnations'
 import { createDaemonAuditEligibilityTracker } from './daemon-audit-eligibility-event'
 import type {
   DaemonAuditContext,
@@ -121,8 +122,7 @@ export abstract class DaemonPtyRuntimeState {
   protected getSizeUnsupported = false
   protected sessionsAwaitingDaemonRecovery = new Set<string>()
   protected sessionIncarnations = new Map<string, string>()
-  // Live sessions whose PTY master stopped taking input, keyed to the incarnation that reported it.
-  protected inputClosedIncarnations = new Map<string, string>()
+  protected inputClosedIncarnations = new DaemonPtyInputClosedIncarnations()
   protected pendingSpawnOperationsBySessionId = new Map<string, Set<PendingDaemonSpawnOperation>>()
   protected pendingClaimSpawnOperations = new Set<PendingDaemonSpawnOperation>()
   protected historySpawnLocks = new Map<string, Promise<void>>()
@@ -162,29 +162,6 @@ export abstract class DaemonPtyRuntimeState {
   ): void
   protected abstract clearSessionAwaitingDaemonRecovery(sessionId: string): void
   protected abstract stopCheckpointTimerIfIdle(): void
-
-  /** Attach results only add the fact; a stream event for a later close may have landed first. */
-  protected syncInputClosed(
-    sessionId: string,
-    result: { isNew: boolean; incarnationId?: string; inputClosed?: true }
-  ): void {
-    const reported = this.inputClosedIncarnations.get(sessionId)
-    if (result.inputClosed && result.incarnationId) {
-      this.inputClosedIncarnations.set(sessionId, result.incarnationId)
-    } else if (
-      reported !== undefined &&
-      (result.incarnationId === undefined ? result.isNew : result.incarnationId !== reported)
-    ) {
-      this.inputClosedIncarnations.delete(sessionId)
-    }
-  }
-
-  protected isInputClosed(sessionId: string): boolean {
-    const reported = this.inputClosedIncarnations.get(sessionId)
-    return (
-      reported !== undefined && (this.sessionIncarnations.get(sessionId) ?? reported) === reported
-    )
-  }
 
   protected clearExitedSessionState(
     sessionId: string,

@@ -178,14 +178,8 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
           fact: event.payload
         })
       } else if (event.event === 'inputClosed') {
-        // Kept even ahead of its spawn reply; a late event never displaces the current one's flag.
-        const current = this.sessionIncarnations.get(event.sessionId)
-        if (
-          this.inputClosedIncarnations.get(event.sessionId) !== current ||
-          current === undefined
-        ) {
-          this.inputClosedIncarnations.set(event.sessionId, event.payload.incarnationId)
-        }
+        // Kept per incarnation: the report can land before its own spawn reply.
+        this.inputClosedIncarnations.record(event.sessionId, event.payload.incarnationId)
       } else if (event.event === 'exit') {
         const currentIncarnationId = this.sessionIncarnations.get(event.sessionId)
         const pendingOperations = new Set([

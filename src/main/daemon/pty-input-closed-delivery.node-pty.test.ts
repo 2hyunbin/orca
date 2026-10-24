@@ -106,7 +106,7 @@ describePosix('input to a live child whose PTY master stopped taking input', () 
 
   it('refuses input after the PTY master read stream fails while the child lives', async () => {
     const { native, host, onInputClosed, readinessEvents } = await startLoggingChild()
-    const socket: unknown = Reflect.get(native, '_socket')
+    const socket = '_socket' in native ? native._socket : undefined
     if (!(socket instanceof Socket)) {
       throw new Error('node-pty master stream is not a socket')
     }
