@@ -1,6 +1,23 @@
-import { TerminalStreamOpcode } from '../../../../../shared/terminal-stream-protocol'
+import {
+  TerminalStreamOpcode,
+  decodeTerminalStreamJson,
+  decodeTerminalStreamText
+} from '../../../../../shared/terminal-stream-protocol'
+import type { TerminalOutputFrameChunk } from '../../terminal-output-frame-chunks'
 import type { TerminalMultiplexConnection } from './terminal-multiplex-connection'
 import type { TerminalMultiplexStream } from './terminal-stream-types'
+
+/** The text of queued output frames a pause discards unsent. */
+export function pausedDiscardedOutputText(chunks: readonly TerminalOutputFrameChunk[]): string {
+  return chunks
+    .map((chunk) =>
+      chunk.opcode === TerminalStreamOpcode.OutputSpan
+        ? (decodeTerminalStreamJson<{ data?: unknown }>(chunk.bytes)?.data ?? '')
+        : decodeTerminalStreamText(chunk.bytes)
+    )
+    .filter((text): text is string => typeof text === 'string')
+    .join('')
+}
 
 /** Tells a negotiated client that this pause discarded output, so its reveal must restore. */
 export function notePausedOutputDropped(

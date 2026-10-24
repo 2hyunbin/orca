@@ -290,6 +290,27 @@ describe('reply ownership matrix', () => {
     expect(replies).toHaveLength(2)
   })
 
+  it('answers the queries of output a pausing view discards, once and only while no view receives', async () => {
+    const { runtime, replies } = createResponderRuntime()
+    markHiddenRendererPty('pty-discard')
+    let paused = false
+    runtime.registerRemoteTerminalViewSubscriber('pty-discard', () => paused)
+    runtime.onPtyData('pty-discard', 'prompt\x1b[c', Date.now())
+    await settle(runtime, 'pty-discard')
+    expect(replies).toEqual([])
+
+    paused = true
+    runtime.answerQueriesInDiscardedRemoteOutput('pty-discard', 'prompt\x1b[c')
+    await settle(runtime, 'pty-discard')
+    expect(replies.map((reply) => reply.data)).toEqual(['\x1b[?1;2c'])
+
+    const releaseLive = runtime.registerRemoteTerminalViewSubscriber('pty-discard', () => false)
+    runtime.answerQueriesInDiscardedRemoteOutput('pty-discard', '\x1b[c')
+    await settle(runtime, 'pty-discard')
+    expect(replies).toHaveLength(1)
+    releaseLive()
+  })
+
   it('keeps raw preview presence separate from terminal query authority', async () => {
     const { runtime, replies } = createResponderRuntime()
     markHiddenRendererPty('pty-preview')

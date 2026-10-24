@@ -9,6 +9,7 @@ import {
   normalizeTerminalTitle
 } from '../../../../shared/agent-detection'
 import { shouldModelAnswerHiddenPtyQueries } from '../../terminal-model-query-authority'
+import { extractDroppedPtyQueryBytes } from '../../../../shared/terminal-reply-query-extraction'
 
 export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
   protected abstract getOrCreateHeadlessTerminal(ptyId: string): RuntimeHeadlessTerminal
@@ -172,6 +173,23 @@ export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends Or
       settings: this.store?.getSettings(),
       hasRemoteViewSubscriber: this.hasRemoteTerminalViewSubscriber(ptyId)
     })
+  }
+
+  /** Output a remote view discards unread when it pauses was yielded to that view at ingestion,
+   *  so its queries reach no xterm; answer them here unless another view still receives it. */
+  answerQueriesInDiscardedRemoteOutput(ptyId: string, data: string): void {
+    const queries = extractDroppedPtyQueryBytes(data)
+    const state = this.headlessTerminals.get(ptyId)
+    if (!queries || !state || !this.shouldAnswerQueriesForLiveChunk(ptyId)) {
+      return
+    }
+    state.writeChain = state.writeChain
+      .then(async () => {
+        if (this.headlessTerminals.get(ptyId) === state) {
+          await state.emulator.write(queries, { forwardQueryReplies: true })
+        }
+      })
+      .catch(() => {})
   }
 
   protected trackHeadlessTerminalData(

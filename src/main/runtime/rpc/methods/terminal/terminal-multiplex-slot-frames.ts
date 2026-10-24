@@ -18,7 +18,10 @@ import {
   serializeBudgetedRequestedSnapshot
 } from './terminal-snapshot-publication'
 import { updateViewportForClient } from './terminal-viewport-update'
-import { notePausedOutputDropped } from './terminal-multiplex-paused-output-drop'
+import {
+  notePausedOutputDropped,
+  pausedDiscardedOutputText
+} from './terminal-multiplex-paused-output-drop'
 import {
   isMultiplexStreamAttached,
   type MultiplexSnapshotRequest,
@@ -84,6 +87,11 @@ export function installMultiplexSlotFrames(state: TerminalMultiplexConnection): 
         stream.pausedOutputDropNoticeSent = false
         const discardsQueuedOutput =
           stream.ackPendingOutput.length > 0 || stream.ackPendingOutputOverflowed
+        // Why: main yielded these queued bytes to this view at ingestion; it will never parse them now.
+        runtime.answerQueriesInDiscardedRemoteOutput(
+          stream.ptyId,
+          pausedDiscardedOutputText(stream.ackPendingOutput)
+        )
         // Why: batched bytes flush into the paused gate, which reports them as dropped.
         stream.outputBatcher.flush()
         stream.ackPendingOutput = []
