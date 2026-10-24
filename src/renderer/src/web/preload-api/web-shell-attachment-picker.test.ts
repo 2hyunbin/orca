@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { takeBrowserAttachmentFile } from '@/lib/browser-attachment-files'
-import { createShellApi } from './preload-api/web-shell-api'
+import { createShellApi } from './web-shell-api'
 
-vi.mock('./preload-api/web-runtime-worktree-catalog', () => ({ resolveRuntimeFilePath: vi.fn() }))
+vi.mock('./web-runtime-worktree-catalog', () => ({ resolveRuntimeFilePath: vi.fn() }))
 
 function chooseOnClick(files: File[] | null): void {
   vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (

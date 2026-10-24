@@ -25,6 +25,7 @@ import {
   type NativeChatReservedAttachment
 } from './native-chat-session-attachment-drop'
 import { userNamedFileAccess } from '@/lib/local-file-access'
+import { releaseBrowserAttachmentFiles } from '@/lib/browser-attachment-files'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { findTerminalTabWorktreeId } from './native-chat-file-link'
 import { isNativeChatImageAttachmentPath } from './native-chat-image-paste'
@@ -264,7 +265,7 @@ export function useNativeChatExternalAttachments({
       options?: NativeChatAttachmentFocusOptions
     ) => {
       const intake = captureIntake(destinationIsCurrent, options)
-      const deliver: CapturedNativeChatDrop = async (paths: string[]): Promise<void> => {
+      const attach = async (paths: string[]): Promise<void> => {
         if (paths.length === 0 || disabledRef.current || !mountedRef.current) {
           return
         }
@@ -275,6 +276,9 @@ export function useNativeChatExternalAttachments({
         }
         await intake.run(reserveNativeChatAttachmentChips(intake.chips, paths))
       }
+      // Every pick and drop ends here, so the web client's held files are released here.
+      const deliver: CapturedNativeChatDrop = (paths) =>
+        attach(paths).finally(() => releaseBrowserAttachmentFiles(paths))
       deliver.preparationConsumer = intake.preparationConsumer
       return deliver
     },
