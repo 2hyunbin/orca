@@ -1,5 +1,8 @@
 import { codexLiveTextKey } from './codex-thread-item-identity'
-import type { CodexItemStreamDeps } from './codex-structured-item-stream-contracts'
+import type {
+  CodexItemStreamDeps,
+  CodexItemStreamState
+} from './codex-structured-item-stream-contracts'
 import type { AgentSessionDeltaWindow } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import type {
   AgentJournalItemBody,
@@ -8,7 +11,6 @@ import type {
 } from '../../shared/agent-session-journal-types'
 import { withJournalReasoningLifecycle } from '../native-chat/agent-session-journal/journal-reasoning-row'
 import { codexStreamingJournalItem } from './codex-structured-item-translation'
-import type { CodexItemStreamState } from './codex-structured-item-stream-contracts'
 import type {
   StructuredAgentSessionItemAppendOptions,
   StructuredAgentSessionEventSink,
@@ -20,8 +22,10 @@ import {
   type JournalLifecycleIdentityMutationInput
 } from '../native-chat/agent-session-journal/journal-row-builders'
 import type { CodexPendingJournalPrompt } from './codex-structured-journal-settlement'
-import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
-import { CODEX_JOURNAL_ADMITTED } from './codex-structured-journal-contracts'
+import {
+  CODEX_JOURNAL_ADMITTED,
+  type CodexJournalTranslationAdmission
+} from './codex-structured-journal-contracts'
 import { reviseCodexTurnRow } from './codex-structured-journal-translation-turns'
 
 const ADMITTED: StructuredAgentSessionSinkAdmission = { accepted: true }

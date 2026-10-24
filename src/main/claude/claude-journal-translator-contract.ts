@@ -1,11 +1,13 @@
 import type { AgentSessionDeltaCoalescerDeps } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
-import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type {
+  StructuredAgentSessionEventSink,
+  StructuredAgentSessionSinkAdmission
+} from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 // What the rest of a Claude session asks of its journal translator.
 
 import type { AgentSessionContextReport } from '../../shared/agent-session-context-usage'
-import type { StructuredAgentSessionSinkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { ClaudeChildToolQueries } from './claude-child-tool-queries'
 import type { ClaudeContextReportPart, ClaudeContextReportTarget } from './claude-context-facts'
 import type { ClaudeJournalPrompts } from './claude-structured-journal-prompts'

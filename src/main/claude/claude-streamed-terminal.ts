@@ -1,7 +1,6 @@
 import type { ClaudeStreamedTextCheckpoints } from './claude-streamed-text-contracts'
 import type { createClaudeStreamedThinking } from './claude-streamed-thinking'
 import type { ClaudeStreamedTextDelta } from './claude-streamed-block-identity'
-import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
 import { claudeStreamingMessageBody } from './claude-structured-item-translation'
 import {
   AGENT_SESSION_STREAMED_TEXT_MAX_BYTES,
@@ -13,7 +12,8 @@ import { withJournalText } from '../native-chat/agent-session-journal/journal-te
 import type { ClaudeStreamedTextCheckpointDeps } from './claude-streamed-text-checkpoints'
 import type {
   AgentJournalItemIdentity,
-  AgentJournalItemBody
+  AgentJournalItemBody,
+  AgentJournalTurnScope
 } from '../../shared/agent-session-journal-types'
 import type {
   StructuredAgentSessionEventSink,

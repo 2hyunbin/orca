@@ -1,9 +1,8 @@
 import type { JournalReducerState } from './journal-reducer'
-import type { JournalRow } from './journal-row-schema'
+import type { JournalRow, JournalItemRow, JournalLifecycleBatchRow } from './journal-row-schema'
 import type { JournalItemAppendOptions } from './journal-store-contracts'
 import type { AgentSessionTextCuts } from '../agent-session-wire/agent-session-text-encoding'
 import type { AgentSessionDeltaSource } from '../agent-session-wire/agent-session-delta-coalescer'
-import type { JournalItemRow, JournalLifecycleBatchRow } from './journal-row-schema'
 
 export type JournalTextDeltaRow = Omit<JournalItemRow, 'kind' | 'body'> & {
   kind: 'text-delta'

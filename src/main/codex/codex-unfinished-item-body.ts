@@ -1,4 +1,7 @@
-import type { CodexItemStreamDeps } from './codex-structured-item-stream-contracts'
+import type {
+  CodexItemStreamDeps,
+  CodexStructuredItemStreams
+} from './codex-structured-item-stream-contracts'
 import { appendCodexLifecycleItem, publishCodexLifecycle } from './codex-structured-journal-sink'
 import {
   endedRunningAgentJournalToolCall,
@@ -11,7 +14,6 @@ import {
   type JournalReasoningLifecycle,
   withJournalReasoningLifecycle
 } from '../native-chat/agent-session-journal/journal-reasoning-row'
-import type { CodexStructuredItemStreams } from './codex-structured-item-stream-contracts'
 import {
   codexJournalItem,
   codexStreamingJournalItem,
