@@ -30,6 +30,7 @@ import {
   subscribeToNativeChatDraftAppend
 } from '../components/native-chat/native-chat-draft-cache'
 import { structuredAgentSessionDraftScopeKey } from '../components/native-chat/native-chat-composer-draft-store'
+import { instrumentUnrelatedTerminalBindings } from './workspace-initial-terminal-census.test-fixture'
 import { useAppStore } from '../store'
 import { createStoreSessionMockApi } from '../store/slices/store-session-test-harness'
 import { resetLocalStructuredSessionVersionForTests } from './local-structured-session-tabs-sync/inventory-generation-fence'
@@ -595,4 +596,227 @@ it('replaces the catalog chat placeholder with the exact accepted terminal while
     resetStructuredAgentLaunchPersistenceForTests()
     prompt?.createSend?.drop()
   }
+})
+
+it('bounds real ancillary reveal and final completion binding work with unrelated window terminals', async () => {
+  const {
+    makeTerminalTab: makeTab,
+    makeWorktree,
+    TEST_REPO
+  } = await import('../store/slices/worktrees-slice-test-fixtures')
+  const { registerTerminalPresentationIpcBridge } =
+    await import('../hooks/ipc-events/terminal-presentation-ipc-bridge')
+  const { materializeHostCreatedWorktree } = await import('../lib/worktree-creation-host-result')
+  const { createBumpWorktreeActivity } =
+    await import('../store/slices/worktrees/session/worktree-activity-bump')
+  const rpcModule = await import('./runtime-rpc-client')
+  const metrics: {
+    size: number
+    ownershipVisits: number
+    bindingVisits: number
+    duplicateBindingVisits: number
+    persistence: number
+    elapsedMs: number
+    duplicateVisits: number
+  }[] = []
+  for (const size of [10, 100]) {
+    resetLocalStructuredSessionVersionForTests()
+    useAppStore.setState(useAppStore.getInitialState(), true)
+    const api = createStoreSessionMockApi()
+    const corpus = instrumentUnrelatedTerminalBindings(size * 10, OTHER)
+    const visits = corpus.counts
+    useAppStore.setState({
+      activeWorktreeId: OTHER,
+      activeTabId: 'unrelated-0',
+      activeTabIdByWorktree: { [OTHER]: 'unrelated-0' },
+      repos: [{ ...TEST_REPO, id: 'repo', executionHostId: 'local' }],
+      worktreesByRepo: { repo: [makeWorktree({ id: WORKTREE, repoId: 'repo', hostId: 'local' })] },
+      tabsByWorktree: { [OTHER]: corpus.tabs },
+      ptyIdsByTabId: corpus.ptyIdsByTabId,
+      bumpWorktreeActivity: createBumpWorktreeActivity(useAppStore.setState, useAppStore.getState)
+    })
+    type Reveal = Parameters<Parameters<typeof window.api.ui.onCreateTerminal>[0]>[0]
+    let reveal: (payload: Reveal) => void = () => {
+      throw new Error('bridge not registered')
+    }
+    const reply = vi.fn()
+    Object.assign(window.api, {
+      ui: {
+        onCreateTerminal: (listener: typeof reveal) => {
+          reveal = listener
+          return () => {}
+        },
+        onRequestTerminalTabMount: () => () => {},
+        replyTerminalCreate: reply
+      }
+    })
+    Object.assign(window, { dispatchEvent: vi.fn() })
+    registerTerminalPresentationIpcBridge([])
+    const rows: RuntimeMobileSessionTabsResult['tabs'] = Array.from({ length: size }, (_, i) => ({
+      type: 'terminal',
+      id: `default-${i}::${LEAF}`,
+      parentTabId: `default-${i}`,
+      leafId: LEAF,
+      title: '',
+      terminal: `default-pty-${i}`,
+      status: 'ready',
+      isActive: i === 0
+    }))
+    let snapshot: RuntimeMobileSessionTabsResult = {
+      ...topology('terminal'),
+      tabs: [],
+      activeTabId: rows[0]!.id,
+      tabGroups: []
+    }
+    const rpc = vi.spyOn(rpcModule, 'callRuntimeRpc').mockImplementation(async () => snapshot)
+    visits.ownershipVisits = 0
+    visits.bindingVisits = 0
+    const started = performance.now()
+    try {
+      for (let i = 0; i < size; i++) {
+        snapshot = { ...snapshot, snapshotVersion: i + 2, tabs: rows.slice(0, i + 1) }
+        reveal({
+          worktreeId: WORKTREE,
+          requestId: `reveal-${i}`,
+          tabId: `default-${i}`,
+          leafId: LEAF,
+          ptyId: `default-pty-${i}`,
+          presentation: 'background',
+          surfaceOwner: false,
+          initialWorkspaceTopology: snapshot
+        })
+      }
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      const incrementalVisits = visits.ownershipVisits
+      const incrementalBindingVisits = visits.bindingVisits
+      const persistence = api.worktrees.updateMeta.mock.calls.length
+      const beforeDuplicate = visits.ownershipVisits
+      const beforeDuplicateBindings = visits.bindingVisits
+      const heldBindings = useAppStore.getState().ptyIdsByTabId
+      const heldLayouts = useAppStore.getState().terminalLayoutsByTabId
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      const duplicateVisits = visits.ownershipVisits - beforeDuplicate
+      expect(useAppStore.getState().ptyIdsByTabId).toBe(heldBindings)
+      expect(useAppStore.getState().terminalLayoutsByTabId).toBe(heldLayouts)
+      metrics.push({
+        size,
+        ownershipVisits: incrementalVisits,
+        bindingVisits: incrementalBindingVisits,
+        duplicateBindingVisits: visits.bindingVisits - beforeDuplicateBindings,
+        persistence,
+        duplicateVisits,
+        elapsedMs: performance.now() - started
+      })
+      console.log('R3R1 corpus', JSON.stringify(metrics.at(-1)))
+      expect(reply.mock.calls.filter(([result]) => result.error)).toEqual([])
+      expect(useAppStore.getState().tabsByWorktree[WORKTREE]).toHaveLength(size)
+      expect(useAppStore.getState().activeTabId).toBe('unrelated-0')
+      // Each real reveal retains its ordinary activity effect; complete-census replay adds none.
+      expect(persistence).toBe(size)
+      expect(api.worktrees.updateMeta).toHaveBeenCalledTimes(size)
+      expect(
+        api.worktrees.updateMeta.mock.calls.every(
+          ([args]) =>
+            args.worktreeId === WORKTREE && typeof args.updates.lastActivityAt === 'number'
+        )
+      ).toBe(true)
+      expect(duplicateVisits).toBeLessThanOrEqual(2 * size * 10)
+      expect(visits.bindingVisits - beforeDuplicateBindings).toBeLessThanOrEqual(2 * size * 10)
+      expect(incrementalBindingVisits).toBeLessThanOrEqual((size + 1) * size * 10)
+      expect(incrementalVisits).toBeLessThanOrEqual((4 * size + 1) * size * 10)
+      // A changed exact leaf still rebinds; conflicting ownership and a real close still win.
+      api.worktrees.updateMeta.mockClear()
+      snapshot = {
+        ...snapshot,
+        snapshotVersion: size + 3,
+        tabs: rows.map((row, i) =>
+          i === 0 && row.type === 'terminal' ? { ...row, terminal: 'rotated-pty' } : row
+        )
+      }
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      expect(
+        useAppStore.getState().terminalLayoutsByTabId['default-0']?.ptyIdsByLeafId?.[LEAF]
+      ).toBe('rotated-pty')
+      expect(api.worktrees.updateMeta).toHaveBeenCalledTimes(1)
+      useAppStore.setState((state) => ({
+        ptyIdsByTabId: { ...state.ptyIdsByTabId, 'unrelated-0': ['collision-pty'] }
+      }))
+      snapshot = {
+        ...snapshot,
+        snapshotVersion: size + 4,
+        tabs: rows.map((row, i) =>
+          i === 1 && row.type === 'terminal' ? { ...row, terminal: 'collision-pty' } : row
+        )
+      }
+      const beforeCollision = api.worktrees.updateMeta.mock.calls.length
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      expect(
+        useAppStore.getState().terminalLayoutsByTabId['default-1']?.ptyIdsByLeafId?.[LEAF]
+      ).toBe('default-pty-1')
+      // Row zero returns to its original PTY; only that real change may stamp activity.
+      expect(api.worktrees.updateMeta.mock.calls.length - beforeCollision).toBe(1)
+      recordWebSessionCloseIntent(
+        { environmentId: LOCAL_STRUCTURED_SESSION_OWNER },
+        WORKTREE,
+        'default-2'
+      )
+      useAppStore.getState().closeTab('default-2', { reason: 'user' })
+      const beforeClose = api.worktrees.updateMeta.mock.calls.length
+      snapshot = { ...snapshot, snapshotVersion: size + 5 }
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      expect(
+        useAppStore.getState().tabsByWorktree[WORKTREE]?.some((tab) => tab.id === 'default-2')
+      ).toBe(false)
+      expect(api.worktrees.updateMeta).toHaveBeenCalledTimes(beforeClose)
+      useAppStore.setState((state) => ({
+        tabsByWorktree: {
+          ...state.tabsByWorktree,
+          [OTHER]: [
+            ...state.tabsByWorktree[OTHER]!,
+            makeTab({ id: 'default-3', worktreeId: OTHER })
+          ],
+          [WORKTREE]: [
+            ...state.tabsByWorktree[WORKTREE]!,
+            makeTab({ id: 'orphan', worktreeId: WORKTREE })
+          ]
+        }
+      }))
+      const extra = (tabId: string, ptyId: string) => ({
+        type: 'terminal' as const,
+        id: `${tabId}::${LEAF}`,
+        parentTabId: tabId,
+        leafId: LEAF,
+        terminal: ptyId,
+        title: '',
+        status: 'ready' as const,
+        isActive: false
+      })
+      snapshot = {
+        ...snapshot,
+        snapshotVersion: size + 6,
+        tabs: [
+          ...snapshot.tabs.map((row) =>
+            row.type === 'terminal' && row.parentTabId === 'default-3'
+              ? { ...row, terminal: 'duplicate-owner-pty' }
+              : row
+          ),
+          extra('new-default', 'new-default-pty'),
+          extra('orphan', 'returned-orphan-pty')
+        ]
+      }
+      await materializeHostCreatedWorktree({ kind: 'local' }, WORKTREE)
+      expect(
+        useAppStore.getState().terminalLayoutsByTabId['default-3']?.ptyIdsByLeafId?.[LEAF]
+      ).toBe('default-pty-3')
+      expect(useAppStore.getState().terminalLayoutsByTabId.orphan?.ptyIdsByLeafId?.[LEAF]).toBe(
+        'returned-orphan-pty'
+      )
+      expect(api.worktrees.updateMeta).toHaveBeenCalledTimes(beforeClose)
+    } finally {
+      rpc.mockRestore()
+    }
+  }
+  expect(metrics[1]!.ownershipVisits).toBeLessThanOrEqual(metrics[0]!.ownershipVisits * 115)
+  expect(metrics[1]!.duplicateVisits).toBeLessThanOrEqual(metrics[0]!.duplicateVisits * 11)
 })

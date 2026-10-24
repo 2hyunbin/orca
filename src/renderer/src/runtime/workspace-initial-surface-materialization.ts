@@ -3,6 +3,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { hasClosedTerminalTabRecord } from '../../../shared/closed-terminal-tab-tombstones'
 import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
 import { wasAgentLaunchPaneClosedByUser } from '../lib/agent-launch-pane-closes'
+import { indexTerminalSurfaceBindings } from '../lib/terminal-surface-binding-index'
 import { bindLivePtyToExactSurface } from '../lib/worktree-agent-live-surface-adoption'
 import { noteHostCreatedLaunchTargets } from '../lib/structured-agent-session-launch-prompt'
 import { markStructuredAgentSessionLaunchesPublished } from '../lib/structured-agent-session-launch-publication'
@@ -83,20 +84,28 @@ export function materializeWorkspaceInitialSurface(
         onAcceptedAgentSession: (worktreeId, sessionId) =>
           acceptedSessions.push({ worktreeId, sessionId })
       })
-      if (accepted.length > 0 && !framesDraw?.(snapshot.worktree)) {
+      if (accepted.length > 0 && terminals.length > 0 && !framesDraw?.(snapshot.worktree)) {
         // The selected native agent must exist before another terminal can become the first row.
         terminals.sort(
           (a, b) =>
             Number(b.id === snapshot.activeTabId || b.isActive) -
             Number(a.id === snapshot.activeTabId || a.isActive)
         )
+        const bindings = indexTerminalSurfaceBindings(staged)
+        const terminalsByTab = new Map<string, typeof terminals>()
+        for (const terminal of terminals) {
+          const siblings = terminalsByTab.get(terminal.parentTabId) ?? []
+          siblings.push(terminal)
+          terminalsByTab.set(terminal.parentTabId, siblings)
+        }
         for (const terminal of terminals) {
           if (!isTerminalLeafId(terminal.leafId)) {
             continue
           }
-          const known = staged.tabsByWorktree[snapshot.worktree]?.some(
-            (tab) => tab.id === terminal.parentTabId
-          )
+          const known = bindings.owners
+            .get(terminal.parentTabId)
+            ?.some((owner) => owner.ownerWorktreeId === snapshot.worktree)
+          const previousTabs = staged.tabsByWorktree[snapshot.worktree] ?? []
           if (
             !bindLivePtyToExactSurface(
               get(),
@@ -110,12 +119,18 @@ export function materializeWorkspaceInitialSurface(
                 launchAgent: terminal.launchAgent,
                 viewMode: terminal.viewMode,
                 startupCwd: terminal.startupCwd
-              }
+              },
+              bindings
             )
           ) {
             continue
           }
           if (!known) {
+            bindings.removeMissingOwners(
+              snapshot.worktree,
+              previousTabs,
+              staged.tabsByWorktree[snapshot.worktree] ?? []
+            )
             materializedNativeTabIds.add(terminal.parentTabId)
             if (terminal.title) {
               afterCommit.push(() =>
@@ -126,7 +141,7 @@ export function materializeWorkspaceInitialSurface(
                   })
               )
             }
-            const siblings = terminals.filter((tab) => tab.parentTabId === terminal.parentTabId)
+            const siblings = terminalsByTab.get(terminal.parentTabId) ?? []
             get().setTabLayout(
               terminal.parentTabId,
               chooseRemoteTerminalLayout(
