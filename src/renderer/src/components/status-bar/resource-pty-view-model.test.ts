@@ -220,6 +220,55 @@ describe('local PTY view model', () => {
     expect(order(rows.filter((row) => row.identity !== '3'))).toEqual(expected)
   })
 
+  it('sorts projects and workspaces by latest activity, including folder workspaces', () => {
+    const folder = folderWorkspaceToWorktree({ ...makeFolderWorkspace(), lastActivityAt: 300 })
+    const rows = buildResourcePtyRows({
+      ...base(),
+      worktrees: [
+        { ...makeWorktree('older', 'Alpha'), lastActivityAt: 100 },
+        { ...makeWorktree('recent', 'Zeta'), lastActivityAt: 200 },
+        folder
+      ],
+      projectGroups: [makeProjectGroup()],
+      sessions: [
+        session('old', { worktreeId: 'older' }),
+        session('recent', { worktreeId: 'recent' }),
+        session('folder', { worktreeId: folder.id }),
+        session('unknown')
+      ]
+    })
+    const order = (input: typeof rows) =>
+      groupResourcePtyRows(input).map((group) => ({
+        id: group.id,
+        workspaces: group.workspaces.map((workspace) => workspace.id)
+      }))
+    const expected = [
+      { id: folder.repoId, workspaces: [folder.id] },
+      { id: 'repo-1', workspaces: ['recent', 'older'] },
+      { id: '', workspaces: [''] }
+    ]
+    expect(order(rows)).toEqual(expected)
+    expect(order(rows.toReversed())).toEqual(expected)
+    expect(rows.map((row) => row.lastActivityAt)).toEqual([100, 200, 300, 0])
+  })
+
+  it('falls back to stable name ordering for missing or invalid activity timestamps', () => {
+    const inputs = base()
+    const rows = buildResourcePtyRows({
+      ...inputs,
+      worktrees: [
+        { ...makeWorktree('a', 'Alpha'), lastActivityAt: Number.NaN },
+        { ...makeWorktree('z', 'Zeta'), lastActivityAt: Number.POSITIVE_INFINITY }
+      ],
+      sessions: [session('z', { worktreeId: 'z' }), session('a', { worktreeId: 'a' })]
+    })
+    expect(rows.every((row) => row.lastActivityAt === 0)).toBe(true)
+    expect(groupResourcePtyRows(rows)[0]?.workspaces.map((workspace) => workspace.id)).toEqual([
+      'a',
+      'z'
+    ])
+  })
+
   it('joins and groups 1,000 sessions in memory', () => {
     const start = performance.now()
     const rows = buildResourcePtyRows({

@@ -141,66 +141,75 @@ export function ResourceUsageStatusSegment({
               </TabsTrigger>
             </TabsList>
           </div>
-          <TabsContent value="resources">
-            {controller.actionError && (
-              <p role="alert" className="px-3 py-2 text-xs text-destructive">
-                {controller.actionError}
-              </p>
-            )}
-            {daemonUnreachable && renderDaemonUnreachableBanner({ daemonActions })}
-            {!daemonUnreachable && sessionsOnlyError && renderSessionsOnlyErrorBanner()}
-            {resourceSnapshot &&
-              renderResourceUsageSummary({
-                totalCpu,
-                totalMemory,
+          {/* Keep the resource panel in layout so both tabs share its full height. */}
+          <div className="grid">
+            <TabsContent
+              value="resources"
+              forceMount
+              inert={controller.selectedTab !== 'resources'}
+              aria-hidden={controller.selectedTab !== 'resources'}
+              className="col-start-1 row-start-1 data-[state=inactive]:invisible"
+            >
+              {controller.actionError && (
+                <p role="alert" className="px-3 py-2 text-xs text-destructive">
+                  {controller.actionError}
+                </p>
+              )}
+              {daemonUnreachable && renderDaemonUnreachableBanner({ daemonActions })}
+              {!daemonUnreachable && sessionsOnlyError && renderSessionsOnlyErrorBanner()}
+              {resourceSnapshot &&
+                renderResourceUsageSummary({
+                  totalCpu,
+                  totalMemory,
+                  memoryMetricCopy,
+                  commitBadgeLabel,
+                  commitMetricCopy,
+                  commitToneClass,
+                  orphanCount
+                })}
+              {/* Why: fixed 420px height so the popover doesn't jump as worktrees expand/collapse or sessions change; inner tree owns its scroll. */}
+              {renderResourceUsagePopoverBody({
+                setPopoverBodyNode,
+                unifiedRepos,
+                resourceSnapshot,
+                sortOption,
+                setSortOption,
                 memoryMetricCopy,
-                commitBadgeLabel,
-                commitMetricCopy,
-                commitToneClass,
-                orphanCount
+                collapsedRepos,
+                toggleRepo,
+                collapsedWorktrees,
+                activeWorktreeId,
+                toggleWorktree,
+                navigateToWorktree,
+                navigateToTab,
+                deleteWorktree,
+                handleKillSession,
+                appCollapsed,
+                setAppCollapsed,
+                daemonUnreachable,
+                runtimeHostNotices
               })}
-            {/* Why: fixed 420px height so the popover doesn't jump as worktrees expand/collapse or sessions change; inner tree owns its scroll. */}
-            {renderResourceUsagePopoverBody({
-              setPopoverBodyNode,
-              unifiedRepos,
-              resourceSnapshot,
-              sortOption,
-              setSortOption,
-              memoryMetricCopy,
-              collapsedRepos,
-              toggleRepo,
-              collapsedWorktrees,
-              activeWorktreeId,
-              toggleWorktree,
-              navigateToWorktree,
-              navigateToTab,
-              deleteWorktree,
-              handleKillSession,
-              appCollapsed,
-              setAppCollapsed,
-              daemonUnreachable,
-              runtimeHostNotices
-            })}
-            {renderResourceUsagePopoverFooter({
-              handleOpenWorkspaceCleanup,
-              orphanCount,
-              handleKillOrphans
-            })}
-            <WorkspaceSpaceCompactPanel onOpenFullPage={openSpaceResults} />
-          </TabsContent>
-          <TabsContent value="ptys">
-            <ResourcePtyPanel
-              active={controller.ptyViewActive}
-              inventory={controller.localPtyInventory}
-              actions={controller.ptyActions}
-              bindings={controller.resourceSessionBindings}
-              worktrees={controller.allWorktrees}
-              repos={controller.repos}
-              projectGroups={controller.projectGroups}
-              runtimePaneTitlesByTabId={controller.runtimePaneTitlesByTabId}
-              onNavigate={navigateToTab}
-            />
-          </TabsContent>
+              {renderResourceUsagePopoverFooter({
+                handleOpenWorkspaceCleanup,
+                orphanCount,
+                handleKillOrphans
+              })}
+              <WorkspaceSpaceCompactPanel onOpenFullPage={openSpaceResults} />
+            </TabsContent>
+            <TabsContent value="ptys" className="col-start-1 row-start-1 min-h-0">
+              <ResourcePtyPanel
+                active={controller.ptyViewActive}
+                inventory={controller.localPtyInventory}
+                actions={controller.ptyActions}
+                bindings={controller.resourceSessionBindings}
+                worktrees={controller.allWorktrees}
+                repos={controller.repos}
+                projectGroups={controller.projectGroups}
+                runtimePaneTitlesByTabId={controller.runtimePaneTitlesByTabId}
+                onNavigate={navigateToTab}
+              />
+            </TabsContent>
+          </div>
         </Tabs>
       </PopoverContent>
       {/* Why: hoisted to a sibling of PopoverContent — nested, the Dialog unmounts with the popover mid-interaction and the kill-confirm flow disappears. */}
