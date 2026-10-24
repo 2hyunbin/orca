@@ -188,8 +188,10 @@ describe('worktree base directory watch target resolution', () => {
     const platform = process.platform
     // A WSL path is only recognized on Windows.
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: target resolution reads only settings and repos.
+    const store = makeStore([wsl, mirrored]) as never
     try {
-      await buildWorktreeBaseDirectoryWatchTargets(makeStore([wsl, mirrored]) as never)
+      await buildWorktreeBaseDirectoryWatchTargets(store)
     } finally {
       Object.defineProperty(process, 'platform', { configurable: true, value: platform })
     }
