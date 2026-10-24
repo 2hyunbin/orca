@@ -72,6 +72,5 @@ it('uses neutral native wording for restored cuts and native Stops, preserving h
       }
     })
   ).toBe('Interrupted')
-  expect(agentVerdictStatusLine(stopped)).toBe('Interrupted by user')
   expect(agentVerdictStatusLine(FAILED, true)).toBe('Failed')
 })

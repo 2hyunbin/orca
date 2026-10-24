@@ -1,3 +1,5 @@
+import { JournalMutationSet } from './journal-mutation-set'
+import { bindJournalSelection } from './journal-selection-binding'
 import type { JournalReducerState } from './journal-reducer'
 import { applyJournalRow } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
@@ -9,8 +11,10 @@ export function stageJournalMutation(
   state: JournalReducerState,
   rows: readonly JournalRow[]
 ): JournalReducerState {
+  const selection = state.selection.fork()
   const staged: JournalReducerState = {
     ...state,
+    selection,
     items: new JournalMutationMap(state.items),
     itemFences: new JournalMutationMap(state.itemFences),
     itemExecutionOwners: new JournalMutationMap(state.itemExecutionOwners),
@@ -23,15 +27,16 @@ export function stageJournalMutation(
     stoppedHistoryCarried: new JournalMutationMap(state.stoppedHistoryCarried),
     queuedHandOffPlaces: new JournalMutationMap(state.queuedHandOffPlaces),
     // The fold only adds these display corrections; staging never publishes them.
-    normalizedHandOffs: new Set(),
+    normalizedHandOffs: new JournalMutationSet(state.normalizedHandOffs),
     queue: { ...state.queue, cards: new JournalMutationMap(state.queue.cards) },
     // Only membership is needed while staging; the canonical fold adopts these after COMMIT.
     removedTurnIds: new Set(),
     appliedSettlementIds: new Set(state.appliedSettlementIds),
     derivedTurnScope: state.derivedTurnScope.fork(),
     queuePauseMarks: { ...state.queuePauseMarks },
-    rest: state.rest.fork()
+    rest: state.rest.fork(selection)
   }
+  bindJournalSelection(staged)
   for (const row of rows) {
     applyJournalRow(staged, row)
   }

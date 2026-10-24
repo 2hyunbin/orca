@@ -52,6 +52,10 @@ export class JournalQueuedMessages {
     return this.deps.sessionId
   }
 
+  normalizationKey(): string {
+    return this.legacy.normalizationKey()
+  }
+
   displayState(): JournalReducerState {
     return this.legacy.displayState()
   }
@@ -71,11 +75,7 @@ export class JournalQueuedMessages {
   }
 
   get(messageId: string): QueuedMessageRow | null {
-    return (
-      this.deps.state().queue.cards.get(messageId) ??
-      this.legacy.cards().find((card) => card.messageId === messageId) ??
-      null
-    )
+    return this.deps.state().queue.cards.get(messageId) ?? this.legacy.get(messageId) ?? null
   }
 
   // Card insertion, attachment claims and send receipt must commit together.
@@ -101,7 +101,12 @@ export class JournalQueuedMessages {
           return { changes: [], result: undefined }
         }
         const { epoch, lastSequence } = this.deps.state()
-        const position = Math.max(0, ...this.list().map((card) => card.position)) + 1
+        const legacyMaximum = this.legacy.maximumPosition()
+        const selection = this.deps.state().selection
+        const currentMaximum = selection.groups.has('unorderedQueuePositions')
+          ? Number.NaN
+          : (selection.order.maximum('queuePositions')?.sequence ?? 0)
+        const position = Math.max(0, currentMaximum, legacyMaximum) + 1
         const change = {
           op: 'queued' as const,
           body,

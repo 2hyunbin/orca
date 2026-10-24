@@ -16,7 +16,8 @@ import type { JournalRow } from './journal-row-schema'
 
 export function applyJournalDispatchRow(
   state: JournalReducerState,
-  row: Extract<JournalRow, { kind: 'dispatch' }>
+  row: Extract<JournalRow, { kind: 'dispatch' }>,
+  structuralCarried?: readonly string[]
 ): void {
   const original = state.submissions.get(row.clientMessageId)
   const submission = original ? { ...original } : undefined
@@ -54,7 +55,7 @@ export function applyJournalDispatchRow(
   if (row.state === 'pending') {
     submission.handedOverAt = row.ts
     placeHandedOverMessage(state, submission, row)
-    foldStoppedHistoryCarried(state, row)
+    foldStoppedHistoryCarried(state, row, structuralCarried)
   } else if (row.state === 'rejected') {
     placeRejectedMessage(state, submission, row)
   }
@@ -81,10 +82,12 @@ export function applyJournalDispatchRow(
 
 function foldStoppedHistoryCarried(
   state: JournalReducerState,
-  row: Extract<JournalRow, { kind: 'dispatch' }>
+  row: Extract<JournalRow, { kind: 'dispatch' }>,
+  structuralCarried?: readonly string[]
 ): void {
-  const carried = Array.isArray(row.carries)
-    ? row.carries.filter((id): id is string => typeof id === 'string' && id.length > 0)
+  const input = structuralCarried ?? row.carries
+  const carried = Array.isArray(input)
+    ? input.filter((id): id is string => typeof id === 'string' && id.length > 0)
     : []
   if (carried.length > 0) {
     state.stoppedHistoryCarried.set(row.clientMessageId, carried)

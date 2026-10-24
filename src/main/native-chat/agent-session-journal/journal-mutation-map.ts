@@ -1,6 +1,7 @@
 /** Only touched entries belong to a mutation; the published fold remains unchanged until COMMIT. */
 export class JournalMutationMap<K, V> extends Map<K, V> {
   private readonly removed = new Set<K>()
+  private readonly detached = new Set<K>()
   constructor(
     private readonly base: ReadonlyMap<K, V>,
     private readonly copy?: (value: V) => V
@@ -33,16 +34,19 @@ export class JournalMutationMap<K, V> extends Map<K, V> {
     const existed = this.has(key)
     super.delete(key)
     this.removed.add(key)
+    if (this.base.has(key)) {
+      this.detached.add(key)
+    }
     return existed
   }
   override *entries(): MapIterator<[K, V]> {
     for (const [key, value] of this.base) {
-      if (!this.removed.has(key)) {
+      if (!this.removed.has(key) && !this.detached.has(key)) {
         yield [key, this.get(key) ?? value]
       }
     }
     for (const entry of super.entries()) {
-      if (!this.base.has(entry[0])) {
+      if (!this.base.has(entry[0]) || this.detached.has(entry[0])) {
         yield entry
       }
     }

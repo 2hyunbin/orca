@@ -228,10 +228,7 @@ export class StructuredAgentSessionRequestFailures {
         ? readAgentJournalTurn(journal.itemBody(request.id) ?? undefined)?.userItemId
         : request.id) ?? ''
     )
-    const { clientMessageId } =
-      journal
-        .submissions()
-        .find(({ clientMessageId: id }) => agentJournalSubmissionKey(id) === opener) ?? {}
+    const { clientMessageId } = journal.submissionAtItem(opener) ?? {}
     const generation = child?.fence === fence ? child?.generation : undefined
     const end = outcome === 'interruption' ? session?.lastEndedChild : undefined
     this.deps.onFailure({

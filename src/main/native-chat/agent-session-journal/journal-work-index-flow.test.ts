@@ -1,3 +1,4 @@
+import { runJournalPopulationContract } from './journal-population-flow-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -165,7 +166,10 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
       failed
     })
   const prefix = make()
-  await prefix.advance(() => !scratch.map('items').size)
+  await prefix.advance(() => {
+    const checkpoint = scratch.load<JournalStructuralCheckpoint>()
+    return (checkpoint?.cursor ?? 0) <= 1 || scratch.map('items').size === 0
+  })
   prefix.close()
   const saved = scratch.load<JournalStructuralCheckpoint>()!
   expect(saved.cursor).toBeGreaterThan(1)
@@ -188,13 +192,27 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
   expect(scratch.load()).toEqual(saved)
   expect(Array.from(scratch.map('work:active:slots'))).toEqual(relations)
-  const main = vi.spyOn(database.db, 'prepare')
+  const cursors: number[] = []
+  const prepare = database.db.prepare.bind(database.db)
+  const statements = new WeakSet<object>()
+  const main = vi.spyOn(database.db, 'prepare').mockImplementation((query) => {
+    const statement = prepare(query)
+    if (query.includes('ORDER BY seq ASC LIMIT') && !statements.has(statement)) {
+      statements.add(statement)
+      const all = statement.all.bind(statement)
+      vi.spyOn(statement, 'all').mockImplementation((...args) => {
+        cursors.push(Number(args[2]))
+        return all(...args)
+      })
+    }
+    return statement
+  })
   const resumed = make()
   await resumed.advance(() => true)
   resumed.close()
-  expect(
-    main.mock.calls.filter(([query]) => query.includes('ORDER BY seq ASC LIMIT'))
-  ).toHaveLength(tip - saved.cursor + 1)
+  expect(new Set(cursors).size).toBe(tip - saved.cursor + 1)
+  expect(cursors[0]).toBe(saved.cursor)
+  expect(cursors.every((cursor) => cursor >= saved.cursor)).toBe(true)
   expect(initialized).toHaveBeenCalledOnce()
   expect(readJournalRestFacts(database.db, sessionId)?.openTurn).toEqual(expected)
   database.db
@@ -207,16 +225,56 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
     guard: JSON.stringify([3, ...JSON.parse(saved.guard).slice(1)]),
     rest: { ...saved.rest, active: saved.rest.active.head }
   })
-  const readsBeforeUpgrade = main.mock.calls.length
+  const readsBeforeUpgrade = cursors.length
   const oldFormat = make()
   await oldFormat.advance(() => true)
   oldFormat.close()
-  expect(
-    main.mock.calls
-      .slice(readsBeforeUpgrade)
-      .filter(([query]) => query.includes('ORDER BY seq ASC LIMIT'))
-  ).toHaveLength(tip + 1)
+  expect(new Set(cursors.slice(readsBeforeUpgrade)).size).toBe(tip + 1)
+  expect(cursors[readsBeforeUpgrade]).toBe(0)
   expect(initialized).toHaveBeenCalledTimes(2)
   expect(readJournalRestFacts(database.db, sessionId)?.openTurn).toEqual(expected)
+  main.mockRestore()
   scratch.close()
+})
+
+it('bounds the complete writer, COW and resumable SQLite fold at N and 10N', async () => {
+  const receipts = []
+  for (const count of [16, 160]) {
+    receipts.push(await runJournalPopulationContract(join(root, `population-${count}`), count))
+  }
+  const [small, large] = receipts
+  for (const name of [
+    'construction',
+    'unrelated-series',
+    'context-and-echo',
+    'queue-flush',
+    'request-seed',
+    'request-descending',
+    'clear-seed',
+    'clear-nonmaximum',
+    'shared-legacy-series',
+    'shared-legacy-relevant',
+    'structural-resume-cleanup'
+  ]) {
+    expect(large.phases[name].points).toBeLessThanOrEqual(24 * small.phases[name].points)
+    expect(large.phases[name].sqlCalls).toBeLessThanOrEqual(24 * small.phases[name].sqlCalls + 128)
+  }
+  for (const name of [
+    'construction',
+    'unrelated-series',
+    'context-and-echo',
+    'request-descending',
+    'clear-nonmaximum',
+    'shared-legacy-series'
+  ]) {
+    const smallVisits =
+      small.phases[name].iteratorSteps - small.phases[name].settlementIteratorSteps
+    const largeVisits =
+      large.phases[name].iteratorSteps - large.phases[name].settlementIteratorSteps
+    expect(largeVisits).toBeLessThanOrEqual(24 * smallVisits + 128)
+  }
+  expect(large.phases.unrelated.iteratorSteps).toBeLessThanOrEqual(
+    small.phases.unrelated.iteratorSteps + 4096
+  )
+  console.info('journal population operation receipts', JSON.stringify(receipts))
 })

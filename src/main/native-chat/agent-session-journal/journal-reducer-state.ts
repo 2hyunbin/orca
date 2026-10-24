@@ -1,3 +1,5 @@
+import { JournalSelection } from './journal-selection'
+import { bindJournalSelection } from './journal-selection-binding'
 import { JournalRestProjection } from './journal-rest-projection'
 import { JournalDerivedTurnScope } from './journal-derived-turn-scope'
 import { createJournalQueuePauseMarks } from './queued-message-pause'
@@ -5,8 +7,10 @@ import { createJournalQueueState } from './journal-queue-fold'
 import type { JournalReducerState } from './journal-reducer'
 
 export function createJournalReducerState(sessionId: string, epoch: string): JournalReducerState {
-  return {
-    rest: new JournalRestProjection(),
+  const selection = new JournalSelection()
+  return bindJournalSelection({
+    selection,
+    rest: new JournalRestProjection(undefined, undefined, selection),
     sessionId,
     epoch,
     lastSequence: 0,
@@ -33,5 +37,5 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     normalizedHandOffs: new Set(),
     queue: createJournalQueueState(),
     historyOrigin: null
-  }
+  })
 }

@@ -1,3 +1,4 @@
+import { createJournalSourceReads } from './journal-source-reads'
 import { createJournalCurrentWorkView } from './journal-current-work-view'
 // Append-only journal store for one agent session. It owns the chat's fold and write queue, and no
 // connection: every statement goes through the host's one journal database.
@@ -6,11 +7,9 @@ import type { AgentJournalDispatchRejection } from '../../../shared/agent-sessio
 import { randomUUID } from 'node:crypto'
 import { createJournalPublicReader } from './journal-public-read'
 import type {
-  AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
-  AgentJournalRenderItem,
   AgentJournalSnapshot,
   AgentJournalSubmission,
   AgentJournalThreadGoal,
@@ -28,7 +27,6 @@ import {
 import {
   applyJournalRow,
   createJournalReducerState,
-  resolveJournalItemId,
   type JournalReducerState
 } from './journal-reducer'
 import { journalTombstoneRowBuilder } from './journal-row-builders'
@@ -36,7 +34,6 @@ import type {
   AgentSessionJournalOptions,
   JournalAppendResult,
   JournalItemAppendOptions,
-  JournalItemLinkageVisitor,
   JournalLifecycleBatchInput,
   JournalPlannedLifecycleBatchInput,
   JournalReadSince,
@@ -56,7 +53,6 @@ import type { JournalOperationReceipt, JournalRowWriter } from './journal-row-wr
 import type { JournalSubmissionWriter } from './journal-submission-writer'
 import type { JournalEpochController } from './journal-epoch-controller'
 import { JournalWriteQueue } from './journal-write-queue'
-import { journalItemExecutionFence, journalItemProvenance } from './journal-item-provenance'
 import { createJournalStoreCollaborators } from './journal-store-collaborators'
 import type { JournalItemAppender } from './journal-item-appender'
 import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
@@ -79,6 +75,7 @@ export class AgentSessionJournal {
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: ((rows?: readonly JournalRow[]) => void) | null = null
   private readonly queue: JournalWriteQueue
+  private readonly sourceReads = createJournalSourceReads(() => this.state)
   private readonly currentWorkView = createJournalCurrentWorkView(() => this.state)
   private readonly rowWriter: JournalRowWriter
   private readonly epochController: JournalEpochController
@@ -199,31 +196,18 @@ export class AgentSessionJournal {
   snapshot = (): AgentJournalSnapshot => this.publicRead().snapshot
 
   publicRead = () =>
-    this.readPublic(this.state, this.queuedMessages.displayState(), this.queuedMessages.revision())
+    this.readPublic(
+      this.state,
+      this.queuedMessages.displayState(),
+      this.queuedMessages.revision(),
+      () => this.queuedMessages.normalizationKey()
+    )
 
-  /** Visit without allocating/sorting a snapshot. */
-  visitItems = (
-    visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void
-  ): void => {
-    for (const item of this.state.items.values()) {
-      visit(item.itemId, item.sequence, item.body)
-    }
-  }
-
-  itemBody = (itemId: string): AgentJournalItemBody | null =>
-    this.state.items.get(itemId)?.body ?? null
-
-  /** Host-only stopped-history IDs carried by each send. */
-  stoppedHistoryCarried = (): ReadonlyMap<string, readonly string[]> =>
-    this.state.stoppedHistoryCarried
-
-  item = (itemId: string): AgentJournalRenderItem | null => this.state.items.get(itemId) ?? null
-
-  visitItemsWithLinkage = (visit: JournalItemLinkageVisitor): void => {
-    for (const item of this.state.items.values()) {
-      visit(item.itemId, item.sequence, item.body, item)
-    }
-  }
+  visitItems = this.sourceReads.visitItems
+  itemBody = this.sourceReads.itemBody
+  stoppedHistoryCarried = this.sourceReads.stoppedHistoryCarried
+  item = this.sourceReads.item
+  visitItemsWithLinkage = this.sourceReads.visitItemsWithLinkage
 
   /** The turn this journal records as running, with its record's item, whichever generation
    *  opened it — the same read a client's snapshot gives, without materialising one. Whether it is
@@ -242,33 +226,18 @@ export class AgentSessionJournal {
   /** The newest context facts the whole journal records, not only a client's loaded page. */
   contextUsage = this.currentWorkView.contextUsage
 
-  /** Includes activity from revisions/tombstones absent from rendered items. */
-  lastActivityAt = (): number => this.state.lastActivityAt
-
-  /** Prefer later execution ownership for reusable children, otherwise creation provenance. */
-  itemFence = (itemId: string): number | undefined => journalItemExecutionFence(this.state, itemId)
-
-  /** Preserve both provenance fields during rebuild. */
-  itemProvenance = (itemId: string) => journalItemProvenance(this.state, itemId)
-
-  /** Excludes client actions and recovery bookkeeping. */
-  lastProviderActivityAt = (fence: number) => this.state.providerActivityAt.get(fence)
-
-  submissionVersion = () => this.state.submissionVersion
-
-  submissions = (): AgentJournalSubmission[] => [...this.state.submissions.values()]
-
-  historyOrigin = () => this.state.historyOrigin
-
-  submission = (clientMessageId: string) => this.state.submissions.get(clientMessageId)
-
-  pendingSubmissions = () => this.submissions().filter((entry) => entry.dispatchState === 'pending')
-
-  /** Reconnecting clients read durable acceptance instead of resending. */
-  receiptFor = (clientMessageId: string): AgentJournalAcceptanceReceipt | null =>
-    this.state.receipts.get(clientMessageId) ?? null
-
-  canonicalItemId = (itemId: string): string => resolveJournalItemId(this.state, itemId)
+  lastActivityAt = this.sourceReads.lastActivityAt
+  itemFence = this.sourceReads.itemFence
+  itemProvenance = this.sourceReads.itemProvenance
+  lastProviderActivityAt = this.sourceReads.lastProviderActivityAt
+  submissionVersion = this.sourceReads.submissionVersion
+  submissions = this.sourceReads.submissions
+  historyOrigin = this.sourceReads.historyOrigin
+  submission = this.sourceReads.submission
+  submissionAtItem = this.sourceReads.submissionAtItem
+  pendingSubmissions = this.sourceReads.pendingSubmissions
+  receiptFor = this.sourceReads.receiptFor
+  canonicalItemId = this.sourceReads.canonicalItemId
 
   /** Read after all preceding writes and before later ones. */
   readInOrder<T>(read: () => T): Promise<T> {

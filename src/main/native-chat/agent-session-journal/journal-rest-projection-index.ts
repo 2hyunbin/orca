@@ -1,6 +1,6 @@
+import { JournalSelection } from './journal-selection'
 import type { AgentSessionSemanticWork } from '../../../shared/agent-session-semantic-work'
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
-import { compareAgentJournalItems } from '../../../shared/agent-session-journal-position'
 import { WorkBucket, type Work } from './journal-work-bucket'
 import type { JournalRestFacts } from './journal-row-table'
 
@@ -18,11 +18,11 @@ export type JournalStructuralStorage = {
 export class JournalRestProjectionIndex {
   protected requests = new Map<string, Request>()
   protected clears = new Map<string, number>()
-  protected users = new Map<string, Set<string>>()
   protected latest: Request | undefined
   revision = 0
   protected dirty = false
   protected floor = 0
+  protected floorGeneration = 0
   protected active = new WorkBucket()
   protected cuts = new Map<string, WorkBucket>()
   protected cutAt = new Map<string, string>()
@@ -36,7 +36,8 @@ export class JournalRestProjectionIndex {
 
   constructor(
     protected readonly storage?: JournalStructuralStorage,
-    saved?: ReturnType<JournalRestProjectionIndex['checkpoint']>
+    saved?: ReturnType<JournalRestProjectionIndex['checkpoint']>,
+    protected selection = new JournalSelection(storage)
   ) {
     if (!storage) {
       return
@@ -56,6 +57,7 @@ export class JournalRestProjectionIndex {
     if (saved) {
       this.latest = saved.latest
       this.floor = saved.floor
+      this.floorGeneration = saved.floorGeneration ?? 0
       this.dirty = saved.dirty
       this.revision = saved.revision
       this.legacy = saved.legacy
@@ -66,6 +68,7 @@ export class JournalRestProjectionIndex {
     return {
       latest: this.latest,
       floor: this.floor,
+      floorGeneration: this.floorGeneration,
       dirty: this.dirty,
       revision: this.revision,
       legacy: this.legacy,
@@ -73,22 +76,9 @@ export class JournalRestProjectionIndex {
     }
   }
 
-  protected linked(key: string, create = false): Set<string> {
-    if (this.storage) {
-      return this.storage.set(`links:${key}`)
-    }
-    let linked = this.users.get(key)
-    if (!linked) {
-      linked = new Set()
-      if (create) {
-        this.users.set(key, linked)
-      }
-    }
-    return linked
-  }
-
   protected updateCut(anchor: string, key: string, work: Work | undefined): void {
     const bucket = this.cuts.get(anchor) ?? new WorkBucket(this.storage, `cut:${anchor}`)
+    bucket.observeFloor(this.floorGeneration)
     bucket.update(key, work)
     this.cuts.set(anchor, bucket)
   }
@@ -113,22 +103,15 @@ export class JournalRestProjectionIndex {
 
   fact(): JournalRestFacts['openTurn'] {
     if (this.dirty) {
-      this.latest = undefined
-      for (const candidate of this.requests.values()) {
-        if (
-          !candidate.retired &&
-          candidate.item.sequence > this.floor &&
-          (!this.latest || compareAgentJournalItems(candidate.item, this.latest.item) > 0)
-        ) {
-          this.latest = candidate
-        }
-      }
+      const key = this.selection.order.maximum('requests')?.key
+      const candidate = key === undefined ? undefined : this.requests.get(key)
+      this.latest = candidate && candidate.item.sequence > this.floor ? candidate : undefined
       this.dirty = false
     }
     const anchor = this.latest?.anchor ?? null
     return (
       this.active.head?.fact ??
-      this.cuts.get(anchor ?? '')?.head?.fact ??
+      this.cuts.get(anchor ?? '')?.headAtFloor(this.floorGeneration)?.fact ??
       (this.legacy?.frontier === anchor ? this.legacy.fact : null)
     )
   }

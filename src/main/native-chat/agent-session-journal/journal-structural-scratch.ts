@@ -1,15 +1,13 @@
+import { JournalSelection } from './journal-selection'
+import { bindJournalSelection } from './journal-selection-binding'
+import type { JournalPendingRow } from './journal-structural-fold-step'
 import { serialize, deserialize } from 'node:v8'
 import Database from '../../sqlite/sync-database'
-import type {
-  AgentJournalRenderItem,
-  AgentJournalSubmission
-} from '../../../shared/agent-session-journal-types'
+import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { createJournalReducerState, type JournalReducerState } from './journal-reducer'
 import { JournalRestProjection, type JournalStructuralStorage } from './journal-rest-projection'
 import { JournalDerivedTurnScope } from './journal-derived-turn-scope'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
-import { isAgentSessionContextClear } from '../../../shared/agent-session-context-clear'
 
 /** Derived upgrade work only: every cursor and relation commits together, never transcript prose. */
 export class JournalStructuralScratch implements JournalStructuralStorage {
@@ -41,8 +39,29 @@ export class JournalStructuralScratch implements JournalStructuralStorage {
   save(value: unknown): void {
     this.db.prepare('INSERT OR REPLACE INTO checkpoint(id,value) VALUES(1,?)').run(serialize(value))
   }
-  reset(): void {
-    this.db.exec('DELETE FROM relations; DELETE FROM context_clears; DELETE FROM checkpoint')
+  beginCleanup(sessionId: string): void {
+    this.save({ cleanup: true, sessionId })
+  }
+
+  cleanupStep(limit = 32): boolean {
+    const rows = this.db.prepare('SELECT id FROM relations ORDER BY id LIMIT ?').all(limit)
+    const remove = this.db.prepare('DELETE FROM relations WHERE id = ?')
+    for (const row of rows) {
+      remove.run(row.id)
+    }
+    if (rows.length !== 0) {
+      return false
+    }
+    const clears = this.db.prepare('SELECT key FROM context_clears ORDER BY key LIMIT ?').all(limit)
+    const removeClear = this.db.prepare('DELETE FROM context_clears WHERE key = ?')
+    for (const row of clears) {
+      removeClear.run(row.key)
+    }
+    if (clears.length !== 0) {
+      return false
+    }
+    this.db.prepare('DELETE FROM checkpoint WHERE id = 1').run()
+    return true
   }
   close(): void {
     this.db.close()
@@ -214,6 +233,8 @@ export type JournalStructuralCheckpoint = {
   sessionId: string
   guard: string
   cursor: number
+  pending?: JournalPendingRow
+  selection?: { format: 6 }
   agent?: string
   rest: ReturnType<JournalRestProjection['checkpoint']>
   scope: string | null
@@ -228,49 +249,15 @@ export function structuralJournalState(
   saved?: JournalStructuralCheckpoint
 ): JournalReducerState {
   const state = createJournalReducerState(sessionId, epoch)
-  const addresses = scratch.map<string, string>('submissionAddresses')
-  state.items = new StructuralMap(
-    scratch.db,
-    'items',
-    { encode: structuralItem, decode: (value) => value },
-    (key, value) => {
-      if (value && isAgentSessionContextClear(value.body)) {
-        scratch.db
-          .prepare('INSERT OR REPLACE INTO context_clears(key,seq) VALUES(?,?)')
-          .run(serialize(key), value.sequence)
-      } else {
-        scratch.db.prepare('DELETE FROM context_clears WHERE key = ?').run(serialize(key))
-      }
-    }
-  )
+  state.selection = new JournalSelection(scratch)
+  state.selection.deferred = true
+  state.items = scratch.map('items', { encode: structuralItem, decode: (value) => value })
   state.itemFences = scratch.map('itemFences')
   state.itemExecutionOwners = scratch.map('itemExecutionOwners')
   state.providerActivityAt = scratch.map('activity')
   state.tombstones = scratch.map('tombstones')
   state.removedTurnIds = scratch.set('removedTurns')
-  state.submissions = new StructuralMap<string, AgentJournalSubmission>(
-    scratch.db,
-    'submissions',
-    undefined,
-    (key, value, previous) => {
-      if (previous && previous.payloadFingerprint !== value?.payloadFingerprint) {
-        scratch.map(`fingerprint:${previous.payloadFingerprint}`).delete(key)
-      }
-      if (value) {
-        scratch.map(`fingerprint:${value.payloadFingerprint}`).set(key, value)
-        addresses.set(agentJournalSubmissionKey(key), key)
-      } else {
-        addresses.delete(agentJournalSubmissionKey(key))
-      }
-    }
-  )
-  state.echoCandidates = (fingerprint) =>
-    scratch.map<string, AgentJournalSubmission>(`fingerprint:${fingerprint}`).values()
-  state.contextClearSequence = () =>
-    Number(
-      scratch.db.prepare('SELECT COALESCE(MAX(seq),0) AS seq FROM context_clears').get()?.seq ?? 0
-    )
-  state.submissionItemSource = (id) => addresses.get(id)
+  state.submissions = scratch.map('submissions')
   state.receipts = scratch.map('receipts')
   state.aliases = scratch.map('aliases')
   // Only presence suppresses the old fingerprint rule; unvalidated echo payload is never interpreted.
@@ -293,11 +280,11 @@ export function structuralJournalState(
       decode: (card) => card
     })
   }
-  state.rest = new JournalRestProjection(scratch, saved?.rest)
+  state.rest = new JournalRestProjection(scratch, saved?.rest, state.selection)
   state.derivedTurnScope = new JournalDerivedTurnScope(saved?.scope)
-  state.lastSequence = saved?.cursor ?? 0
+  state.lastSequence = saved?.pending?.sequence ?? saved?.cursor ?? 0
   state.agent = saved?.agent
   state.appliedSettlementIds = scratch.set('settlements')
   state.latestAcceptedTurnSequence = saved?.latestAcceptedTurnSequence ?? 0
-  return state
+  return bindJournalSelection(state)
 }

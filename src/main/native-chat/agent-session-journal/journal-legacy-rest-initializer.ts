@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { setImmediate as yieldToForeground } from 'node:timers/promises'
-import { applyJournalRow } from './journal-reducer'
+import { stepStructuralJournalRow } from './journal-structural-fold-step'
 import { parseJournalRow } from './journal-row-schema'
 import {
   readJournalRestFacts,
@@ -84,7 +85,7 @@ export class JournalLegacyRestInitializer {
     if (tip < 1) {
       return null
     }
-    return { ...projection, tip, guard: JSON.stringify([5, sessionId, projection, tip, owner]) }
+    return { ...projection, tip, guard: JSON.stringify([6, sessionId, projection, tip, owner]) }
   }
   private async run(canWork: () => boolean): Promise<void> {
     await yieldToForeground()
@@ -107,6 +108,19 @@ export class JournalLegacyRestInitializer {
       if (!canWork()) {
         return
       }
+      const cleanup = scratch.load<{ cleanup?: boolean; sessionId: string }>()
+      if (cleanup?.cleanup) {
+        scratch.db.exec('BEGIN IMMEDIATE')
+        try {
+          scratch.cleanupStep()
+          scratch.db.exec('COMMIT')
+        } catch (error) {
+          scratch.db.exec('ROLLBACK')
+          throw error
+        }
+        await yieldToForeground()
+        continue
+      }
       if (!this.candidate) {
         const retry = this.reconsidered.values().next()
         if (!retry.done) {
@@ -126,15 +140,20 @@ export class JournalLegacyRestInitializer {
       }
       const source = this.source(sessionId)
       if (!source || this.attempted.has(source.guard)) {
+        if (!source && scratch.load<JournalStructuralCheckpoint>()?.sessionId === sessionId) {
+          scratch.beginCleanup(sessionId)
+        }
         this.candidate = undefined
         continue
       }
       let saved = scratch.load<JournalStructuralCheckpoint>()
-      if (saved?.guard !== source.guard) {
-        scratch.reset()
-        saved = undefined
+      if (saved && (saved.guard !== source.guard || saved.selection?.format !== 6)) {
+        scratch.beginCleanup(sessionId)
+        continue
       }
-      let state = structuralJournalState(scratch, sessionId, source.epoch, saved)
+      const state = structuralJournalState(scratch, sessionId, source.epoch, saved)
+      let completed = saved?.cursor ?? 0
+      let pending = saved?.pending
       try {
         while (!this.stopped) {
           await yieldToForeground()
@@ -151,39 +170,59 @@ export class JournalLegacyRestInitializer {
           let finished = false
           scratch.db.exec('BEGIN IMMEDIATE')
           try {
-            while (rows < 32 && bytes < 256 * 1024 && performance.now() - started < 8) {
-              const entry = readJournalRowsAfter(
-                this.deps.database.db,
-                sessionId,
-                source.epoch,
-                state.lastSequence,
-                1
-              )[0]
-              if (!entry || entry.seq > source.tip) {
-                finished = true
-                break
+            let steps = 0
+            let entry: ReturnType<typeof readJournalRowsAfter>[number] | undefined
+            let sourceHash: string | undefined
+            let row: Extract<ReturnType<typeof parseJournalRow>, { ok: true }>['row'] | undefined
+            while (
+              rows < 32 &&
+              steps < 32 &&
+              bytes < 256 * 1024 &&
+              performance.now() - started < 8 &&
+              canWork()
+            ) {
+              if (!entry || !row) {
+                entry = readJournalRowsAfter(
+                  this.deps.database.db,
+                  sessionId,
+                  source.epoch,
+                  completed,
+                  1
+                )[0]
+                if (!entry || entry.seq > source.tip) {
+                  finished = true
+                  break
+                }
+                const parsed = parseJournalRow(entry.rowJson)
+                if (
+                  !parsed.ok ||
+                  parsed.row.epoch !== source.epoch ||
+                  parsed.row.seq !== entry.seq ||
+                  entry.seq !== completed + 1 ||
+                  (entry.seq === 1 && parsed.row.kind !== 'epoch') ||
+                  (pending && pending.sequence !== entry.seq)
+                ) {
+                  throw new Error('legacy journal is incomplete, damaged or newer')
+                }
+                sourceHash = createHash('sha256').update(entry.rowJson).digest('hex')
+                row = parsed.row
+                bytes += Buffer.byteLength(entry.rowJson)
               }
-              const parsed = parseJournalRow(entry.rowJson)
-              if (
-                !parsed.ok ||
-                parsed.row.epoch !== source.epoch ||
-                parsed.row.seq !== entry.seq ||
-                entry.seq !== state.lastSequence + 1 ||
-                (entry.seq === 1 && parsed.row.kind !== 'epoch')
-              ) {
-                throw new Error('legacy journal is incomplete, damaged or newer')
+              pending = stepStructuralJournalRow(state, row, entry.ts, sourceHash!, pending)
+              steps++
+              if (!pending) {
+                completed = entry.seq
+                rows++
+                entry = undefined
+                row = undefined
               }
-              applyJournalRow(state, parsed.row, entry.ts)
-              // Queue display/history prose is irrelevant to this structural projection.
-              state.queuePauseMarks = { latestStop: null, resumedSequence: 0, reopenedSequence: 0 }
-              state.historyOrigin = null
-              bytes += Buffer.byteLength(entry.rowJson)
-              rows++
             }
             scratch.save({
               sessionId,
               guard: source.guard,
-              cursor: state.lastSequence,
+              cursor: completed,
+              pending,
+              selection: state.selection.checkpoint(),
               agent: state.agent,
               rest: state.rest.checkpoint(),
               scope: state.derivedTurnScope.checkpoint(),
@@ -228,7 +267,7 @@ export class JournalLegacyRestInitializer {
             }
           }
           this.attempted.add(source.guard)
-          scratch.reset()
+          scratch.beginCleanup(sessionId)
           break
         }
       } catch (error) {

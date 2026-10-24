@@ -12,8 +12,10 @@ import { statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
 import { journalDispatchRowApplies } from './journal-dispatch-settlement'
-import { DISPATCH_DOUBT_PROVIDER_ENDED_UNANSWERED } from './journal-dispatch-doubt-reasons'
-import { dispatchWasWithdrawn } from '../../../shared/structured-agent-session-dispatch-rejection'
+import {
+  queuedHandOffDisplayItem,
+  queuedHandOffDisplaySubmission
+} from './journal-queued-hand-off-display'
 
 export function applyJournalSubmission(
   state: JournalReducerState,
@@ -83,22 +85,13 @@ export function foldQueuedHandOffInDoubt(
   state: JournalReducerState,
   original: AgentJournalSubmission
 ): void {
-  const submission = { ...original }
+  const submission = queuedHandOffDisplaySubmission(original)
   state.normalizedHandOffs.add(submission.clientMessageId)
   const itemId = agentJournalSubmissionKey(submission.clientMessageId)
   const item = state.items.get(itemId)
   const place = state.queuedHandOffPlaces.get(submission.clientMessageId)
   if (item && place) {
-    const { sequenceIndex: _rejectedAt, ...rest } = item
-    state.items.set(itemId, { ...rest, ...place })
-  }
-  if (dispatchWasWithdrawn(submission) && !submission.answeredInTurn) {
-    delete submission.queuedMessageId
-  } else {
-    submission.dispatchState = 'unknown'
-    submission.reason = DISPATCH_DOUBT_PROVIDER_ENDED_UNANSWERED
-    submission.recovered = true
-    delete submission.rejection
+    state.items.set(itemId, queuedHandOffDisplayItem(item, place)!)
   }
   state.submissions.set(submission.clientMessageId, submission)
 }
@@ -128,21 +121,8 @@ export function journalSubmissionAt(state: JournalReducerState, resolvedItemId: 
   if (identity?.provider !== 'orca') {
     return undefined
   }
-  const known = state.submissions.get(identity.clientMessageId)
-  // Oversized components are digests; legacy keys may not recover the original send id.
-  if (agentJournalSubmissionKey(identity.clientMessageId) === resolvedItemId) {
-    return known
-  }
-  const indexed = state.submissionItemSource?.(resolvedItemId)
-  if (indexed !== undefined) {
-    return state.submissions.get(indexed)
-  }
-  for (const candidate of state.submissions.values()) {
-    if (agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId) {
-      return candidate
-    }
-  }
-  return undefined
+  const raw = state.selection.rawAt(resolvedItemId)
+  return raw === undefined ? undefined : state.submissions.get(raw)
 }
 
 export function acceptSubmissionFromProviderItem(

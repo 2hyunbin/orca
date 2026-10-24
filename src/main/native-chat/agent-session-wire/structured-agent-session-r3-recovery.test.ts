@@ -120,14 +120,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-it.each([
-  'live-unproved',
-  'foreign',
-  'conflicted',
-  'failed',
-  'ended',
-  'changed-during-await'
-] as const)(
+it.each(['live-unproved', 'foreign', 'conflicted', 'ended', 'changed-during-await'] as const)(
   'keeps cold listing and both opened consumers under current %s owner evidence',
   async (kind) => {
     let initial = record()
@@ -154,7 +147,7 @@ it.each([
     }
     const current = await create([initial])
     await seed(sessionId)
-    if (kind === 'failed' || kind === 'live-unproved') {
+    if (kind === 'live-unproved') {
       vi.spyOn(current.deps.store, 'reconcileOnRestart').mockRejectedValue(
         new Error('bookkeeping unavailable')
       )

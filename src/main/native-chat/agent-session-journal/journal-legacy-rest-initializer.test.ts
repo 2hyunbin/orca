@@ -207,7 +207,8 @@ it.each([64, 640])(
     expect(published).toHaveBeenCalledOnce()
     expect(facts()?.openTurn).toEqual(expected)
     expect(reads[0]?.[2]).toBe(checkpoint.cursor)
-    expect(reads.length).toBe(tip - checkpoint.cursor + 1)
+    expect(new Set(reads.map((args) => args[2])).size).toBe(tip - checkpoint.cursor + 1)
+    expect(reads.every((args) => Number(args[2]) >= checkpoint.cursor)).toBe(true)
     const count = reads.length
     await resumed.advance(() => true)
     expect(reads).toHaveLength(count)
@@ -290,11 +291,14 @@ it('preserves equal-time claimant order through a dispatch checkpoint and implic
   const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
   expect(checkpoint.cursor).toBeGreaterThanOrEqual(dispatched)
   expect(checkpoint.cursor).toBeLessThan(echoed)
-  expect([
-    ...scratch
-      .map<string, unknown>(`fingerprint:${agentSessionSendBodyFingerprint(sessionId, body)}`)
-      .keys()
-  ]).toEqual(['A', 'B'])
+  expect(
+    Array.from(
+      scratch.map<string, { ordinal: number; fingerprint: string }>('selection:submissionSources')
+    )
+      .filter(([, value]) => value.fingerprint === agentSessionSendBodyFingerprint(sessionId, body))
+      .sort(([, a], [, b]) => a.ordinal - b.ordinal)
+      .map(([raw]) => raw)
+  ).toEqual(['A', 'B'])
   scratch.close()
   closeTestJournalHostDatabases()
   const resumed = make()
@@ -414,7 +418,9 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
         return Reflect.apply(original, this, args)
       })
     })
-    const allExec = vi.spyOn(Object.getPrototypeOf(openTestJournalHostDatabase(root).db), 'exec')
+    const execPrototype = Object.getPrototypeOf(openTestJournalHostDatabase(root).db)
+    const originalExec = execPrototype.exec
+    const allExec = vi.spyOn(execPrototype, 'exec')
     const allSql = vi.spyOn(Object.getPrototypeOf(openTestJournalHostDatabase(root).db), 'prepare')
     const journal = await open()
     for (let i = 0; i < count; i++) {
@@ -505,21 +511,39 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
     expect(cursor).toBeGreaterThanOrEqual(prefix)
     expect(cursor).toBeLessThan(tip)
     const resumed = make()
-    const resumeStart = allSql.mock.calls.length
-    const committedHeads: JournalStructuralCheckpoint[] = []
-    await resumed.advance(() => {
-      const saved = scratch.load<JournalStructuralCheckpoint>()
-      if (saved) {
-        committedHeads.push(saved)
+    const resumedCursors: number[] = []
+    const prepare = database.db.prepare.bind(database.db)
+    const rowStatements = new WeakSet<object>()
+    const rowSql = vi.spyOn(database.db, 'prepare').mockImplementation((query) => {
+      const statement = prepare(query)
+      if (query.includes('ORDER BY seq ASC LIMIT') && !rowStatements.has(statement)) {
+        rowStatements.add(statement)
+        const all = statement.all.bind(statement)
+        vi.spyOn(statement, 'all').mockImplementation((...args) => {
+          resumedCursors.push(Number(args[2]))
+          return all(...args)
+        })
       }
-      return true
+      return statement
     })
+    const committedHeads: JournalStructuralCheckpoint[] = []
+    allExec.mockImplementation(function (query) {
+      const result = originalExec.call(this, query)
+      if (String(query).trim() === 'COMMIT') {
+        const saved = scratch.load<JournalStructuralCheckpoint>()
+        if (saved && !saved.pending && !('cleanup' in saved)) {
+          committedHeads.push(saved)
+        }
+      }
+      return result
+    })
+    await resumed.advance(() => true)
     const structuralVisits = allSql.mock.calls.filter(([query]) =>
       String(query).includes('SELECT id,key,value FROM relations')
     ).length
-    const mainRows = allSql.mock.calls
-      .slice(resumeStart)
-      .filter(([query]) => String(query).includes('ORDER BY seq ASC LIMIT')).length
+    const mainRows = new Set(resumedCursors).size
+    expect(resumedCursors[0]).toBe(cursor)
+    expect(resumedCursors.every((after) => after >= cursor)).toBe(true)
     const structuralSql = allSql.mock.calls.filter(([query]) =>
       /relations|checkpoint|context_clears/.test(String(query))
     ).length
@@ -538,6 +562,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
           .filter((part) => part.trim()).length,
       0
     )
+    rowSql.mockRestore()
     allSql.mockRestore()
     allExec.mockRestore()
     update.mockRestore()

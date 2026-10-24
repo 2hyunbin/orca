@@ -1,6 +1,12 @@
+import type { JournalSelection } from './journal-selection'
 import { rememberAppliedSettlementId } from './journal-settlement-id-retention'
 import type { JournalRestProjection } from './journal-rest-projection'
-import { journalItemDeclaresEcho } from './journal-item-echo'
+import { resolveJournalItemId } from './journal-item-resolution'
+export {
+  resolveJournalItemId,
+  journalEchoClaimant,
+  isProviderUserMessageEcho
+} from './journal-item-resolution'
 // Live append and replay share this fold. Revisions change content, preserving creation position
 // and unspecified producer linkage; queued/rejected submissions use their handoff/settlement positions.
 
@@ -13,11 +19,7 @@ import type {
 import { journalHistoryOrigin, type JournalHistoryOrigin } from './journal-history-origin'
 import { journalBatchMutationProducer, journalRenderItem } from './journal-render-item'
 import { compareAgentJournalItems } from '../../../shared/agent-session-journal-position'
-import {
-  agentJournalSubmissionKey,
-  parseAgentJournalItemKey
-} from '../../../shared/agent-session-journal-item-key'
-import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { JournalDerivedTurnScope } from './journal-derived-turn-scope'
 import { removeJournalItem, statedOrDerivedTurnScope, upsertJournalItem } from './journal-item-fold'
 import { journalItemRevisionIsStale } from './journal-item-revision'
@@ -26,11 +28,9 @@ import { isJournalStopOrResumeRow, type JournalRow } from './journal-row-schema'
 import { acceptSubmissionFromProviderItem, applyJournalSubmission } from './journal-submission-fold'
 import { applyJournalDispatchRow } from './journal-dispatch-reducer'
 import { queuedHandOffOutcome } from './journal-dispatch-settlement'
-import { isWriteFailureSubmission } from '../../../shared/structured-agent-session-dispatch-rejection'
 import { projectJournalStopNote } from './journal-stop-note-projection'
 import { journalItemExecutionFence } from './journal-item-provenance'
 import { retireRewoundJournalSubmission } from './journal-rewind-submission-retirement'
-import { latestAgentSessionContextClearSequence } from '../../../shared/agent-session-context-clear'
 import { foldJournalQueuePauseMark, type JournalQueuePauseMarks } from './queued-message-pause'
 import { foldJournalQueueRow, type JournalQueueState } from './journal-queue-fold'
 
@@ -40,9 +40,7 @@ export {
 } from './journal-settlement-id-retention'
 
 export type JournalReducerState = {
-  echoCandidates?: (fingerprint: string) => Iterable<AgentJournalSubmission>
-  contextClearSequence?: () => number
-  submissionItemSource?: (itemId: string) => string | undefined
+  selection: JournalSelection
   rest: JournalRestProjection
   /** Actual SQL pair read/committed in this epoch; undefined is not a persisted value. */
   persistedRest?: readonly [string | null, number | null]
@@ -119,6 +117,14 @@ export function applyJournalRow(
   for (const id of ids) {
     state.rest.observe(state, state.aliases.get(id) ?? id)
   }
+  for (;;) {
+    const affected = state.selection.groups.next('aliasRestDirty')?.key
+    if (affected === undefined) {
+      break
+    }
+    state.selection.groups.update('aliasRestDirty', affected, false)
+    state.rest.observe(state, affected)
+  }
   // Open hygiene changes canonical truth; an actual Stop still has its original event edge.
   const recovered =
     queueRecovery ||
@@ -133,7 +139,12 @@ export function applyJournalRow(
   }
 }
 
-function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedAt: number): void {
+export function applyJournalRowBody(
+  state: JournalReducerState,
+  row: JournalRow,
+  savedAt: number,
+  structuralCarried?: readonly string[]
+): void {
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
   if (row.kind === 'epoch') {
@@ -184,45 +195,8 @@ function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedA
     if (state.appliedSettlementIds.has(row.settlementId)) {
       return
     }
-    for (const [sequenceIndex, mutation] of row.mutations.entries()) {
-      if (mutation.kind === 'item') {
-        if (journalItemRevisionIsStale(state, mutation.itemId, mutation.revision)) {
-          continue
-        }
-        if (!state.itemEchoes.has(mutation.itemId) && Object.hasOwn(mutation, 'echoOf')) {
-          state.itemEchoes.set(mutation.itemId, mutation.echoOf)
-        }
-        const { revision, body } = mutation
-        const itemId = resolveJournalItemId(state, mutation.itemId, body)
-        if (!state.itemEchoes.has(mutation.itemId)) {
-          acceptSubmissionFromProviderItem(state, mutation.itemId, itemId, row)
-        }
-        const producer = journalBatchMutationProducer(row, mutation)
-        const scope = statedOrDerivedTurnScope(state, mutation)
-        const item = journalRenderItem(
-          itemId,
-          revision,
-          body,
-          {
-            ...row,
-            ...(mutation.recovered
-              ? { recovered: mutation.recovered, recoveredAt: mutation.recoveredAt }
-              : {})
-          },
-          scope,
-          producer,
-          sequenceIndex
-        )
-        item.observedAt = mutation.observedAt ?? row.ts
-        upsertJournalItem(state, itemId, revision, item, {
-          fence: row.fence,
-          ownerFence: mutation.ownerFence
-        })
-        const fence = journalItemExecutionFence(state, itemId) ?? row.fence
-        observeJournalProviderActivity(state, row, mutation.itemId, body, savedAt, fence)
-      } else {
-        removeJournalItem(state, resolveItemId(state, mutation.itemId), mutation.revision)
-      }
+    for (let sequenceIndex = 0; sequenceIndex < row.mutations.length; sequenceIndex++) {
+      applyJournalLifecycleMutation(state, row, sequenceIndex, savedAt)
     }
     rememberAppliedSettlementId(state, row.settlementId)
     return
@@ -231,75 +205,57 @@ function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedA
     applyJournalSubmission(state, row)
     return
   }
-  applyJournalDispatchRow(state, row)
+  applyJournalDispatchRow(state, row, structuralCarried)
 }
 
-export function resolveJournalItemId(
+export function applyJournalLifecycleMutation(
   state: JournalReducerState,
-  itemId: string,
-  body?: AgentJournalRenderItem['body']
-): string {
-  const aliased = state.aliases.get(itemId)
-  if (aliased) {
-    return aliased
+  row: Extract<JournalRow, { kind: 'lifecycle-batch' }>,
+  sequenceIndex: number,
+  savedAt: number
+): void {
+  const mutation = row.mutations[sequenceIndex]
+  if (!mutation) {
+    throw new Error('missing journal lifecycle mutation')
   }
-  const submissionId = journalEchoClaimant(state, itemId, body)
-  if (!submissionId) {
-    return itemId
-  }
-  state.aliases.set(itemId, submissionId)
-  return submissionId
-}
-
-export function isProviderUserMessageEcho(
-  itemId: string,
-  body: AgentJournalRenderItem['body']
-): boolean {
-  const identity = parseAgentJournalItemKey(itemId)
-  return (
-    body.kind === 'message' &&
-    body.role === 'user' &&
-    identity !== null &&
-    identity.provider !== 'orca'
-  )
-}
-
-/** Find an echo's eligible submission without claiming it. */
-export function journalEchoClaimant(
-  state: JournalReducerState,
-  itemId: string,
-  body?: AgentJournalRenderItem['body']
-): string | null {
-  if (
-    !body ||
-    journalItemDeclaresEcho(state.itemEchoes, itemId) ||
-    !isProviderUserMessageEcho(itemId, body)
-  ) {
-    return null
-  }
-  const fingerprint = agentSessionSendBodyFingerprint(state.sessionId, body)
-  const contextSequence =
-    state.contextClearSequence?.() ?? latestAgentSessionContextClearSequence(state.items.values())
-  // Exact payload plus queue order preserves repeated identical sends one-for-one.
-  // A submission an echo may not claim is one that says the message never reached
-  // the provider, so an item resembling it is somebody else's. That is `rejected`
-  // now — and, in journals written before this state moved, an `unknown` carrying
-  // the transport marker. Replaying an older journal must not let such a row alias
-  // the echo of a later, genuinely delivered resend of the same text.
-  let submission: AgentJournalSubmission | undefined
-  for (const candidate of state.echoCandidates?.(fingerprint) ?? state.submissions.values()) {
-    if (
-      (contextSequence === 0 || (candidate.acceptedSequence ?? 0) > contextSequence) &&
-      candidate.dispatchState !== 'rejected' &&
-      !isWriteFailureSubmission(candidate) &&
-      candidate.payloadFingerprint === fingerprint &&
-      state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0 &&
-      (!submission || candidate.submittedAt < submission.submittedAt)
-    ) {
-      submission = candidate
+  if (mutation.kind === 'item') {
+    if (journalItemRevisionIsStale(state, mutation.itemId, mutation.revision)) {
+      return
     }
+    if (!state.itemEchoes.has(mutation.itemId) && Object.hasOwn(mutation, 'echoOf')) {
+      state.itemEchoes.set(mutation.itemId, mutation.echoOf)
+    }
+    const { revision, body } = mutation
+    const itemId = resolveJournalItemId(state, mutation.itemId, body)
+    if (!state.itemEchoes.has(mutation.itemId)) {
+      acceptSubmissionFromProviderItem(state, mutation.itemId, itemId, row)
+    }
+    const producer = journalBatchMutationProducer(row, mutation)
+    const scope = statedOrDerivedTurnScope(state, mutation)
+    const item = journalRenderItem(
+      itemId,
+      revision,
+      body,
+      {
+        ...row,
+        ...(mutation.recovered
+          ? { recovered: mutation.recovered, recoveredAt: mutation.recoveredAt }
+          : {})
+      },
+      scope,
+      producer,
+      sequenceIndex
+    )
+    item.observedAt = mutation.observedAt ?? row.ts
+    upsertJournalItem(state, itemId, revision, item, {
+      fence: row.fence,
+      ownerFence: mutation.ownerFence
+    })
+    const fence = journalItemExecutionFence(state, itemId) ?? row.fence
+    observeJournalProviderActivity(state, row, mutation.itemId, body, savedAt, fence)
+  } else {
+    removeJournalItem(state, resolveItemId(state, mutation.itemId), mutation.revision)
   }
-  return submission ? agentJournalSubmissionKey(submission.clientMessageId) : null
 }
 
 function resolveItemId(state: JournalReducerState, itemId: string): string {
