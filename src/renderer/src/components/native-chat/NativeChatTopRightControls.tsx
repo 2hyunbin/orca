@@ -21,11 +21,13 @@ import { useNativeChatTabOwnerWorktreeId } from './use-native-chat-tab-owner'
 export function NativeChatTopRightControls({
   find,
   session,
-  working
+  working,
+  inline = false
 }: {
   find: NativeChatFind
   session: Pick<NativeChatStructuredViewProps, 'tabId' | 'sessionId' | 'agent' | 'isVisible'>
   working: boolean
+  inline?: boolean
 }): React.JSX.Element | null {
   const worktreeId = useNativeChatTabOwnerWorktreeId(session.tabId)
   // A primitive, so the selector is stable; the chat's host is where its History row lives.
@@ -50,12 +52,12 @@ export function NativeChatTopRightControls({
   }
   const label = translate('components.tab.bar.switch.toCli', 'Switch to CLI')
   return (
-    <div className="absolute top-2 right-4 z-20">
+    <div className={inline ? 'flex' : 'absolute top-2 right-4 z-20'}>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             type="button"
-            variant="ghost"
+            variant={inline ? 'pane-title' : 'ghost'}
             size="icon-xs"
             aria-label={label}
             // Not `disabled` while a reply runs: the tooltip has to say why.

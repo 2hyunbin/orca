@@ -9,7 +9,7 @@ import { makeTabGroup } from '@/store/slices/store-test-helpers'
 import * as cliFork from '../tab-bar/native-chat-cli-fork-run'
 // @vitest-environment happy-dom
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
@@ -363,7 +363,14 @@ it('gates eligible native header hover and menu switches through capability hydr
       </DropdownMenu>
     </TooltipProvider>
   )
-  expect(screen.getByRole('button', { name: 'Split Chat Right', hidden: true })).toBeTruthy()
+  const actions = screen
+    .getByRole('button', { name: 'Split Chat Right', hidden: true })
+    .closest('.pane-title-actions')
+  if (!(actions instanceof HTMLElement)) {
+    throw new Error('Expected the grouped pane actions row')
+  }
+  const row = within(actions)
+  expect(row.getByRole('button', { name: 'Close tab', hidden: true })).toBeTruthy()
   const transcript = screen.getByTestId('message-list')
   const legacyName = 'Show as terminal'
   const expectHidden = () => {
@@ -383,6 +390,7 @@ it('gates eligible native header hover and menu switches through capability hydr
   })
   const loadingButtons = screen.getAllByRole('button', { name: 'Switch to CLI', hidden: true })
   expect(loadingButtons).toHaveLength(2)
+  expect(row.getAllByRole('button', { name: 'Switch to CLI', hidden: true })).toHaveLength(1)
   for (const button of loadingButtons) {
     expect(button.hasAttribute('disabled')).toBe(true)
   }
@@ -403,6 +411,7 @@ it('gates eligible native header hover and menu switches through capability hydr
   )
   const buttons = screen.getAllByRole('button', { name: 'Switch to CLI', hidden: true })
   expect(buttons).toHaveLength(2)
+  expect(row.getAllByRole('button', { name: 'Switch to CLI', hidden: true })).toHaveLength(1)
   expect(screen.queryByRole('button', { name: legacyName, hidden: true })).toBeNull()
   for (const button of buttons) {
     expect(button.hasAttribute('disabled')).toBe(false)

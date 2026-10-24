@@ -51,7 +51,7 @@ import { useAppStore } from '../../store'
 import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 import { useNativeChatStructuredComposerTransport } from './use-native-chat-structured-composer-transport'
 import { NativeChatStructuredGoalStrip } from './NativeChatStructuredGoalStrip'
-import { nativeChatPaneHeader } from './NativeChatPaneHeader'
+import { nativeChatPaneHeader, nativeChatPaneCaptureHandlers } from './NativeChatPaneHeader'
 import { structuredAgentSessionReadFailureNotice } from './structured-agent-session-read-failure-notice'
 import { useStructuredAgentSessionDeliveryNotices } from './use-structured-agent-session-delivery-notices'
 import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
@@ -266,21 +266,20 @@ export function NativeChatStructuredSession(
   if (hostNotice) {
     notices.push(hostNotice)
   }
+  const controls = { find, session: props, working: controller.isWorking }
+  const paneHeader = nativeChatPaneHeader(
+    props,
+    ownerWorktreeId,
+    appearanceStyle.colorScheme,
+    !find.isOpen && <NativeChatTopRightControls {...controls} inline />
+  )
   return (
     <div
       ref={rootRef}
       data-native-chat-root="true"
       data-native-chat-working={controller.isWorking ? 'true' : 'false'}
       tabIndex={-1}
-      onPointerDownCapture={(event) => {
-        paneCommands.onPointerDownCapture(event)
-        rootInput.onPointerDownCapture(event)
-      }}
-      onKeyDownCapture={(event) => {
-        find.onKeyDownCapture(event)
-        paneCommands.onKeyDownCapture(event)
-        rootInput.onKeyDownCapture(event)
-      }}
+      {...nativeChatPaneCaptureHandlers(find, paneCommands, rootInput)}
       onContextMenuCapture={paneCommands.onContextMenuCapture}
       className={cn(
         NATIVE_CHAT_APPEARANCE_ROOT_CLASS,
@@ -289,9 +288,9 @@ export function NativeChatStructuredSession(
       style={appearanceStyle}
       data-native-chat-scheme={appearanceStyle.colorScheme}
     >
-      {nativeChatPaneHeader(props, ownerWorktreeId, appearanceStyle.colorScheme)}
+      {paneHeader}
       <NativeChatContextClearFade clearing={controller.contextClear.clearing}>
-        <NativeChatTopRightControls find={find} session={props} working={controller.isWorking} />
+        {(find.isOpen || !paneHeader) && <NativeChatTopRightControls {...controls} />}
         {viewState.kind === 'loading' || (viewState.kind === 'error' && !readFailure) ? (
           historyPhase !== 'unread' && <NativeChatLoadingCue />
         ) : viewState.kind === 'error' ? (
