@@ -385,8 +385,8 @@ describe('a start the chat needed and did not get', () => {
     await host.close(SESSION, 'evict')
     acquire.mockRejectedValueOnce(new Error('spawn codex ENOENT'))
     const first = await accept('first')
-    const second = await accept('second')
     await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
+    const second = await accept('second')
     await eventually(async () => expect((await submission(second))?.dispatchState).toBe('accepted'))
 
     const snapshot = await host.journalSnapshot(SESSION)
