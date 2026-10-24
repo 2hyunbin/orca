@@ -12,7 +12,7 @@ import {
   remoteRuntimeConnectOptions
 } from './remote-runtime-connect-bound'
 import { openRemoteRuntimeWebSocket } from './remote-runtime/requests/remote-runtime-request-websocket'
-import { withRemoteRuntimeTailscaleHint } from './remote-runtime-tailscale-hint'
+import { withRemoteRuntimeTailscaleHint } from './remote-runtime/remote-runtime-tailscale-hint'
 
 const servers = new Set<Server>()
 const sockets = new Set<Socket>()
