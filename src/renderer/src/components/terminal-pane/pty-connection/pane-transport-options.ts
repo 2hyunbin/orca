@@ -77,8 +77,8 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
         tabId: session.deps.tabId,
         ptyId,
         reason: 'host-rebound-exited-pane',
-        // Why external: a new host process is fresh evidence, so a prior failed attempt can't refuse it.
-        trigger: 'external',
+        // Why: a new host process is fresh evidence a failed attempt can't refuse; the cap still holds.
+        trigger: 'host-evidence',
         terminalRecoveryGeneration: session.terminalRecoveryGeneration,
         terminalRecoveryInstanceId: session.terminalRecoveryInstance.id
       }),
