@@ -199,11 +199,7 @@ function resolveTrackpadPixelWheelReportCount(
     return null
   }
 
-  // Why: trackpad pixel streams map 1:1 to physical distance: one report per
-  // terminal row scrolled, fractional remainder carried. No per-event cap and
-  // no momentum-tail suppression: the input write queue batches whatever a
-  // busy frame accumulates into a single PTY write, so the TUI applies it at
-  // once instead of replaying it, and inertial scrolling stays real-time.
+  // Convert trackpad pixels to physical rows with fractional carry, without caps or tail suppression. The input queue batches a busy frame into one PTY write so inertia stays real-time.
   const totalRows = state.pendingRows + distanceRows
   const reports = Math.trunc(totalRows)
   state.pendingRows = totalRows - reports
