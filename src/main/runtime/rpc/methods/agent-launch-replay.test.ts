@@ -743,7 +743,11 @@ it('carries only an actual resolved workspace on negotiated desktop errors and p
     if (typeof args.initializeSurface !== 'function') {
       throw new Error('missing real initialization seam')
     }
-    await args.initializeSurface({ worktreeId: 'wt-resolved', workspacePath: '/actual/workspace' })
+    await args.initializeSurface({
+      worktreeId: 'wt-resolved',
+      workspacePath: '/actual/workspace',
+      startupTerminalHandle: undefined
+    })
     throw new Error('post-resolution bookkeeping failed')
   })
   const params = replay.params.parse(

@@ -4,7 +4,7 @@ import type { Store } from '../persistence'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import type { Repo } from '../../shared/repo-types'
-import { getDefaultRepoHookSettings } from '../../shared/constants'
+import { getDefaultRepoHookSettings, getDefaultSettings } from '../../shared/constants'
 import { WORKTREE_META_PERSISTED_DEFAULTS } from '../../shared/worktree/meta-persisted-defaults'
 import type { RuntimeManagedWorktreeCreateArgs } from './runtime-managed-worktree-create-types'
 import type { AddWorktreeOptions } from '../git/worktree'
@@ -217,7 +217,7 @@ it('writes a requested identity only at actual checkout materialization, includi
     promisedAgentChat: true,
     deps: {
       store: {
-        getSettings: () => ({}),
+        getSettings: () => getDefaultSettings('/fixture'),
         setWorktreeMeta: write,
         getRepos: unexpected,
         getRepo: unexpected,
