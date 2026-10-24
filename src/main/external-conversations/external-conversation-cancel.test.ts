@@ -132,28 +132,48 @@ describe('ExternalConversationSeam cancel', () => {
   it('settles a start not yet linked, and throws for a conversation it never saw', async () => {
     const h = harness()
     const fake = fakeTerminal()
-    const aborted = deferred<void>()
+    const launcher = fakeLauncher(async () => launchResult(null), undefined, false)
     // As the real launcher: an abort before the surface is published throws.
-    const launcher = fakeLauncher(
-      async () => {
-        await aborted.promise
-        throw new Error('request_aborted')
-      },
-      undefined,
-      false
+    launcher.launch.mockImplementation(
+      (_input, _onPublished, signal) =>
+        new Promise((_resolve, reject) =>
+          signal?.addEventListener('abort', () => reject(new Error('request_aborted')))
+        )
     )
     const host = { launcher: launcher.launcher, terminal: fake.terminal }
     const started = h.seam.start(host, KEY, 'd1', START)
     await vi.waitFor(() => expect(launcher.launch).toHaveBeenCalledTimes(1))
     await expect(h.seam.cancel(host, KEY, 'c1')).resolves.toEqual({ outcome: 'accepted' })
-    expect(launcher.launch.mock.calls[0][2]?.aborted).toBe(true)
-    aborted.resolve()
     await expect(started).resolves.toMatchObject({
       initial: { outcome: 'refused', reason: 'conversation_cancelled' }
     })
     await expect(h.seam.cancel(host, { source: 'dev', externalId: 'nope' }, 'c2')).rejects.toThrow(
       'external_conversation_not_found'
     )
+  })
+
+  it('waits for a published agent to be linked, then stops it', async () => {
+    const h = harness()
+    const fake = fakeTerminal()
+    const linking = deferred<{ worktreeId: string; sshHostId: null }>()
+    const { launcher, launch } = fakeLauncher(async () => launchResult('handed-to-terminal'))
+    const host = {
+      launcher: { ...launcher, paneWorkspace: () => linking.promise },
+      terminal: fake.terminal
+    }
+    const started = h.seam.start(host, KEY, 'd1', START)
+    await vi.waitFor(() => expect(launch).toHaveBeenCalledTimes(1))
+    h.hookRows.set(PANE, hookRow())
+    let settled = false
+    const cancelled = h.seam.cancel(host, KEY, 'c1').finally(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
+    linking.resolve({ worktreeId: WORKTREE, sshHostId: null })
+    await expect(cancelled).resolves.toEqual({ outcome: 'accepted' })
+    expect(fake.keys).toEqual(['\x1b'])
+    await started
   })
 
   it('refuses, unrecorded, while the host is out of contact or a shell is in front', async () => {
@@ -205,6 +225,23 @@ describe('ExternalConversationSeam cancel: what it leaves behind', () => {
     expect(fake.writes).toEqual(['next'])
     await seam.send(host, KEY, 's2', 'again')
     expect(fake.keys).toEqual(['\x1b', CLEAR])
+  })
+
+  it('pastes nothing after a clear that may have half-landed, and keeps the mark for the next send', async () => {
+    const { seam, host, fake } = await cancelledEarly()
+    fake.state.draft = 'first'
+    fake.sendTerminal.mockImplementationOnce(async (_handle, _action, options) => {
+      options.reserveWrite?.('pty-1')
+      throw new Error('connection_lost')
+    })
+    await expect(seam.send(host, KEY, 's1', 'next')).resolves.toEqual({
+      outcome: 'unknown',
+      reason: 'writer_failed'
+    })
+    expect(fake.writes).toEqual([])
+    await expect(seam.send(host, KEY, 's2', 'next')).resolves.toEqual({ outcome: 'accepted' })
+    expect(fake.keys).toEqual(['\x1b', CLEAR])
+    expect(fake.writes).toEqual(['next'])
   })
 
   it('touches nothing else in the box: a person’s text, an unread screen, a new process', async () => {

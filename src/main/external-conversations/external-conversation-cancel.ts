@@ -41,11 +41,13 @@ export async function cancelConversation(
     return refused('connectors_disabled')
   }
   const id = conversationId(key)
-  const settledWork = seam.chain.cancel(id, 'conversation_cancelled')
+  const settling = seam.chain.cancel(id, 'conversation_cancelled')
+  // A launch that already published its agent links it before ending, so look only after that.
+  await settling
   const linked = findLink(seam.store, key)
   if (!linked) {
-    // A start not yet linked has reached no agent, so settling it stopped everything.
-    if (settledWork) {
+    // A start that ended unlinked reached no agent, so settling it stopped everything.
+    if (settling) {
       return { outcome: 'accepted' }
     }
     throw new Error('external_conversation_not_found')

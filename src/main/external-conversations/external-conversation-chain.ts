@@ -5,7 +5,13 @@ import {
   type Delivery
 } from './external-conversation-types'
 
-type Lane = { controller: AbortController; signal: AbortSignal; tail: Promise<unknown> }
+type Lane = {
+  controller: AbortController
+  signal: AbortSignal
+  tail: Promise<unknown>
+  // Every item's end: aborted queued items end at once, while the head may still be finishing.
+  settled: Promise<unknown>
+}
 
 export function refusalOf(signal: AbortSignal): ConnectorRefusal {
   return CONNECTOR_REFUSALS.find((reason) => reason === signal.reason) ?? 'connectors_disabled'
@@ -33,6 +39,7 @@ export class ConversationChain {
     )
     const tail = result.catch(() => undefined)
     lane.tail = tail
+    lane.settled = Promise.all([lane.settled, tail])
     void tail.then(() => {
       if (this.lanes.get(id) === lane && lane.tail === tail) {
         this.lanes.delete(id)
@@ -41,15 +48,18 @@ export class ConversationChain {
     return result
   }
 
-  /** With laneSignal, cancel only that lane so a replacement lane remains untouched. True if one was. */
-  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): boolean {
+  /**
+   * With laneSignal, cancel only that lane so a replacement lane remains untouched. Returns when the
+   * cancelled lane's work has all ended, or null when there was none.
+   */
+  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): Promise<unknown> | null {
     const lane = this.lanes.get(id)
     if (!lane || (laneSignal && lane.signal !== laneSignal)) {
-      return false
+      return null
     }
     this.lanes.delete(id)
     lane.controller.abort(reason)
-    return true
+    return lane.settled
   }
 
   private openLane(id: string): Lane {
@@ -57,7 +67,8 @@ export class ConversationChain {
     const lane: Lane = {
       controller,
       signal: AbortSignal.any([this.signal, controller.signal]),
-      tail: Promise.resolve()
+      tail: Promise.resolve(),
+      settled: Promise.resolve()
     }
     this.lanes.set(id, lane)
     return lane

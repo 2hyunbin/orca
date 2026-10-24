@@ -7,7 +7,10 @@ import {
 } from '../runtime/launched-agent-write-guard'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
-import { writeFencedAgentKeys } from '../runtime/terminal-agent-fenced-keys'
+import {
+  writeFencedAgentKeys,
+  type FencedAgentKeysOutcome
+} from '../runtime/terminal-agent-fenced-keys'
 import { deliverFollowUp, sameBinding, type FollowUpTerminal } from './external-conversation-send'
 import type { ConversationKey, Delivery } from './external-conversation-types'
 import { conversationId } from './external-conversation-types'
@@ -56,10 +59,13 @@ export class ConversationTurns {
   ): Promise<Delivery> {
     const id = conversationId(key)
     const turn = this.turns.get(id)
-    this.turns.delete(id)
     if (link.agent === 'claude' && turn?.interrupted && sameBinding(turn.binding, pane.binding)) {
-      await clearRestoredPrompt(terminal, link, pane, turn.text, signal)
+      // A clear that may have half-landed gets no follow-up pasted after it; the mark stays for the next.
+      if ((await clearRestoredPrompt(terminal, link, pane, turn.text, signal)) === 'unknown') {
+        return { outcome: 'unknown', reason: 'writer_failed' }
+      }
     }
+    this.turns.delete(id)
     const delivery = await deliverFollowUp(terminal, {
       handle: pane.handle,
       expectedBinding: pane.binding,
@@ -81,30 +87,36 @@ async function clearRestoredPrompt(
   pane: { handle: string; binding: AgentPromptExpectedBinding },
   text: string,
   signal: AbortSignal
-): Promise<void> {
+): Promise<FencedAgentKeysOutcome['outcome']> {
   // Clear keys at a shell that replaced the agent would wipe the user's command line.
   const guard = createLaunchedAgentWriteGuard(terminal, link.agent, {
     unprovableHost: 'write-unless-shell'
   })
   try {
-    await writeFencedAgentKeys(terminal, pane.handle, buildAgentTuiClearInputForText(text), {
-      signal,
-      beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
-      // Synchronous with the write, so the box is read just before the clear goes in.
-      fence: (ptyId) => {
-        const { processIncarnation } = terminal.getTerminalPromptRequestBinding(pane.handle)
-        const draft = terminal.readTerminalComposerDraft(ptyId)
-        if (
-          signal.aborted ||
-          ptyId !== pane.binding.ptyId ||
-          processIncarnation !== pane.binding.processIncarnation ||
-          draft === null ||
-          !composerDraftShowsText(draft, text)
-        ) {
-          throw new Error('input_not_stale')
+    const cleared = await writeFencedAgentKeys(
+      terminal,
+      pane.handle,
+      buildAgentTuiClearInputForText(text),
+      {
+        signal,
+        beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
+        // Synchronous with the write, so the box is read just before the clear goes in.
+        fence: (ptyId) => {
+          const { processIncarnation } = terminal.getTerminalPromptRequestBinding(pane.handle)
+          const draft = terminal.readTerminalComposerDraft(ptyId)
+          if (
+            signal.aborted ||
+            ptyId !== pane.binding.ptyId ||
+            processIncarnation !== pane.binding.processIncarnation ||
+            draft === null ||
+            !composerDraftShowsText(draft, text)
+          ) {
+            throw new Error('input_not_stale')
+          }
         }
       }
-    })
+    )
+    return cleared.outcome
   } finally {
     guard.dispose()
   }
