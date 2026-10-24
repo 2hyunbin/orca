@@ -18,6 +18,13 @@ export type SystemSshBuildArgsOptions = {
    * be read as having answered "nothing claims it". See `sshConfigMayClaimAlias`.
    */
   aliasClaimedByConfig?: boolean
+  /** Dial Orca's held `ssh -L` forward instead of the target's proxy. See `system-ssh-loopback-route`. */
+  loopbackRoute?: SystemSshLoopbackRouteArgs
+}
+
+export type SystemSshLoopbackRouteArgs = {
+  localPort: number
+  hostKeyAlias: string
 }
 
 export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOptions): string[] {
@@ -74,9 +81,19 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
 export function appendSshTargetDestinationArgs(
   args: string[],
   target: SshTarget,
-  options?: Pick<SystemSshBuildArgsOptions, 'aliasClaimedByConfig' | 'gssapiOnly'>
+  options?: Pick<SystemSshBuildArgsOptions, 'aliasClaimedByConfig' | 'gssapiOnly' | 'loopbackRoute'>
 ): void {
   const useConfigHost = shouldUseOpenSshConfigHost(target)
+  const loopbackRoute = options?.loopbackRoute
+  if (loopbackRoute) {
+    // Why: OpenSSH keeps the first value it sees per option, so these win over ssh_config's route
+    // while User, IdentityFile, certificates, and known_hosts files still come from the alias.
+    args.push('-o', 'HostName=127.0.0.1')
+    args.push('-o', `Port=${loopbackRoute.localPort}`)
+    args.push('-o', 'ProxyCommand=none')
+    args.push('-o', 'ProxyJump=none')
+    args.push('-o', `HostKeyAlias=${loopbackRoute.hostKeyAlias}`)
+  }
 
   // Why: a wildcard `Host *` block supplies ProxyCommand/ProxyJump for every alias, so an alias
   // whose own Host block was renamed or deleted still looks config-backed and gets dialled bare —
@@ -87,7 +104,7 @@ export function appendSshTargetDestinationArgs(
     appendUnclaimedAliasEndpoint(args, target)
   }
 
-  if (!useConfigHost && target.port !== 22) {
+  if (!useConfigHost && !loopbackRoute && target.port !== 22) {
     args.push('-p', String(target.port))
   }
 
@@ -109,11 +126,12 @@ export function appendSshTargetDestinationArgs(
     args.push('-o', 'GSSAPIAuthentication=yes')
   }
 
-  if (!useConfigHost && target.jumpHost) {
+  // Why: `-J` after `ProxyJump=none` is a fatal duplicate in OpenSSH, so the route skips both proxies.
+  if (!useConfigHost && !loopbackRoute && target.jumpHost) {
     args.push('-J', target.jumpHost)
   }
 
-  if (!useConfigHost && target.proxyCommand) {
+  if (!useConfigHost && !loopbackRoute && target.proxyCommand) {
     args.push('-o', `ProxyCommand=${target.proxyCommand}`)
   }
 
@@ -177,6 +195,9 @@ export function getSystemSshBuildArgsFromOperationOptions(
   }
   if (options?.aliasClaimedByConfig === false) {
     buildArgsOptions.aliasClaimedByConfig = false
+  }
+  if (options?.loopbackRoute !== undefined) {
+    buildArgsOptions.loopbackRoute = options.loopbackRoute
   }
   return Object.keys(buildArgsOptions).length === 0 ? undefined : buildArgsOptions
 }
