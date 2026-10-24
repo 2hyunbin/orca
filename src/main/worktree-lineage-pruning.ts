@@ -48,6 +48,7 @@ export function pruneLineageForMissingRepoWorktrees(
   options: {
     platform?: NodeJS.Platform
     preservedMetadataCandidateIds?: ReadonlySet<string>
+    workspaceLineage?: Readonly<Record<string, WorkspaceLineage>>
   } = {}
 ): void {
   const { platform = process.platform, preservedMetadataCandidateIds } = options
@@ -60,7 +61,7 @@ export function pruneLineageForMissingRepoWorktrees(
     return
   }
   const worktreeLineage = store.getAllWorktreeLineage()
-  const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
+  const workspaceLineage = options.workspaceLineage ?? store.getAllWorkspaceLineage?.() ?? {}
   const repoPrefix = `${repo.id}::`
   // Why: one empty observation cannot prove every registered lineage edge disappeared at once.
   if (

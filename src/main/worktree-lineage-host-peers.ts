@@ -100,11 +100,11 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   store: HostPeerStore,
   repo: Repo,
   input: readonly T[],
-  rawMetadata?: Readonly<Record<string, WorktreeMeta>>
+  rawMetadata?: Readonly<Record<string, WorktreeMeta>>,
+  workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
   const rows = input
-  const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
   const savedLineage =
     hasSavedLineageRecords(lineageById) || hasSavedLineageRecords(workspaceLineage)
       ? savedLineageReader(store, repo, workspaceLineage, rawMetadata)

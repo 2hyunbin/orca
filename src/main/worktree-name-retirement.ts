@@ -233,6 +233,28 @@ export async function getRetiredNameRegistryForRepo(
   return registry
 }
 
+export function canListRetiredNames<
+  T extends Partial<RetirementReadStore & RetirementBackfillStore>
+>(store: T | null): store is T & RetirementReadStore & RetirementBackfillStore {
+  return !!store?.getRetiredWorktreeNameRegistry && !!store.mergeRetiredWorktreeNames
+}
+
+export async function listRetiredWorktreeNamesForRepo(
+  store: RetirementReadStore &
+    RetirementBackfillStore & {
+      getRepos(): readonly Repo[]
+      getSettings(): RetirementPathSettings
+    },
+  repo: Repo
+) {
+  const settings = store.getSettings()
+  const registry = await getRetiredNameRegistryForRepo(store, repo, store.getRepos(), settings)
+  return {
+    retiredNamesByRepo: { [repo.id]: registry.names },
+    retiredNameTiersByRepo: { [repo.id]: registry.exhaustedTiers }
+  }
+}
+
 export async function retireGeneratedWorktreeName(
   store: RetirementWriteStore,
   repo: Repo,

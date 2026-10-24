@@ -39,7 +39,7 @@ import { scanRuntimeWorktreesUntilNotOvertaken } from './runtime-witnessed-workt
 import { listRuntimeFolderWorkspaces } from './runtime-worktree-filesystem'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { resolveConfiguredWorktreeBasePaths } from '../../shared/worktree/configured-worktree-base-path'
-import { getRetiredNameRegistryForRepo } from '../worktree-name-retirement'
+import { canListRetiredNames, listRetiredWorktreeNamesForRepo } from '../worktree-name-retirement'
 
 type Dependencies = {
   getStore(): RuntimeStore | null
@@ -159,6 +159,7 @@ export class RuntimeManagedWorktreeQueries {
     const scan = await scanRuntimeWorktreesUntilNotOvertaken(store, repo, (target) =>
       this.deps.scanRepo(target)
     )
+    let workspaceLineage: ReturnType<RuntimeStore['getAllWorkspaceLineage']> | undefined
     // Why a still-overtaken scan is published non-authoritative rather than rejected: this method
     // has no stale reply, and a thrown error makes the client drop the repo's rows. Non-authoritative
     // rows purge nothing and light no indicator; the overtaking mutation's own change event, sent
@@ -176,7 +177,10 @@ export class RuntimeManagedWorktreeQueries {
           scanGeneration: scan.scanGeneration
         })
       }
-      pruneLineageForMissingRepoWorktrees(store as unknown as Store, repo, scan.worktrees)
+      workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
+      pruneLineageForMissingRepoWorktrees(store as unknown as Store, repo, scan.worktrees, {
+        workspaceLineage
+      })
     }
     const matcher = createWorktreeVisibilitySourceMatcher(
       [repo.path, ...scan.worktrees.map((worktree) => worktree.path)],
@@ -211,7 +215,13 @@ export class RuntimeManagedWorktreeQueries {
       source: scan.ok ? 'git' : 'metadata-fallback',
       // Why the scan's generation: the rows describe the catalog as of when the scan began.
       catalogVersion: localWorktreeCatalogVersionAt(scan.scanGeneration),
-      worktrees: projectWorktreeLineageWithHostPeers(store, repo, detected, metaById)
+      worktrees: projectWorktreeLineageWithHostPeers(
+        store,
+        repo,
+        detected,
+        metaById,
+        workspaceLineage
+      )
     }
   }
 
@@ -291,21 +301,11 @@ export class RuntimeManagedWorktreeQueries {
     retiredNameTiersByRepo: Record<string, number>
   }> {
     const store = this.deps.getStore()
-    if (!store?.getRetiredWorktreeNameRegistry || !store.mergeRetiredWorktreeNames) {
+    if (!canListRetiredNames(store)) {
       return { retiredNamesByRepo: {}, retiredNameTiersByRepo: {} }
     }
     const repo = await this.deps.resolveRepo(repoSelector)
-    const settings = store.getSettings()
-    const registry = await getRetiredNameRegistryForRepo(
-      store as never,
-      repo,
-      store.getRepos(),
-      settings
-    )
-    return {
-      retiredNamesByRepo: { [repo.id]: registry.names },
-      retiredNameTiersByRepo: { [repo.id]: registry.exhaustedTiers }
-    }
+    return listRetiredWorktreeNamesForRepo(store, repo)
   }
 
   private visibilityDefaults(

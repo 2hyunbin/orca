@@ -24,8 +24,8 @@ export type LineageStore = Partial<
     | 'getFolderWorkspaces'
   >
 >
-export function readWorktreeLineageCorpus(store: LineageStore) {
-  const lineageById = mergeWorkspaceLineageRecords(
+function readStoredWorktreeLineage(store: LineageStore) {
+  return mergeWorkspaceLineageRecords(
     Object.fromEntries(
       Object.entries(store.getAllWorktreeLineage?.() ?? {}).map(([id, edge]) => [id, { ...edge }])
     ),
@@ -33,6 +33,12 @@ export function readWorktreeLineageCorpus(store: LineageStore) {
       Object.entries(store.getAllWorkspaceLineage?.() ?? {}).map(([id, edge]) => [id, { ...edge }])
     )
   )
+}
+
+export function readWorktreeLineageCorpus(
+  store: LineageStore,
+  lineageById = readStoredWorktreeLineage(store)
+) {
   const rawMetadata = Object.fromEntries(
     Object.entries(store.getAllWorktreeMeta?.() ?? {}).map(([id, meta]) => [id, { ...meta }])
   )
@@ -201,6 +207,18 @@ export function projectCurrentStoreWorktreeLineage<T extends Worktree>(
   store: LineageStore,
   rows: readonly T[]
 ) {
-  const facts = readWorktreeLineageCorpus(store)
-  return facts.project(rows)
+  const lineageById = readStoredWorktreeLineage(store)
+  if (
+    Object.keys(lineageById).length === 0 &&
+    rows.every((row) => row.hostId !== undefined && !row.savedLineage && !row.lineage)
+  ) {
+    return rows.map((row) => ({
+      ...row,
+      savedLineage: null,
+      parentWorktreeId: null,
+      childWorktreeIds: [],
+      lineage: null
+    }))
+  }
+  return readWorktreeLineageCorpus(store, lineageById).project(rows)
 }
