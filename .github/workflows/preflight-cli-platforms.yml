@@ -1,60 +1,135 @@
-name: Preflight CLI platforms
-
+name: Managed hook stdin diagnostic control
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
-    paths:
-      - 'src/main/ipc/preflight*'
-      - 'src/main/ipc/agent-detection-shell-path.ts'
-      - 'src/main/ipc/command-path-resolver*'
-      - 'src/main/preflight/**'
-      - 'src/main/startup/*shell*'
-      - 'src/packages/process-host/**'
-      - '.github/actions/install-node-dependencies/**'
-      - '.github/workflows/preflight-cli-platforms.yml'
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: preflight-cli-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: hook-stdin-control-${{ github.run_id }}
+  cancel-in-progress: false
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
 jobs:
-  preflight:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
-    name: Preflight CLI (${{ matrix.os }})
-    runs-on: ${{ fromJSON('{"ubuntu-22.04":"blacksmith-4vcpu-ubuntu-2204","macos-15":"blacksmith-6vcpu-macos-15","windows-2022":"blacksmith-4vcpu-windows-2025"}')[matrix.os] || matrix.os }}
-    timeout-minutes: 20
+  control:
+    name: Hook stdin (${{ matrix.source.name }})
+    runs-on: windows-2022
+    timeout-minutes: 25
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
-        os: [ubuntu-22.04, macos-15, windows-2022]
-    env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+        source:
+          - name: pristine-refactor-base
+            sha: 5ee74f4f83ddb7da960e37783e3008375d189a38
+          - name: tested-candidate-integration
+            sha: e50aa599d3fc8cc5b491504cd76406b2e95b722f
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ matrix.source.sha }}
           persist-credentials: false
+      - name: Verify source and record runner
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ matrix.source.sha }}
+        run: |
+          if ((git rev-parse HEAD) -ne $env:EXPECTED_SHA) { throw 'Unexpected source' }
+          New-Item -ItemType Directory -Force .build/hook-stdin-control | Out-Null
+          git rev-parse HEAD | Set-Content .build/hook-stdin-control/source.txt
+          git rev-parse "HEAD^{tree}" | Set-Content .build/hook-stdin-control/source-tree.txt
+          git rev-parse "HEAD:src/main/agent-hooks/managed-hook-stdin-lifecycle.test.ts" | Set-Content .build/hook-stdin-control/fixture-blob.txt
+          Get-Content C:/image/imagedata.json -ErrorAction SilentlyContinue | Set-Content .build/hook-stdin-control/runner-image.json
       - uses: ./.github/actions/install-node-dependencies
         with:
           native-runtime: node
-          cache-electron-package: 'true'
-      - name: Check native CLI execution and shell PATH discovery
-        run: >-
-          pnpm exec vitest run --config config/vitest.config.ts --maxWorkers=2
-          src/main/ipc/preflight-command-exec.test.ts
-          src/main/ipc/preflight-host-cli-status.test.ts
-          src/main/ipc/preflight-runnable-local-cli.test.ts
-          src/main/ipc/preflight-agent-detection.test.ts
-          src/main/ipc/preflight-agent-refresh.test.ts
-          src/main/ipc/preflight-wsl-agent-detection.test.ts
-          src/main/ipc/preflight-windows-path-refresh.repro.test.ts
-          src/main/startup/hydrate-shell-path.test.ts
-          src/main/startup/hydrate-shell-path.windows.test.ts
-          src/main/startup/login-shell-environment.test.ts
-          src/main/runtime/rpc/methods/preflight.test.ts
-          src/packages/process-host/src/process-tree-termination.test.ts
-          src/packages/process-host/src/run-process.test.ts
-          src/packages/process-host/src/run-process-termination-failure.test.ts
+          persist-native-cache: 'false'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            mobile/pnpm-lock.yaml
+      - uses: ./.github/actions/install-mobile-dependencies
+      - name: Cache Windows launchers
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            native/windows-cli-launcher/.build
+            native/windows-cli-launcher/target
+            native/windows-agent-hook/.build
+            native/windows-agent-hook/target
+            ~/.cargo/registry
+          key: windows-cli-launcher-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/windows-cli-launcher/**', 'native/windows-agent-hook/**', 'config/scripts/build-windows-cli-launcher.mjs', 'config/scripts/build-windows-agent-hook.mjs', 'config/scripts/windows-rust-executable-build.mjs', 'resources/build/icon.ico', 'package.json') }}
+      - name: Build Windows hooks and launchers
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            rustup toolchain install stable --profile minimal
+            rustup default stable
+          }
+          node config/scripts/build-windows-agent-hook.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node config/scripts/build-windows-cli-launcher.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Add fixture-only phase diagnostics
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const p = 'src/main/agent-hooks/managed-hook-stdin-lifecycle.test.ts';
+          let s = fs.readFileSync(p, 'utf8');
+          fs.copyFileSync(p, '.build/hook-stdin-control/original-managed-hook-stdin-lifecycle.test.ts');
+          const crypto = require('node:crypto');
+          fs.writeFileSync('.build/hook-stdin-control/original-fixture-sha256.txt', crypto.createHash('sha256').update(s).digest('hex') + '\n');
+          const anchors = [
+            ['    const child = spawnProcess({', '    const diagnosticStarted = Date.now()\n    const diagnosticLabel = executable.split(/[\\\\/]/).at(-1) + " " + (args.some((arg) => arg.includes("-EncodedCommand")) ? "encoded-powershell" : args.includes("-lc") ? "login-shell-command" : (args.find((arg) => /\\.(cmd|ps1|sh)$/.test(arg))?.split(/[\\\\/]/).at(-1) ?? "fixture-launch"))\n    console.error("HOOK_CONTROL_START", diagnosticLabel, "stdin=" + stdin)\n    const child = spawnProcess({'],
+            ['      reject(new Error(`hook did not finish with stdin ${stdin}d`))', '      reject(new Error(`hook did not finish with stdin ${stdin}d: ${diagnosticLabel}; elapsed=${Date.now() - diagnosticStarted}`))'],
+            ["    child.on('close', (exitCode) => {", "    child.on('close', (exitCode) => {\n      console.error('HOOK_CONTROL_END', diagnosticLabel, 'exit=' + exitCode, 'elapsed=' + (Date.now() - diagnosticStarted))"]
+          ];
+          for (const [from, to] of anchors) {
+            if (s.split(from).length !== 2) throw new Error('Nonunique diagnostic anchor: ' + from);
+            s = s.replace(from, to);
+          }
+          fs.writeFileSync(p, s);
+          NODE
+          git diff -- src/main/agent-hooks/managed-hook-stdin-lifecycle.test.ts > .build/hook-stdin-control/fixture-diagnostics.diff
+      - name: Cold Windows boundary group
+        id: cold
+        continue-on-error: true
+        shell: pwsh
+        env:
+          ORCA_REAL_WINDOWS_SKILL_TEST: '1'
+        run: |
+          $files = node config/scripts/pr-package-test-paths.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts --reporter=default --reporter=json --outputFile=.build/hook-stdin-control/cold-results.json @files
+          exit $LASTEXITCODE
+      - name: Exact prior control warmup
+        if: always()
+        shell: pwsh
+        run: |
+          pnpm exec vitest run --config config/vitest.config.ts --no-file-parallelism config/scripts/nsis-process-check.test.mjs config/scripts/idle-cpu-process-sampling.test.mjs
+          exit $LASTEXITCODE
+      - name: Warm Windows boundary group
+        id: warm
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        env:
+          ORCA_REAL_WINDOWS_SKILL_TEST: '1'
+        run: |
+          $files = node config/scripts/pr-package-test-paths.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts --reporter=default --reporter=json --outputFile=.build/hook-stdin-control/warm-results.json @files
+          exit $LASTEXITCODE
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hook-stdin-control-${{ matrix.source.name }}-${{ github.run_id }}
+          path: .build/hook-stdin-control/
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Diagnostic outcome (not a PR gate)
+        if: always()
+        shell: pwsh
+        env:
+          COLD_OUTCOME: ${{ steps.cold.outcome }}
+          WARM_OUTCOME: ${{ steps.warm.outcome }}
+        run: |
+          Write-Output "Cold=$env:COLD_OUTCOME Warm=$env:WARM_OUTCOME; diagnostic only, no PR gate waiver"
