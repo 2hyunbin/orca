@@ -36,7 +36,7 @@ export function terminalFactKeys(
   after: TerminalFactRoot
 ): readonly string[] | undefined {
   const hint = publications.get(publicationKey(get))?.[source]
-  return hint?.before === before && hint.after === after ? hint.keys : undefined
+  return hint && hint.before === before && hint.after === after ? hint.keys : undefined
 }
 export function terminalFactSetter(
   set: TerminalStoreSet,

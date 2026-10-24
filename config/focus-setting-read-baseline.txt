@@ -331,7 +331,7 @@
 5 src/renderer/src/store/slices/settings.ts
 8 src/renderer/src/store/slices/store-test-helpers.ts
 1 src/renderer/src/store/slices/terminal-tab-retirement.ts
-3 src/renderer/src/store/slices/workspace-attention/workspace-unread-characterization-fixture.ts
+2 src/renderer/src/store/slices/workspace-attention/workspace-unread-characterization-fixture.ts
 1 src/renderer/src/store/slices/worktree-visibility-owner-settings.ts
 3 src/renderer/src/store/slices/worktree-visibility-settings-write.ts
 3 src/renderer/src/store/slices/worktrees-slice-test-harness.ts

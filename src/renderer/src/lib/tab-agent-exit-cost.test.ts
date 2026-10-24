@@ -79,7 +79,7 @@ function setup(size: number) {
           root: { type: 'leaf', leafId: leaf },
           activeLeafId: leaf,
           expandedLeafId: null,
-          ptyIdsByLeafId: tab.ptyId ? { [leaf]: tab.ptyId } : {}
+          ptyIdsByLeafId: Object.fromEntries(tab.ptyId ? [[leaf, tab.ptyId]] : [])
         }
       ])
     ),

@@ -93,7 +93,7 @@ describe('local preflight context worktree lookup', () => {
         updatedAt: 0,
         lastUsedAt: null,
         runtimeId: null,
-        preferredEndpointId: null
+        preferredEndpointId: 'endpoint-1'
       })),
       runtimeEnvironmentCatalogHydrated: true
     })
