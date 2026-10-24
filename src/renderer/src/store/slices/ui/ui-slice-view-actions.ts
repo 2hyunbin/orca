@@ -1,5 +1,10 @@
 import type { UISlice, UISliceGet, UISliceSet } from './ui-slice-contract'
 import { rewindHistoryIndexPastView } from '../worktree-nav-history'
+import { getPairedWebClientEnvironmentId } from '@/lib/paired-web-client-host'
+import {
+  parseExecutionHostId,
+  toRuntimeExecutionHostId
+} from '../../../../../shared/execution-host'
 
 export function createUiViewActions(set: UISliceSet, get: UISliceGet): Partial<UISlice> {
   return {
@@ -17,8 +22,16 @@ export function createUiViewActions(set: UISliceSet, get: UISliceGet): Partial<U
     selectedAutomationId: null,
     setSelectedAutomationId: (id) => set({ selectedAutomationId: id }),
     pendingAutomationRunNavigation: null,
-    setPendingAutomationRunNavigation: (navigation) =>
-      set({ pendingAutomationRunNavigation: navigation }),
+    setPendingAutomationRunNavigation: (navigation) => {
+      const environmentId = navigation ? getPairedWebClientEnvironmentId(get()) : null
+      // A web client's local and SSH hosts are its server's, which the Automations page lists as that runtime.
+      set({
+        pendingAutomationRunNavigation:
+          navigation && environmentId && parseExecutionHostId(navigation.hostId)?.kind !== 'runtime'
+            ? { ...navigation, hostId: toRuntimeExecutionHostId(environmentId) }
+            : navigation
+      })
+    },
     openAutomationsPage: () => {
       get().recordViewVisit('automations')
       set((state) => ({

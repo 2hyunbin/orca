@@ -249,9 +249,10 @@ export function buildAutomationHostCatalog(
   const referenced = groupReferencedKeys(input.referencedStableKeys)
   const desktopAuthority: StableAutomationAuthorityRef = { kind: 'desktop' }
   // Only a saved runtime can absorb the desktop authority; an unknown id leaves it projected.
-  const desktopAliasEnvironmentId = input.runtimes.find(
+  const desktopAlias = input.runtimes.find(
     (runtime) => runtime.environmentId === input.desktopAliasEnvironmentId
-  )?.environmentId
+  )
+  const desktopAliasEnvironmentId = desktopAlias?.environmentId
   const desktopContext: AuthorityProjectionContext = {
     authority: desktopAuthority,
     authorityLabel: input.desktop.label,
@@ -288,9 +289,8 @@ export function buildAutomationHostCatalog(
     byStableKey,
     hydration: {
       runtimeCatalogSettled: input.runtimeCatalogSettled,
-      // An unprojected desktop has no SSH targets left to load.
-      desktopSshHydrated:
-        desktopAliasEnvironmentId !== undefined || input.desktop.ssh.targetsHydrated,
+      // A folded desktop's SSH targets are the runtime it folded into.
+      desktopSshHydrated: (desktopAlias?.ssh ?? input.desktop.ssh).targetsHydrated,
       runtimeSshHydratedByEnvironmentId: new Map(
         input.runtimes.map((runtime) => [runtime.environmentId, runtime.ssh.targetsHydrated])
       ),
