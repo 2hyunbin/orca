@@ -128,6 +128,7 @@ export function MobileNativeChatAsk({
         >
           {prompt.questions.map((qq, i) => (
             <Pressable
+              // oxlint-disable-next-line react-doctor/no-array-index-as-key -- Questions are positional: selections are index-addressed and a prompt never reorders them.
               key={i}
               style={[styles.tab, i === index && styles.tabActive]}
               disabled={submitting}

@@ -16,6 +16,7 @@ export function PhoneCarousel(): React.JSX.Element {
   const [tappingSlide, setTappingSlide] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup clears all four timers the schedule chain re-arms.
   useEffect(() => {
     if (typeof window === 'undefined') {
       return

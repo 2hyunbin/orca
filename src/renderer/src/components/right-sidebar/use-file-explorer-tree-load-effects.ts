@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { shouldResetFileExplorerForVisibleWorktree } from './file-explorer-reset'
 import { decideExpandedDirLoad } from './file-explorer-stale-dir-cache'
@@ -61,6 +61,11 @@ export function useFileExplorerTreeLoadEffects({
   const sshConnectedGeneration = useAppStore((s) => s.sshConnectedGeneration)
 
   const lastResetWorktreePathRef = useRef<string | null>(null)
+  const resetForVisibleWorktree = useEffectEvent(() => {
+    setNameFilterQuery('')
+    resetAndLoad()
+    clearFileExplorerUndoHistory()
+  })
   useEffect(
     () => () => {
       lastResetWorktreePathRef.current = null
@@ -83,10 +88,8 @@ export function useFileExplorerTreeLoadEffects({
     }
     lastResetWorktreePathRef.current = visibleFilesWorktreePath
     resetSelection()
-    setNameFilterQuery('')
-    resetAndLoad()
-    clearFileExplorerUndoHistory()
-  }, [visibleFilesWorktreePath, resetSelection]) // eslint-disable-line react-hooks/exhaustive-deps
+    resetForVisibleWorktree()
+  }, [visibleFilesWorktreePath, resetSelection])
 
   // Why: on app startup the file explorer loads before SSH providers are
   // registered, so readDir fails for remote worktrees. When the SSH
@@ -94,14 +97,19 @@ export function useFileExplorerTreeLoadEffects({
   // effect retries the load. Only retries when there was a prior error to
   // avoid redundant reloads for local worktrees.
   const sshGenRef = useRef(sshConnectedGeneration)
+  const retryFailedRootLoad = useEffectEvent(() => {
+    if (rootError) {
+      resetAndLoad()
+    }
+  })
   useEffect(() => {
     if (sshConnectedGeneration > sshGenRef.current) {
       sshGenRef.current = sshConnectedGeneration
-      if (visibleFilesWorktreePath && rootError) {
-        resetAndLoad()
+      if (visibleFilesWorktreePath) {
+        retryFailedRootLoad()
       }
     }
-  }, [sshConnectedGeneration, visibleFilesWorktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sshConnectedGeneration, visibleFilesWorktreePath])
 
   useEffect(() => {
     if (
@@ -118,11 +126,9 @@ export function useFileExplorerTreeLoadEffects({
     void loadDir(displayRootPath, depth)
   }, [visibleFilesWorktreePath, displayRootPath, dirCache, loadingDirPaths, loadDir])
 
-  useEffect(() => {
-    if (!visibleFilesWorktreePath) {
-      return
-    }
-    for (const dirPath of expanded) {
+  // Why an event: only expansion and worktree changes load; dirCache/loading churn must not fan out reads.
+  const loadExpandedDirs = useEffectEvent((worktreePath: string, expandedDirs: Set<string>) => {
+    for (const dirPath of expandedDirs) {
       // Why first: a refresh wave marks every dir it owns before its first read lands, and without
       // this the effect would fan out an unbounded loadDir per dir on the next `expanded` change.
       if (loadingDirPaths.has(dirPath)) {
@@ -137,10 +143,15 @@ export function useFileExplorerTreeLoadEffects({
       if (decision === 'skip') {
         continue
       }
-      const depth = splitPathSegments(dirPath.slice(visibleFilesWorktreePath.length + 1)).length - 1
+      const depth = splitPathSegments(dirPath.slice(worktreePath.length + 1)).length - 1
       void loadDir(dirPath, depth, decision === 'reload' ? { force: true } : undefined)
     }
-  }, [expanded, visibleFilesWorktreePath]) // eslint-disable-line react-hooks/exhaustive-deps
+  })
+  useEffect(() => {
+    if (visibleFilesWorktreePath) {
+      loadExpandedDirs(visibleFilesWorktreePath, expanded)
+    }
+  }, [expanded, visibleFilesWorktreePath])
 
   useEffect(() => {
     if (
