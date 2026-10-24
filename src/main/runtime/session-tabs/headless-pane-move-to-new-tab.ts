@@ -61,9 +61,9 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
   }
 
   /**
-   * Puts the committed tab where the client dropped it, selected, into the order from before the
-   * commit, so the user's other tabs keep their places; without a drop position it goes last in its
-   * source's group. Published by the caller.
+   * Puts the committed tab where the client dropped it, selected. The groups hold the tabs the host
+   * holds now, ordered as the user had them before the commit (a rebuild puts terminals first); a tab
+   * opened meanwhile goes after them. Without a drop position the tab goes last in its source's group.
    */
   private placeMovedPaneTab(
     worktreeId: string,
@@ -72,22 +72,37 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
     placement: MovedPanePlacement | undefined
   ): void {
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const rebuilt = snapshot?.tabGroups ?? []
+    const tabId = move.targetTabId
     const target =
-      groupsBefore.find((group) => group.id === placement?.targetGroupId) ??
-      groupsBefore.find((group) => group.tabOrder.includes(move.sourceTabId))
+      rebuilt.find((group) => group.id === placement?.targetGroupId) ??
+      rebuilt.find((group) => group.tabOrder.includes(move.sourceTabId)) ??
+      rebuilt.find((group) => group.tabOrder.includes(tabId))
     if (!snapshot || !target) {
       return
     }
-    const tabId = move.targetTabId
-    const order = target.tabOrder.filter((id) => id !== tabId)
+    const ordered = rebuilt.map((group) => {
+      const before = groupsBefore.find((candidate) => candidate.id === group.id)?.tabOrder ?? []
+      const rank = (id: string): number => {
+        const at = before.indexOf(id)
+        return at === -1 ? before.length : at
+      }
+      return {
+        id: group.id,
+        tabOrder: group.tabOrder.filter((id) => id !== tabId).toSorted((a, b) => rank(a) - rank(b))
+      }
+    })
     const index = target.id === placement?.targetGroupId ? placement.index : undefined
-    order.splice(Math.max(0, Math.min(index ?? order.length, order.length)), 0, tabId)
     const groups = withSelectedTabs(
       groupsBefore,
-      groupsBefore.map((group) => ({
-        id: group.id,
-        tabOrder: group.id === target.id ? order : group.tabOrder
-      })),
+      ordered.map((group) => {
+        if (group.id !== target.id) {
+          return group
+        }
+        const tabOrder = [...group.tabOrder]
+        tabOrder.splice(Math.max(0, Math.min(index ?? tabOrder.length, tabOrder.length)), 0, tabId)
+        return { id: group.id, tabOrder }
+      }),
       tabId
     )
     const layout = snapshot.tabGroupLayout ?? { type: 'leaf' as const, groupId: target.id }

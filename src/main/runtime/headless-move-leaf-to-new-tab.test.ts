@@ -16,7 +16,9 @@ import { ownedEditorFileId } from '../../shared/workspace-session-pane-ownership
 const SIBLING_LEAF_ID = '33333333-3333-4333-8333-333333333333'
 const OTHER_LEAF_ID = '44444444-4444-4444-8444-444444444444'
 async function setup(
-  withSession: (session: WorkspaceSessionState) => WorkspaceSessionState = (session) => session
+  withSession: (session: WorkspaceSessionState) => WorkspaceSessionState = (session) => session,
+  /** Runs while the move's commit is pending, as another writer would. */
+  duringCommit: (session: WorkspaceSessionState) => WorkspaceSessionState = (session) => session
 ) {
   const base = makeWorkspaceSessionWithHeadlessTerminal()
   const hostTab = base.tabsByWorktree[TEST_WORKTREE_ID]![0]!
@@ -52,6 +54,7 @@ async function setup(
   )
   // The host's real planner over the shared session, as Store.moveTerminalLeafToNewTab runs it.
   const commit = vi.fn(async (request: TerminalLeafMoveRequest) => {
+    setSession(duringCommit(getSession()))
     const plan = planTerminalLeafMove([{ hostId: 'local', session: getSession() }], request)
     if (plan.sessions[0]) {
       setSession(plan.sessions[0].session)
@@ -152,6 +155,27 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     await move('host-new-tab', { targetGroupId: group.id, index: 2 })
     expect((await listed())?.tabOrder).toEqual(['host-tab', file, 'host-new-tab', 'other-tab'])
   })
+  it('keeps a tab opened while the move commits, after the tabs the user had', async () => {
+    const { runtime, move } = await setup(withFileBetweenTerminals, withLateTerminal)
+    const worktree = `id:${TEST_WORKTREE_ID}`
+    const listed = async () => (await runtime.listMobileSessionTabs(worktree)).tabGroups?.[0]
+    const group = (await listed())!
+    const file = group.tabOrder.find((id) => id !== 'host-tab' && id !== 'other-tab')!
+    await runtime.moveMobileSessionTab(worktree, {
+      kind: 'reorder',
+      tabId: file,
+      targetGroupId: group.id,
+      tabOrder: ['host-tab', file, 'other-tab']
+    })
+    await move('host-new-tab', { targetGroupId: group.id, index: 2 })
+    expect((await listed())?.tabOrder).toEqual([
+      'host-tab',
+      file,
+      'host-new-tab',
+      'other-tab',
+      'late-tab'
+    ])
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()
@@ -205,6 +229,35 @@ function withFileBetweenTerminals(session: WorkspaceSessionState): WorkspaceSess
           tabOrder: ['host-tab', 'file-tab', 'other-tab']
         }
       ]
+    }
+  }
+}
+
+const LATE_LEAF_ID = '55555555-5555-4555-8555-555555555555'
+
+/** A terminal tab another writer opens while the move's commit is pending. */
+function withLateTerminal(session: WorkspaceSessionState): WorkspaceSessionState {
+  const tabs = session.tabsByWorktree[TEST_WORKTREE_ID] ?? []
+  if (tabs.some((tab) => tab.id === 'late-tab')) {
+    return session
+  }
+  return {
+    ...session,
+    tabsByWorktree: {
+      ...session.tabsByWorktree,
+      [TEST_WORKTREE_ID]: [
+        ...tabs,
+        { ...tabs[0]!, id: 'late-tab', ptyId: 'late-pty', title: 'Late', sortOrder: 9 }
+      ]
+    },
+    terminalLayoutsByTabId: {
+      ...session.terminalLayoutsByTabId,
+      'late-tab': {
+        root: { type: 'leaf', leafId: LATE_LEAF_ID },
+        activeLeafId: LATE_LEAF_ID,
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [LATE_LEAF_ID]: 'late-pty' }
+      }
     }
   }
 }
