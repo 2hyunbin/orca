@@ -9,7 +9,7 @@ import { potentiallyLiveRemoteAttachmentSql } from '../federation/remote-attachm
 export function mailboxHandoffAuthority(
   this: OrchestrationDb,
   mailbox: string,
-  route = ''
+  identity: string | readonly [pane: string, handle: string] = ''
 ): string {
   if (mailbox.startsWith('run:')) {
     const row = this.db
@@ -24,21 +24,28 @@ export function mailboxHandoffAuthority(
   }
   if (mailbox.startsWith('dispatch:')) {
     const id = mailbox.slice(9)
+    let route = typeof identity === 'string' ? identity : identity[0]
+    const handle = typeof identity === 'string' ? identity : identity[1]
+    const routed = this.getActiveDispatchForIdentity(handle, route)
+    if (routed?.assignee_handle === handle) {
+      route = handle
+    }
     const local = this.db
       .prepare(`SELECT consumer_generation, assignee_handle, assignee_pane_key,
       assignee_orca_session_id, process_incarnation FROM dispatch_contexts
       WHERE id = ? AND status IN ('pending', 'dispatched')
-      AND (? = '' OR assignee_pane_key = ? OR assignee_orca_session_id = ?)`)
-      .get(id, route, route, route)
+      AND (? = '' OR id = ? OR assignee_orca_session_id = ?)`)
+      .get(id, route, routed?.id ?? null, route)
     if (local) {
       return JSON.stringify([route, 'dispatch', local])
     }
+    const attachmentId = routed ? null : this.findActiveRemoteAttachmentForPane(route)?.dispatch_id
     const attachment = this.db
       .prepare(`SELECT consumer_generation, home_run_id, pane_key,
       terminal_handle, process_incarnation FROM remote_dispatch_attachments
       WHERE dispatch_id = ? AND ${potentiallyLiveRemoteAttachmentSql()}
-      AND (? = '' OR pane_key = ?)`)
-      .get(id, route, route)
+      AND (? = '' OR dispatch_id = ?)`)
+      .get(id, route, attachmentId ?? null)
     return attachment ? JSON.stringify([route, 'attachment', attachment]) : ''
   }
   return mailbox
@@ -48,20 +55,16 @@ function currentAuthority(db: OrchestrationDb, mailbox: string, expected: string
   if (!expected) {
     return false
   }
-  let route = ''
+  let route: unknown = ''
   if (mailbox.startsWith('dispatch:')) {
     try {
       const parsed: unknown = JSON.parse(expected)
-      if (Array.isArray(parsed) && typeof parsed[0] === 'string') {
-        route = parsed[0]
-      } else {
-        return false
-      }
+      route = Array.isArray(parsed) ? parsed[0] : undefined
     } catch {
       return false
     }
   }
-  return db.mailboxHandoffAuthority(mailbox, route) === expected
+  return typeof route === 'string' && db.mailboxHandoffAuthority(mailbox, route) === expected
 }
 
 export function getAutomaticMailCandidates(

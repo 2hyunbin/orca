@@ -1,10 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import SyncDatabase from '../../sqlite/sync-database'
 import { OrchestrationDb } from './db'
 import { drainLegacyMailHandoff } from './legacy-mail-handoff'
-import { readMailHandoff } from './mail-handoff'
+import { readMailHandoff, UNKNOWN_MAIL_HANDOFF } from './mail-handoff'
 import { selectStructuredMailHandoff, type StructuredMailEvidence } from './mailbox-settlement'
 
 it.each(['accepted', 'rejected', 'missing-membership'] as const)(
@@ -117,3 +119,156 @@ it.each(['accepted', 'rejected', 'missing-membership'] as const)(
     }
   }
 )
+
+it('upgrades N/10N fetched history with one membership traversal and unchanged uncertainty', () => {
+  const costs: number[] = []
+  const plans: string[][] = []
+  for (const count of [100, 1000]) {
+    const directory = mkdtempSync(join(tmpdir(), 'orca-mail-membership-upgrade-'))
+    const path = join(directory, 'orchestration.db')
+    let db: OrchestrationDb | undefined = new OrchestrationDb(path)
+    let migrationSql = ''
+    const prepare = SyncDatabase.prototype.prepare
+    const capture = vi.spyOn(SyncDatabase.prototype, 'prepare').mockImplementation(function (
+      this: SyncDatabase,
+      sql
+    ) {
+      if (sql.includes('json_each(d.message_ids)')) {
+        migrationSql = sql
+      }
+      return prepare.call(this, sql)
+    })
+    try {
+      const run = db.createRun({
+        objective: 'retained check history',
+        coordinatorHandle: 'coord',
+        coordinatorPaneKey: 'coord:pane'
+      })
+      const mailbox = `run:${run.id}`
+      const members = Array.from({ length: count }, () =>
+        db!.insertMessage({ runId: run.id, from: 'worker', to: mailbox, subject: 'checked' })
+      )
+      const consumer = {
+        runId: run.id,
+        mailboxHandle: mailbox,
+        consumerGeneration: run.consumer_generation
+      }
+      for (let offset = 0; offset < count; offset += 50) {
+        const fetched = db.getOrCreateMailboxDelivery(consumer)!
+        expect(fetched.messages).toHaveLength(50)
+        db.acknowledgeMailboxDelivery({ ...consumer, deliveryId: fetched.delivery.id })
+      }
+      db.db
+        .prepare(
+          "UPDATE deliveries SET status = 'fenced' WHERE rowid = (SELECT min(rowid) FROM deliveries)"
+        )
+        .run()
+      const outstanding = db.insertMessage({
+        runId: run.id,
+        from: 'worker',
+        to: mailbox,
+        subject: 'fetched unread'
+      })
+      expect(db.getOrCreateMailboxDelivery(consumer)?.messages.map((row) => row.id)).toEqual([
+        outstanding.id
+      ])
+      const controls = ['delivered', 'ambiguous', 'legacy', 'fresh', 'reserved'].map((subject) =>
+        db!.insertMessage({ from: 'worker', to: subject, subject })
+      )
+      db.db
+        .prepare("UPDATE messages SET delivered_at = datetime('now') WHERE id = ?")
+        .run(controls[0]!.id)
+      db.db
+        .prepare('UPDATE messages SET pointer_enter_pending = 2 WHERE id = ?')
+        .run(controls[1]!.id)
+      db.db
+        .prepare('UPDATE messages SET pointer_enter_pending = 1 WHERE id = ?')
+        .run(controls[4]!.id)
+      db.putStructuredPointerOperation({
+        mailbox_handle: 'legacy',
+        session_id: 'session',
+        operation_id: 'old-operation',
+        batch_fingerprint: 'old-fingerprint',
+        minted_at_ms: 1
+      })
+      expect(members.every((row) => db!.getMessageById(row.id)?.delivered_at === null)).toBe(true)
+      db.db.exec('ALTER TABLE messages DROP COLUMN handoff')
+      db.db.exec('ALTER TABLE messages DROP COLUMN recovery_used')
+      db.db.pragma('user_version = 43')
+      db.close()
+      db = undefined
+      db = new OrchestrationDb(path)
+      capture.mockRestore()
+      expect(migrationSql).not.toBe('')
+      plans.push(
+        db.db
+          .prepare(`EXPLAIN QUERY PLAN ${migrationSql}`)
+          .all(UNKNOWN_MAIL_HANDOFF)
+          .map((row) => String(row.detail))
+      )
+      expect(
+        members.every(
+          (row) => readMailHandoff(db!.getMessageById(row.id)?.handoff)?.kind === 'unknown'
+        )
+      ).toBe(true)
+      expect(
+        controls.map((row) => readMailHandoff(db!.getMessageById(row.id)?.handoff)?.kind ?? null)
+      ).toEqual(['unknown', 'unknown', 'unknown', null, null])
+      expect(db.db.pragma('user_version', { simple: true })).toBe(44)
+      expect(db.getMessageById(outstanding.id)).toMatchObject({
+        read: 0,
+        delivered_at: null,
+        handoff: UNKNOWN_MAIL_HANDOFF
+      })
+      expect(JSON.parse(db.getMessageById(controls[2]!.id)!.handoff!)).toEqual({
+        version: 1,
+        kind: 'legacy',
+        operationId: 'old-operation'
+      })
+      db.close()
+      db = undefined
+      // Count SQLite VM work on the captured production statement and the actual upgraded file.
+      costs.push(
+        Number(
+          execFileSync(
+            'python3',
+            [
+              '-c',
+              `
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+db.execute('BEGIN')
+db.execute('UPDATE messages SET handoff = NULL')
+steps = 0
+def tick():
+    global steps
+    steps += 1
+    return 0
+db.set_progress_handler(tick, 1)
+db.execute(sys.argv[2], (sys.argv[3],))
+db.set_progress_handler(None, 0)
+print(steps)
+db.rollback()
+db.close()
+`,
+              path,
+              migrationSql,
+              UNKNOWN_MAIL_HANDOFF
+            ],
+            { encoding: 'utf8' }
+          ).trim()
+        )
+      )
+    } finally {
+      capture.mockRestore()
+      db?.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  }
+  console.info('fetched-history upgrade VM steps N/10N', costs)
+  for (const plan of plans) {
+    expect.soft(plan.some((detail) => detail.includes('CORRELATED'))).toBe(false)
+  }
+  expect(costs[0]).toBeGreaterThan(0)
+  expect(costs[1]).toBeLessThanOrEqual(costs[0]! * 12)
+})

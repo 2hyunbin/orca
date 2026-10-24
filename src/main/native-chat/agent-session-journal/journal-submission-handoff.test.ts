@@ -1,6 +1,5 @@
 import { expect, it } from 'vitest'
 import { applyJournalRow, createJournalReducerState } from './journal-reducer'
-import { journalSubmissionHandoff } from './journal-submission-handoff'
 
 it('requires original handover scope or an exact opener, rather than reduced positional scope', () => {
   const state = createJournalReducerState('session', 'epoch')
@@ -20,7 +19,7 @@ it('requires original handover scope or an exact opener, rather than reduced pos
     providerHandle: { kind: 'codex', threadId: 'thread' },
     body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'notice' }] }
   })
-  expect(journalSubmissionHandoff(state, 'notice')).toBeNull()
+  expect(state.mailHandoffs.owner(state, 'notice')).toBeNull()
   applyJournalRow(state, {
     ...base(3),
     kind: 'dispatch',
@@ -38,7 +37,7 @@ it('requires original handover scope or an exact opener, rather than reduced pos
     providerItemId: null,
     reason: null
   })
-  expect(journalSubmissionHandoff(state, 'notice')).toMatchObject({ itemId: 'turn' })
+  expect(state.mailHandoffs.owner(state, 'notice')).toMatchObject({ itemId: 'turn' })
   applyJournalRow(state, {
     ...base(5),
     kind: 'item',
@@ -46,5 +45,5 @@ it('requires original handover scope or an exact opener, rather than reduced pos
     revision: 1,
     body: { kind: 'turn', turnId: 'turn-2', state: 'completed', outcome: 'failure' }
   })
-  expect(journalSubmissionHandoff(state, 'notice')).toMatchObject({ itemId: 'turn' })
+  expect(state.mailHandoffs.owner(state, 'notice')).toMatchObject({ itemId: 'turn' })
 })

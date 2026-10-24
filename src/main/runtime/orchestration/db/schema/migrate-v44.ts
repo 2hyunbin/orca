@@ -15,7 +15,7 @@ export function migrateV44(this: OrchestrationDb, current: number): void {
   this.db
     .prepare(`UPDATE messages SET handoff = ? WHERE handoff IS NULL AND (
     delivered_at IS NOT NULL OR pointer_enter_pending > 1 OR
-    EXISTS (SELECT 1 FROM deliveries d, json_each(d.message_ids) m WHERE m.value = messages.id)
+    id IN (SELECT m.value FROM deliveries d, json_each(d.message_ids) m)
   )`)
     .run(UNKNOWN_MAIL_HANDOFF)
   // Until the old journal supplies exact membership, only pre-upgrade mail is uncertain.

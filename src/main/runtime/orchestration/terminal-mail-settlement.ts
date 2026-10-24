@@ -15,7 +15,7 @@ export function selectTerminalMailHandoff(input: {
   db: OrchestrationDb
   mailbox: string
   target: TerminalMailTarget | null
-  route?: string
+  route?: string | readonly [pane: string, handle: string]
   wasAbandoned: (target: TerminalMailTarget) => boolean
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined

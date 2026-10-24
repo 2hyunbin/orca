@@ -25,9 +25,6 @@ export function reconcileStructuredMailInput(
 ): boolean {
   try {
     const receipt = host.readReceipt?.(reference)
-    if (receipt?.verdict === 'unreadable') {
-      return false
-    }
     if (receipt?.verdict === 'readable' && receipt.receipt.status === 'accepted') {
       const result = receipt.receipt.result
       recordStructuredMailHandoff(db, mailbox, messages, (member) => ({
@@ -37,7 +34,7 @@ export function reconcileStructuredMailInput(
       }))
       return false
     }
-    return true
+    return receipt?.verdict !== 'unreadable'
   } catch {
     return false
   }

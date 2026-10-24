@@ -97,7 +97,3 @@ export class JournalMailHandoffs {
     return owners.length === 1 ? owners[0] : null
   }
 }
-
-export function journalSubmissionHandoff(state: JournalReducerState, clientMessageId: string) {
-  return state.mailHandoffs.owner(state, clientMessageId)
-}

@@ -64,7 +64,8 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     if (!db || (!mailboxHandle.startsWith('run:') && !mailboxHandle.startsWith('dispatch:'))) {
       return
     }
-    if (!this.deps.getTerminalHandleForLeafKey(this.leafKey(leaf))) {
+    const terminalHandle = this.deps.getTerminalHandleForLeafKey(this.leafKey(leaf))
+    if (!terminalHandle) {
       return
     }
     // Why the gate lives HERE and not at each caller: this method is the single point at
@@ -119,7 +120,7 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
       db,
       mailbox: mailboxHandle,
       target: this.deps.readMailTarget?.(leaf) ?? null,
-      route: `${leaf.tabId}:${leaf.leafId}`,
+      route: [`${leaf.tabId}:${leaf.leafId}`, terminalHandle],
       wasAbandoned: (target) => this.deps.mailTargetWasAbandoned?.(target) ?? false,
       waiters,
       reservedTypes: options.reservedTypes
