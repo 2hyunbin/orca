@@ -6,33 +6,25 @@ import { splitTerminalPaneWithInheritedCwd } from './terminal-pane-split-with-in
 import { createDeferred } from './pty-connection-test-async'
 import type { splitPaneInMain, splitServerPane } from './terminal-pane-split-in-main'
 
-const mocks = vi.hoisted(() => ({
-  layoutOwnerIsMain: false,
-  recordCreatedTerminalPaneSplit: vi.fn(),
-  resolveSplitCwd: vi.fn(),
-  splitPaneInMain: vi.fn<typeof splitPaneInMain>(),
-  splitServerPane: vi.fn<typeof splitServerPane>(),
-  splitWebRuntimeTerminal: vi.fn(),
-  runtimeEnvironmentId: null as string | null,
-  storeState: {
-    tabsByWorktree: {} as Record<string, { id: string }[]>,
-    terminalLayoutsByTabId: {} as Record<string, { ptyIdsByLeafId?: Record<string, string> }>
-  },
-  storeListeners: new Set<() => void>()
-}))
-
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mocks.storeState,
-    subscribe: (listener: () => void) => {
-      mocks.storeListeners.add(listener)
-      return () => mocks.storeListeners.delete(listener)
-    }
+const mocks = vi.hoisted(() => {
+  return {
+    layoutOwnerIsMain: false,
+    recordCreatedTerminalPaneSplit: vi.fn(),
+    resolveSplitCwd: vi.fn(),
+    splitPaneInMain: vi.fn<typeof splitPaneInMain>(),
+    splitServerPane: vi.fn<typeof splitServerPane>(),
+    splitWebRuntimeTerminal: vi.fn(),
+    readHostPublishedSplitSourcePtyId: vi.fn<() => string | null>(),
+    isHostTabPane: vi.fn<() => boolean>(),
+    splitWhenHostPublishesSource:
+      vi.fn<(source: unknown, split: (ptyId: string, navigatedAway: boolean) => void) => void>()
   }
-}))
+})
 
-vi.mock('@/lib/resolve-owner', () => ({
-  runtimeEnvironmentIdUnlessTwin: () => mocks.runtimeEnvironmentId
+vi.mock('@/runtime/web-runtime-split-source-pty', () => ({
+  readHostPublishedSplitSourcePtyId: mocks.readHostPublishedSplitSourcePtyId,
+  isHostTabPane: mocks.isHostTabPane,
+  splitWhenHostPublishesSource: mocks.splitWhenHostPublishesSource
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -87,79 +79,73 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     mocks.resolveSplitCwd.mockReset()
     mocks.splitWebRuntimeTerminal.mockReset()
     mocks.splitWebRuntimeTerminal.mockReturnValue(false)
-    mocks.runtimeEnvironmentId = null
-    mocks.storeState.tabsByWorktree = {}
-    mocks.storeState.terminalLayoutsByTabId = {}
-    mocks.storeListeners.clear()
+    mocks.readHostPublishedSplitSourcePtyId.mockReset().mockReturnValue(null)
+    mocks.isHostTabPane.mockReset().mockReturnValue(false)
+    mocks.splitWhenHostPublishesSource.mockReset()
   })
 
   describe('a pane of a paired server tab whose own attach has not landed', () => {
     const HOST_TAB = 'web-terminal-host-tab-1'
     const HOST_PTY = 'remote:env-1@@terminal-1'
+    const SOURCE = { worktreeId: 'worktree-1', tabId: HOST_TAB, leafId: 'leaf-1' }
 
     function splitHostTabPane(splitPane: ReturnType<typeof vi.fn>): void {
-      mocks.runtimeEnvironmentId = 'env-1'
-      mocks.storeState.tabsByWorktree = { 'worktree-1': [{ id: HOST_TAB }] }
+      mocks.isHostTabPane.mockReturnValue(true)
       mocks.splitWebRuntimeTerminal.mockImplementation((ptyId: string | null) => Boolean(ptyId))
       splitTerminalPaneWithInheritedCwd({
         worktreeId: 'worktree-1',
         tabId: HOST_TAB,
         manager: makeManager(splitPane),
-        paneTransports: new Map([[1, { getPtyId: () => null } as unknown as PtyTransport]]),
+        // No transport yet: the pane's attach has not landed.
+        paneTransports: new Map(),
         paneCwdMap: new Map(),
         fallbackCwd: '/fallback',
-        pane: { id: 1, leafId: 'leaf-1' } as ManagedPane,
+        pane: LAYOUT_OWNER_SOURCE_PANE,
         direction: 'vertical',
         source: 'keyboard'
       })
     }
 
     it('splits on the server from the terminal the server published for it', () => {
-      mocks.storeState.terminalLayoutsByTabId = {
-        [HOST_TAB]: { ptyIdsByLeafId: { 'leaf-1': HOST_PTY } }
-      }
+      mocks.readHostPublishedSplitSourcePtyId.mockReturnValue(HOST_PTY)
       const splitPane = vi.fn()
 
       splitHostTabPane(splitPane)
 
-      expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(HOST_PTY, 'vertical', 'keyboard', {
-        worktreeId: 'worktree-1',
-        tabId: HOST_TAB,
-        leafId: 'leaf-1'
-      })
+      expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(
+        HOST_PTY,
+        'vertical',
+        'keyboard',
+        SOURCE
+      )
       expect(splitPane).not.toHaveBeenCalled()
     })
 
     // A pane split here has no server terminal, and nothing would ever start one.
-    it('holds the split until the server publishes the source terminal, never splitting here', async () => {
+    it('leaves the split to the server once it publishes the source, never splitting here', () => {
       const splitPane = vi.fn(() => ({ id: 2 }))
 
       splitHostTabPane(splitPane)
-      await Promise.resolve()
-      expect(splitPane).not.toHaveBeenCalled()
-      expect(mocks.splitWebRuntimeTerminal).not.toHaveBeenCalledWith(
-        HOST_PTY,
-        expect.anything(),
-        expect.anything(),
-        expect.anything()
-      )
 
-      mocks.storeState.terminalLayoutsByTabId = {
-        [HOST_TAB]: { ptyIdsByLeafId: { 'leaf-1': HOST_PTY } }
-      }
-      for (const listener of mocks.storeListeners) {
-        listener()
-      }
-      await vi.waitFor(() =>
-        expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(
-          HOST_PTY,
-          'vertical',
-          'keyboard',
-          { worktreeId: 'worktree-1', tabId: HOST_TAB, leafId: 'leaf-1' }
-        )
+      expect(splitPane).not.toHaveBeenCalled()
+      const [source, split] = mocks.splitWhenHostPublishesSource.mock.calls[0]!
+      expect(source).toEqual(SOURCE)
+      split(HOST_PTY, false)
+      expect(mocks.splitWebRuntimeTerminal).toHaveBeenLastCalledWith(
+        HOST_PTY,
+        'vertical',
+        'keyboard',
+        SOURCE
+      )
+      // Moved elsewhere meanwhile: the split lands without taking focus back.
+      split(HOST_PTY, true)
+      expect(mocks.splitWebRuntimeTerminal).toHaveBeenLastCalledWith(
+        HOST_PTY,
+        'vertical',
+        'keyboard',
+        undefined
       )
       expect(splitPane).not.toHaveBeenCalled()
-      expect(mocks.storeListeners.size).toBe(0)
     })
   })
 

@@ -2,12 +2,10 @@ import type { TerminalPaneSplitSource } from '../../../../shared/feature-educati
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import {
+  isHostTabPane,
   readHostPublishedSplitSourcePtyId,
-  waitForHostPublishedSplitSourcePtyId
+  splitWhenHostPublishesSource
 } from '@/runtime/web-runtime-split-source-pty'
-import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
-import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
-import { useAppStore } from '@/store'
 import type { PtyTransport } from './pty-transport-types'
 import { resolveSplitCwd, type PaneCwdMap } from './resolve-split-cwd'
 import { recordCreatedTerminalPaneSplit } from './terminal-pane-split-completion'
@@ -59,23 +57,20 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
       return
     }
   }
-  if (!ptyId && isHostTabPane(args.worktreeId, args.tabId)) {
+  if (!ptyId && isHostTabPane(sourcePane)) {
     // Only the host starts a terminal in its tab, so a split made here would stay blank.
-    void waitForHostPublishedSplitSourcePtyId(sourcePane).then((publishedPtyId) => {
-      if (!splitWebRuntimeTerminal(publishedPtyId, args.direction, args.source, sourcePane)) {
-        console.warn('[terminal-pane] split dropped: the host never published the source pane')
-      }
+    splitWhenHostPublishesSource(sourcePane, (publishedPtyId, navigatedAway) => {
+      // No source, no focus: a late split must not pull the user back from where they went.
+      splitWebRuntimeTerminal(
+        publishedPtyId,
+        args.direction,
+        args.source,
+        navigatedAway ? undefined : sourcePane
+      )
     })
     return
   }
   splitLocally(args, () => splitCwd(args, ptyId))
-}
-
-function isHostTabPane(worktreeId: string, tabId: string): boolean {
-  return (
-    isWebTerminalSurfaceTabId(tabId) &&
-    runtimeEnvironmentIdUnlessTwin(useAppStore.getState(), worktreeId) !== null
-  )
 }
 
 /** The new pane's cwd: the source pane's when known, else resolved from its terminal. */
