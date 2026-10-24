@@ -128,6 +128,28 @@ describe('splitWhenHostPublishesSource', () => {
     expect(mocks.toastError).not.toHaveBeenCalled()
   })
 
+  // A hydration can move the workspace to another server and publish its bindings in one commit.
+  it('never splits on a server other than the one the gesture targeted', () => {
+    const split = vi.fn()
+    splitWhenHostPublishesSource(SOURCE, split)
+
+    mocks.owner.environmentId = 'env-2'
+    publish({ terminalLayoutsByTabId: sourceLayout({ 'leaf-1': 'remote:env-2@@terminal-9' }) })
+
+    expect(split).not.toHaveBeenCalled()
+    expect(mocks.listeners.size).toBe(0)
+  })
+
+  it('ignores a binding that names another server', () => {
+    const split = vi.fn()
+    splitWhenHostPublishesSource(SOURCE, split)
+
+    publish({ terminalLayoutsByTabId: sourceLayout({ 'leaf-1': 'remote:env-2@@terminal-9' }) })
+    expect(split).not.toHaveBeenCalled()
+    publish({ terminalLayoutsByTabId: sourceLayout({ 'leaf-1': PTY }) })
+    expect(split).toHaveBeenCalledExactlyOnceWith(PTY, false)
+  })
+
   it('tells the user when the server never publishes the source terminal', () => {
     const split = vi.fn()
     splitWhenHostPublishesSource(SOURCE, split, 1_000)

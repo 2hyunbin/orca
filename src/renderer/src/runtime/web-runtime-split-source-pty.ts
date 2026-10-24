@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
+import { parseRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { layoutContainsLeafId } from '../../../shared/workspace-layout/terminal-pane-tree'
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
@@ -12,15 +13,20 @@ const HOST_SPLIT_SOURCE_WAIT_MS = 15_000
 
 type AppState = ReturnType<typeof useAppStore.getState>
 
-/** The terminal the host published for a pane of one of its tabs, before this pane's own attach lands. */
+/**
+ * The terminal the workspace's server published for a pane of one of its tabs, before this pane's
+ * own attach lands. A binding naming any other server is not this pane's terminal.
+ */
 export function readHostPublishedSplitSourcePtyId(source: WebRuntimeSplitSource): string | null {
   if (!isWebTerminalSurfaceTabId(source.tabId)) {
     return null
   }
-  return (
-    useAppStore.getState().terminalLayoutsByTabId[source.tabId]?.ptyIdsByLeafId?.[source.leafId] ??
-    null
-  )
+  const state = useAppStore.getState()
+  const ptyId = state.terminalLayoutsByTabId[source.tabId]?.ptyIdsByLeafId?.[source.leafId]
+  const environmentId = runtimeEnvironmentIdUnlessTwin(state, source.worktreeId)
+  return ptyId && environmentId && parseRemoteRuntimePtyId(ptyId)?.environmentId === environmentId
+    ? ptyId
+    : null
 }
 
 /** A pane of a paired server's tab: only that server starts terminals in it. */
@@ -72,12 +78,15 @@ export function splitWhenHostPublishesSource(
     if (settled) {
       return
     }
+    // Ownership first: a hydration can swap the workspace's server and its bindings in one commit.
+    if (!sourceStillThere(source, environmentId)) {
+      finish()
+      return
+    }
     const ptyId = readHostPublishedSplitSourcePtyId(source)
     if (ptyId) {
       finish()
       split(ptyId, viewOf(useAppStore.getState()) !== gestureView)
-    } else if (!sourceStillThere(source, environmentId)) {
-      finish()
     }
   }
   const timer = setTimeout(() => {
