@@ -21,6 +21,7 @@ import { isUnknownRequestTypeError } from './daemon-endpoint-errors'
 import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
 import type { DaemonAsyncIoHealth, DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
 import { observeDaemonAsyncIoHealth } from './daemon-async-io-telemetry-event'
+import { sameEndpointIdentity } from './daemon-endpoint-incarnation'
 
 export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyProvider {
   constructor(opts: DaemonPtyAdapterOptions) {
@@ -90,7 +91,8 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
       ) {
         const result: DaemonAsyncIoHealth = { state: health.state, pendingMs: health.pendingMs }
         // A reply that crossed a reconnect cannot be attributed to either incarnation.
-        if (identity && this.client.getDaemonIdentity() === identity) {
+        const current = this.client.getDaemonIdentity()
+        if (identity && current && sameEndpointIdentity(identity, current)) {
           observeDaemonAsyncIoHealth(identity, this.protocolVersion, result)
         }
         return result

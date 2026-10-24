@@ -2,7 +2,9 @@ import { expect, it, vi } from 'vitest'
 import { validate } from '../telemetry/validator'
 import { observeDaemonAsyncIoHealth } from './daemon-async-io-telemetry-event'
 
-const { trackMock } = vi.hoisted(() => ({ trackMock: vi.fn() }))
+const { trackMock } = vi.hoisted(() => ({
+  trackMock: vi.fn((_name: 'daemon_async_io_health', _props: unknown) => true)
+}))
 vi.mock('../telemetry/client', () => ({ track: trackMock }))
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getVersion: () => '1.4.300' })

@@ -1,5 +1,4 @@
-// App-side emitter for `daemon_async_io_health` (#29133). Rides the existing asyncIoHealth poll;
-// every failure dies here so telemetry can never cost a terminal.
+// Telemetry must never fail a health read, so every error stops here.
 
 import { getAppEnvironment } from '../../shared/app-environment'
 import { classifyDaemonAppVersionMatch } from '../../shared/daemon-adoption-telemetry'
@@ -38,8 +37,10 @@ export function observeDaemonAsyncIoHealth(
       )
     }
     if (!seen) {
-      observedStalls.set(identity.launchNonce, { stalledAtMs: nowMs, recovered: false })
-      track('daemon_async_io_health', { transition: 'stalled', ...base })
+      // Record only a delivered stall so a pre-init poll can report it later.
+      if (track('daemon_async_io_health', { transition: 'stalled', ...base })) {
+        observedStalls.set(identity.launchNonce, { stalledAtMs: nowMs, recovered: false })
+      }
       return
     }
     seen.recovered = true
