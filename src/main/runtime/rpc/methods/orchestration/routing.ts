@@ -62,6 +62,11 @@ export function resolveMessageRun(
     )
   }
   const targetRunId = params.to?.startsWith('run:') ? params.to.slice('run:'.length) : undefined
+  for (const namedRunId of new Set([params.runId, targetRunId])) {
+    if (namedRunId) {
+      rejectRemotelyHomedRun(db, namedRunId)
+    }
+  }
   const resolvedRunId = params.runId ?? targetRunId ?? dispatch?.run_id
   let run = resolvedRunId ? db.getRun(resolvedRunId) : undefined
 
@@ -151,8 +156,32 @@ export function interruptedAcknowledgedCheck(
   }
 }
 
-export function rejectFederatedExplicitTarget(params: { to?: string; run?: string }): void {
-  if (params.to || params.run) {
+/**
+ * A Run a remote Dispatch here reports to lives on its coordinator's computer; this host's row of
+ * that id is only a mirror, and mail written into it reaches no one (#32292).
+ */
+function rejectRemotelyHomedRun(
+  db: ReturnType<OrcaRuntimeService['getOrchestrationDb']>,
+  runId: string
+): void {
+  const attachment = db.findRemoteAttachmentForHomeRun(runId)
+  if (!attachment) {
+    return
+  }
+  throw new OrchestrationError(
+    'run_home_unreachable',
+    `Run ${runId} lives on the computer that coordinates Dispatch ${attachment.dispatch_id}, which isn't reachable from this terminal. Nothing was sent. Report from the worker terminal of Dispatch ${attachment.dispatch_id} with a plain send (no --to or --run).`
+  )
+}
+
+/** A federated worker reaches only its Run home; naming that home is the same as omitting it. */
+export function rejectFederatedExplicitTarget(
+  params: { to?: string; run?: string },
+  homeRunId: string
+): void {
+  const namesOnlyHome =
+    (!params.to || params.to === `run:${homeRunId}`) && (!params.run || params.run === homeRunId)
+  if (!namesOnlyHome) {
     throw new OrchestrationError(
       'invalid_argument',
       'Federated Dispatch messages route to their Run home; omit --to and --run.'
