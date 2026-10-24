@@ -28,7 +28,7 @@ import { StructuredAgentSessionEventRecovery } from './structured-agent-session-
 import { StructuredAgentSessionBackgroundTaskChannel } from './structured-agent-session-background-task-channel'
 import { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
 import { StructuredAgentSessionConversations } from './structured-agent-session-conversations'
-import * as restartResume from './structured-agent-session-restart-resume-host'
+import * as resume from './structured-agent-session-restart-resume-host'
 import { structuredAgentSessionRestartResumeSurfaces } from './structured-agent-session-restart-resume-wiring'
 import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages } from './structured-agent-session-queued-wiring'
@@ -76,7 +76,7 @@ export class StructuredAgentSessionHost {
   private readonly conversationDelivery: conversation.StructuredAgentSessionConversationDelivery
   private readonly eventRecovery: StructuredAgentSessionEventRecovery
   private readonly backgroundTasks: StructuredAgentSessionBackgroundTaskChannel
-  readonly restartResume: restartResume.StructuredAgentSessionRestartResume
+  readonly restartResume: resume.StructuredAgentSessionRestartResume
 
   constructor(readonly deps: HostTypes.StructuredAgentSessionHostDeps) {
     // Collaborators share a logger wrapper that cannot fail the operation it reports.
@@ -143,16 +143,12 @@ export class StructuredAgentSessionHost {
       failStartingChild: (...args) => this.lifetime.failStartingChild(...args),
       trackOpen: (open) => this.tasks.trackAttach(open)
     })
-    this.restartResume = restartResume.createStructuredAgentSessionRestartResume(
-      deps,
-      this.sessions,
-      {
-        ...structuredAgentSessionRestartResumeSurfaces(this, this.now),
-        readChildWork: this.clientDelivery.readChildWork,
-        childWorkOpen: this.clientDelivery.childWorkOpen,
-        publishStatus: this.clientDelivery.publishStatusAndSettlement
-      }
-    )
+    this.restartResume = resume.createStructuredAgentSessionRestartResume(deps, this.sessions, {
+      ...structuredAgentSessionRestartResumeSurfaces(this, this.now),
+      readChildWork: this.clientDelivery.readChildWork,
+      childWorkOpen: this.clientDelivery.childWorkOpen,
+      publishStatus: this.clientDelivery.publishStatusAndSettlement
+    })
     this.lifetime = lifetime.createStructuredAgentSessionConversationLifetime({
       context: () => this.lifetimeContext(),
       sessions: this.sessions,
