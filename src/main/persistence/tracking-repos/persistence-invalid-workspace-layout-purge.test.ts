@@ -3,28 +3,31 @@ import {
   testState,
   createStore,
   writeDataFile,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
+  makeRepo
+} from '../../persistence-test-harness'
+import { makeTerminalTab } from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultWorkspaceSession } from '../shared/constants'
-import { folderWorkspaceKey } from '../shared/workspace-scope'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
-import type { DetectedWorktreeListResult } from '../shared/worktree/types'
-import { collectLayoutEvents } from './runtime/workspace-layout-stream-events.test-fixture'
+import {
+  FLOATING_TERMINAL_WORKTREE_ID,
+  getDefaultWorkspaceSession
+} from '../../../shared/constants'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import type { DetectedWorktreeListResult } from '../../../shared/worktree/types'
+import { collectLayoutEvents } from '../../runtime/workspace-layout-stream-events.test-fixture'
 import {
   bumpLocalWorktreeScanGeneration,
   getLocalWorktreeCatalogVersion
-} from './local-worktree-scan-generation'
-import { dropWorkspacesTheListingInvalidates } from './persistence/restoring-sessions/invalid-workspace-layout-purge'
-import { WorkspaceLayoutStream } from './runtime/workspace-layout-stream'
-import { windowViewSaveForMain } from './persistence/window-save-view'
+} from '../../local-worktree-scan-generation'
+import { dropWorkspacesTheListingInvalidates } from '../restoring-sessions/invalid-workspace-layout-purge'
+import { WorkspaceLayoutStream } from '../../runtime/workspace-layout-stream'
+import { windowViewSaveForMain } from '../window-save-view'
 
-vi.mock('../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -32,8 +35,10 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: vi.fn().mockReturnValue({})
+}))
 
 const REPO = 'repo-a'
 const KEPT = `${REPO}::/work/kept`

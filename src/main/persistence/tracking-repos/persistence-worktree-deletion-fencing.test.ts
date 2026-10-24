@@ -1,26 +1,25 @@
 import {
   closeTestStores,
   createStore,
-  makeTerminalTab,
   registerWorkspaceRepos,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
+import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultWorkspaceSession } from '../shared/constants'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
 
-import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
-import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { removeWorktreeMetaRow } from '../host-qualified-worktree-meta'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -46,11 +45,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

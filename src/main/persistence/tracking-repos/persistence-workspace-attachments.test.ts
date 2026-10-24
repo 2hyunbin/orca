@@ -8,11 +8,11 @@ import {
   makeRepo,
   testState,
   writeDataFile
-} from './persistence-test-harness'
-import { getWorkspaceAttachments } from '../shared/workspace-attachments'
-import type { WorkspaceAttachment } from '../shared/worktree/types'
-import { mergeWorktree } from './ipc/worktree-metadata-merge'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+} from '../../persistence-test-harness'
+import { getWorkspaceAttachments } from '../../../shared/workspace-attachments'
+import type { WorkspaceAttachment } from '../../../shared/worktree/types'
+import { mergeWorktree } from '../../ipc/worktree-metadata-merge'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -20,8 +20,8 @@ vi.mock('electron', () => ({
     isEncryptionAvailable: () => false
   }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 const pr = (number: number): WorkspaceAttachment => ({ provider: 'github', type: 'pr', number })
 
 describe('workspace attachment persistence', () => {

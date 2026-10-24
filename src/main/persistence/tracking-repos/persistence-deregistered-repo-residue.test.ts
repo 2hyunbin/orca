@@ -4,23 +4,23 @@ import {
   createStore,
   writeDataFile,
   readDataFile,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
+  makeRepo
+} from '../../persistence-test-harness'
+import { makeTerminalTab } from '../../persistence-session-fixtures'
 // Deregistered repos bypass missing-directory pruning, so residue needs its own sweep.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultWorkspaceSession } from '../shared/constants'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import {
   composeWorktreeHostIdentity,
   hostWorktreeTarget
-} from '../shared/worktree/host-qualified-identity'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
-import type { PersistedState } from '../shared/persisted-state-types'
+} from '../../../shared/worktree/host-qualified-identity'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import type { PersistedState } from '../../../shared/persisted-state-types'
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -30,8 +30,10 @@ vi.mock('electron', () => ({
   safeStorage: { isEncryptionAvailable: () => false }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: vi.fn().mockReturnValue({})
+}))
 
 const LIVE_REPO = 'live-repo'
 const GONE_REPO = 'gone-repo'

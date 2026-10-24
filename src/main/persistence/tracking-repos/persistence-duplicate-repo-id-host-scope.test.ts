@@ -3,19 +3,19 @@ import {
   createSqliteTestStore,
   createStore as createFreshStore,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 // Repo IDs can repeat across execution hosts; row deletion must preserve sibling registrations.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { Project, ProjectHostSetup } from '../shared/project-types'
-import type { Repo } from '../shared/repo-types'
-import { getDefaultPersistedState } from '../shared/constants'
-import { toRuntimeExecutionHostId } from '../shared/execution-host'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import { resetRetirementCollisionKeyCacheForTests } from './worktree-name-retirement'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import type { Project, ProjectHostSetup } from '../../../shared/project-types'
+import type { Repo } from '../../../shared/repo-types'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
+import { resetRetirementCollisionKeyCacheForTests } from '../../worktree-name-retirement'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 
 let hasCreatedStoreInCase = false
 
@@ -23,8 +23,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 function duplicateIdRepos(): Repo[] {
   return [
@@ -59,7 +59,8 @@ async function createStoreFromState(state: Record<string, unknown>) {
     return createFreshStore()
   }
   vi.resetModules()
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   // resetModules replaces AppEnvironment; reinstall this test’s userData path before initializing.
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()

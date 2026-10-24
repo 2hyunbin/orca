@@ -6,31 +6,33 @@ import {
   writeDataFile,
   readDataFile,
   makeRepo,
-  makeTerminalTab,
   makeWorktreeLineage
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
+import {
+  makeTerminalTab,
+  makeTerminalTab as makeSessionTerminalTab
+} from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { PersistedState } from '../shared/persisted-state-types'
-import type { ProjectGroup } from '../shared/project-group-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { makeTerminalTab as makeSessionTerminalTab } from './persistence-session-fixtures'
+import type { PersistedState } from '../../../shared/persisted-state-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
 
 import {
   advanceSshConnectionGeneration,
   assertSshMutationExpectation,
   resetSshConnectionGenerations
-} from './ssh/connection/ssh-connection-generation'
-import { getRuntimeOwnedSshTargetId } from './ssh/connection/ssh-connection-store'
+} from '../../ssh/connection/ssh-connection-generation'
+import { getRuntimeOwnedSshTargetId } from '../../ssh/connection/ssh-connection-store'
 import {
   _getLocalWorktreeScanGenerationCacheSize,
   getLocalWorktreeScanGeneration,
   isLocalWorktreeScanGenerationCurrent
-} from './local-worktree-scan-generation'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
-import type { ExecutionHostId } from '../shared/execution-host'
+} from '../../local-worktree-scan-generation'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 
 const at = (id: string, hostId: ExecutionHostId) => hostWorktreeTarget({ id, hostId })
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
@@ -38,7 +40,7 @@ const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => 
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -64,11 +66,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

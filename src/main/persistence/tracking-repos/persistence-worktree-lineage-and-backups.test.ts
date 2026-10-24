@@ -9,26 +9,26 @@ import {
   makeRepo,
   makeWorktreeLineage,
   makeWorkspaceLineage
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, readFileSync, rmSync, mkdtempSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createProfileStateStore } from './persistence/profile-state/profile-state-store-factory'
-import { ProfileStateAuthorityBootstrapError } from './persistence/profile-state/profile-state-authority-bootstrap'
-import { restoreProfileStateJsonExport } from './persistence/profile-state/legacy-json/profile-state-recovery'
-import { acquireProfileStateMaintenance } from './persistence/profile-state/profile-state-access'
-import type { Repo } from '../shared/repo-types'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
-import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+import { createProfileStateStore } from '../profile-state/profile-state-store-factory'
+import { ProfileStateAuthorityBootstrapError } from '../profile-state/profile-state-recovery-required'
+import { restoreProfileStateJsonExport } from '../profile-state/legacy-json/profile-state-recovery'
+import { acquireProfileStateMaintenance } from '../profile-state/profile-state-access'
+import type { Repo } from '../../../shared/repo-types'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { removeWorktreeMetaRow } from '../host-qualified-worktree-meta'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -54,11 +54,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

@@ -9,11 +9,11 @@ import {
   readPersistedStateJson,
   testState,
   writeDataFile
-} from './persistence-test-harness'
-import { getDefaultPersistedState } from '../shared/constants'
-import { createProjectGroup } from '../shared/project-groups'
-import { normalizeRuntimePathSeparators } from '../shared/cross-platform-path'
-import { LoadedStateAdaptationOperations } from './persistence/loading-store/loaded-state-adaptation'
+} from '../../persistence-test-harness'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { createProjectGroup } from '../../../shared/project-groups'
+import { normalizeRuntimePathSeparators } from '../../../shared/cross-platform-path'
+import { LoadedStateAdaptationOperations } from '../loading-store/loaded-state-adaptation'
 
 vi.mock('electron', () => ({
   app: {
@@ -29,7 +29,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(() => ({ hosts: [] })),
   sshConfigHostsToTargets: vi.fn(() => [])
 }))

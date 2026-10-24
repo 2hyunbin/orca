@@ -3,20 +3,20 @@ import {
   createSqliteTestStore,
   createStore as createFreshStore,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { getDefaultPersistedState } from '../shared/constants'
-import { getRepoExecutionHostId } from '../shared/execution-host'
-import { MARINE_CREATURES } from '../shared/marine-creatures'
-import { createRetiredNameLookup } from '../shared/worktree/retired-name-registry'
-import type { SshTarget } from '../shared/ssh-types'
-import { MAX_RETIREMENT_NAMESPACES } from './worktree-retirement-namespace'
-import { getRuntimeOwnedSshTargetId } from './ssh/connection/ssh-connection-store'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import { resetRetirementCollisionKeyCacheForTests } from './worktree-name-retirement'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { getRepoExecutionHostId } from '../../../shared/execution-host'
+import { MARINE_CREATURES } from '../../../shared/marine-creatures'
+import { createRetiredNameLookup } from '../../../shared/worktree/retired-name-registry'
+import type { SshTarget } from '../../../shared/ssh-types'
+import { MAX_RETIREMENT_NAMESPACES } from '../../worktree-retirement-namespace'
+import { getRuntimeOwnedSshTargetId } from '../../ssh/connection/ssh-connection-store'
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
+import { resetRetirementCollisionKeyCacheForTests } from '../../worktree-name-retirement'
 
 let hasCreatedStoreInCase = false
 
@@ -24,8 +24,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const REPO = 'repo-1'
 const OTHER_REPO = 'repo-2'
@@ -53,7 +53,8 @@ function sshTarget(id: string, overrides: Partial<SshTarget> = {}): SshTarget {
 
 async function reloadStore() {
   vi.resetModules()
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   // Reinstall this test’s userData path after resetModules before initializing Store.
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
@@ -190,7 +191,7 @@ describe('worktree name retirement registry', () => {
     let store = await createStore()
     store.addRepo(oldRepo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, oldRepo, store.getSettings(), 'nautilus')
     store.removeProjectForHost({ id: REPO, executionHostId: getRepoExecutionHostId(oldRepo) })
     store.flush()
@@ -217,7 +218,7 @@ describe('worktree name retirement registry', () => {
     store.updateSettings({ workspaceDir, nestWorkspaces: false })
     store.addRepo(oldRepo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, oldRepo, store.getSettings(), 'nautilus')
 
     // No Claude history exists to recover this retirement, and Codex rollouts are not backfilled.
@@ -236,7 +237,7 @@ describe('worktree name retirement registry', () => {
     const oldRepo = { ...REMOTE_REPO, connectionId: 'ssh-old' }
     store.addRepo(oldRepo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, oldRepo, store.getSettings(), 'nautilus')
 
     store.removeProjectForHost({ id: REPO, executionHostId: getRepoExecutionHostId(oldRepo) })
@@ -257,7 +258,7 @@ describe('worktree name retirement registry', () => {
     const oldRepo = { ...REMOTE_REPO, connectionId: 'ssh-old' }
     store.addRepo(oldRepo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, oldRepo, store.getSettings(), 'nautilus')
 
     store.removeProjectForHost({ id: REPO, executionHostId: getRepoExecutionHostId(oldRepo) })
@@ -284,7 +285,7 @@ describe('worktree name retirement registry', () => {
     store.addRepo(repo)
     store.reassignSshTargetId('ssh-old', 'ssh-new')
 
-    const { getRetiredNameRegistryForRepo } = await import('./worktree-name-retirement')
+    const { getRetiredNameRegistryForRepo } = await import('../../worktree-name-retirement')
     const readopted = store.getRepos().find((entry) => entry.id === REPO)!
     expect(readopted.connectionId).toBe('ssh-new')
     await expect(
@@ -298,7 +299,7 @@ describe('worktree name retirement registry', () => {
     const repo = { ...REMOTE_REPO, connectionId: 'ssh-old' }
     store.addRepo(repo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, repo, store.getSettings(), 'nautilus')
 
     // Remove the repo so only the namespace retains the retirement.
@@ -331,7 +332,7 @@ describe('worktree name retirement registry', () => {
     const repo = { ...REMOTE_REPO, connectionId: 'ssh-1' }
     store.addRepo(repo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, repo, store.getSettings(), 'nautilus')
 
     store.updateSshTarget('ssh-1', { host: 'new.example.com' })
@@ -356,7 +357,7 @@ describe('worktree name retirement registry', () => {
     const repo = { ...REMOTE_REPO, connectionId: runtimeId }
     store.addRepo(repo)
     const { retireGeneratedWorktreeName, getRemoteRetirementNamespaceKey } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, repo, store.getSettings(), 'nautilus')
 
     expect(store.getRetiredWorktreeNameRegistry(REPO).names).toEqual(['nautilus'])
@@ -377,7 +378,7 @@ describe('worktree name retirement registry', () => {
     const repo = { ...REMOTE_REPO, connectionId: runtimeId }
     store.addRepo(repo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, repo, store.getSettings(), 'nautilus')
 
     store.updateSshTarget(runtimeId, { host: 'vm-new.example.com' })
@@ -398,7 +399,7 @@ describe('worktree name retirement registry', () => {
     const sibling = { ...REMOTE_REPO, connectionId: 'ssh-y' }
     store.addRepo(sibling)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, sibling, store.getSettings(), 'nautilus')
 
     // Re-adopt the same config alias at a new endpoint.
@@ -430,7 +431,7 @@ describe('worktree name retirement registry', () => {
     const oldRepo = { ...REMOTE_REPO, connectionId: 'ssh-old' }
     store.addRepo(oldRepo)
     const { getRetiredNameRegistryForRepo, retireGeneratedWorktreeName } =
-      await import('./worktree-name-retirement')
+      await import('../../worktree-name-retirement')
     await retireGeneratedWorktreeName(store, oldRepo, store.getSettings(), 'nautilus')
 
     store.removeProjectForHost({ id: REPO, executionHostId: getRepoExecutionHostId(oldRepo) })

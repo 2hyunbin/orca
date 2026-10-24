@@ -2,29 +2,26 @@ import {
   closeTestStores,
   createStore as createFreshStore,
   testState
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 // Identical repo/path IDs across hosts require host-scoped metadata and lineage writes.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { Repo } from '../shared/repo-types'
-import type { WorktreeLineage } from '../shared/worktree/lineage-types'
-import { getDefaultPersistedState } from '../shared/constants'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
-import { worktreeWorkspaceKey } from '../shared/workspace-scope'
-import {
-  removeWorktreeMetaRow,
-  resolveWorktreeMetaOwner
-} from './persistence/host-qualified-worktree-meta'
-import { persistRuntimeManagedWorktreeSortOrder } from './runtime/runtime-managed-worktree-metadata'
+import type { Repo } from '../../../shared/repo-types'
+import type { WorktreeLineage } from '../../../shared/worktree/lineage-types'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import { removeWorktreeMetaRow, resolveWorktreeMetaOwner } from '../host-qualified-worktree-meta'
+import { persistRuntimeManagedWorktreeSortOrder } from '../../runtime/runtime-managed-worktree-metadata'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const WORKTREE_ID = 'dup::/wt'
 const LOCAL = hostWorktreeTarget({ id: WORKTREE_ID, hostId: 'local' })

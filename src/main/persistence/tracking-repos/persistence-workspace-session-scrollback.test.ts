@@ -1,38 +1,40 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync, mkdirSync, existsSync } from 'node:fs'
-import { ProfileStateSqliteAuthority } from './persistence/profile-state/profile-state-sqlite-authority'
+import { ProfileStateSqliteAuthority } from '../profile-state/profile-state-sqlite-authority'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { isTerminalLeafId, makePaneKey } from '../shared/stable-pane-id'
-import { TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT } from '../shared/terminal-scrollback-limits'
-import { MAX_BROWSER_HISTORY_ENTRIES } from '../shared/workspace-session-browser-history'
+import { isTerminalLeafId, makePaneKey } from '../../../shared/stable-pane-id'
+import { TERMINAL_SCROLLBACK_REPLAY_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
+import { MAX_BROWSER_HISTORY_ENTRIES } from '../../../shared/workspace-session-browser-history'
 import {
   closeTestStores,
   createSqliteTestStore,
   createStore,
   dataFile,
   makeRepo,
-  makeTerminalTab,
   readPersistedStateJson,
   testState,
   workspaceRepos,
   writeDataFile
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import {
+  makeTerminalTab,
   TEST_LEAF_1,
   TEST_LEAF_2,
   makeSessionWithTerminalBuffers,
   makeSessionWithBrowserHistory
-} from './persistence-session-fixtures'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import { Store, initDataPath } from './persistence'
+} from '../../persistence-session-fixtures'
+
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
+import { Store } from '../loading-store/store'
+import { initDataPath } from '../loading-store/user-data-path'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -58,11 +60,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 
@@ -567,7 +569,7 @@ describe('Store', () => {
     )
 
     const store = await createStore()
-    const { agentHookServer } = await import('./agent-hooks/server')
+    const { agentHookServer } = await import('../../agent-hooks/server')
     await agentHookServer.start({ env: 'production', userDataPath: testState.dir })
     try {
       const layout = store.getWorkspaceSession().terminalLayoutsByTabId.tab1

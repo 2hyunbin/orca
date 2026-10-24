@@ -5,21 +5,21 @@ import {
   testState,
   readPersistedStateJson,
   writePersistedStateJson
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 // Repinning moves automation ownership only when a live registration proves the prior capture’s source.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { FolderWorkspace } from '../shared/folder-workspace-types'
-import type { ProjectGroup } from '../shared/project-group-types'
-import type { Repo } from '../shared/repo-types'
-import type { SshTarget } from '../shared/ssh-types'
-import { AUTOMATION_ORPHAN_ISSUES } from '../shared/automation-list-scope'
-import { getDefaultPersistedState } from '../shared/constants'
-import { folderWorkspaceKey } from '../shared/workspace-scope'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
-import { resetRetirementCollisionKeyCacheForTests } from './worktree-name-retirement'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Repo } from '../../../shared/repo-types'
+import type { SshTarget } from '../../../shared/ssh-types'
+import { AUTOMATION_ORPHAN_ISSUES } from '../../../shared/automation-list-scope'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
+import { resetRetirementCollisionKeyCacheForTests } from '../../worktree-name-retirement'
 
 let hasCreatedStoreInCase = false
 
@@ -27,8 +27,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const NOW = 1_700_000_000_000
 const PROD_GENERATION = 4
@@ -141,7 +141,8 @@ async function loadStore(state: Record<string, unknown>) {
   }
   vi.resetModules()
   installFakeAppEnvironment({ getPath: () => testState.dir })
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('../loading-store/store')
+  const { initDataPath } = await import('../loading-store/user-data-path')
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
 }
@@ -186,7 +187,8 @@ describe('a workspace re-pinned outside the automation editor', () => {
 
     vi.resetModules()
     installFakeAppEnvironment({ getPath: () => testState.dir })
-    const { Store, initDataPath } = await import('./persistence')
+    const { Store } = await import('../loading-store/store')
+    const { initDataPath } = await import('../loading-store/user-data-path')
     initDataPath()
     const reloaded = createSqliteTestStore(Store, {
       dataFile: join(testState.dir, 'orca-data.json')
@@ -209,7 +211,8 @@ describe('a workspace re-pinned outside the automation editor', () => {
 
     vi.resetModules()
     installFakeAppEnvironment({ getPath: () => testState.dir })
-    const { Store, initDataPath } = await import('./persistence')
+    const { Store } = await import('../loading-store/store')
+    const { initDataPath } = await import('../loading-store/user-data-path')
     initDataPath()
     const reloaded = createSqliteTestStore(Store, {
       dataFile: join(testState.dir, 'orca-data.json')

@@ -6,32 +6,32 @@ import {
   makeRepo,
   makeProject,
   makeProjectHostSetup
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync, mkdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultPersistedState } from '../shared/constants'
+import { getDefaultPersistedState } from '../../../shared/constants'
 import {
   commitProvenRepoKindChange,
   proveRepoKindChange,
   updateProjectHostSetupWithProvenKind
-} from './folder-repo-git-conversion'
+} from '../../folder-repo-git-conversion'
 
 import {
   getLocalWorktreeScanGeneration,
   isLocalWorktreeScanGenerationCurrent
-} from './local-worktree-scan-generation'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
-import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+} from '../../local-worktree-scan-generation'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { removeWorktreeMetaRow } from '../host-qualified-worktree-meta'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -57,11 +57,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 
