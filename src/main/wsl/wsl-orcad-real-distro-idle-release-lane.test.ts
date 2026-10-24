@@ -81,14 +81,20 @@ function createManager(): void {
   })
 }
 
-function guest(command: string): Promise<string> {
+/** Disposed after each command: a kept exec loop is a wsl.exe client that holds the distro up. */
+async function guest(command: string): Promise<string> {
   const target = {
     kind: 'wsl' as const,
     id: defaultWslOrcadEnvironmentId(PLAIN),
     distro: PLAIN,
     label: PLAIN
   }
-  return execCommand(createWslOrcadHostTransport({ target }), command, { timeoutMs: 60_000 })
+  const transport = createWslOrcadHostTransport({ target })
+  try {
+    return await execCommand(transport, command, { timeoutMs: 60_000 })
+  } finally {
+    transport.dispose()
+  }
 }
 
 async function rpc<T>(connection: WslOrcadConnection, method: string, params?: unknown) {
@@ -200,7 +206,7 @@ async function idleReleasePhase(): Promise<void> {
   ).catch(async (error: unknown) => {
     // The distro is still running, so this boots nothing: record what kept it.
     receipt.stillRunning = await guest(
-      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,args | grep -v grep | grep -E "orca|node" || true'
+      'ls -la "$HOME/.orca/wsl-holder-release" 2>&1; ps -eo pid,args | grep -v grep | grep -v orca-wsl-exec-loop | grep -E "orca|node" || true'
     ).catch(String)
     throw error
   })
