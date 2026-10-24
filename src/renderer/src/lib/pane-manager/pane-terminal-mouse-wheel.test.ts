@@ -268,6 +268,44 @@ describe('terminal mouse wheel multiplier', () => {
     expect(reports).toEqual([1, 1, 1, 2, 1, 1, 0, 1])
   })
 
+  it('keeps a Mac trackpad flick linear when its wheelDelta lands on the notch grid', () => {
+    const state = createTerminalTuiMouseWheelDistanceState()
+    // Chromium on macOS reports wheelDeltaY = -3 * deltaY for continuous devices.
+    const flick = [8, 16, 24, 32, 40, 48, 56, 48, 40, 32, 24, 16, 8]
+
+    const reports = flick.map((deltaY, index) =>
+      resolveTerminalTuiMouseWheelReportCount(
+        { deltaY, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -3 * deltaY, timeStamp: index * 8 },
+        1,
+        state,
+        { cellHeight: 16 }
+      )
+    )
+
+    expect(reports).toEqual([0, 1, 2, 2, 2, 3, 4, 3, 2, 2, 2, 1, 0])
+  })
+
+  it('treats a notched wheel after an idle trackpad gesture as discrete again', () => {
+    const state = createTerminalTuiMouseWheelDistanceState()
+    resolveTerminalTuiMouseWheelReportCount(
+      { deltaY: 8, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -24, timeStamp: 0 },
+      1,
+      state,
+      { cellHeight: 16 }
+    )
+
+    const reports = [1000, 1200].map((timeStamp) =>
+      resolveTerminalTuiMouseWheelReportCount(
+        { deltaY: 4, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -120, timeStamp },
+        1,
+        state,
+        { cellHeight: 16 }
+      )
+    )
+
+    expect(reports).toEqual([1, 1])
+  })
+
   it('drops pending trackpad distance on each direction change', () => {
     const state = createTerminalTuiMouseWheelDistanceState()
 
