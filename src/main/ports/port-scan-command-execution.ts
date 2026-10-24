@@ -39,7 +39,10 @@ export async function runPortScanCommandInProcess(
     throw new Error('Port scanning is shutting down.')
   }
   if (process.platform === 'darwin' && darwinOperation) {
-    return runDarwinPortScanCommand(command, args, darwinOperation)
+    const fd = openDarwinPortScanLock(darwinOperation)
+    if (fd !== null) {
+      return runDarwinPortScanCommand(command, args, darwinOperation, fd)
+    }
   }
   return await new Promise((resolve, reject) => {
     let settled = false
@@ -71,7 +74,7 @@ export async function runPortScanCommandInProcess(
           maxBuffer: 2 * 1024 * 1024,
           windowsHide: true
         },
-        (error, stdout) => {
+        (error, stdout, stderr) => {
           if (error) {
             // Node kills its own execFile timeout with a signal, which surfaces
             // as killed:true — the only way to tell a timeout from a real error.
@@ -85,6 +88,10 @@ export async function runPortScanCommandInProcess(
                   : error
               )
             )
+            return
+          }
+          if (process.platform === 'darwin' && darwinOperation === 'listeners' && stderr) {
+            settle(() => reject(new Error('Port scan observation is unavailable.')))
             return
           }
           settle(() => resolve({ stdout: String(stdout), spawnMs }))
@@ -141,9 +148,9 @@ function isCompletedCwdLsof(command: string, args: string[], stdout: string): bo
 async function runDarwinPortScanCommand(
   command: string,
   args: string[],
-  operation: DarwinPortScanOperation
+  operation: DarwinPortScanOperation,
+  fd: number
 ): Promise<{ stdout: string; spawnMs: number }> {
-  const fd = openDarwinPortScanLock(operation)
   let child: ChildProcess
   const startedAt = Date.now()
   try {
@@ -224,7 +231,11 @@ async function runDarwinPortScanCommand(
         const emptyLsof = command === '/usr/sbin/lsof' && code === 1 && stdout === ''
         // A vanished selected PID makes lsof exit 1 after printing the surviving cwd records.
         const completedCwd = code === 1 && isCompletedCwdLsof(command, args, stdout)
-        if (signal || stderr || (code !== 0 && !emptyLsof && !completedCwd)) {
+        if (
+          signal ||
+          (stderr && command !== '/usr/sbin/lsof') ||
+          (code !== 0 && !emptyLsof && !completedCwd)
+        ) {
           throw new Error('Port scan observation is unavailable.')
         }
         if (

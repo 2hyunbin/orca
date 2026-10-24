@@ -5,7 +5,18 @@ import { spawnProcess } from '@orca/process-host'
 import type { ChildProcess } from 'node:child_process'
 import { openDarwinPortScanLock } from './darwin-port-scan-lock'
 import { runPortScanCommandInProcess } from './port-scan-command-execution'
-import { PortScanCommandTimeoutError } from './port-scan-command-protocol'
+import {
+  PortScanCommandTimeoutError,
+  type DarwinPortScanOperation
+} from './port-scan-command-protocol'
+
+function supportedFilesystemLock(operation: DarwinPortScanOperation): number {
+  const fd = openDarwinPortScanLock(operation)
+  if (fd === null) {
+    throw new Error('This fixture requires a lock-supported filesystem.')
+  }
+  return fd
+}
 
 // Cooperative children terminate themselves; no kernel hangs or process-tree signalling.
 describe.runIf(process.platform === 'darwin')('Darwin operation admission', () => {
@@ -20,7 +31,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
   })
 
   it('keeps independent slots excluded after the owning client exits and recovers on child exit', async () => {
-    const fd = openDarwinPortScanLock('attribution')
+    const fd = supportedFilesystemLock('attribution')
     let parent: ChildProcess
     try {
       parent = spawnProcess({
@@ -42,13 +53,13 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     }
     await once(parent, 'exit')
     expect(() => openDarwinPortScanLock('attribution')).toThrow()
-    closeSync(openDarwinPortScanLock('listeners'))
+    closeSync(supportedFilesystemLock('listeners'))
     await new Promise((resolve) => setTimeout(resolve, 1700))
-    closeSync(openDarwinPortScanLock('attribution'))
+    closeSync(supportedFilesystemLock('attribution'))
     await expect(
       runPortScanCommandInProcess('/missing/sta-11266', [], 'attribution')
     ).rejects.toThrow()
-    closeSync(openDarwinPortScanLock('attribution'))
+    closeSync(supportedFilesystemLock('attribution'))
   }, 10_000)
 
   it('settles a caller timeout while the actual child retains admission, then allows recovery', async () => {
@@ -65,7 +76,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     )
     await expect(probe).rejects.toBeInstanceOf(PortScanCommandTimeoutError)
     expect(() => openDarwinPortScanLock('attribution')).toThrow()
-    closeSync(openDarwinPortScanLock('listeners'))
+    closeSync(supportedFilesystemLock('listeners'))
     await new Promise((resolve) => setTimeout(resolve, 900))
     const recovered = await runPortScanCommandInProcess(
       process.execPath,
@@ -83,6 +94,6 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
         'listeners'
       )
     ).rejects.toThrow()
-    closeSync(openDarwinPortScanLock('listeners'))
+    closeSync(supportedFilesystemLock('listeners'))
   })
 })

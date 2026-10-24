@@ -144,7 +144,7 @@ async function scanDarwinLsofPorts(
     )
     const ports = parseLsofListeningOutput(stdout)
     if (shouldSkipMetadataCommands(spawnMs, options)) {
-      throw new Error('Port attribution is unavailable.')
+      return { ports: ports.map(recallListenerMetadata), metadataAvailable: false }
     }
     // Why: on a quiet machine the same servers keep listening, so the two metadata commands — the
     // expensive half of the scan — would re-derive answers the last scan already has.

@@ -715,28 +715,42 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     })
   })
 
-  // Regression for #11161 review: without carry-forward the panel moves every
-  // workspace port into External on each skipped cycle.
-  it('does not carry previous ownership through an incomplete scan', async () => {
+  it('keeps remembered workspace labels on fresh holders through a slow-spawn skip and recovery', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    let listenSpawnMs = 5
-    runPortScanCommandMock.mockImplementation(async (command: string, args: string[]) => {
-      if (command === '/usr/sbin/lsof' && args.includes('-iTCP')) {
-        return { stdout: LSOF_LISTEN_OUTPUT, spawnMs: listenSpawnMs }
-      }
-      return {
-        stdout: command === '/usr/sbin/lsof' ? ['p123', 'n/repo'].join('\n') : '',
-        spawnMs: 5
-      }
+    let slow = false
+    runPortScanCommandMock.mockImplementation(async (command: string, args: string[]) => ({
+      stdout: args.includes('-iTCP')
+        ? `${LSOF_LISTEN_OUTPUT}${slow ? '\np456\ncnode\nd0x2\nn127.0.0.1:8080' : ''}`
+        : command === '/usr/sbin/lsof'
+          ? 'p123\nn/repo\np456\nn/repo\n'
+          : '123 node /repo/server.js\n456 node /repo/other.js\n',
+      spawnMs: slow ? 4_200 : 5
+    }))
+    const watcher = urlWatcherStub()
+    expect((await scanWorkspacePorts(worktrees, watcher)).ports[0]).toMatchObject({
+      pid: 123,
+      kind: 'workspace'
     })
-
-    const full = await scanWorkspacePorts(worktrees, urlWatcherStub())
-    listenSpawnMs = 4_200
-    const skipped = await scanWorkspacePorts(worktrees, urlWatcherStub())
-
-    expect(full.ports[0]).toMatchObject({ kind: 'workspace' })
-    expect(skipped.ports[0]).toMatchObject({ kind: 'external' })
-    expect(skipped.ports[0]?.pid).toBeUndefined()
+    watcher.reconcileScan.mockClear()
+    slow = true
+    const skipped = await scanWorkspacePorts(worktrees, watcher)
+    expect(skipped.ports).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pid: 123,
+          kind: 'workspace',
+          owner: expect.objectContaining({ worktreeId: 'repo::/repo', confidence: 'cwd' })
+        }),
+        expect.objectContaining({ pid: 456, port: 8080, kind: 'external' })
+      ])
+    )
+    expect(watcher.reconcileScan).not.toHaveBeenCalled()
+    expect(runPortScanCommandMock).toHaveBeenCalledTimes(4)
+    const recovered = await scanWorkspacePorts(worktrees, watcher)
+    expect(recovered.ports.every((port) => port.kind === 'workspace')).toBe(true)
+    expect(recovered.ports).toHaveLength(2)
+    expect(watcher.reconcileScan).toHaveBeenCalledTimes(worktrees.length)
+    expect(runPortScanCommandMock).toHaveBeenCalledTimes(7)
   })
 
   it('does not hand carried-forward metadata to a different listener', async () => {

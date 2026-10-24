@@ -103,7 +103,6 @@ describe('Darwin selected-PID cwd completion', () => {
   it('still refuses failed or malformed cwd observations and nonzero results from other command roles', async () => {
     for (const [stdout, code, stderr, signal, args] of [
       [survivingCwd, 2, '', null, cwdArgs],
-      [survivingCwd, 1, 'lsof: diagnostic\n', null, cwdArgs],
       [survivingCwd, 1, '', 'SIGTERM', cwdArgs],
       [survivingCwd.trimEnd(), 1, '', null, cwdArgs],
       ['p123\nfcwd\nn/repo\nmalformed\n', 1, '', null, cwdArgs],
@@ -115,6 +114,22 @@ describe('Darwin selected-PID cwd completion', () => {
         runPortScanCommandInProcess('/usr/sbin/lsof', [...args], 'attribution')
       ).rejects.toThrow()
     }
+  })
+
+  it('ignores healthy lsof diagnostics but rejects diagnostic listener observations', async () => {
+    for (const [stdout, code, args] of [
+      ['p123\ncnode\nd0x1\nn127.0.0.1:5173\n', 0, ['-O', '-iTCP', '-sTCP:LISTEN', '-Fpcnd']],
+      [survivingCwd, 1, cwdArgs]
+    ] as const) {
+      spawnMock.mockImplementationOnce(() => completedChild(stdout, code, 'lsof: diagnostic\n'))
+      await expect(
+        runPortScanCommandInProcess('/usr/sbin/lsof', [...args], 'attribution')
+      ).resolves.toMatchObject({ stdout })
+    }
+    spawnMock.mockImplementationOnce(() => completedChild('', 0, 'netstat: diagnostic\n'))
+    await expect(
+      runPortScanCommandInProcess('/usr/sbin/netstat', ['-aln', '-p', 'tcp'], 'listeners')
+    ).rejects.toThrow('Port scan observation is unavailable.')
   })
 
   it.each([100, 1_000])(

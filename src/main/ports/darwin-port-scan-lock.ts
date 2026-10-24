@@ -10,7 +10,7 @@ import {
 import type { DarwinPortScanOperation } from './port-scan-command-protocol'
 
 /** The child inherits this open-file description; closing a duplicate never unlocks it. */
-export function openDarwinPortScanLock(operation: DarwinPortScanOperation): number {
+export function openDarwinPortScanLock(operation: DarwinPortScanOperation): number | null {
   const uid = process.getuid?.()
   const root = '/private/var/tmp'
   const parent = lstatSync(root)
@@ -19,10 +19,12 @@ export function openDarwinPortScanLock(operation: DarwinPortScanOperation): numb
     uid === undefined ||
     !parent.isDirectory() ||
     parent.uid !== 0 ||
-    (parent.mode & 0o1000) === 0 ||
-    ![0x1a, 0x11].includes(filesystem.type)
+    (parent.mode & 0o1000) === 0
   ) {
     throw new Error('Port scan lock storage is unavailable.')
+  }
+  if (![0x1a, 0x11].includes(filesystem.type)) {
+    return null
   }
   const directory = `${root}/orca-port-scan-${uid}`
   mkdirSync(directory, { mode: 0o700, recursive: true })
