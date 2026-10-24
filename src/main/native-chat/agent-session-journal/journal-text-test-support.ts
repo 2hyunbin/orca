@@ -1,3 +1,4 @@
+import type { ClaudeSubagentLinkageSource } from '../../claude/claude-subagent-linkage'
 import type { AgentSessionJournal } from './journal-store'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,6 +14,15 @@ import {
 } from './journal-host-database-test-support'
 import { iterateJournalEpochRows } from './journal-row-table'
 import { parseJournalRow } from './journal-row-schema'
+
+export const rootTextProducer: ClaudeSubagentLinkageSource = {
+  linkageFor: () => {
+    throw new Error('root block consulted child resolver')
+  },
+  settledLinkageFor: () => {
+    throw new Error('root block consulted child resolver')
+  }
+}
 
 export const textJournals = createTrackedJournalOpener()
 const roots: string[] = []

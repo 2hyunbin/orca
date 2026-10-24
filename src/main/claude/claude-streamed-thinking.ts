@@ -125,6 +125,7 @@ export function createClaudeStreamedThinking(deps: {
         deps.sink.appendItem(identity, body, appendOptions)
         deps.sink.publish()
       }
+      return undefined
     }
   })
   const finish = (ended: ClaudeStreamedBlockEnd, scope?: string): boolean =>
@@ -185,7 +186,7 @@ export function createClaudeStreamedThinking(deps: {
       }
       return { identity, body, ...(streamed ? { startedAt: streamed.startedAt } : {}) }
     },
-    prepareFinishOpen: (completedAt: number, extra?: ClaudeStreamedTextDelta) => {
+    prepareFinishOpen: (completedAt?: number, extra?: ClaudeStreamedTextDelta) => {
       const pending = checkpoints.prepareFinish(undefined, extra)
       return {
         steps: pending.flatMap((block) => {
@@ -212,7 +213,7 @@ export function createClaudeStreamedThinking(deps: {
       }
     },
     /** End every block still open, for a turn that is ending. */
-    finishOpen: (completedAt: number): boolean => {
+    finishOpen: (completedAt?: number): boolean => {
       const accepted = finish({ completedAt })
       if (accepted) {
         blocks.clear()

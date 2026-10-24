@@ -26,7 +26,7 @@ export function upsertJournalItem(
   state: JournalReducerState,
   itemId: string,
   revision: number,
-  next: AgentJournalRenderItem,
+  next: AgentJournalRenderItem & { turnScope: AgentJournalTurnScope },
   /** The write's fence, and the provenance it states (`JournalItemRow.ownerFence`), which only
    *  creation reads: a revision keeps the item's. A stated `executionOwner` moves on any write. */
   fences: { fence: number; ownerFence?: number; executionOwner?: number },

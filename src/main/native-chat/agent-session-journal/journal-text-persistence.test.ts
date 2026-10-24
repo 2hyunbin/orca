@@ -7,6 +7,7 @@ import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-
 import { replayJournal } from './journal-open'
 import { applyJournalRow, createJournalReducerState } from './journal-reducer'
 import {
+  rootTextProducer,
   textJournals as journals,
   closeTextJournals,
   textRig as rig,
@@ -71,7 +72,6 @@ it('saves only increments, reopens an interrupted stream, and catches up through
   r.time(300)
   await reopened.appendItem(identity, body('CORRECTED'), options)
   expect(r.rows().some((row) => row.kind === 'text-delta')).toBe(false)
-  expect(r.rows().some((row) => row.kind === 'text-pruned')).toBe(false)
   const loaded = replayJournal(r.database.db, 'chat')
   expect(loaded?.state.items.get(agentJournalItemKey(control))?.body.kind).toBe('approval')
   expect(loaded?.state.queue.cards.get('queued')?.body.blocks).toEqual([
@@ -156,7 +156,7 @@ it('owns deferred source through conditional null/winning wholes, refusal, finis
       publication = vi.fn()
     const deferred = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: errors, info: vi.fn(), warn: vi.fn() },
+      logger: { error: errors, warn: vi.fn() },
       watermarks: { maxQueuedOperations: winning ? 3 : 4 }
     })
     const sink = deferred.sink
@@ -239,7 +239,7 @@ it('matches independent chunk cuts and retains only the current resident generat
       errors = vi.fn()
     const deferred = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: errors, info: vi.fn(), warn: vi.fn() }
+      logger: { error: errors, warn: vi.fn() }
     })
     deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
     let expected = ''
@@ -279,7 +279,7 @@ it('credits flushed resident bytes until forget and does not recharge a returnin
     errors = vi.fn()
   const deferred = createDeferredStructuredAgentSessionEventSink({
     sessionId: 'chat',
-    logger: { error: errors, info: vi.fn(), warn: vi.fn() }
+    logger: { error: errors, warn: vi.fn() }
   })
   deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
   const coalescer = createAgentSessionDeltaCoalescer({
@@ -367,14 +367,16 @@ it('preserves skipped whitespace through real provider ingress, unsupplied compl
             r.assembler.apply({ type: 'text.close', item: { id: 'm' } }).admission.accepted
           ).toBe(true)
           const reopened = await r.reopenJournal()
-          expect(messageText(reopened.itemBody(key))).toBe(expected.trim() ? expected : undefined)
+          expect(messageText(reopened.itemBody(key) ?? undefined)).toBe(
+            expected.trim() ? expected : undefined
+          )
           continue
         }
         const r = await rig(),
           errors = vi.fn()
         const deferred = createDeferredStructuredAgentSessionEventSink({
           sessionId: 'chat',
-          logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+          logger: { error: errors, warn: vi.fn() }
         })
         deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
         const claude = createClaudeJournalTranslator({
@@ -467,7 +469,7 @@ it('keeps skipped and refused suffix ownership through unbound start and complet
     errors = vi.fn()
   const deferred = createDeferredStructuredAgentSessionEventSink({
     sessionId: 'chat',
-    logger: { error: errors, warn: vi.fn(), info: vi.fn() },
+    logger: { error: errors, warn: vi.fn() },
     watermarks: { maxQueuedOperations: 1 }
   })
   const sink = deferred.sink
@@ -529,7 +531,7 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
       errors = vi.fn()
     const deferred = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+      logger: { error: errors, warn: vi.fn() }
     })
     deferred.bind({ journal: r.journal, fence: 7, publish: () => undefined })
     const translator = createCodexJournalTranslator({
@@ -572,14 +574,15 @@ it('finishes selected Codex reasoning by raw key at N and 10N without enumeratin
     let productionLookups = 0
     let commandVisits = 0
     const originalGet = CodexItemStreamRetention.prototype.get
-    const get = vi
-      .spyOn(CodexItemStreamRetention.prototype, 'get')
-      .mockImplementation(function (key) {
-        if (key.includes('cmd-')) {
-          commandVisits++
-        }
-        return originalGet.call(this, key)
-      })
+    const get = vi.spyOn(CodexItemStreamRetention.prototype, 'get').mockImplementation(function (
+      this: InstanceType<typeof CodexItemStreamRetention>,
+      key
+    ) {
+      if (key.includes('cmd-')) {
+        commandVisits++
+      }
+      return originalGet.call(this, key)
+    })
     for (let k = 0; k < n; k++) {
       const raw = codexLiveTextKey('thread', 'turn', { type: 'reasoning', id: `r-${k}` })
       const identity = deferred.sink.liveText?.(raw)?.live?.identity
@@ -637,7 +640,7 @@ it('selects pending Codex completion by thread, turn, type and live/history name
       errors = vi.fn()
     const deferred = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+      logger: { error: errors, warn: vi.fn() }
     })
     const variants = [
       ['thread', 'turn', 'reasoning', historyImport],
@@ -705,24 +708,24 @@ it('materializes a cold Claude whole only for its fallback consumer, allowing su
       errors = vi.fn()
     const deferred = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: errors, warn: vi.fn(), info: vi.fn() }
+      logger: { error: errors, warn: vi.fn() }
     })
     const cp = createClaudeStreamedTextCheckpoints({
       ...(prepared
         ? { source: deferred.sink.textSource, prepareText: deferred.sink.prepareText }
         : {}),
       schedule: () => () => undefined,
-      producer: {
-        linkageFor: () => ({ kind: 'root' }),
-        settledLinkageFor: () => ({ kind: 'root' })
-      },
+      producer: rootTextProducer,
       persist: () => true
     })
     const chunk = 'COLD-JOIN'.repeat(8192)
     cp.append(identity, chunk)
     const original = Array.prototype.join
     let assemblies = 0
-    const spy = vi.spyOn(Array.prototype, 'join').mockImplementation(function (separator) {
+    const spy = vi.spyOn(Array.prototype, 'join').mockImplementation(function (
+      this: unknown[],
+      separator
+    ) {
       if (this[0] === chunk) {
         assemblies++
       }

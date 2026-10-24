@@ -138,17 +138,6 @@ export function registerJournalUnknownRowKindTests(): void {
         baseLength: 1,
         suffix: 'x'
       },
-      'text-pruned': {
-        ...base,
-        seq: 10,
-        kind: 'text-pruned',
-        itemId: 'i',
-        field: 0,
-        marker: 2,
-        witness: 9,
-        revision: 3,
-        ranges: [[8, 8]]
-      },
       submission: {
         ...base,
         seq: 4,

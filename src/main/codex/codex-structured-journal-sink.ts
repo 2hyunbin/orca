@@ -136,7 +136,7 @@ export function appendCodexItemAndPublish(
 
 function criticalAdmission(
   admission: StructuredAgentSessionSinkAdmission
-): CodexJournalTranslationAdmission {
+): StructuredAgentSessionSinkAdmission {
   return admission.accepted ? CODEX_JOURNAL_ADMITTED : admission
 }
 
@@ -146,7 +146,7 @@ export function appendCodexLifecycleItem(
   body: AgentJournalItemBody,
   /** observedAt overrides append time for a delayed first write. */
   attribution: AgentJournalRowAttribution & { observedAt?: number }
-): CodexJournalTranslationAdmission {
+): StructuredAgentSessionSinkAdmission {
   const options = { lifecycle: true, retireText: true as const, ...attribution }
   if (sink.tryAppendItem) {
     return criticalAdmission(sink.tryAppendItem(identity, body, options))
@@ -161,7 +161,7 @@ export function appendCodexLifecycleTransition(
   body: AgentJournalItemBody,
   resolveIdentity: StructuredAgentSessionIdentityResolver,
   attribution: AgentJournalRowAttribution
-): CodexJournalTranslationAdmission {
+): StructuredAgentSessionSinkAdmission {
   if (sink.tryAppendLifecycleTransition) {
     return criticalAdmission(
       sink.tryAppendLifecycleTransition(identitySizeBound, body, resolveIdentity, attribution)
@@ -173,7 +173,7 @@ export function appendCodexLifecycleTransition(
 
 export function publishCodexLifecycle(
   sink: StructuredAgentSessionEventSink
-): CodexJournalTranslationAdmission {
+): StructuredAgentSessionSinkAdmission {
   if (sink.tryPublish) {
     return criticalAdmission(sink.tryPublish({ lifecycle: true }))
   }

@@ -2,7 +2,7 @@ import { createCodexJournalTranslator } from '../../codex/codex-structured-journ
 import { CodexTurnOrdinals } from '../../codex/codex-turn-ordinals'
 import { codexLiveTextKey } from '../../codex/codex-thread-item-identity'
 import { join } from 'node:path'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, assert, expect, it, vi } from 'vitest'
 import Database from '../../sqlite/sync-database'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionSubscribeEvent } from '../../../shared/agent-session-wire'
@@ -24,6 +24,7 @@ import {
 } from '../../../shared/structured-agent-session-reducer'
 
 import {
+  rootTextProducer,
   textJournals as journals,
   flushJournalTextIdle,
   closeTextJournals,
@@ -43,6 +44,7 @@ it('charges advancing sparse/protected work at N and 10N', async () => {
     const selected: number[] = []
     const select = JournalTextIndex.prototype.select
     const spy = vi.spyOn(JournalTextIndex.prototype, 'select').mockImplementation(function (
+      this: JournalTextIndex,
       ...args
     ) {
       const unit = select.apply(this, args)
@@ -98,11 +100,12 @@ it('charges advancing sparse/protected work at N and 10N', async () => {
     const values = loaded.state.providerActivityWitness.values.bind(
       loaded.state.providerActivityWitness
     )
-    loaded.state.providerActivityWitness.values = function* () {
+    loaded.state.providerActivityWitness.values = function* (): Generator<number, undefined> {
       for (const value of values()) {
         owners++
         yield value
       }
+      return undefined
     }
     // The real shared fold must not enumerate the historical owner population.
     const { applyJournalRow } = await import('./journal-reducer')
@@ -280,7 +283,7 @@ it('finalizes real Claude ingress before forgetting, and recovers only dead unwi
       failures = vi.fn()
     const sink = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: failures, info: vi.fn(), warn: vi.fn() },
+      logger: { error: failures, warn: vi.fn() },
       watermarks: { maxLifecycleQueuedOperations: 0 }
     })
     sink.bind({ journal: r.journal, fence: 7, publish: () => undefined })
@@ -289,7 +292,7 @@ it('finalizes real Claude ingress before forgetting, and recovers only dead unwi
       sink: sink.sink,
       schedule: () => () => undefined
     })
-    const send = (message: Record<string, unknown>, startsTurn = false) =>
+    const send = (message: Record<string, unknown>, startsTurn?: true) =>
       translator.handle({
         type: 'message',
         sessionId: 'chat',
@@ -351,7 +354,9 @@ it('finalizes real Claude ingress before forgetting, and recovers only dead unwi
       )
     expect(wholes.at(-1)?.seq).toBeLessThan(turnEnd?.seq ?? 0)
     expect(r.rows().filter((row) => row.kind === 'text-delta')).toHaveLength(0)
-    expect(endingTurn && r.journal.itemBody(endingTurn.itemId)).toMatchObject({
+    expect(
+      endingTurn?.kind === 'item' ? r.journal.itemBody(endingTurn.itemId) : null
+    ).toMatchObject({
       kind: 'turn',
       state: ending === 'result' ? 'completed' : 'interrupted'
     })
@@ -424,7 +429,7 @@ it('retains refused terminal text and joins no prefixes for unchanged attributio
   let accept = true
   const writes = vi.fn(() => accept)
   const cp = createClaudeStreamedTextCheckpoints({
-    producer: { linkageFor: () => ({ kind: 'root' }), settledLinkageFor: () => ({ kind: 'root' }) },
+    producer: rootTextProducer,
     schedule: () => () => undefined,
     persist: writes,
     persistDelta: () => true
@@ -447,10 +452,10 @@ it('retains refused terminal text and joins no prefixes for unchanged attributio
   const r = await rig()
   const deferred = createDeferredStructuredAgentSessionEventSink({
     sessionId: 'chat',
-    logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() }
+    logger: { error: vi.fn(), warn: vi.fn() }
   })
   const live = createClaudeStreamedTextCheckpoints({
-    producer: { linkageFor: () => ({ kind: 'root' }), settledLinkageFor: () => ({ kind: 'root' }) },
+    producer: rootTextProducer,
     schedule: () => () => undefined,
     source: deferred.sink.textSource,
     prepareText: deferred.sink.prepareText,
@@ -640,7 +645,7 @@ it('terminalizes 257 real-shaped prose/thinking blocks and preserves evicted ret
       failures = vi.fn()
     const sink = createDeferredStructuredAgentSessionEventSink({
       sessionId: 'chat',
-      logger: { error: failures, info: vi.fn(), warn: vi.fn() }
+      logger: { error: failures, warn: vi.fn() }
     })
     sink.bind({ journal: r.journal, fence: 7, publish: () => undefined })
     const translator = createClaudeJournalTranslator({
@@ -719,7 +724,7 @@ it('keeps real Codex live identities through cache and ordinal-byte eviction, th
   const allocate = vi.spyOn(CodexTurnOrdinals.prototype, 'ordinalFor')
   const deferred = createDeferredStructuredAgentSessionEventSink({
     sessionId: 'chat',
-    logger: { error: failures, info: vi.fn(), warn: vi.fn() }
+    logger: { error: failures, warn: vi.fn() }
   })
   const translator = createCodexJournalTranslator({
     sink: deferred.sink,
@@ -770,7 +775,9 @@ it('keeps real Codex live identities through cache and ordinal-byte eviction, th
   }
   expect((await deferred.drained()).ok).toBe(true)
   const allocations = allocate.mock.calls.length
-  expect(allocate.mock.contexts[0].bytes).toBeLessThanOrEqual(512 * 1024)
+  const ordinalOwner = allocate.mock.contexts[0]
+  assert.instanceOf(ordinalOwner, CodexTurnOrdinals)
+  expect(ordinalOwner.bytes).toBeLessThanOrEqual(512 * 1024)
   delta(0, 'c')
   expect(allocate.mock.calls).toHaveLength(allocations)
   expect((await deferred.drained()).ok).toBe(true)

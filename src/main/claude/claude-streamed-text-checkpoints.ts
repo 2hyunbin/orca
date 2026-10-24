@@ -282,6 +282,7 @@ export function createClaudeProseCheckpoints(
       }
       deps.sink.appendItem(identity, body, { ...options, turnScope: turnScope() })
       deps.sink.publish()
+      return undefined
     }
   })
 }

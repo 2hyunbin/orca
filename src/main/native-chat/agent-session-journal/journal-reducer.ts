@@ -61,7 +61,7 @@ export type JournalReducerState = {
   /** Earliest individually replayable sequence. */
   oldestSequence: number
   highestFence: number
-  items: Map<string, AgentJournalRenderItem>
+  items: Map<string, ReturnType<typeof journalRenderItem>>
   /** Creation provenance determines whether an item belongs to current execution. */
   itemFences: Map<string, number>
   /** Later runs may explicitly assume execution of reusable child items. */
