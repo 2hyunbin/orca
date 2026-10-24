@@ -12,7 +12,10 @@ import { terminalTitleBlocksExplicitAgentStatus } from './runtime-worktree-statu
 import type { HookLiveAgentRow } from './runtime-terminal-contracts'
 import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
-type HookTurnFacts = Pick<AgentStatusEntry, 'state' | 'agentType' | 'mainAgent'>
+type HookTurnFacts = Pick<
+  AgentStatusEntry,
+  'state' | 'agentType' | 'mainAgent' | 'restoredUnconfirmed'
+>
 
 function workingHookOwnsIdleTitleInterval(
   status: HookTurnFacts,
@@ -34,10 +37,15 @@ function workingHookOwnsIdleTitleInterval(
 }
 
 // Why: Codex's title follows the thread it displays, so a /side chat goes idle while the main
-// turn runs; that turn's end always arrives by hook or rollout, never by title alone.
+// turn runs; its end arrives by hook or host rollout, and the stale bound covers older hosts.
 function codexHookReportsRunningTurn(status: HookTurnFacts): boolean {
   const mainState = status.mainAgent?.state
-  return status.agentType === 'codex' && mainState !== undefined && mainState !== 'done'
+  return (
+    status.agentType === 'codex' &&
+    status.restoredUnconfirmed !== true &&
+    mainState !== undefined &&
+    mainState !== 'done'
+  )
 }
 
 // Why: only a completed turn's reply is final; mid-turn hook snapshots carry tool stdout.
