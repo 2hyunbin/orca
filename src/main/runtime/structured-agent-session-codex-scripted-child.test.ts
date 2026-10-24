@@ -137,14 +137,16 @@ it('delivers current-choice mail during a recorded Codex turn while changed-choi
       })
     ).toMatchObject({ ok: true })
   }
-  const mail = hostTestMessage('worker mail on current choices')
-  mail.from = structuredMailSource({
-    db: null,
-    mailboxHandle: 'dispatch:recorded-contract',
-    dispatchId: 'recorded-contract',
-    batch: [],
-    senderName: () => null
-  })
+  const mail = {
+    ...hostTestMessage('worker mail on current choices'),
+    from: structuredMailSource({
+      db: null,
+      mailboxHandle: 'dispatch:recorded-contract',
+      dispatchId: 'recorded-contract',
+      batch: [],
+      senderName: () => null
+    })
+  }
   const mailId = envelope('mail', fence, {}).clientOperationId
   const sentMail = createStructuredMailboxPointerHost().send({
     sessionId: HOST_TEST_SESSION,
