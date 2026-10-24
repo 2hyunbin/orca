@@ -3,18 +3,9 @@ import * as dependencies from './orca-runtime-create-terminal-dependencies'
 import type { OrcaRuntimeWithCreateTerminal } from './terminal/launch/terminal-create'
 import type { RuntimeTerminalPresentation } from '../../shared/runtime-types'
 
-// A headless server reaches here whenever the caller's cwd matched no workspace; name that, not the window.
-function getWindowForWorkspacelessCreate(
-  runtime: OrcaRuntimeWithCreateTerminal
-): ReturnType<OrcaRuntimeWithCreateTerminal['getAuthoritativeWindow']> {
-  try {
-    return runtime.getAuthoritativeWindow()
-  } catch {
-    throw new Error(
-      'No workspace was given or found for this terminal, and this Orca host has no open app window to create one in. Pass --worktree to choose a workspace. No terminal was created.'
-    )
-  }
-}
+// Without a window, the missing piece the caller can supply is the workspace, so name that.
+const NO_WORKSPACE_OR_WINDOW_MESSAGE =
+  'No workspace was given or found for this terminal, and this Orca host has no open app window to create one in. Pass --worktree to choose a workspace. No terminal was created.'
 
 // A create with no workspace lands in whatever the window is showing, so only the window can make it.
 export async function createDesktopTerminal(
@@ -30,7 +21,7 @@ export async function createDesktopTerminal(
   }
   opts = applyRemoteViewerLaunchEnv(opts, opts.terminalImageViewerSupported)
   runtime.assertGraphReady()
-  const win = getWindowForWorkspacelessCreate(runtime)
+  const win = runtime.getAuthoritativeWindow(NO_WORKSPACE_OR_WINDOW_MESSAGE)
   const requestId = dependencies.randomUUID()
   const reply = await new Promise<{ tabId: string; title: string }>((resolve, reject) => {
     const timer = setTimeout(() => {
