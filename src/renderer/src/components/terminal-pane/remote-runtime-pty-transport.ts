@@ -3299,6 +3299,8 @@ export function createRemoteRuntimePtyTransport(
     if (!replay) {
       settleSignInConnectWait()
     }
+    // Why: a replay may only settle the wait it was started for, never a newer connect's.
+    const replayedWait = replay ? signInConnectWait : null
     const expected = recoveryInputHold.expect(restoredInputEndpoint(options.sessionId))
     let result: PtyConnectResult | undefined
     try {
@@ -3319,7 +3321,7 @@ export function createRemoteRuntimePtyTransport(
         return signInConnectWait.promise
       }
     }
-    if (replay) {
+    if (replayedWait && signInConnectWait === replayedWait) {
       settleSignInConnectWait(result)
     }
     return result

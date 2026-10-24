@@ -208,16 +208,16 @@ async function mountNewPaneAwaitingSignIn(failure: { message: string }, afterSig
   })
   transport = pane
   let connectSettled = false
-  const connected = pane
-    .connect({
+  const connected = Promise.resolve(
+    pane.connect({
       url: '',
       cols: 80,
       rows: 24,
       callbacks: { onError, onRecoveryStateChange: (state) => publishedStates.push(state) }
     })
-    .finally(() => {
-      connectSettled = true
-    })
+  ).finally(() => {
+    connectSettled = true
+  })
   await vi.advanceTimersByTimeAsync(0)
   return {
     connected,

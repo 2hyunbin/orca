@@ -3528,7 +3528,7 @@
             "disconnectedBody": "Se detuvieron los reintentos automáticos. Vuelva a conectarse para reanudar esta sesión de terminal.",
             "reconnectButton": "Reconnect",
             "signInTitle": "Esperando el inicio de sesión SSH",
-            "signInBody": "Esta terminal continuará sola cuando inicies sesión en el host.",
+            "signInBody": "Este terminal continuará solo cuando inicie sesión en el host.",
             "signInButton": "Iniciar sesión"
           },
           "TerminalRestoringPlaceholder": {
