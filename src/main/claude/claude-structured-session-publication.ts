@@ -14,6 +14,28 @@ import type {
 import { ClaudeBackgroundTaskTracker } from './claude-background-task-tracker'
 import { ClaudeChildWorkDecoder } from './claude-child-work-decoder'
 import { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
+import type { ClaudeStructuredLaunch } from './claude-structured-launch-resolution'
+
+export function claudeSessionInitialization(
+  launch: ClaudeStructuredLaunch,
+  proof: ClaudeSession['initialization']['proof'],
+  contextActivity: number,
+  onLateRefusal: ClaudeSession['initialization']['onLateRefusal']
+): ClaudeSession['initialization'] {
+  return {
+    proof,
+    account: launch.account,
+    resumesTranscript: launch.resumesTranscript,
+    claudeConfigDir: launch.claudeConfigDir,
+    cwd: launch.cwd,
+    history: {
+      leafUuid: launch.resumeLeafUuid,
+      covered: !launch.resumesTranscript || launch.resumeLeafUuid === null,
+      contextActivity
+    },
+    onLateRefusal
+  }
+}
 
 export function createClaudeSessionPublication(input: {
   connection: ClaudeSession['connection']
