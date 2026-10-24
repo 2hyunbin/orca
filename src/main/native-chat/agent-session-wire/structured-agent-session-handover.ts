@@ -178,11 +178,12 @@ export async function beginSubmissionHandover(
       } finally {
         attempt?.end()
       }
+      if (reconsider) {
+        return async () => undefined
+      }
+      // The journal writer orders proof before teardown; the host lane may be closing the child.
+      await resolveHandover(ctx, clientMessageId, outcome)
       return async () => {
-        if (reconsider) {
-          return
-        }
-        await resolveHandover(ctx, clientMessageId, outcome)
         if (outcome?.state === 'accepted' || outcome?.state === 'admitted') {
           await ctx.recordRanOptions?.({
             message: executionOptions,
