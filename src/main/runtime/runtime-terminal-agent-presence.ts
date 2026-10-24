@@ -1,7 +1,8 @@
 import {
   isAgentForegroundWrapperProcess,
   isExpectedAgentProcess,
-  recognizeAgentProcess
+  recognizeAgentProcess,
+  type RecognizedAgentProcess
 } from '../../shared/agent-process-recognition'
 import { isOpenCodeNativeTitle } from '../../shared/agent-detection'
 import { isShellProcess } from '../../shared/shell-process-detection'
@@ -42,18 +43,18 @@ type RuntimeTerminalAgentPresenceDependencies = {
   getTitleDisplayClear(ptyId: string): TitleDisplayClear | null
 }
 
-export type RuntimeTerminalAgentPresenceOptions = {
-  retryForegroundWrappers?: boolean
-  /** Foreground identity the caller already confirmed; skips the provider's cached read. */
-  foregroundProcess?: string | null
-}
+/** `confirmed`: the launch command line was read and named no agent. */
+export type ForegroundRead =
+  | ({ kind: 'agent' } & RecognizedAgentProcess)
+  | { kind: 'shell' | 'wrapper' | 'other'; confirmed: boolean }
+  | { kind: 'unreadable' }
 
 type PaneAgentEvidence = {
   ptyId: string | null
   /** A title or prompt that only an agent paints. */
   shown: boolean
-  /** An agent status recorded with no title to contradict it. */
-  untitledStatus: boolean
+  /** The agent reported its own status: OSC 7501, a hook row, or a status with no title over it. */
+  reportsStatus: boolean
   /** Claude's management screen is up, so a Claude process there is not a task agent. */
   suppressClaude: boolean
 }
@@ -61,17 +62,8 @@ type PaneAgentEvidence = {
 export class RuntimeTerminalAgentPresence {
   constructor(private readonly deps: RuntimeTerminalAgentPresenceDependencies) {}
 
-  async isRunning(
-    handle: string,
-    options: RuntimeTerminalAgentPresenceOptions = {}
-  ): Promise<boolean> {
-    return (await this.resolve(handle, options)) === 'present'
-  }
-
-  async resolve(
-    handle: string,
-    options: RuntimeTerminalAgentPresenceOptions = {}
-  ): Promise<TerminalAgentPresence> {
+  /** `foreground`: a read the caller already made, so the process is not read twice. */
+  async resolve(handle: string, foreground?: ForegroundRead): Promise<TerminalAgentPresence> {
     // Why: a structured session IS the agent and has no pane or foreground process to probe.
     if (this.deps.isLiveStructuredAgent?.(handle)) {
       return 'present'
@@ -82,67 +74,54 @@ export class RuntimeTerminalAgentPresence {
         return 'present'
       }
       if (!pane.ptyId) {
-        return pane.untitledStatus ? 'present' : 'absent'
+        return pane.reportsStatus ? 'present' : 'absent'
       }
-      // Why: under OSC 7501 an agent paints no title glyph, so its own status is the evidence;
-      // it counts only where the process read below does not contradict it.
-      const reported =
-        !pane.suppressClaude &&
-        (pane.untitledStatus || this.deps.reportsAgentStatus(handle, pane.ptyId))
-      const foreground = await this.readForegroundProcess(pane.ptyId, {
-        confirmShell: reported,
-        cached: options.foregroundProcess
-      })
-      if (!foreground) {
-        return reported ? 'present' : 'unknown'
+      const read =
+        foreground ?? (await this.readForeground(pane.ptyId, { confirmShell: pane.reportsStatus }))
+      switch (read.kind) {
+        case 'agent':
+          return pane.suppressClaude && isExpectedAgentProcess(read.processName, 'claude')
+            ? 'absent'
+            : 'present'
+        case 'wrapper':
+          return (await this.waitForWrappedAgent(pane.ptyId, pane.suppressClaude))
+            ? 'present'
+            : 'absent'
+        case 'unreadable':
+          return pane.reportsStatus ? 'present' : 'unknown'
+        default:
+          // Why: an agent under OSC 7501 paints no title glyph, so its own status is the evidence
+          // wherever the process read cannot name what runs.
+          return pane.reportsStatus && !contradictsReportedStatus(read) ? 'present' : 'absent'
       }
-      const recognized = recognizeAgentProcess(foreground)
-      if (recognized) {
-        return pane.suppressClaude && isExpectedAgentProcess(recognized.processName, 'claude')
-          ? 'absent'
-          : 'present'
-      }
-      if (isShellProcess(foreground)) {
-        return 'absent'
-      }
-      if (reported) {
-        return 'present'
-      }
-      return options.retryForegroundWrappers !== false &&
-        isAgentForegroundWrapperProcess(foreground) &&
-        (await this.waitForWrappedAgent(pane.ptyId, pane.suppressClaude))
-        ? 'present'
-        : 'absent'
     } catch {
       return 'absent'
     }
   }
 
+  /** Whether the foreground proves that a reported agent status is left over. */
+  async foregroundContradictsStatus(ptyId: string): Promise<boolean> {
+    return contradictsReportedStatus(await this.readForeground(ptyId, { confirmShell: true }))
+  }
+
   /**
-   * The foreground's name, re-read once from the launch command line when the cached name proves
+   * The foreground, re-read once from the launch command line when the cached name proves
    * nothing: macOS p_comm names the native Claude install by its version directory (`2.1.310`),
-   * and a Windows tracker answers with the shell until its scan lands.
+   * npm installs run as `node`, and a Windows tracker answers with the shell until its scan lands.
+   * `confirmShell` false keeps a plain shell with no status behind it to the cheap cached read.
    */
-  async readForegroundProcess(
+  async readForeground(
     ptyId: string,
-    { confirmShell, cached }: { confirmShell: boolean; cached?: string | null }
-  ): Promise<string | null> {
-    const foreground =
-      cached !== undefined
-        ? cached
-        : await Promise.resolve(this.deps.getForegroundProcess(ptyId)).catch(() => null)
-    if (
-      !foreground ||
-      recognizeAgentProcess(foreground) ||
-      isAgentForegroundWrapperProcess(foreground) ||
-      (!confirmShell && isShellProcess(foreground))
-    ) {
-      return foreground
+    { confirmShell }: { confirmShell: boolean }
+  ): Promise<ForegroundRead> {
+    const cached = await Promise.resolve(this.deps.getForegroundProcess(ptyId)).catch(() => null)
+    if (recognizeAgentProcess(cached) || (!confirmShell && cached && isShellProcess(cached))) {
+      return classifyForeground(cached, false)
     }
     const confirmed = await Promise.resolve(this.deps.confirmForegroundProcess(ptyId)).catch(
       () => null
     )
-    return confirmed ?? foreground
+    return confirmed ? classifyForeground(confirmed, true) : classifyForeground(cached, false)
   }
 
   private readPaneEvidence(handle: string): PaneAgentEvidence {
@@ -153,10 +132,11 @@ export class RuntimeTerminalAgentPresence {
     if (pty) {
       const clear = this.deps.getTitleDisplayClear(pty.ptyId)
       const leaf = this.deps.getPrimaryLeaf(pty.ptyId)
-      return readPtyEvidence(
+      const evidence = readPtyEvidence(
         getPtyDisplayRecord(pty, clear),
         leaf ? getLeafDisplayRecord(leaf, clear) : null
       )
+      return this.withReportedStatus(handle, evidence)
     }
     const liveLeaf = this.deps.getLiveLeaf(handle)
     const leaf = getLeafDisplayRecord(
@@ -176,15 +156,23 @@ export class RuntimeTerminalAgentPresence {
     const tabTitle = this.deps.getTabTitle(leaf.tabId)
     const tabClassification = paneTitle === null ? classifyAgentTitle(tabTitle) : 'neutral'
     const waitText = buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview)
-    return {
+    return this.withReportedStatus(handle, {
       ptyId: leaf.ptyId,
       shown:
         titleProves(paneTitle, paneClassification) ||
         titleProves(tabTitle, tabClassification) ||
         (!isOpenCodeNativeTitle(paneTitle ?? tabTitle) && isKnownReadyPromptPreview(waitText)),
-      untitledStatus: leaf.lastAgentStatus !== null && paneTitle === null && tabTitle === null,
+      reportsStatus: leaf.lastAgentStatus !== null && paneTitle === null && tabTitle === null,
       suppressClaude: paneClassification === 'management' || tabClassification === 'management'
-    }
+    })
+  }
+
+  private withReportedStatus(handle: string, pane: PaneAgentEvidence): PaneAgentEvidence {
+    const reportsStatus =
+      !pane.suppressClaude &&
+      (pane.reportsStatus ||
+        (pane.ptyId !== null && this.deps.reportsAgentStatus(handle, pane.ptyId)))
+    return { ...pane, reportsStatus }
   }
 
   private async waitForWrappedAgent(ptyId: string, suppressClaude: boolean): Promise<boolean> {
@@ -232,8 +220,33 @@ function readPtyEvidence(
         ptyTitleProvesAgentPresence(pty, ptyTitle, classifyAgentTitle(ptyTitle))) ||
       (isOpenCodeNativeTitle(markerTitle) && pty.launchAgent === 'opencode') ||
       (!isOpenCodeNativeTitle(markerTitle) && isKnownReadyPromptPreview(waitText)),
-    untitledStatus:
+    reportsStatus:
       pty.lastAgentStatus !== null && leafTitle === null && ptyTitle === null && !management,
     suppressClaude: leafTitle !== null ? leafClassification === 'management' : management
   }
+}
+
+function classifyForeground(processName: string | null, confirmed: boolean): ForegroundRead {
+  if (!processName) {
+    return { kind: 'unreadable' }
+  }
+  const recognized = recognizeAgentProcess(processName)
+  if (recognized) {
+    return { kind: 'agent', ...recognized }
+  }
+  return {
+    kind: isShellProcess(processName)
+      ? 'shell'
+      : isAgentForegroundWrapperProcess(processName)
+        ? 'wrapper'
+        : 'other',
+    confirmed
+  }
+}
+
+/** A shell, or a launch command line that names no agent; an opaque or unread name does not. */
+function contradictsReportedStatus(read: ForegroundRead): boolean {
+  return (
+    read.kind === 'shell' || (read.kind !== 'agent' && read.kind !== 'unreadable' && read.confirmed)
+  )
 }

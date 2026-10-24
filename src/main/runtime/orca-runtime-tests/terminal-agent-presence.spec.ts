@@ -8,7 +8,6 @@ import { assertTerminalRunsAgent } from '../rpc/methods/orchestration/worker/exp
 // install by its version directory: the shape of an idle Claude worker in STA-11772.
 const PLAIN_TITLE = '\x1b]0;Orca worker dispatch task ok\x07'
 const PROGRAM_IDLE = '\x1b]7501;state=idle:app=claude-code\x1b\\'
-const SHELL_PROMPT = '\x1b]133;A\x07'
 
 async function claudeTerminal(foreground: {
   cached: string | null
@@ -48,25 +47,27 @@ describe('terminal agent presence', () => {
     await expect(runtime.resolveTerminalAgentPresence(handle)).resolves.toBe('present')
   })
 
-  it('reports a clean exit to the shell as absent', async () => {
-    const { runtime, handle } = await claudeTerminal({ cached: 'zsh' })
+  it('lets a shell in the foreground outrank the status a killed agent left behind', async () => {
+    const { runtime, handle } = await claudeTerminal({ cached: 'zsh', confirm: async () => 'zsh' })
     runtime.onPtyData('pty-claude', PLAIN_TITLE + PROGRAM_IDLE, 1)
-    runtime.onPtyData('pty-claude', SHELL_PROMPT, 2)
 
     await expect(runtime.resolveTerminalAgentPresence(handle)).resolves.toBe('absent')
   })
 
-  it('lets a shell in the foreground outrank the status a killed agent left behind', async () => {
-    const confirmForegroundProcess = vi.fn(async () => 'zsh')
+  it('does not let leftover status vouch for a dev server started after the agent died', async () => {
     const { runtime, handle } = await claudeTerminal({
-      cached: 'zsh',
-      confirm: confirmForegroundProcess
+      cached: 'node',
+      confirm: async () => 'node'
     })
     runtime.onPtyData('pty-claude', PLAIN_TITLE + PROGRAM_IDLE, 1)
-
-    await expect(runtime.resolveTerminalAgentPresence(handle)).resolves.toBe('absent')
-    // A Windows tracker answers with the shell until its scan lands, so the shell is re-read.
-    expect(confirmForegroundProcess).toHaveBeenCalledOnce()
+    vi.useFakeTimers()
+    try {
+      const presence = runtime.resolveTerminalAgentPresence(handle)
+      await vi.advanceTimersByTimeAsync(10_000)
+      await expect(presence).resolves.toBe('absent')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('refuses an unreadable foreground with a reason, keeping the existing error code', async () => {

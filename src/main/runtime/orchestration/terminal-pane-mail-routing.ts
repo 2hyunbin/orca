@@ -1,4 +1,3 @@
-import type { RuntimeTerminalAgentPresenceOptions } from '../runtime-terminal-agent-presence'
 import { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
@@ -6,7 +5,6 @@ import {
   detectAgentStatusFromTitle,
   isClaudeManagementTitle
 } from '../../../shared/agent-detection'
-import { recognizeAgentProcess } from '../../../shared/agent-process-recognition'
 import {
   resolveStructuredWorkerAuthority,
   resolveStructuredWorkerIdentityForSession
@@ -111,13 +109,6 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
     return this.titleObservationSequence
   }
 
-  async isTerminalRunningAgent(
-    handle: string,
-    options?: RuntimeTerminalAgentPresenceOptions
-  ): Promise<boolean> {
-    return this.terminalAgentPresence.isRunning(handle, options)
-  }
-
   async isTerminalRunningSettledPromptAgent(handle: string): Promise<boolean> {
     try {
       const livePty = this.getLivePtyForHandle(handle)
@@ -129,15 +120,14 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
       }
       // Why confirm a shell too: treating an unproven name as "no agent" downgrades the prompt to
       // unframed chunks, which Claude's composer truncates.
-      const foregroundProcess = await this.terminalAgentPresence.readForegroundProcess(ptyId, {
+      const foreground = await this.terminalAgentPresence.readForeground(ptyId, {
         confirmShell: true
       })
-      const agent = recognizeAgentProcess(foregroundProcess)?.agent
+      const agent = foreground.kind === 'agent' ? foreground.agent : undefined
       if (agent !== 'claude' && agent !== 'codex') {
         return false
       }
-      const presence = { retryForegroundWrappers: false, foregroundProcess }
-      if (!(await this.isTerminalRunningAgent(handle, presence))) {
+      if ((await this.terminalAgentPresence.resolve(handle, foreground)) !== 'present') {
         return false
       }
       trackedPty.foregroundAgent = agent

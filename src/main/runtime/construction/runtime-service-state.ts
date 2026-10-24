@@ -64,12 +64,16 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
       this.ptyController?.confirmForegroundProcess?.(ptyId) ?? null,
     reportsAgentStatus: (handle, ptyId) =>
       this.getPtyProgramActivity(ptyId) !== null ||
-      this.getFreshExplicitAgentStatusForHandle(handle) !== null,
+      this.getFreshExplicitAgentStatusForPty(handle, ptyId) !== null,
     getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId)
   })
 
   resolveTerminalAgentPresence(handle: string): Promise<TerminalAgentPresence> {
     return this.terminalAgentPresence.resolve(handle)
+  }
+
+  async isTerminalRunningAgent(handle: string): Promise<boolean> {
+    return (await this.terminalAgentPresence.resolve(handle)) === 'present'
   }
 
   protected notifier: RuntimeNotifier | null = null
@@ -212,7 +216,6 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
   })
 
   protected readonly terminalAgentStatus = new RuntimeTerminalAgentStatusQuery({
-    getController: () => this.ptyController,
     getLivePty: (handle) => this.getLivePtyForHandle(handle),
     getLiveLeaf: (handle) => this.getLiveLeafForHandle(handle),
     getPrimaryLeaf: (ptyId) => this.getPrimaryLeafForPty(ptyId),
@@ -220,6 +223,8 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getExplicitStatus: (handle) => this.getFreshExplicitAgentStatusForHandle(handle),
     getLifecycleStatus: (ptyId) => this.agentPromptLifecycleByPtyId.get(ptyId),
     isRunning: (handle) => this.isTerminalRunningAgent(handle),
+    foregroundContradictsStatus: (ptyId) =>
+      this.terminalAgentPresence.foregroundContradictsStatus(ptyId),
     getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId)
   })
 
