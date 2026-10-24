@@ -29,6 +29,8 @@ type RuntimeMobileAgentStatusHost = {
   getTrackedTitle(ptyId: string | null): string | null
   /** Wall clock of the PTY's latest live OSC title; seeded restore titles leave it unset. */
   getPtyTitleObservedAtEpochMs?(ptyId: string | null): number | null
+  /** When main started the PTY's current process; null when it attached to a running one. */
+  getPtyProcessStartedAtEpochMs?(ptyId: string): number | null
 }
 
 export function buildRuntimeMobileAgentStatus(
@@ -44,7 +46,8 @@ export function buildRuntimeMobileAgentStatus(
   // provider session — only the full hook payload does, and headless serve has no
   // renderer to publish `tab.agentStatus`. Without it mobile native chat has no
   // transcript to address and sits on the empty state forever.
-  const hookRow = selectRuntimeHookAgentRowForPane(getHookRowsForPane(paneKey))
+  const hookRows = getHookRowsForPane(paneKey)
+  const hookRow = selectRuntimeHookAgentRowForPane(hookRows)
   // Why: the hook row is evidence in its own right. Returning early on a missing
   // PTY status/projected row put this check ahead of the only headless carrier, so
   // an agent that reported its session but never emitted a recognized title got no
@@ -103,6 +106,51 @@ export function buildRuntimeMobileAgentStatus(
     ownerAgent,
     ownerOptions
   )
+  const identityOnly = (evidenceAt: number): { agentStatus: AgentStatusEntry } => {
+    const agentType = ownerAgent ?? hookRow.agentType ?? hookRow.providerSessionAgentType
+    return {
+      agentStatus: normalizeCompatibleAgentStatusEntryForOwner(
+        {
+          state: 'done',
+          prompt: '',
+          updatedAt: evidenceAt,
+          stateStartedAt: evidenceAt,
+          // Why: clients render an unverifiable row as no status yet keep its identity, so native
+          // chat still finds the session; clients that cannot read it get the legacy `done`.
+          restoredUnconfirmed: true,
+          paneKey,
+          ...(terminalHandle ? { terminalHandle } : {}),
+          ...(agentType ? { agentType } : {}),
+          ...((pty?.worktreeId ?? leaf?.worktreeId)
+            ? { worktreeId: pty?.worktreeId ?? leaf?.worktreeId }
+            : {}),
+          tabId: tab.parentTabId,
+          terminalTitle,
+          stateHistory: [],
+          ...providerSession
+        },
+        ownerAgent,
+        ownerOptions
+      )
+    }
+  }
+  // Why: evidence from before main started this process describes an earlier one, so a fresh
+  // shell after a restore must not wear that turn's state. An attached process has no start here.
+  const processPtyId = pty?.ptyId ?? leaf?.ptyId
+  const processStartedAt = processPtyId ? host.getPtyProcessStartedAtEpochMs?.(processPtyId) : null
+  const newestEvidenceAt = Math.max(
+    retained?.updatedAt ?? -Infinity,
+    ...hookRows.map((row) => row.receivedAt)
+  )
+  if (
+    processStartedAt != null &&
+    newestEvidenceAt < processStartedAt &&
+    !pty?.lastAgentStatus &&
+    !leaf?.lastAgentStatus
+  ) {
+    // Dated by the start, the newest fact here, so a client's copy of the old turn cannot outrank it.
+    return identityOnly(processStartedAt)
+  }
   // Why: OSC 9999 hook payload carries real state/prompt/agent; without preferring it, hook-only transitions never surfaced (#7970).
   const liveRow = retained ?? resolveRuntimeHookLiveAgentRow(hookRow.live, pty, nonAgentTitle)
   if (liveRow) {
@@ -139,12 +187,17 @@ export function buildRuntimeMobileAgentStatus(
   }
   // Why: a turn restored across a server restart is unverifiable, not finished; a synthetic
   // `done` told clients a running agent had stopped. Keep its own date (so it cannot outrank a
-  // client's row) and drop the question fields (#12346). Only a later shell title retires it.
+  // client's row) and drop the question fields (#12346). A later shell title retires the turn,
+  // leaving only its identity: Done beside a shell would claim a completion nobody saw.
+  const titleObservedAt =
+    pty?.lastOscTitleEpochMs ?? host.getPtyTitleObservedAtEpochMs?.(leaf?.ptyId ?? null) ?? 0
   const shellTitleRetiredRestored =
     hookRow.restored !== null &&
     terminalTitleBlocksExplicitAgentStatus(ptyTitle) &&
-    (pty?.lastOscTitleEpochMs ?? host.getPtyTitleObservedAtEpochMs?.(leaf?.ptyId ?? null) ?? 0) >=
-      hookRow.restored.updatedAt
+    titleObservedAt >= hookRow.restored.updatedAt
+  if (shellTitleRetiredRestored && !pty?.lastAgentStatus) {
+    return identityOnly(titleObservedAt)
+  }
   const restored = !pty?.lastAgentStatus && !shellTitleRetiredRestored ? hookRow.restored : null
   if (restored) {
     const restoredAgentType = ownerAgent ?? restored.payload.agentType
