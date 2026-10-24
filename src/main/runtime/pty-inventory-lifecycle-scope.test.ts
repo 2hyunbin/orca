@@ -130,6 +130,53 @@ describe('lifecycle invalidation respects inventory scope and retry bounds', () 
     expect(list).toHaveBeenCalledTimes(2)
   })
 
+  it('re-lists instead of joining a newer listing that waits less for slow hosts', async () => {
+    const first = deferred<PtyProcessInfo[]>()
+    const second = deferred<PtyProcessInfo[]>()
+    const list = vi
+      .fn<InventoryListing>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValue([processRow('relisted')])
+    const { runtime } = createInventoryRuntime(list)
+    vi.spyOn(Date, 'now').mockReturnValue(1000)
+    const patient = runtime.read(undefined, 'repo::/tmp/a', 4000)
+    const hasty = runtime.read(undefined, 'repo::/tmp/b', 1500)
+    first.resolve([processRow('overtaken')])
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(3))
+    second.resolve([processRow('short-wait')])
+    // The patient read re-lists; the hasty one may adopt that longer-waiting listing.
+    expect((await patient)?.allLivePtyIds).toEqual(new Set(['relisted']))
+    expect((await hasty)?.allLivePtyIds).toEqual(new Set(['relisted']))
+    expect(list).toHaveBeenCalledTimes(3)
+  })
+
+  it('re-lists instead of joining a newer listing that asked for different process evidence', async () => {
+    const first = deferred<PtyProcessInfo[]>()
+    const second = deferred<PtyProcessInfo[]>()
+    const list = vi
+      .fn<InventoryListing>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+      .mockResolvedValue([processRow('relisted')])
+    const { runtime } = createInventoryRuntime(list)
+    const withEvidence = runtime.read(undefined, 'repo::/tmp/a', undefined, {
+      includeForegroundProcessEvidence: true
+    })
+    const without = runtime.read(undefined, 'repo::/tmp/b', undefined, {
+      includeForegroundProcessEvidence: false
+    })
+    first.resolve([processRow('overtaken')])
+    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(3))
+    expect(list.mock.calls[2]?.[1]?.includeForegroundProcessEvidence).toBe(true)
+    second.resolve([processRow('no-evidence')])
+    expect((await withEvidence)?.allLivePtyIds).toEqual(new Set(['relisted']))
+    // Overtaken by a listing with evidence, the evidence-free read re-lists rather than adopt it.
+    expect((await without)?.allLivePtyIds).toEqual(new Set(['relisted']))
+    expect(list).toHaveBeenCalledTimes(4)
+    expect(list.mock.calls[3]?.[1]?.includeForegroundProcessEvidence).toBe(false)
+  })
+
   it('allows only one target retry and keeps a second invalidation unknown', async () => {
     const first = deferred<PtyProcessInfo[]>()
     const second = deferred<PtyProcessInfo[]>()

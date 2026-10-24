@@ -21,6 +21,7 @@ export abstract class OrcaRuntimeWithPtyControllerInventoryListing extends OrcaR
   private latestAggregatePtyInventoryListing: {
     generation: number
     processes: Promise<HostScopedPtyProcesses>
+    opts: { deadlineMs: number; includeForegroundProcessEvidence?: boolean }
   } | null = null
 
   /** Lists the controller's PTYs; `stale` means a newer listing or lifecycle change overtook it. */
@@ -60,7 +61,7 @@ export abstract class OrcaRuntimeWithPtyControllerInventoryListing extends OrcaR
             .listProcesses(connectionId === undefined ? undefined : providerKey, providerListOpts)
             .then((listed) => ({ processes: listed, hostIds: [providerKey] }))
     if (connectionId === undefined) {
-      this.latestAggregatePtyInventoryListing = { generation, processes }
+      this.latestAggregatePtyInventoryListing = { generation, processes, opts: providerListOpts }
     }
     const isCurrent = () =>
       connectionId === undefined
@@ -74,7 +75,14 @@ export abstract class OrcaRuntimeWithPtyControllerInventoryListing extends OrcaR
     // Why join: a census begun after ours is fresh enough, and re-listing would supersede it in turn.
     while (result.ok && targeted && connectionId === undefined && !isCurrent()) {
       const newer = this.latestAggregatePtyInventoryListing
-      if (!newer || newer.generation <= generation) {
+      // Never another read's question: same evidence asked, and as long to wait for slow hosts.
+      if (
+        !newer ||
+        newer.generation <= generation ||
+        newer.opts.includeForegroundProcessEvidence !==
+          providerListOpts.includeForegroundProcessEvidence ||
+        newer.opts.deadlineMs < providerListOpts.deadlineMs
+      ) {
         break
       }
       generation = newer.generation
