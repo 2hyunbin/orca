@@ -76,14 +76,23 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
       'refused'
     )
-    call.mockResolvedValueOnce({ id: 'm', ok: false, error: { code: 'method_not_found' } })
-    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
-      'refused'
-    )
-    call.mockRejectedValueOnce(new Error('timeout'))
-    await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
-      'unknown'
-    )
+    for (const code of ['method_not_found', 'tab_not_found']) {
+      call.mockResolvedValueOnce({ id: 'm', ok: false, error: { code, message: code } })
+      await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
+        'refused'
+      )
+    }
+    // The bridge answers a lost transport as an error envelope, as runtimeEnvironments.call does.
+    for (const code of [
+      'runtime_timeout',
+      'remote_runtime_unavailable',
+      'runtime_rpc_queue_overloaded'
+    ]) {
+      call.mockResolvedValueOnce({ id: 'm', ok: false, error: { code, message: code } })
+      await expect(moveWebRuntimeLeafToNewTab(ENVIRONMENT_ID, REQUEST, PLACEMENT)).resolves.toBe(
+        'unknown'
+      )
+    }
   })
   it('names the host only when it advertises committing pane moves', async () => {
     stubRuntimeEnvironmentBridge({ call: vi.fn() })
@@ -135,7 +144,13 @@ describe('moveWebRuntimeLeafToNewTab', () => {
   })
   it('waits for the next snapshot when the host cannot be asked about a lost reply', async () => {
     const { closeTab } = withRevertSpies()
-    stubRuntimeEnvironmentBridge({ call: vi.fn().mockRejectedValue(new Error('offline')) })
+    stubRuntimeEnvironmentBridge({
+      call: vi.fn().mockResolvedValue({
+        id: 'l',
+        ok: false,
+        error: { code: 'remote_runtime_unavailable', message: 'remote_runtime_unavailable' }
+      })
+    })
     await settleHostPaneMove(ENVIRONMENT_ID, REQUEST, 'unknown', true)
     expect(closeTab).not.toHaveBeenCalled()
     expect(refresh).not.toHaveBeenCalled()

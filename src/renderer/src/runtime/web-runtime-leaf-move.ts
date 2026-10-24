@@ -2,6 +2,7 @@ import type { TerminalLeafMoveRequest } from '../../../shared/terminal-leaf-move
 import { SESSION_TABS_MOVE_PANE_TO_NEW_TAB_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { toHostSessionTabId } from '../../../shared/terminal-surface-id'
 import { makePaneKey } from '../../../shared/stable-pane-id'
+import { isRecoverableRemoteRuntimeConnectionError } from '../../../shared/remote-runtime-client-error-classification'
 import { runtimeEnvironmentIdUnlessTwin } from '../lib/resolve-owner'
 import { useAppStore } from '../store'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
@@ -58,6 +59,11 @@ export async function moveWebRuntimeLeafToNewTab(
       '[web-runtime-session] no answer to the pane move:',
       error instanceof Error ? error.message : String(error)
     )
+    return 'unknown'
+  }
+  // Why: the bridge answers a lost transport as an error envelope, not a throw; the host may have committed.
+  if (!response.ok && isRecoverableRemoteRuntimeConnectionError(response.error)) {
+    console.warn('[web-runtime-session] no answer to the pane move:', response.error.code)
     return 'unknown'
   }
   const answer = response.ok ? response.result : response
