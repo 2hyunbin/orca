@@ -85,10 +85,7 @@ export const AgentSessionRewindRecordSchema = z.object({
 export type AgentSessionRewindRecord = z.infer<typeof AgentSessionRewindRecordSchema>
 export type AgentSessionRewindFork = NonNullable<AgentSessionRewindRecord['providerFork']>
 
-/** A message a rewind can return to: a user message that opened its own turn. One sent into a
- *  running turn belongs to that turn, whose provider and journal order it differently, so a rewind
- *  goes back only to whole turns. `turnOpener` reads the message a turn record names as its opener,
- *  as restored history scopes its openers to their turns too. */
+/** Rewind whole turns only: mid-turn sends have different provider/journal order. Read turnOpener from the turn record, matching restored-history scope. */
 export function isAgentSessionRewindTarget(
   item: Pick<AgentJournalRenderItem, 'itemId' | 'body' | 'turnScope'>,
   turnOpener: (turnItemId: string) => string | undefined
@@ -99,11 +96,7 @@ export function isAgentSessionRewindTarget(
   return item.turnScope?.kind !== 'turn' || turnOpener(item.turnScope.turnItemId) === item.itemId
 }
 
-/**
- * The fork a rewind still owes the chat's next launch: it applies while the chat's provider
- * session is the one rewound, or the fork itself before the provider has written it. A prepared
- * one counts: recovery always completes it, so a launch before then must not resume the old one.
- */
+/** Apply the owed fork while the head is the rewound session or its unwritten fork. Include prepared recovery so early launch cannot resume the old conversation. */
 export function pendingAgentSessionRewindFork(
   rewind: AgentSessionRewindRecord | undefined,
   headNativeId: string | undefined
