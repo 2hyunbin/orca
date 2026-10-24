@@ -229,6 +229,7 @@ export function extractAgentProviderSession(
       return id ? { key: 'session_id', id } : null
     }
     // DSH's bridge has no persistence artifact and sends an empty transcript_path; retain its session ID only.
+    // Kiro also reports no transcript path; its ID feeds --resume-id.
     case 'kiro':
     case 'dsh': {
       const id = readSessionId(payload, ['session_id'])
