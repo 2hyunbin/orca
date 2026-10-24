@@ -268,13 +268,6 @@ export function registerMobileHandlers(
     return { revoked: rpcServer.revokeRuntimeAccess(args.deviceId) }
   })
 
-  ipcMain.handle('mobile:isWebSocketReady', () => {
-    return {
-      ready: rpcServer.getWebSocketEndpoint() !== null,
-      endpoint: rpcServer.getWebSocketEndpoint()
-    }
-  })
-
   ipcMain.handle('mobile:getWindowsFirewallStatus', (_event, args?: { address?: string }) => {
     const port = getWebSocketPort(rpcServer.getWebSocketEndpoint())
     return inspectWindowsMobileFirewall(port, args?.address, firewallEnvironment)

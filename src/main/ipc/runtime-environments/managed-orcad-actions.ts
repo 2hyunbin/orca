@@ -12,8 +12,13 @@ import {
 } from '../../ssh/orcad-runtime-maintenance'
 import { getOrcadSshDeployment } from '../../../shared/runtime-environments'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
-import type { OrcadManagedRestartResult } from '../../../shared/orcad-managed-runtime'
+import type {
+  OrcadManagedRestartResult,
+  OrcadManagedStaleLockReclaimRequest,
+  OrcadManagedStaleLockReclaimResult
+} from '../../../shared/orcad-managed-runtime'
 import { restartManagedOrcadEnvironment } from '../../managed-server/lifecycle/orcad-managed-launch-session'
+import { runManagedOrcadStaleLockReclaim } from '../../managed-server/lifecycle/orcad-managed-stale-lock-reclaim'
 import { clearLaunchSessionNote } from './runtime-environment-managed-tunnel'
 import { forgetLaunchSessionVerdict } from '../ssh/ssh-host-launch-session-note'
 import type { ManagedServerActions } from '../../runtime/managed-server-actions-registry'
@@ -102,15 +107,36 @@ export async function restartManagedOrcad(
 ): Promise<OrcadManagedRestartResult> {
   const result = await restartManagedOrcadEnvironment(options.getUserDataPath(), selector)
   if (result.outcome === 'restarted') {
-    // Why: the restarted orcad dropped the old connection; reconnect on the new one.
-    await options.invalidateTransport(result.environmentId)
-    const environment = resolveEnvironment(options.getUserDataPath(), result.environmentId)
-    const targetId = getOrcadSshDeployment(environment)?.sshTargetId
-    if (targetId) {
-      options.clearHostServerNotes(targetId, result.environmentId)
-      forgetLaunchSessionVerdict(targetId)
-      clearLaunchSessionNote(targetId, result.environmentId)
-    }
+    await reconnectRestartedManagedOrcad(options, result.environmentId)
   }
   return result
+}
+
+/** Desktop-only: the host status line offers it when a start refused a possibly stale lock (#32177). */
+export async function reclaimManagedOrcadStaleLock(
+  options: ManagedOrcadActionOptions,
+  selector: string,
+  request: OrcadManagedStaleLockReclaimRequest
+): Promise<OrcadManagedStaleLockReclaimResult> {
+  const result = await runManagedOrcadStaleLockReclaim(options.getUserDataPath(), selector, request)
+  // Even unstarted: the reconnect's own start replaces the note that offered this.
+  if (result.status === 'reclaimed') {
+    await reconnectRestartedManagedOrcad(options, result.environmentId)
+  }
+  return result
+}
+
+async function reconnectRestartedManagedOrcad(
+  options: ManagedOrcadActionOptions,
+  environmentId: string
+): Promise<void> {
+  // Why: the restarted orcad dropped the old connection; reconnect on the new one.
+  await options.invalidateTransport(environmentId)
+  const environment = resolveEnvironment(options.getUserDataPath(), environmentId)
+  const targetId = getOrcadSshDeployment(environment)?.sshTargetId
+  if (targetId) {
+    options.clearHostServerNotes(targetId, environmentId)
+    forgetLaunchSessionVerdict(targetId)
+    clearLaunchSessionNote(targetId, environmentId)
+  }
 }
