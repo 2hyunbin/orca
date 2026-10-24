@@ -3,8 +3,8 @@ import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import {
   isHostTabPane,
-  readHostPublishedSplitSourcePtyId,
-  splitWhenHostPublishesSource
+  notifyHostSplitSourceNotStarted,
+  readHostPublishedSplitSourcePtyId
 } from '@/runtime/web-runtime-split-source-pty'
 import type { PtyTransport } from './pty-transport-types'
 import { resolveSplitCwd, type PaneCwdMap } from './resolve-split-cwd'
@@ -59,15 +59,7 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
   }
   if (!ptyId && isHostTabPane(sourcePane)) {
     // Only the host starts a terminal in its tab, so a split made here would stay blank.
-    splitWhenHostPublishesSource(sourcePane, (publishedPtyId, navigatedAway) => {
-      // No source, no focus: a late split must not pull the user back from where they went.
-      splitWebRuntimeTerminal(
-        publishedPtyId,
-        args.direction,
-        args.source,
-        navigatedAway ? undefined : sourcePane
-      )
-    })
+    notifyHostSplitSourceNotStarted()
     return
   }
   splitLocally(args, () => splitCwd(args, ptyId))

@@ -16,15 +16,14 @@ const mocks = vi.hoisted(() => {
     splitWebRuntimeTerminal: vi.fn(),
     readHostPublishedSplitSourcePtyId: vi.fn<() => string | null>(),
     isHostTabPane: vi.fn<() => boolean>(),
-    splitWhenHostPublishesSource:
-      vi.fn<(source: unknown, split: (ptyId: string, navigatedAway: boolean) => void) => void>()
+    notifyHostSplitSourceNotStarted: vi.fn()
   }
 })
 
 vi.mock('@/runtime/web-runtime-split-source-pty', () => ({
   readHostPublishedSplitSourcePtyId: mocks.readHostPublishedSplitSourcePtyId,
   isHostTabPane: mocks.isHostTabPane,
-  splitWhenHostPublishesSource: mocks.splitWhenHostPublishesSource
+  notifyHostSplitSourceNotStarted: mocks.notifyHostSplitSourceNotStarted
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -81,7 +80,7 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     mocks.splitWebRuntimeTerminal.mockReturnValue(false)
     mocks.readHostPublishedSplitSourcePtyId.mockReset().mockReturnValue(null)
     mocks.isHostTabPane.mockReset().mockReturnValue(false)
-    mocks.splitWhenHostPublishesSource.mockReset()
+    mocks.notifyHostSplitSourceNotStarted.mockReset()
   })
 
   describe('a pane of a paired server tab whose own attach has not landed', () => {
@@ -122,30 +121,13 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     })
 
     // A pane split here has no server terminal, and nothing would ever start one.
-    it('leaves the split to the server once it publishes the source, never splitting here', () => {
+    it('says the source has not started instead of splitting here', () => {
       const splitPane = vi.fn(() => ({ id: 2 }))
 
       splitHostTabPane(splitPane)
 
       expect(splitPane).not.toHaveBeenCalled()
-      const [source, split] = mocks.splitWhenHostPublishesSource.mock.calls[0]!
-      expect(source).toEqual(SOURCE)
-      split(HOST_PTY, false)
-      expect(mocks.splitWebRuntimeTerminal).toHaveBeenLastCalledWith(
-        HOST_PTY,
-        'vertical',
-        'keyboard',
-        SOURCE
-      )
-      // Moved elsewhere meanwhile: the split lands without taking focus back.
-      split(HOST_PTY, true)
-      expect(mocks.splitWebRuntimeTerminal).toHaveBeenLastCalledWith(
-        HOST_PTY,
-        'vertical',
-        'keyboard',
-        undefined
-      )
-      expect(splitPane).not.toHaveBeenCalled()
+      expect(mocks.notifyHostSplitSourceNotStarted).toHaveBeenCalledOnce()
     })
   })
 
