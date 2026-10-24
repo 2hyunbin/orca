@@ -1,3 +1,4 @@
+import { createAgentPaneAuthority } from './agent-pane-authority'
 import { describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
@@ -28,7 +29,9 @@ function setup(existing: AgentStatusEntry) {
     recentlyClosedAgentStatusTabIds: {}
   } as unknown as AppState
   const requestFreshness = vi.fn()
+  const authority = createAgentPaneAuthority()
   const runtime = {
+    authority: () => authority,
     get: () => state,
     set: vi.fn((update) => {
       if (typeof update === 'function') {

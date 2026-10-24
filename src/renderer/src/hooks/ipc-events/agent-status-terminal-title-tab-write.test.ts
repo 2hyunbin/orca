@@ -1,8 +1,5 @@
-import { applyAgentStatusPatch } from '@/store/agent-status-patch'
-import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { useAppStore } from '@/store'
-import { createTestStore } from '@/store/slices/store-test-helpers'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
 import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -139,6 +136,9 @@ describe('hook-driven tab title IPC integration', () => {
     'applies $mode $states against the tab title slot',
     async ({ mode, states, title, expected }) => {
       vi.resetModules()
+      const { createTestStore } = await import('@/store/slices/store-test-helpers')
+      const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
+      const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
       const store = createTestStore()
       const seeded = storeWithDivergedTitleSlots({ tabTitle: title, paneSlotTitle: 'Codex ready' })
       const otherLeaf = '22222222-2222-4222-8222-222222222222'
@@ -185,8 +185,8 @@ describe('hook-driven tab title IPC integration', () => {
         })
       )
       const { registerAgentStatusIpcBridge } = await import('./agent-status-ipc-bridge')
-      const updateTitle = vi.spyOn(getAgentStatusOwner(store).getState(), 'updateTabTitle')
-      const updateTitles = vi.spyOn(getAgentStatusOwner(store).getState(), 'updateTabTitles')
+      const updateTitle = vi.spyOn(store.getState(), 'updateTabTitle')
+      const updateTitles = vi.spyOn(store.getState(), 'updateTabTitles')
       const unsubs: (() => void)[] = []
       const bridge = registerAgentStatusIpcBridge(unsubs)
       try {
