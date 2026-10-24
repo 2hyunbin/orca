@@ -215,7 +215,7 @@ export abstract class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithRes
         terminals.set(ptyId, {
           ptyId,
           workspaceId,
-          paneKey: pty?.paneKey ?? null,
+          paneKey: pty ? this.paneOfPty(pty).paneKey : null,
           wslDistro: pty?.wslDistro ?? null,
           foregroundAgent: pty?.foregroundAgent ?? null
         })
