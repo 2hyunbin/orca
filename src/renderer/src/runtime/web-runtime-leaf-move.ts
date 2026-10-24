@@ -8,8 +8,13 @@ import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   captureRuntimeEnvironmentCall,
+  captureWebSessionIntentOwner,
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
+import {
+  clearWebSessionReorderIntent,
+  recordWebSessionReorderIntent
+} from './web-session-reorder-intent'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 import { moveWebRuntimeSessionTab } from './web-runtime-session-tab-move'
 import { activateWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
@@ -67,39 +72,80 @@ export async function moveWebRuntimeLeafToNewTab(
   }
 }
 
+/** Where this window drew the moved pane's tab, read at the drop, before a host snapshot lands. */
+export type DroppedPanePlacement = {
+  /** The group and its order when the pane was dropped at a chosen position. */
+  order: { groupId: string; tabOrder: string[] } | null
+  active: boolean
+}
+
 /**
- * After the host answered: a refusal redraws the host's tabs so the pane goes back at once; a
- * committed move gives the host the drop position and the focus this window already shows.
+ * Reads the drop's placement and holds the drawn order, so the host's snapshot of the commit,
+ * which goes out before its reply and appends the tab, cannot move it back meanwhile.
+ */
+export function holdDroppedPanePlacement(
+  environmentId: string,
+  request: TerminalLeafMoveRequest,
+  placedInGroupId: string | null
+): DroppedPanePlacement {
+  const state = useAppStore.getState()
+  const tabOrder = placedInGroupId
+    ? state.groupsByWorktree[request.worktreeId]?.find((group) => group.id === placedInGroupId)
+        ?.tabOrder
+    : undefined
+  const order =
+    placedInGroupId && tabOrder?.includes(request.targetTabId)
+      ? { groupId: placedInGroupId, tabOrder: [...tabOrder] }
+      : null
+  if (order) {
+    recordWebSessionReorderIntent(
+      captureWebSessionIntentOwner(environmentId),
+      request.worktreeId,
+      order.groupId,
+      order.tabOrder,
+      Date.now()
+    )
+  }
+  return {
+    order,
+    active: state.activeTabIdByWorktree[request.worktreeId] === request.targetTabId
+  }
+}
+
+/**
+ * After the host answered: a refusal drops the held order and redraws the host's tabs so the pane
+ * goes back at once; a committed move gives the host the drop position and focus held at the drop.
  */
 export async function settleHostPaneMove(args: {
   environmentId: string
   request: TerminalLeafMoveRequest
   moved: boolean
-  /** The group the pane was dropped into at a chosen position, or null when appended. */
-  placedInGroupId: string | null
+  placement: DroppedPanePlacement
 }): Promise<void> {
-  const { environmentId, request, moved, placedInGroupId } = args
+  const { environmentId, request, moved, placement } = args
   const { worktreeId, targetTabId } = request
   if (!moved) {
+    if (placement.order) {
+      clearWebSessionReorderIntent(
+        captureWebSessionIntentOwner(environmentId),
+        worktreeId,
+        placement.order.groupId
+      )
+    }
     await refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId)
     return
   }
-  const tabOrder = placedInGroupId
-    ? useAppStore
-        .getState()
-        .groupsByWorktree[worktreeId]?.find((group) => group.id === placedInGroupId)?.tabOrder
-    : undefined
-  if (placedInGroupId && tabOrder?.includes(targetTabId)) {
+  if (placement.order) {
     await moveWebRuntimeSessionTab({
       kind: 'reorder',
       worktreeId,
       environmentId,
       tabId: targetTabId,
-      targetGroupId: placedInGroupId,
-      tabOrder
+      targetGroupId: placement.order.groupId,
+      tabOrder: placement.order.tabOrder
     })
   }
-  if (useAppStore.getState().activeTabIdByWorktree[worktreeId] === targetTabId) {
+  if (placement.active) {
     await activateWebRuntimeSessionTab({
       worktreeId,
       tabId: targetTabId,

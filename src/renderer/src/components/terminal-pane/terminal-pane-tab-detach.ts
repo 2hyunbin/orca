@@ -14,6 +14,7 @@ import {
   toWebTerminalSurfaceTabId
 } from '../../../../shared/terminal-surface-id'
 import {
+  holdDroppedPanePlacement,
   moveWebRuntimeLeafToNewTab,
   resolvePaneMoveHost,
   settleHostPaneMove
@@ -169,14 +170,14 @@ async function moveLeafToNewTab(
     // sees the move first; a refusal is undone by the next snapshot.
     const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request)
     const applied = applyMove(args, request, false, request.ptyId)
+    const placement = holdDroppedPanePlacement(
+      paneMoveHost,
+      request,
+      args.targetIndex === undefined ? null : args.targetGroupId
+    )
     void hostMove
       .then((moved) =>
-        settleHostPaneMove({
-          environmentId: paneMoveHost,
-          request,
-          moved,
-          placedInGroupId: args.targetIndex === undefined ? null : args.targetGroupId
-        })
+        settleHostPaneMove({ environmentId: paneMoveHost, request, moved, placement })
       )
       .catch((error: unknown) =>
         console.warn('[terminal-pane-detach] host move not settled', error)

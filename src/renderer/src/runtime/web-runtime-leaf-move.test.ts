@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   moveWebRuntimeLeafToNewTab,
+  holdDroppedPanePlacement,
   resolvePaneMoveHost,
   settleHostPaneMove
 } from './web-runtime-leaf-move'
@@ -15,7 +16,17 @@ const store = vi.hoisted(() => {
 const supports = vi.hoisted(() => vi.fn())
 vi.mock('../store', () => ({ useAppStore: { getState: () => store.state } }))
 vi.mock('./runtime-rpc-client', () => ({ runtimeEnvironmentSupportsCapability: supports }))
-const followUps = vi.hoisted(() => ({ refresh: vi.fn(), reorder: vi.fn(), activate: vi.fn() }))
+const followUps = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  reorder: vi.fn(),
+  activate: vi.fn(),
+  holdOrder: vi.fn(),
+  releaseOrder: vi.fn()
+}))
+vi.mock('./web-session-reorder-intent', () => ({
+  recordWebSessionReorderIntent: followUps.holdOrder,
+  clearWebSessionReorderIntent: followUps.releaseOrder
+}))
 vi.mock('./web-runtime-session-snapshot', () => ({
   refreshWebRuntimeSessionTabsSnapshot: followUps.refresh
 }))
@@ -91,29 +102,52 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     await expect(resolvePaneMoveHost(WORKTREE_ID)).resolves.toBeNull()
     expect(supports).not.toHaveBeenCalled()
   })
-  it('redraws the host tabs when the host did not move the pane', async () => {
-    await settleHostPaneMove({
-      environmentId: ENVIRONMENT_ID,
-      request: REQUEST,
-      moved: false,
-      placedInGroupId: 'group-1'
-    })
-    expect(followUps.refresh).toHaveBeenCalledWith(ENVIRONMENT_ID, WORKTREE_ID)
-    expect(followUps.reorder).not.toHaveBeenCalled()
-    expect(followUps.activate).not.toHaveBeenCalled()
-  })
-  it('gives the host the drop position and focus of a committed move', async () => {
+  it('holds the drawn order at the drop, before the host snapshot can append the tab', () => {
     const tabOrder = [REQUEST.targetTabId, REQUEST.sourceTabId]
     store.state = {
       ...store.state,
       groupsByWorktree: { [WORKTREE_ID]: [{ id: 'group-1', tabOrder }] },
       activeTabIdByWorktree: { [WORKTREE_ID]: REQUEST.targetTabId }
     }
+    expect(holdDroppedPanePlacement(ENVIRONMENT_ID, REQUEST, 'group-1')).toEqual({
+      order: { groupId: 'group-1', tabOrder },
+      active: true
+    })
+    expect(followUps.holdOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      WORKTREE_ID,
+      'group-1',
+      tabOrder,
+      expect.any(Number)
+    )
+  })
+  it('redraws the host tabs and drops the held order when the host did not move the pane', async () => {
+    await settleHostPaneMove({
+      environmentId: ENVIRONMENT_ID,
+      request: REQUEST,
+      moved: false,
+      placement: { order: { groupId: 'group-1', tabOrder: [REQUEST.targetTabId] }, active: true }
+    })
+    expect(followUps.releaseOrder).toHaveBeenCalledWith(expect.anything(), WORKTREE_ID, 'group-1')
+    expect(followUps.refresh).toHaveBeenCalledWith(ENVIRONMENT_ID, WORKTREE_ID)
+    expect(followUps.reorder).not.toHaveBeenCalled()
+    expect(followUps.activate).not.toHaveBeenCalled()
+  })
+  it('sends the order and focus held at the drop, not the order on screen now', async () => {
+    const tabOrder = [REQUEST.targetTabId, REQUEST.sourceTabId]
+    // A host snapshot appended the tab after the drop.
+    store.state = {
+      ...store.state,
+      groupsByWorktree: {
+        [WORKTREE_ID]: [{ id: 'group-1', tabOrder: [REQUEST.sourceTabId, REQUEST.targetTabId] }]
+      },
+      activeTabIdByWorktree: { [WORKTREE_ID]: REQUEST.sourceTabId }
+    }
     await settleHostPaneMove({
       environmentId: ENVIRONMENT_ID,
       request: REQUEST,
       moved: true,
-      placedInGroupId: 'group-1'
+      placement: { order: { groupId: 'group-1', tabOrder }, active: true }
     })
     expect(followUps.refresh).not.toHaveBeenCalled()
     expect(followUps.reorder).toHaveBeenCalledWith(

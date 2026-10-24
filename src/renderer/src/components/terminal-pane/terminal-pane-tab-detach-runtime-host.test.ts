@@ -17,13 +17,16 @@ const moveOnHost = vi.hoisted(() => vi.fn())
 const paneMoveHost = vi.hoisted(() => vi.fn())
 const moveLocally = vi.hoisted(() => vi.fn())
 const settle = vi.hoisted(() => vi.fn())
+const hold = vi.hoisted(() => vi.fn())
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/web-runtime-leaf-move', () => ({
   moveWebRuntimeLeafToNewTab: moveOnHost,
   resolvePaneMoveHost: paneMoveHost,
-  settleHostPaneMove: settle
+  settleHostPaneMove: settle,
+  holdDroppedPanePlacement: hold
 }))
 const MIRRORED_SOURCE = toWebTerminalSurfaceTabId('host-source')
+const HELD = { order: null, active: true }
 const itSwitchOff = it.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)
 function mirroredStore(layoutOf = SOURCE_TAB_ID) {
   const store = createStore()
@@ -52,6 +55,7 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
   beforeEach(() => {
     moveOnHost.mockReset()
     settle.mockReset().mockResolvedValue(undefined)
+    hold.mockReset().mockReturnValue(HELD)
     paneMoveHost.mockReset().mockResolvedValue('env-1')
     moveLocally.mockReset().mockResolvedValue({ status: 'not_held' })
     vi.stubGlobal('window', { api: { pty: { moveLeafToNewTab: moveLocally } } })
@@ -80,18 +84,19 @@ describe('detachTerminalPaneToTab on a runtime-hosted worktree', () => {
     answer(true)
     await vi.waitFor(() =>
       expect(settle).toHaveBeenCalledWith(
-        expect.objectContaining({ moved: true, placedInGroupId: null, request })
+        expect.objectContaining({ moved: true, placement: HELD, request })
       )
     )
   })
-  itSwitchOff('gives the host the drop position of a placed tab', async () => {
-    moveOnHost.mockResolvedValue(true)
+  itSwitchOff('holds a placed tab where it was dropped before the host answers', async () => {
+    moveOnHost.mockReturnValue(new Promise(() => {}))
     await detach(mirroredStore(), 0).result
-    await vi.waitFor(() =>
-      expect(settle).toHaveBeenCalledWith(
-        expect.objectContaining({ moved: true, placedInGroupId: TARGET_GROUP_ID })
-      )
+    expect(hold).toHaveBeenCalledWith(
+      'env-1',
+      expect.objectContaining({ leafId: LEAF_2 }),
+      TARGET_GROUP_ID
     )
+    expect(settle).not.toHaveBeenCalled()
   })
   itSwitchOff('applies the move once when the host refuses it', async () => {
     moveOnHost.mockResolvedValue(false)
