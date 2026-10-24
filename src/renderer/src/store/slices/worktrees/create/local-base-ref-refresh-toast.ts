@@ -48,7 +48,7 @@ export function showLocalBaseRefRefreshToast(
   const worktreeName = createdWorktree ? resolveWorktreeDisplayName(createdWorktree).trim() : ''
   const detail = localBaseRefRefreshFailureDetail(result)
 
-  // Why: Infinity so create-time failures aren't buried; one id per repo and branch because creates toward one target share a run, so its result is one fact, not one per create.
+  // Sticky create-time failure; shared repo/branch refresh is one fact, so all creates reuse one toast ID.
   toast.warning(
     worktreeName
       ? translate(
