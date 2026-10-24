@@ -1,10 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { WebSocket } from 'ws'
-import {
-  handleRequest,
-  type RpcRequest,
-  type RpcResponse
-} from '../scripts/mock-server-rpc-handlers'
+import type { RpcRequest, RpcResponse } from '../scripts/mock-server-rpc-handlers'
+
+let handleRequest: typeof import('../scripts/mock-server-rpc-handlers').handleRequest
+
+beforeAll(async () => {
+  vi.stubEnv('MOCK_NATIVE_CHAT', '0')
+  vi.stubEnv('MOCK_REPO_COUNT', '2')
+  vi.stubEnv('MOCK_WORKTREE_COUNT', '2')
+  vi.stubEnv('MOCK_RPC_DELAY_MS', '0')
+  for (const method of ['session.tabs.list', 'terminal.list']) {
+    vi.stubEnv(`MOCK_RPC_DELAY_${method.replaceAll('.', '_').toUpperCase()}_MS`, '0')
+  }
+  ;({ handleRequest } = await import('../scripts/mock-server-rpc-handlers'))
+})
+
+afterAll(() => vi.unstubAllEnvs())
 
 function callRpc(method: string, params?: Record<string, unknown>): RpcResponse {
   let response: RpcResponse | undefined
