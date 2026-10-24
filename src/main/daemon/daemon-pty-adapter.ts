@@ -19,7 +19,8 @@ import {
 } from '../../shared/host-spawn-admission'
 import { isUnknownRequestTypeError } from './daemon-endpoint-errors'
 import type { AutomaticWorkRequestType } from './daemon-automatic-work-protocol'
-import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import type { DaemonAsyncIoHealth, DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import { observeDaemonAsyncIoHealth } from './daemon-async-io-telemetry-event'
 
 export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyProvider {
   constructor(opts: DaemonPtyAdapterOptions) {
@@ -74,6 +75,7 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
     if (!this.client.isConnected()) {
       return { state: 'unverifiable' }
     }
+    const identity = this.client.getDaemonIdentity()
     try {
       const health = await this.client.request<unknown>('asyncIoHealth', undefined, 7_000)
       if (
@@ -86,7 +88,12 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
         Number.isFinite(health.pendingMs) &&
         health.pendingMs >= 0
       ) {
-        return { state: health.state, pendingMs: health.pendingMs }
+        const result: DaemonAsyncIoHealth = { state: health.state, pendingMs: health.pendingMs }
+        // A reply that crossed a reconnect cannot be attributed to either incarnation.
+        if (identity && this.client.getDaemonIdentity() === identity) {
+          observeDaemonAsyncIoHealth(identity, this.protocolVersion, result)
+        }
+        return result
       }
     } catch (error) {
       if (isUnknownRequestTypeError(error)) {

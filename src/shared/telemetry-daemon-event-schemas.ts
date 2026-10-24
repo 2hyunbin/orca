@@ -74,6 +74,26 @@ export const daemonAdoptedSchema = z
   })
   .strict()
 
+export const DAEMON_ASYNC_IO_STALL_DURATION_BUCKETS = ['<1m', '1-5m', '5-30m', '30m+'] as const
+
+// Why: #29133 — counts libuv worker-pool stalls in the field so the Darwin runtime patch can be
+// judged. Once per transition per daemon incarnation; `app_version_match` splits an adopted
+// pre-fix daemon from one this build forked. `stalled_for_bucket` is app-observed, poll-granular.
+const daemonAsyncIoHealthBase = {
+  protocol_generation: z.number().int().positive().max(1_000),
+  app_version_match: z.enum(DAEMON_ADOPTED_APP_VERSION_MATCH)
+}
+export const daemonAsyncIoHealthSchema = z.discriminatedUnion('transition', [
+  z.object({ transition: z.literal('stalled'), ...daemonAsyncIoHealthBase }).strict(),
+  z
+    .object({
+      transition: z.literal('recovered'),
+      ...daemonAsyncIoHealthBase,
+      stalled_for_bucket: z.enum(DAEMON_ASYNC_IO_STALL_DURATION_BUCKETS)
+    })
+    .strict()
+])
+
 // Why: `daemon_pty_cwd_denied` is the #17696 symptom — the daemon cannot read a cwd the app can,
 // on proven divergence only. `daemon_pty_cwd_readable` is its control, on TCC-gated folders only.
 export const daemonPtyCwdVerdictSchema = z
