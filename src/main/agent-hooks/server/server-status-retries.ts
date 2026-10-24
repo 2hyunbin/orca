@@ -1,4 +1,4 @@
-import { pollClaudePermissionTranscript } from '../../../shared/agent-hook-listener/providers/claude-permission-transcript'
+import { applyClaudePermissionTranscript } from '../../../shared/agent-hook-listener/providers/claude-permission-transcript'
 import { pollCodexTranscriptStatus } from '../../../shared/agent-hook-listener/providers/codex-transcript-poll'
 import { normalizeHookPayload } from '../../../shared/agent-hook-listener'
 import {
@@ -83,10 +83,9 @@ export abstract class AgentHookServerStatusRetries extends AgentHookServerStatus
       return
     }
     if (source === 'claude') {
-      const proposal = pollClaudePermissionTranscript(this.state, original)
-      const next = proposal
-        ? this.applyNormalizedStatus(proposal.event, proposal.onAccepted)
-        : original
+      const next = applyClaudePermissionTranscript(this.state, original, (event, onAccepted) =>
+        this.applyNormalizedStatus(event, onAccepted)
+      )
       if (next) {
         this.scheduleTranscriptPoll(source, body, next)
       }

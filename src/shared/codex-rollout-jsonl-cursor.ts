@@ -82,6 +82,12 @@ export function readJsonlCursor(
     start = stats.size - cursor.offset > bytesToRead ? stats.size - bytesToRead : cursor.offset
     buffer = Buffer.allocUnsafe(bytesToRead)
     bytesRead = readSync(fd, buffer, 0, bytesToRead, start)
+    if (onGap && bytesRead !== bytesToRead) {
+      cursor.offset = stats.size
+      cursor.carry = ''
+      onGap()
+      return []
+    }
   } catch {
     return undefined
   } finally {

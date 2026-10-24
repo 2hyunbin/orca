@@ -4,6 +4,7 @@ import { readJsonlCursor, type JsonlCursor } from '../../codex-rollout-jsonl-cur
 import type { AgentProcessIdentity } from '../../agent-process-presence'
 import type { ClaudeLeadTurnState } from '../listener-state'
 
+type Proof = 'complete' | 'pending' | 'lost'
 type Verdict = 'working' | 'cancellation' | 'done'
 export type ClaudePermissionObservation = {
   cursor: JsonlCursor
@@ -19,6 +20,7 @@ export type ClaudePermissionObservation = {
   descendants: Set<string>
   anchored: boolean
   result: boolean
+  proof: Proof
   superseded?: boolean
   verdict: Verdict
   published?: Verdict
@@ -89,6 +91,7 @@ function bindRequest(
     observation.toolUseId = anchor.id
     observation.descendants.add(anchor.uuid)
     observation.anchored = true
+    observation.proof = 'pending'
     return anchor.index
   }
   return -1
@@ -97,9 +100,11 @@ function bindRequest(
 export function readClaudePermissionObservation(
   observation: ClaudePermissionObservation,
   allowSettled = true
-): void {
+): Proof | undefined {
+  const lost = observation.proof === 'lost' && observation.anchored
   const rows = readJsonlCursor(observation.cursor, undefined, () => {
     allowSettled = false
+    observation.proof = 'lost'
     observation.anchored = false
     observation.descendants.clear()
     observation.result = false
@@ -108,37 +113,24 @@ export function readClaudePermissionObservation(
   })
   if (!rows) {
     observation.failures++
+    observation.proof = observation.failures >= 3 || lost ? 'lost' : 'pending'
     return
   }
   observation.failures = 0
+  if (lost && observation.anchored) {
+    return 'lost'
+  }
   const start = observation.anchored ? 0 : bindRequest(observation, rows, allowSettled) + 1
   if (!observation.anchored) {
-    return
+    return observation.proof
   }
   for (const row of rows.slice(start)) {
     if (!rootRecord(row, observation.sessionId) || typeof row.uuid !== 'string') {
       continue
     }
-    if (typeof row.parentUuid !== 'string' || !observation.descendants.has(row.parentUuid)) {
-      continue
-    }
-    if (observation.descendants.size >= 512) {
-      observation.failures = 3
-      return
-    }
-    observation.descendants.add(row.uuid)
+    const descends =
+      typeof row.parentUuid === 'string' && observation.descendants.has(row.parentUuid)
     const content = blocks(row)
-    if (
-      row.type === 'user' &&
-      content.some(
-        (block) => block.type === 'tool_result' && block.tool_use_id === observation.toolUseId
-      )
-    ) {
-      observation.promptId ??= typeof row.promptId === 'string' ? row.promptId : undefined
-      observation.result = true
-      observation.descendants.clear()
-      observation.descendants.add(row.uuid)
-    }
     const differentPrompt =
       observation.promptId !== undefined &&
       typeof row.promptId === 'string' &&
@@ -155,9 +147,40 @@ export function readClaudePermissionObservation(
       !content.some((block) => block.type === 'tool_result') &&
       ((isRecord(row.message) && typeof row.message.content === 'string') ||
         content.some((block) => block.type === 'text' && typeof block.text === 'string'))
-    if (userPrompt || (differentPrompt && row.type === 'assistant' && content.length > 0)) {
-      observation.superseded = true
+    if (
+      (descends || observation.result) &&
+      (userPrompt ||
+        (differentPrompt &&
+          row.type === 'assistant' &&
+          row.isMeta !== true &&
+          row.isCompactSummary !== true &&
+          content.length > 0))
+    ) {
       observation.verdict = 'working'
+      if (!descends) {
+        observation.proof = 'lost'
+        return 'lost'
+      }
+      observation.superseded = true
+    }
+    if (!descends) {
+      continue
+    }
+    if (observation.descendants.size >= 512) {
+      observation.proof = 'lost'
+      return 'lost'
+    }
+    observation.descendants.add(row.uuid)
+    if (
+      row.type === 'user' &&
+      content.some(
+        (block) => block.type === 'tool_result' && block.tool_use_id === observation.toolUseId
+      )
+    ) {
+      observation.promptId ??= typeof row.promptId === 'string' ? row.promptId : undefined
+      observation.result = true
+      observation.descendants.clear()
+      observation.descendants.add(row.uuid)
     }
     if (differentPrompt || observation.superseded) {
       continue
@@ -182,4 +205,6 @@ export function readClaudePermissionObservation(
       observation.verdict = 'done'
     }
   }
+  observation.proof = observation.cursor.carry ? 'pending' : 'complete'
+  return observation.proof
 }

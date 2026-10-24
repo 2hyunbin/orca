@@ -17,6 +17,7 @@ import { createProgramStatusProjector } from '../../shared/program-status/agent-
 import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import type { AgentHookRelayEnvelope } from '../../shared/agent-hook-relay'
 import { AgentHookServer } from './server'
+import { AgentTranscriptPollScheduler } from '../../shared/agent-transcript-poll-scheduler'
 import { buildBody, PANE, GOOD_PANE, postHookEvent } from './server.test-fixtures'
 
 const SESSION = '00000000-0000-4000-8000-000000000000'
@@ -115,6 +116,7 @@ afterEach(() => {
     server.stop()
   }
   vi.useRealTimers()
+  vi.restoreAllMocks()
   for (const dir of directories.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -419,6 +421,97 @@ describe('Claude permission result observation', () => {
     }
   )
 
+  it.each([false, true])(
+    'settles only proved Q1 after proof exhaustion, including recovered identity (relay=%s)',
+    async (remote) => {
+      for (const recovered of [false, true]) {
+        const pane = await setup(remote)
+        const { lines, tool } = capture('escape')
+        await pane.post({ hook_event_name: 'UserPromptSubmit', prompt: 'original prompt' })
+        writeFileSync(pane.transcript, recovered ? '' : `${lines[0]}\n`)
+        await permission(pane, tool)
+        await pane.post({ hook_event_name: 'SubagentStart', agent_id: 'child' })
+        const suffix = Array.from({ length: 520 }, (_, i) =>
+          line({
+            type: 'attachment',
+            isSidechain: false,
+            sessionId: SESSION,
+            uuid: `cap-${i}`,
+            parentUuid: i ? `cap-${i - 1}` : 'escape2-node-6'
+          })
+        ).join('')
+        appendFileSync(
+          pane.transcript,
+          `${lines.slice(recovered ? 0 : 1).join('\n')}\n${suffix}${line({
+            type: 'user',
+            isSidechain: false,
+            sessionId: SESSION,
+            uuid: 'p2-cap',
+            parentUuid: 'cap-519',
+            promptId: 'p2',
+            message: { content: 'Continue working' }
+          })}${line({
+            type: 'assistant',
+            isSidechain: false,
+            sessionId: SESSION,
+            uuid: 'p2-response',
+            parentUuid: 'p2-cap',
+            promptId: 'p2',
+            message: { content: [{ type: 'text', text: 'Working' }] }
+          })}`
+        )
+        const clear = vi.spyOn(AgentTranscriptPollScheduler.prototype, 'clear')
+        if (remote && !recovered) {
+          pane.disconnect()
+        }
+        await pane.tick()
+        expect(clear).toHaveBeenCalledWith(PANE)
+        if (remote) {
+          expect(pane.forwarded.at(-1)).toMatchObject({
+            claudeSettledRequests: [{ toolUseId: tool.id }],
+            payload: { mainAgent: { state: 'working' } }
+          })
+          pane.reconnect()
+        }
+        expect(pane.row()).toMatchObject({
+          state: 'working',
+          prompt: 'original prompt',
+          mainAgent: { state: 'working' },
+          subagents: [expect.objectContaining({ id: 'child' })]
+        })
+        expect(pane.row()?.mainAgent?.outcome).toBeUndefined()
+        expect(pane.row()?.toolName).toBeUndefined()
+        const schedules = vi.spyOn(AgentTranscriptPollScheduler.prototype, 'schedule')
+        appendFileSync(pane.transcript, `${lines[4]}\n${lines[5]}\n`)
+        await pane.tick()
+        expect(schedules).not.toHaveBeenCalled()
+        expect(pane.row()?.mainAgent?.state).toBe('working')
+        schedules.mockRestore()
+        clear.mockRestore()
+        await pane.post({ hook_event_name: 'SubagentStop', agent_id: 'child' })
+        expect(pane.row()?.toolName).toBeUndefined()
+        expect(pane.row()?.mainAgent?.state).toBe('working')
+      }
+    }
+  )
+
+  it('does not settle an ID-less desktop wait when its recovered binding was missed while disconnected', async () => {
+    const pane = await setup(true)
+    const { lines, tool } = capture('escape')
+    await permission(pane, tool)
+    await pane.post({ hook_event_name: 'SubagentStart', agent_id: 'child' })
+    pane.disconnect()
+    appendFileSync(pane.transcript, `${lines.slice(0, 3).join('\n')}\n`)
+    await pane.tick()
+    await pane.tick()
+    expect(pane.forwarded.at(-1)).toMatchObject({
+      claudeSettledRequests: [{ toolUseId: tool.id }],
+      payload: { mainAgent: { state: 'working' } }
+    })
+    pane.reconnect()
+    expect(pane.row()?.state).toBe('waiting') // Missing receiver identity is uncovered, never guessed.
+  })
+
   it('keeps the exact observation when a live terminal moves to another pane', async () => {
     const pane = await setup()
     const { lines, tool } = capture('escape')
@@ -444,12 +537,17 @@ describe('Claude permission result observation', () => {
     renameSync(replacement, pane.transcript)
     await pane.tick()
     expect(pane.row()?.state).toBe('waiting')
+    writeFileSync(pane.transcript, `${lines[0]}\n`)
+    await permission(pane, tool)
     writeFileSync(
       pane.transcript,
       `${lines.slice(0, 3).join('\n')}\nnot-json\n${lines.slice(3).join('\n')}\n`
     )
     await pane.tick()
     expect(pane.row()?.state).toBe('waiting')
+    // Lost proof retires; a fresh request observation can recover a complete replacement.
+    writeFileSync(pane.transcript, `${lines[0]}\n`)
+    await permission(pane, tool)
     writeFileSync(replacement, `${lines.join('\n')}\n`)
     renameSync(replacement, pane.transcript)
     await pane.tick()

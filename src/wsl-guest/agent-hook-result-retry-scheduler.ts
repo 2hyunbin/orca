@@ -1,4 +1,4 @@
-import { pollClaudePermissionTranscript } from '../shared/agent-hook-listener/providers/claude-permission-transcript'
+import { applyClaudePermissionTranscript } from '../shared/agent-hook-listener/providers/claude-permission-transcript'
 import { pollCodexTranscriptStatus } from '../shared/agent-hook-listener/providers/codex-transcript-poll'
 // Deferred re-normalization timers for late-arriving agent results: the transcript hadn't caught up
 // when the hook fired, so re-read the same body on a timer and re-apply only if it changed. Both
@@ -139,13 +139,12 @@ export class AgentHookResultRetryScheduler {
       return
     }
     if (source === 'claude') {
-      const proposal = pollClaudePermissionTranscript(this.host.state, original)
-      const next = proposal
-        ? this.host.applyEvent(proposal.event, source, env, version, () => {
-            proposal.onAccepted()
-            this.host.onClaudeTranscriptAccepted?.(proposal.event)
-          })
-        : original
+      const next = applyClaudePermissionTranscript(this.host.state, original, (event, onAccepted) =>
+        this.host.applyEvent(event, source, env, version, () => {
+          onAccepted()
+          this.host.onClaudeTranscriptAccepted?.(event)
+        })
+      )
       if (next) {
         this.scheduleTranscriptPoll(source, body, next, env, version)
       }

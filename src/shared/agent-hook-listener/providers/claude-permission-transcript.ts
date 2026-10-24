@@ -56,6 +56,7 @@ export function prepareClaudePermissionObservation(
     descendants: new Set(),
     anchored: false,
     result: false,
+    proof: 'pending',
     verdict: 'working',
     failures: 0
   }
@@ -93,8 +94,7 @@ export function hasClaudePermissionObservation(
     (observation.published
       ? lead === observation.lead
       : lead.state === 'waiting' &&
-        (lead.waitingToolUseId === undefined || lead.waitingToolUseId === observation.toolUseId)) &&
-    observation.failures < 3
+        (lead.waitingToolUseId === undefined || lead.waitingToolUseId === observation.toolUseId))
   if (!valid) {
     state.claudePermissionObservationByPaneKey.delete(event.paneKey)
   }
@@ -105,7 +105,7 @@ export function hasClaudePermissionObservation(
 export function pollClaudePermissionTranscript(
   state: HookListenerState,
   original: AgentHookEventPayload
-): { event: AgentHookEventPayload; onAccepted: () => void } | undefined {
+): { event: AgentHookEventPayload; onAccepted: () => boolean } | undefined {
   if (!hasClaudePermissionObservation(state, original)) {
     return undefined
   }
@@ -114,13 +114,25 @@ export function pollClaudePermissionTranscript(
   if (!observation || !lead) {
     return undefined
   }
-  readClaudePermissionObservation(observation)
+  const proof = readClaudePermissionObservation(observation)
+  if (!proof) {
+    if (observation.failures >= 3) {
+      state.claudePermissionObservationByPaneKey.delete(original.paneKey)
+    }
+    return undefined
+  }
+  const retire = proof === 'lost'
+  const verdict = proof === 'complete' ? observation.verdict : 'working'
+  if (retire && !observation.result) {
+    state.claudePermissionObservationByPaneKey.delete(original.paneKey)
+    return undefined
+  }
   if (!observation.toolUseId || !observation.anchored) {
     return undefined
   }
   const binding = !observation.published && original.toolUseId !== observation.toolUseId
-  if (!binding && (!observation.result || observation.published === observation.verdict)) {
-    if (observation.superseded && observation.published === 'working') {
+  if (!binding && (!observation.result || observation.published === verdict)) {
+    if (retire || (observation.superseded && observation.published === 'working')) {
       state.claudePermissionObservationByPaneKey.delete(original.paneKey)
     }
     return undefined
@@ -142,8 +154,8 @@ export function pollClaudePermissionTranscript(
           waitingToolUseId: observation.toolUseId
         }
       : {
-          state: observation.verdict === 'working' ? 'working' : 'done',
-          ...(observation.verdict === 'cancellation' ? { outcome: 'cancellation' as const } : {})
+          state: verdict === 'working' ? 'working' : 'done',
+          ...(verdict === 'cancellation' ? { outcome: 'cancellation' as const } : {})
         }
   )
   if (!binding) {
@@ -168,6 +180,7 @@ export function pollClaudePermissionTranscript(
   if (!payload) {
     return undefined
   }
+  const finished = retire || verdict !== 'working' || observation.superseded
   return {
     event: {
       ...original,
@@ -189,6 +202,12 @@ export function pollClaudePermissionTranscript(
       payload: { ...original.payload, ...payload, model: original.payload.model }
     },
     onAccepted: () => {
+      if (
+        state.claudePermissionObservationByPaneKey.get(original.paneKey) !== observation ||
+        state.claudeLeadStateByPaneKey.get(original.paneKey) !== lead
+      ) {
+        return false
+      }
       state.claudeLeadStateByPaneKey.set(original.paneKey, record)
       state.lastToolByPaneKey.set(
         original.paneKey,
@@ -196,13 +215,56 @@ export function pollClaudePermissionTranscript(
       )
       observation.lead = record
       if (!binding) {
-        observation.published = observation.verdict
+        observation.published = verdict
       }
-      if (!binding && (observation.verdict !== 'working' || observation.superseded)) {
+      if (!binding && finished) {
         state.claudePermissionObservationByPaneKey.delete(original.paneKey)
       }
+      return true
     }
   }
+}
+
+/** Complete the existing ID-bind/settle path only after canonical admission has returned. */
+export function applyClaudePermissionTranscript<T extends AgentHookEventPayload>(
+  state: HookListenerState,
+  original: T,
+  apply: (event: AgentHookEventPayload, onAccepted: () => void) => T | undefined
+): T | undefined {
+  const observation = state.claudePermissionObservationByPaneKey.get(original.paneKey)
+  let current: T | undefined = original
+  for (let step = 0; step < 2 && current; step++) {
+    if (state.lastStatusByPaneKey.get(original.paneKey) !== current) {
+      break
+    }
+    const proposal = pollClaudePermissionTranscript(state, current)
+    if (!proposal) {
+      break
+    }
+    let accepted = false
+    const next = apply(proposal.event, () => {
+      accepted = proposal.onAccepted()
+    })
+    current = next
+    if (
+      !accepted ||
+      !next ||
+      next === original ||
+      state.lastStatusByPaneKey.get(original.paneKey) !== next
+    ) {
+      break
+    }
+    if (observation?.proof !== 'lost' || observation.published) {
+      return next
+    }
+  }
+  if (
+    observation?.proof === 'lost' &&
+    state.claudePermissionObservationByPaneKey.get(original.paneKey) === observation
+  ) {
+    state.claudePermissionObservationByPaneKey.delete(original.paneKey)
+  }
+  return current
 }
 
 /** Child refreshes retain the request's identity while the producer still owns that wait. */
