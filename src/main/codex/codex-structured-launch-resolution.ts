@@ -1,5 +1,6 @@
 import {
   assertStructuredAgentResolutionCurrent,
+  resolveAgainAfterRefreshOnMissingProgram,
   type StructuredAgentResolutionOperation
 } from '../native-chat/structured-agent-command-resolution'
 // How a durable session record becomes a Codex process launch.
@@ -13,7 +14,6 @@ import {
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
 import { resolveCodexCommand } from '../codex-cli/command'
-import { resolveAgainAfterRefreshOnMissingProgram } from '../native-chat/structured-agent-command-resolution'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
 import type { CodexStructuredLaunch } from './codex-structured-session-adapter'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'

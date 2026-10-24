@@ -24,11 +24,11 @@ import {
 import { structuredAgentRuntimeMetadata } from './structured-agent-runtime-metadata'
 import {
   refreshHostAgentBaseEnvironmentAfterMiss,
-  resolveHostAgentBaseEnvironment
+  resolveHostAgentBaseEnvironment,
+  createStructuredAgentEnvironmentResolvers
 } from './structured-agent-shell-environment'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { nativeChatShellEnvironmentPolicy } from '../../shared/native-chat-shell-environment'
-import { createStructuredAgentEnvironmentResolvers } from './structured-agent-shell-environment'
 import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 
 type LaunchEnvironmentSettings = Pick<

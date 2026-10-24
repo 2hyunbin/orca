@@ -1,5 +1,8 @@
 import {
   assertStructuredAgentResolutionCurrent,
+  resolveAgainAfterRefreshOnMissingProgram,
+  resolveStructuredAgentCommand,
+  type StructuredAgentCommandSettings,
   type StructuredAgentResolutionOperation
 } from '../native-chat/structured-agent-command-resolution'
 // Launch from durable record values for the working directory, pinned account and resume session.
@@ -14,11 +17,6 @@ import {
 } from '../../shared/agent-session-provider-handle'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { resolveCliCommand } from '../../shared/node-cli-command-resolution'
-import {
-  resolveAgainAfterRefreshOnMissingProgram,
-  resolveStructuredAgentCommand,
-  type StructuredAgentCommandSettings
-} from '../native-chat/structured-agent-command-resolution'
 import {
   checkAgentCliVersion,
   type AgentCliVersionCheck,

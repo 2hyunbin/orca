@@ -1,5 +1,6 @@
 import {
   assertStructuredAgentResolutionCurrent,
+  resolveAgainAfterRefreshOnMissingProgram,
   type StructuredAgentResolutionOperation
 } from '../native-chat/structured-agent-command-resolution'
 // What a structured Claude child's environment is built from, shared by its launch and the
@@ -8,7 +9,6 @@ import {
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { applyClaudeEnvPatch } from '../claude-accounts/environment'
 import { resolveClaudeCommand } from '../codex-cli/command'
-import { resolveAgainAfterRefreshOnMissingProgram } from '../native-chat/structured-agent-command-resolution'
 import { withoutInheritedClaudeConfigDir } from './claude-config-dir-pin'
 
 function cloneDefinedEnv(env: NodeJS.ProcessEnv | Record<string, string>): Record<string, string> {
