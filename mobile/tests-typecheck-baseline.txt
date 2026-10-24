@@ -107,5 +107,3 @@ src/transport/rpc-operation.test.ts
 src/transport/rpc-session-liveness-watchdog.test.ts
 src/transport/runtime-capability-probe.test.ts
 src/transport/settings-host-client-lifecycle.test.ts
-src/worktree/agent-row-display.test.ts
-src/worktree/host-worktree-refresh.test.ts
