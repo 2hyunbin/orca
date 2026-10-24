@@ -1,9 +1,10 @@
 import { expect, it, vi } from 'vitest'
+import * as TaskManager from 'expo-task-manager'
 const state = vi.hoisted(() => ({ task: null as null | ((input: unknown) => Promise<void>) }))
 vi.mock('expo-task-manager', () => ({
-  defineTask: (_name: string, task: typeof state.task) => {
+  defineTask: vi.fn((_name: string, task: typeof state.task) => {
     state.task = task
-  },
+  }),
   isAvailableAsync: async () => true
 }))
 vi.mock('expo-notifications', () => ({
@@ -24,6 +25,11 @@ import { registerPushDismissalTask } from './push-background-dismissal'
 
 it('handles native background JSON and scopes dismissal to the originating host', async () => {
   await registerPushDismissalTask()
+  expect(TaskManager.defineTask).toHaveBeenCalledExactlyOnceWith(
+    'orca-push-dismissal',
+    expect.any(Function)
+  )
+  expect(Notifications.registerTaskAsync).toHaveBeenCalledExactlyOnceWith('orca-push-dismissal')
   await state.task!({
     data: {
       data: {
