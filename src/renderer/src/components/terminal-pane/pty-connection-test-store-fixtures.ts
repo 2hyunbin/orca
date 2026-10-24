@@ -1,19 +1,20 @@
 import { vi } from 'vitest'
-import type { PaneForegroundAgentEntry } from '@/store/slices/pane-foreground-agent'
+import { getDefaultSettings } from '../../../../shared/constants'
+import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import type { AgentStatusPatch } from '@/store/agent-status-patch'
 import { LEAF_1 } from './pty-connection-test-pane-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
 
-export function createInitialStoreState(getState: () => StoreState): StoreState {
-  return {
+export async function createInitialStoreState() {
+  const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const store = createTestStore()
+  const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
+  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
+  const { makeTab, makeWorktree, TEST_REPO } = await import('@/store/slices/store-test-helpers')
+  store.setState({
     activeWorktreeId: 'wt-1',
-    tabsByWorktree: {
-      'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
-    },
-    ptyIdsByTabId: {
-      'tab-1': ['tab-pty']
-    },
-    terminalPaneStartsByPaneKey: {},
-    terminalPaneResumeOutcomesByPaneKey: {},
+    tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1', ptyId: 'tab-pty' })] },
+    ptyIdsByTabId: { 'tab-1': ['tab-pty'] },
     terminalLayoutsByTabId: {
       'tab-1': {
         root: { type: 'leaf', leafId: LEAF_1 },
@@ -22,78 +23,67 @@ export function createInitialStoreState(getState: () => StoreState): StoreState 
         ptyIdsByLeafId: { [LEAF_1]: 'tab-pty' }
       }
     },
-    unreadTerminalTabs: {},
-    deleteStateByWorktreeId: {},
     worktreesByRepo: {
-      repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', displayName: 'feat/notis' }]
+      repo1: [
+        makeWorktree({ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', displayName: 'feat/notis' })
+      ]
     },
-    runtimeStatusByEnvironmentId: new Map(),
-    repos: [{ id: 'repo1', connectionId: null, displayName: 'orca' }],
-    projects: [],
-    sshConnectionStates: new Map(),
-    transientClearedAgentStatusConnectionIds: {},
-    cacheTimerByKey: {},
-    // Why: terminalMainSideEffectAuthority false pins the legacy renderer byte-parser wiring this suite asserts on (onTitleChange/onBell); authority-on mode has its own tests.
+    repos: [
+      {
+        ...TEST_REPO,
+        id: 'repo1',
+        connectionId: null,
+        executionHostId: 'local',
+        displayName: 'orca'
+      }
+    ],
     settings: {
+      ...getDefaultSettings('/tmp'),
       promptCacheTimerEnabled: true,
       experimentalTerminalAttention: true,
       terminalMainSideEffectAuthority: false
+    }
+  })
+  const state = store.getState()
+  const spies = {
+    removeDeferredSshReconnectTarget: vi.spyOn(state, 'removeDeferredSshReconnectTarget'),
+    removeDeferredSshSessionId: vi.spyOn(state, 'removeDeferredSshSessionId'),
+    consumePendingColdRestore: vi.spyOn(state, 'consumePendingColdRestore'),
+    consumePendingSnapshot: vi.spyOn(state, 'consumePendingSnapshot'),
+    getAgentLaunchConfigForStatusEntry: vi.spyOn(state, 'getAgentLaunchConfigForStatusEntry'),
+    clearSleepingAgentSession: vi.spyOn(state, 'clearSleepingAgentSession'),
+    registerAgentLaunchConfig: vi.spyOn(state, 'registerAgentLaunchConfig'),
+    clearAgentLaunchConfig: vi.spyOn(state, 'clearAgentLaunchConfig'),
+    observeTerminalGitHubPullRequestLink: vi.spyOn(state, 'observeTerminalGitHubPullRequestLink'),
+    recordTerminalInput: vi.spyOn(state, 'recordTerminalInput'),
+    setAgentStatus: vi.spyOn(state, 'setAgentStatus'),
+    removeAgentStatus: vi.spyOn(state, 'removeAgentStatus'),
+    dropAgentStatus: vi.spyOn(state, 'dropAgentStatus'),
+    retireAgentPaneAuthority: vi.spyOn(state, 'retireAgentPaneAuthority'),
+    restoreAgentPaneAuthority: vi.spyOn(state, 'restoreAgentPaneAuthority'),
+    setPaneForegroundAgent: vi.spyOn(state, 'setPaneForegroundAgent'),
+    clearPaneForegroundAgent: vi.spyOn(state, 'clearPaneForegroundAgent'),
+    markTerminalBell: vi.spyOn(state, 'markTerminalBell'),
+    markAgentAttentionUnread: vi.spyOn(state, 'markAgentAttentionUnread')
+  }
+  const bindings = new Set<{ dispose: () => void }>()
+  const owner = getAgentStatusOwner(store)
+  return {
+    store,
+    track<T extends { dispose: () => void }>(binding: T): T {
+      bindings.add(binding)
+      return binding
     },
-    codexRestartNoticeByPtyId: {},
-    deferredSshReconnectTargets: [],
-    deferredSshSessionIdsByTabId: {},
-    removeDeferredSshReconnectTarget: vi.fn(),
-    removeDeferredSshSessionId: vi.fn(),
-    consumePendingColdRestore: vi.fn(() => null),
-    consumePendingSnapshot: vi.fn(() => null),
-    runtimePaneTitlesByTabId: {},
-    agentStatusByPaneKey: {},
-    retainedAgentsByPaneKey: {},
-    paneForegroundAgentByPaneKey: {},
-    sleepingAgentSessionsByPaneKey: {},
-    suppressedPtyExitIds: {},
-    agentLaunchConfigByPaneKey: {},
-    getAgentLaunchConfigForStatusEntry: vi.fn((entry: { paneKey: string }) => {
-      return getState().agentLaunchConfigByPaneKey[entry.paneKey]?.launchConfig
-    }),
-    clearSleepingAgentSession: vi.fn((paneKey: string) => {
-      delete getState().sleepingAgentSessionsByPaneKey[paneKey]
-    }),
-    registerAgentLaunchConfig: vi.fn(),
-    clearAgentLaunchConfig: vi.fn(),
-    observeTerminalGitHubPullRequestLink: vi.fn(),
-    recordTerminalInput: vi.fn(),
-    setAgentStatus: vi.fn(
-      (
-        paneKey: string,
-        payload: Record<string, unknown>,
-        terminalTitle?: string | null,
-        _timing?: unknown,
-        routing?: { connectionId?: string | null }
-      ) => {
-        getState().agentStatusByPaneKey[paneKey] = {
-          ...payload,
-          paneKey,
-          ...(terminalTitle ? { terminalTitle } : {}),
-          ...(routing?.connectionId !== undefined ? { connectionId: routing.connectionId } : {}),
-          updatedAt: Date.now(),
-          stateStartedAt: Date.now(),
-          stateHistory: []
-        }
+    dispose: () => {
+      for (const binding of bindings) {
+        binding.dispose()
       }
-    ),
-    removeAgentStatus: vi.fn(),
-    dropAgentStatus: vi.fn(),
-    retireAgentPaneAuthority: vi.fn(),
-    restoreAgentPaneAuthority: vi.fn(),
-    setPaneForegroundAgent: vi.fn((paneKey: string, entry: PaneForegroundAgentEntry) => {
-      getState().paneForegroundAgentByPaneKey[paneKey] = entry
-    }),
-    clearPaneForegroundAgent: vi.fn((paneKey: string) => {
-      delete getState().paneForegroundAgentByPaneKey[paneKey]
-    }),
-    markTerminalBell: vi.fn(),
-    markAgentAttentionUnread: vi.fn()
+      bindings.clear()
+    },
+    read: () => ({ ...owner.getState(), ...spies }),
+    patch: (patch: AgentStatusPatch) => applyAgentStatusPatch(store, patch),
+    setStatus: (key: string, entry: AgentStatusEntry | undefined) =>
+      owner.transact((transaction) => transaction.setEntry(key, entry))
   }
 }
 
@@ -101,7 +91,7 @@ export function buildReattachPaneTitleState(current: StoreState, title: string):
   return {
     ...current,
     tabsByWorktree: {
-      'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', title }]
+      'wt-1': current.tabsByWorktree['wt-1'].map((tab) => ({ ...tab, title }))
     },
     runtimePaneTitlesByTabId: {
       'tab-1': { 1: title }
@@ -119,9 +109,10 @@ export function buildActiveRuntimeEnvironmentState(
     // The client stamps a server's rows on arrival; focus alone never names the owner.
     repos: current.repos.map((repo) => ({
       ...repo,
-      executionHostId: repo.executionHostId ?? `runtime:${environmentId}`
+      executionHostId: `runtime:${environmentId}`
     })),
     settings: {
+      ...getDefaultSettings('/tmp'),
       ...current.settings,
       activeRuntimeEnvironmentId: environmentId
     }

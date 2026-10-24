@@ -45,22 +45,22 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionReattachModeResetTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function setReattachPaneTitle(title: string): void {
-    mockStoreState = buildReattachPaneTitleState(mockStoreState, title)
+    storeFixture.patch(buildReattachPaneTitleState(storeFixture.read(), title))
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -70,9 +70,10 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -85,6 +86,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -94,10 +96,10 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         await import('@/lib/pane-manager/terminal-scroll-intent')
       const transport = createMockTransport('fresh-pty')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(1)
       pane.terminal.buffer.active.viewportY = 40
       pane.terminal.buffer.active.baseY = 100
@@ -115,7 +117,9 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           pane.terminal.buffer.active.viewportY = pane.terminal.buffer.active.baseY
         })
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
       expect(pane.terminal.buffer.active.viewportY).toBe(40)
       expect(renderListener.current).not.toBeNull()
@@ -144,10 +148,10 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         return null
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -156,7 +160,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
 
       const tailWriteCall = pane.terminal.write.mock.invocationCallOrder.find(
@@ -175,19 +179,23 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState.codexRestartNoticeByPtyId = {
-        'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
-      }
+      storeFixture.patch({
+        codexRestartNoticeByPtyId: {
+          'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
+        }
+      })
       const pane = createPane(1)
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures implement the connection's pane, manager and dependency contract.
       const args = [pane, createManager(1), createDeps()] as unknown as Parameters<
         typeof connectPanePty
       >
-      const binding = connectPanePty(...args)
+      const binding = storeFixture.track(connectPanePty(...args))
       transport.getPtyId.mockReturnValue('pty-live')
-      mockStoreState.codexRestartNoticeByPtyId = {
-        'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
-      }
+      storeFixture.patch({
+        codexRestartNoticeByPtyId: {
+          'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
+        }
+      })
       sendTerminalInputThroughPane(pane, '\x1b[1;1R')
       sendTerminalInputThroughPane(pane, 'do work\r')
       expect(transport.sendInputImmediate).toHaveBeenCalledWith('\x1b[1;1R')
@@ -205,7 +213,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
 
       // xterm answers CSI 6n natively with a CPR via onData; it must take the immediate path (skips the remote 8ms debounce that corrupted it).
@@ -266,7 +274,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
       expect(replayCallback.current).toBeTypeOf('function')
 
@@ -308,7 +316,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput).toHaveBeenCalledWith('\x1b[I', 'query-reply')
@@ -343,13 +351,15 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          restoredLeafId: LEAF_1,
-          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-        }) as never
+      storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            restoredLeafId: LEAF_1,
+            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+          }) as never
+        )
       )
       await flushAsyncTicks(20)
 
@@ -394,7 +404,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         const writes = (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls.map(
@@ -456,11 +466,11 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         if (ORCA_LAYOUT_OWNER_IS_MAIN) {
           await mainStartsPaneAs({
             ptyId: 'adopted-pty',
-            bind: bindsPaneInStore(() => mockStoreState, 'tab-1', LEAF_1)
+            bind: bindsPaneInStore(storeFixture.store, 'tab-1', LEAF_1)
           })
         }
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(30)
 
         expect(transport.connect).toHaveBeenCalledTimes(2)
@@ -514,7 +524,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -547,7 +557,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -583,7 +593,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -618,7 +628,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredLeafId: LEAF_1,
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
         return (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls
           .map((call) => String(call[0]))
@@ -648,15 +658,15 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       })
       transportFactoryQueue.push(transport)
       // Why: launchAgent is launch-ownership metadata that never decays; it must not preserve stale modes for a shell left after agent death.
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', title: 'zsh', launchAgent: 'claude' }]
         },
         runtimePaneTitlesByTabId: {
           'tab-1': { 1: 'zsh' }
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const textarea = {} as HTMLTextAreaElement
@@ -668,7 +678,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -706,7 +716,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -747,7 +757,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -782,8 +792,8 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         return null
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', title: 'Codex done' }]
         },
@@ -791,9 +801,9 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           'tab-1': { 1: 'Codex done' }
         },
         settings: {
-          ...mockStoreState.settings
+          ...storeFixture.read().settings
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -804,7 +814,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures implement the connection's pane, manager and dependency contract.
       const args = [pane, manager, deps] as unknown as Parameters<typeof connectPanePty>
-      const binding = connectPanePty(...args)
+      const binding = storeFixture.track(connectPanePty(...args))
       await flushAsyncTicks(20)
 
       expect(window.api.pty.signal).toHaveBeenCalledWith('tab-pty', 'SIGWINCH')

@@ -23,13 +23,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: xterm and the pane mirror must end every restore on the same kitty flags.
@@ -40,9 +40,10 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -54,6 +55,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -78,7 +80,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pane-connection mocks cover the members connectPanePty reads.
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
       return { pane, mirror: deps.paneKittyKeyboardModesRef.current.get(pane.id) }
     }
@@ -116,7 +118,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
       deps.paneKittyKeyboardModesRef.current.set(pane.id, mirror)
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pane-connection mocks cover the members connectPanePty reads.
-      connectPanePty(pane as never, createManager(91) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(91) as never, deps as never))
       await flushAsyncTicks(20)
 
       expect(pane.terminal.write).toHaveBeenCalledWith(

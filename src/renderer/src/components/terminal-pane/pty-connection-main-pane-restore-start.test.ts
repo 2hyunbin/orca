@@ -46,14 +46,14 @@ const TAB = 'tab-restore-start'
 const LEAF = leafIdForPane(1)
 const PANE_KEY = `${TAB}:${LEAF}`
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
 
 function setStore(patch: Partial<StoreState>): void {
-  mockStoreState = { ...mockStoreState, ...patch }
+  storeFixture.patch({ ...storeFixture.read(), ...patch })
   for (const listener of storeSubscribers) {
-    listener(mockStoreState)
+    listener(storeFixture.read())
   }
 }
 
@@ -82,7 +82,7 @@ async function connectBound(
     ...layoutBoundTo('pty-old'),
     terminalPaneStartsByPaneKey: start ? { [PANE_KEY]: start } : {}
   })
-  const deps = buildPaneConnectionDeps(() => mockStoreState, {
+  const deps = buildPaneConnectionDeps(storeFixture, {
     tabId: TAB,
     restoredLeafId: LEAF,
     restoredPtyIdByLeafId: { [LEAF]: 'pty-old' },
@@ -92,7 +92,7 @@ async function connectBound(
   const args = [createPane(1), createManager(1), deps] as unknown as Parameters<
     typeof connectPanePty
   >
-  const connection = connectPanePty(...args)
+  const connection = storeFixture.track(connectPanePty(...args))
   await flushAsyncTicks()
   return { transport, deps, connection }
 }
@@ -116,9 +116,10 @@ describe('a restored pane main starts (layout-owner build)', () => {
     sent.length = 0
     transportFactoryQueue = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     bindPtyConnectionTestMocks({
-      getState: () => mockStoreState,
+      getState: () => storeFixture.read(),
+      getStore: () => storeFixture.store,
       getTransportQueue: () => transportFactoryQueue,
       getTransportOptions: () => [],
       getStoreSubscribers: () => storeSubscribers,
@@ -130,6 +131,7 @@ describe('a restored pane main starts (layout-owner build)', () => {
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 

@@ -16,13 +16,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionPendingSpawnTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -32,9 +32,10 @@ export function registerPtyConnectionPendingSpawnTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -50,6 +51,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
         await import('./pty-connection/pty-connect-limits')
       pendingSpawnByPaneKey.clear()
       pendingSpawnGenerationByPaneKey.clear()
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -58,13 +60,15 @@ export function registerPtyConnectionPendingSpawnTests(): void {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
 
       expect((globalThis as Record<string, unknown>).__ptyConnectDiag).toBeUndefined()
@@ -80,19 +84,17 @@ export function registerPtyConnectionPendingSpawnTests(): void {
       const transport = createMockTransport()
       transport.connect.mockReturnValueOnce(spawn.promise)
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
       vi.mocked(window.api.pty.declarePendingPaneSerializer).mockReturnValueOnce(
         declaration.promise
       )
 
-      const binding = connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks(12)
       expect(pendingSpawnByPaneKey.size).toBe(1)
@@ -119,21 +121,21 @@ export function registerPtyConnectionPendingSpawnTests(): void {
       firstTransport.connect.mockReturnValueOnce(pendingSpawn.promise)
       const remountTransport = createMockTransport()
       transportFactoryQueue.push(firstTransport, remountTransport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null, generation: 7 }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
       const remountDeps = createDeps()
 
-      const firstBinding = connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps() as never
+      const firstBinding = storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks()
       firstBinding.dispose()
-      connectPanePty(createPane(1) as never, createManager(1) as never, remountDeps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, remountDeps as never)
+      )
       await flushAsyncTicks()
 
       expect(firstTransport.connect).toHaveBeenCalledOnce()

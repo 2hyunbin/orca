@@ -33,7 +33,7 @@ const {
   requestTerminalPaneRecovery: vi.fn(async () => true)
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -55,17 +55,24 @@ vi.mock('./terminal-pane-recovery', async (importOriginal) => ({
   requestTerminalPaneRecovery
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -126,16 +133,17 @@ describe('fresh spawn leaves a local pane unbound', () => {
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   it('remounts the pane when the spawn resolves without a PTY id', async () => {
@@ -145,10 +153,12 @@ describe('fresh spawn leaves a local pane unbound', () => {
     transport.connect.mockImplementation(async () => null)
     transportFactoryQueue.push(transport)
 
-    connectPanePty(
-      createPane(1) as never,
-      createManager(1) as never,
-      createDeps({ tabId: 'tab-unbound-spawn' }) as never
+    storeFixture.track(
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ tabId: 'tab-unbound-spawn' }) as never
+      )
     )
     await flushAsyncTicks(40)
 
@@ -171,7 +181,9 @@ describe('fresh spawn leaves a local pane unbound', () => {
 
     const deps = createDeps({ tabId: 'tab-transport-retry' })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocks cover every pane, manager, and deps member the connect path reads.
-    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+    storeFixture.track(
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(40)
 
     expect(transport.connect).toHaveBeenCalled()
@@ -186,10 +198,12 @@ describe('fresh spawn leaves a local pane unbound', () => {
     const transport = createMockTransport('pty-bound')
     transportFactoryQueue.push(transport)
 
-    connectPanePty(
-      createPane(1) as never,
-      createManager(1) as never,
-      createDeps({ tabId: 'tab-bound-spawn' }) as never
+    storeFixture.track(
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ tabId: 'tab-bound-spawn' }) as never
+      )
     )
     await flushAsyncTicks(40)
 
@@ -206,14 +220,16 @@ describe('fresh spawn leaves a local pane unbound', () => {
   it('settles the tab recovery attempt as a success when the spawn binds a PTY', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const settleTerminalTabRecovery = vi.fn()
-    mockStoreState = { ...mockStoreState, settleTerminalTabRecovery } as StoreState
+    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
     const transport = createMockTransport('pty-bound')
     transportFactoryQueue.push(transport)
 
-    connectPanePty(
-      createPane(1) as never,
-      createManager(1) as never,
-      createDeps({ tabId: 'tab-bound-spawn' }) as never
+    storeFixture.track(
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ tabId: 'tab-bound-spawn' }) as never
+      )
     )
     await flushAsyncTicks(40)
 
@@ -226,15 +242,17 @@ describe('fresh spawn leaves a local pane unbound', () => {
   it('settles the attempt as failed before asking for the remount', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const settleTerminalTabRecovery = vi.fn()
-    mockStoreState = { ...mockStoreState, settleTerminalTabRecovery } as StoreState
+    storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
     const transport = createMockTransport()
     transport.connect.mockImplementation(async () => null)
     transportFactoryQueue.push(transport)
 
-    connectPanePty(
-      createPane(1) as never,
-      createManager(1) as never,
-      createDeps({ tabId: 'tab-unbound-spawn' }) as never
+    storeFixture.track(
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ tabId: 'tab-unbound-spawn' }) as never
+      )
     )
     await flushAsyncTicks(40)
 

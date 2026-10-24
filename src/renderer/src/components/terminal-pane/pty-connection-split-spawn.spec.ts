@@ -25,13 +25,13 @@ import {
 export function registerPtyConnectionSplitSpawnTests(): void {
   const { notifyCodexPaneBoundForStaleSweep } = ptyConnectionTestMocks
 
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -41,9 +41,10 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -55,6 +56,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -66,10 +68,8 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
 
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
@@ -114,7 +114,9 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       })
       setFitOverride('pty-fit', 'mobile-fit', 49, 20)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -148,16 +150,18 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       try {
         const transport = createMockTransport(ptyId)
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
           ptyIdsByTabId: { 'tab-1': [] }
-        }
+        })
         const pane = createPane(1)
         pane.terminal.cols = 80
         pane.terminal.rows = 24
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         runNextFrame()
         await flushAsyncTicks()
 
@@ -234,15 +238,15 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         ...(pendingCwd ? { cwdPromise: pendingCwd.promise } : {})
       })
       if (scenario === 'narrow-remote') {
-        mockStoreState.repos[0].executionHostId = 'runtime:env-1'
-        mockStoreState.worktreesByRepo.repo1[0].runtimeOwnerEnvironmentId = 'env-1'
+        storeFixture.read().repos[0].executionHostId = 'runtime:env-1'
+        storeFixture.read().worktreesByRepo.repo1[0].runtimeOwnerEnvironmentId = 'env-1'
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane, manager and deps doubles implement every member connectPanePty reads on this startup path.
       const args = [pane, createManager(1), deps] as unknown as Parameters<typeof connectPanePty>
       if (scenario === 'metrics') {
         applyOrDeferPaneMetricOptions(args[0], { fontSize: 24 }, false)
       }
-      const binding = connectPanePty(...args)
+      const binding = storeFixture.track(connectPanePty(...args))
 
       if (visibility === 'visible' && scenario !== 'starved') {
         frameCallbacks.shift()?.(0)
@@ -332,14 +336,14 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         return issuePtyId
       })
       transportFactoryQueue.push(mainTransport, issueTransport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
       const updateStoreTabPtyId = vi.fn((_tabId: string, ptyId: string) => {
-        mockStoreState.tabsByWorktree['wt-1'][0].ptyId = ptyId
-        const livePtyIds = mockStoreState.ptyIdsByTabId?.['tab-1'] ?? []
+        storeFixture.read().tabsByWorktree['wt-1'][0].ptyId = ptyId
+        const livePtyIds = storeFixture.read().ptyIdsByTabId?.['tab-1'] ?? []
         if (!livePtyIds.includes(ptyId)) {
           livePtyIds.push(ptyId)
         }
@@ -364,7 +368,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
           updateTabPtyId: updateStoreTabPtyId
         })
       ] as unknown as Parameters<typeof connectPanePty>
-      connectPanePty(...mainArgs)
+      storeFixture.track(connectPanePty(...mainArgs))
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sibling uses the same checked fixture shape with its own command and transport.
       const issueArgs = [
         issuePane,
@@ -376,11 +380,11 @@ export function registerPtyConnectionSplitSpawnTests(): void {
           updateTabPtyId: updateStoreTabPtyId
         })
       ] as unknown as Parameters<typeof connectPanePty>
-      connectPanePty(...issueArgs)
+      storeFixture.track(connectPanePty(...issueArgs))
 
       await flushAsyncTicks(20)
       expect(issueTransport.connect).toHaveBeenCalledTimes(1)
-      expect(mockStoreState.tabsByWorktree['wt-1'][0].ptyId).toBe('pty-issue')
+      expect(storeFixture.read().tabsByWorktree['wt-1'][0].ptyId).toBe('pty-issue')
       expect(mainTransport.connect).not.toHaveBeenCalled()
 
       primaryCwd.resolve('/workspace')
@@ -409,30 +413,36 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       const remountTransport = createMockTransport()
       transportFactoryQueue.push(mainTransport, setupTransport, remountTransport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         repos: [{ id: 'repo1', connectionId: null }]
-      }
+      })
 
       const sharedTransportsRef = { current: new Map() }
-      connectPanePty(
-        createPane(1) as never,
-        createManager(2) as never,
-        createDeps({ paneTransportsRef: sharedTransportsRef }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(2) as never,
+          createDeps({ paneTransportsRef: sharedTransportsRef }) as never
+        )
       )
-      connectPanePty(
-        createPane(2) as never,
-        createManager(2) as never,
-        createDeps({
-          startup: { command: 'bash setup-runner.sh' },
-          paneTransportsRef: sharedTransportsRef
-        }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(2) as never,
+          createManager(2) as never,
+          createDeps({
+            startup: { command: 'bash setup-runner.sh' },
+            paneTransportsRef: sharedTransportsRef
+          }) as never
+        )
       )
 
       const remountDeps = createDeps()
       const remountPane = createPane(1)
-      connectPanePty(remountPane as never, createManager(2) as never, remountDeps as never)
+      storeFixture.track(
+        connectPanePty(remountPane as never, createManager(2) as never, remountDeps as never)
+      )
 
       setupSpawn.resolve('pty-setup')
       mainSpawn.resolve('pty-main')
@@ -458,16 +468,16 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         return { id: currentPtyId, isReattach: true }
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
 
       const pane = createPane(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks()
 
       expect(pane.container.dataset.ptyId).toBe('pty-daemon-reattach')
@@ -493,11 +503,11 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         }
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         ptyIdsByTabId: { 'tab-1': [] }
-      }
+      })
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
       pane.terminal.onData = vi.fn(((handler: (data: string) => void) => {
@@ -509,7 +519,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         startup: { command: 'codex resume provider-session' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(4)
       if (!onDataHandler || parseCallbacks.length === 0) {
         throw new Error('expected replay and terminal input handlers')
@@ -538,10 +548,10 @@ export function registerPtyConnectionSplitSpawnTests(): void {
 
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -554,7 +564,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       const deps = createDeps({ replayingPanesRef })
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -584,10 +594,10 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] }
-      }
+      })
       const keyTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       Object.assign(pane.terminal, { element: keyTarget.target })
@@ -597,7 +607,9 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         return { dispose: vi.fn() }
       })
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       const send = registered.onData
       if (!send) {
         throw new Error('expected onData handler to be registered')

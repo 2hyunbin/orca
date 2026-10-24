@@ -26,13 +26,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -42,9 +42,10 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -57,6 +58,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -97,11 +99,11 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           return 'fresh-resume-pty'
         })
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'restored-session' }] },
           settings: {
-            ...mockStoreState.settings,
+            ...storeFixture.read().settings,
             agentCmdOverrides: {}
           },
           sleepingAgentSessionsByPaneKey: {
@@ -119,7 +121,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
               updatedAt: 1
             }
           }
-        } as StoreState
+        } as StoreState)
         const pane = createPane(2)
         const manager = createManager(2)
         const deps = createDeps({
@@ -130,7 +132,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -142,7 +144,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           // the shell and asks main, which replaces it and resumes the agent.
           expect(transport.disconnect).toHaveBeenCalled()
           await expectWindowStartAskedMain(transport, paneKey)
-          expectNoWindowStart(transport, mockStoreState)
+          expectNoWindowStart(transport, storeFixture.read())
           expect(transport.sendInput).not.toHaveBeenCalled()
           expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
           return
@@ -164,7 +166,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         expect(deps.clearTabPtyId).toHaveBeenCalledWith('tab-1', 'restored-session')
         expect(deps.syncPanePtyLayoutBinding).not.toHaveBeenCalledWith(2, 'restored-session')
         expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'fresh-resume-pty')
-        expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
+        expect(storeFixture.read().clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
         expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(paneKey, 1)
       } finally {
         globalThis.setTimeout = originalSetTimeout
@@ -219,8 +221,8 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           return 'fresh-resume-pty'
         })
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: {
             'wt-1': [
               {
@@ -231,7 +233,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             ]
           },
           settings: {
-            ...mockStoreState.settings,
+            ...storeFixture.read().settings,
             agentCmdOverrides: {},
             terminalWindowsShell: args.terminalWindowsShell
           },
@@ -249,7 +251,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
               updatedAt: 1
             }
           }
-        } as StoreState
+        } as StoreState)
         const deps = createDeps({
           restoredLeafId: LEAF_2,
           restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
@@ -258,7 +260,9 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        storeFixture.track(
+          connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        )
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -309,10 +313,10 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         coldRestore: undefined
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'restored-session' }] },
-        settings: { ...mockStoreState.settings, agentCmdOverrides: {} },
+        settings: { ...storeFixture.read().settings, agentCmdOverrides: {} },
         sleepingAgentSessionsByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -327,8 +331,8 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState
-      Object.assign(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] ?? {}, { state })
+      } as StoreState)
+      Object.assign(storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey] ?? {}, { state })
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps({
@@ -336,13 +340,13 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
       expect(transport.disconnect).not.toHaveBeenCalled()
       expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'restored-session')
-      expect(mockStoreState.clearSleepingAgentSession).not.toHaveBeenCalled()
+      expect(storeFixture.read().clearSleepingAgentSession).not.toHaveBeenCalled()
     }
 
     // Why: a live note is the idle anchor of a running pane, done or not, never hibernation evidence.
@@ -363,10 +367,10 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         coldRestore: undefined
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'restored-session' }] },
-        settings: { ...mockStoreState.settings, agentCmdOverrides: {} },
+        settings: { ...storeFixture.read().settings, agentCmdOverrides: {} },
         agentStatusByPaneKey: {
           [paneKey]: {
             state: 'working',
@@ -393,7 +397,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps({
@@ -401,13 +405,13 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
       expect(transport.disconnect).not.toHaveBeenCalled()
       expect(deps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'restored-session')
-      expect(mockStoreState.clearSleepingAgentSession).not.toHaveBeenCalled()
+      expect(storeFixture.read().clearSleepingAgentSession).not.toHaveBeenCalled()
     })
   })
 }

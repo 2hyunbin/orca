@@ -1,7 +1,8 @@
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { leafIdForPane } from './pty-connection-test-pane-fixtures'
-import type { StoreState } from './pty-connection-test-store-state'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AgentStatusPatch } from '@/store/agent-status-patch'
 import type { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 
 type MockRef = { current: Mock }
@@ -42,7 +43,7 @@ export type PaneConnectionDeps = {
 }
 
 export function buildPaneConnectionDeps(
-  getState: () => StoreState,
+  fixture: { read: () => AgentStatusReadState; patch: (patch: AgentStatusPatch) => void },
   overrides: Record<string, unknown> = {}
 ): PaneConnectionDeps {
   return {
@@ -70,21 +71,21 @@ export function buildPaneConnectionDeps(
     setRuntimePaneTitle: vi.fn(),
     clearRuntimePaneTitle: vi.fn(),
     updateTabPtyId: vi.fn((tabId: string, ptyId: string, replacedPtyId?: string) => {
-      const current = getState().ptyIdsByTabId?.[tabId] ?? []
+      const current = fixture.read().ptyIdsByTabId?.[tabId] ?? []
       const next =
         replacedPtyId && current.includes(replacedPtyId)
           ? current.map((candidate) => (candidate === replacedPtyId ? ptyId : candidate))
           : current.includes(ptyId)
             ? current
             : [...current, ptyId]
-      getState().ptyIdsByTabId = { ...getState().ptyIdsByTabId, [tabId]: next }
+      fixture.patch({ ptyIdsByTabId: { ...fixture.read().ptyIdsByTabId, [tabId]: next } })
     }),
     markTerminalBell: vi.fn(),
     dispatchNotification: vi.fn(),
     onShowSessionRestoredBanner: vi.fn(),
     setCacheTimerStartedAt: vi.fn(),
     syncPanePtyLayoutBinding: vi.fn((paneId: number, ptyId: string) => {
-      const layout = getState().terminalLayoutsByTabId?.['tab-1']
+      const layout = fixture.read().terminalLayoutsByTabId?.['tab-1']
       if (layout) {
         layout.ptyIdsByLeafId = { ...layout.ptyIdsByLeafId, [leafIdForPane(paneId)]: ptyId }
       }

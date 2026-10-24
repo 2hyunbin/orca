@@ -18,13 +18,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionVisibilityResumeSizeTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -34,9 +34,10 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -48,6 +49,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -70,10 +72,8 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         })
         const pane = createPane(2)
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
+        const binding = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
         ) as unknown as {
           noteVisibilityResume: () => void
         }
@@ -185,7 +185,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           pane.terminal.cols = 82
           pane.terminal.rows = 40
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           transport.resize.mockClear()
           vi.mocked(window.api.pty.getSize).mockClear()
@@ -230,7 +230,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         } as never
         vi.mocked(window.api.pty.getSize).mockResolvedValue({ cols: 62, rows: 63 })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks()
         proposedGrid = { cols: 65, rows: 63 }
         vi.mocked(pane.fitAddon.fit).mockClear()
@@ -277,7 +277,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         } as never
 
         try {
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           proposedGrid = { cols: 65, rows: 63 }
           setDriverForPty('pty-pane-2', { kind: 'mobile', clientId: 'phone-1' })
@@ -315,7 +315,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => ({ cols: 101, rows: 33 }))
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           setFitOverride('pty-pane-2', 'mobile-fit', 40, 30)
           transport.resize.mockClear()
@@ -362,7 +362,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => proposedGrid)
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           observer.trigger()
           await flushAsyncTicks()
@@ -413,7 +413,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             ...pane.fitAddon,
             proposeDimensions: vi.fn(() => proposedGrid)
           } as never
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           observer.trigger()
           await flushAsyncTicks()
@@ -459,7 +459,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => ({ cols: 130, rows: 50 }))
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
           await flushAsyncTicks()
           setDriverForPty('pty-pane-2', { kind: 'mobile', clientId: 'phone-1' })
           transport.resize.mockClear()
@@ -560,10 +560,8 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         })
         const pane = createPane(2)
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
+        const binding = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
         ) as unknown as {
           noteVisibilityResume: () => void
         }
@@ -602,7 +600,9 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           ...pane.fitAddon,
           proposeDimensions: vi.fn(() => ({ cols: 132, rows: 42 }))
         } as never
-        const binding = connectPanePty(pane as never, createManager(2) as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(pane as never, createManager(2) as never, deps as never)
+        )
         await flushAsyncTicks()
         transport.claimViewport.mockClear()
 

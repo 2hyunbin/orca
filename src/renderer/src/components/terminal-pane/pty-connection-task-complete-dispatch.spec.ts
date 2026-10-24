@@ -25,23 +25,23 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionTaskCompleteDispatchTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   function notifyStoreSubscribers(): void {
     for (const listener of storeSubscribers.slice()) {
-      listener(mockStoreState)
+      listener(storeFixture.read())
     }
   }
 
@@ -52,9 +52,10 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -66,6 +67,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -85,7 +87,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -125,7 +127,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -150,15 +152,15 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.ptyIdsByTabId = { 'tab-1': ['pty-hook'] }
-      mockStoreState.terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': ['pty-hook'] } })
+      storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
 
       vi.useFakeTimers()
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const statusHandler = createdTransportOptions[0]?.onAgentStatus as
         | ((payload: {
@@ -194,7 +196,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
+      storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
         launchConfig: {
           agentArgs: '',
           agentEnv: {}
@@ -217,7 +219,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -237,17 +239,19 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const transport = createMockTransport('pty-omp')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.tabsByWorktree = {
-        'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
-      }
-      mockStoreState.runtimePaneTitlesByTabId = { 'tab-1': { 1: '\u280b Pi' } }
+      storeFixture.patch({
+        tabsByWorktree: {
+          'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
+        }
+      })
+      storeFixture.patch({ runtimePaneTitlesByTabId: { 'tab-1': { 1: '\u280b Pi' } } })
 
       const pane = createPane(1)
       const manager = createManager(1)
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -275,7 +279,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         agentType: 'pi'
       })
 
-      expect(mockStoreState.setAgentStatus).toHaveBeenCalledWith(
+      expect(storeFixture.read().setAgentStatus).toHaveBeenCalledWith(
         makePaneKey('tab-1', LEAF_1),
         {
           state: 'working',
@@ -288,16 +292,18 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         { connectionId: null }
       )
 
-      mockStoreState.tabsByWorktree = {
-        'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
-      }
+      storeFixture.patch({
+        tabsByWorktree: {
+          'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }]
+        }
+      })
       statusHandler({
         state: 'working',
         prompt: 'keep the remote title',
         agentType: 'pi'
       })
 
-      expect(mockStoreState.setAgentStatus).toHaveBeenLastCalledWith(
+      expect(storeFixture.read().setAgentStatus).toHaveBeenLastCalledWith(
         makePaneKey('tab-1', LEAF_1),
         {
           state: 'working',
@@ -316,16 +322,18 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const transport = createMockTransport('pty-omp-gemini-cwd')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.tabsByWorktree = {
-        'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
-      }
+      storeFixture.patch({
+        tabsByWorktree: {
+          'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
+        }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -353,7 +361,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(createdTransportOptions[0]?.onAgentStatus).toBeUndefined()
     })
@@ -376,7 +384,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         isVisibleRef: { current: false }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(6)
       vi.useFakeTimers()
 
@@ -410,7 +418,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -422,7 +430,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       idleHandler('* Codex done')
       expect(window.api.notifications.dispatch).not.toHaveBeenCalled()
 
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: 'Use delayed hook status in notification',
         updatedAt: Date.now(),
@@ -432,7 +440,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         terminalTitle: '* Codex done',
         stateHistory: [],
         lastAssistantMessage: 'Delayed status arrived.'
-      }
+      })
 
       vi.advanceTimersByTime(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS)
       await flushAsyncTicks()
@@ -464,7 +472,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -479,7 +487,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       expect(window.api.notifications.dispatch).not.toHaveBeenCalled()
 
       vi.advanceTimersByTime(100)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: 'Use the late hook status in notification',
         updatedAt: Date.now(),
@@ -489,7 +497,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         terminalTitle: '* Codex done',
         stateHistory: [],
         lastAssistantMessage: 'Late status arrived.'
-      }
+      })
       notifyStoreSubscribers()
       await flushAsyncTicks()
       vi.advanceTimersByTime(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS - 350)
@@ -519,7 +527,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       vi.setSystemTime(1_000_000)
       const dispatchNotification = useNotificationDispatch('wt-1')
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: 'Previous task that must not leak',
         updatedAt: Date.now() - 15_000,
@@ -529,13 +537,13 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         terminalTitle: '* Codex done',
         stateHistory: [],
         lastAssistantMessage: 'Old response'
-      }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -573,7 +581,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
 
       const dispatchNotification = useNotificationDispatch('wt-1')
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: 'Should not leak into BEL',
         updatedAt: Date.now(),
@@ -581,13 +589,13 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         agentType: 'codex',
         paneKey,
         stateHistory: []
-      }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {
@@ -623,7 +631,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Captured transport options expose onAgentExited as an optional zero-argument callback.
       const agentExitedHandler = createdTransportOptions[0]?.onAgentExited as
@@ -637,7 +645,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
 
       expect(deps.setCacheTimerStartedAt).toHaveBeenCalledWith(makePaneKey('tab-1', LEAF_1), null)
       expect(deps.onAgentExitedRef.current).toHaveBeenCalledWith(LEAF_1)
-      expect(mockStoreState.removeAgentStatus).not.toHaveBeenCalled()
+      expect(storeFixture.read().removeAgentStatus).not.toHaveBeenCalled()
     })
   })
 }

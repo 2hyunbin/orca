@@ -20,13 +20,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -36,9 +36,10 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -50,6 +51,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -72,8 +74,8 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
         source: 'headless'
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         runtimeStatusByEnvironmentId: new Map([
           [
             'env-1',
@@ -83,13 +85,13 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
             }
           ]
         ])
-      }
+      })
 
       const pane = createPane(1)
       const { parseCallbacks, writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ mountFollowsTerminalPark: true })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       for (let step = 0; step < 30; step += 1) {
         parseCallbacks.shift()?.()
         await flushAsyncTicks(2)
@@ -125,8 +127,8 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
         alternateScreen: true,
         scrollbackAnsi: 'FLOATING-PARK-HISTORY\r\n'
       })
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'global-floating-terminal': [{ id: 'tab-1', ptyId: localPtyId }]
         },
@@ -139,7 +141,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
             ptyIdsByLeafId: { [LEAF_1]: localPtyId }
           }
         }
-      }
+      })
 
       const pane = createPane(1)
       pane.container.getBoundingClientRect = vi.fn(() => createRect(0, 0))
@@ -150,7 +152,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
         restoredLeafId: LEAF_1,
         restoredPtyIdByLeafId: { [LEAF_1]: localPtyId }
       })
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       for (let step = 0; step < 30; step += 1) {
         parseCallbacks.shift()?.()
         await flushAsyncTicks(2)

@@ -30,23 +30,23 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   function notifyStoreSubscribers(): void {
     for (const listener of storeSubscribers.slice()) {
-      listener(mockStoreState)
+      listener(storeFixture.read())
     }
   }
 
@@ -57,9 +57,10 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -71,6 +72,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -80,7 +82,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'waiting',
         prompt: 'approve the tool call',
         updatedAt: Date.now(),
@@ -88,12 +90,12 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         agentType: 'claude',
         paneKey,
         stateHistory: []
-      }
+      })
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
         | undefined
@@ -135,7 +137,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       enableActiveRuntimeEnvironment()
       vi.useFakeTimers()
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'still working',
         updatedAt: Date.now(),
@@ -143,13 +145,13 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         agentType: 'claude',
         paneKey,
         stateHistory: []
-      }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -210,26 +212,28 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.ptyIdsByTabId = { 'tab-1': ['pty-hook'] }
-      mockStoreState.terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': ['pty-hook'] } })
+      storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
       vi.useFakeTimers()
-      mockStoreState.settings = {
-        ...mockStoreState.settings,
-        experimentalTerminalAttention: false,
-        notifications: {
-          enabled: true,
-          agentTaskComplete: false,
-          terminalBell: true,
-          suppressWhenFocused: false,
-          customSoundPath: null
+      storeFixture.patch({
+        settings: {
+          ...storeFixture.read().settings,
+          experimentalTerminalAttention: false,
+          notifications: {
+            enabled: true,
+            agentTaskComplete: false,
+            terminalBell: true,
+            suppressWhenFocused: false,
+            customSoundPath: null
+          }
         }
-      }
+      })
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -324,7 +328,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         const crashedTurnStartedAt = Date.now()
         const initialAgentType =
           hookUpdateBeforeDispatch === 'same-turn-known-agent' ? 'unknown' : 'codex'
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
+        storeFixture.setStatus(paneKey, {
           state: 'working',
           prompt: 'crash before done hook',
           updatedAt: crashedTurnStartedAt,
@@ -332,14 +336,14 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
           agentType: initialAgentType,
           paneKey,
           stateHistory: []
-        }
+        })
         const getForegroundProcess = vi.mocked(window.api.pty.getForegroundProcess)
         getForegroundProcess.mockResolvedValue('codex')
         const pane = createPane(1)
         const manager = createManager(1)
         const deps = createDeps()
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks()
         const titleHandler = createdTransportOptions[0]?.onTitleChange as
           | ((title: string, rawTitle: string) => void)
@@ -353,7 +357,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         getForegroundProcess.mockResolvedValue(null)
         await vi.advanceTimersByTimeAsync(3_000)
         if (hookUpdateBeforeDispatch !== 'none') {
-          mockStoreState.agentStatusByPaneKey[paneKey] = {
+          storeFixture.setStatus(paneKey, {
             state: 'working',
             prompt:
               hookUpdateBeforeDispatch === 'new-turn'
@@ -365,7 +369,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
             agentType: 'codex',
             paneKey,
             stateHistory: []
-          }
+          })
           notifyStoreSubscribers()
         }
         await vi.advanceTimersByTimeAsync(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS)
@@ -410,7 +414,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -421,7 +425,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
 
       titleHandler('Codex working', 'Codex working')
       await vi.advanceTimersByTimeAsync(2_500)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'replacement agent turn',
         updatedAt: Date.now(),
@@ -429,7 +433,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         agentType: 'claude',
         paneKey,
         stateHistory: []
-      }
+      })
       getForegroundProcess.mockResolvedValue('claude')
       await vi.advanceTimersByTimeAsync(1_000)
       await vi.advanceTimersByTimeAsync(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS)
@@ -442,7 +446,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         expect.any(Function)
       )
 
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: 'replacement agent turn',
         updatedAt: Date.now(),
@@ -450,7 +454,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         agentType: 'claude',
         paneKey,
         stateHistory: []
-      }
+      })
       titleHandler('Claude done', 'Claude done')
       await vi.advanceTimersByTimeAsync(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS)
 
@@ -494,7 +498,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
         await flushAsyncTicks()
         const titleHandler = createdTransportOptions[0]?.onTitleChange as
           | ((title: string, rawTitle: string) => void)
@@ -518,7 +522,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         // Why: let the first null sample record a pending process exit before the replacement owner is installed.
         await flushAsyncTicks()
 
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
+        storeFixture.setStatus(paneKey, {
           state: 'working',
           prompt: 'replacement agent turn',
           updatedAt: Date.now(),
@@ -526,7 +530,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
           agentType: 'claude',
           paneKey,
           stateHistory: []
-        }
+        })
         releaseConfirmingNullSample?.()
         // Ignore cursor resets from setup so this assertion only covers the replacement idle event.
         pane.terminal.write.mockClear()
@@ -560,7 +564,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -574,7 +578,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
 
       titleHandler('Codex working', 'Codex working')
       await vi.advanceTimersByTimeAsync(2_500)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'replacement agent turn',
         updatedAt: Date.now(),
@@ -582,7 +586,7 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         agentType: 'claude',
         paneKey,
         stateHistory: []
-      }
+      })
       idleHandler('Claude done')
       getForegroundProcess.mockResolvedValue('claude')
       await vi.advanceTimersByTimeAsync(1_000)

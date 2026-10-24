@@ -26,13 +26,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionHiddenCodexQueriesTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -42,9 +42,10 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -56,6 +57,7 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -73,13 +75,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -114,14 +118,16 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
         const pane = createPane(1)
         const manager = createManager(1)
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The connection fixture supplies the hidden pane APIs with this explicit startup command.
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command }
-          }) as never
+        const binding = storeFixture.track(
+          connectPanePty(
+            pane as never,
+            manager as never,
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The connection fixture supplies the hidden pane APIs with this explicit startup command.
+            createDeps({
+              isVisibleRef: { current: false },
+              startup: { command }
+            }) as never
+          )
         )
         await flushAsyncTicks(6)
 
@@ -147,13 +153,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -180,13 +188,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -218,13 +228,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -256,13 +268,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -292,13 +306,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -329,13 +345,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -373,13 +391,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -421,7 +441,7 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       })
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: '',
         agentType: 'codex',
@@ -430,18 +450,20 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
         updatedAt: now,
         stateStartedAt: now,
         stateHistory: []
-      }
+      })
 
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -492,7 +514,7 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       })
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: '',
         agentType: 'codex',
@@ -501,14 +523,16 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
         updatedAt: now,
         stateStartedAt: now,
         stateHistory: []
-      }
+      })
 
       const isVisibleRef = { current: false }
       const pane = createPane(1)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef, startup: { command: 'codex' } }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          createManager(1) as never,
+          createDeps({ isVisibleRef, startup: { command: 'codex' } }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -554,13 +578,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -611,13 +637,15 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       const pane = createPane(1)
       pane.terminal.buffer.active.type = 'alternate'
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)
@@ -666,10 +694,12 @@ export function registerPtyConnectionHiddenCodexQueriesTests(): void {
       const pane = createPane(1)
       pane.terminal.buffer.active.type = 'alternate'
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({ isVisibleRef, startup: { command: 'codex' } }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({ isVisibleRef, startup: { command: 'codex' } }) as never
+        )
       )
       try {
         await flushAsyncTicks(6)

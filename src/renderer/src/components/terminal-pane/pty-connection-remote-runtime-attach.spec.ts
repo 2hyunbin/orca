@@ -24,18 +24,18 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -45,9 +45,10 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -59,6 +60,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -78,7 +80,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('⠋ Working ├─ file.ts █ progress \uE0B0 prompt\r\n')
@@ -95,21 +97,21 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'pty-local-detached' }]
         },
         settings: {
-          ...mockStoreState.settings
+          ...storeFixture.read().settings
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(transport.connect).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: 'pty-local-detached' })
@@ -129,23 +131,23 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       })
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'remote:terminal-1' }]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => callback?.())
       const manager = createManager(2)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
 
       expect(transport.connect).not.toHaveBeenCalled()
@@ -170,20 +172,22 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         remoteCallbacks = callbacks
       })
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'remote:terminal-delayed' }]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(2)
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
 
-      connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
       expect(window.api.pty.reportRendererSerializerReady).not.toHaveBeenCalled()
 
@@ -233,8 +237,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       )
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: restoredPtyId }]
         },
@@ -242,7 +246,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           'tab-1': []
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1',
           agentCmdOverrides: {}
         },
@@ -259,7 +263,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       pane.terminal.write.mockImplementation((_data: string, callback?: () => void) => callback?.())
@@ -269,7 +273,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: restoredPtyId }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
       capturedDataCallback.current?.('shell ready\r\n')
       await new Promise((resolve) => setTimeout(resolve, 70))
@@ -305,7 +309,7 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       expect(deps.updateTabPtyId).toHaveBeenCalledWith('tab-1', freshPtyId)
       expect(window.api.pty.reportRendererSerializerReady).toHaveBeenCalledWith(freshPtyId)
       expect(transport.sendInput).not.toHaveBeenCalled()
-      expect(mockStoreState.clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
+      expect(storeFixture.read().clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
     })
 
     it('does not let a restored encoded PTY override the current worktree owner', async () => {
@@ -314,8 +318,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'remote:env-1@@terminal-1' }]
         },
@@ -331,16 +335,16 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-2'
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('env-2', expect.any(Object))
       expect(transport.attach).toHaveBeenCalledWith(
@@ -357,8 +361,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       transportFactoryQueue.push(transport)
       const tabId = 'web-terminal-host-tab'
       const ptyId = 'remote:hub-web@@terminal-1'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: tabId, ptyId }] },
         ptyIdsByTabId: { [tabId]: [ptyId] },
         worktreesByRepo: {
@@ -372,16 +376,18 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           ]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }]
-      } as StoreState
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({
-          tabId,
-          restoredLeafId: LEAF_1,
-          restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
-        }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({
+            tabId,
+            restoredLeafId: LEAF_1,
+            restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
+          }) as never
+        )
       )
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('hub-web', expect.any(Object))
@@ -398,8 +404,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       transportFactoryQueue.push(transport)
       const tabId = 'web-terminal-host-tab'
       const ptyId = 'remote:hub-b@@terminal-1'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: tabId, ptyId }] },
         worktreesByRepo: {
           repo1: [
@@ -413,16 +419,18 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             }
           ]
         }
-      } as StoreState
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({
-          tabId,
-          restoredLeafId: LEAF_1,
-          restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
-        }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({
+            tabId,
+            restoredLeafId: LEAF_1,
+            restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
+          }) as never
+        )
       )
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('hub-b', expect.any(Object))
@@ -435,17 +443,19 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const ptyId = 'remote:stale-hub@@terminal-1'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
-        settings: { ...mockStoreState.settings, activeRuntimeEnvironmentId: 'stale-hub' }
-      } as StoreState
+        settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'stale-hub' }
+      } as StoreState)
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
 
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -457,17 +467,19 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const { createIpcPtyTransport } = await import('./pty-transport')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/srv/wt-1' }]
         },
         repos: [{ id: 'repo1', connectionId: null }],
-        settings: { ...mockStoreState.settings, activeRuntimeEnvironmentId: 'legacy-hub' }
-      } as StoreState
+        settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'legacy-hub' }
+      } as StoreState)
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
 
       // Why: the client stamps every server row on arrival, so an unstamped row is this machine's.
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
@@ -485,19 +497,21 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       transportFactoryQueue.push(transport)
       const setupWorktreeId =
         'ephemeral-setup-terminal:settings-mobile-emulator-orca-cli-skill-terminal'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { [setupWorktreeId]: [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }]
-      } as StoreState
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ worktreeId: setupWorktreeId }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ worktreeId: setupWorktreeId }) as never
+        )
       )
 
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -511,21 +525,23 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       transportFactoryQueue.push(transport)
       const setupWorktreeId =
         'ephemeral-setup-terminal:settings-mobile-emulator-orca-cli-skill-terminal'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { [setupWorktreeId]: [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
         runtimeEnvironments: [{ id: 'hub-a' }],
-        settings: { ...mockStoreState.settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState
+        settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ worktreeId: setupWorktreeId }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ worktreeId: setupWorktreeId }) as never
+        )
       )
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('hub-a', expect.any(Object))
@@ -538,19 +554,21 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const { createIpcPtyTransport } = await import('./pty-transport')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-local': [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-local', repoId: 'repo1', path: '/tmp/wt-local', hostId: 'local' }]
         },
         repos: []
-      } as StoreState
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ worktreeId: 'wt-local', cwd: '/tmp/wt-local' }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ worktreeId: 'wt-local', cwd: '/tmp/wt-local' }) as never
+        )
       )
 
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -565,8 +583,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-remote': [{ id: 'tab-1', ptyId: null }] },
         // Why: the worktree row exists (so the owner is not "ambiguous") but its repo has
         // not landed yet — exactly the window that used to fail open to local.
@@ -574,13 +592,15 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
           repo1: [{ id: 'wt-remote', repoId: 'repo1', path: '/tmp/orca-docker-relay-perf-repo' }]
         },
         repos: []
-      } as StoreState
+      } as StoreState)
 
       const deps = createDeps({
         worktreeId: 'wt-remote',
         cwd: '/tmp/orca-docker-relay-perf-repo'
       })
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
 
       expect(createIpcPtyTransport).not.toHaveBeenCalled()
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
@@ -592,21 +612,23 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const { createIpcPtyTransport } = await import('./pty-transport')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'global-floating-terminal': [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/tmp/wt-1', hostId: 'local' }]
         },
         repos: [{ id: 'repo1', connectionId: null, executionHostId: 'local' }],
         runtimeEnvironments: [{ id: 'hub-a' }],
-        settings: { ...mockStoreState.settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState
+        settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ worktreeId: 'global-floating-terminal' }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ worktreeId: 'global-floating-terminal' }) as never
+        )
       )
 
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -619,8 +641,8 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const hostPtyId = 'ssh:hub-private@@pty-2'
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: hostPtyId }]
         },
@@ -651,13 +673,15 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
             executionHostId: 'runtime:hub-env'
           }
         ]
-      } as StoreState
+      } as StoreState)
       const deps = createDeps({
         restoredLeafId: LEAF_1,
         restoredPtyIdByLeafId: { [LEAF_1]: hostPtyId }
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('hub-env', expect.any(Object))

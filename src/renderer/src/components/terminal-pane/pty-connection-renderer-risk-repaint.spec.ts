@@ -21,13 +21,13 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
   const { resetAndRefreshAllTerminalWebglAtlases, scheduleTerminalWebglAtlasRecovery } =
     ptyConnectionTestMocks
 
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function expectNoGlobalAtlasRecovery(): void {
@@ -43,9 +43,10 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -57,6 +58,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -76,7 +78,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('Arabic: السلام عليكم\r\n')
@@ -104,7 +106,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b[4')
@@ -138,7 +140,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         callback?.()
       })
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('没改什么(护城河)\r\n')
@@ -169,7 +173,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         parseCallback = callback
       })
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('没改什么(护城河)\r\n')
@@ -205,7 +211,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.(
@@ -244,7 +252,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?1049h\x1b[2J\x1b[HVim package.json')
@@ -283,7 +293,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         // Why: PTY reads split CSI sequences at arbitrary byte boundaries, so the enter sequence can straddle two onData chunks.
@@ -326,7 +338,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[34;1H\x1b[K\x1b[34;1H\x1b[?1049l\x1b[?25h')
@@ -364,7 +378,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?1049h\x1b[2J\x1b[Hpager frame\x1b[K\x1b[?1049l')
@@ -402,7 +418,9 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         // Captured from a real vim session: a 1024-byte PTY read boundary cuts the cursor move \x1b[30;5H into "\x1b[30" + ";5H".

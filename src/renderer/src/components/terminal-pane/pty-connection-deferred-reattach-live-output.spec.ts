@@ -21,13 +21,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -37,9 +37,10 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -51,6 +52,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -65,8 +67,8 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
       })
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         sleepingAgentSessionsByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -80,7 +82,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -89,12 +91,12 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
       await new Promise((resolve) => setTimeout(resolve, 70))
 
       expect(transport.sendInput).not.toHaveBeenCalled()
-      expect(mockStoreState.clearSleepingAgentSession).not.toHaveBeenCalled()
+      expect(storeFixture.read().clearSleepingAgentSession).not.toHaveBeenCalled()
     })
 
     it('does not resume the provider session when daemon reattach returns a live snapshot', async () => {
@@ -108,8 +110,8 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
       })
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         agentStatusByPaneKey: {
           [paneKey]: {
             state: 'working',
@@ -122,7 +124,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
             providerSession: { key: 'session_id', id: 'codex-session-1' }
           }
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -131,7 +133,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(20)
       await new Promise((resolve) => setTimeout(resolve, 70))
 
@@ -169,7 +171,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
           restoredLeafId: LEAF_1,
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
-        connectPanePty(pane as never, createManager(1) as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
         await flushAsyncTicks(20)
         for (let step = 0; step < 40; step += 1) {
           parseCallbacks.shift()?.()
@@ -207,7 +209,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
 
       const snapshotIndex = writes.indexOf(`${RESET_GRAPHIC_RENDITION}authoritative-snapshot`)
@@ -256,7 +258,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
       for (let index = 0; index < 30; index += 1) {
         parseCallbacks.shift()?.()
@@ -306,7 +308,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
       for (let index = 0; index < 40; index += 1) {
         const pending = parseCallbacks.shift()
@@ -361,7 +363,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
       for (let index = 0; index < 40; index += 1) {
         const pending = parseCallbacks.shift()
@@ -398,7 +400,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -425,7 +427,7 @@ export function registerPtyConnectionDeferredReattachLiveOutputTests(): void {
         isVisibleRef: { current: false }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()

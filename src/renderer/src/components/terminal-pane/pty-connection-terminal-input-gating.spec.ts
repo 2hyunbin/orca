@@ -28,13 +28,13 @@ const REMOUNTED = { remounted: true as const, generation: 1 }
 const AUTOMATIC_REQUEST = expect.objectContaining({ trigger: 'automatic' })
 
 export function registerPtyConnectionTerminalInputGatingTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -44,9 +44,10 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -58,6 +59,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -66,8 +68,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: new Proxy(
           {
             'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }],
@@ -80,7 +82,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
           }
         ),
         codexRestartNoticeByPtyId: {}
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -91,7 +93,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -107,8 +109,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: new Proxy(
           {
             'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }],
@@ -123,7 +125,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         codexRestartNoticeByPtyId: {
           'pty-other': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -134,7 +136,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -150,8 +152,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: new Proxy(
           {
             'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }],
@@ -166,7 +168,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         codexRestartNoticeByPtyId: {
           'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -177,7 +179,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -193,8 +195,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }] },
         ptyIdsByTabId: { 'tab-1': ['pty-live'] },
         // Why: the record survives a dismissal as launch-account memory, so the
@@ -202,7 +204,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         codexRestartNoticeByPtyId: {
           'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B', dismissed: true }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -213,7 +215,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -229,14 +231,14 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }] },
         ptyIdsByTabId: { 'tab-1': ['pty-live'] },
         codexRestartNoticeByPtyId: {
           'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B', dismissed: true }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -247,7 +249,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -263,8 +265,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-dismissed')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         // Why: `tab.ptyId` is whichever pane bound last, so a sibling's unanswered
         // notice would otherwise kill this pane's keyboard with no prompt of its own.
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-sibling' }] },
@@ -273,7 +275,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
           'pty-dismissed': { previousAccountLabel: 'A', nextAccountLabel: 'B', dismissed: true },
           'pty-sibling': { previousAccountLabel: 'A', nextAccountLabel: 'C' }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -288,7 +290,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         paneTransportsRef: { current: new Map([[2, createMockTransport('pty-sibling')]]) }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -305,15 +307,15 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-stale')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-sibling' }] },
         ptyIdsByTabId: { 'tab-1': ['pty-stale', 'pty-sibling'] },
         codexRestartNoticeByPtyId: {
           'pty-stale': { previousAccountLabel: 'A', nextAccountLabel: 'B' },
           'pty-sibling': { previousAccountLabel: 'A', nextAccountLabel: 'B', dismissed: true }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -326,7 +328,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         paneTransportsRef: { current: new Map([[2, createMockTransport('pty-sibling')]]) }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -343,8 +345,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-plain-shell')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         // Why: a requested restart hides the prompt, so blocking this record-less
         // pane through `tab.ptyId` would leave a dead keyboard and nothing to answer.
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-sibling' }] },
@@ -356,7 +358,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
             restartRequested: true
           }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -369,7 +371,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         paneTransportsRef: { current: new Map([[2, createMockTransport('pty-sibling')]]) }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -386,8 +388,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-live' }] },
         ptyIdsByTabId: { 'tab-1': ['pty-live'] },
         // Why: unlike a dismissal, a queued restart leaves the pane running under
@@ -395,7 +397,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         codexRestartNoticeByPtyId: {
           'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B', restartRequested: true }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -406,7 +408,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -424,8 +426,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       vi.setSystemTime(1_100)
       const transport = createMockTransport('pty-codex-stale')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'pty-codex-stale' }]
         },
@@ -446,7 +448,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
             stateHistory: []
           }
         }
-      }
+      })
 
       const pane = createPane(1)
       const terminalTarget = createKeyboardEventTarget()
@@ -459,7 +461,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -486,8 +488,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         const transport = createMockTransport(ptyId)
         transportFactoryQueue.push(transport)
         const paneKey = makePaneKey('tab-1', LEAF_1)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId }] },
           ptyIdsByTabId: { 'tab-1': [ptyId] },
           agentStatusByPaneKey: {
@@ -501,7 +503,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
               stateHistory: []
             }
           }
-        }
+        })
 
         const pane = createPane(1)
         const terminalTarget = createKeyboardEventTarget()
@@ -512,7 +514,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
 
         if (!onDataHandler) {
           throw new Error('expected onData handler to be registered')
@@ -539,11 +543,11 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       try {
         const transport = createMockTransport(ptyId)
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId }] },
           ptyIdsByTabId: { 'tab-1': [ptyId] }
-        }
+        })
 
         const pane = createPane(1)
         let onDataHandler: ((data: string) => void) | null = null
@@ -552,7 +556,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
 
         if (!onDataHandler) {
           throw new Error('expected onData handler to be registered')
@@ -587,11 +593,11 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       try {
         const transport = createMockTransport(ptyId)
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId }] },
           ptyIdsByTabId: { 'tab-1': [ptyId] }
-        }
+        })
 
         const pane = createPane(1)
         let onDataHandler: ((data: string) => void) | null = null
@@ -600,7 +606,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
 
         if (!onDataHandler) {
           throw new Error('expected onData handler to be registered')
@@ -624,7 +632,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       transport.sendInput.mockReturnValue(false)
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         paneKey,
         state: 'working',
         prompt: 'disconnected input',
@@ -632,7 +640,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         stateStartedAt: 900,
         agentType: 'custom-agent',
         stateHistory: []
-      }
+      })
 
       const pane = createPane(1)
       const terminalTarget = createKeyboardEventTarget()
@@ -643,7 +651,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
 
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
@@ -667,7 +677,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       transport.sendInputAccepted = vi.fn().mockResolvedValue(false)
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         paneKey,
         state: 'working',
         prompt: 'mobile race input',
@@ -675,7 +685,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         stateStartedAt: 900,
         agentType: 'custom-agent',
         stateHistory: []
-      }
+      })
 
       const pane = createPane(1)
       const terminalTarget = createKeyboardEventTarget()
@@ -686,7 +696,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
 
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
@@ -707,7 +719,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { _resetTerminalPaneRecoveryForTests } = await import('./terminal-pane-recovery')
       _resetTerminalPaneRecoveryForTests()
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      mockStoreState = { ...mockStoreState, remountTerminalTabForRecovery } as StoreState
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
       const transport = createMockTransport('daemon-pty')
       let writeUnavailable: (() => void) | undefined
       transport.connect.mockImplementation(
@@ -718,7 +730,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       )
       transportFactoryQueue.push(transport)
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks(6)
       writeUnavailable?.()
       await flushAsyncTicks(6)
@@ -733,7 +747,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { _resetTerminalPaneRecoveryForTests } = await import('./terminal-pane-recovery')
       _resetTerminalPaneRecoveryForTests()
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      mockStoreState = { ...mockStoreState, remountTerminalTabForRecovery } as StoreState
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
       const transport = createMockTransport('daemon-pty')
       let writeUnavailable: (() => void) | undefined
       transport.connect.mockImplementation(
@@ -745,7 +759,9 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks(6)
       writeUnavailable?.()
       await flushAsyncTicks(6)
@@ -772,14 +788,12 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const { settleTerminalWriteStallWatch, WRITE_PIPELINE_STALL_CHECK_MS } =
         await import('@/lib/pane-manager/terminal-write-pipeline-health')
       const remountTerminalTabForRecovery = vi.fn(() => REMOUNTED)
-      mockStoreState = { ...mockStoreState, remountTerminalTabForRecovery } as StoreState
+      storeFixture.patch({ ...storeFixture.read(), remountTerminalTabForRecovery } as StoreState)
       const transport = createMockTransport('pty-wedged')
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks()
       pane.terminal.write.mockClear()
@@ -805,10 +819,8 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       transport.sendInputAccepted = vi.fn().mockResolvedValue(false)
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks()
       pane.terminal.write.mockClear()
@@ -829,15 +841,15 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
 
       const transport = createMockTransport(null)
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-level-pty' }]
         },
         codexRestartNoticeByPtyId: {
           'tab-level-pty': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -848,7 +860,7 @@ export function registerPtyConnectionTerminalInputGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {

@@ -17,13 +17,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -33,9 +33,10 @@ export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -47,6 +48,7 @@ export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -80,7 +82,9 @@ export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -131,7 +135,9 @@ export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -190,7 +196,9 @@ export function registerPtyConnectionHiddenSnapshotLiveOverlapTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })

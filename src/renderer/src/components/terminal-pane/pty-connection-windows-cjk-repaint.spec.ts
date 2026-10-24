@@ -24,13 +24,13 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
   const { resetAndRefreshAllTerminalWebglAtlases, scheduleTerminalWebglAtlasRecovery } =
     ptyConnectionTestMocks
 
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function expectNoGlobalAtlasRecovery(): void {
@@ -46,9 +46,10 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -60,6 +61,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -88,7 +90,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\r\x1b[Korca % npm test')
@@ -121,7 +125,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           parseCallback = callback
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?2026hplain claude frame\x1b[?2026l')
@@ -155,7 +161,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      connectPanePty(pane as never, manager as never, createDeps() as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b[48')
@@ -191,7 +197,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      connectPanePty(pane as never, manager as never, createDeps() as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b')
@@ -226,7 +232,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      connectPanePty(pane as never, manager as never, createDeps() as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(
@@ -267,7 +273,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
         sendTerminalInputThroughPane(pane, '已经安装完成，软件已更新后重启。')
 
@@ -305,7 +313,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('已经安装完成，软件已更新后重启。')
@@ -342,7 +352,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
         sendTerminalInputThroughPane(pane, 'abc 123 ✓')
 
@@ -378,7 +390,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('abc 123 ✓')
@@ -416,7 +430,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         // User typed into the prompt; Claude redraws the input line in place.
@@ -455,7 +471,9 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks(6)
 
         // CR redraw still forces one synchronous refresh, but no native-Windows follow-up repaint is scheduled.
@@ -495,7 +513,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         const manager = createManager(1)
         manager.hasWebglRenderer.mockReturnValue(true)
 
-        connectPanePty(pane as never, manager as never, createDeps() as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\r\x1b[3Gzzzx\x1b[K')

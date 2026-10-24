@@ -35,22 +35,22 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionReplayPayloadHandlingTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function setReattachPaneTitle(title: string): void {
-    mockStoreState = buildReattachPaneTitleState(mockStoreState, title)
+    storeFixture.patch(buildReattachPaneTitleState(storeFixture.read(), title))
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -60,9 +60,10 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -74,6 +75,7 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -115,7 +117,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -163,7 +167,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       pane.terminal.buffer.active.baseY = 100
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
-      const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -222,7 +228,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       pane.terminal.buffer.active.baseY = 100
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
-      const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -274,7 +282,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       })
       const manager = createManager(1)
       const deps = createDeps()
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedReplayCallback.current?.('remote prompt\r\n$ ')
@@ -308,7 +318,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const disposable = await withMockedDocumentActiveElement(textarea, async () => {
-        const connection = connectPanePty(pane as never, manager as never, deps as never)
+        const connection = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
 
         capturedReplayCallback.current?.(ANSI_POSITIONED_CURSOR_AGENT_REATTACH_SCREEN)
@@ -348,7 +360,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const disposable = await withMockedDocumentActiveElement(textarea, async () => {
-        const connection = connectPanePty(pane as never, manager as never, deps as never)
+        const connection = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
 
         capturedReplayCallback.current?.(
@@ -389,7 +403,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const disposable = await withMockedDocumentActiveElement(textarea, async () => {
-        const connection = connectPanePty(pane as never, manager as never, deps as never)
+        const connection = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
 
         capturedReplayCallback.current?.(
@@ -430,7 +446,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const disposable = await withMockedDocumentActiveElement(textarea, async () => {
-        const connection = connectPanePty(pane as never, manager as never, deps as never)
+        const connection = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
 
         // A dead run left the cursor hidden; the live-agent reset preserves ?25l, so the veto must re-show the cursor for the shell.
@@ -471,7 +489,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       })
       const manager = createManager(1)
       const deps = createDeps()
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedReplayCallback.current?.('\x1b]0;Restored title\x07', { clearBeforeReplay: false })
@@ -508,7 +528,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       })
       const manager = createManager(1)
       const deps = createDeps()
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedReplayCallback.current?.('', { clearBeforeReplay: false })
@@ -542,7 +564,9 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       })
       const manager = createManager(1)
       const deps = createDeps()
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedReplayCallback.current?.('first replay')
@@ -588,10 +612,8 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks(8)
 
@@ -644,10 +666,8 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks(8)
 
@@ -685,10 +705,8 @@ export function registerPtyConnectionReplayPayloadHandlingTests(): void {
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
-      const binding = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       await flushAsyncTicks(8)
       const getMainBufferSnapshot = window.api.pty.getMainBufferSnapshot as unknown as ReturnType<

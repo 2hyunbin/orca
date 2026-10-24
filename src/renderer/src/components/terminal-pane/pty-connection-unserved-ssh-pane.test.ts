@@ -28,7 +28,7 @@ const {
   notifyCodexPaneBoundForStaleSweep: vi.fn()
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -48,7 +48,12 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    getState: () => mockStoreState,
+    get getState() {
+      return storeFixture.store.getState
+    },
+    get setState() {
+      return storeFixture.store.setState
+    },
     subscribe: (listener: (state: StoreState) => void) => {
       storeSubscribers.push(listener)
       return () => {
@@ -125,7 +130,7 @@ vi.mock('./pty-dispatcher', async (importOriginal) => {
 })
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 function sshApi() {
@@ -151,20 +156,27 @@ describe('a pane on an unconverted SSH row', () => {
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
-    mockStoreState = {
-      ...createInitialStoreState(() => mockStoreState),
-      tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
-      repos: [{ id: 'repo1', connectionId: 'conn-1' }],
+    storeFixture = await createInitialStoreState()
+    storeFixture.patch({
+      tabsByWorktree: {
+        'wt-1': storeFixture.read().tabsByWorktree['wt-1'].map((tab) => ({ ...tab, ptyId: null }))
+      },
+      repos: storeFixture
+        .read()
+        .repos.map((repo) => ({ ...repo, connectionId: 'conn-1', executionHostId: undefined })),
       sshConnectionStates: new Map([['conn-1', { status: 'disconnected' }]])
-    }
+    })
     await installTerminalTestGlobals()
     const { connectPanePty } = await import('./pty-connection')
     connectPane = (paneId, deps) =>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-      connectPanePty(createPane(paneId) as never, createManager(paneId) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(paneId) as never, createManager(paneId) as never, deps as never)
+      )
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 
@@ -202,13 +214,12 @@ describe('a pane on an unconverted SSH row', () => {
   })
 
   it('does not dial a removed target or one that is already connected', async () => {
-    mockStoreState = { ...mockStoreState, sshTargetLabels: new Map() }
+    storeFixture.patch({ sshTargetLabels: new Map() })
     mountUnservedPane(1)
-    mockStoreState = {
-      ...mockStoreState,
+    storeFixture.patch({
       sshTargetLabels: undefined,
       sshConnectionStates: new Map([['conn-1', { status: 'connected' }]])
-    }
+    })
     mountUnservedPane(2)
     await flushAsyncTicks(10)
 
@@ -245,7 +256,9 @@ describe('a pane on an unconverted SSH row', () => {
     const pane = createPane(1)
     const { connectPanePty } = await import('./pty-connection')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-    connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+    storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+    )
     await flushAsyncTicks(10)
 
     vi.mocked(pane.terminal.onData).mock.calls[0]?.[0]('ls\r')

@@ -25,13 +25,13 @@ import {
 const ABANDONED_RESTORE_GAP = `${RESET_AFTER_BYTE_GAP}${buildKittyKeyboardRestore(0)}`
 
 export function registerPtyConnectionStalledHiddenRestoreTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -41,9 +41,10 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -55,6 +56,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -86,7 +88,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -178,7 +182,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       vi.useFakeTimers()
@@ -225,7 +231,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
 
       const pane = createPane(1)
       const deps = createDeps({ isVisibleRef: { current: false } })
-      const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       vi.useFakeTimers()
@@ -279,7 +287,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -342,7 +352,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -395,7 +407,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -497,7 +511,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         const deps = createDeps({
           isVisibleRef: { current: false }
         })
-        disposable = connectPanePty(pane as never, manager as never, deps as never)
+        disposable = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -579,7 +595,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -665,7 +683,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -717,7 +737,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -767,7 +789,9 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })

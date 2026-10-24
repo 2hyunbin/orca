@@ -30,7 +30,7 @@ const {
   notifyCodexPaneBoundForStaleSweep: vi.fn()
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -48,17 +48,24 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
   scheduleTerminalWebglAtlasRecovery
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -130,7 +137,7 @@ const HOST_FRAME = `\x1b[?1049h\x1b[2J\x1b[H${Array.from(
 ).join('\r\n')}\x1b[${HOST_ROWS};3H`
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 async function connectRemotePane(): Promise<{
@@ -141,7 +148,7 @@ async function connectRemotePane(): Promise<{
   dispose: () => void
 }> {
   const { connectPanePty } = await import('./pty-connection')
-  mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, 'env-1')
+  storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), 'env-1'))
   const transport = createMockTransport('remote:env-1@@terminal-1')
   const captured: { current: ConnectCallbacks['onReplayData'] | null } = { current: null }
   transport.connect.mockImplementation(async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
@@ -169,7 +176,9 @@ async function connectRemotePane(): Promise<{
   })
 
   const manager = createManager(1)
-  const disposable = connectPanePty(pane as never, manager as never, createDeps() as never)
+  const disposable = storeFixture.track(
+    connectPanePty(pane as never, manager as never, createDeps() as never)
+  )
   await flushAsyncTicks(6)
   transport.resize.mockClear()
 
@@ -189,11 +198,12 @@ describe('pushed remote snapshot replay grid', () => {
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 

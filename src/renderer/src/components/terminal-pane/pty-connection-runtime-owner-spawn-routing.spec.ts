@@ -20,13 +20,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -36,9 +36,10 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -50,6 +51,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -57,8 +59,8 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [
@@ -79,15 +81,17 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           ]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'hub-a'
         }
-      } as StoreState
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
+        )
       )
       await flushAsyncTicks()
 
@@ -101,21 +105,23 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         worktreesByRepo: {
           repo1: [{ id: 'wt-1', repoId: 'repo1', path: '/srv/stale-worktree' }]
         },
         runtimeEnvironments: [{ id: 'hub-a' }, { id: 'hub-b' }],
         runtimeEnvironmentCatalogHydrated: true,
-        settings: { ...mockStoreState.settings, activeRuntimeEnvironmentId: 'hub-a' }
-      } as StoreState
+        settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
+      } as StoreState)
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
+        )
       )
       await flushAsyncTicks()
 
@@ -130,8 +136,8 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const transport = createMockTransport('remote:owner-runtime@@terminal-1')
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null }]
         },
@@ -144,10 +150,10 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           }
         ],
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'focused-runtime'
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       const manager = createManager(2)
@@ -160,7 +166,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith(
         'owner-runtime',
@@ -178,8 +184,8 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const transport = createMockTransport('pty-local-1')
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null }]
         },
@@ -192,16 +198,16 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
           }
         ],
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'focused-runtime'
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       const manager = createManager(2)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -218,17 +224,19 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       })
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null }]
         }
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(2)
       const { writes } = captureCallbackTerminalWrites(pane)
 
-      connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
 
       expect(writes).toContain(STARTUP_CWD_FALLBACK_NOTICE)
@@ -240,16 +248,16 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'remote:env-1@@terminal-1' }]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           activeRuntimeEnvironmentId: 'env-1'
         }
-      } as StoreState
+      } as StoreState)
 
       const paneTransports = new Map([[1, existingTransport]])
       const pane = createPane(2)
@@ -262,7 +270,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         paneTransportsRef: { current: paneTransports }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(transport.connect).not.toHaveBeenCalled()
       expect(transport.attach).toHaveBeenCalledWith(
@@ -290,21 +298,23 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         paneTransportsRef: { current: new Map([[99, createMockTransport('another-pane-pty')]]) }
       })
 
-      connectPanePty(restartPane as never, restartManager as never, restartDeps as never)
+      storeFixture.track(
+        connectPanePty(restartPane as never, restartManager as never, restartDeps as never)
+      )
       await flushAsyncTicks()
 
       expect(spawnedPtyId).toBe('pty-restarted')
       expect(restartDeps.syncPanePtyLayoutBinding).toHaveBeenCalledWith(1, 'pty-restarted')
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'pty-restarted' }]
         },
         settings: {
-          ...mockStoreState.settings
+          ...storeFixture.read().settings
         }
-      }
+      })
 
       const remountTransport = createMockTransport()
       transportFactoryQueue.push(remountTransport)
@@ -315,7 +325,9 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'pty-restarted' }
       })
 
-      connectPanePty(remountPane as never, remountManager as never, remountDeps as never)
+      storeFixture.track(
+        connectPanePty(remountPane as never, remountManager as never, remountDeps as never)
+      )
 
       expect(remountTransport.connect).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: 'pty-restarted' })
@@ -336,7 +348,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {
@@ -365,16 +377,18 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState.settings = {
-        ...mockStoreState.settings,
-        experimentalTerminalAttention: false
-      }
+      storeFixture.patch({
+        settings: {
+          ...storeFixture.read().settings,
+          experimentalTerminalAttention: false
+        }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {

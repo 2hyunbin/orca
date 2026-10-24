@@ -19,13 +19,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionFreshSpawnGuardsTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -35,9 +35,10 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -49,6 +50,7 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -61,7 +63,7 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       pane.terminal.rows = 0
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks()
 
       expect(deps.onPtyErrorRef.current).not.toHaveBeenCalled()
@@ -76,7 +78,7 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       pane.terminal.rows = 0
       const deps = createDeps({ isVisibleRef: { current: true } })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       await flushAsyncTicks()
 
       expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(
@@ -93,14 +95,16 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'deleting' } }
-      }
+      })
       // Why: a unique tab id keeps this pane's key clear of other tests' pendingSpawnByPaneKey entries so the connect deterministically fresh-spawns.
       const deps = createDeps({ tabId: 'tab-removal-skip-spawn' })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(transport.connect).not.toHaveBeenCalled()
@@ -112,13 +116,15 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'queued' } }
-      }
+      })
       const deps = createDeps({ tabId: 'tab-queued-delete-spawn' })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalled()
@@ -131,12 +137,14 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const deps = createDeps({ tabId: 'tab-retain-disposed-spawn' })
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-retain-disposed-spawn', ptyId: null }] }
-      }
+      })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       const retain = createdTransportOptions[0]?.retainDisposedSpawn
@@ -144,21 +152,21 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
         throw new Error('pane transport was built without retainDisposedSpawn')
       }
       expect(retain()).toBe(true)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'deleting' } }
-      }
+      })
       expect(retain()).toBe(false)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         deleteStateByWorktreeId: { 'local|wt-1': { isDeleting: true, phase: 'deleting' } }
-      }
+      })
       expect(retain()).toBe(false)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         deleteStateByWorktreeId: {},
         tabsByWorktree: { 'wt-1': [] }
-      }
+      })
       expect(retain()).toBe(false)
     })
 
@@ -168,7 +176,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const placement = { kind: 'new-tab' } as const
       const deps = createDeps({ tabId: 'tab-placement', placement })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(createdTransportOptions[0]).toMatchObject({ placement })
@@ -181,7 +191,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       // Why: unique tab id → deterministic fresh spawn (mirrors the skip test's control).
       const deps = createDeps({ tabId: 'tab-removal-control-spawn' })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalled()
@@ -206,7 +218,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       transportFactoryQueue.push(transport)
       const deps = createDeps({ tabId: 'tab-fence-swallow' })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       // Why: assert the callback was captured before invoking — optional invocation
@@ -233,7 +247,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       transportFactoryQueue.push(transport)
       const deps = createDeps({ tabId: 'tab-real-error-surface' })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(capturedOnError.current).toBeTypeOf('function')
@@ -245,18 +261,20 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           terminalWindowsShell: 'wsl.exe',
           terminalWindowsWslDistro: 'Debian',
           localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Debian' }
         },
         projects: [{ id: 'repo1', localWindowsRuntimePreference: { kind: 'windows-host' } }]
-      }
+      })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
 
       expect(createdTransportOptions[0]?.projectRuntime).toEqual({
@@ -275,18 +293,20 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null, forceHostRuntime: true }]
         },
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' }
         }
-      }
+      })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
 
       expect(createdTransportOptions[0]?.projectRuntime).toBeUndefined()
@@ -298,11 +318,11 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         activeWorktreeId: 'wt-1',
         tabsByWorktree: {
-          ...mockStoreState.tabsByWorktree,
+          ...storeFixture.read().tabsByWorktree,
           [FLOATING_TERMINAL_WORKTREE_ID]: [
             { id: 'tab-floating-agent', ptyId: null, launchAgent: 'codex' }
           ]
@@ -311,22 +331,24 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
           { id: 'repo1', localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' } }
         ],
         settings: {
-          ...mockStoreState.settings,
+          ...storeFixture.read().settings,
           terminalWindowsShell: 'wsl.exe',
           terminalWindowsWslDistro: 'Ubuntu',
           localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' }
         }
-      }
+      })
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({
-          tabId: 'tab-floating-agent',
-          worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
-          cwd: 'C:\\Users\\alice',
-          startup: { launchAgent: 'codex' }
-        }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({
+            tabId: 'tab-floating-agent',
+            worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+            cwd: 'C:\\Users\\alice',
+            startup: { launchAgent: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks()
 
@@ -352,12 +374,14 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       )
       transportFactoryQueue.push(transport)
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      )
       await flushAsyncTicks()
 
       capturedDataCallback.current?.('Created https://github.com/acme/orca/pull/42\r\n')
 
-      expect(mockStoreState.observeTerminalGitHubPullRequestLink).toHaveBeenCalledWith(
+      expect(storeFixture.read().observeTerminalGitHubPullRequestLink).toHaveBeenCalledWith(
         'wt-1',
         expect.objectContaining({
           url: 'https://github.com/acme/orca/pull/42',
@@ -384,7 +408,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
         startup: { command: 'codex', launchAgent: 'codex' }
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks()
       capturedDataCallback.current?.('timed out waiting for state db back')
       capturedDataCallback.current?.('fill\r\n')
@@ -403,7 +429,7 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       transportFactoryQueue.push(transport)
       const deps = createDeps()
 
-      connectPanePty(pane as never, createManager(1, 1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1, 1) as never, deps as never))
       await flushAsyncTicks()
 
       transport.sendInput.mockClear()
@@ -441,7 +467,7 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
           deferred.push(() => forward(data))
         }
       })
-      connectPanePty(pane as never, createManager(1, 1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1, 1) as never, deps as never))
       await flushAsyncTicks()
       transport.sendInput.mockClear()
       deps.replayingPanesRef.current.set(pane.id, 1)
@@ -505,10 +531,12 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
         resumeProviderSession: { key: 'session_id', id: 'codex-session-1' } as const
       }
 
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ startup, onStartupBound }) as never
+      storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ startup, onStartupBound }) as never
+        )
       )
 
       expect(onStartupBound).not.toHaveBeenCalled()

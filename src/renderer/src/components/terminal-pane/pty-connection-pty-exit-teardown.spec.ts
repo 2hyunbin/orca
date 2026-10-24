@@ -29,13 +29,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionPtyExitTeardownTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function installSleepingCodexResumeState(restoredPtyId?: string) {
@@ -45,12 +45,12 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       agentArgs: '--model gpt-5',
       agentEnv: { CODEX_PROFILE: 'captured' }
     }
-    mockStoreState = {
-      ...mockStoreState,
+    storeFixture.patch({
+      ...storeFixture.read(),
       tabsByWorktree: {
         'wt-1': [{ id: 'tab-1', ...(restoredPtyId ? { ptyId: restoredPtyId } : {}) }]
       },
-      settings: { ...mockStoreState.settings, agentCmdOverrides: {} },
+      settings: { ...storeFixture.read().settings, agentCmdOverrides: {} },
       agentStatusByPaneKey: {},
       sleepingAgentSessionsByPaneKey: {
         [paneKey]: {
@@ -66,7 +66,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
           launchConfig
         }
       }
-    } as StoreState
+    } as StoreState)
     return launchConfig
   }
 
@@ -77,9 +77,10 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -92,6 +93,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -104,7 +106,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         consumeSuppressedPtyExit: vi.fn(() => true)
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -132,7 +134,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         consumeSuppressedPtyExit: vi.fn(() => true)
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -164,7 +166,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         consumeSuppressedPtyExit: vi.fn(() => true)
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -191,7 +193,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         consumeSuppressedPtyExit: vi.fn(() => true)
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -213,10 +215,10 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         restoredLeafId: LEAF_2,
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) },
         clearExitedPanePtyLayoutBinding: vi.fn(() => {
-          mockStoreState = {
-            ...mockStoreState,
+          storeFixture.patch({
+            ...storeFixture.read(),
             terminalLayoutsByTabId: {
-              ...mockStoreState.terminalLayoutsByTabId,
+              ...storeFixture.read().terminalLayoutsByTabId,
               'tab-1': {
                 root: {
                   type: 'split',
@@ -230,11 +232,11 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
                 ptyIdsByLeafId: { [LEAF_1]: 'pty-pane-1' }
               }
             }
-          }
+          })
         })
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -261,7 +263,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -286,7 +288,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(createPane(1) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(1) as never, manager as never, deps as never))
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -314,10 +316,8 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      const binding = connectPanePty(
-        createPane(1) as never,
-        manager as never,
-        deps as never
+      const binding = storeFixture.track(
+        connectPanePty(createPane(1) as never, manager as never, deps as never)
       ) as unknown as { markShortcutTerminalInputSent: () => void }
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
@@ -341,7 +341,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(createPane(1) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(1) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -367,7 +367,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -390,7 +390,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -416,7 +416,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ onPaneProcessDied: vi.fn() })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -441,7 +441,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(2)
       const deps = createDeps({ onPaneProcessDied: vi.fn() })
 
-      connectPanePty(createPane(1) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(1) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -471,7 +471,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const startup = { command: 'codex --resume session-1' }
       const deps = createDeps({ onPaneProcessDied: vi.fn(), startup })
 
-      connectPanePty(createPane(1) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(1) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -505,7 +505,9 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         onPaneProcessDied: vi.fn()
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks(20)
       callbacks[0]?.onData?.('too many consoles in use, max consoles is 128')
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
@@ -550,7 +552,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
         await mainStartsPaneAs({
           ptyId: 'pty-main',
-          bind: bindsPaneInStore(() => mockStoreState, 'tab-1', LEAF_1)
+          bind: bindsPaneInStore(storeFixture.store, 'tab-1', LEAF_1)
         })
       }
       const deps = createDeps({
@@ -559,7 +561,9 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      )
       await flushAsyncTicks(30)
       expect(callbacks).toHaveLength(2)
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
@@ -587,7 +591,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(createPane(1) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(1) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string, exitCode?: number) => void)
         | undefined
@@ -610,7 +614,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const deps = createDeps()
       const pane = createPane(1)
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtyRebind = createdTransportOptions[0]?.onPtyRebind as
         | ((ptyId: string, replacedPtyId: string) => void)
         | undefined
@@ -647,7 +651,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const deps = createDeps()
       const pane = createPane(1)
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -663,8 +667,8 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
 
       // The fixture dependency is intentionally lightweight, so mirror the live
       // tab/layout commit that the real store performs atomically on replacement.
-      mockStoreState.tabsByWorktree['wt-1'][0]!.ptyId = 'terminal-reconnected'
-      const replacementLayout = mockStoreState.terminalLayoutsByTabId?.['tab-1']
+      storeFixture.read().tabsByWorktree['wt-1'][0]!.ptyId = 'terminal-reconnected'
+      const replacementLayout = storeFixture.read().terminalLayoutsByTabId?.['tab-1']
       if (!replacementLayout) {
         throw new Error('test fixture missing terminal layout')
       }
@@ -685,22 +689,24 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(2, 2)
       const deps = createDeps()
       const pane = createPane(2)
-      mockStoreState.terminalLayoutsByTabId = {
-        'tab-1': {
-          root: {
-            type: 'split',
-            direction: 'horizontal',
-            first: { type: 'leaf', leafId: LEAF_1 },
-            second: { type: 'leaf', leafId: LEAF_2 },
-            ratio: 0.5
-          },
-          activeLeafId: LEAF_2,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [LEAF_1]: 'tab-pty', [LEAF_2]: 'terminal-old' }
+      storeFixture.patch({
+        terminalLayoutsByTabId: {
+          'tab-1': {
+            root: {
+              type: 'split',
+              direction: 'horizontal',
+              first: { type: 'leaf', leafId: LEAF_1 },
+              second: { type: 'leaf', leafId: LEAF_2 },
+              ratio: 0.5
+            },
+            activeLeafId: LEAF_2,
+            expandedLeafId: null,
+            ptyIdsByLeafId: { [LEAF_1]: 'tab-pty', [LEAF_2]: 'terminal-old' }
+          }
         }
-      }
+      })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -715,8 +721,8 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       onPtyRebind?.('terminal-reconnected', 'terminal-old')
 
       // The tab-level PTY is pane one's fallback; pane two is represented by its leaf binding.
-      expect(mockStoreState.tabsByWorktree['wt-1'][0]?.ptyId).toBe('tab-pty')
-      expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId?.[LEAF_2]).toBe(
+      expect(storeFixture.read().tabsByWorktree['wt-1'][0]?.ptyId).toBe('tab-pty')
+      expect(storeFixture.read().terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId?.[LEAF_2]).toBe(
         'terminal-reconnected'
       )
 
@@ -735,9 +741,10 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const pane = createPane(1)
-      mockStoreState.tabsByWorktree['wt-1'] = [{ id: 'tab-1', ptyId: 'terminal-old' }]
+      storeFixture.read().tabsByWorktree['wt-1'] = [{ id: 'tab-1', ptyId: 'terminal-old' }]
       const terminalLayoutsByTabId =
-        mockStoreState.terminalLayoutsByTabId ?? (mockStoreState.terminalLayoutsByTabId = {})
+        storeFixture.read().terminalLayoutsByTabId ??
+        storeFixture.patch({ terminalLayoutsByTabId: {} })
       terminalLayoutsByTabId['tab-1'] = {
         root: { type: 'leaf', leafId: LEAF_1 },
         activeLeafId: LEAF_1,
@@ -745,7 +752,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         ptyIdsByLeafId: { [LEAF_1]: 'terminal-old' }
       }
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -775,7 +782,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -802,7 +809,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
       })
 
-      connectPanePty(createPane(2) as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
       const onPtyExit = createdTransportOptions[0]?.onPtyExit as
         | ((ptyId: string) => void)
         | undefined
@@ -810,7 +817,9 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
 
       onPtyExit?.('pty-pane-2')
 
-      expect(mockStoreState.removeAgentStatus).toHaveBeenCalledWith(makePaneKey('tab-1', LEAF_2))
+      expect(storeFixture.read().removeAgentStatus).toHaveBeenCalledWith(
+        makePaneKey('tab-1', LEAF_2)
+      )
     })
 
     it('closes a split pane when an established PTY exits after terminal input', async () => {
@@ -824,7 +833,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       const onDataMock = pane.terminal.onData as unknown as {
         mock: { calls: [[(data: string) => void] | []] }
       }

@@ -24,13 +24,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionInterruptInferenceTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -40,9 +40,10 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -54,6 +55,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -66,7 +68,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         vi.useFakeTimers()
         vi.setSystemTime(1_100)
         const paneKey = makePaneKey('tab-1', LEAF_1)
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
+        storeFixture.setStatus(paneKey, {
           state: 'working',
           prompt: 'stop this task',
           updatedAt: 1_000,
@@ -75,7 +77,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
           paneKey,
           terminalTitle: 'Codex',
           stateHistory: []
-        }
+        })
         const terminalTarget = createKeyboardEventTarget()
         const unrelatedTarget = createKeyboardEventTarget()
         ;(
@@ -89,7 +91,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         if (!onDataHandler) {
           throw new Error('expected onData handler to be registered')
         }
@@ -119,7 +123,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
 
         if (agentType === 'codex') {
           expect(window.api.agentStatus.inferInterrupt).not.toHaveBeenCalled()
-          expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({ state: 'working' })
+          expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
+            state: 'working'
+          })
           expect(transport.sendInputAccepted).toHaveBeenCalledWith('\x03', 'query-reply')
           return
         }
@@ -143,12 +149,14 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      })
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop visible spinner',
         updatedAt: 1_000,
@@ -157,7 +165,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -170,17 +178,19 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps({
         setRuntimePaneTitle: vi.fn((tabId: string, paneId: number, title: string) => {
-          mockStoreState.runtimePaneTitlesByTabId = {
-            ...mockStoreState.runtimePaneTitlesByTabId,
-            [tabId]: {
-              ...mockStoreState.runtimePaneTitlesByTabId[tabId],
-              [paneId]: title
+          storeFixture.patch({
+            runtimePaneTitlesByTabId: {
+              ...storeFixture.read().runtimePaneTitlesByTabId,
+              [tabId]: {
+                ...storeFixture.read().runtimePaneTitlesByTabId[tabId],
+                [paneId]: title
+              }
             }
-          }
+          })
         })
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -197,7 +207,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
           tabs: [{ id: 'tab-1', title: 'Codex working' }],
           browserTabs: [],
           ptyIdsByTabId: { 'tab-1': ['tab-pty'] },
-          runtimePaneTitlesByTabId: mockStoreState.runtimePaneTitlesByTabId,
+          runtimePaneTitlesByTabId: storeFixture.read().runtimePaneTitlesByTabId,
           hasPermission: false,
           hasLiveWorking: false,
           hasLiveDone: true,
@@ -212,11 +222,13 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       transportFactoryQueue.push(transport)
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -229,17 +241,19 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps({
         setRuntimePaneTitle: vi.fn((tabId: string, paneId: number, title: string) => {
-          mockStoreState.runtimePaneTitlesByTabId = {
-            ...mockStoreState.runtimePaneTitlesByTabId,
-            [tabId]: {
-              ...mockStoreState.runtimePaneTitlesByTabId[tabId],
-              [paneId]: title
+          storeFixture.patch({
+            runtimePaneTitlesByTabId: {
+              ...storeFixture.read().runtimePaneTitlesByTabId,
+              [tabId]: {
+                ...storeFixture.read().runtimePaneTitlesByTabId[tabId],
+                [paneId]: title
+              }
             }
-          }
+          })
         })
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -261,11 +275,13 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       transportFactoryQueue.push(transport)
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -276,7 +292,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       }) as typeof pane.terminal.onData)
       const deps = createDeps()
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -299,7 +315,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop from real terminal byte',
         updatedAt: 1_000,
@@ -308,7 +324,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
       pane.terminal.onData = vi.fn(((handler: (data: string) => void) => {
@@ -316,7 +332,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -352,7 +370,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -371,7 +391,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop enhanced keyboard input',
         updatedAt: 1_000,
@@ -380,7 +400,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -390,7 +410,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -418,12 +440,14 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      })
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop after process exit',
         updatedAt: 1_000,
@@ -432,7 +456,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -442,18 +466,22 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
       terminalTarget.dispatch(keyEvent({ key: 'c', ctrlKey: true }))
       ;(onDataHandler as unknown as (data: string) => void)('\x1b[99;5u')
       await flushAsyncTicks()
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Terminal 1'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Terminal 1'
+          }
         }
-      }
+      })
       vi.advanceTimersByTime(500)
       await flushAsyncTicks()
 
@@ -465,7 +493,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         baselineAgentType: 'custom-agent',
         intent: 'ctrl-c'
       })
-      expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+      expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
     })
 
     it('keeps inferred interrupted status after the pane settles on a non-agent title', async () => {
@@ -475,12 +503,14 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      })
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop and leave shell',
         updatedAt: 1_000,
@@ -489,9 +519,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       vi.mocked(window.api.agentStatus.inferInterrupt).mockImplementation(async () => {
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
+        storeFixture.setStatus(paneKey, {
           state: 'done',
           prompt: 'stop and leave shell',
           interrupted: true,
@@ -500,7 +530,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
           agentType: 'custom-agent',
           paneKey,
           terminalTitle: 'Terminal 1'
-        }
+        })
         return true
       })
       const terminalTarget = createKeyboardEventTarget()
@@ -513,17 +543,19 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       }) as typeof pane.terminal.onData)
       const deps = createDeps({
         setRuntimePaneTitle: vi.fn((tabId: string, paneId: number, title: string) => {
-          mockStoreState.runtimePaneTitlesByTabId = {
-            ...mockStoreState.runtimePaneTitlesByTabId,
-            [tabId]: {
-              ...mockStoreState.runtimePaneTitlesByTabId[tabId],
-              [paneId]: title
+          storeFixture.patch({
+            runtimePaneTitlesByTabId: {
+              ...storeFixture.read().runtimePaneTitlesByTabId,
+              [tabId]: {
+                ...storeFixture.read().runtimePaneTitlesByTabId[tabId],
+                [paneId]: title
+              }
             }
-          }
+          })
         })
       })
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -533,12 +565,12 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.advanceTimersByTime(500)
       await flushAsyncTicks()
       expect(window.api.agentStatus.inferInterrupt).toHaveBeenCalled()
-      expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+      expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
 
       vi.advanceTimersByTime(750)
       await flushAsyncTicks()
 
-      expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+      expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
     })
 
     it('does not infer exact interrupt input when the transport cannot acknowledge writes', async () => {
@@ -549,7 +581,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'ssh style write',
         updatedAt: 1_000,
@@ -558,7 +590,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
       pane.terminal.onData = vi.fn(((handler: (data: string) => void) => {
@@ -566,7 +598,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -586,12 +620,14 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.runtimePaneTitlesByTabId = {
-        'tab-1': {
-          1: 'Codex working'
+      storeFixture.patch({
+        runtimePaneTitlesByTabId: {
+          'tab-1': {
+            1: 'Codex working'
+          }
         }
-      }
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      })
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'stop then exit',
         updatedAt: 1_000,
@@ -600,7 +636,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex working',
         stateHistory: []
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
@@ -611,7 +647,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       }) as typeof pane.terminal.onData)
       const deps = createDeps()
 
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')
       }
@@ -640,7 +676,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       expect(deps.clearRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1)
       expect(deps.clearTabPtyId).toHaveBeenCalledWith('tab-1', 'tab-pty')
       expect(deps.setCacheTimerStartedAt).toHaveBeenCalledWith(paneKey, null)
-      expect(mockStoreState.removeAgentStatus).toHaveBeenCalledWith(paneKey)
+      expect(storeFixture.read().removeAgentStatus).toHaveBeenCalledWith(paneKey)
     })
 
     it('ignores repeated and Alt-modified Escape input before accepting plain Escape', async () => {
@@ -652,7 +688,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         vi.useFakeTimers()
         vi.setSystemTime(1_100)
         const paneKey = makePaneKey('tab-1', LEAF_1)
-        mockStoreState.agentStatusByPaneKey[paneKey] = {
+        storeFixture.setStatus(paneKey, {
           state: 'working',
           prompt: 'keep running',
           updatedAt: 1_000,
@@ -661,12 +697,14 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
           paneKey,
           terminalTitle: 'Codex',
           stateHistory: []
-        }
+        })
         const terminalTarget = createKeyboardEventTarget()
         const pane = createPane(1)
         pane.terminal.element = terminalTarget.target
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        )
         // Kitty flags 3 report repeat type and disambiguate Escape without the exact-byte fallback.
         for (const { event, data } of [
           { event: keyEvent({ key: 'Escape', repeat: true }), data: '\x1b[27;1:2u' },
@@ -714,7 +752,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       vi.useFakeTimers()
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'working',
         prompt: 'copy selection',
         updatedAt: 1_000,
@@ -723,7 +761,7 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         paneKey,
         terminalTitle: 'Codex',
         stateHistory: []
-      }
+      })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown; hasSelection: ReturnType<typeof vi.fn> }).element =
@@ -732,7 +770,9 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
         true
       )
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       terminalTarget.dispatch(keyEvent({ key: 'c', ctrlKey: true }))
       vi.advanceTimersByTime(500)
 
@@ -748,17 +788,17 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       const pane = createPane(1)
       ;(pane.terminal as { element?: unknown }).element = terminalTarget.target
 
-      const firstConnection = connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps() as never
+      const firstConnection = storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       )
       expect(terminalTarget.handlers.size).toBe(1)
 
       firstConnection.dispose()
       expect(terminalTarget.handlers.size).toBe(0)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      storeFixture.track(
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      )
       expect(terminalTarget.handlers.size).toBe(1)
       expect(
         terminalTarget.target.addEventListener.mock.calls.filter(([type]) => type === 'keydown')

@@ -19,13 +19,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -35,9 +35,10 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -49,6 +50,7 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -112,7 +114,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -192,7 +196,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
       transport.resize.mockClear()
       signalPty.mockClear()
@@ -276,7 +282,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
           }
         }
       }
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('', { seq: 100, rawLength: 0, droppedOutput: true })
@@ -347,7 +355,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
       const manager = createManager(1)
       const deps = createDeps({ isVisibleRef: { current: true } })
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(6)
       transport.resize.mockClear()
       pane.fitAddon.proposeDimensions.mockImplementation(() =>
@@ -389,10 +399,10 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
           : null
       )
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty' }] }
-      }
+      })
       const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
       getMainBufferSnapshot.mockResolvedValue({
         data: '\x1b[?1049hMODEL-FRAME',
@@ -420,7 +430,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await flushAsyncTicks(40)
 
       expect(writtenText()).not.toContain('ALT-FRAME-BODY')
@@ -438,7 +450,9 @@ export function registerPtyConnectionHiddenSnapshotResizeSignalsTests(): void {
       const isVisibleRef = { current: false }
       const deps = createDeps({ isVisibleRef })
 
-      const disposable = connectPanePty(pane as never, manager as never, deps as never)
+      const disposable = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       const onResizeMock = pane.terminal.onResize as unknown as {
         mock: { calls: [[(event: { cols: number; rows: number }) => void] | []] }
       }

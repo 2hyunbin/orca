@@ -23,23 +23,23 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   function notifyStoreSubscribers(): void {
     for (const listener of storeSubscribers.slice()) {
-      listener(mockStoreState)
+      listener(storeFixture.read())
     }
   }
 
@@ -50,9 +50,10 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -64,6 +65,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -77,10 +79,12 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
       ] as const
 
       function enableMainAuthority(): void {
-        mockStoreState.settings = {
-          ...mockStoreState.settings,
-          terminalMainSideEffectAuthority: true
-        }
+        storeFixture.patch({
+          settings: {
+            ...storeFixture.read().settings,
+            terminalMainSideEffectAuthority: true
+          }
+        })
       }
 
       it('omits byte-parser callbacks from the local transport options', async () => {
@@ -89,7 +93,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
 
         expect(createdTransportOptions[0]).toBeDefined()
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
@@ -108,7 +114,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
 
         expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('env-1', expect.any(Object))
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
@@ -127,7 +135,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const pane = createPane(1)
         const manager = createManager(1)
         const deps = createDeps()
-        connectPanePty(pane as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-1')
@@ -166,10 +174,8 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         transportFactoryQueue.push(transport)
 
         const deps = createDeps()
-        const binding = connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          deps as never
+        const binding = storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
         )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-2')
@@ -193,7 +199,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         vi.useFakeTimers()
 
         const deps = createDeps()
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-genuine')
 
@@ -229,7 +237,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         vi.useFakeTimers()
 
         const deps = createDeps()
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-stale')
 
@@ -275,19 +285,23 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
         const paneKey = makePaneKey('tab-1', LEAF_1)
-        mockStoreState.agentStatusByPaneKey = {
-          [paneKey]: {
-            paneKey,
-            state: 'done',
-            prompt: 'hi',
-            updatedAt: 1000,
-            stateStartedAt: 1000,
-            agentType: 'codex',
-            stateHistory: []
+        storeFixture.patch({
+          agentStatusByPaneKey: {
+            [paneKey]: {
+              paneKey,
+              state: 'done',
+              prompt: 'hi',
+              updatedAt: 1000,
+              stateStartedAt: 1000,
+              agentType: 'codex',
+              stateHistory: []
+            }
           }
-        }
+        })
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-133')
 
@@ -297,8 +311,8 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           facts: [{ kind: 'command-finished', exitCode: 130 }]
         })
 
-        expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(paneKey)
-        expect(mockStoreState.removeAgentStatus).not.toHaveBeenCalled()
+        expect(storeFixture.read().dropAgentStatus).toHaveBeenCalledWith(paneKey)
+        expect(storeFixture.read().removeAgentStatus).not.toHaveBeenCalled()
       })
 
       it('routes pr-link facts to the worktree PR observer', async () => {
@@ -308,7 +322,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-pr')
 
@@ -323,7 +339,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           facts: [{ kind: 'pr-link', link }]
         })
 
-        expect(mockStoreState.observeTerminalGitHubPullRequestLink).toHaveBeenCalledWith(
+        expect(storeFixture.read().observeTerminalGitHubPullRequestLink).toHaveBeenCalledWith(
           'wt-1',
           link,
           expect.objectContaining({ tabId: 'tab-1', ptyId: 'tab-pty' })
@@ -343,27 +359,31 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         )
         transportFactoryQueue.push(transport)
         const paneKey = makePaneKey('tab-1', LEAF_1)
-        mockStoreState.agentStatusByPaneKey = {
-          [paneKey]: {
-            paneKey,
-            state: 'done',
-            prompt: 'hi',
-            updatedAt: 1000,
-            stateStartedAt: 1000,
-            agentType: 'codex',
-            stateHistory: []
+        storeFixture.patch({
+          agentStatusByPaneKey: {
+            [paneKey]: {
+              paneKey,
+              state: 'done',
+              prompt: 'hi',
+              updatedAt: 1000,
+              stateStartedAt: 1000,
+              agentType: 'codex',
+              stateHistory: []
+            }
           }
-        }
+        })
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
 
         capturedDataCallback.current?.('Created https://github.com/acme/orca/pull/42\r\n')
         capturedDataCallback.current?.('\x1b]133;D;130\x07prompt $ ')
 
-        expect(mockStoreState.observeTerminalGitHubPullRequestLink).not.toHaveBeenCalled()
-        expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+        expect(storeFixture.read().observeTerminalGitHubPullRequestLink).not.toHaveBeenCalled()
+        expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
       })
 
       it('seeds and settles Command Code status from command-code facts', async () => {
@@ -375,7 +395,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         vi.useFakeTimers()
         const paneKey = makePaneKey('tab-1', LEAF_1)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-cc')
 
@@ -384,7 +406,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           seq: 1,
           facts: [{ kind: 'command-code-working', prompt: 'say hi' }]
         })
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
           state: 'working',
           prompt: 'say hi',
           agentType: 'command-code'
@@ -397,9 +419,11 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           facts: [{ kind: 'command-code-done', prompt: 'say hi' }]
         })
         vi.advanceTimersByTime(1499)
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({ state: 'working' })
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
+          state: 'working'
+        })
         vi.advanceTimersByTime(1)
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
           state: 'done',
           prompt: 'say hi',
           agentType: 'command-code'
@@ -423,19 +447,23 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           agentType: 'claude' as const,
           stateHistory: []
         }
-        mockStoreState.tabsByWorktree = {
-          'wt-1': [{ id: 'tab-1', ptyId: null, launchAgent: 'claude' }]
-        }
-        mockStoreState.agentStatusByPaneKey[paneKey] = claudeStatus
-        mockStoreState.paneForegroundAgentByPaneKey[paneKey] = {
+        storeFixture.patch({
+          tabsByWorktree: {
+            'wt-1': [{ id: 'tab-1', ptyId: null, launchAgent: 'claude' }]
+          }
+        })
+        storeFixture.setStatus(paneKey, claudeStatus)
+        storeFixture.read().paneForegroundAgentByPaneKey[paneKey] = {
           agent: 'claude',
           shellForeground: false
         }
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-false-cc')
-        mockStoreState.setAgentStatus.mockClear()
+        storeFixture.read().setAgentStatus.mockClear()
 
         handler._dispatchTerminalSideEffectBatchForTest({
           ptyId: 'pty-fact-false-cc',
@@ -447,8 +475,8 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         })
         vi.advanceTimersByTime(2000)
 
-        expect(mockStoreState.setAgentStatus).not.toHaveBeenCalled()
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(claudeStatus)
+        expect(storeFixture.read().setAgentStatus).not.toHaveBeenCalled()
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toBe(claudeStatus)
       })
 
       it('rejects Command Code facts when retained Claude identity owns the pane', async () => {
@@ -468,13 +496,15 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           agentType: 'unknown' as const,
           stateHistory: []
         }
-        mockStoreState.retainedAgentsByPaneKey[paneKey] = { agentType: 'claude' }
-        mockStoreState.agentStatusByPaneKey[paneKey] = unknownStatus
+        storeFixture.read().retainedAgentsByPaneKey[paneKey] = { agentType: 'claude' }
+        storeFixture.setStatus(paneKey, unknownStatus)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-retained-false-cc')
-        mockStoreState.setAgentStatus.mockClear()
+        storeFixture.read().setAgentStatus.mockClear()
 
         handler._dispatchTerminalSideEffectBatchForTest({
           ptyId: 'pty-fact-retained-false-cc',
@@ -486,8 +516,8 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         })
         vi.advanceTimersByTime(2000)
 
-        expect(mockStoreState.setAgentStatus).not.toHaveBeenCalled()
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(unknownStatus)
+        expect(storeFixture.read().setAgentStatus).not.toHaveBeenCalled()
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toBe(unknownStatus)
       })
 
       it('keeps Command Code working when a working fact lands before the done settles', async () => {
@@ -499,7 +529,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         vi.useFakeTimers()
         const paneKey = makePaneKey('tab-1', LEAF_1)
 
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+        )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-cc-repaint')
 
@@ -522,7 +554,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         })
         vi.advanceTimersByTime(2000)
 
-        expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+        expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
           state: 'working',
           prompt: 'Run a slow command',
           agentType: 'command-code'
@@ -542,10 +574,12 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         )
         transportFactoryQueue.push(transport)
 
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ startup: { command: 'command-code --trust' } }) as never
+        storeFixture.track(
+          connectPanePty(
+            createPane(1) as never,
+            createManager(1) as never,
+            createDeps({ startup: { command: 'command-code --trust' } }) as never
+          )
         )
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
@@ -553,12 +587,12 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         capturedDataCallback.current?.('# Command Code v0.27.2\r\n')
         capturedDataCallback.current?.('❯ Fix the spinner\r\n\x1b[35m✻ Thinking...\x1b[0m')
 
-        expect(mockStoreState.setAgentStatus).not.toHaveBeenCalled()
+        expect(storeFixture.read().setAgentStatus).not.toHaveBeenCalled()
       })
 
       it('honors the persisted kill switch for panes bound before settings hydrate', async () => {
         // Pre-hydration: settings not loaded but kill switch persisted off — pane registers byte parsers, not a fact consumer.
-        mockStoreState.settings = null
+        storeFixture.patch({ settings: null })
         ;(window.api as unknown as Record<string, unknown>).settings = {
           getSync: vi.fn(() => ({ terminalMainSideEffectAuthority: false }))
         }
@@ -568,7 +602,9 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         transportFactoryQueue.push(transport)
 
         const deps = createDeps()
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        storeFixture.track(
+          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        )
 
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
           expect(createdTransportOptions[0]?.[callback]).toBeTypeOf('function')
@@ -585,7 +621,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         expect(deps.markTerminalBell).not.toHaveBeenCalled()
 
         // Hydration with switch still off: byte parsing stays the single consumer — one BEL marks unread once.
-        mockStoreState.settings = { terminalMainSideEffectAuthority: false }
+        storeFixture.patch({ settings: { terminalMainSideEffectAuthority: false } })
         notifyStoreSubscribers()
         const onBell = createdTransportOptions[0]?.onBell as () => void
         onBell()

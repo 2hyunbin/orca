@@ -23,18 +23,18 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionTypedAgentIdentityTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -44,9 +44,10 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -58,6 +59,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -71,7 +73,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -93,7 +95,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       expect(transport.sendInput).toHaveBeenCalledWith('omp\r', 'query-reply')
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'OMP ready')
       expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', 'OMP ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -108,7 +110,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -128,8 +130,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     it('keeps GPU enabled when a pane-scoped OMP owner emits a Gemini-looking title', async () => {
       const { connectPanePty } = await import('./pty-connection')
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         agentStatusByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -141,14 +143,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(1)
       const transport = createMockTransport('pty-omp-gemini-cwd')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -172,8 +174,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       transportFactoryQueue.push(transport1, transport2)
       const manager = createManager(2, 1)
 
-      connectPanePty(pane1 as never, manager as never, createDeps() as never)
-      connectPanePty(pane2 as never, manager as never, createDeps() as never)
+      storeFixture.track(connectPanePty(pane1 as never, manager as never, createDeps() as never))
+      storeFixture.track(connectPanePty(pane2 as never, manager as never, createDeps() as never))
       await flushAsyncTicks()
       const onTitleChange1 = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -191,12 +193,12 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     it('DOM-gates a genuine Gemini split pane even when the tab launched a non-Gemini agent', async () => {
       const { connectPanePty } = await import('./pty-connection')
       // The shared tab.launchAgent must not veto the renderer for a sibling pane.
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'tab-pty', launchAgent: 'omp' }]
         }
-      } as StoreState
+      } as StoreState)
       const pane1 = createPane(1)
       const pane2 = createPane(2)
       const transport1 = createMockTransport('pty-split-owner-1')
@@ -204,8 +206,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       transportFactoryQueue.push(transport1, transport2)
       const manager = createManager(2, 2)
 
-      connectPanePty(pane1 as never, manager as never, createDeps() as never)
-      connectPanePty(pane2 as never, manager as never, createDeps() as never)
+      storeFixture.track(connectPanePty(pane1 as never, manager as never, createDeps() as never))
+      storeFixture.track(connectPanePty(pane2 as never, manager as never, createDeps() as never))
       await flushAsyncTicks()
       const onTitleChange2 = createdTransportOptions[1]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -227,7 +229,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       // Stale, never-cleared launch identity must not veto the renderer.
       const deps = createDeps({ startup: { command: 'claude', launchAgent: 'claude' } })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -243,8 +245,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     it('DOM-gates a genuine Gemini title when the only pane row is a done non-Gemini agent', async () => {
       const { connectPanePty } = await import('./pty-connection')
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         agentStatusByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -256,14 +258,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(1)
       const transport = createMockTransport('pty-reused-done-row')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -281,8 +283,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const staleAt = Date.now() - 60 * 60 * 1000
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         agentStatusByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -294,14 +296,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
             stateHistory: []
           }
         }
-      } as StoreState
+      } as StoreState)
       const pane = createPane(1)
       const transport = createMockTransport('pty-reused-stale-row')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -325,7 +327,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'pi \x17omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -346,7 +348,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
 
       expect(transport.sendInput).toHaveBeenCalledWith('pi \x17omp\r', 'query-reply')
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'OMP ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -363,7 +365,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'pi\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -385,7 +387,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       expect(transport.sendInput).toHaveBeenCalledWith('pi\r', 'query-reply')
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'Pi ready')
       expect(deps.updateTabTitle).toHaveBeenCalledWith('tab-1', 'Pi ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'pi',
         terminalTitle: 'Pi ready'
@@ -397,7 +399,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: '',
         agentType: 'pi',
@@ -406,15 +408,15 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         updatedAt: now,
         stateStartedAt: now,
         stateHistory: []
-      }
-      mockStoreState.runtimePaneTitlesByTabId = { 'tab-1': { 1: 'Pi ready' } }
+      })
+      storeFixture.patch({ runtimePaneTitlesByTabId: { 'tab-1': { 1: 'Pi ready' } } })
       const pane = createPane(1)
       const transport = createMockTransport('remote:web-env-1@@pty-pi-prompt')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -435,7 +437,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
 
       expect(transport.sendInput).toHaveBeenCalledWith('omp\r', 'query-reply')
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'Pi ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'pi',
         terminalTitle: 'Pi ready'
@@ -446,14 +448,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const { connectPanePty } = await import('./pty-connection')
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      mockStoreState.runtimePaneTitlesByTabId = { 'tab-1': { 1: 'Pi ready' } }
+      storeFixture.patch({ runtimePaneTitlesByTabId: { 'tab-1': { 1: 'Pi ready' } } })
       const pane = createPane(1)
       const transport = createMockTransport('remote:web-env-1@@pty-pi-title-only')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -474,7 +476,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
 
       expect(transport.sendInput).toHaveBeenCalledWith('omp\r', 'query-reply')
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'Pi ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'pi',
         terminalTitle: 'Pi ready'
@@ -486,7 +488,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
-      mockStoreState.agentStatusByPaneKey[paneKey] = {
+      storeFixture.setStatus(paneKey, {
         state: 'done',
         prompt: '',
         agentType: 'pi',
@@ -495,14 +497,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         updatedAt: now,
         stateStartedAt: now,
         stateHistory: []
-      }
+      })
       const pane = createPane(1)
       const transport = createMockTransport('remote:web-env-1@@pty-stale-done')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -522,7 +524,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       })
 
       expect(deps.setRuntimePaneTitle).toHaveBeenCalledWith('tab-1', 1, 'OMP ready')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -539,7 +541,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'op\x1b[Dm\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -559,7 +561,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       })
 
       expect(transport.sendInput).toHaveBeenCalledWith('op\x1b[Dm\r', 'query-reply')
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -576,7 +578,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'ommp\x1b[D\x1b[D\x1b[3~\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -595,7 +597,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         agentType: 'pi'
       })
 
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -612,7 +614,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, `${'x'.repeat(4097)}omp\r`)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -631,7 +633,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         agentType: 'pi'
       })
 
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'pi',
         terminalTitle: 'Pi ready'
@@ -648,7 +650,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'x'.repeat(4097))
       sendTerminalInputThroughPane(pane, '\x03')
       sendTerminalInputThroughPane(pane, 'omp\r')
@@ -669,7 +671,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         agentType: 'pi'
       })
 
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'
@@ -693,7 +695,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -714,7 +716,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
         agentType: 'pi'
       })
 
-      expect(mockStoreState.agentStatusByPaneKey[paneKey]).toMatchObject({
+      expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toMatchObject({
         state: 'done',
         agentType: 'omp',
         terminalTitle: 'OMP ready'

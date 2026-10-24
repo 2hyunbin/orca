@@ -19,13 +19,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionUnansweredCommandFinishTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('command-finished cleanup when the shell check cannot answer', () => {
@@ -35,9 +35,10 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -49,6 +50,7 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -75,8 +77,8 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
           }
         )
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
+        storeFixture.patch({
+          ...storeFixture.read(),
           agentStatusByPaneKey: {
             [paneKey]: {
               paneKey,
@@ -89,16 +91,18 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
               stateHistory: []
             }
           }
-        }
+        })
 
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ tabId, isVisibleRef: { current: false } }) as never
+        storeFixture.track(
+          connectPanePty(
+            createPane(1) as never,
+            createManager(1) as never,
+            createDeps({ tabId, isVisibleRef: { current: false } }) as never
+          )
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
-        mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
+        storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
           launchConfig: { agentArgs: '', agentEnv: {} },
           identity: { agentType: 'codex' }
         }
@@ -109,9 +113,9 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
 
         expect(hasVerifiableAgentProcess).toHaveBeenCalledWith(paneKey)
         if (verifiable) {
-          expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+          expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
         } else {
-          expect(mockStoreState.dropAgentStatus).toHaveBeenCalledWith(paneKey)
+          expect(storeFixture.read().dropAgentStatus).toHaveBeenCalledWith(paneKey)
         }
       }
     )

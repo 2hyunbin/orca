@@ -24,18 +24,18 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionSessionLivenessTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   function seedUnverifiableRestoredPane() {
-    mockStoreState = {
-      ...mockStoreState,
+    storeFixture.patch({
+      ...storeFixture.read(),
       tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: 'unverifiable-pty' }] },
       ptyIdsByTabId: { 'tab-1': ['unverifiable-pty'] },
       terminalLayoutsByTabId: {
@@ -46,7 +46,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           ptyIdsByLeafId: { [LEAF_2]: 'unverifiable-pty' }
         }
       }
-    } as StoreState
+    } as StoreState)
     return createDeps({
       restoredLeafId: LEAF_2,
       restoredPtyIdByLeafId: { [LEAF_2]: 'unverifiable-pty' }
@@ -55,7 +55,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -65,9 +65,10 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -79,6 +80,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -101,7 +103,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         })
         const hasPty = vi.fn(async () => false)
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         capturedDataCallback.current?.('shell prompt')
 
         binding.reconcileIfSessionMissing(hasPty)
@@ -126,7 +130,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
 
         binding.reconcileIfSessionMissing(vi.fn(async () => true))
         binding.reconcileIfSessionMissing(vi.fn(async () => null))
@@ -155,7 +161,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         binding.reconcileIfSessionMissing(hasPty)
         transport.getPtyId.mockReturnValue('pty-pane-2-reattached')
         resolveHasPty(false)
@@ -183,7 +191,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         // Why: clear the freshly-split early-return guard so the only remaining protection is the freshness guard under test.
         capturedDataCallback.current?.('shell prompt')
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
@@ -220,7 +230,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         // Why: clear the freshly-split early-return guard so onExit reaches close.
         capturedDataCallback.current?.('shell prompt')
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
@@ -249,7 +261,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        const binding = connectPanePty(createPane(1) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(1) as never, manager as never, deps as never)
+        )
 
         // The last pane reattaches to the tab's persisted ptyId ('tab-pty'); let that bind first.
         await flushAsyncTicks()
@@ -272,7 +286,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -292,7 +308,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -312,7 +330,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -346,7 +366,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        connectPanePty(createPane(2) as never, manager as never, deps as never)
+        storeFixture.track(connectPanePty(createPane(2) as never, manager as never, deps as never))
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -385,7 +405,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -426,7 +448,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(createPane(2) as never, manager as never, deps as never)
+        )
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -457,16 +481,18 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       transportFactoryQueue.push(transport)
       const deps = seedUnverifiableRestoredPane()
 
-      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
       expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(2, 'terminal_pane_owner_unverified')
       expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
       expect(deps.clearTabPtyId).not.toHaveBeenCalled()
-      expect(mockStoreState.tabsByWorktree['wt-1'][0]?.ptyId).toBe('unverifiable-pty')
-      expect(mockStoreState.ptyIdsByTabId?.['tab-1']).toEqual(['unverifiable-pty'])
-      expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
+      expect(storeFixture.read().tabsByWorktree['wt-1'][0]?.ptyId).toBe('unverifiable-pty')
+      expect(storeFixture.read().ptyIdsByTabId?.['tab-1']).toEqual(['unverifiable-pty'])
+      expect(storeFixture.read().terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
         [LEAF_2]: 'unverifiable-pty'
       })
       expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(expect.any(String), 1)
@@ -479,14 +505,16 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       transportFactoryQueue.push(transport)
       const deps = seedUnverifiableRestoredPane()
 
-      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      storeFixture.track(
+        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      )
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
       expect(deps.onPtyErrorRef.current).toHaveBeenCalledWith(2, 'terminal_pane_owner_unverified')
       expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
       expect(deps.clearTabPtyId).not.toHaveBeenCalled()
-      expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
+      expect(storeFixture.read().terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
         [LEAF_2]: 'unverifiable-pty'
       })
       expect(window.api.pty.clearPendingPaneSerializer).toHaveBeenCalledWith(expect.any(String), 1)
@@ -506,7 +534,9 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         const cleared = vi.fn()
         deps.onPtyErrorClearedRef = { current: cleared }
 
-        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        storeFixture.track(
+          connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        )
         await flushAsyncTicks()
 
         expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -517,7 +547,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
         expect(deps.clearTabPtyId).not.toHaveBeenCalled()
         if (!fresh) {
-          expect(mockStoreState.terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
+          expect(storeFixture.read().terminalLayoutsByTabId?.['tab-1']?.ptyIdsByLeafId).toEqual({
             [LEAF_2]: 'unverifiable-pty'
           })
         }
@@ -558,10 +588,8 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         })
         const pane = createPane(2)
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
+        const binding = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
         ) as unknown as {
           noteVisibilityResume: () => void
         }

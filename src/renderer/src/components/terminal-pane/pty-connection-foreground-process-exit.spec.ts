@@ -18,13 +18,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionForegroundProcessExitTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty process-exit retirement', () => {
@@ -34,9 +34,10 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -48,6 +49,7 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -68,10 +70,8 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
         isVisibleRef: { current: visible }
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: connectPanePty returns the pane binding, which exposes sampleForegroundAgentOnFocus.
-      const binding = connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        deps as never
+      const binding = storeFixture.track(
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       ) as unknown as { sampleForegroundAgentOnFocus: () => void }
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks(20)
@@ -88,7 +88,7 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
 
       const { cacheKey, binding } = await connectRestoredPane(ptyId, true)
       await vi.advanceTimersByTimeAsync(3_000)
-      expect(mockStoreState.paneForegroundAgentByPaneKey[cacheKey]).toMatchObject({
+      expect(storeFixture.read().paneForegroundAgentByPaneKey[cacheKey]).toMatchObject({
         agent: 'codex',
         agentEvidence: 'process-read'
       })
@@ -97,18 +97,18 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
       children = false
       await vi.advanceTimersByTimeAsync(10_000)
 
-      expect(mockStoreState.paneForegroundAgentByPaneKey[cacheKey]).toEqual({
+      expect(storeFixture.read().paneForegroundAgentByPaneKey[cacheKey]).toEqual({
         agent: null,
         shellForeground: false
       })
-      expect(mockStoreState.clearAgentLaunchConfig).toHaveBeenCalledWith(cacheKey)
+      expect(storeFixture.read().clearAgentLaunchConfig).toHaveBeenCalledWith(cacheKey)
 
       // Codex typed again in the same unmarked pane: the next sample must identify it.
       foreground = 'codex'
       children = true
       binding.sampleForegroundAgentOnFocus()
       await vi.advanceTimersByTimeAsync(3_000)
-      expect(mockStoreState.paneForegroundAgentByPaneKey[cacheKey]).toMatchObject({
+      expect(storeFixture.read().paneForegroundAgentByPaneKey[cacheKey]).toMatchObject({
         agent: 'codex',
         agentEvidence: 'process-read'
       })

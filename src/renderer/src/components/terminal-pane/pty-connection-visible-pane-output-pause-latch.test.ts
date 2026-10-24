@@ -44,7 +44,7 @@ const { scheduleRuntimeGraphSync, shouldSeedCacheTimerOnInitialTitle } = vi.hois
   shouldSeedCacheTimerOnInitialTitle: vi.fn(() => false)
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
 
@@ -52,17 +52,24 @@ vi.mock('@/runtime/sync-runtime-graph', () => ({
   scheduleRuntimeGraphSync
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -112,7 +119,7 @@ vi.mock('./pty-dispatcher', async (importOriginal) => {
 const REMOTE_PTY_ID = 'remote:env-1@@terminal-1'
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 type Binding = { syncProcessTracking: () => void; dispose: () => void }
@@ -135,10 +142,8 @@ async function connectVisibleRemotePane(): Promise<{
   })
   transportFactoryQueue.push(transport)
   const deps = createDeps({ isVisibleRef: { current: true } })
-  const binding = connectPanePty(
-    createPane(1) as never,
-    createManager(1) as never,
-    deps as never
+  const binding = storeFixture.track(
+    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
   ) as Binding
   await flushAsyncTicks(6)
   expect(captured.callbacks).not.toBeNull()
@@ -160,11 +165,12 @@ describe('remote pane output pause vs visibility', () => {
     vi.clearAllMocks()
     transportFactoryQueue = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 

@@ -24,18 +24,18 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionHookCompletionBellArbitrationTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
   function enableActiveRuntimeEnvironment(environmentId = 'env-1'): void {
-    mockStoreState = buildActiveRuntimeEnvironmentState(mockStoreState, environmentId)
+    storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), environmentId))
   }
 
   describe('connectPanePty', () => {
@@ -45,9 +45,10 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -59,6 +60,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -66,17 +68,17 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const { connectPanePty } = await import('./pty-connection')
       const transport = createMockTransport('pty-ssh')
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         repos: [{ id: 'repo1', connectionId: 'conn-1' }],
         sshConnectionStates: new Map([['conn-1', { status: 'connected' }]])
-      } as StoreState
+      } as StoreState)
 
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       expect(createdTransportOptions[0]?.onAgentStatus).toBeUndefined()
     })
@@ -86,15 +88,15 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.ptyIdsByTabId = { 'tab-1': ['pty-hook'] }
-      mockStoreState.terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': ['pty-hook'] } })
+      storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
 
       vi.useFakeTimers()
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const statusHandler = createdTransportOptions[0]?.onAgentStatus as
         | ((payload: {
@@ -157,15 +159,15 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const transport = createMockTransport('tab-pty')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.ptyIdsByTabId = { 'tab-1': ['tab-pty'] }
-      mockStoreState.terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'tab-pty' }
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': ['tab-pty'] } })
+      storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'tab-pty' }
 
       vi.useFakeTimers()
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const statusHandler = createdTransportOptions[0]?.onAgentStatus as
         | ((payload: {
@@ -217,15 +219,15 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
-      mockStoreState.ptyIdsByTabId = { 'tab-1': ['pty-hook'] }
-      mockStoreState.terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': ['pty-hook'] } })
+      storeFixture.read().terminalLayoutsByTabId!['tab-1'].ptyIdsByLeafId = { [LEAF_1]: 'pty-hook' }
 
       vi.useFakeTimers()
       const pane = createPane(1)
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const statusHandler = createdTransportOptions[0]?.onAgentStatus as
         | ((payload: {
@@ -282,7 +284,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
@@ -318,7 +320,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -367,7 +369,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler || !onDataHandler) {
@@ -393,8 +395,8 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const transport = createMockTransport('pty-codex-stale')
       transportFactoryQueue.push(transport)
       // isCodexPaneStale reads codexRestartNoticeByPtyId; seed a restart notice to trigger the stale branch.
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'pty-codex-stale' }]
         },
@@ -404,7 +406,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
         codexRestartNoticeByPtyId: {
           'pty-codex-stale': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
         }
-      }
+      })
 
       const pane = createPane(1)
       let onDataHandler: ((data: string) => void) | null = null
@@ -416,7 +418,7 @@ export function registerPtyConnectionHookCompletionBellArbitrationTests(): void 
       const manager = createManager(1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       if (!onDataHandler) {
         throw new Error('expected onData handler to be registered')

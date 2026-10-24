@@ -50,7 +50,7 @@ const {
   notifyCodexPaneBoundForStaleSweep: vi.fn()
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
 
@@ -67,17 +67,24 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
   scheduleTerminalWebglAtlasRecovery
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -129,7 +136,7 @@ vi.mock('./pty-dispatcher', async (importOriginal) => {
 })
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 /** The host advertised paired parking while it was reachable, so the reveal reattaches its pty. */
@@ -163,8 +170,8 @@ async function revealParkedRemotePane(
   transport.serializeBuffer = vi.fn()
   transport.serializeBufferOutcome = serializeBufferOutcome
   transportFactoryQueue.push(transport)
-  mockStoreState = {
-    ...mockStoreState,
+  storeFixture.patch({
+    ...storeFixture.read(),
     tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: REMOTE_PTY_ID }] },
     ptyIdsByTabId: { 'tab-1': [REMOTE_PTY_ID] },
     terminalLayoutsByTabId: {
@@ -176,7 +183,7 @@ async function revealParkedRemotePane(
       }
     },
     runtimeStatusByEnvironmentId: pairedParkingHostStatus()
-  }
+  })
   const pane = createPane(1)
   const { writes } = captureCallbackTerminalWrites(pane)
   // Why the active pane: an inactive split defers its restore to the frame scheduler.
@@ -206,12 +213,13 @@ describe('parked remote pane reveal with an unverifiable host snapshot', () => {
     vi.clearAllMocks()
     transportFactoryQueue = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
     vi.useRealTimers()
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 

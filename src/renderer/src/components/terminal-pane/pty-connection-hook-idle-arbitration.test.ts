@@ -36,7 +36,7 @@ const {
   notifyCodexPaneBoundForStaleSweep: vi.fn()
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -54,17 +54,24 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
   scheduleTerminalWebglAtlasRecovery
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -128,7 +135,7 @@ vi.mock('./pty-dispatcher', async (importOriginal) => {
 })
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 // Why: activeRuntimeEnvironmentId exercises the remote-runtime path where the renderer still owns OSC 9999 status.
@@ -140,11 +147,12 @@ describe('connectPanePty', () => {
     transportFactoryQueue = []
     createdTransportOptions = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     await installTerminalTestGlobals()
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 
@@ -160,7 +168,7 @@ describe('connectPanePty', () => {
     const realDispatchNotification = useNotificationDispatch('wt-1')
     const dispatchNotification = vi.fn((event) => realDispatchNotification(event))
     const paneKey = makePaneKey('tab-1', LEAF_1)
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    storeFixture.setStatus(paneKey, {
       state: 'done',
       prompt: 'Fix notification payloads',
       updatedAt: Date.now(),
@@ -174,18 +182,18 @@ describe('connectPanePty', () => {
       toolInput: 'src/main/ipc/notifications.ts',
       lastAssistantMessage: 'Implemented the formatter.',
       interrupted: false
-    }
-    mockStoreState.worktreesByRepo.repo2 = [
+    })
+    storeFixture.read().worktreesByRepo.repo2 = [
       { id: 'wt-2', repoId: 'repo2', path: '/tmp/wt-2', displayName: 'feat/other' }
     ]
-    mockStoreState.repos.push({ id: 'repo2', connectionId: null, displayName: 'docs' })
-    mockStoreState.activeWorktreeId = 'wt-2'
+    storeFixture.read().repos.push({ id: 'repo2', connectionId: null, displayName: 'docs' })
+    storeFixture.patch({ activeWorktreeId: 'wt-2' })
 
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps({ dispatchNotification })
 
-    connectPanePty(pane as never, manager as never, deps as never)
+    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -197,7 +205,7 @@ describe('connectPanePty', () => {
     vi.useFakeTimers()
     idleHandler('* Claude done')
 
-    expect(mockStoreState.markAgentAttentionUnread).not.toHaveBeenCalled()
+    expect(storeFixture.read().markAgentAttentionUnread).not.toHaveBeenCalled()
     expect(dispatchNotification).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(AGENT_TASK_COMPLETE_NOTIFICATION_MAX_WAIT_MS)
@@ -209,7 +217,7 @@ describe('connectPanePty', () => {
       ptyId: 'tab-pty',
       paneKey
     })
-    expect(mockStoreState.markAgentAttentionUnread).toHaveBeenCalledWith({
+    expect(storeFixture.read().markAgentAttentionUnread).toHaveBeenCalledWith({
       workspaceId: 'wt-1',
       subjectKey: paneKey,
       groupId: 'tab-1',
@@ -238,7 +246,7 @@ describe('connectPanePty', () => {
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    storeFixture.setStatus(paneKey, {
       state: 'working',
       prompt: 'still thinking',
       updatedAt: Date.now() - 60_000,
@@ -246,13 +254,13 @@ describe('connectPanePty', () => {
       agentType: 'pi',
       paneKey,
       stateHistory: []
-    }
+    })
 
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps()
 
-    connectPanePty(pane as never, manager as never, deps as never)
+    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -277,7 +285,7 @@ describe('connectPanePty', () => {
     transportFactoryQueue.push(transport)
     vi.useFakeTimers()
     const paneKey = makePaneKey('tab-1', LEAF_1)
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    storeFixture.setStatus(paneKey, {
       state: 'working',
       prompt: 'previous agent state',
       updatedAt: Date.now() - 60_000,
@@ -285,13 +293,13 @@ describe('connectPanePty', () => {
       agentType: 'pi',
       paneKey,
       stateHistory: []
-    }
+    })
 
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps()
 
-    connectPanePty(pane as never, manager as never, deps as never)
+    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -320,7 +328,7 @@ describe('connectPanePty', () => {
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    storeFixture.setStatus(paneKey, {
       state: 'working',
       prompt: 'still working without a known agent identity',
       updatedAt: Date.now() - 60_000,
@@ -328,13 +336,13 @@ describe('connectPanePty', () => {
       agentType: 'unknown',
       paneKey,
       stateHistory: []
-    }
+    })
 
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps()
 
-    connectPanePty(pane as never, manager as never, deps as never)
+    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -358,7 +366,7 @@ describe('connectPanePty', () => {
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
-    mockStoreState.agentStatusByPaneKey[paneKey] = {
+    storeFixture.setStatus(paneKey, {
       state: 'working',
       prompt: 'OMP is still working',
       updatedAt: Date.now() - 60_000,
@@ -366,13 +374,13 @@ describe('connectPanePty', () => {
       agentType: 'omp',
       paneKey,
       stateHistory: []
-    }
+    })
 
     const pane = createPane(1)
     const manager = createManager(1)
     const deps = createDeps()
 
-    connectPanePty(pane as never, manager as never, deps as never)
+    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)

@@ -17,13 +17,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionMode2031SubscriptionsTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -33,9 +33,10 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -47,6 +48,7 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -69,14 +71,16 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
           }
         )
         transportFactoryQueue.push(transport)
-        mockStoreState = {
-          ...mockStoreState,
-          settings: { ...mockStoreState.settings, theme: 'light' }
-        }
+        storeFixture.patch({
+          ...storeFixture.read(),
+          settings: { ...storeFixture.read().settings, theme: 'light' }
+        })
         const pane = createPane(1)
         const manager = createManager(1)
         const deps = createDeps({ isVisibleRef: { current: true } })
-        const binding = connectPanePty(pane as never, manager as never, deps as never)
+        const binding = storeFixture.track(
+          connectPanePty(pane as never, manager as never, deps as never)
+        )
         await flushAsyncTicks(6)
         return {
           transport,
@@ -216,25 +220,27 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
         }
       )
       transportFactoryQueue.push(transport)
-      mockStoreState = {
-        ...mockStoreState,
-        settings: { ...mockStoreState.settings, theme: 'light' }
-      }
+      storeFixture.patch({
+        ...storeFixture.read(),
+        settings: { ...storeFixture.read().settings, theme: 'light' }
+      })
 
       const isVisibleRef = { current: false }
       const paneMode2031Ref = { current: new Map<number, boolean>() }
       const paneLastThemeModeRef = { current: new Map<number, 'dark' | 'light'>() }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef,
-          paneMode2031Ref,
-          paneLastThemeModeRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef,
+            paneMode2031Ref,
+            paneLastThemeModeRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 
@@ -267,15 +273,17 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
       const paneLastThemeModeRef = { current: new Map<number, 'dark' | 'light'>() }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          paneMode2031Ref,
-          paneLastThemeModeRef,
-          startup: { command: 'codex' }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          pane as never,
+          manager as never,
+          createDeps({
+            isVisibleRef: { current: false },
+            paneMode2031Ref,
+            paneLastThemeModeRef,
+            startup: { command: 'codex' }
+          }) as never
+        )
       )
       await flushAsyncTicks(6)
 

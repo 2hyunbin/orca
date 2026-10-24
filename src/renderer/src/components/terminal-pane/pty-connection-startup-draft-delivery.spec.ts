@@ -21,13 +21,13 @@ import {
 } from './pty-connection-test-environment'
 
 export function registerPtyConnectionStartupDraftDeliveryTests(): void {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
   let createdTransportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
 
   function createDeps(overrides: Record<string, unknown> = {}) {
-    return buildPaneConnectionDeps(() => mockStoreState, overrides)
+    return buildPaneConnectionDeps(storeFixture, overrides)
   }
 
   describe('connectPanePty', () => {
@@ -37,9 +37,10 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       transportFactoryQueue = []
       createdTransportOptions = []
       storeSubscribers = []
-      mockStoreState = createInitialStoreState(() => mockStoreState)
+      storeFixture = await createInitialStoreState()
       bindPtyConnectionTestMocks({
-        getState: () => mockStoreState,
+        getState: () => storeFixture.read(),
+        getStore: () => storeFixture.store,
         getTransportQueue: () => transportFactoryQueue,
         getTransportOptions: () => createdTransportOptions,
         getStoreSubscribers: () => storeSubscribers,
@@ -51,6 +52,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
     })
 
     afterEach(async () => {
+      storeFixture.dispose()
       await restoreTerminalTestGlobals()
     })
 
@@ -70,11 +72,11 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       )
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         repos: [{ id: 'repo1', connectionId: null }]
-      }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -90,7 +92,9 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('codex')
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-      const binding = connectPanePty(pane as never, manager as never, deps as never)
+      const binding = storeFixture.track(
+        connectPanePty(pane as never, manager as never, deps as never)
+      )
       await vi.advanceTimersByTimeAsync(VISIBLE_PTY_SETTLE_MS)
       await flushAsyncTicks()
       expect(capturedDataCallback.current).not.toBeNull()
@@ -106,7 +110,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
           mock: { calls: [(data: string) => void][] }
         }
       ).mock.calls[0]?.[0]('USER_DRAFT')
-      ;(mockStoreState.recordTerminalInput as ReturnType<typeof vi.fn>).mockClear()
+      ;(storeFixture.read().recordTerminalInput as ReturnType<typeof vi.fn>).mockClear()
       await vi.advanceTimersByTimeAsync(waitMs)
       expect(transport.sendInputAccepted).not.toHaveBeenCalled()
       capturedDataCallback.current?.('\x1b[?2004h\x1b[2K› ')
@@ -139,8 +143,10 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
         '\x1b[200~https://github.com/stablyai/orca/issues/42\x1b[201~'
       ])
       expect(window.api.pty.writeAccepted).not.toHaveBeenCalled()
-      expect(mockStoreState.recordTerminalInput).toHaveBeenCalledOnce()
-      expect(mockStoreState.recordTerminalInput).toHaveBeenCalledWith(makePaneKey('tab-1', LEAF_1))
+      expect(storeFixture.read().recordTerminalInput).toHaveBeenCalledOnce()
+      expect(storeFixture.read().recordTerminalInput).toHaveBeenCalledWith(
+        makePaneKey('tab-1', LEAF_1)
+      )
     })
 
     it('keeps startup draft ownership while deferred connect waits through setup', async () => {
@@ -163,11 +169,11 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       )
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         repos: [{ id: 'repo1', connectionId: null }]
-      }
+      })
 
       const pane = createPane(1)
       const manager = createManager(1)
@@ -181,7 +187,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
         }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
 
       const sidecarClaimed = claimStartupDelivery({
         worktreeId: 'wt-1',
@@ -219,24 +225,26 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
-      mockStoreState = {
-        ...mockStoreState,
+      storeFixture.patch({
+        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
         repos: [{ id: 'repo1', connectionId: null }]
-      }
+      })
 
-      const binding = connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({
-          startup: {
-            command: 'codex',
-            launchAgent: 'codex',
-            launchConfig: { agentArgs: '', agentEnv: {} },
-            launchToken: 'launch-token-1',
-            draftPrompt: 'https://github.com/stablyai/orca/issues/42'
-          }
-        }) as never
+      const binding = storeFixture.track(
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({
+            startup: {
+              command: 'codex',
+              launchAgent: 'codex',
+              launchConfig: { agentArgs: '', agentEnv: {} },
+              launchToken: 'launch-token-1',
+              draftPrompt: 'https://github.com/stablyai/orca/issues/42'
+            }
+          }) as never
+        )
       )
 
       binding.dispose()

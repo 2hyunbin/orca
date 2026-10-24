@@ -252,7 +252,7 @@ export function installWindowsDoneTerminalModeReset(
       >
     | ConnectPanePtySession
 ): void {
-  const initialAgentStatus = session.state.agentStatusByPaneKey[session.cacheKey]
+  const initialAgentStatus = getAgentStatusEntry(session.cacheKey)
   let lastAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(initialAgentStatus)
   if (
     !initialAgentStatus &&

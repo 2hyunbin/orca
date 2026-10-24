@@ -33,7 +33,7 @@ const {
   notifyCodexPaneBoundForStaleSweep: vi.fn()
 }))
 
-let mockStoreState: StoreState
+let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -58,17 +58,24 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
   scheduleTerminalWebglAtlasRecovery
 }))
 
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => mockStoreState,
-    subscribe: (listener: (state: StoreState) => void) => {
-      storeSubscribers.push(listener)
-      return () => {
-        storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+vi.mock('@/store', () => {
+  return {
+    useAppStore: {
+      get getState() {
+        return storeFixture.store.getState
+      },
+      get setState() {
+        return storeFixture.store.setState
+      },
+      subscribe: (listener: (state: StoreState) => void) => {
+        storeSubscribers.push(listener)
+        return () => {
+          storeSubscribers = storeSubscribers.filter((candidate) => candidate !== listener)
+        }
       }
     }
   }
-}))
+})
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const { buildAgentStatusModuleMock } = await import('./pty-connection-test-environment')
@@ -160,7 +167,7 @@ vi.mock('./pty-dispatcher', async (importOriginal) => {
 })
 
 function createDeps(overrides: Record<string, unknown> = {}) {
-  return buildPaneConnectionDeps(() => mockStoreState, overrides)
+  return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
 const RESUME = { key: 'session_id', id: 'provider-session-1' } as const
@@ -216,17 +223,20 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     drain.queued.clear()
     createdTransportOptions = []
     storeSubscribers = []
-    mockStoreState = createInitialStoreState(() => mockStoreState)
-    mockStoreState.rememberSleepingAgentSession = vi.fn((record: { paneKey: string }) => {
-      mockStoreState.sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
+    storeFixture = await createInitialStoreState()
+    storeFixture.patch({
+      rememberSleepingAgentSession: vi.fn((record: { paneKey: string }) => {
+        storeFixture.read().sleepingAgentSessionsByPaneKey[record.paneKey] ??= record
+      })
     })
-    mockStoreState.pendingStartupByTabId = {}
-    mockStoreState.automaticAgentResumeClaimsByTabId = {}
+    storeFixture.patch({ pendingStartupByTabId: {} })
+    storeFixture.patch({ automaticAgentResumeClaimsByTabId: {} })
     await installTerminalTestGlobals()
     ;(await mainLayoutApplyTransport()).reset()
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 
@@ -248,7 +258,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -260,7 +272,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       expect.objectContaining({ resumeSpawnIntent: 'automatic-restore' })
     ])
     expect(getPaneSpawnDeferral(paneKey)?.reason).toBe('live_cap')
-    expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+    expect(storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
       paneKey,
       agent: 'claude',
       providerSession: RESUME,
@@ -297,7 +309,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -338,7 +352,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -368,7 +384,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     const pane = createPane(1)
     const paneKey = makePaneKey('tab-1', pane.leafId)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -399,7 +417,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -409,24 +429,24 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     expect(getPaneSpawnDeferral(paneKey)).toBeDefined()
 
     const otherLeaf = '22222222-2222-4222-8222-222222222222'
-    mockStoreState.agentStatusByPaneKey[makePaneKey('tab-2', otherLeaf)] = {
+    storeFixture.setStatus(makePaneKey('tab-2', otherLeaf), {
       paneKey: makePaneKey('tab-2', otherLeaf),
       agentType: 'claude',
       providerSession: RESUME,
       state: 'working'
-    }
-    mockStoreState = {
-      ...mockStoreState,
-      ptyIdsByTabId: { ...mockStoreState.ptyIdsByTabId, 'tab-2': ['pty-elsewhere'] },
+    })
+    storeFixture.patch({
+      ...storeFixture.read(),
+      ptyIdsByTabId: { ...storeFixture.read().ptyIdsByTabId, 'tab-2': ['pty-elsewhere'] },
       terminalLayoutsByTabId: {
-        ...mockStoreState.terminalLayoutsByTabId,
+        ...storeFixture.read().terminalLayoutsByTabId,
         'tab-2': {
           root: { type: 'leaf', leafId: otherLeaf },
           activeLeafId: otherLeaf,
           expandedLeafId: null
         }
       }
-    }
+    })
     deps.isVisibleRef.current = true
     binding.noteVisibilityResume()
     await flushAsyncTicks(20)
@@ -454,7 +474,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -496,16 +518,20 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
       binding.dispose()
       return
     }
-    mockStoreState.pendingStartupByTabId = {
-      'tab-9': { command: 'claude', launchAgent: 'claude', resumeProviderSession: RESUME }
-    }
+    storeFixture.patch({
+      pendingStartupByTabId: {
+        'tab-9': { command: 'claude', launchAgent: 'claude', resumeProviderSession: RESUME }
+      }
+    })
     deps.isVisibleRef.current = true
     binding.noteVisibilityResume()
     await flushAsyncTicks(20)
@@ -531,7 +557,9 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     })
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = storeFixture.track(
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
+    )
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))

@@ -113,7 +113,7 @@ const LOST_OPENINGS: TimelineEvent[] = [
 ]
 
 describe('Claude completion banners through the real pane and hook lanes', () => {
-  let mockStoreState: StoreState
+  let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportQueue: MockTransport[] = []
   let transportOptions: Record<string, unknown>[] = []
   let storeSubscribers: ((state: StoreState) => void)[] = []
@@ -127,9 +127,10 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
     transportOptions = []
     storeSubscribers = []
     foreground = 'claude'
-    mockStoreState = createInitialStoreState(() => mockStoreState)
+    storeFixture = await createInitialStoreState()
     bindPtyConnectionTestMocks({
-      getState: () => mockStoreState,
+      getState: () => storeFixture.read(),
+      getStore: () => storeFixture.store,
       getTransportQueue: () => transportQueue,
       getTransportOptions: () => transportOptions,
       getStoreSubscribers: () => storeSubscribers,
@@ -155,6 +156,7 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
   })
 
   afterEach(async () => {
+    storeFixture.dispose()
     await restoreTerminalTestGlobals()
   })
 
@@ -165,7 +167,7 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
     const transport = createMockTransport('tab-pty')
     transport.connect.mockImplementation(async () => null)
     transportQueue.push(transport)
-    const deps = buildPaneConnectionDeps(() => mockStoreState, {
+    const deps = buildPaneConnectionDeps(storeFixture, {
       restoredLeafId: LEAF_1,
       restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' },
       dispatchNotification: (event: Parameters<typeof dispatchTerminalNotification>[1]) =>
@@ -177,16 +179,18 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
     if (servedBy) {
       // A pane of a paired server that predates the turn-end stamp (it advertises no capability).
       const ptyId = `remote:${servedBy}@@pty-1`
-      const layout = mockStoreState.terminalLayoutsByTabId?.['tab-1']
+      const layout = storeFixture.read().terminalLayoutsByTabId?.['tab-1']
       if (!layout) {
         throw new Error('Expected the pane layout')
       }
       vi.mocked(transport.getPtyId).mockReturnValue(ptyId)
-      mockStoreState.ptyIdsByTabId = { 'tab-1': [ptyId] }
-      mockStoreState.terminalLayoutsByTabId = {
-        'tab-1': { ...layout, ptyIdsByLeafId: { [LEAF_1]: ptyId } }
-      }
-      mockStoreState.runtimeStatusByEnvironmentId.set(servedBy, {
+      storeFixture.patch({ ptyIdsByTabId: { 'tab-1': [ptyId] } })
+      storeFixture.patch({
+        terminalLayoutsByTabId: {
+          'tab-1': { ...layout, ptyIdsByLeafId: { [LEAF_1]: ptyId } }
+        }
+      })
+      storeFixture.read().runtimeStatusByEnvironmentId.set(servedBy, {
         checkedAt: Date.now(),
         status: { capabilities: [] }
       })
@@ -249,12 +253,12 @@ describe('Claude completion banners through the real pane and hook lanes', () =>
         stateStartedAt,
         ...pickHostTurnEnd(hostRow)
       }
-      mockStoreState.agentStatusByPaneKey[PANE_KEY] = {
+      storeFixture.setStatus(PANE_KEY, {
         ...payload,
         paneKey: PANE_KEY,
         updatedAt: Date.now(),
         stateHistory: []
-      }
+      })
       observeAgentHookCompletionForNotification({ paneKey: PANE_KEY, worktreeId: 'wt-1', payload })
     }
     await vi.advanceTimersByTimeAsync(5_000)
