@@ -82,6 +82,7 @@ function transport(
   setOption: () => Promise<boolean>
 ): NativeChatStructuredComposerTransport {
   return {
+    capturePresentation: () => () => true,
     send: vi.fn(() => true),
     dispatchCommand: (text) =>
       dispatchStructuredAgentSessionComposerCommand(text, {
@@ -396,6 +397,7 @@ it('reveals a structured prompt answer at the press, before the host accepts it'
     const submits = useStructuredNativeChatSubmitReveal(
       {
         epoch: null,
+        capturePresentation: () => () => true,
         respond: async () => host.promise,
         queuedMessages: {
           queueCapable: true,

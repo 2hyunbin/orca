@@ -103,6 +103,7 @@ export function useNativeChatComposerSubmit(args: {
       return
     }
     structuredTransport.onSubmitted?.()
+    const isCurrent = structuredTransport.capturePresentation()
     const submitted = readNativeChatComposerDraft(draftScopeKey)
     const release = acquireLease()
     void threadGoal
@@ -111,12 +112,14 @@ export function useNativeChatComposerSubmit(args: {
         if (!accepted) {
           return
         }
-        structuredTransport.onError(null)
         if (!clearNativeChatComposerDraftIfUnchanged(draftScopeKey, submitted)) {
           return
         }
-        setCaret(0)
-        setEntered(false)
+        if (isCurrent()) {
+          structuredTransport.onError(null)
+          setCaret(0)
+          setEntered(false)
+        }
       })
       .finally(release)
   }, [

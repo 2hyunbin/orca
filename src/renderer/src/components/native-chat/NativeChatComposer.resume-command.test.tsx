@@ -97,6 +97,7 @@ const RESUME: CommandItem = {
 
 function renderStructuredChat(identity: string | null = null) {
   const transport: NativeChatStructuredComposerTransport = {
+    capturePresentation: () => () => true,
     send: vi.fn(() => true),
     dispatchCommand: vi.fn(async () => ({ handled: false, accepted: false, error: null })),
     optionsSurface: {
