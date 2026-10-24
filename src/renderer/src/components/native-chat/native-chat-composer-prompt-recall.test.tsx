@@ -18,17 +18,22 @@ vi.mock('./NativeChatAutocompleteMenus', () => ({
   NativeChatMentionHint: () => null,
   NativeChatPickerMenu: () => null
 }))
-vi.mock('../../store', () => {
-  const state = {
+vi.mock('../../store', async () => {
+  const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const useAppStore = createTestStore()
+  const { getDefaultSettings } = await import('../../../../shared/constants')
+  const settings = getDefaultSettings('/tmp')
+  useAppStore.setState({
     dictationState: 'idle',
-    settings: { voice: { enabled: false }, nativeChatSessionOptions: {} },
-    agentStatusByPaneKey: {},
+    settings: {
+      ...settings,
+      voice: { ...settings.voice, enabled: false },
+      nativeChatSessionOptions: {}
+    },
     updateSettings: vi.fn(),
     clearNativeChatLaunchDraft: vi.fn(),
     markNativeChatLaunchDraftAdopted: vi.fn()
-  }
-  const useAppStore = (selector: (value: typeof state) => unknown): unknown => selector(state)
-  useAppStore.getState = () => state
+  })
   return { useAppStore }
 })
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
