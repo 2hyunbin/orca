@@ -3,6 +3,7 @@ const DOM_DELTA_LINE = 1
 const DOM_DELTA_PAGE = 2
 const LEGACY_MOUSE_WHEEL_DELTA_UNIT = 120
 const CONTINUOUS_WHEEL_GESTURE_IDLE_MS = 300
+const CONTINUOUS_WHEEL_LEGACY_RATIO = 3
 const DEFAULT_TERMINAL_CELL_HEIGHT = 16
 const TUI_WHEEL_ACCELERATED_DISTANCE_GAIN = 1.6
 const TUI_WHEEL_BURST_FULL_INTERVAL_MS = 16
@@ -77,8 +78,9 @@ function wheelInputTime(event: TerminalTuiWheelEventInput): number | null {
 
 // Why: Chromium derives wheelDelta from whole notches (120 each) for wheels but
 // from pixel distance for continuous devices (a Mac trackpad reports -3 x deltaY),
-// so an off-grid wheelDelta marks a continuous gesture. The verdict sticks for the
-// gesture, so fast momentum events whose wheelDelta lands on the grid stay continuous.
+// so an off-grid wheelDelta marks a continuous gesture. A fast trackpad event can
+// land on the grid, so on-grid events stay continuous only shortly after off-grid
+// input and only with the trackpad's 3x shape; a Mac notch moves far less per 120.
 function resolveContinuousWheelGesture(
   event: TerminalTuiWheelEventInput,
   state: TerminalTuiMouseWheelDistanceState
@@ -89,19 +91,25 @@ function resolveContinuousWheelGesture(
   }
   const inputAt = wheelInputTime(event)
   const legacyDelta = legacyVerticalWheelDelta(event)
-  const offNotchGrid =
-    legacyDelta === null || legacyDelta === 0 || legacyDelta % LEGACY_MOUSE_WHEEL_DELTA_UNIT !== 0
+  if (
+    legacyDelta === null ||
+    legacyDelta === 0 ||
+    legacyDelta % LEGACY_MOUSE_WHEEL_DELTA_UNIT !== 0
+  ) {
+    state.continuousGestureAt = inputAt
+    return true
+  }
   const continuesGesture =
     inputAt !== null &&
     state.continuousGestureAt !== null &&
     inputAt >= state.continuousGestureAt &&
-    inputAt - state.continuousGestureAt <= CONTINUOUS_WHEEL_GESTURE_IDLE_MS
-  if (offNotchGrid || continuesGesture) {
-    state.continuousGestureAt = inputAt
-    return true
+    inputAt - state.continuousGestureAt <= CONTINUOUS_WHEEL_GESTURE_IDLE_MS &&
+    Math.abs(event.deltaY) * CONTINUOUS_WHEEL_LEGACY_RATIO >=
+      Math.abs(legacyDelta) - CONTINUOUS_WHEEL_LEGACY_RATIO
+  if (!continuesGesture) {
+    state.continuousGestureAt = null
   }
-  state.continuousGestureAt = null
-  return false
+  return continuesGesture
 }
 
 function normalizeCellHeight(cellHeight: number | undefined): number {

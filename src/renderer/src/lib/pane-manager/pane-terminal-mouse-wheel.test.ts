@@ -285,7 +285,7 @@ describe('terminal mouse wheel multiplier', () => {
     expect(reports).toEqual([0, 1, 2, 2, 2, 3, 4, 3, 2, 2, 2, 1, 0])
   })
 
-  it('treats a notched wheel after an idle trackpad gesture as discrete again', () => {
+  it('treats a notched wheel right after trackpad input as discrete', () => {
     const state = createTerminalTuiMouseWheelDistanceState()
     resolveTerminalTuiMouseWheelReportCount(
       { deltaY: 8, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -24, timeStamp: 0 },
@@ -294,16 +294,16 @@ describe('terminal mouse wheel multiplier', () => {
       { cellHeight: 16 }
     )
 
-    const reports = [1000, 1200].map((timeStamp) =>
+    const reports = [100, 200, 300].map((timeStamp) =>
       resolveTerminalTuiMouseWheelReportCount(
-        { deltaY: 4, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -120, timeStamp },
+        { deltaY: -4, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: 120, timeStamp },
         1,
         state,
         { cellHeight: 16 }
       )
     )
 
-    expect(reports).toEqual([1, 1])
+    expect(reports).toEqual([1, 1, 1])
   })
 
   it('drops pending trackpad distance on each direction change', () => {
