@@ -59,7 +59,6 @@ export function useTaskPageLinearListEffects(model: TaskPageGlobalEffectsModel) 
     lastLinearRequestRef,
     landingLinearRefreshKeysRef
   } = model
-  // Why: debounce the Linear search input so we don't fire a request per keystroke (300ms, matching GitHub search).
   useEffect(() => {
     if (!taskResumeApplied) {
       return
@@ -125,7 +124,6 @@ export function useTaskPageLinearListEffects(model: TaskPageGlobalEffectsModel) 
     setLinearIssuePage
   ])
 
-  // Why: fetch Linear issues when the tab is active and connected; empty search uses the `all` list with server-side filters.
   useEffect(() => {
     if (!taskResumeApplied) {
       return
@@ -297,7 +295,6 @@ export function useTaskPageLinearListEffects(model: TaskPageGlobalEffectsModel) 
     linearTaskSourceContext
   ])
 
-  // Why: Has Worktree loads Linear tickets linked on local worktrees, not a Linear list/search query.
   return model
 }
 export type TaskPageLinearListEffectsModel = ReturnType<typeof useTaskPageLinearListEffects>
