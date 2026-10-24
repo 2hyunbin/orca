@@ -8,8 +8,9 @@ const lockedDuringPrune = vi.hoisted(() => {
   return { value }
 })
 const repoRef = vi.hoisted(() => ({ value: '' }))
-const gitExecFileAsyncMock = vi.hoisted(() =>
-  vi.fn(async (args: string[]) => {
+const git = vi.hoisted(() => {
+  // Records which entries were locked while the prune ran.
+  const recordLocksAtPrune = async (args: string[]) => {
     if (args[0] === 'rev-parse') {
       return { stdout: '.git\n', stderr: '' }
     }
@@ -20,9 +21,11 @@ const gitExecFileAsyncMock = vi.hoisted(() =>
       exists(joinPath(admin, name, 'locked'))
     )
     return { stdout: '', stderr: '' }
-  })
-)
-vi.mock('./runner', () => ({ gitExecFileAsync: gitExecFileAsyncMock }))
+  }
+  return { recordLocksAtPrune, mock: vi.fn(recordLocksAtPrune) }
+})
+const gitExecFileAsyncMock = git.mock
+vi.mock('./runner', () => ({ gitExecFileAsync: git.mock }))
 const wslDistroForCommandMock = vi.hoisted(() => vi.fn((): string | null => null))
 vi.mock('./command-runner/git-command-resolution', () => ({
   wslDistroForCommand: wslDistroForCommandMock
@@ -34,7 +37,7 @@ vi.mock('./wsl-drive-checkout-git-routing', () => ({
   pendingWslDriveCheckoutGitRouting: () => null
 }))
 
-import { isForeignLink, pruneGitWorktrees } from './worktree-prune-guard'
+import { isForeignLink, PRUNE_GUARD_LOCK_REASON, pruneGitWorktrees } from './worktree-prune-guard'
 
 let repo: string
 
@@ -49,7 +52,8 @@ beforeEach(() => {
   repo = mkdtempSync(join(tmpdir(), 'orca-prune-guard-'))
   repoRef.value = repo
   mkdirSync(join(repo, '.git', 'worktrees'), { recursive: true })
-  gitExecFileAsyncMock.mockClear()
+  gitExecFileAsyncMock.mockReset()
+  gitExecFileAsyncMock.mockImplementation(git.recordLocksAtPrune)
   lockedDuringPrune.value = []
   wslDistroForCommandMock.mockReturnValue(null)
 })
@@ -81,6 +85,39 @@ describe('pruneGitWorktrees', () => {
     writeFileSync(lockFile('wsl'), 'mine')
     await pruneGitWorktrees({ cwd: repo }, 'win32')
     expect(readFileSync(lockFile('wsl'), 'utf8')).toBe('mine')
+  })
+
+  it('reclaims a lock a crash left behind, and removes it after the prune', async () => {
+    link('wsl', '/mnt/c/src/app-wsl/.git')
+    writeFileSync(lockFile('wsl'), PRUNE_GUARD_LOCK_REASON)
+    await pruneGitWorktrees({ cwd: repo }, 'win32')
+    expect(lockedDuringPrune.value).toEqual(['wsl'])
+    expect(existsSync(lockFile('wsl'))).toBe(false)
+  })
+
+  it('keeps the lock for a prune that overlaps another in the same repo', async () => {
+    link('wsl', '/mnt/c/src/app-wsl/.git')
+    const locksSeen: boolean[] = []
+    let releaseFirst: () => void = () => {}
+    gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'rev-parse') {
+        return { stdout: '.git\n', stderr: '' }
+      }
+      locksSeen.push(existsSync(lockFile('wsl')))
+      if (locksSeen.length === 1) {
+        await new Promise<void>((resolve) => {
+          releaseFirst = resolve
+        })
+      }
+      return { stdout: '', stderr: '' }
+    })
+    const first = pruneGitWorktrees({ cwd: repo }, 'win32')
+    const second = pruneGitWorktrees({ cwd: repo }, 'win32')
+    await vi.waitFor(() => expect(locksSeen).toHaveLength(1))
+    releaseFirst()
+    await Promise.all([first, second])
+    expect(locksSeen).toEqual([true, true])
+    expect(existsSync(lockFile('wsl'))).toBe(false)
   })
 
   it('unlocks even when the prune fails', async () => {

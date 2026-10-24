@@ -22,11 +22,43 @@ import { usesHostGitForWslLinkedWorktree } from './wsl-linked-worktree-git-routi
 export const PRUNE_GUARD_LOCK_REASON =
   'Orca: kept from a prune by the other Git (Windows or WSL), which cannot read this link.'
 
+// One lock-prune-unlock per repo at a time: an overlapping prune would outlive the other's unlock.
+const prunesByAdminRoot = new Map<string, Promise<void>>()
+
 export async function pruneGitWorktrees(
   options: GitExecOptions,
   platform: NodeJS.Platform = process.platform
 ): Promise<void> {
-  const locked = platform === 'win32' ? await lockForeignWorktreeEntries(options) : []
+  if (platform !== 'win32') {
+    await gitExecFileAsync(['worktree', 'prune'], options)
+    return
+  }
+  // Decide which Git runs only once its routing is settled, as the prune itself will.
+  await pendingWslDriveCheckoutGitRouting(['worktree', 'prune'], options)
+  const distro = usesHostGitForWslLinkedWorktree(options.cwd, options.wslDistro)
+    ? null
+    : wslDistroForCommand(options.cwd, options.wslDistro)
+  const adminRoot = await worktreeAdminRoot(options, distro)
+  const key = adminRoot.toLowerCase()
+  const run = (prunesByAdminRoot.get(key) ?? Promise.resolve())
+    .catch(() => {})
+    .then(() => pruneWithForeignEntriesLocked(options, adminRoot, distro !== null))
+  prunesByAdminRoot.set(key, run)
+  try {
+    await run
+  } finally {
+    if (prunesByAdminRoot.get(key) === run) {
+      prunesByAdminRoot.delete(key)
+    }
+  }
+}
+
+async function pruneWithForeignEntriesLocked(
+  options: GitExecOptions,
+  adminRoot: string,
+  runsInWsl: boolean
+): Promise<void> {
+  const locked = await lockForeignWorktreeEntries(adminRoot, runsInWsl)
   try {
     await gitExecFileAsync(['worktree', 'prune'], options)
   } finally {
@@ -34,35 +66,44 @@ export async function pruneGitWorktrees(
   }
 }
 
-/** Returns the lock files written; an entry the user already locked is left alone. */
-async function lockForeignWorktreeEntries(options: GitExecOptions): Promise<string[]> {
-  // Decide which Git runs only once its routing is settled, as the prune itself will.
-  await pendingWslDriveCheckoutGitRouting(['worktree', 'prune'], options)
-  const distro = usesHostGitForWslLinkedWorktree(options.cwd, options.wslDistro)
-    ? null
-    : wslDistroForCommand(options.cwd, options.wslDistro)
-  const adminRoot = await worktreeAdminRoot(options, distro)
+/** Returns the lock files this module owns now; an entry the user locked is left alone. */
+async function lockForeignWorktreeEntries(
+  adminRoot: string,
+  runsInWsl: boolean
+): Promise<string[]> {
   const locked: string[] = []
-  for (const name of await readdir(adminRoot).catch(() => [])) {
-    const entry = join(adminRoot, name)
-    const link = await readFile(join(entry, 'gitdir'), 'utf8').then(
-      (text) => text.trim(),
-      () => ''
-    )
-    if (!link || !isForeignLink(link, distro !== null)) {
+  for (const { entry, link } of await readWorktreeLinks(adminRoot)) {
+    if (!isForeignLink(link, runsInWsl)) {
       continue
     }
     const lockFile = join(entry, 'locked')
-    // `wx` fails on an existing lock, which then stays the user's.
-    const wrote = await writeFile(lockFile, PRUNE_GUARD_LOCK_REASON, { flag: 'wx' }).then(
+    const owned = await writeFile(lockFile, PRUNE_GUARD_LOCK_REASON, { flag: 'wx' }).then(
       () => true,
-      () => false
+      // An existing lock is the user's, unless a crash left one of ours behind.
+      async () => (await readFile(lockFile, 'utf8').catch(() => '')) === PRUNE_GUARD_LOCK_REASON
     )
-    if (wrote) {
+    if (owned) {
       locked.push(lockFile)
     }
   }
   return locked
+}
+
+/** Each linked worktree's admin entry and its `gitdir` link; none when the folder is missing. */
+export async function readWorktreeLinks(
+  adminRoot: string
+): Promise<{ entry: string; link: string }[]> {
+  const entries = (await readdir(adminRoot).catch(() => [])).map((name) => join(adminRoot, name))
+  const links = await Promise.all(
+    entries.map(async (entry) => ({
+      entry,
+      link: await readFile(join(entry, 'gitdir'), 'utf8').then(
+        (text) => text.trim(),
+        () => ''
+      )
+    }))
+  )
+  return links.filter(({ link }) => link)
 }
 
 /**
