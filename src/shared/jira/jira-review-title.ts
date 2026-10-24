@@ -1,8 +1,8 @@
 import { JIRA_ISSUE_KEY_PATTERN, parseJiraIssueUrl } from './jira-issue-url'
-import { escapeRegex } from './string-utils'
-import { getWorkspaceAttachments } from './workspace-attachments'
-import type { WorkspaceAttachmentMetadata } from './workspace-attachment-legacy'
-import type { WorkspaceAttachment } from './worktree/types'
+import { escapeRegex } from '../string-utils'
+import { getWorkspaceAttachments } from '../workspace-attachments'
+import type { WorkspaceAttachmentMetadata } from '../workspace-attachment-legacy'
+import type { WorkspaceAttachment } from '../worktree/types'
 
 function attachmentJiraIssueKey(item: WorkspaceAttachment): string | null {
   if (item.provider !== 'jira' || item.type !== 'issue') {

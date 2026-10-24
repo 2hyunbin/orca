@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getWorkspaceJiraIssueKey, prefixJiraReviewTitle } from './jira-review-title'
-import type { WorkspaceAttachment } from './worktree/types'
+import type { WorkspaceAttachment } from '../worktree/types'
 
 function jira(key: string, site = 'https://jira.example.com/jira'): WorkspaceAttachment {
   return {

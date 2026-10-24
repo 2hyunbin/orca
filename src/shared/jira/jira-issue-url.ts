@@ -1,4 +1,4 @@
-import type { JiraIssue, JiraSite } from './jira/jira-types'
+import type { JiraIssue, JiraSite } from './jira-types'
 
 export type ParsedJiraIssueUrl = {
   issueKey: string
