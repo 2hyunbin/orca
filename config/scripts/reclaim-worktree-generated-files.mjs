@@ -90,6 +90,30 @@ function sameDirectory(first, second) {
   return second?.isDirectory() && first.dev === second.dev && first.ino === second.ino
 }
 
+async function containsNestedRepository(root) {
+  const pending = [root]
+  while (pending.length) {
+    const path = pending.pop()
+    if (!(await info(path))?.isDirectory()) {
+      return true
+    }
+    const entries = await readdir(path, { withFileTypes: true })
+    const names = new Set(entries.map((entry) => entry.name))
+    if (
+      names.has('.git') ||
+      (names.has('HEAD') && names.has('objects') && (names.has('refs') || names.has('config')))
+    ) {
+      return true
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        pending.push(join(path, entry.name))
+      }
+    }
+  }
+  return false
+}
+
 async function makeDirectoriesWritable(root) {
   const pending = [root]
   while (pending.length) {
@@ -164,7 +188,8 @@ export async function reclaimWorktreeGeneratedFiles({
       if (
         !sameDirectory(original, current) ||
         current.mtimeMs > cutoff ||
-        !(await ignoredAndUntracked(worktree, path))
+        !(await ignoredAndUntracked(worktree, path)) ||
+        (await containsNestedRepository(path))
       ) {
         result.protected += 1
         return
