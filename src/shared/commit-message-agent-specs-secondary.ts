@@ -84,7 +84,7 @@ export function buildSecondaryCommitMessageAgentSpecs({
       // Why: kimi-code accepts the generation prompt only via --prompt/-p (Claude's
       // --print is rejected). Deliver on argv so --prompt receives the text (#11669).
       promptDelivery: 'argv',
-      // Why: kimi-code 0.36–0.40 reject --quiet/--thinking/--no-thinking (#14771).
+      // Why: Kimi Code has no --quiet/--thinking/--no-thinking; -p alone is headless (#14771).
       buildArgs: ({ prompt, model }) => [
         '--prompt',
         prompt,

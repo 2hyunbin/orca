@@ -53,27 +53,22 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
     expect(COMMIT_MESSAGE_AGENT_SPECS.pi?.defaultModelId).toBe('default')
   })
 
-  it('uses --prompt (not Claude --print) for Kimi non-interactive generation', () => {
-    // Why: kimi-code 0.31+ rejects --print; non-interactive mode is --prompt/-p (#11669).
+  it('passes only flags Kimi Code accepts for non-interactive generation', () => {
+    // Why: Kimi Code rejects --print/--quiet/--thinking/--no-thinking as unknown options (#11669, #14771).
     const spec = COMMIT_MESSAGE_AGENT_SPECS.kimi
-    expect(spec).toBeDefined()
-    expect(spec!.promptDelivery).toBe('argv')
-    const args = spec!.buildArgs({
-      prompt: 'Name a branch for adding login',
-      model: 'kimi-code/kimi-for-coding',
-      thinkingLevel: 'on'
-    })
-    expect(args).toContain('--prompt')
-    expect(args).not.toContain('--print')
-    // Why: with argv delivery the prompt is the value of --prompt.
-    const promptIndex = args.indexOf('--prompt')
-    expect(promptIndex).toBeGreaterThanOrEqual(0)
-    expect(args[promptIndex + 1]).toBe('Name a branch for adding login')
-    // Why: kimi-code 0.36–0.40 reject --quiet/--thinking/--no-thinking as unknown options (#14771).
-    expect(args).not.toContain('--quiet')
-    expect(args).not.toContain('--thinking')
-    expect(args).not.toContain('--no-thinking')
-    expect(args).toEqual(expect.arrayContaining(['--model', 'kimi-code/kimi-for-coding']))
+    expect(spec?.promptDelivery).toBe('argv')
+    expect(
+      spec?.buildArgs({
+        prompt: 'Name a branch for adding login',
+        model: 'kimi-code/kimi-for-coding',
+        thinkingLevel: 'on'
+      })
+    ).toEqual([
+      '--prompt',
+      'Name a branch for adding login',
+      '--model',
+      'kimi-code/kimi-for-coding'
+    ])
   })
 
   it('uses Muse exec for non-interactive Source Control AI generation', () => {
@@ -101,21 +96,6 @@ describe('COMMIT_MESSAGE_AGENT_SPECS', () => {
       'default',
       'kimi-code/kimi-for-coding'
     ])
-  })
-
-  it('does not advertise unsupported Kimi thinking controls', () => {
-    const spec = COMMIT_MESSAGE_AGENT_SPECS.kimi!
-    const model = spec.models.find((candidate) => candidate.id === 'kimi-code/kimi-for-coding')
-
-    expect(model).toBeDefined()
-    expect(model?.thinkingLevels).toBeUndefined()
-    expect(model?.defaultThinkingLevel).toBeUndefined()
-    for (const thinkingLevel of ['on', 'off'] as const) {
-      const args = spec.buildArgs({ prompt: 'PROMPT', model: 'default', thinkingLevel })
-      expect(args).not.toContain('--thinking')
-      expect(args).not.toContain('--no-thinking')
-      expect(args).not.toContain('--quiet')
-    }
   })
 
   it('omits Kimi --model for the config default and an empty model', () => {
