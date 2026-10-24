@@ -18,6 +18,7 @@ import { loadWindowsNativeRegistry, WINDOWS_REG_SZ } from '../windows-native-reg
 import { readWslDistroRegistrations } from '../wsl/wsl-distro-registry-id'
 import { listWslHostDistros } from '../wsl/wsl-host-distro-list'
 import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
+import { readWorktreeLinks } from '../git/worktree-prune-guard'
 import { isTelemetryEnabled, track } from './client'
 import {
   buildWslUsageSnapshot,
@@ -84,6 +85,34 @@ export function collectWslProjects(
   return projects
 }
 
+/**
+ * Windows-drive WSL git repos with a linked worktree whose link is a Linux path (WSL Git made it).
+ * File reads only, one folder per such repo; no Git is spawned.
+ */
+export async function countWindowsDriveReposWithWslWorktrees(
+  store: WslUsageStore
+): Promise<number> {
+  let total = 0
+  for (const repo of store.getRepos()) {
+    const host = parseExecutionHostId(getRepoExecutionHostId(repo))
+    if (host && host.kind !== 'local') {
+      continue
+    }
+    const project = classifyLocalWslProject(
+      repo,
+      resolveLocalWorkspaceRuntime(store, repo, repo.path)
+    )
+    if (project?.location !== 'windows_drive' || project.kind !== 'git') {
+      continue
+    }
+    const links = await readWorktreeLinks(join(repo.path, '.git', 'worktrees'))
+    if (links.some(({ link }) => link.startsWith('/'))) {
+      total += 1
+    }
+  }
+  return total
+}
+
 function readWslHostDistros(userDataPath: string): Map<string, string> {
   try {
     return new Map(
@@ -131,6 +160,7 @@ export async function gatherWslUsageSnapshotInput(
       () => readWslHostDistros(userDataPath),
       getCachedWslDistros()?.[0] ?? null
     ),
+    windowsDriveReposWithWslWorktrees: await countWindowsDriveReposWithWslWorktrees(store),
     wslHostsGateOpen: gateOpen
   }
 }
