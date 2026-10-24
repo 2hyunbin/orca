@@ -64,7 +64,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
           settings: {
             ...storeFixture.read().settings,
             terminalMainSideEffectAuthority: true
-          }['settings']
+          }
         })
       }
 
@@ -490,7 +490,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
           settings: {
             ...storeFixture.read().settings,
             terminalHiddenDeliveryGate: false
-          }['settings']
+          }
         })
         const deps = createDeps({ isVisibleRef: { current: false } })
         const { transport, dataCallback } = await connectHiddenPane(deps)

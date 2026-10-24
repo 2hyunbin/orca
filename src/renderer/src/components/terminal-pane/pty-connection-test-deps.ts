@@ -1,5 +1,8 @@
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
+import type { PtyTransport } from './pty-transport-types'
+import type { PtyPaneStartup } from './pty-connection-types'
+import type { TerminalColorSchemeMode } from '../../../../shared/terminal-color-scheme-protocol'
 import { leafIdForPane } from './pty-connection-test-pane-fixtures'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { AgentStatusPatch } from '@/store/agent-status-patch'
@@ -12,15 +15,16 @@ export type PaneConnectionDeps = {
   tabId: string
   worktreeId: string
   cwd: string
-  startup: null
+  cwdPromise?: Promise<string>
+  startup: PtyPaneStartup
   restoredLeafId: string | null
   restoredPtyIdByLeafId: Record<string, string>
   mountFollowsTerminalPark: boolean
-  paneTransportsRef: { current: Map<number, unknown> }
-  paneMode2031Ref: { current: Map<number, unknown> }
+  paneTransportsRef: { current: Map<number, PtyTransport> }
+  paneMode2031Ref: { current: Map<number, boolean> }
   paneKittyKeyboardModesRef: { current: Map<number, TerminalKittyKeyboardModeTracker> }
-  paneLastThemeModeRef: { current: Map<number, unknown> }
-  replayingPanesRef: { current: Map<number, unknown> }
+  paneLastThemeModeRef: { current: Map<number, TerminalColorSchemeMode> }
+  replayingPanesRef: { current: Map<number, number> }
   isActiveRef: { current: boolean }
   isVisibleRef: { current: boolean }
   onPtyExitRef: MockRef
@@ -37,7 +41,7 @@ export type PaneConnectionDeps = {
   dispatchNotification: Mock
   onShowSessionRestoredBanner: Mock
   setCacheTimerStartedAt: Mock
-  syncPanePtyLayoutBinding: Mock<(paneId: number, ptyId: string) => void>
+  syncPanePtyLayoutBinding: Mock<(paneId: number, ptyId: string | null) => void>
   clearExitedPanePtyLayoutBinding: Mock
   [key: string]: unknown
 }
@@ -84,7 +88,7 @@ export function buildPaneConnectionDeps(
     dispatchNotification: vi.fn(),
     onShowSessionRestoredBanner: vi.fn(),
     setCacheTimerStartedAt: vi.fn(),
-    syncPanePtyLayoutBinding: vi.fn((paneId: number, ptyId: string) => {
+    syncPanePtyLayoutBinding: vi.fn((paneId: number, ptyId: string | null) => {
       const layout = fixture.read().terminalLayoutsByTabId?.['tab-1']
       if (layout) {
         layout.ptyIdsByLeafId = { ...layout.ptyIdsByLeafId, [leafIdForPane(paneId)]: ptyId }

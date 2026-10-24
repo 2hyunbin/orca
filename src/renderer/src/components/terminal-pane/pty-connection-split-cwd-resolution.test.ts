@@ -107,7 +107,7 @@ describe('connectPanePty split cwd resolution', () => {
     const binding = connectPanePty(
       createPane(1) as never,
       createManager(1) as never,
-      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
+      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise })
     )
     await flushAsyncTicks(20)
 
@@ -130,7 +130,7 @@ describe('connectPanePty split cwd resolution', () => {
     const binding = connectPanePty(
       createPane(1) as never,
       createManager(1) as never,
-      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
+      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise })
     )
     await flushAsyncTicks(20)
     binding.dispose()

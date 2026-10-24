@@ -168,7 +168,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         tabsByWorktree: { 'wt-1': [{ id: 'tab-entity', ptyId: null, generation: 3 }] },
         getTab: (id: string) =>
           id === 'unified-1' ? { id, contentType: 'terminal', entityId: 'tab-entity' } : null
-      } as never)
+      })
       markWorktreeSleepIntent('wt-1')
       const deps = createDeps({ tabId: 'unified-1', isVisibleRef: { current: false } })
 
