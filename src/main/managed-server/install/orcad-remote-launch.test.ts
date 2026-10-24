@@ -162,7 +162,9 @@ describe('liveness', () => {
           const orcad = spawn(process.execPath, [entry], { stdio: 'ignore' })
           // Before `exec` landed in the launcher, the recorded PID was a shell waiting on node.
           const waiting = spawn('sh', ['-c', `'${process.execPath}' '${entry}'; :`], {
-            stdio: 'ignore'
+            stdio: 'ignore',
+            // Own process group, so cleanup also reaches the node the shell waits on.
+            detached: true
           })
           try {
             await waitForArgs(orcad.pid, 'orcad.js')
@@ -173,7 +175,9 @@ describe('liveness', () => {
             expect(parseOrcadLiveness(probeIn(probe))).toBe('LIVE')
           } finally {
             orcad.kill()
-            waiting.kill()
+            if (waiting.pid !== undefined) {
+              process.kill(-waiting.pid, 'SIGKILL')
+            }
           }
         })
       })
