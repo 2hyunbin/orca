@@ -17,7 +17,7 @@ import {
   structuredAgentSessionTeardownTrigger,
   tearDownRuntime,
   type InstalledRuntime
-} from './structured-agent-session-runtime-teardown'
+} from './agent-session/structured-agent-session-runtime-teardown'
 import { AgentSessionRecoveryCapsule } from './agent-session-recovery-capsule'
 import { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { StructuredAgentSessionAdapterRouter } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router'
