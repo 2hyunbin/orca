@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { WebSocket } from 'ws'
-import type { RpcRequest, RpcResponse } from '../scripts/mock-server-rpc-handlers'
+import type {
+  handleRequest as handleRpcRequest,
+  RpcRequest,
+  RpcResponse
+} from '../scripts/mock-server-rpc-handlers'
 
-let handleRequest: typeof import('../scripts/mock-server-rpc-handlers').handleRequest
+let handleRequest: typeof handleRpcRequest
 
 beforeAll(async () => {
   vi.stubEnv('MOCK_NATIVE_CHAT', '0')
