@@ -114,6 +114,9 @@ describe('pruneGitWorktrees', () => {
     const first = pruneGitWorktrees({ cwd: repo }, 'win32')
     const second = pruneGitWorktrees({ cwd: repo }, 'win32')
     await vi.waitFor(() => expect(locksSeen).toHaveLength(1))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The second prune waits for the first instead of running beside it.
+    expect(locksSeen).toHaveLength(1)
     releaseFirst()
     await Promise.all([first, second])
     expect(locksSeen).toEqual([true, true])
