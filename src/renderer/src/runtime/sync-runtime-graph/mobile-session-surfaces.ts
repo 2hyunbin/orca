@@ -91,9 +91,7 @@ export function isMobilePublishableOpenFile(file: AppState['openFiles'][number])
   ) {
     return false
   }
-  // Why: a phone reads a plain file tab by its workspace-relative path; a tab naming a file
-  // outside its workspace (an external file, or another workspace's file viewed here, #32158)
-  // has none. Markdown tabs are read through the desktop's tab instead, so they still show.
+  // Plain files need workspace-relative paths; external/cross-workspace files lack one (#32158). Markdown still reads through desktop tab.
   const isMarkdown = file.language === 'markdown' || file.mode === 'markdown-preview'
   return isMarkdown || file.relativePath !== file.filePath
 }
