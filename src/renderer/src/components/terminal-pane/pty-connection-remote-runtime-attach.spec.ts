@@ -1,3 +1,4 @@
+import { connectMockPanePty } from './pty-connection-test-connect-mock-pane'
 import { runtimeEnvironment } from '../../runtime/server-layout-frames.test-fixture'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -455,7 +456,6 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
     })
 
     it('spawns an unstamped local worktree locally while a single server is focused', async () => {
-      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
       const worktreeId = 'repo1::/srv/wt-1'
@@ -473,11 +473,18 @@ export function registerPtyConnectionRemoteRuntimeAttachTests(): void {
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'legacy-hub' }
       })
 
-      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps({ worktreeId }))
-
-      // Why: the client stamps every server row on arrival, so an unstamped row is this machine's.
-      expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
-      expect(createIpcPtyTransport).toHaveBeenCalled()
+      const binding = await connectMockPanePty(
+        createPane(1),
+        createManager(1),
+        createDeps({ worktreeId })
+      )
+      try {
+        // Why: the client stamps every server row on arrival, so an unstamped row is this machine's.
+        expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
+        expect(createIpcPtyTransport).toHaveBeenCalled()
+      } finally {
+        binding.dispose()
+      }
     })
 
     it('runs an inline setup terminal locally instead of failing its host closed', async () => {
