@@ -121,4 +121,31 @@ describe('TerminalPaneRecoveryPortals', () => {
     act(() => vi.advanceTimersByTime(CALM_STATUS_REVEAL_DELAY_MS * 2))
     expect(view.container.querySelectorAll('[data-remote-server-outage-notice]')).toHaveLength(0)
   })
+
+  it('drops a visible notice at once when a pane starts waiting for SSH sign-in', async () => {
+    vi.useFakeTimers()
+    const { TerminalPaneRecoveryPortals } = await import('./TerminalPaneRecoveryPortals')
+    const pane = document.createElement('div')
+    document.body.append(pane)
+    const controller = controllerFor([pane])
+    const view = render(<TerminalPaneRecoveryPortals controller={controller} />)
+    act(() => vi.advanceTimersByTime(CALM_STATUS_REVEAL_DELAY_MS * 2))
+    expect(view.container.querySelectorAll('[data-remote-server-outage-notice]')).toHaveLength(1)
+
+    view.rerender(
+      <TerminalPaneRecoveryPortals
+        controller={{
+          ...controller,
+          ptyRecoveryStatesByPaneId: {
+            1: { phase: 'backoff' as const, epoch: 1, attempt: 1, reason: 'ssh-sign-in' as const }
+          }
+        }}
+      />
+    )
+
+    expect(view.container.querySelectorAll('[data-remote-server-outage-notice]')).toHaveLength(0)
+    expect(
+      document.querySelectorAll('[data-terminal-remote-runtime-reconnect-banner="ssh-sign-in"]')
+    ).toHaveLength(1)
+  })
 })
