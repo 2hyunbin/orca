@@ -122,9 +122,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
         disposeRendererLifetime()
         subscription?.close()
       }
-      // Why: the renderer treats close as terminal and drops its handle, so send it once.
-      // Latch before sending so a re-entrant call cannot duplicate it, and never
-      // throw: a dying renderer must not abort its siblings' retirement.
+      // Notify close once, latched before send; a dying renderer must not interrupt sibling retirement.
       let closeNotified = false
       let transportClosed = false
       const notifyClosed = (): void => {
@@ -164,8 +162,7 @@ export function registerRuntimeEnvironmentSubscriptionHandlers(args: {
                 return
               }
               if (payload.type === 'close') {
-                // Why: retirement advances the generation before closing, so gating
-                // close on it stranded the renderer with a dead subscription.
+                // Retirement advances generation before close; the old generation still needs its terminal notification.
                 notifyClosed()
                 return
               }
