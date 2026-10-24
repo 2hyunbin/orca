@@ -1,5 +1,7 @@
 import { snapshotLatestTurn } from './agent-session-history-latest-turn'
 export { snapshotLatestTurn } from './agent-session-history-latest-turn'
+import { resolveHistoryLimit } from './agent-session-history-limit'
+export { resolveHistoryLimit } from './agent-session-history-limit'
 // Paged history over one journal.
 //
 // `tail` and `before` read the REDUCED timeline, so backward paging keeps
@@ -11,14 +13,12 @@ export { snapshotLatestTurn } from './agent-session-history-latest-turn'
 
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
-import { isSubagentBlock } from '../../../shared/native-chat-types'
 import type {
   AgentJournalCursor,
   AgentJournalRenderItem,
   AgentJournalSnapshot
 } from '../../../shared/agent-session-journal-types'
 import {
-  AGENT_SESSION_HISTORY_DEFAULT_LIMIT,
   AGENT_SESSION_HISTORY_MAX_LIMIT,
   type AgentSessionHistoryDirection,
   type AgentSessionHistoryPage,
@@ -33,8 +33,7 @@ import {
   boundHistoryItemsByBytes,
   type HistoryReader,
   measureHistoryItem,
-  newestWholeSequenceGroups,
-  wholeSubagentGroupsStart,
+  conversationWindow,
   oversizedHistoryItem,
   submissionBytesByItemId
 } from './agent-session-history-page-bounds'
@@ -42,57 +41,40 @@ import { offPageSubagentRoster } from './agent-session-history-subagent-roster'
 
 export { AGENT_SESSION_HISTORY_MAX_PAGE_BYTES } from './agent-session-history-page-bounds'
 
-/** Clamp oversized requests so clients can keep paging. */
-export function resolveHistoryLimit(limit: number | undefined): number {
-  if (limit === undefined || !Number.isFinite(limit)) {
-    return AGENT_SESSION_HISTORY_DEFAULT_LIMIT
-  }
-  return Math.min(AGENT_SESSION_HISTORY_MAX_LIMIT, Math.max(1, Math.floor(limit)))
-}
-
-/** Both scopes window on session-owned rows; every-agent also includes interleaved subagent rows. */
+/** Whose rows a backward read serves. Both window over the session's own rows; a
+ *  reader of the session's own agent alone gets only those. In-process only: no wire
+ *  request carries it. */
 export type AgentSessionHistoryScope = 'every-agent' | 'own-agent'
-
-/** Window by own-agent rows, retaining contiguous subagent work and whole sibling groups within byte bounds. */
-function conversationWindow(
-  items: readonly AgentJournalRenderItem[],
-  limit: number
-): AgentJournalRenderItem[] {
-  const own = items.filter((item) => isRootAgentJournalItem(item) && !isSubagentRow(item))
-  if (own.length === items.length) {
-    return newestWholeSequenceGroups(items, limit)
-  }
-  const ownWindow = newestWholeSequenceGroups(own, limit)
-  const start = ownWindow.length < own.length ? ownWindow[0]?.sequence : undefined
-  if (start === undefined) {
-    return [...items]
-  }
-  const reach = newestWholeSequenceGroups(own, 2 * limit)
-  const floor = reach.length < own.length ? reach[0]!.sequence : Number.NEGATIVE_INFINITY
-  const whole = wholeSubagentGroupsStart(items, start, floor)
-  return items.filter((item) => item.sequence >= whole)
-}
-
-function isSubagentRow(item: AgentJournalRenderItem): boolean {
-  return item.body.kind === 'message' && item.body.blocks.some(isSubagentBlock)
-}
 
 export function readAgentSessionHistory(
   journal: AgentSessionJournal,
   request: AgentSessionHistoryRequest,
   {
-    snapshot = journal.snapshot(),
+    view = journal.publicRead(),
+    snapshot = view.snapshot,
     scope = 'every-agent',
-    reader = CLIENT_HISTORY_READER
+    reader = CLIENT_HISTORY_READER,
+    rowReplay = false
   }: {
     /** Reuse a snapshot across synchronous catch-up pages to avoid repeated full reduction. */
     snapshot?: AgentJournalSnapshot
+    view?: ReturnType<AgentSessionJournal['publicRead']>
     scope?: AgentSessionHistoryScope
     reader?: HistoryReader
+    /** Internal catch-up and older item-backed clients keep their existing row replay. */
+    rowReplay?: boolean
   } = {}
 ): AgentSessionHistoryResult {
   const limit = resolveHistoryLimit(request.limit)
   if (request.direction === 'after') {
+    if (
+      !rowReplay &&
+      request.cursor?.epoch === snapshot.cursor.epoch &&
+      request.cursor.sequence <= snapshot.cursor.sequence &&
+      view.normalizationKey !== ''
+    ) {
+      return historyReset(snapshot, 'cursor_compacted', reader)
+    }
     return readForward(journal, snapshot, request.cursor, limit, reader)
   }
   const cursor = request.direction === 'before' ? request.cursor : undefined
@@ -135,24 +117,27 @@ export function readAgentSessionHistory(
 /** Reuse reduced state until the journal cursor advances. */
 export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
-  reader: HistoryReader = CLIENT_HISTORY_READER
+  reader: HistoryReader = CLIENT_HISTORY_READER,
+  initialView = journal.publicRead()
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
-  let snapshot = journal.snapshot()
+  let view = initialView
   return (request) => {
     const live = journal.cursor()
-    if (live.epoch !== snapshot.cursor.epoch || live.sequence !== snapshot.cursor.sequence) {
-      snapshot = journal.snapshot()
+    const prior = view.snapshot.cursor
+    if (live.epoch !== prior.epoch || live.sequence !== prior.sequence) {
+      view = journal.publicRead()
     }
-    return readAgentSessionHistory(journal, request, { snapshot, reader })
+    return readAgentSessionHistory(journal, request, { view, reader, rowReplay: true })
   }
 }
 
 export function readAgentSessionHydrationPage(
   journal: AgentSessionJournal,
   fence?: number,
-  reader: HistoryReader = CLIENT_HISTORY_READER
+  reader: HistoryReader = CLIENT_HISTORY_READER,
+  snapshot: AgentJournalSnapshot = journal.snapshot()
 ): AgentSessionHistoryPage {
-  return buildHydrationPage(journal.snapshot(), fence, reader)
+  return buildHydrationPage(snapshot, fence, reader)
 }
 
 function buildHydrationPage(

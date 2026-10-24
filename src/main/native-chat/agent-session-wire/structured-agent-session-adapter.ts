@@ -15,7 +15,6 @@ import type {
   AgentJournalAnsweredTurnIdentity,
   AgentJournalItemIdentity,
   AgentJournalMessageItem,
-  AgentJournalDispatchState,
   AgentJournalTurnItem,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
@@ -31,10 +30,7 @@ import type { AgentSessionSlashCommand } from '../../../shared/agent-session-wir
 import type { AgentSessionThreadGoalChange } from '../../../shared/agent-session-thread-goal-wire'
 import type { AgentSessionRefusalReason } from '../../../shared/agent-session-wire-refusals'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
-import type {
-  AgentSessionCancelOutcome,
-  StructuredAgentSessionAdapterStop
-} from './structured-agent-session-adapter-stop'
+import type { StructuredAgentSessionAdapterStop } from './structured-agent-session-adapter-stop'
 export type { AgentSessionCancelOutcome } from './structured-agent-session-adapter-stop'
 export type {
   StructuredAgentSessionChildEndCause,
@@ -273,18 +269,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     fence: number
     command: StructuredAgentSessionCommandRun
   }): Promise<AgentSessionCommandAdmission>
-  /** Cancel only the requested turn; absent turnId also covers dispatches whose turns have not opened. */
-  cancelTurn(input: {
-    sessionId: string
-    turnId?: string
-    fence: number
-    prompt?: { itemId: string }
-    /** Original host Stop time; in-process only, for a Stop that ends the session. */
-    stoppedAt?: number
-    dispatchStatus?: { state: AgentJournalDispatchState; recovered: boolean } | null
-    /** Re-read journal turn immediately before interrupt; direct callers may omit this guard. */
-    resolveLiveTurnId?: () => string | null
-  }): Promise<AgentSessionCancelOutcome>
   /** Rejection proves refusal; thrown changes have unknown effects. */
   changeThreadGoal?(input: {
     sessionId: string

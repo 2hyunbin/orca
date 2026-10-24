@@ -5,25 +5,20 @@ import type { JournalTextPruner } from './journal-text-pruner'
 
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import { randomUUID } from 'node:crypto'
+import { createJournalPublicReader } from './journal-public-read'
 import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
   AgentJournalItemBody,
   AgentJournalItemIdentity,
-  AgentJournalRenderItem,
   AgentJournalSnapshot,
   AgentJournalSubmission,
   AgentJournalThreadGoal,
-  AgentJournalTurnLifecycle,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionContextUsage } from '../../../shared/agent-session-context-usage'
 import { latestStructuredAgentContextFacts } from '../../../shared/structured-agent-session-context-usage'
-import {
-  newestStructuredAgentSessionTurnBySequence,
-  runningStructuredAgentSessionTurnItemBySequence
-} from '../../../shared/structured-agent-session-live-turn'
 import { readJournalSince } from './journal-cursor'
 import type { JournalHostDatabase } from './journal-host-database'
 import { journalRowsAfterReader, preserveJournalLiveText } from './journal-open'
@@ -35,7 +30,6 @@ import {
 import {
   applyJournalRow,
   createJournalReducerState,
-  renderJournalState,
   resolveJournalItemId,
   type JournalReducerState
 } from './journal-reducer'
@@ -82,6 +76,7 @@ export class AgentSessionJournal {
   private readonly mintEpoch: () => string
 
   private state: JournalReducerState
+  private readonly readPublic = createJournalPublicReader()
   private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: ((rows?: readonly JournalRow[]) => void) | null = null
@@ -190,7 +185,10 @@ export class AgentSessionJournal {
     sequence: this.state.lastSequence
   })
 
-  snapshot = (): AgentJournalSnapshot => renderJournalState(this.queuedMessages.displayState())
+  snapshot = (): AgentJournalSnapshot => this.publicRead().snapshot
+
+  publicRead = () =>
+    this.readPublic(this.state, this.queuedMessages.displayState(), this.queuedMessages.revision())
 
   private readonly itemReaders = createJournalItemReaders(() => this.state)
 
@@ -205,12 +203,8 @@ export class AgentSessionJournal {
   item = this.itemReaders.item
   visitItemsWithLinkage = this.itemReaders.visitItemsWithLinkage
 
-  /** Read the journal's running turn without allocating a snapshot; host projection decides current work. */
-  runningTurn = (): { item: AgentJournalRenderItem; turnId: string } | null =>
-    runningStructuredAgentSessionTurnItemBySequence(this.state.items.values())
-
-  newestTurn = (): AgentJournalTurnLifecycle | null =>
-    newestStructuredAgentSessionTurnBySequence(this.state.items.values())
+  runningTurn = this.itemReaders.runningTurn
+  newestTurn = this.itemReaders.newestTurn
 
   threadGoalSource = (): JournalThreadGoalSource =>
     journalThreadGoalSource(this.state.items.values())

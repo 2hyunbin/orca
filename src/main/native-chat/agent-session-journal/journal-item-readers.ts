@@ -1,7 +1,12 @@
+import {
+  newestStructuredAgentSessionTurnBySequence,
+  runningStructuredAgentSessionTurnItemBySequence
+} from '../../../shared/structured-agent-session-live-turn'
 import { journalItemExecutionFence, journalItemProvenance } from './journal-item-provenance'
 import type {
   AgentJournalItemBody,
-  AgentJournalRenderItem
+  AgentJournalRenderItem,
+  AgentJournalTurnLifecycle
 } from '../../../shared/agent-session-journal-types'
 import type { JournalItemLinkageVisitor } from './journal-store-contracts'
 import type { JournalReducerState } from './journal-reducer'
@@ -9,6 +14,13 @@ import { journalHasUnwitnessedText } from './journal-text-query'
 
 export function createJournalItemReaders(state: () => JournalReducerState) {
   return {
+    /** Read the journal's running turn without allocating a snapshot; host projection decides current work. */
+    runningTurn: (): { item: AgentJournalRenderItem; turnId: string } | null =>
+      runningStructuredAgentSessionTurnItemBySequence(state().items.values()),
+
+    newestTurn: (): AgentJournalTurnLifecycle | null =>
+      newestStructuredAgentSessionTurnBySequence(state().items.values()),
+
     /** Whose execution the item is now, while it is in the timeline: the run a reusable child's row
      *  last named (`JournalItemRow.executionOwner`), else its creator (`JournalItemRow.ownerFence`). */
     itemFence: (itemId: string): number | undefined => journalItemExecutionFence(state(), itemId),

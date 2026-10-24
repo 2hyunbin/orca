@@ -2,6 +2,7 @@
 
 import type {
   AgentJournalApprovalItem,
+  AgentJournalDispatchState,
   AgentJournalQuestionItem
 } from '../../../shared/agent-session-journal-types'
 import type { ProviderDiagnostic } from '../../../shared/agent-session-failure'
@@ -16,6 +17,18 @@ export type AgentSessionCancelOutcome = {
 export type AgentSessionPromptCancelRoute = { kind: 'dismiss' } | { kind: 'stop' }
 
 export type StructuredAgentSessionAdapterStop = {
+  /** Cancel only the requested turn; absent turnId also covers dispatches whose turns have not opened. */
+  cancelTurn(input: {
+    sessionId: string
+    turnId?: string
+    fence: number
+    prompt?: { itemId: string }
+    /** Original host Stop time; in-process only, for a Stop that ends the session. */
+    stoppedAt?: number
+    dispatchStatus?: { state: AgentJournalDispatchState; recovered: boolean } | null
+    /** Re-read journal turn immediately before interrupt; direct callers may omit this guard. */
+    resolveLiveTurnId?: () => string | null
+  }): Promise<AgentSessionCancelOutcome>
   /** Wait for in-flight work or grace expiry measured from interrupt issuance. */
   awaitStoppedRequestEnd?(sessionId: string, stoppedAt: number): Promise<void>
   /** Undefined routes through cancelTurn with the prompt. */
