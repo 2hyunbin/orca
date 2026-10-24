@@ -70,6 +70,10 @@ vi.mock('@/lib/image-blob-png', async (importOriginal) => ({
 
 vi.mock('./NativeChatSelectionQuote', () => ({ NativeChatSelectionQuote: () => null }))
 
+vi.mock('@/components/tab-bar/TabWorkspaceLayoutMenuSection', () => ({
+  TabWorkspaceLayoutMenuSection: () => 'Move Tab to Split'
+}))
+
 function childrenText(children: ReactNode): string {
   return React.Children.toArray(children)
     .map((child) => {
@@ -98,6 +102,7 @@ function Harness({
     composerRef: createRef(),
     onSwitchToTerminal,
     showTerminalPaneActions: !structured,
+    workspaceLayout: structured ? { unifiedTabId: 'chat-tab', groupId: 'group-1' } : undefined,
     resolveOrcaSessionId: orcaSessionId === undefined ? undefined : async () => orcaSessionId,
     actions: {
       ...emptyNativeChatContextMenuActions,
@@ -417,6 +422,14 @@ describe('useNativeChatContextMenu', () => {
         (candidate) => childrenText(candidate.children) === 'Continue with Terminal Agent'
       )
     ).toBe(false)
+  })
+
+  it('reuses workspace layout actions without terminal-only pane commands', () => {
+    const markup = renderToStaticMarkup(<Harness structured />)
+
+    expect(markup).toContain('Move Tab to Split')
+    expect(markup).not.toContain('Split Terminal Right')
+    expect(markup).not.toContain('Fork Agent Session')
   })
 
   describe('Copy Orca Session ID', () => {

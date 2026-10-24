@@ -146,6 +146,8 @@ export function NativeChatStructuredSession(
     startFailures,
     agentName: agentLabel
   })
+  // Nothing reads an unread history, so its pane stays blank beside the Retry line.
+  const loadingPane = historyPhase === 'unread' ? null : <NativeChatLoadingCue />
   // A lost contact is the host notice's to say; the read adds only a refusal the host sent.
   const readFailure =
     controller.status === 'error' && !(hostOutage && !controller.readRefusal)
@@ -168,7 +170,6 @@ export function NativeChatStructuredSession(
   const fileLinkProps = { onLinkClick, allowFileUriLinks: onLinkClick !== undefined }
   const paneCommands = useStructuredNativeChatPaneCommands({
     tabId: props.tabId,
-    ownerWorktreeId,
     groupId: props.groupId,
     isVisible: props.isVisible,
     rootRef,
@@ -293,7 +294,7 @@ export function NativeChatStructuredSession(
       <NativeChatContextClearFade clearing={controller.contextClear.clearing}>
         {find.isOpen ? <NativeChatFindBar find={find} isVisible={props.isVisible} /> : null}
         {viewState.kind === 'loading' || (viewState.kind === 'error' && !readFailure) ? (
-          historyPhase !== 'unread' && <NativeChatLoadingCue />
+          loadingPane
         ) : viewState.kind === 'error' ? (
           <NativeChatEmptyState
             kind="error"

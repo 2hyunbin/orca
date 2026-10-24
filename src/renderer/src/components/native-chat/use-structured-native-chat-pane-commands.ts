@@ -18,7 +18,6 @@ import { runNativeChatSplitTarget } from './native-chat-layout-actions'
 
 export function useStructuredNativeChatPaneCommands({
   tabId,
-  ownerWorktreeId,
   groupId,
   isVisible,
   rootRef,
@@ -30,7 +29,6 @@ export function useStructuredNativeChatPaneCommands({
   ...menuTargets
 }: {
   tabId: string
-  ownerWorktreeId: string | null
   groupId?: string
   isVisible: boolean
   rootRef: RefObject<HTMLDivElement | null>
@@ -69,9 +67,12 @@ export function useStructuredNativeChatPaneCommands({
       right: formatShortcutLabel('terminal.splitRight', keybindings),
       down: formatShortcutLabel('terminal.splitDown', keybindings)
     },
-    chatPane:
-      ownerWorktreeId && groupId && terminalPaneActions === undefined
-        ? { tabId, worktreeId: ownerWorktreeId, groupId }
+    workspaceLayout:
+      groupId && terminalPaneActions === undefined
+        ? {
+            unifiedTabId: tabId,
+            groupId
+          }
         : undefined
   })
   const onKeyDownCapture = useCallback<KeyboardEventHandler<HTMLDivElement>>(
