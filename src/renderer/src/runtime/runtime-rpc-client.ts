@@ -3,7 +3,7 @@ import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
 import type { RuntimeStatus } from '../../../shared/runtime-types'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { withBrowserPaneUiRuntimeRpcSource } from '../../../shared/runtime-rpc-feature-interaction-source'
-import { assertRuntimeStatusCompatible } from './runtime-protocol-compat'
+import { assertRuntimeStatusCompatible, isRuntimeStatusCompatible } from './runtime-protocol-compat'
 import { createRuntimeRpcAbortError } from './abortable-runtime-environment-call'
 import { callRuntimeEnvironmentWithRevision } from './runtime-rpc-environment-call'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
@@ -199,30 +199,11 @@ export function clearRecentRuntimeCompatibilityFailure(
     // positive capability verdict must not route a structured request to the replacement.
     runtimeCompatibilityChecks.delete(trimmed)
     // Why (STA-11921): the host publishes a probe's answer before settling it, so the detached
-    // pending probe can never record it; the answer itself is the proof synchronous readers need.
-    if (
-      observedStatus &&
-      cached.failedAt === null &&
-      !cached.provenCompatible &&
-      isRuntimeStatusCompatible(observedStatus)
-    ) {
-      rememberRuntimeEnvironmentCompatibility(trimmed, {
-        check: Promise.resolve(),
-        failedAt: null,
-        provenCompatible: true,
-        status: observedStatus,
-        statusCheckedAt: Date.now()
-      })
+    // probe never records it; the published answer is the proof synchronous readers need.
+    const answersPendingProbe = cached.failedAt === null && !cached.provenCompatible
+    if (observedStatus && answersPendingProbe && isRuntimeStatusCompatible(observedStatus)) {
+      markRuntimeEnvironmentCompatible(trimmed, observedStatus)
     }
-  }
-}
-
-function isRuntimeStatusCompatible(status: RuntimeStatus): boolean {
-  try {
-    assertRuntimeStatusCompatible(status)
-    return true
-  } catch {
-    return false
   }
 }
 
@@ -235,7 +216,10 @@ export function clearRuntimeCompatibilityCache(environmentId?: string | null): v
   runtimeCompatibilityChecks.clear()
 }
 
-export function markRuntimeEnvironmentCompatible(environmentId: string): void {
+export function markRuntimeEnvironmentCompatible(
+  environmentId: string,
+  status: RuntimeStatus | null = null
+): void {
   const trimmed = environmentId.trim()
   if (!trimmed) {
     return
@@ -244,8 +228,8 @@ export function markRuntimeEnvironmentCompatible(environmentId: string): void {
     check: Promise.resolve(),
     failedAt: null,
     provenCompatible: true,
-    status: null,
-    statusCheckedAt: null
+    status,
+    statusCheckedAt: status ? Date.now() : null
   })
 }
 
@@ -341,7 +325,8 @@ export async function runtimeEnvironmentSupportsCapability(
   const status = await getRuntimeEnvironmentStatus(trimmed, timeoutMs)
   const supported = status.capabilities?.includes(capability) === true
   const resolved = runtimeCompatibilityChecks.get(trimmed)
-  if (!supported && resolved?.status === status) {
+  // Why runtimeId: a status publication may have replaced the entry with its own copy.
+  if (!supported && resolved?.status?.runtimeId === status.runtimeId) {
     resolved.statusCheckedAt = null
   }
   return supported
