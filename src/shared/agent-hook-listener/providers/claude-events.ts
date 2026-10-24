@@ -157,7 +157,9 @@ export function normalizeClaudeEvent(
   }
 
   const eventToolUseId = readFirstString(hookPayload, ['tool_use_id', 'toolUseId'])
+  const isWaitingInducing = reportedStateName === 'waiting'
   const isParallelSiblingActivityDuringWait =
+    !isWaitingInducing &&
     eventAgentId === undefined &&
     previousLead?.state === 'waiting' &&
     (eventName === 'PreToolUse' ||
@@ -172,7 +174,6 @@ export function normalizeClaudeEvent(
 
   // Why: subagent/teammate events carry `agent_id` (lead's don't); child tool activity keeps its row live but must not become the lead's state or overwrite its tool/prompt caches (a live card would vanish).
   // Two exceptions take the full path below: waiting-inducing events (a child needs human attention on this pane) and the blocked child's own next tool event (approval granted — clear the wait as for the lead).
-  const isWaitingInducing = reportedStateName === 'waiting'
   const subagentOriginId =
     !isWaitingInducing &&
     (eventName === 'PreToolUse' ||

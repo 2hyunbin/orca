@@ -168,6 +168,50 @@ function line(row: Record<string, unknown>) {
 }
 
 describe('Claude permission result observation', () => {
+  it.each([false, true])(
+    'keeps the current explicit question through accepted refreshes (relay=%s)',
+    async (remote) => {
+      const pane = await setup(remote)
+      const state = pane.desktop._getStateForTests()
+      const question = (id: string, text = id) => ({
+        tool_name: 'AskUserQuestion',
+        tool_use_id: id,
+        tool_input: { questions: [{ question: text, options: ['a', 'b'] }] }
+      })
+      for (const refresh of [false, true]) {
+        await pane.post({ hook_event_name: 'PreToolUse', ...question('q1') }, true)
+        if (refresh) {
+          await pane.post({
+            hook_event_name: 'PermissionRequest',
+            ...question('q1'),
+            tool_use_id: undefined
+          })
+        }
+        await pane.post({ hook_event_name: 'PreToolUse', ...question('q2') }, true)
+        for (const payload of [
+          { hook_event_name: 'PostToolUse', ...question('q1') },
+          { hook_event_name: 'PostToolUseFailure', ...question('q1') },
+          { hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'sibling' },
+          { hook_event_name: 'PermissionRequest', ...question('q2'), tool_use_id: undefined }
+        ]) {
+          expect(state.lastStatusByPaneKey.get(PANE)?.toolUseId).toBe('q2')
+          expect(pane.row()).toMatchObject({
+            state: 'waiting',
+            interactivePrompt: JSON.stringify(question('q2').tool_input)
+          })
+          expect(
+            (pane.relay?.['state'] ?? state).claudeLeadStateByPaneKey.get(PANE)?.waitingToolUseId
+          ).toBe('q2')
+          await pane.post(payload)
+        }
+        expect(state.lastStatusByPaneKey.get(PANE)?.toolUseId).toBe('q2')
+        pane.reconnect()
+        await pane.post({ hook_event_name: 'PostToolUse', ...question('q2') })
+        expect(pane.row()).toMatchObject({ state: 'working', interactivePrompt: undefined })
+      }
+    }
+  )
+
   it.each([
     { action: 'decline', remote: false },
     { action: 'escape', remote: false },

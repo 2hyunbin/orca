@@ -14,6 +14,7 @@ export class CodexSubagentPollScheduler<T> {
   private timer: ReturnType<typeof setTimeout> | undefined
   private timerDueAt: number | undefined
   private timerGeneration = 0
+  private flushing = false
 
   constructor(
     private readonly delayMs: number,
@@ -45,6 +46,9 @@ export class CodexSubagentPollScheduler<T> {
   }
 
   private arm(): void {
+    if (this.flushing) {
+      return
+    }
     if (this.entries.size === 0) {
       this.cancelTimer()
       return
@@ -93,24 +97,18 @@ export class CodexSubagentPollScheduler<T> {
 
   private flush(): void {
     const now = this.now()
+    this.flushing = true
     try {
-      // Find one entry at a time so a callback can clear a sibling that has
-      // not fired yet, matching independent timer cancellation semantics.
-      while (true) {
-        let dueEntry: { key: string; value: T } | undefined
-        for (const [key, entry] of this.entries) {
-          if (entry.dueAt <= now) {
-            dueEntry = { key, value: entry.value }
-            break
-          }
+      // Live iteration observes sibling cancellation and delete/reinsert ordering.
+      for (const [key, entry] of this.entries) {
+        if (entry.dueAt > now) {
+          continue
         }
-        if (!dueEntry) {
-          break
-        }
-        this.entries.delete(dueEntry.key)
-        this.onDue(dueEntry.key, dueEntry.value)
+        this.entries.delete(key)
+        this.onDue(key, entry.value)
       }
     } finally {
+      this.flushing = false
       // A callback may have scheduled, cleared, or replaced any key.
       this.arm()
     }

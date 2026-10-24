@@ -267,7 +267,7 @@ export function applyClaudePermissionTranscript<T extends AgentHookEventPayload>
   return current
 }
 
-/** Child refreshes retain the request's identity while the producer still owns that wait. */
+/** Refreshes retain only the request identity the current producer still owns. */
 export function claudeWaitingRequestIdentity(
   state: HookListenerState,
   source: string,
@@ -275,11 +275,15 @@ export function claudeWaitingRequestIdentity(
   eventName: unknown
 ): Partial<AgentHookEventPayload> | undefined {
   const previous = state.lastStatusByPaneKey.get(paneKey)
+  const lead = state.claudeLeadStateByPaneKey.get(paneKey)
   if (
     source !== 'claude' ||
-    state.claudeLeadStateByPaneKey.get(paneKey)?.state !== 'waiting' ||
-    previous?.hookEventName !== 'PermissionRequest' ||
-    eventName === 'PermissionRequest'
+    lead?.state !== 'waiting' ||
+    previous?.payload.state !== 'waiting' ||
+    (previous.hookEventName !== 'PermissionRequest' && previous.hookEventName !== 'PreToolUse') ||
+    previous.toolUseId !== lead.waitingToolUseId ||
+    previous.toolAgentId !== lead.waitingAgentId ||
+    (eventName === 'PermissionRequest' && !isAskUserQuestionTool(previous.payload.toolName))
   ) {
     return undefined
   }

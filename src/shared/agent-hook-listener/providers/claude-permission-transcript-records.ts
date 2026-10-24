@@ -139,7 +139,7 @@ export function readClaudePermissionObservation(
     }
     const acquisition = (observation.acquisition ??= { rows: [], bytes: 0 })
     acquisition.bytes += progress.bytes
-    if (acquisition.bytes - Buffer.byteLength(observation.cursor.carry) > 1024 * 1024) {
+    if (acquisition.bytes > 1024 * 1024) {
       observation.acquisition = undefined
       observation.initialized = false
       return (observation.proof = 'lost')

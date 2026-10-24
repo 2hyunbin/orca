@@ -286,6 +286,48 @@ it('qualifies bounded acquisition, fragments and gaps without reviving lost proo
     read(o)
     expect(o.anchored).toBe(false)
   }
+  for (const excess of [-1, 0, 1, 2]) {
+    const cap = 1024 * 1024
+    const o = make('')
+    if (excess > 0) {
+      read(o)
+    }
+    const pad = (size: number) => `{"x":"${'x'.repeat(size - 9)}"}\n`
+    const request = `${lines[0]}\n`
+    const prefixSize = excess > 0 ? cap - 7 : cap + excess - Buffer.byteLength('{"x":"é"}\n')
+    const prefix = request + pad(200_000).repeat(4) + pad(prefixSize - request.length - 800_000)
+    const suffix = excess > 0 ? `"x":${' '.repeat(excess - 1)}0}\n{"x":"é"}\n` : '{"x":"é"}\n'
+    const first = Buffer.from(excess > 0 ? `${prefix}{` : prefix + suffix)
+    const second = Buffer.from(suffix)
+    const split = excess > 0 ? second.indexOf(0xc3) + 1 : first.indexOf(0xc3) + 1
+    const chunks =
+      excess > 0
+        ? [first, second.subarray(0, split)]
+        : [first.subarray(0, split), first.subarray(split)]
+    const before = io.bytes
+    for (const [index, chunk] of chunks.entries()) {
+      appendFileSync(filePath, chunk)
+      read(o)
+      if (index === 0) {
+        expect(o.anchored).toBe(false)
+      }
+    }
+    expect(io.bytes - before).toBe(chunks.reduce((sum, chunk) => sum + chunk.length, 0))
+    if (excess > 0) {
+      expect(o).toMatchObject({
+        proof: 'lost',
+        acquisition: undefined,
+        anchored: false,
+        result: false,
+        toolUseId: undefined
+      })
+      expect(read(o)).toBe('lost')
+    } else {
+      expect(io.bytes - before).toBe(cap + excess)
+      expect(o).toMatchObject({ anchored: true, toolUseId: tool.id, result: false })
+      expect(o.acquisition).toBeUndefined()
+    }
+  }
   const bounded = make('')
   read(bounded)
   const metadata = `${JSON.stringify({ type: 'metadata', text: 'x'.repeat(200_000) })}\n`

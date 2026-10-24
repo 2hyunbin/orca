@@ -112,6 +112,40 @@ describe('CodexSubagentPollScheduler', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it.each([false, true])('drains live mutations and rearms after callback failure=%s', (fail) => {
+    vi.useFakeTimers()
+    const seen: string[] = []
+    const scheduler = new CodexSubagentPollScheduler<string>(10, (key, value) => {
+      seen.push(value)
+      if (key !== 'a') {
+        return
+      }
+      scheduler.clear('b')
+      scheduler.schedule('c', 'replaced', 0)
+      scheduler.schedule('new', 'new', 0)
+      if (fail) {
+        scheduler.clearAll()
+        scheduler.schedule('live', 'readmitted', 0)
+        throw new Error('callback failure')
+      }
+    })
+    scheduler.schedule('future', 'future', 100)
+    for (const key of ['a', 'b', 'c']) {
+      scheduler.schedule(key, key)
+    }
+    const flush = () => vi.advanceTimersByTime(10)
+    if (fail) {
+      expect(flush).toThrow('callback failure')
+    } else {
+      flush()
+    }
+    expect(seen).toEqual(fail ? ['a'] : ['a', 'replaced', 'new'])
+    expect(vi.getTimerCount()).toBe(1)
+    vi.advanceTimersByTime(100)
+    expect(seen).toEqual(fail ? ['a', 'readmitted'] : ['a', 'replaced', 'new', 'future'])
+    expect([scheduler.size, vi.getTimerCount()]).toEqual([0, 0])
+  })
+
   it('lets a due callback cancel a sibling before that sibling runs', () => {
     vi.useFakeTimers()
     const seen: string[] = []

@@ -1,3 +1,6 @@
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const watchers = vi.hoisted(() => ({
@@ -27,7 +30,7 @@ vi.mock('./transcript-native-watcher', () => ({
   }
 }))
 import { AgentTranscriptPollScheduler } from './agent-transcript-poll-scheduler'
-import { CodexSubagentPollScheduler } from './codex-subagent-poll-scheduler'
+import { readJsonlCursor, type JsonlCursor } from './codex-rollout-jsonl-cursor'
 
 describe('host transcript wakeup budget', () => {
   beforeEach(() => {
@@ -37,34 +40,89 @@ describe('host transcript wakeup budget', () => {
   })
   afterEach(() => vi.useRealTimers())
 
-  it.each([
-    { count: 10, cadence: 1_000 },
-    { count: 100, cadence: 1_000 }
-  ])('bounds quiet root probes across $count panes with one timer', ({ count, cadence }) => {
-    let before = 0
-    let after = 0
-    const baseline = new CodexSubagentPollScheduler<number>(cadence, (key, value) => {
-      before++
-      baseline.schedule(key, value)
-    })
-    const optimized = new AgentTranscriptPollScheduler<number>(cadence, (key, value) => {
-      after++
-      optimized.schedule(key, value, `/rollout-${key}.jsonl`)
-    })
-    for (let i = 0; i < count; i++) {
-      baseline.schedule(String(i), i)
-      optimized.schedule(String(i), i, `/rollout-${i}.jsonl`)
+  it.each([10, 100])(
+    'bounds upstream deadline visits and real incremental IO for %i panes',
+    (count) => {
+      const dir = mkdtempSync(join(tmpdir(), 'transcript-deadlines-'))
+      const captured = readFileSync(
+        join(__dirname, '__fixtures__/claude-permission-escape.jsonl'),
+        'utf8'
+      ).split('\n')
+      const visits = [0, 0]
+      class CountedMap<V> extends Map<string, V> {
+        override *values(): MapIterator<V> {
+          for (const value of super.values()) {
+            visits[0]++
+            yield value
+          }
+        }
+        override *[Symbol.iterator](): MapIterator<[string, V]> {
+          for (const entry of super[Symbol.iterator]()) {
+            visits[1]++
+            yield entry
+          }
+        }
+      }
+      let bytes = 0
+      const seen: unknown[] = []
+      const scheduler = new AgentTranscriptPollScheduler<JsonlCursor>(1_000, (key, value) => {
+        const progress = { complete: false, bytes: 0 }
+        seen.push(...(readJsonlCursor(value, undefined, undefined, progress) ?? []))
+        bytes += progress.bytes
+        scheduler.schedule(key, value, value.filePath)
+      })
+      const cursor = (i: number) => ({ filePath: join(dir, `${i}.jsonl`), offset: 0, carry: '' })
+      Object.defineProperty(scheduler['deadlines'], 'entries', { value: new CountedMap() })
+      const parse = vi.spyOn(JSON, 'parse')
+      try {
+        for (let i = 0; i < count; i++) {
+          const value = cursor(i)
+          writeFileSync(value.filePath, `${captured[0]}\n`)
+          scheduler.schedule(String(i), value, value.filePath)
+        }
+        expect(visits).toEqual([(count * (count + 1)) / 2, 0]) // External admission remains quadratic in aggregate.
+        vi.advanceTimersByTime(1_000)
+        expect(seen).toHaveLength(count)
+        bytes = 0
+        visits.fill(0)
+        parse.mockClear()
+        vi.advanceTimersByTime(60_000)
+        expect(visits).toEqual([12 * count, 24 * count]) // P+D+R=3P per recurring flush.
+        expect([bytes, parse.mock.calls.length]).toEqual([0, 0])
+        expect(watchers.entries).toHaveLength(count)
+        visits.fill(0)
+        appendFileSync(cursor(0).filePath, `${captured[1]}\n`)
+        for (let i = 0; i < 100; i++) {
+          watchers.entries[0]!.wake()
+        }
+        expect(visits).toEqual([count, 0]) // One coalesced external mutation.
+        visits.fill(0)
+        vi.advanceTimersByTime(1_000)
+        expect([bytes, parse.mock.calls.length, seen.length]).toEqual([
+          Buffer.byteLength(`${captured[1]}\n`),
+          1,
+          count + 1
+        ])
+        expect(visits[0]! + visits[1]!).toBeLessThanOrEqual(count + 1 + count)
+        expect(seen.at(-1)).toEqual(JSON.parse(captured[1]!))
+        expect(vi.getTimerCount()).toBe(1)
+        visits.fill(0)
+        for (let i = 0; i < count; i++) {
+          scheduler.clear(String(i))
+        }
+        expect(visits).toEqual([(count * (count - 1)) / 2, 0])
+        expect(watchers.entries.every((entry) => entry.dispose.mock.calls.length === 1)).toBe(true)
+        for (const watcher of watchers.entries) {
+          watcher.wake()
+        }
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        scheduler.clearAll()
+        parse.mockRestore()
+        rmSync(dir, { recursive: true, force: true })
+      }
     }
-    expect(vi.getTimerCount()).toBe(2)
-    vi.advanceTimersByTime(60_000)
-    expect(before).toBe(count * (60_000 / cadence))
-    expect(after).toBe(count * 12)
-    expect(watchers.entries).toHaveLength(count)
-    optimized.clearAll()
-    baseline.clearAll()
-    expect(vi.getTimerCount()).toBe(0)
-    expect(watchers.entries.every((entry) => entry.dispose.mock.calls.length === 1)).toBe(true)
-  })
+  )
 
   it('coalesces a stream without postponing reads and reuses the latest hook', () => {
     const seen: string[] = []
