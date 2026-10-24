@@ -1,6 +1,9 @@
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
-import type { AgentProviderSessionMetadata } from '../../../../shared/agent-session-resume'
-import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
+import {
+  type AgentProviderSessionMetadata,
+  agentProviderSessionsEqual
+} from '../../../../shared/agent-session-resume'
+
 import {
   AGENT_SESSION_HISTORY_MAX_LIMIT,
   type AgentSessionHistoryResult

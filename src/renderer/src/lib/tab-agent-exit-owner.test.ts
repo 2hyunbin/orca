@@ -1,3 +1,4 @@
+import { ALL_TUI_AGENTS } from '../../../shared/tui-agent-display-names'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStore } from 'zustand/vanilla'
 import { createAppState } from '@/store'
@@ -316,4 +317,74 @@ describe('root terminal exit evidence on captured canonical pairs', () => {
       expect(clear).toHaveBeenCalledWith('other')
     }
   )
+})
+
+it.each(ALL_TUI_AGENTS)(
+  'keeps %s working and sibling blockers, then accepts retained completion',
+  (agent) => {
+    const { store, status } = setup(undefined, {
+      tabsByWorktree: { workspace: [{ ...tab, launchAgent: agent }] }
+    })
+    const sibling = makePaneKey('tab', '22222222-2222-4222-8222-222222222222')
+    const clear = vi.fn(store.getState().clearTabLaunchAgent)
+    store.setState({
+      clearTabLaunchAgent: clear,
+      terminalLayoutsByTabId: {
+        tab: {
+          root: null,
+          activeLeafId: leaf,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [leaf]: 'pty-a', '22222222-2222-4222-8222-222222222222': 'pty-b' }
+        }
+      }
+    })
+    status.transact((transaction) => {
+      transaction.setEntry(pane, { ...row('working'), agentType: agent })
+      transaction.setEntry(sibling, { ...row('working'), paneKey: sibling, agentType: agent })
+    })
+    expect(clear).not.toHaveBeenCalled()
+    status.transact((transaction) =>
+      transaction.setEntry(pane, { ...row('done'), agentType: agent })
+    )
+    expect(clear).not.toHaveBeenCalled()
+    status.transact((transaction) => transaction.setEntry(pane, undefined))
+    expect(clear).not.toHaveBeenCalled()
+    status.transact((transaction) => {
+      transaction.setEntry(sibling, undefined)
+      store.setState({
+        retainedAgentsByPaneKey: {
+          [pane]: {
+            entry: { ...row('done'), agentType: agent },
+            worktreeId: 'workspace',
+            retainedAt: 20
+          }
+        }
+      })
+    })
+    expect(clear).toHaveBeenCalledExactlyOnceWith('tab')
+  }
+)
+
+it('uses real hook and generated-title publications without clearing a working launch', () => {
+  const { store, status } = setup()
+  const clear = vi.fn(store.getState().clearTabLaunchAgent)
+  const generated = vi.fn(store.getState().setGeneratedTabTitlesFromAgentPrompts)
+  store.setState({
+    clearTabLaunchAgent: clear,
+    setGeneratedTabTitlesFromAgentPrompts: generated,
+    settings: { ...store.getState().settings, tabAutoGenerateTitle: true }
+  })
+  store
+    .getState()
+    .setAgentStatus(pane, { agentType: 'codex', state: 'working', prompt: 'Explain this function' })
+  expect(status.getEntry(pane)?.state).toBe('working')
+  expect(generated).toHaveBeenCalledTimes(1)
+  expect(store.getState().tabsByWorktree.workspace[0].generatedTitle).toBe('Explain this function')
+  expect(clear).not.toHaveBeenCalled()
+  store.getState().setTabCustomTitle('tab', 'zsh')
+  expect(clear).not.toHaveBeenCalled()
+  store
+    .getState()
+    .setAgentStatus(pane, { agentType: 'codex', state: 'done', prompt: 'Explain this function' })
+  expect(clear).toHaveBeenCalledExactlyOnceWith('tab')
 })

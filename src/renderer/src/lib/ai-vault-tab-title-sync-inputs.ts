@@ -1,5 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
-import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
+import type { AgentStatusReadState, AgentStatusSnapshot } from '@/store/agent-status-observers'
+
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import { isAiVaultTitleAgent } from '../../../shared/ai-vault-session-title'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'

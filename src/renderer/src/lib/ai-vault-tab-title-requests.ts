@@ -2,8 +2,11 @@ import type { AgentStatusReadState } from '@/store/agent-status-observers'
 
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import type { AgentStatusEntry, AgentType } from '../../../shared/agent-status-types'
-import type { AiVaultSessionTitle } from '../../../shared/ai-vault-session-title'
-import { isAiVaultTitleAgent } from '../../../shared/ai-vault-session-title'
+import {
+  type AiVaultSessionTitle,
+  isAiVaultTitleAgent
+} from '../../../shared/ai-vault-session-title'
+
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'

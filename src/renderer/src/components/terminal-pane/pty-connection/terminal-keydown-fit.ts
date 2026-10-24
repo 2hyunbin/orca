@@ -1,5 +1,5 @@
-import { getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
+
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'

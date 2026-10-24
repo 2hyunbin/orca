@@ -9,12 +9,11 @@ import { locateTerminalTab } from '../../../terminals/terminal-tab-location'
 import {
   admitTerminalRecoveryRemount,
   nextTerminalRecoveryLedger,
-  settledTerminalRecoveryLedger
+  settledTerminalRecoveryLedger,
+  type TerminalRecoveryRemountRequest,
+  type TerminalRecoveryRemountResult
 } from '../../../terminals/terminal-tab-recovery-ledger'
-import type {
-  TerminalRecoveryRemountRequest,
-  TerminalRecoveryRemountResult
-} from '../../../terminals/terminal-tab-recovery-ledger'
+
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
 import { selectWorktreesByRepo } from '../../../workspace-record-selectors'
 import { flushPurgedWorkspaceEdits } from '../teardown/removed-workspace-unsaved-files'

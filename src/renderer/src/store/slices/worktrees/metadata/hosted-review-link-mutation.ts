@@ -1,7 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
-import type { WorktreeSlice } from '../../worktree-helpers'
-import { applyWorktreeUpdates } from '../../worktree-helpers'
+import { type WorktreeSlice, applyWorktreeUpdates } from '../../worktree-helpers'
+
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'

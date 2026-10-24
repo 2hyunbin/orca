@@ -9,15 +9,16 @@ import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import { makePaneKey } from '../../../shared/stable-pane-id'
-import { normalizeAgentProviderSession } from '../../../shared/agent-session-resume'
+import {
+  normalizeAgentProviderSession,
+  type AgentProviderSessionMetadata,
+  type SleepingAgentLaunchConfig
+} from '../../../shared/agent-session-resume'
 import {
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
 } from '../../../shared/tui-agent-launch-defaults'
-import type {
-  AgentProviderSessionMetadata,
-  SleepingAgentLaunchConfig
-} from '../../../shared/agent-session-resume'
+
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { CODEX_ACCOUNT_RESTART_STARTUP } from './codex-session-restart'
 

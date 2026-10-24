@@ -1,5 +1,5 @@
-import { useAgentStatusSelector } from '@/store/agent-status'
-import { getAgentStatusState } from '@/store/agent-status'
+import { useAgentStatusSelector, getAgentStatusState } from '@/store/agent-status'
+
 import React, { useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'

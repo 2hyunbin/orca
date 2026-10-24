@@ -1,5 +1,5 @@
-import { useAgentStatusSelector } from '@/store/agent-status'
-import { useAgentStatusField } from '@/store/agent-status'
+import { useAgentStatusSelector, useAgentStatusField } from '@/store/agent-status'
+
 import { Folder, GitBranch } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { AgentIcon } from '@/lib/agent-catalog'

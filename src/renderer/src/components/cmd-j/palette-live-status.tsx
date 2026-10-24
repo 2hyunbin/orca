@@ -11,7 +11,10 @@ import {
   type TabPaneInputSources
 } from '../../../../shared/sidebar-list/smart-attention'
 import { isExplicitAgentStatusFresh } from '@/lib/agent-status'
-import { getLiveAgentStatusByWorktreeId } from '@/lib/worktree-activity-state'
+import {
+  getLiveAgentStatusByWorktreeId,
+  type LiveAgentWorktreeStatus
+} from '@/lib/worktree-activity-state'
 import {
   getWorktreeStatus,
   getWorktreeStatusLabel,
@@ -27,7 +30,7 @@ import {
   type TerminalTabAttentionBadge
 } from '@/components/tab-bar/terminal-tab-activity-status'
 import { translate } from '@/i18n/i18n'
-import type { LiveAgentWorktreeStatus } from '@/lib/worktree-activity-state'
+
 import {
   AGENT_STATUS_STALE_AFTER_MS,
   type AgentStatusEntry

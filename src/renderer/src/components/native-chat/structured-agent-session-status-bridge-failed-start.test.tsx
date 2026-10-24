@@ -14,7 +14,10 @@ import { structuredAgentSessionAgentStatus } from '../../../../shared/structured
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import type { Tab } from '../../../../shared/tab-types'
-import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
+import {
+  type StructuredAgentSessionLaunchIntent,
+  StructuredAgentSessionCreateRefusalError
+} from '@/lib/launch-structured-agent-session'
 
 type TestStore = {
   getState: () => AgentStatusReadState
@@ -78,7 +81,7 @@ vi.mock('@/lib/launch-structured-agent-session', () => {
 })
 
 import { StructuredAgentSessionStatusBridge } from './StructuredAgentSessionStatusBridge'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
+
 import {
   retryStructuredAgentSessionLaunch,
   startStructuredAgentLaunch

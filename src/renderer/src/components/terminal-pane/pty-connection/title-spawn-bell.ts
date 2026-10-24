@@ -1,5 +1,5 @@
-import { getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
+
 import { resolvePaneTitleDecision } from '../terminal-title-evidence'
 import { useAppStore } from '@/store'
 import { shouldSeedCacheTimerOnInitialTitle } from '../cache-timer-seeding'

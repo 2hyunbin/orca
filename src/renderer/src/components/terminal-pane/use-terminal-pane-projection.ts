@@ -1,6 +1,6 @@
 import { useAgentStatusSelector } from '@/store/agent-status'
-import { useCallback, useEffect } from 'react'
-import type { CSSProperties } from 'react'
+import { useCallback, useEffect, type CSSProperties } from 'react'
+
 import {
   DEFAULT_TERMINAL_DIVIDER_DARK,
   isTerminalBackgroundLight,

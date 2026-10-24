@@ -1,6 +1,6 @@
-import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
+import { getAgentStatusState } from '@/store/agent-status'
 import { useSyncExternalStore } from 'react'
-import '@/store'
+import { useAppStore } from '@/store'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import {
@@ -92,7 +92,7 @@ export async function runNativeChatCliFork(args: {
   }
   pending.set(key, controller)
   changed()
-  const stopSource = subscribeAgentStatusState(() => {
+  const stopSource = useAppStore.subscribe(() => {
     if (!isCurrent()) {
       abandon()
     }

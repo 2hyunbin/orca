@@ -1,5 +1,5 @@
-import { getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
+
 import { detectAgentStatusFromTitle } from '@/lib/agent-status'
 import '@/store'
 import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'

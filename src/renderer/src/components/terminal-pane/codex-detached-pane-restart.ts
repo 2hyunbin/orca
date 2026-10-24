@@ -12,7 +12,7 @@ import { getAgentStatusState } from '@/store/agent-status'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { AppState } from '@/store'
-import '@/store'
+
 import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import { hasRegisteredRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 import { buildPaneAccountRestartStartup } from '@/lib/agent-account-restart-startup'

@@ -2,13 +2,19 @@ import {
   afterPurgeAcceptance,
   preparePurgeOwnership
 } from './worktrees/teardown/worktree-purge-preparation'
-import { prepareAgentHibernationOutputRemoval } from '@/lib/agent-hibernation-output-activity'
-import { prepareAgentStartupDeliveriesRemoval } from '@/lib/agent-startup-delivery-guards'
+import {
+  prepareAgentHibernationOutputRemoval,
+  forgetAgentHibernationTabOutput
+} from '@/lib/agent-hibernation-output-activity'
+import {
+  prepareAgentStartupDeliveriesRemoval,
+  forgetAgentStartupDeliveriesForTabs
+} from '@/lib/agent-startup-delivery-guards'
 import { removePaneKeys } from './agent-status-pane-keyed-records'
 import type { AppState } from '../types'
-import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-activity'
+
 import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
-import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-startup-delivery-guards'
+
 // Why: the store-free registry (not terminal-parked-tab-watchers, which imports @/store) so a slice can import this module during its own evaluation.
 import { retireParkedTerminalTab } from '@/components/terminal-pane/terminal-parked-watcher-registry'
 import { forgetNativeChatPromptDismissalsForTab } from '@/components/native-chat/native-chat-prompt-dismissals'

@@ -1,16 +1,17 @@
 import { coordinatedPurgeSet } from '../teardown/worktree-purge-preparation'
 import { beginEnclosingWorktreeRemoval } from '@/store/active-worktree-deselection-intent'
 import type { WorktreePurgeTarget, WorktreeSlice } from '../../worktree-helpers'
+import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import type { ProjectHostSetup } from '../../../../../../shared/project-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { DetectedWorktreeListResult } from '../../../../../../shared/worktree/types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import {
+  type ExecutionHostId,
   getRepoExecutionHostId,
   toRuntimeExecutionHostId
 } from '../../../../../../shared/execution-host'
-import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
+
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import {
   dropRuntimeHostedCatalogRows,

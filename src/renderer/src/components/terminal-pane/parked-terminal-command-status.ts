@@ -1,5 +1,5 @@
-import { getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
+
 /**
  * Parked-pane command-lifecycle status policy.
  * Why: parking unmounts TerminalPane, so OSC 133;D and Command Code scrape signals went dark.

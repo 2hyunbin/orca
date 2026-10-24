@@ -10,7 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
-import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
+import {
+  type StructuredAgentSessionLaunchIntent,
+  StructuredAgentSessionCreateRefusalError
+} from '@/lib/launch-structured-agent-session'
 
 type TestStore = {
   getState: () => AgentStatusReadState
@@ -80,7 +83,7 @@ vi.mock('@/lib/launch-structured-agent-session', () => {
 
 import { StructuredAgentSessionStatusBridge } from './StructuredAgentSessionStatusBridge'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
+
 import { startStructuredAgentLaunch } from '@/lib/structured-agent-session-launch'
 import {
   getStructuredAgentSessionLaunchLifecycle,

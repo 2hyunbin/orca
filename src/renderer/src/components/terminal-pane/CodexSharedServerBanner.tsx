@@ -1,5 +1,5 @@
-import { useAgentStatusSelector } from '@/store/agent-status'
-import { getAgentStatusState } from '@/store/agent-status'
+import { useAgentStatusSelector, getAgentStatusState } from '@/store/agent-status'
+
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'

@@ -1,17 +1,18 @@
-import { prepareStructuredAgentSessionSendRemoval } from '@/components/native-chat/structured-agent-session-message-sender'
-import { structuredAgentSessionSendBody } from '../../../shared/structured-agent-session-send-mutation'
-import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
-import type { StructuredAgentSessionFirstMessage } from '../../../shared/structured-agent-session-create'
-import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
-import { agentSessionThrownFailure } from '../../../shared/agent-session-write-failure'
-import { handBackStructuredAgentSessionMessage } from '@/components/native-chat/structured-agent-session-message-hand-back'
 import {
+  prepareStructuredAgentSessionSendRemoval,
   dropStructuredAgentSessionSends,
   reserveStructuredAgentSessionSend,
   sendStructuredAgentSessionMessage,
   type StructuredAgentSessionCreateSend,
   type StructuredAgentSessionReservedSend
 } from '@/components/native-chat/structured-agent-session-message-sender'
+import { structuredAgentSessionSendBody } from '../../../shared/structured-agent-session-send-mutation'
+import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
+import type { StructuredAgentSessionFirstMessage } from '../../../shared/structured-agent-session-create'
+import { StructuredAgentSessionCreateRefusalError } from './structured-agent-session-launch-errors'
+import { agentSessionThrownFailure } from '../../../shared/agent-session-write-failure'
+import { handBackStructuredAgentSessionMessage } from '@/components/native-chat/structured-agent-session-message-hand-back'
+
 import { noteStructuredAgentSessionFence } from '@/components/native-chat/structured-agent-session-send-attempt'
 import { publishStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-pending-sends'
 import { agentSessionWriteNoticeText } from '@/components/native-chat/agent-session-write-notice-text'

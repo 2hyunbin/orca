@@ -1,5 +1,9 @@
-import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
-import { getAgentStatusEntry } from '@/store/agent-status'
+import {
+  subscribeAgentStatusState,
+  getAgentStatusState,
+  getAgentStatusEntry
+} from '@/store/agent-status'
+
 import type { AgentIdleEdgeMeta } from '../../../../../shared/terminal-output-side-effects'
 import { idleEdgeSettledAtRest, isClaudeIdleEdge } from '@/lib/agent-idle-edge'
 import { captureNotificationTransportOwner } from '@/attention/notification-subject-owner'

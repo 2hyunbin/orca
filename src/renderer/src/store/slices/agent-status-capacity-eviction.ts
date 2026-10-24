@@ -1,8 +1,11 @@
 import type { AppState } from '../types'
-import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import {
+  type AgentStatusEntry,
+  AGENT_STATUS_STALE_AFTER_MS
+} from '../../../../shared/agent-status-types'
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import type { RetainedAgentEntry } from './agent-status-contract'
-import { AGENT_STATUS_STALE_AFTER_MS } from '../../../../shared/agent-status-types'
+
 import { getTabIdFromPaneKey } from './agent-status-pane-key-tab-binding'
 
 const MAX_RETAINED_AGENTS = 500
