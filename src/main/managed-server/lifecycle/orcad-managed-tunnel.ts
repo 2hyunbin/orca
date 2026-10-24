@@ -5,6 +5,7 @@ import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { probeManagedOrcadTunnel } from './orcad-managed-tunnel-resume'
 import { ensureManagedOrcadServing } from './orcad-managed-serving'
 import { OrcadManagedTunnelManager } from './orcad-managed-tunnel-manager'
+import { buildOnBindableLocalPort } from './orcad-managed-tunnel-local-port'
 import { getRemoteRuntimeSharedControlAnsweredAt } from '../../ipc/runtime-environments/runtime-environment-shared-control-answers'
 import {
   getSshConnectionManager,
@@ -48,8 +49,8 @@ function pairingRecovery(userDataPath: string): ManagedOrcadPairingRecovery {
     resolve: (environmentId) => resolveEnvironment(userDataPath, environmentId),
     repairs,
     ensure: (environment) =>
-      managedTunnels.ensure(environment, () =>
-        resolveEnvironmentOrNull(userDataPath, environment.id)
+      buildOnBindableLocalPort(userDataPath, environment, (current) =>
+        managedTunnels.ensure(current, () => resolveEnvironmentOrNull(userDataPath, current.id))
       )
   }
 }
@@ -61,7 +62,9 @@ export async function ensureOrcadManagedTunnel(
 ): Promise<KnownRuntimeEnvironment> {
   const { id } = resolveEnvironment(userDataPath, selector)
   await buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-    managedTunnels.ensure(environment, () => resolveEnvironmentOrNull(userDataPath, id))
+    buildOnBindableLocalPort(userDataPath, environment, (current) =>
+      managedTunnels.ensure(current, () => resolveEnvironmentOrNull(userDataPath, id))
+    )
   )
   return resolveEnvironment(userDataPath, id)
 }
@@ -72,7 +75,9 @@ export async function rebuildOrcadManagedTunnel(
 ): Promise<'built' | 'repaired'> {
   const { id } = resolveEnvironment(userDataPath, selector)
   return buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-    managedTunnels.rebuild(environment, () => resolveEnvironmentOrNull(userDataPath, id))
+    buildOnBindableLocalPort(userDataPath, environment, (current) =>
+      managedTunnels.rebuild(current, () => resolveEnvironmentOrNull(userDataPath, id))
+    )
   )
 }
 
