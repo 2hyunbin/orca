@@ -2,7 +2,7 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 // Random-IV ciphertext changes on every encryption; identical state must still skip redundant writes.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'

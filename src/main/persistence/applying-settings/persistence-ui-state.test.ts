@@ -15,7 +15,7 @@ import {
   writeDataFile,
   readDataFile,
   makeRepo
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({

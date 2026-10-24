@@ -15,8 +15,8 @@ import {
   writeDataFile,
   readDataFile,
   makeRepo
-} from '../persistence-test-harness'
-import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from '../persistence-session-fixtures'
+} from './persistence-test-harness'
+import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
 
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'

@@ -22,7 +22,7 @@ import {
   dataFile,
   testState,
   writeDataFile
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 
 const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
   trackMock: vi.fn(),

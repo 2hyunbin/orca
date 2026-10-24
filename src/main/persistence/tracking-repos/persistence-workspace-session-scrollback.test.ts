@@ -16,14 +16,14 @@ import {
   testState,
   workspaceRepos,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import {
   makeTerminalTab,
   TEST_LEAF_1,
   TEST_LEAF_2,
   makeSessionWithTerminalBuffers,
   makeSessionWithBrowserHistory
-} from '../../persistence-session-fixtures'
+} from '../persistence-session-fixtures'
 
 import { installFakeAppEnvironment } from '../../../../config/scripts/vitest-host-ports-setup'
 import { Store } from '../loading-store/store'

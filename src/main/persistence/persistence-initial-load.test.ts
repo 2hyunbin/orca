@@ -8,7 +8,7 @@ import {
   makeProject,
   makeProjectHostSetup,
   createSqliteTestStore
-} from '../persistence-test-harness'
+} from './persistence-test-harness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
@@ -18,7 +18,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
 import { closeTerminalTabInWorkspaceSession } from '../../shared/workspace-session-terminal-tab-close'
 
-import { TEST_LEAF_1 } from '../persistence-session-fixtures'
+import { TEST_LEAF_1 } from './persistence-session-fixtures'
 import { ProfileStateSqliteAuthority } from './profile-state/profile-state-sqlite-authority'
 
 import {
