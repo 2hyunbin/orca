@@ -53,15 +53,71 @@ export function TerminalRemoteRuntimeReconnectBanner({
   if (wslHostUnavailable) {
     return <WslHostUnavailableBanner reason={wslHostUnavailable} />
   }
-  if (awaitingSignIn && !pairingRefused) {
-    return <SshSignInWaitBanner onSignIn={onReconnect} />
-  }
-  const retrying = phase !== 'disconnected' && !pairingRefused
+  const signingIn = awaitingSignIn && !pairingRefused
+  const retrying = phase !== 'disconnected' && !pairingRefused && !signingIn
+  const reconnectLabel = translate(
+    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
+    'Reconnect'
+  )
+  const copy = pairingRefused
+    ? {
+        bannerState: 'pairing-refused',
+        title: translate(
+          'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedTitle',
+          'This host no longer accepts this computer'
+        ),
+        body: translate(
+          'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedBody',
+          "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
+        ),
+        action: reconnectLabel
+      }
+    : signingIn
+      ? {
+          bannerState: 'ssh-sign-in',
+          title: translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInTitle',
+            'Waiting for SSH sign-in'
+          ),
+          body: translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInBody',
+            'This terminal continues by itself once you sign in to the host.'
+          ),
+          action: translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInButton',
+            'Sign in'
+          )
+        }
+      : retrying
+        ? {
+            bannerState: phase,
+            title: translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingTitle',
+              'Reconnecting to remote runtime'
+            ),
+            body: translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
+              'Orca is retrying automatically. This terminal will resume if the connection returns.'
+            ),
+            action: null
+          }
+        : {
+            bannerState: phase,
+            title: translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
+              'Remote runtime disconnected'
+            ),
+            body: translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
+              'Automatic retries stopped. Reconnect to resume this terminal session.'
+            ),
+            action: reconnectLabel
+          }
 
   return (
     <div
       className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center"
-      data-terminal-remote-runtime-reconnect-banner={pairingRefused ? 'pairing-refused' : phase}
+      data-terminal-remote-runtime-reconnect-banner={copy.bannerState}
     >
       <div
         className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-md border border-border bg-card/95 px-3 py-3 text-card-foreground shadow-xs backdrop-blur-[1px]"
@@ -71,91 +127,21 @@ export function TerminalRemoteRuntimeReconnectBanner({
         <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
           {retrying ? (
             <Loader2 className="size-4 animate-spin" />
+          ) : signingIn ? (
+            <KeyRound className="size-4" />
           ) : (
             <ServerOff className="size-4" />
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">
-            {pairingRefused
-              ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedTitle',
-                  'This host no longer accepts this computer'
-                )
-              : retrying
-                ? translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingTitle',
-                    'Reconnecting to remote runtime'
-                  )
-                : translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedTitle',
-                    'Remote runtime disconnected'
-                  )}
-          </div>
-          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {pairingRefused
-              ? translate(
-                  'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.pairingRefusedBody',
-                  "Orca couldn't pair with it again over SSH. Nothing on the host was stopped. Reconnect to try again."
-                )
-              : retrying
-                ? translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryingBody',
-                    'Orca is retrying automatically. This terminal will resume if the connection returns.'
-                  )
-                : translate(
-                    'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.disconnectedBody',
-                    'Automatic retries stopped. Reconnect to resume this terminal session.'
-                  )}
-          </div>
+          <div className="text-sm font-semibold">{copy.title}</div>
+          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{copy.body}</div>
         </div>
-        {!retrying ? (
+        {copy.action ? (
           <Button size="sm" onClick={onReconnect}>
-            {translate(
-              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.reconnectButton',
-              'Reconnect'
-            )}
+            {copy.action}
           </Button>
         ) : null}
-      </div>
-    </div>
-  )
-}
-
-function SshSignInWaitBanner({ onSignIn }: { onSignIn: () => void }): React.JSX.Element {
-  return (
-    <div
-      className="pointer-events-none absolute inset-x-3 bottom-3 z-30 flex justify-center"
-      data-terminal-remote-runtime-reconnect-banner="ssh-sign-in"
-    >
-      <div
-        className="pointer-events-auto flex w-full max-w-xl items-center gap-3 rounded-md border border-border bg-card/95 px-3 py-3 text-card-foreground shadow-xs backdrop-blur-[1px]"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-          <KeyRound className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">
-            {translate(
-              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInTitle',
-              'Waiting for SSH sign-in'
-            )}
-          </div>
-          <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-            {translate(
-              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInBody',
-              'This terminal continues by itself once you sign in to the host.'
-            )}
-          </div>
-        </div>
-        <Button size="sm" onClick={onSignIn}>
-          {translate(
-            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.signInButton',
-            'Sign in'
-          )}
-        </Button>
       </div>
     </div>
   )

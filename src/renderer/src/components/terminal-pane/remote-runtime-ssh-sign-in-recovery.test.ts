@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PtyTransport } from './pty-transport-types'
+import type { PtyTransport, PtyTransportRecoveryState } from './pty-transport-types'
 import {
   createRemoteRuntimeTransportMocks,
   readyHostSessionInventoryResponse,
@@ -184,13 +184,14 @@ describe.each([
   })
 })
 
-async function mountNewPaneAwaitingSignIn(failure: { message: string }) {
+async function mountNewPaneAwaitingSignIn(failure: { message: string }, afterSignIn?: () => void) {
   let signedIn = false
   const healthyCall = runtimeCall.getMockImplementation()
   runtimeCall.mockImplementation(async (request: { method: string; params?: unknown }) => {
     if (!signedIn) {
       throw new Error(failure.message)
     }
+    afterSignIn?.()
     return healthyCall?.(request)
   })
   const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
@@ -198,6 +199,7 @@ async function mountNewPaneAwaitingSignIn(failure: { message: string }) {
     await import('./remote-runtime-pty-recovery-state')
   const onError = vi.fn()
   const onPtySpawn = vi.fn()
+  const publishedStates: PtyTransportRecoveryState[] = []
   const pane = createRemoteRuntimePtyTransport('env-1', {
     worktreeId: 'wt-1',
     tabId: 'tab-new',
@@ -209,10 +211,11 @@ async function mountNewPaneAwaitingSignIn(failure: { message: string }) {
     url: '',
     cols: 80,
     rows: 24,
-    callbacks: { onError }
+    callbacks: { onError, onRecoveryStateChange: (state) => publishedStates.push(state) }
   })
   return {
     pane,
+    lastPublishedState: () => publishedStates.at(-1),
     onError,
     onPtySpawn,
     createCalls: () =>
@@ -278,6 +281,24 @@ describe('SSH sign-in for a terminal created while the host waits for sign-in', 
     expect(pending.signIn()).toBe(1)
     await vi.waitFor(() => expect(pending.onPtySpawn).toHaveBeenCalledTimes(1))
     expect(pending.onError).not.toHaveBeenCalled()
+  })
+
+  it('stops showing the sign-in wait once sign-in finishes, even while the create still retries', async () => {
+    const { pane, lastPublishedState, signIn } = await mountNewPaneAwaitingSignIn(
+      pendingErrors[0],
+      () => {
+        throw Object.assign(new Error('Could not connect to the remote Orca runtime.'), {
+          code: 'remote_runtime_unavailable'
+        })
+      }
+    )
+    expect(lastPublishedState()?.reason).toBe('ssh-sign-in')
+
+    signIn()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(pane.getRecoveryState?.().phase).not.toBe('idle')
+    expect(lastPublishedState()?.reason).toBeUndefined()
   })
 
   it.each(['destroy', 'disconnect'] as const)(

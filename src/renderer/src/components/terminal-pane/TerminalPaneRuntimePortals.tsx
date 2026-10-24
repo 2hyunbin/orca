@@ -197,20 +197,31 @@ export function TerminalPaneRecoveryPortals({
             epoch={recoveryState.epoch}
             phase={recoveryState.phase}
             onReconnect={() => {
-              const transport = paneTransportsRef.current.get(pane.id)
               const retry = (): void => {
-                transport?.retryRecovery?.()
+                paneTransportsRef.current.get(pane.id)?.retryRecovery?.()
               }
-              // Why connect first: it asks Orca to pair again, or opens the SSH sign-in, which a
-              // pane retry alone does not.
-              const connectEnvironmentId =
-                pairingRefusedEnvironmentId ??
-                (awaitingSignIn ? (transport?.getRuntimeEnvironmentId?.() ?? null) : null)
-              if (connectEnvironmentId) {
+              // Why connect first: it asks Orca to pair again, which a pane retry alone does not.
+              if (pairingRefusedEnvironmentId) {
                 void window.api.runtimeEnvironments
-                  .connect({ selector: connectEnvironmentId })
+                  .connect({ selector: pairingRefusedEnvironmentId })
                   .catch(() => undefined)
                   .finally(retry)
+                return
+              }
+              const signInEnvironmentId = awaitingSignIn
+                ? paneTransportsRef.current.get(pane.id)?.getRuntimeEnvironmentId?.()
+                : null
+              if (signInEnvironmentId) {
+                // Why no retry on failure: a rejected password must not re-dial into a second prompt;
+                // the control-ready revival starts the pane once sign-in succeeds.
+                void window.api.runtimeEnvironments
+                  .connect({ selector: signInEnvironmentId })
+                  .then((response) => {
+                    if (response.ok) {
+                      retry()
+                    }
+                  })
+                  .catch(() => undefined)
                 return
               }
               retry()

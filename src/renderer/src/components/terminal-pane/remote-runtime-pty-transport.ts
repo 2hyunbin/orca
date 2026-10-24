@@ -338,6 +338,12 @@ export function createRemoteRuntimePtyTransport(
   let unregisterControlReadyReviver: (() => void) | null = null
   // Why: the pane's retry is waiting on the user's SSH sign-in, not on a lost link.
   let awaitingSshSignIn = false
+  function setAwaitingSshSignIn(next: boolean): void {
+    if (awaitingSshSignIn !== next) {
+      awaitingSshSignIn = next
+      emitRecoveryState()
+    }
+  }
   // Why registered only while recovering: detach and destroy go idle, so a discarded transport is never retained.
   function syncControlReadyReviver(): void {
     const wantsRevival = recovery.isActive || recovery.currentPhase === 'disconnected'
@@ -345,7 +351,14 @@ export function createRemoteRuntimePtyTransport(
       // Why: a backoff advances and a latched pane replays its attach, exactly as online/resume/Reconnect would.
       unregisterControlReadyReviver = registerRemoteRuntimePtyControlReadyReviver(
         runtimeEnvironmentId,
-        () => !destroyed && (recovery.retryNow() || (transport.retryRecovery?.() ?? false))
+        () => {
+          if (destroyed) {
+            return false
+          }
+          // Why: a ready control socket proves sign-in finished, whatever the replay meets next.
+          setAwaitingSshSignIn(false)
+          return recovery.retryNow() || (transport.retryRecovery?.() ?? false)
+        }
       )
     } else if (!wantsRevival && unregisterControlReadyReviver) {
       unregisterControlReadyReviver()
@@ -1335,6 +1348,7 @@ export function createRemoteRuntimePtyTransport(
           if (!isRecoverableRemoteRuntimeConnectionError(statusClientError)) {
             throw statusError
           }
+          setAwaitingSshSignIn(false)
           const startsRecovery = recoveryDeadlineAt === null
           recoveryDeadlineAt ??= Date.now() + REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS
           if (startsRecovery && !recovery.isActive) {
@@ -1379,7 +1393,7 @@ export function createRemoteRuntimePtyTransport(
         if (!isRecoverableRemoteRuntimeConnectionError(clientError)) {
           throw error
         }
-        awaitingSshSignIn = false
+        setAwaitingSshSignIn(false)
         if (kind === 'agent-session') {
           agentSessionRequiresHostAuthorityReplay = true
         } else {
@@ -3211,7 +3225,7 @@ export function createRemoteRuntimePtyTransport(
         // Why: no handle is bound yet, so the resubscribe path cannot own this retry; replay attach
         // instead of latching in 'connecting' with nothing armed (#18495).
         connecting = false
-        awaitingSshSignIn = isSshSignInPendingTerminalError(runtimeTerminalErrorMessage(error))
+        setAwaitingSshSignIn(isSshSignInPendingTerminalError(runtimeTerminalErrorMessage(error)))
         scheduleConnectRetryAfterRecoverableFailure()
         if (handle && isRemoteTerminalStaleMessage(runtimeTerminalErrorMessage(error))) {
           retireIfHostRecordsExit(handle, remotePtyId ?? options.existingPtyId ?? null)
@@ -3547,10 +3561,10 @@ export function createRemoteRuntimePtyTransport(
         } else if (isSshSignInPendingTerminalError(message)) {
           // Why: main refused before dispatch, so nothing was created; the control-ready revival
           // replays this create once sign-in finishes (#31942).
-          awaitingSshSignIn = true
+          setAwaitingSshSignIn(true)
           scheduleConnectRetryAfterRecoverableFailure()
         } else if (isRecoverablePaneBindingError(error)) {
-          awaitingSshSignIn = false
+          setAwaitingSshSignIn(false)
           scheduleConnectRetryAfterRecoverableFailure()
         } else {
           recovery.cancel()
