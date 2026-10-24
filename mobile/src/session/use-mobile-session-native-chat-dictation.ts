@@ -129,9 +129,10 @@ export function useMobileSessionNativeChatDictation(
     owner: MobileChatDraftOwner
     insert: (text: string) => void
   } | null>(null)
+  const dictationTargetReady = showNativeChat ? connState === 'connected' : canSend
   const dictation = useMobileDictation({
     client,
-    enabled: canSend && dictationEnabled,
+    enabled: dictationTargetReady && dictationEnabled,
     onTranscript: (text) => {
       const destination = dictationOwner.current
       dictationOwner.current = null

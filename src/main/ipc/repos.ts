@@ -19,7 +19,7 @@ export function registerRepoHandlers(
   store: Store,
   runtime: OrcaRuntimeService
 ): void {
-  // Remove previously registered handlers so we can re-register on macOS app re-activation (new window).
+  // macOS window recreation re-registers these handlers.
   ipcMain.removeHandler('repos:list')
   ipcMain.removeHandler('repos:add')
   ipcMain.removeHandler('repos:removeForHost')
