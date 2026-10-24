@@ -66,7 +66,6 @@ export function boundStreamItem(item: Record<string, unknown>): Record<string, u
   }
 }
 
-/** One item stream's retained state: the item bounded to what a checkpoint re-reads. */
 export function codexItemStreamState(
   item: CodexThreadItem,
   identity: AgentJournalItemIdentity,

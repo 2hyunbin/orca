@@ -47,16 +47,13 @@ export {
   MAX_CODEX_ITEM_STREAM_PENDING_PATCHES,
   MAX_CODEX_ITEM_STREAM_STATES
 } from './codex-structured-item-stream-bounds'
-/** Delta-only item ids are provider input; retain only a deterministic recent window. */
-
 export function createCodexStructuredItemStreams(
   deps: CodexItemStreamDeps
 ): CodexStructuredItemStreams {
   const states = new CodexItemStreamRetention()
   const checkpointLengths = new Map<string, number>()
   const pendingCheckpoints = new Set<string>()
-  // Which thread and turn produced each stream, resolved to its attribution per append
-  // so a parent learned after the first checkpoint still reaches the row.
+  // Resolve attribution on each append so later-discovered parents reach existing rows.
   const producers = new Map<string, { threadId: string; turnId: string | null }>()
   const attributionOf = (key: string): AgentJournalRowAttribution => {
     const producer = producers.get(key)
@@ -64,9 +61,7 @@ export function createCodexStructuredItemStreams(
       ? deps.attributionFor(producer.threadId, producer.turnId)
       : { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
   }
-  // Patch updates are authoritative item snapshots. Keep the latest rejected
-  // snapshot until the journal admits it; unlike streamed deltas, there is no
-  // coalescer timer to retry these events for us.
+  // Retain rejected patch snapshots for retry; they have no coalescer timer.
   const pendingPatches = new Map<string, CodexPendingItemPatch>()
   let retainedPatchBytes = 0
 

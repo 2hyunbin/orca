@@ -28,13 +28,9 @@ import { appendWithinUtf8ByteLimit } from './agent-session-streamed-text-bounds'
 // ending, an approval arriving — bypasses it by flushing first, so nothing can
 // be journaled ahead of the text that preceded it.
 
-/** Long enough to fold a burst of tokens into one row, short enough that the
- *  text still reads as streaming. */
 export const AGENT_SESSION_DELTA_COALESCE_MS = 60
 
-/** Matches the admitted live provider-record envelope. The framer owns record
- * admission; this independently prevents many legal deltas from rebuilding an
- * unbounded string after they have crossed that boundary. */
+/** Bound accumulated legal deltas independently of input record admission. */
 export const AGENT_SESSION_STREAMED_TEXT_MAX_BYTES = 16 * 1024 * 1024
 export const AGENT_SESSION_STREAMED_TEXT_TOTAL_MAX_BYTES = 32 * 1024 * 1024
 export { AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER } from './agent-session-streamed-text-bounds'
@@ -180,8 +176,7 @@ export function createAgentSessionDeltaCoalescer(
     append: (key, delta) => {
       let stream = streams.get(key)
       if (!stream) {
-        // Evict the oldest stream before admitting a new attacker-controlled
-        // id. Flush first so the retained prefix is durably visible.
+        // Flush before eviction so a new untrusted ID cannot erase observed output.
         while (!deps.isProtected?.(key) && evictable.size >= maxStreams) {
           const oldest = evictable.values().next().value
           if (oldest) {
@@ -189,8 +184,7 @@ export function createAgentSessionDeltaCoalescer(
               evictable.delete(oldest)
               continue
             }
-            // Under sink backpressure the oldest stream must remain available
-            // for a later retry; dropping it would lose already-observed output.
+            // Backpressure must retain observed text for retry.
             if (!flushKey(oldest)) {
               return false
             }
@@ -274,8 +268,7 @@ export function createAgentSessionDeltaCoalescer(
         stream.dirty = true
       }
       streams.set(key, stream)
-      // One timer for every stream: a shared deadline bounds latency the same
-      // way and costs one wakeup per window instead of one per stream.
+      // Share one timer across streams to bound wakeups per window.
       scheduleFlush()
       return true
     },

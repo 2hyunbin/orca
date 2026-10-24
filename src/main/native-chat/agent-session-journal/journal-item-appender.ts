@@ -10,7 +10,7 @@ import type { JournalAppendResult, JournalItemAppendOptions } from './journal-st
 import type { JournalRow } from './journal-row-schema'
 import type { JournalOperationReceipt } from './journal-row-writer'
 
-// A module-level Error's lazy stack retains the bundle's startup code and read buffer.
+// Module-level Error stacks retain startup code and buffers; construct them only when needed.
 class NothingResolvedError extends Error {}
 
 export type JournalResolvedItem = { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }
@@ -43,7 +43,7 @@ export class JournalItemAppender {
       .then((row) => appendResult(row, itemId))
   }
 
-  /** `resolve` reads the fold at the write's own place in the queue; null writes nothing. */
+  /** Resolve against preceding queued writes; null appends nothing. */
   appendResolved(
     resolve: () => JournalResolvedItem | null,
     options: JournalItemAppendOptions

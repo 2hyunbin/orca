@@ -29,7 +29,6 @@ import {
 } from './claude-structured-item-translation'
 import type { ClaudeSubagentLinkageSource } from './claude-subagent-linkage'
 
-/** The stream a frame belongs to, which a new message in it starts over. */
 function streamScope(frame: Record<string, unknown>): string | null {
   const event = claudeRecord(frame.event)
   const sessionId = claudeText(frame.session_id)
@@ -41,15 +40,13 @@ function streamScope(frame: Record<string, unknown>): string | null {
 
 export type ClaudeStreamedThinking = ReturnType<typeof createClaudeStreamedThinking>
 
-/** A thinking block's closing row, and when the block began if it was seen streaming. */
 export type ClaudeReasoningFinal = {
   identity: AgentJournalItemIdentity
   body: AgentJournalMessageItem
   startedAt?: number
 }
 
-/** Thinking blocks streamed under --include-partial-messages, written to the same row their
- *  final assistant frame later lands on, and open until that frame or the turn's end. */
+/** Keep thinking deltas and their final frame on one row until finalization or turn end. */
 export function createClaudeStreamedThinking(deps: {
   sink: StructuredAgentSessionEventSink
   producer: ClaudeSubagentLinkageSource
@@ -117,9 +114,9 @@ export function createClaudeStreamedThinking(deps: {
         const appendOptions = {
           ...options,
           turnScope: deps.turnScope(),
-          // The row starts with its block, not with its first text or a queued write.
+          // Preserve block start time despite delayed text or writes.
           ...(startedAt === undefined ? {} : { observedAt: startedAt }),
-          // An end the sink sheds under pressure would leave the row open with nothing to close it.
+          // Preserve terminal writes under pressure so reasoning cannot remain open.
           ...(ended ? { lifecycle: true } : {})
         }
         if (ended) {
@@ -140,9 +137,8 @@ export function createClaudeStreamedThinking(deps: {
     )
 
   return {
-    /** True when the frame carried thinking text. */
     observe: (frame: Record<string, unknown>, observedAt: number): boolean => {
-      // A new message in a stream means the previous one's unfinished blocks are never finishing.
+      // A new message abandons unfinished blocks in the same stream.
       const restarted = streamScope(frame)
       if (restarted !== null) {
         finish({ completedAt: observedAt }, restarted)
@@ -159,8 +155,7 @@ export function createClaudeStreamedThinking(deps: {
       }
       return true
     },
-    /** The row a final frame's thinking lands on — its streamed block's, else its own — closed.
-     *  Only a block seen streaming has an observed end. */
+    /** Close the streamed row if present; only streaming gives us an observed end time. */
     finalize: (
       envelope: ClaudeMessageEnvelope,
       observedAt: number

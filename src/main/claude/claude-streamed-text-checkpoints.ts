@@ -65,9 +65,7 @@ export function createClaudeStreamedTextCheckpoints(
     }
   >()
 
-  /** Resolved FRESH on every checkpoint. A provisional producer is stamped with
-   *  the handle it has rather than holding the prose back: the next checkpoint,
-   *  or `reattribute` once the announcement lands, revises the same row. */
+  /** Resolve each checkpoint afresh; later announcements revise provisional producers on the same row. */
   const producerOptions = (key: string): StructuredAgentSessionAppendOptions => {
     const scope = records.get(key)?.scope ?? null
     if (scope === null) {

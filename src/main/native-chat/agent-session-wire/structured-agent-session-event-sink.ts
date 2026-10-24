@@ -55,9 +55,7 @@ import { StructuredAgentSessionExitObservation } from './structured-agent-sessio
 /** Linkage a producer stamps on the rows it writes. Absent on every append the
  *  session's own agent makes, which is what makes absence mean root. */
 export type StructuredAgentSessionAppendOptions = AgentJournalProducerLinkage & {
-  /** Marks a critical lifecycle operation for lifecycle barriers and diagnostics. */
   lifecycle?: boolean
-  /** Host clock to stamp on the row instead of its append time. */
   observedAt?: number
 }
 
@@ -65,11 +63,10 @@ export type StructuredAgentSessionPublishOptions = Pick<
   StructuredAgentSessionAppendOptions,
   'lifecycle'
 > & {
-  /** A publication still waiting with this key is replaced by this one. */
   coalescingKey?: string
 }
 
-/** An item write states which turn its row belongs to; the write that creates the row decides. */
+/** Creation fixes turn scope; revisions keep it. */
 export type StructuredAgentSessionItemAppendOptions = StructuredAgentSessionAppendOptions & {
   rawTextKey?: string
   retireText?: true
@@ -77,8 +74,7 @@ export type StructuredAgentSessionItemAppendOptions = StructuredAgentSessionAppe
   applied?: () => void
   echoOf?: JournalItemEcho['echoOf']
   turnScope: AgentJournalTurnScope
-  /** A reusable child's row a later run can resume: this child now executes it
-   *  (`JournalItemRow.executionOwner`). */
+  /** A later child execution assumes this reusable row. */
   executes?: true
 }
 
@@ -195,10 +191,9 @@ export type StructuredAgentSessionReadingControl = {
 }
 
 export function createDeferredStructuredAgentSessionEventSink(deps: {
-  /** The session this sink writes for, named in every failure it logs. */
   sessionId: string
   logger: StructuredAgentSessionLogger
-  /** The sink failed for good; the owner decides what that costs the provider. */
+  /** Permanent failure; owner decides whether the provider can continue. */
   onFailed?: (error: unknown) => void
   watermarks?: Partial<StructuredAgentSessionSinkWatermarks>
   readingControl?: StructuredAgentSessionReadingControl
@@ -235,9 +230,9 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
           bound.journal.appendLifecycleBatch({
             settlementId,
             mutations,
-            // No row-level linkage: each mutation names its own (see the batch row builder).
+            // Preserve per-mutation linkage instead of stamping the whole row.
             fence: bound.fence,
-            // The provider's own observation: its child's generation produced every item it creates.
+            // Provider observations use the bound child’s execution fence.
             ownerFence: bound.fence
           })
       },

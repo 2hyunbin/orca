@@ -1,8 +1,3 @@
-// Wiring for the store's collaborators.
-//
-// Split out of the store itself so the class stays a description of the public
-// surface rather than sixty lines of constructor plumbing.
-
 import type {
   AgentJournalCursor,
   AgentSessionJournalIdentity
@@ -31,9 +26,7 @@ import { isJournalStreamedTextRevision } from './journal-streamed-text-revision'
 import { JournalTextPruner } from './journal-text-pruner'
 
 export type JournalStoreHost = {
-  /** Fires the journal's commit listener for a durable change that appended no
-   *  row — a standalone draft-table transaction — so readers learn of it the
-   *  same way they learn of a row. */
+  /** Notify readers of durable draft-only transactions that append no journal row. */
   notifyCommitted: () => void
   identity: AgentSessionJournalIdentity
   now: () => number
@@ -65,8 +58,6 @@ export type JournalStoreCollaborators = {
   stopMarks: JournalStopMarks
   context: JournalContextController
   stops: JournalStopAcceptor
-  /** Restores the store's state from disk. Owned here because it needs the same
-   *  collaborators the constructor just built. */
   restore: () => Promise<void>
 }
 
@@ -92,7 +83,6 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
   })
   const claimAttachments: JournalAttachmentClaim = (db, body, required, previous) =>
     claimAgentSessionAttachmentsInTransaction(db, {
-      // Uploaded attachments are stored beside the journal database.
       stateDirectory: host.database().stateDirectory,
       sessionId: host.identity.sessionId,
       body,
@@ -141,7 +131,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
       cards: queuedMessages
     }),
     stops: new JournalStopAcceptor({ writer: rowWriter, state: host.state }),
-    // Moves the cards an earlier build wrote into the journal, once per open; never fails it.
+    // Import legacy cards once per open without failing the open.
     restore: () =>
       restoreJournalStore(host, { epochController }).then(() => queuedMessages.importAtOpen()),
     rowWriter,
