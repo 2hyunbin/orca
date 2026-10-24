@@ -163,7 +163,10 @@ registerWorkspaceHttpLinkBrowserOpener(async (request) => {
       ...request,
       linkContext: request.linkContext
     })
-    if (outcome.status === 'failed') {
+    if (
+      outcome.status === 'failed' ||
+      (outcome.status === 'refused' && !request.linkContext.linkIntent?.targetGroupId)
+    ) {
       const { intentPresentation } = await import('@/lib/workspace-browser-tab-presentation')
       throw new Error(intentPresentation(request.intent, request.url).error)
     }

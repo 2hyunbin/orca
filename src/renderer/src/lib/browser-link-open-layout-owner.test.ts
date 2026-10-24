@@ -148,6 +148,13 @@ it('does not activate a link superseded while main was opening its tab', async (
   await main.settle()
 
   expect(await opening).toEqual({ status: 'superseded' })
+  await main.settle()
+  expect(store.getState().browserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
+  expect(store.getState().browserPagesByWorkspace).toEqual({})
+  expect(
+    store.getState().unifiedTabsByWorktree[WORKSPACE]?.some((tab) => tab.contentType === 'browser')
+  ).toBe(false)
+  expect(store.getState().recentlyClosedBrowserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
   expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })
@@ -167,6 +174,13 @@ it('does not activate a link whose owner changed while main was opening its tab'
   await main.settle()
 
   expect(await opening).toEqual({ status: 'refused' })
+  await main.settle()
+  expect(store.getState().browserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
+  expect(store.getState().browserPagesByWorkspace).toEqual({})
+  expect(
+    store.getState().unifiedTabsByWorktree[WORKSPACE]?.some((tab) => tab.contentType === 'browser')
+  ).toBe(false)
+  expect(store.getState().recentlyClosedBrowserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
   expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })

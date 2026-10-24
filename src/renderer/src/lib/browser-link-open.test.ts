@@ -181,6 +181,50 @@ describe('browser link placement and exact page activation', () => {
     expect(store.getState().browserPagesByWorkspace[existing.id]?.[0]?.url).toBe(URL_TO_OPEN)
   })
 
+  it('removes a newly created tab after an activation error while preserving existing tabs', async () => {
+    const existing = browser('c', 'https://unrelated.example/')
+    const before = store.getState()
+    const outcome = await openLocalBrowserLink({
+      destination: browserLinkTestDestination(),
+      context: context(),
+      url: URL_TO_OPEN,
+      ownsRoute: () => true,
+      reveal: () => {
+        throw new Error('Workspace activation failed')
+      }
+    })
+
+    expect(outcome).toEqual({ status: 'failed' })
+    const state = store.getState()
+    expect(state.browserTabsByWorktree[WORKSPACE]?.map((tab) => tab.id)).toEqual([existing.id])
+    expect(state.browserPagesByWorkspace).toEqual(before.browserPagesByWorkspace)
+    expect(state.unifiedTabsByWorktree[WORKSPACE]).toEqual(before.unifiedTabsByWorktree[WORKSPACE])
+    expect(state.recentlyClosedBrowserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
+  })
+
+  it('retains a successfully created background tab without activating it', async () => {
+    const outcome = await openLocalBrowserLink({
+      destination: browserLinkTestDestination(),
+      context: context(),
+      url: URL_TO_OPEN,
+      options: { activate: false },
+      ownsRoute: () => true
+    })
+
+    expect(outcome.status).toBe('opened')
+    if (outcome.status !== 'opened') {
+      throw new Error('Expected open')
+    }
+    const state = store.getState()
+    expect(state.browserTabsByWorktree[WORKSPACE]?.map((tab) => tab.id)).toEqual([
+      outcome.result.browserWorkspaceId
+    ])
+    expect(state.browserPagesByWorkspace[outcome.result.browserWorkspaceId]?.[0]?.url).toBe(
+      URL_TO_OPEN
+    )
+    expect(state.activeGroupIdByWorktree[WORKSPACE]).toBe('c')
+  })
+
   it('uses the selected matching wrapper, then active page, instead of recency', async () => {
     browser('b')
     const selected = browser('b')

@@ -77,6 +77,8 @@ export async function openLocalBrowserLink(params: {
       throw new BrowserLinkPlacementRefused('The browser link destination is no longer available.')
     }
   }
+  let createdTabId: string | undefined
+  let retainCreatedTab = false
   try {
     validate(state)
     let result = selection.match
@@ -103,6 +105,7 @@ export async function openLocalBrowserLink(params: {
         focusAddressBar: false,
         validateLinkPlacement: validate
       })
+      createdTabId = created.id
       if (hasPendingEntityTab(destination.worktreeId, created.id)) {
         await new Promise<void>((resolve) =>
           afterPendingEntityTabs(destination.worktreeId, created.id, resolve)
@@ -122,6 +125,7 @@ export async function openLocalBrowserLink(params: {
     }
     validate(useAppStore.getState())
     if (params.options?.activate === false) {
+      retainCreatedTab = true
       return { status: 'opened', result }
     }
     params.reveal?.()
@@ -153,6 +157,7 @@ export async function openLocalBrowserLink(params: {
       return { status: 'refused' }
     }
     focusOpenedBrowserLink(actual)
+    retainCreatedTab = true
     return { status: 'opened', result: actual }
   } catch (error) {
     if (context.isCurrentRequest?.() === false) {
@@ -162,5 +167,9 @@ export async function openLocalBrowserLink(params: {
       return { status: 'refused' }
     }
     return { status: 'failed' }
+  } finally {
+    if (createdTabId && !retainCreatedTab) {
+      useAppStore.getState().closeBrowserTab(createdTabId, { reason: 'cleanup' })
+    }
   }
 }
