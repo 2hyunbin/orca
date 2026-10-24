@@ -15,7 +15,7 @@ import { DERIVED_DELIVERY_SCHEMA_SQL, migrateV41 } from './migrate-v41'
 import { migrateV42 } from './migrate-v42'
 import { migrateV43 } from './migrate-v43'
 
-// Migrate existing tables atomically; bump user_version only after success.
+// CREATE TABLE IF NOT EXISTS won't alter existing tables; migrate atomically before bumping user_version.
 export function migrate(this: OrchestrationDb): void {
   const storedVersion = this.db.pragma('user_version', { simple: true }) as number
   const current = resolveOrchestrationMigrationStartVersion(this.db, storedVersion, SCHEMA_VERSION)
