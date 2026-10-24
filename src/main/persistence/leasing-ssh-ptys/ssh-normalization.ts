@@ -27,6 +27,7 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
   const currentGracePeriodSeconds = target.relayGracePeriodSeconds
   const legacyGracePeriodSeconds = target.remoteWorkspaceSyncGracePeriodSeconds
   const systemSshConnectionReuse = target.systemSshConnectionReuse
+  const systemSshProxyConnectionReuse = target.systemSshProxyConnectionReuse
   const remoteRuntime = target.remoteRuntime
   const remoteRuntimeResolution = normalizeSshRemoteRuntimeResolution(
     target.remoteRuntimeResolution
@@ -36,6 +37,7 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
   delete target.remoteWorkspaceSyncGracePeriodSeconds
   delete target.relayGracePeriodSeconds
   delete target.systemSshConnectionReuse
+  delete target.systemSshProxyConnectionReuse
   delete target.remoteRuntime
   delete target.remoteRuntimeResolution
   delete target.experimentalPtySourceCreditV1
@@ -58,6 +60,9 @@ export function normalizeSshTarget(t: SshTarget): SshTarget {
   }
   if (systemSshConnectionReuse === false) {
     normalized.systemSshConnectionReuse = false
+  }
+  if (systemSshProxyConnectionReuse === true) {
+    normalized.systemSshProxyConnectionReuse = true
   }
   // Keep explicit runtime choices; unknown newer values must not silently select another runtime.
   const knownRuntime = SSH_REMOTE_RUNTIMES.find((runtime) => runtime === remoteRuntime)
