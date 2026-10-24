@@ -38,8 +38,13 @@ export function assertTerminalQuickCommandMutationReadableForClient(
   if (mutation.type === 'delete') {
     return
   }
+  const existing = commands.find((command) => command.id === mutation.command.id)
   const next = applyTerminalQuickCommandMutation(commands, mutation)
   if (
+    (existing &&
+      !projectTerminalQuickCommandsForClient(commands, ctx).some(
+        (command) => command.id === existing.id
+      )) ||
     !projectTerminalQuickCommandsForClient(next, ctx).some(
       (command) => command.id === mutation.command.id
     )

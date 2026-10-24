@@ -230,6 +230,33 @@ describe('quick-command client compatibility', () => {
     expect(scheduleSave).not.toHaveBeenCalled()
   })
 
+  it.each(['runtime', 'mobile'] as const)(
+    'refuses a stale %s client edit of a hidden prompt before saving anything',
+    async (clientKind) => {
+      const { dispatcher, state, scheduleSave } = makeDispatcher()
+
+      const response = await dispatcher.dispatch(
+        makeRequest('settings.updateTerminalQuickCommands', {
+          mutation: { type: 'upsert', command: { ...longCommand, prompt: 'Stale short prompt' } }
+        }),
+        {
+          clientKind,
+          clientCapabilities: [TERMINAL_QUICK_COMMAND_LARGE_LISTS_RUNTIME_CAPABILITY]
+        }
+      )
+
+      expect(response).toMatchObject({
+        ok: false,
+        error: {
+          code: 'invalid_argument',
+          message: expect.stringContaining('Update this Orca client')
+        }
+      })
+      expect(state.settings.terminalQuickCommands).toEqual([shortCommand, longCommand])
+      expect(scheduleSave).not.toHaveBeenCalled()
+    }
+  )
+
   it('stores a long prompt instead of refusing it', async () => {
     const { dispatcher, state } = makeDispatcher([shortCommand])
     const response = await dispatcher.dispatch(
