@@ -163,6 +163,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  zod@>=3 <4: 3.25.76
   dompurify@<3.4.17: 3.4.17
   sprintf-js@<1.1.3: 1.1.3
   markdown-it@>=14.0.0 <14.3.3: 14.3.3
@@ -179,6 +180,7 @@ patchedDependencies:
   react-native-webview@13.16.2: 55b7bce35c78ee1a50c4b99ad65b52982f3cfa73da6f61d0853c4d03219eec06
   react-native@0.83.10: 22bc31f0a057b1f96d9949b38a7ccde81225f617c0f243820dc8a455c91debfb
   sprintf-js@1.1.3: 05316a8b01f155fe19a1e0cb4042c81d43d798a76755c407684e1199a18b1e08
+  zod@3.25.76: 8f57d8e7910df51ec3c40c412b4f8fb3d01fd65e1889c057aae0e4a15483bcec
 
 importers:
 
@@ -8769,7 +8771,7 @@ snapshots:
       toqr: 0.1.1
       wrap-ansi: 7.0.0
       ws: 8.22.0
-      zod: 3.25.76
+      zod: 3.25.76(patch_hash=8f57d8e7910df51ec3c40c412b4f8fb3d01fd65e1889c057aae0e4a15483bcec)
     optionalDependencies:
       expo-router: 55.0.18(589555b6d8c5573172d9947cbca71959)
       react-native: 0.83.10(patch_hash=22bc31f0a057b1f96d9949b38a7ccde81225f617c0f243820dc8a455c91debfb)(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.85.2(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1)
@@ -15524,7 +15526,7 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod@3.25.76: {}
+  zod@3.25.76(patch_hash=8f57d8e7910df51ec3c40c412b4f8fb3d01fd65e1889c057aae0e4a15483bcec): {}
 
   zod@4.6.7: {}
 
