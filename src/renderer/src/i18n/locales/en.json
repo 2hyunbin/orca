@@ -193,6 +193,28 @@
     },
     "managedProfile": {
       "createFailed": "Couldn't create this workspace's browser profile. Close this tab and open a new one to try again."
+    },
+    "history": {
+      "clear": "Clear browsing history",
+      "clearAllTime": "All time",
+      "clearLastHour": "Last hour",
+      "clearRange": "Clear history from",
+      "clearToday": "Today",
+      "cleared": "Cleared browsing history",
+      "close": "Close",
+      "description": "Search and manage browsing history",
+      "empty": "Pages you visit will show up here",
+      "enterKey": "Enter",
+      "escKey": "Esc",
+      "menuItem": "History",
+      "noMatches": "No pages match your search",
+      "open": "Open",
+      "remove": "Remove from history",
+      "removeShort": "Remove",
+      "search": "Search history",
+      "title": "History",
+      "today": "Today",
+      "yesterday": "Yesterday"
     }
   },
   "editor": {
