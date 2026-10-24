@@ -252,12 +252,23 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      # Why: App tokens last one hour, and the cold runtime build alone can outlast that.
+      - name: Re-mint daily repo token for versioning
+        id: app_token_version
+        if: steps.freshness.outputs.should_build == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.HOURLY_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HOURLY_RELEASE_APP_PRIVATE_KEY }}
+          owner: stablyai
+          repositories: orca-daily
+
       - name: Compute daily version
         id: daily
         if: steps.freshness.outputs.should_build == 'true'
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.app_token.outputs.token }}
+          GH_TOKEN: ${{ steps.app_token_version.outputs.token }}
           MAIN_REPO_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail

@@ -156,15 +156,6 @@ jobs:
           # build step is compromised (zizmor: artipacked).
           persist-credentials: false
 
-      - name: Mint hourly repo token
-        id: app_token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.HOURLY_RELEASE_APP_ID }}
-          private-key: ${{ secrets.HOURLY_RELEASE_APP_PRIVATE_KEY }}
-          owner: stablyai
-          repositories: orca-hourly
-
       - name: Setup pnpm
         uses: ./.github/actions/setup-pnpm
 
@@ -231,6 +222,16 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      # Why here: App tokens last one hour, and the cold runtime build alone can outlast that.
+      - name: Mint hourly repo token
+        id: app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.HOURLY_RELEASE_APP_ID }}
+          private-key: ${{ secrets.HOURLY_RELEASE_APP_PRIVATE_KEY }}
+          owner: stablyai
+          repositories: orca-hourly
 
       - name: Compute hourly version
         id: hourly
