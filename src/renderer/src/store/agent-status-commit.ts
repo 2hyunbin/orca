@@ -31,6 +31,12 @@ export type { AgentStatusTransaction } from './agent-status-fold'
 export type AgentStatusOwner = ReturnType<typeof createAgentStatusOwner>
 const owners = new WeakMap<object, AgentStatusOwner>()
 const actionOwners = new WeakMap<AppState['transferAgentPaneAuthority'], AgentStatusOwner>()
+export function findAgentStatusOwnerByReader(
+  getState: () => unknown
+): AgentStatusOwner | undefined {
+  return owners.get(getState)
+}
+
 export function findAgentStatusOwner(
   state: Partial<Pick<AppState, 'transferAgentPaneAuthority'>>
 ): AgentStatusOwner | undefined {
