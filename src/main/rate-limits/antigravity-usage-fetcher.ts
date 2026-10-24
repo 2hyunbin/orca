@@ -1,7 +1,7 @@
 import { runProcess } from '@orca/process-host'
 import { hasReachedAppVersion, parseCliVersion } from '../../shared/app-version'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
-import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
+import { hostShellEnvironment } from '../runtime/structured-agent-shell-environment'
 import type { ProviderRateLimits, UsageRateLimitFailureKind } from '../../shared/rate-limit-types'
 import {
   ANTIGRAVITY_MIN_USAGE_VERSION,
@@ -97,9 +97,9 @@ export async function fetchAntigravityRateLimits(
   const run = options.runCommand ?? runProcess
   const resolve = options.resolveCommand ?? resolveCommandOnLocalPath
   const platform = options.platform ?? process.platform
-  const resolveEnvironment = options.resolveEnvironment ?? (() => resolveLoginShellEnvironment())
+  const resolveEnvironment = options.resolveEnvironment ?? (() => hostShellEnvironment())
 
-  // GUI-launched Electron PATH often omits agy's ~/.local/bin.
+  // Resolve agy with agent-launch env: login-shell/saved Windows PATH can differ from Electron's.
   const env = { ...(await resolveEnvironment()), ...ANTIGRAVITY_PROBE_ENV }
   const command = antigravityCommandName()
   const program = await resolve(command, { platform, env })

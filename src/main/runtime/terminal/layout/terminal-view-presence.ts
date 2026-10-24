@@ -48,9 +48,9 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     }
   }
 
-  /** Remote xterm subscribers own query replies; main yields until the idempotent release runs. */
-  registerRemoteTerminalViewSubscriber(ptyId: string): () => void {
-    return this.terminalViewSubscribers.registerRemote(ptyId)
+  /** Remote views own delivered query replies; pause readers return dropped output to main. Release is idempotent. */
+  registerRemoteTerminalViewSubscriber(ptyId: string, isOutputPaused?: () => boolean): () => void {
+    return this.terminalViewSubscribers.registerRemote(ptyId, isOutputPaused)
   }
 
   /** Live local daemon sessions with no ingested bytes need attachment; existing headless state or snapshot reconciliation means attach already began. */
@@ -72,8 +72,9 @@ export abstract class OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged ext
     return this.terminalViewSubscribers.hasRaw(ptyId)
   }
 
+  /** Whether a remote view will receive this PTY's output now, and so answers its queries. */
   hasRemoteTerminalViewSubscriber(ptyId: string): boolean {
-    return this.terminalViewSubscribers.hasRemote(ptyId)
+    return this.terminalViewSubscribers.hasRemoteReceivingOutput(ptyId)
   }
 
   isMobileTerminalQueryReplyAuthority(ptyId: string, clientId: string): boolean {

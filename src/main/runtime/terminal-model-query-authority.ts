@@ -18,7 +18,7 @@ export function isTerminalModelQueryAuthorityEnabled(
   return isHiddenPtyDeliveryGateEnabled(settings) && settings?.terminalModelQueryAuthority !== false
 }
 
-/** Capture ownership in the ingestion tick that decides drops; remote view subscribers retain reply authority while attached. */
+/** Capture ownership in the ingestion tick deciding drops; unpaused remote views answer delivered queries, while paused streams drop chunks and yield to main. */
 export function shouldModelAnswerHiddenPtyQueries(opts: {
   ptyId: string
   settings: TerminalModelQueryAuthoritySettings | null | undefined

@@ -100,8 +100,11 @@ export async function initializeMultiplexStream(
     }
     stream.outputBatcher.push(data, meta)
   })
-  // Remote xterm owns query replies while attached; yield the main responder (terminal-query-authority.md).
-  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(ptyId)
+  // Remote xterm answers delivered queries; paused streams drop output, returning reply authority to main.
+  const releaseViewSubscriber = runtime.registerRemoteTerminalViewSubscriber(
+    ptyId,
+    () => stream.outputPaused
+  )
   // Report daemon death now, before the next refused keystroke.
   const unsubscribeEndpointLoss = stream.supportsEndpointLossNotice
     ? subscribeToPtyEndpointLoss(ptyId, () => {

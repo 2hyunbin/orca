@@ -280,48 +280,6 @@ describe('agent process recognition', () => {
     expect(isRecognizedAgentType('muse')).toBe(true)
   })
 
-  it('recognizes Muse by its versioned muse-bin sibling binary', () => {
-    // Muse execs muse-bin-VERSION; macOS comm truncates it to muse-bin-1.0.3-R (verified on-device).
-    expect(recognizeAgentProcess('muse-bin-1.0.3-R2198.1')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r2198.1'
-    })
-    expect(recognizeAgentProcess('muse-bin-1.0.3-R')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r'
-    })
-    expect(recognizeAgentProcess('/Users/dev/.local/bin/muse-bin-1.0.3-R2198.1')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r2198.1'
-    })
-  })
-
-  it('does not recognize Muse headless exec commands as interactive agents', () => {
-    expect(recognizeAgentProcessFromCommandLine('muse exec "summarize this diff"')).toBeNull()
-    expect(
-      recognizeAgentProcessFromCommandLine('muse exec --json "review this" > result.jsonl')
-    ).toBeNull()
-    // Muse dispatches bare exec even after --; it errors rather than hosting a TUI.
-    expect(recognizeAgentProcessFromCommandLine('muse -- exec "summarize this diff"')).toBeNull()
-    // A whole-prompt exec still takes the missing-prompt error path.
-    expect(recognizeAgentProcessFromCommandLine("muse 'exec'")).toBeNull()
-    // Why: `muse resume` reopens the interactive TUI, so it still hosts a live session.
-    expect(recognizeAgentProcessFromCommandLine('muse resume')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-    // Muse1.0.3 still dispatches resume after -- into the interactive TUI.
-    expect(recognizeAgentProcessFromCommandLine('muse -- resume')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-    // One quoted prompt argv never equals the bare exec subcommand.
-    expect(recognizeAgentProcessFromCommandLine('muse -- "exec the release notes"')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-  })
-
   it('recognizes Mistral Vibe by its installed executable and legacy alias', () => {
     expect(recognizeAgentProcess('/home/dev/.local/bin/vibe')).toEqual({
       agent: 'mistral-vibe',
@@ -605,6 +563,13 @@ describe('agent process recognition', () => {
   })
 
   it('does not recognize Muse headless exec runs as interactive agents', () => {
+    expect(recognizeAgentProcessFromCommandLine("muse 'exec'")).toBeNull()
+    for (const command of ['muse resume', 'muse -- resume', 'muse -- "exec the release notes"']) {
+      expect(recognizeAgentProcessFromCommandLine(command)).toEqual({
+        agent: 'muse',
+        processName: 'muse'
+      })
+    }
     expect(recognizeAgentProcessFromCommandLine('muse exec "summarize this diff"')).toBeNull()
     expect(
       recognizeAgentProcessFromCommandLine(

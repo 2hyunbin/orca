@@ -83,7 +83,7 @@ export function structuredAgentBaseEnvironment(input: {
 const SHELL_ENVIRONMENT_TTL_MS = 10_000
 
 /** Serve cached shell env immediately and refresh after TTL; Windows retains a loaded profile, retrying failures, and overlays saved installer PATH on reads. */
-async function hostShellEnvironment(cachedOnly = false): Promise<NodeJS.ProcessEnv> {
+export async function hostShellEnvironment(cachedOnly = false): Promise<NodeJS.ProcessEnv> {
   const windows = process.platform === 'win32'
   const env = await resolveLoginShellEnvironment({
     cachedOnly,

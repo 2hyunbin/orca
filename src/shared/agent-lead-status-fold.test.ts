@@ -8,7 +8,7 @@ import {
 } from './agent-lead-status-fold'
 
 describe('foldAgentLeadStatus', () => {
-  it('keeps a lead that is not settled, whatever its children do', () => {
+  it('keeps a blocked lead while child work is working', () => {
     expect(foldAgentLeadStatus({ leadState: 'blocked', childWorkLiveness: 'working' })).toEqual({
       stateName: 'blocked'
     })
@@ -25,16 +25,6 @@ describe('foldAgentLeadStatus', () => {
       stateName: 'working',
       workingMode: 'monitoring'
     })
-  })
-
-  it("takes no verdict: how the mainAgent's turn ended is not a fold input", () => {
-    // Cancellation belongs to the lead verdict; surviving child work folds exactly as after any turn end.
-    const input: Parameters<typeof foldAgentLeadStatus>[0] = {
-      leadState: 'done',
-      childWorkLiveness: 'monitoring'
-    }
-    expect(Object.keys(input)).toEqual(['leadState', 'childWorkLiveness'])
-    expect(foldAgentLeadStatus(input)).toEqual({ stateName: 'working', workingMode: 'monitoring' })
   })
 
   it('settles when nothing is running', () => {
@@ -117,6 +107,9 @@ describe('isAgentTimeAccruing', () => {
     for (const leadState of leadStates) {
       for (const childWorkLiveness of liveness) {
         const folded = foldAgentLeadStatus({ leadState, childWorkLiveness })
+        if (folded.workingMode === 'monitoring') {
+          expect(leadState).toBe('done')
+        }
         const accrues = isAgentTimeAccruing({
           state: folded.stateName,
           workingMode: folded.workingMode
@@ -151,8 +144,11 @@ describe('continueMainAgentStatus', () => {
       state: 'done',
       stateStartedAt: 4
     })
-    expect(
-      continueMainAgentStatus(undefined, { state: 'working', outcome: 'cancellation' }, 30)
-    ).toEqual({ state: 'working', stateStartedAt: 30 })
+    for (const state of ['working', 'waiting', 'blocked'] as const) {
+      expect(continueMainAgentStatus(undefined, { state, outcome: 'cancellation' }, 30)).toEqual({
+        state,
+        stateStartedAt: 30
+      })
+    }
   })
 })
