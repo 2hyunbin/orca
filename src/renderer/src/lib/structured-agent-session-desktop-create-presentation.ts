@@ -1,6 +1,6 @@
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 
-import { useAppStore } from '@/store'
+import type { AppState } from '@/store/types'
 
 import { onRuntimeEnvironmentsRetired } from '@/runtime/runtime-environment-revision'
 
@@ -25,7 +25,7 @@ import {
   findStructuredLaunchTab,
   captureStructuredLaunchSurfaceAddress,
   openStructuredAgentSessionProvisionalTab
-} from './structured-agent-session-launch-surface'
+} from './structured-agent-session-provisional-surface'
 import { notifyStructuredLaunchListeners } from './structured-agent-session-launch-registry'
 
 onRuntimeEnvironmentsRetired((ids) => {
@@ -48,7 +48,8 @@ onRuntimeEnvironmentsRetired((ids) => {
 /** Rows have already passed the catalog's host, environment and freshness admission. */
 export function acceptDesktopCreateCatalog(
   hostId: ExecutionHostId,
-  rows: readonly Worktree[]
+  rows: readonly Worktree[],
+  get: () => AppState
 ): void {
   if (!hasDesktopCreateLaunchRecords()) {
     return
@@ -74,7 +75,8 @@ export function acceptDesktopCreateCatalog(
     ) {
       continue
     }
-    const address = record.surfaceAddress ?? captureStructuredLaunchSurfaceAddress(row.id)
+    const address =
+      record.surfaceAddress ?? captureStructuredLaunchSurfaceAddress(row.id, undefined, get)
     if (!create.worktreeId || !record.surfaceAddress) {
       updates.push({
         ...record,
@@ -92,13 +94,16 @@ export function acceptDesktopCreateCatalog(
       continue
     }
     try {
-      openStructuredAgentSessionProvisionalTab({
-        worktreeId,
-        executionHostId: hostId,
-        sessionId: record.sessionId,
-        agent: record.agent,
-        activate: false
-      })
+      openStructuredAgentSessionProvisionalTab(
+        {
+          worktreeId,
+          executionHostId: hostId,
+          sessionId: record.sessionId,
+          agent: record.agent,
+          activate: false
+        },
+        get
+      )
     } catch (error) {
       console.warn('[structured-agent-launch] catalog presentation failed', error)
     }
@@ -122,7 +127,8 @@ export function currentDesktopCreate(
 
 export function presentDesktopCreateWorkspace(
   record: DesktopCreateLaunchRecord,
-  worktreeId: string
+  worktreeId: string,
+  get: () => AppState
 ): void {
   const current = currentDesktopCreate(record)
   if (
@@ -136,32 +142,42 @@ export function presentDesktopCreateWorkspace(
   const next = {
     ...current,
     desktopCreate: { ...current.desktopCreate, worktreeId },
-    surfaceAddress: current.surfaceAddress ?? captureStructuredLaunchSurfaceAddress(worktreeId)
+    surfaceAddress:
+      current.surfaceAddress ?? captureStructuredLaunchSurfaceAddress(worktreeId, undefined, get)
   }
   writeStructuredAgentLaunchRecords([next])
-  openStructuredAgentSessionProvisionalTab({
-    worktreeId,
-    executionHostId: record.executionHostId,
-    sessionId: record.sessionId,
-    agent: record.agent,
-    activate: false
-  })
+  openStructuredAgentSessionProvisionalTab(
+    {
+      worktreeId,
+      executionHostId: record.executionHostId,
+      sessionId: record.sessionId,
+      agent: record.agent,
+      activate: false
+    },
+    get
+  )
   notifyStructuredLaunchListeners(false)
 }
 
-export function removeDesktopCreateProvisional(record: DesktopCreateLaunchRecord): void {
+export function removeDesktopCreateProvisional(
+  record: DesktopCreateLaunchRecord,
+  get: () => AppState
+): void {
   const worktreeId = record.desktopCreate.worktreeId
   if (!worktreeId) {
     return
   }
-  const tab = findStructuredLaunchTab({
-    worktreeId,
-    sessionId: record.sessionId,
-    executionHostId: record.executionHostId
-  })
+  const tab = findStructuredLaunchTab(
+    {
+      worktreeId,
+      sessionId: record.sessionId,
+      executionHostId: record.executionHostId
+    },
+    get
+  )
   if (tab) {
     try {
-      useAppStore.getState().closeUnifiedTab(tab.id, {
+      get().closeUnifiedTab(tab.id, {
         agentSessionRetirementHandled: true,
         preserveWorktreeSelection: true,
         recordInteraction: false
@@ -175,7 +191,8 @@ export function removeDesktopCreateProvisional(record: DesktopCreateLaunchRecord
 /** Accepted ordinary topology, never a reservation, retires only the exact ready terminal's chat placeholder. */
 export function acceptDesktopCreateTopology(
   hostId: ExecutionHostId,
-  snapshot: RuntimeMobileSessionTabsResult
+  snapshot: RuntimeMobileSessionTabsResult,
+  get: () => AppState
 ): void {
   if (!hasDesktopCreateLaunchRecords()) {
     return
@@ -214,7 +231,7 @@ export function acceptDesktopCreateTopology(
   if (updates.length || settled.length) {
     writeStructuredAgentLaunchRecords(updates, settled)
     for (const record of terminals) {
-      removeDesktopCreateProvisional(record)
+      removeDesktopCreateProvisional(record, get)
     }
     notifyStructuredLaunchListeners(false)
   }

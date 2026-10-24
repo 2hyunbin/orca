@@ -98,7 +98,7 @@ export function applyStructuredSessionTabSnapshots(
   )
   settleStructuredSessionMirror()
   for (const topology of acceptedTopologies) {
-    noteHostCreatedLaunchTargets(LOCAL_EXECUTION_HOST_ID, topology)
+    noteHostCreatedLaunchTargets(LOCAL_EXECUTION_HOST_ID, topology, useAppStore.getState)
   }
   const { setTabLabel } = useAppStore.getState()
   for (const { tabId, label } of drawnChatLabels) {

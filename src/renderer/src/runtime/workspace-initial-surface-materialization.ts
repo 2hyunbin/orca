@@ -188,7 +188,7 @@ export function materializeWorkspaceInitialSurface(
   )
   settle()
   for (const topology of accepted) {
-    noteHostCreatedLaunchTargets('local', topology)
+    noteHostCreatedLaunchTargets('local', topology, useAppStore.getState)
   }
   markStructuredAgentSessionLaunchesPublished('local', acceptedSessions)
   for (const effect of afterCommit) {

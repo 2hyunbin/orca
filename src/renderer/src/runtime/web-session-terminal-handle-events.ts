@@ -1,3 +1,4 @@
+import { useAppStore } from '@/store'
 import { noteHostCreatedLaunchTargets } from '../lib/structured-agent-session-launch-prompt'
 import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import { getRuntimeEnvironmentConnectionGeneration } from '@/store/slices/runtime-status'
@@ -104,7 +105,8 @@ export function queueAcceptedWebSessionTerminalSnapshot(
       ) {
         noteHostCreatedLaunchTargets(
           toRuntimeExecutionHostId(environmentId),
-          suppressCancelledStructuredSessionTabs(snapshot, { kind: 'environment', environmentId })
+          suppressCancelledStructuredSessionTabs(snapshot, { kind: 'environment', environmentId }),
+          useAppStore.getState
         )
       }
     })

@@ -1,3 +1,6 @@
+import type { ExecutionHostId } from '../../../shared/execution-host'
+import type { Worktree } from '../../../shared/worktree/types'
+import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import { useAppStore } from '@/store'
 import type { AgentLaunchResult } from '../../../shared/agent-launch-intent'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
@@ -38,12 +41,12 @@ import {
   presentDesktopCreateWorkspace,
   removeDesktopCreateProvisional
 } from './structured-agent-session-desktop-create-presentation'
-export {
-  acceptDesktopCreateCatalog,
-  acceptDesktopCreateTopology
+import {
+  acceptDesktopCreateCatalog as acceptCatalog,
+  acceptDesktopCreateTopology as acceptTopology
 } from './structured-agent-session-desktop-create-presentation'
+import { cancelDesktopCreateLaunch as cancelLaunch } from './structured-agent-session-desktop-create-cancellation'
 export {
-  cancelDesktopCreateLaunch,
   cancelDesktopCreateOnClose,
   retireDesktopCreatePresentation
 } from './structured-agent-session-desktop-create-cancellation'
@@ -113,7 +116,7 @@ export async function issueDesktopCreateLaunch(
     }
     try {
       if (result.outcome.kind === 'structured') {
-        presentDesktopCreateWorkspace(record, result.worktreeId)
+        presentDesktopCreateWorkspace(record, result.worktreeId, useAppStore.getState)
       }
     } catch (error) {
       console.warn('[structured-agent-launch] result presentation failed', error)
@@ -134,7 +137,7 @@ export async function issueDesktopCreateLaunch(
     }
     if (settled) {
       if (result.outcome.kind === 'terminal') {
-        removeDesktopCreateProvisional(latest)
+        removeDesktopCreateProvisional(latest, useAppStore.getState)
       }
       deleteStructuredAgentLaunchRecord(record.sessionId)
     } else {
@@ -154,13 +157,13 @@ export async function issueDesktopCreateLaunch(
         isAgentLaunchReplayUnsupportedRefusal(error))
     ) {
       discardStructuredLaunchPrompts(record.sessionId)
-      removeDesktopCreateProvisional(latest)
+      removeDesktopCreateProvisional(latest, useAppStore.getState)
       deleteStructuredAgentLaunchRecord(record.sessionId)
     } else {
       writeStructuredAgentLaunchRecords([{ ...latest, lifecycle: 'visibility-unknown' }])
       markHostCreatedLaunchUnconfirmed(record.sessionId)
       if (latest[desktopCreateAcceptedTerminal]) {
-        removeDesktopCreateProvisional(latest)
+        removeDesktopCreateProvisional(latest, useAppStore.getState)
         deleteStructuredAgentLaunchRecord(record.sessionId)
       }
       const data = error instanceof RuntimeRpcCallError ? error.response.error.data : undefined
@@ -179,7 +182,7 @@ export async function issueDesktopCreateLaunch(
         (!latest.desktopCreate.worktreeId || latest.desktopCreate.worktreeId === worktreeId)
       ) {
         try {
-          presentDesktopCreateWorkspace(record, worktreeId)
+          presentDesktopCreateWorkspace(record, worktreeId, useAppStore.getState)
         } catch (observerError) {
           console.warn('[structured-agent-launch] workspace presentation failed', observerError)
         }
@@ -264,4 +267,24 @@ export function retryDesktopCreateLaunch(worktreeId: string, sessionId: string):
       console.warn('[structured-agent-launch] outer Retry remains unconfirmed', error)
     )
   return true
+}
+
+export function acceptDesktopCreateCatalog(
+  hostId: ExecutionHostId,
+  rows: readonly Worktree[]
+): void {
+  acceptCatalog(hostId, rows, useAppStore.getState)
+}
+
+export function acceptDesktopCreateTopology(
+  hostId: ExecutionHostId,
+  snapshot: RuntimeMobileSessionTabsResult
+): void {
+  acceptTopology(hostId, snapshot, useAppStore.getState)
+}
+
+export function cancelDesktopCreateLaunch(
+  launch: Parameters<typeof cancelLaunch>[0]
+): Promise<void> {
+  return cancelLaunch(launch, useAppStore.getState)
 }

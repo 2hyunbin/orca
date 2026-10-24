@@ -3,7 +3,7 @@ import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-sli
 import type { AppState } from '../../../types'
 import { cleanupFailedEphemeralVmWorkspace } from '@/lib/ephemeral-vm-failed-create-cleanup'
 import { dismissHostCreatedLaunchPrompt } from '@/lib/structured-agent-session-launch-prompt'
-import { cancelDesktopCreateLaunch } from '@/lib/structured-agent-session-desktop-create'
+import { cancelDesktopCreateLaunch } from '@/lib/structured-agent-session-desktop-create-cancellation'
 import { endWindowCreation } from '@/lib/sidebar-ended-creations'
 
 export function createBeginPendingWorktreeCreation(
@@ -66,8 +66,9 @@ export function createRemovePendingWorktreeCreation(
     })
     if (removedEntry?.request.hostAgentLaunch && options?.reason !== 'completed') {
       dismissHostCreatedLaunchPrompt(removedEntry.request.hostAgentLaunch.sessionId)
-      void cancelDesktopCreateLaunch(removedEntry.request.hostAgentLaunch).catch((error: unknown) =>
-        console.warn('[structured-agent-launch] progress cancellation unconfirmed', error)
+      void cancelDesktopCreateLaunch(removedEntry.request.hostAgentLaunch, get).catch(
+        (error: unknown) =>
+          console.warn('[structured-agent-launch] progress cancellation unconfirmed', error)
       )
     }
     if (removedEntry) {

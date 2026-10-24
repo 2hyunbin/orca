@@ -1,4 +1,4 @@
-import { acceptDesktopCreateCatalog } from '@/lib/structured-agent-session-desktop-create'
+import { acceptDesktopCreateCatalog } from '@/lib/structured-agent-session-desktop-create-presentation'
 import type { StateCreator } from 'zustand'
 import { appliedWorktreeCatalogVersionPatch } from './worktree-catalog-version-state'
 import type { AppState } from '../../../types'
@@ -297,7 +297,7 @@ export function mergeFetchedWorktrees(
   })
   if (decision.outcome === 'applied') {
     try {
-      acceptDesktopCreateCatalog(args.hostId, acceptedRows)
+      acceptDesktopCreateCatalog(args.hostId, acceptedRows, get)
     } catch (error) {
       console.warn('worktree create: provisional presentation failed', error)
     }

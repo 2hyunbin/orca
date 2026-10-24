@@ -1,7 +1,6 @@
-import {
-  retireDesktopCreatePresentation,
-  acceptDesktopCreateTopology
-} from './structured-agent-session-desktop-create'
+import type { AppState } from '@/store/types'
+import { retireDesktopCreatePresentation } from './structured-agent-session-desktop-create-cancellation'
+import { acceptDesktopCreateTopology } from './structured-agent-session-desktop-create-presentation'
 import type { AgentLaunchResult } from '../../../shared/agent-launch-intent'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -186,9 +185,10 @@ export function abandonHostCreatedLaunchTab(hostId: ExecutionHostId, localTabId:
 /** Called only after the ordinary host/generation/version/cancellation acceptance boundary. */
 export function noteHostCreatedLaunchTargets(
   hostId: ExecutionHostId,
-  snapshot: RuntimeMobileSessionTabsResult
+  snapshot: RuntimeMobileSessionTabsResult,
+  get: () => AppState
 ): void {
-  acceptDesktopCreateTopology(hostId, snapshot)
+  acceptDesktopCreateTopology(hostId, snapshot, get)
   if (!staged.has(hostPromptIndexKey(hostId))) {
     return
   }

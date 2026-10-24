@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { WorktreeCreationRequest } from './pending-worktree-creation'
 import type { AgentLaunchCancelResult } from '../../../shared/agent-launch-cancellation'
 import { recordHostCreatedLaunchMessage } from './structured-agent-session-host-launch-prompt'
@@ -34,7 +35,8 @@ import {
 
 /** Progress removal is synchronous; durable prevention never gates closing its view. */
 export async function cancelDesktopCreateLaunch(
-  launch: NonNullable<WorktreeCreationRequest['hostAgentLaunch']>
+  launch: NonNullable<WorktreeCreationRequest['hostAgentLaunch']>,
+  get: () => AppState
 ): Promise<void> {
   if (!launch.issued) {
     return
@@ -80,7 +82,7 @@ export async function cancelDesktopCreateLaunch(
   if (result.status === 'cancelled') {
     discardStructuredLaunchPrompts(record.sessionId)
     deleteStructuredAgentLaunchRecord(record.sessionId)
-    removeDesktopCreateProvisional(record)
+    removeDesktopCreateProvisional(record, get)
     notifyStructuredLaunchListeners(false)
   } else if (result.result) {
     settleHostCreatedLaunchResult(record.sessionId, record.executionHostId, result.result)

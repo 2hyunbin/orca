@@ -1,5 +1,5 @@
 import type { StructuredLaunchSlotOwner } from '@/lib/structured-agent-session-launch-slot'
-import { retireDesktopCreatePresentation } from '@/lib/structured-agent-session-desktop-create'
+import { retireDesktopCreatePresentation } from '@/lib/structured-agent-session-desktop-create-cancellation'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
