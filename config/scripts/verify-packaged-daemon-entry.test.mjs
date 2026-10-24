@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { PROTOCOL_VERSION } from '../../src/main/daemon/daemon-protocol-version.ts'
 
 const require = createRequire(import.meta.url)
 const {
@@ -125,6 +126,49 @@ describe.skipIf(process.platform === 'win32')('terminal host round trip', () => 
       scratchDirs: readdirSync(root).filter((name) => name.startsWith('oth-'))
     }
   }
+
+  it('authenticates both channels with the current daemon protocol before serving a PTY', async () => {
+    const hellosPath = join(root, 'hellos.jsonl')
+    const result = await roundTrip(
+      fakeDaemon(`(() => {
+        let stream
+        return (socket) => {
+          let buffer = ''
+          socket.on('data', (chunk) => {
+            buffer += chunk.toString()
+            let newline
+            while ((newline = buffer.indexOf('\\n')) !== -1) {
+              const message = JSON.parse(buffer.slice(0, newline))
+              buffer = buffer.slice(newline + 1)
+              if (message.type === 'hello') {
+                fs.appendFileSync(${JSON.stringify(hellosPath)}, JSON.stringify({
+                  version: message.version, role: message.role
+                }) + '\\n')
+                const ok = message.version === ${PROTOCOL_VERSION}
+                socket.write(JSON.stringify({ type: 'hello', ok, error: ok ? undefined : 'Protocol version mismatch' }) + '\\n')
+                if (ok && message.role === 'stream') stream = socket
+              } else if (message.type === 'createOrAttach' && stream) {
+                stream.write(JSON.stringify({ payload: { data: 'OK 42' } }) + '\\n')
+              }
+            }
+          })
+        }
+      })()`),
+      10_000
+    )
+    expect(result.error).toBeNull()
+    expect(
+      readFileSync(hellosPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+    ).toEqual([
+      { version: PROTOCOL_VERSION, role: 'control' },
+      { version: PROTOCOL_VERSION, role: 'stream' }
+    ])
+    expect(result.daemonAlive).toBe(false)
+    expect(result.scratchDirs).toEqual([])
+  })
 
   it('rejects by the deadline and cleans up when the daemon never answers the hello', async () => {
     const result = await roundTrip(fakeDaemon('() => {}'), 1_500)
