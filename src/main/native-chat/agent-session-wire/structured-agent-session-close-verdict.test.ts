@@ -17,6 +17,8 @@ import { selectStructuredAgentSettledTurns } from '../../../shared/structured-ag
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { JournalLegacyRestInitializer } from '../agent-session-journal/journal-legacy-rest-initializer'
+import { setStructuredJournalReadiness } from './structured-agent-session-registry'
 import {
   adapter,
   attach,
@@ -197,6 +199,16 @@ describe('a turn cut short by closing its provider', () => {
     await host.close(SESSION, 'evict')
     expect(hostTestState().store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
     await host.journalSnapshot(SESSION)
+    const beforeBackground = { trusted: [...trusted], statuses: [...statuses] }
+    const advance = vi.spyOn(JournalLegacyRestInitializer.prototype, 'advance')
+    setStructuredJournalReadiness(() => true)
+    try {
+      host.advanceLegacyRest()
+      await advance.mock.results.findLast((result) => result.value)?.value
+    } finally {
+      setStructuredJournalReadiness(() => false)
+    }
+    expect({ trusted, statuses }).toEqual(beforeBackground)
     for (const row of [trusted.at(-1), lastSummary(statuses)]) {
       expect(row).toMatchObject({
         status: 'idle',

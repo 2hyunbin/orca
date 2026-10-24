@@ -209,6 +209,8 @@ export class StructuredAgentSessionClientDelivery {
     return journal ? this.currentWork(sessionId, journal) : null
   }
 
+  hasUnknownRestart = (sessionId: string): boolean => this.statusFeed.hasUnknownRestart(sessionId)
+
   /** A restored chat this host has not opened: its row from the record and journal rest facts. */
   publishAtRest = (sessionId: string, rest: StructuredAgentSessionAtRest): void =>
     this.statusFeed.publishAtRest(sessionId, rest)

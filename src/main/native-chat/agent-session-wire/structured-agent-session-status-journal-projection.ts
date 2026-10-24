@@ -49,6 +49,9 @@ export class StructuredAgentSessionJournalProjections {
     }
   >()
 
+  hasUnknownRestart = (sessionId: string): boolean =>
+    this.restored.get(sessionId)?.rest.known === false
+
   noteRestart(sessionId: string, rest: StructuredAgentSessionAtRest): void {
     const previous = this.restored.get(sessionId)
     if (!previous || (previous.rest.known === false && rest.known !== false)) {

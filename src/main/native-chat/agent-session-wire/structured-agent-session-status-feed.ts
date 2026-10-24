@@ -165,6 +165,8 @@ export class StructuredAgentSessionStatusFeed {
     }
   }
 
+  hasUnknownRestart = (sessionId: string): boolean => this.projections.hasUnknownRestart(sessionId)
+
   readPublished = (sessionId: string): AgentSessionStatusSummary | undefined =>
     this.published.get(sessionId)?.summary
 

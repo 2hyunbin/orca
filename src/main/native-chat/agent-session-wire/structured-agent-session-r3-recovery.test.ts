@@ -317,3 +317,129 @@ it.each([32, 320])(
     expect(ordered).toHaveBeenCalledTimes(records.length)
   }
 )
+
+it('publishes committed legacy initialization after ordinary open at its original clock', async () => {
+  const completed = 'legacy-completed-before-background'
+  const unfinished = 'legacy-unfinished-before-background'
+  const negatives = ['legacy-foreign', 'legacy-conflicted', 'legacy-unproved']
+  const ids = [completed, unfinished, ...negatives]
+  const records = ids.map((id) => {
+    const r = record(id)
+    if (id === completed || id === unfinished) {
+      return {
+        ...r,
+        lease: {
+          ...r.lease,
+          claimStatus: 'released' as const,
+          unreconciled: false,
+          ownerProcess: null,
+          reservedSpawnToken: null,
+          deathEvidence: {
+            kind: 'pid-absent' as const,
+            detail: 'previous runtime ended',
+            observedAt: NOW,
+            ownerFence: 7,
+            runtimeEnd: 'crash' as const
+          }
+        }
+      }
+    }
+    return {
+      ...r,
+      lease: {
+        ...r.lease,
+        ...(id === negatives[0]
+          ? { ownerProcess: { ...r.lease.ownerProcess!, hostId: 'foreign' } }
+          : id === negatives[1]
+            ? { claimStatus: 'conflicted' as const }
+            : {})
+      }
+    }
+  })
+  const current = await create(records)
+  const { db } = current.deps.journalDatabase
+  for (const id of ids) {
+    await seed(id, id === unfinished)
+    db.prepare(
+      'UPDATE journal_sessions SET open_turn_id = NULL, open_turn_since = NULL WHERE session_id = ?'
+    ).run(id)
+  }
+  const rows = db.prepare(
+    'SELECT seq, ts, row_json FROM journal_rows WHERE session_id = ? ORDER BY seq'
+  )
+  const originalRows = rows.all(completed)
+  const trusted: AgentSessionStatusSummary[] = []
+  const broadcast: AgentSessionStatusSummary[] = []
+  current.deps.statusSink = { publish: (row) => trusted.push(row), forget: () => {} }
+  current.subscribeStatus({
+    id: 'initialization-both',
+    emit: (event) => {
+      if (event.type === 'status') {
+        broadcast.push(event.session)
+      }
+    }
+  })
+  const opened = vi.spyOn(AgentSessionJournal.prototype, 'open')
+  const advance = vi.spyOn(JournalLegacyRestInitializer.prototype, 'advance')
+  const latest = (events: AgentSessionStatusSummary[], id: string) =>
+    events.findLast((event) => event.sessionId === id)
+  await current.restoreReadableSessions(ids)
+  expect(opened).not.toHaveBeenCalled()
+  for (const events of [trusted, broadcast]) {
+    for (const id of ids) {
+      expect(latest(events, id)?.status).toBeNull()
+      expect(latest(events, id)?.turnOutcome).toBeUndefined()
+      expect(latest(events, id)?.statusStartedAt).toBeUndefined()
+      expect(latest(events, id)?.restoredInterruption).toBeUndefined()
+    }
+  }
+  expect(readJournalRestFacts(db, completed)?.known).toBe(false)
+  await current.journalSnapshot(completed)
+  expect(opened).toHaveBeenCalledOnce()
+  expect(readJournalRestFacts(db, completed)).toMatchObject({ known: true, openTurn: null })
+  expect(rows.all(completed)).toEqual(originalRows)
+  for (const events of [trusted, broadcast]) {
+    expect(latest(events, completed)?.status).toBeNull()
+    expect(latest(events, completed)?.turnOutcome).toBeUndefined()
+    expect(latest(events, completed)?.statusStartedAt).toBeUndefined()
+  }
+  setStructuredJournalReadiness(() => true)
+  current.advanceLegacyRest()
+  await advance.mock.results.findLast((result) => result.value)?.value
+  for (const events of [trusted, broadcast]) {
+    expect(latest(events, completed)).toMatchObject({
+      status: 'idle',
+      statusStartedAt: savedAt,
+      updatedAt: savedAt
+    })
+    expect(latest(events, completed)?.turnOutcome).toBeUndefined()
+    expect(latest(events, completed)?.restoredInterruption).toBeUndefined()
+    expect(latest(events, unfinished)).toMatchObject({
+      status: 'idle',
+      turnOutcome: 'cancellation',
+      restoredInterruption: true,
+      statusStartedAt: savedAt
+    })
+    for (const id of negatives) {
+      expect(latest(events, id)?.status).toBeNull()
+      expect(latest(events, id)?.turnOutcome).toBeUndefined()
+      expect(latest(events, id)?.restoredInterruption).toBeUndefined()
+      expect(readJournalRestFacts(db, id)?.known).toBe(false)
+    }
+  }
+  expect(rows.all(completed)).toEqual(originalRows)
+  expect(opened).toHaveBeenCalledOnce()
+  for (const action of [
+    'acquire',
+    'dispatch',
+    'cancelTurn',
+    'answerPrompt',
+    'setOption'
+  ] as const) {
+    expect(current.deps.adapter[action]).not.toHaveBeenCalled()
+  }
+  const before = { trusted: [...trusted], broadcast: [...broadcast] }
+  current.advanceLegacyRest()
+  await advance.mock.results.findLast((result) => result.value)?.value
+  expect({ trusted, broadcast }).toEqual(before)
+})

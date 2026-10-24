@@ -421,7 +421,8 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
     const execPrototype = Object.getPrototypeOf(openTestJournalHostDatabase(root).db)
     const originalExec = execPrototype.exec
     const allExec = vi.spyOn(execPrototype, 'exec')
-    const allSql = vi.spyOn(Object.getPrototypeOf(openTestJournalHostDatabase(root).db), 'prepare')
+    const originalPrepare = execPrototype.prepare
+    const allSql = vi.spyOn(execPrototype, 'prepare')
     const journal = await open()
     for (let i = 0; i < count; i++) {
       await journal.appendSubmission({
@@ -512,17 +513,23 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
     expect(cursor).toBeLessThan(tip)
     const resumed = make()
     const resumedCursors: number[] = []
-    const prepare = database.db.prepare.bind(database.db)
     const rowStatements = new WeakSet<object>()
-    const rowSql = vi.spyOn(database.db, 'prepare').mockImplementation((query) => {
-      const statement = prepare(query)
-      if (query.includes('ORDER BY seq ASC LIMIT') && !rowStatements.has(statement)) {
+    const rowReads: { mockRestore(): void }[] = []
+    allSql.mockImplementation(function (query) {
+      const statement = originalPrepare.call(this, query)
+      if (
+        this === database.db &&
+        query.includes('ORDER BY seq ASC LIMIT') &&
+        !rowStatements.has(statement)
+      ) {
         rowStatements.add(statement)
         const all = statement.all.bind(statement)
-        vi.spyOn(statement, 'all').mockImplementation((...args) => {
-          resumedCursors.push(Number(args[2]))
-          return all(...args)
-        })
+        rowReads.push(
+          vi.spyOn(statement, 'all').mockImplementation((...args) => {
+            resumedCursors.push(Number(args[2]))
+            return all(...args)
+          })
+        )
       }
       return statement
     })
@@ -538,6 +545,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
       return result
     })
     await resumed.advance(() => true)
+    expect(failed).not.toHaveBeenCalled()
     const structuralVisits = allSql.mock.calls.filter(([query]) =>
       String(query).includes('SELECT id,key,value FROM relations')
     ).length
@@ -562,7 +570,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
           .filter((part) => part.trim()).length,
       0
     )
-    rowSql.mockRestore()
+    rowReads.forEach((spy) => spy.mockRestore())
     allSql.mockRestore()
     allExec.mockRestore()
     update.mockRestore()

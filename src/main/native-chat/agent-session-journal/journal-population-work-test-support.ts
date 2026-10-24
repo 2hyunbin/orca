@@ -110,19 +110,20 @@ export async function exercisePopulationWork(
     turnScope: AGENT_JOURNAL_THREAD_SCOPE
   })
   expect(active.entries.get(source)?.fact).toEqual({ itemId: source, since: 100 })
+  // Lifecycle endpoints are positive; the independent row clock remains negative.
   const late = await journal.appendItem(
     identity('late-provider-root'),
     {
       kind: 'turn',
       turnId: 'late-provider-root',
       state: 'running',
-      startedAt: -1000
+      startedAt: 1
     },
     { fence: 1, observedAt: -500 }
   )
   const lateKey = agentJournalItemKey(identity('late-provider-root'))
   expect(journal.item(lateKey)?.observedAt).toBe(-500)
-  expect(journal.item(lateKey)?.sequence).toBe(late.sequence)
+  expect(journal.item(lateKey)?.sequence).toBe(late.cursor.sequence)
   expect(active.head?.fact).toEqual(head.fact)
   await journal.appendItem(
     identity('late-provider-root'),
@@ -131,8 +132,8 @@ export async function exercisePopulationWork(
       turnId: 'late-provider-root',
       state: 'completed',
       outcome: 'success',
-      startedAt: -1000,
-      completedAt: -900
+      startedAt: 1,
+      completedAt: 2
     },
     { fence: 1, observedAt: -900 }
   )

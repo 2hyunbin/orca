@@ -17,6 +17,7 @@ export function createHostLegacyRestInitializer(
   return new JournalLegacyRestInitializer({
     database: deps.journalDatabase,
     candidates: () => orderedLegacyRestCandidates(deps.store),
+    needsPublication: (id) => clientDelivery.hasUnknownRestart(id),
     owner: (id) => {
       const record = deps.store.getRecord(id)
       if (!record || sessions.get(id)?.child) {

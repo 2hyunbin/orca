@@ -28,6 +28,8 @@ export class JournalLegacyRestInitializer {
     private readonly deps: {
       database: JournalHostDatabase
       candidates: () => Iterable<string | undefined>
+      /** Ordinary open can commit the pair before its cold unknown presentation completes. */
+      needsPublication?: (sessionId: string) => boolean
       /** Null means an owner is still live/foreign/unproved; a stable value is its actual source guard. */
       owner: (sessionId: string) => string | null
       initialized: (
@@ -69,11 +71,14 @@ export class JournalLegacyRestInitializer {
     const { db } = this.deps.database
     const projection = readJournalSessionProjection(db, sessionId)
     const owner = this.deps.owner(sessionId)
+    if (!projection || owner === null) {
+      return null
+    }
+    const known = projection.pair[0] !== null || projection.pair[1] === 0
     if (
-      !projection ||
-      projection.pair[0] !== null ||
-      projection.pair[1] !== null ||
-      owner === null
+      known
+        ? !this.deps.needsPublication?.(sessionId)
+        : projection.pair[0] !== null || projection.pair[1] !== null
     ) {
       return null
     }
@@ -85,7 +90,21 @@ export class JournalLegacyRestInitializer {
     if (tip < 1) {
       return null
     }
-    return { ...projection, tip, guard: JSON.stringify([6, sessionId, projection, tip, owner]) }
+    return {
+      ...projection,
+      known,
+      tip,
+      guard: JSON.stringify([6, sessionId, projection, tip, owner])
+    }
+  }
+  private publishKnown(sessionId: string, guard: string): void {
+    const facts = readJournalRestFacts(this.deps.database.db, sessionId)
+    if (facts?.known && this.source(sessionId)?.guard === guard) {
+      this.deps.initialized(sessionId, facts)
+    }
+    if (this.scratch?.load<JournalStructuralCheckpoint>()?.sessionId === sessionId) {
+      this.scratch.beginCleanup(sessionId)
+    }
   }
   private async run(canWork: () => boolean): Promise<void> {
     await yieldToForeground()
@@ -146,6 +165,11 @@ export class JournalLegacyRestInitializer {
         this.candidate = undefined
         continue
       }
+      if (source.known) {
+        this.publishKnown(sessionId, source.guard)
+        this.candidate = undefined
+        continue
+      }
       let saved = scratch.load<JournalStructuralCheckpoint>()
       if (saved && (saved.guard !== source.guard || saved.selection?.format !== 6)) {
         scratch.beginCleanup(sessionId)
@@ -162,6 +186,9 @@ export class JournalLegacyRestInitializer {
           }
           const current = this.source(sessionId)
           if (current?.guard !== source.guard) {
+            if (current?.known) {
+              this.publishKnown(sessionId, current.guard)
+            }
             return
           }
           const started = performance.now()

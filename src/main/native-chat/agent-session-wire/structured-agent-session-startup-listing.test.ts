@@ -28,7 +28,6 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
-import { structuredAgentSessionHostInstance } from './structured-agent-session-queued-pause'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import {
   openTestAgentSessionRecordStore,
@@ -528,9 +527,7 @@ it('preserves waiting-card pause and failed-mark fallback across cache reacquisi
   })
   await journal.queuedMessages.insert({
     messageId: 'waiting',
-    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'queued' }] },
-    fingerprint: 'fp',
-    hostInstance: structuredAgentSessionHostInstance()
+    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'queued' }] }
   })
   await journal.close()
   const seen = new Map<string, AgentSessionJournal>()

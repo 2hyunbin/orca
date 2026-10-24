@@ -83,16 +83,17 @@ export async function exerciseRetainedPopulation(
         turnId: 'late-linked-request',
         userItemId: source,
         state: 'running',
-        startedAt: -444
+        startedAt: 1
       },
       { fence: 1, observedAt: -333 }
     )
     expect(journal.item(lateKey)!.sequence).toBeGreaterThan(sourceSequence)
+    expect(journal.item(lateKey)!.observedAt).toBe(-333)
     expect(state.rest.checkpoint().latest?.item.itemId).toBe(
       agentJournalItemKey(identity(`descending-${count - 1}`))
     )
     expect(journal.requestFrontier()).toBe(agentJournalItemKey(identity(`descending-${count - 1}`)))
-    expect(journal.restFact()).toEqual({ itemId: lateKey, since: -444 })
+    expect(journal.restFact()).toEqual({ itemId: lateKey, since: 1 })
   })
   await measure('request-descending', async () => {
     for (let index = count - 1; index >= 0; index--) {
@@ -101,7 +102,7 @@ export async function exerciseRetainedPopulation(
         index === 0 ? source : agentJournalItemKey(identity(`descending-${index - 1}`))
       expect(journal.requestFrontier()).toBe(expected)
       expect(state.rest.checkpoint().latest?.item.itemId).toBe(expected)
-      expect(journal.restFact()).toEqual({ itemId: lateKey, since: -444 })
+      expect(journal.restFact()).toEqual({ itemId: lateKey, since: 1 })
     }
   })
   await measure('request-finished-rewind', async () => {
@@ -113,8 +114,8 @@ export async function exerciseRetainedPopulation(
         userItemId: source,
         state: 'completed',
         outcome: 'success',
-        startedAt: -444,
-        completedAt: -222
+        startedAt: 1,
+        completedAt: 2
       },
       { fence: 1 }
     )
