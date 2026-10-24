@@ -4,18 +4,13 @@
  * probe so the sampling loop stays free of store/DOM lookups.
  */
 import { getAgentStatusState } from '@/store/agent-status'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { listProbePanes, paneRootElement, type ProbePane } from './echo-instrumentation'
 import type { FocusedPaneCensus } from './diagnostic-summary'
 
-type ProbeStoreState = {
-  activeTabId?: string | null
-  paneForegroundAgentByPaneKey?: Record<string, { agent?: string | null }>
-  agentStatusByPaneKey?: Record<string, { agentType?: string | null }>
-}
-
-export function readProbeStoreState(): (ProbeStoreState & Record<string, unknown>) | null {
+export function readProbeStoreState(): AgentStatusReadState | null {
   try {
-    return getAgentStatusState() as unknown as ProbeStoreState & Record<string, unknown>
+    return getAgentStatusState()
   } catch {
     return null
   }
