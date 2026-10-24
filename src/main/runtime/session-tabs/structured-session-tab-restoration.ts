@@ -108,6 +108,9 @@ export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce exten
     tabId?: string
     /** This machine's window made the create; its own open places the tab. */
     placedByWindow?: boolean
+    /** Where the creating paired client opens the chat. */
+    /** A ChatTabPlacement, typed in place: this file is at its line limit. */
+    placement?: { groupId?: string; afterTabId?: string }
   }): Promise<void> {
     input = initialChatSelection(this, input, this.mobileSessionTabsByWorktree)
     const host = getStructuredAgentSessionHost()

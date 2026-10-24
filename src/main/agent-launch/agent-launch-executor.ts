@@ -12,6 +12,7 @@ import {
 /** Structured launches create the workspace without an agent, then ask its host for chat support.
  * The host needs the created workspace to answer; a definitive refusal starts a terminal agent. */
 
+import { assertAgentPromptRequestActive } from '../runtime/orca-runtime-core'
 import { assertOpenCodeModelLaunchPreferencesAbsent } from '../opencode/opencode-model-startup-plan'
 import type { AgentLaunchResult } from '../../shared/agent-launch-intent'
 import { combineLaunchWarnings } from './agent-launch-warnings'
@@ -76,15 +77,15 @@ export async function executeAgentLaunch(
       ...(intent.surface ? { surface: intent.surface } : {}),
       vocabulary
     })
-  // The create's startup terminal is this launch's only surface, and the create delivers the text.
+  // Intent preparation may have outlived the request.
+  assertAgentPromptRequestActive(execution.signal)
   if (execution.promptPolicy === 'legacy-host') {
     assertLegacyHostTarget(execution)
     const placed = await resolveWorkspace(execution, preflight)
     return published(execution, legacyHostCreateResult(execution, placed, preflight))
   }
 
-  // A reused terminal already downgraded in the pre-flight; there is nothing to create. Its agent
-  // was running before this launch existed, so argv is unreachable and the PTY is the only way in.
+  // A reused process cannot accept new argv; deliver through its PTY.
   if (intent.reuseTerminal) {
     const reused = published(execution, {
       outcome: { kind: 'terminal', handle: intent.reuseTerminal.handle },
@@ -159,6 +160,8 @@ export async function executeAgentLaunch(
         return startup
       }
 
+      recoverableWorktreeId = execution.signal?.aborted ? placed.worktreeId : undefined
+      assertAgentPromptRequestActive(execution.signal)
       const settlement: AgentLaunchModeSettlement = {
         phase: intent.target.kind === 'existing' ? 'before-effects' : 'created-workspace',
         agent: intent.agent,
@@ -183,6 +186,7 @@ export async function executeAgentLaunch(
       recoverableWorktreeId = placed.worktreeId
       let created: CreatedSurface
       try {
+        assertAgentPromptRequestActive(execution.signal)
         assertHostFoundingNotCancelled(attempt)
         created = await createLaunchSurface(execution, placed, settled)
       } catch (error) {
@@ -211,6 +215,7 @@ export async function executeAgentLaunch(
           ) {
             throw error
           }
+          assertAgentPromptRequestActive(execution.signal)
           settled = downgradeAgentLaunchModeForStructuredRefusal(settled, vocabulary, settlement)
           created = await createLaunchTerminalSurface(execution, placed)
         }

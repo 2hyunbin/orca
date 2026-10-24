@@ -13,7 +13,8 @@ import type {
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
+import { mainTerminalRegistered } from '../surface/main-terminal-surfaces'
+import { assertPaneBoundAtRegistration, isRuntimeHostedWorkspace } from './bind-first-registration'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
@@ -117,6 +118,16 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         : {}),
       ...(binding?.incarnationId ? { incarnationId: binding.incarnationId } : {})
     })
+    // Switch point: bind-first; main's layout already names this pane (L80). A paired server's
+    // workspace is that server's layout, and a runtime with no session store (tests) has none.
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      paneKey &&
+      this.store?.getWorkspaceSession &&
+      !isRuntimeHostedWorkspace(this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId))
+    ) {
+      assertPaneBoundAtRegistration(ptyId, paneKey, this.paneOfPty(pty).paneKey)
+    }
     if (binding?.setupCompletionToken && !this.setupCompletionTokenByPtyId.has(ptyId)) {
       const observed = createSetupCompletionObservation(binding.setupCompletionToken)
       this.setupCompletionTokenByPtyId.set(ptyId, observed)
@@ -138,7 +149,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       paneKey &&
       binding.incarnationId &&
       pty.incarnationId === binding.incarnationId &&
-      pty.paneKey === paneKey &&
+      this.paneOfPty(pty).paneKey === paneKey &&
       pty.launchToken === null &&
       agentLaunchAuthority.launchToken.length > 0 &&
       agentLaunchAuthority.launchToken.length <= 128 &&
@@ -154,7 +165,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       paneKey &&
       binding.incarnationId === providerReattachLaunchIdentity.incarnationId &&
       pty.incarnationId === providerReattachLaunchIdentity.incarnationId &&
-      pty.paneKey === paneKey &&
+      this.paneOfPty(pty).paneKey === paneKey &&
       isTuiAgent(providerReattachLaunchIdentity.launchAgent)
     ) {
       // Why: daemon metadata owns the surviving process; its incarnation fence restores identity without minting renderer launch authority.
@@ -177,7 +188,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     }
     // Switch point: a pane main binds lists its terminal now, in the same push as the flip below.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      startedMainTerminalSurfaces(this)?.terminalRegistered(ptyId)
+      mainTerminalRegistered(this, ptyId)
     }
     // Why: a listed surface's pending-handle → ready flip must not wait on a later renderer graph change.
     this.touchMobileSessionSnapshotsForPty(ptyId)

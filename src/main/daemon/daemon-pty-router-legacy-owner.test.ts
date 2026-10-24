@@ -5,10 +5,9 @@ import { DaemonPtyRouter } from './daemon-pty-router'
 import { TerminalSessionOwnerUnverifiedError } from './daemon-errors'
 
 const SPAWN = { cols: 80, rows: 24 }
-// Above any real pid ceiling, so the exit probe always finds it missing.
+// Keep the fake PID outside the real process range.
 const MISSING_PID = 2_147_483_000
 
-// #26296: after a daemon update, the old daemon keeps the sessions it runs; the new one takes only new ids.
 describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
   it('reattaches on the older daemon when startup discovery could not route the id', async () => {
     const current = createAdapter('current')
@@ -75,7 +74,7 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
     const router = new DaemonPtyRouter({ current, legacy: [legacy] })
     await router.discoverLegacySessions()
 
-    // A dropped current connection answers the probe with null; the inventory reconnects.
+    // Model reconnect through inventory after the current connection drops.
     vi.mocked(current.probePtyLiveness).mockResolvedValue(null)
 
     await router.spawn({ ...SPAWN, sessionId: 'current-session' })
@@ -98,7 +97,6 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
     expect(legacy.probePtyLiveness).toHaveBeenCalledOnce()
   })
 
-  // A daemon still on its socket is not proven exited by a missing pid alone.
   it('refuses while the older daemon socket answers even if its pid is gone', async () => {
     const current = createAdapter('current')
     const legacy = createAdapter('legacy', ['claude-session'])
@@ -138,27 +136,30 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
       expect(current.spawn).toHaveBeenCalledOnce()
     }
   )
-  it('keeps generation50 live ownership while generation51 receives new native setup', async () => {
-    expect(PROTOCOL_VERSION).toBe(51)
-    expect(PREVIOUS_DAEMON_PROTOCOL_VERSIONS).toContain(50)
-    const current = createAdapter('v51', [], undefined, 51)
-    const legacy = createAdapter('v50', ['old-live'], undefined, 50)
-    const router = new DaemonPtyRouter({ current, legacy: [legacy] })
-    await router.discoverLegacySessions()
-    await router.spawn({ ...SPAWN, sessionId: 'old-live', attachOnly: true })
-    const request = {
-      ...SPAWN,
-      command: 'bash /actual/setup.sh',
-      env: { ORCA_SETUP_COMPLETION_TOKEN: 'native:upgrade' }
+  it.each([50, 51])(
+    'keeps generation%s live ownership while generation52 receives new native setup',
+    async (previous) => {
+      expect(PROTOCOL_VERSION).toBe(52)
+      expect(PREVIOUS_DAEMON_PROTOCOL_VERSIONS).toContain(previous)
+      const current = createAdapter('v52', [], undefined, 52)
+      const legacy = createAdapter(`v${previous}`, ['old-live'], undefined, previous)
+      const router = new DaemonPtyRouter({ current, legacy: [legacy] })
+      await router.discoverLegacySessions()
+      await router.spawn({ ...SPAWN, sessionId: 'old-live', attachOnly: true })
+      const request = {
+        ...SPAWN,
+        command: 'bash /actual/setup.sh',
+        env: { ORCA_SETUP_COMPLETION_TOKEN: 'native:upgrade' }
+      }
+      await router.spawn(request)
+      router.write('old-live', 'ordinary input')
+      expect(legacy.spawn).toHaveBeenCalledExactlyOnceWith({
+        ...SPAWN,
+        sessionId: 'old-live',
+        attachOnly: true
+      })
+      expect(current.spawn).toHaveBeenCalledExactlyOnceWith(request)
+      expect(legacy.write).toHaveBeenCalledWith('old-live', 'ordinary input')
     }
-    await router.spawn(request)
-    router.write('old-live', 'ordinary input')
-    expect(legacy.spawn).toHaveBeenCalledExactlyOnceWith({
-      ...SPAWN,
-      sessionId: 'old-live',
-      attachOnly: true
-    })
-    expect(current.spawn).toHaveBeenCalledExactlyOnceWith(request)
-    expect(legacy.write).toHaveBeenCalledWith('old-live', 'ordinary input')
-  })
+  )
 })

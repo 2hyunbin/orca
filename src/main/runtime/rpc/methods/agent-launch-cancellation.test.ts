@@ -193,14 +193,14 @@ it.each([
       await proceed.promise
       return commit(proof)
     })
-    const enqueue = JournalRowWriter.prototype.enqueue
-    vi.spyOn(JournalRowWriter.prototype, 'enqueue').mockImplementation(
-      function (build, hook, proof) {
+    const enqueue = JournalRowWriter.prototype.enqueueRows
+    vi.spyOn(JournalRowWriter.prototype, 'enqueueRows').mockImplementation(
+      function (plan, proof, receiptRow) {
         if (!proof) {
-          return enqueue.call(this, build, hook, proof)
+          return enqueue.call(this, plan, proof, receiptRow)
         }
         waiting.resolve()
-        return proceed.promise.then(() => enqueue.call(this, build, hook, proof))
+        return proceed.promise.then(() => enqueue.call(this, plan, proof, receiptRow))
       }
     )
     const launch = h.call('agent.launchReplay')

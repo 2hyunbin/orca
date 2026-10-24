@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { OrcaRuntimeWithRuntimeId } from '../../../runtime/construction/runtime-identity-state'
 import { TerminalIntentionalStops } from '../../../runtime/terminal-intentional-stops'
 import { TerminalRunFactsRegister } from '../../../runtime/terminal-run-facts'
@@ -31,7 +32,7 @@ async function commit(
   const runtime = {
     terminalRunFacts: facts,
     intentionalPtyStops,
-    // Why the real method: the case under test is what the runtime does with each commit.
+    // Exercise real runtime commit handling through the fixture ports.
     noteTerminalSpawnCommit: OrcaRuntimeWithRuntimeId.prototype.noteTerminalSpawnCommit,
     registerPreAllocatedHandleForPty: vi.fn(),
     registerPty: vi.fn(),
@@ -62,7 +63,25 @@ describe('runtime spawn commit: run facts', () => {
   })
 
   it('records a new process as a fresh spawn', async () => {
-    expect((await commit({})).freshSpawn).toBe(true)
+    const registerPty = vi.fn()
+    expect(
+      (
+        await commit({}, undefined, undefined, (ctx) => {
+          ctx.args.worktreeId = 'wt-1'
+          ctx.args.tabId = 'tab-1'
+          ctx.metadataLeafId = 'leaf-1'
+          ctx.env = { ORCA_SETUP_COMPLETION_TOKEN: 'native:runtime-run-facts' }
+          ctx.deps.runtime!.registerPty = registerPty
+        })
+      ).freshSpawn
+    ).toBe(true)
+    expect(registerPty).toHaveBeenCalledWith(
+      PTY_ID,
+      'wt-1',
+      null,
+      expect.objectContaining({ setupCompletionToken: 'native:runtime-run-facts' }),
+      expect.any(Boolean)
+    )
   })
 
   it('never reads an SSH adoption that omits isReattach as fresh', async () => {
@@ -96,6 +115,34 @@ describe('runtime spawn commit: run facts', () => {
     await commit(result, new TerminalRunFactsRegister(), stops)
 
     expect(stops.claimExit(PTY_ID, INCARNATION_ID)).toEqual([])
+  })
+
+  it('reports the resumed agent before the bind can publish its first frame', async () => {
+    const onResumeOutcome = vi.fn()
+    const persistPtyBinding = vi.fn(async () => {
+      expect(onResumeOutcome.mock.calls).toEqual(
+        ORCA_LAYOUT_OWNER_IS_MAIN ? [[PTY_ID, 'resume-unavailable']] : []
+      )
+      return true
+    })
+
+    await commit({}, undefined, undefined, (ctx) => {
+      ctx.args.resumeProviderSession = { key: 'session_id', id: 'codex-session-1' }
+      ctx.args.onResumeOutcome = onResumeOutcome
+      ctx.codexResumeUnavailable = true
+      ctx.codexResumeArgvDropped = true
+      ctx.hostSessionBinding = {
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this boundary pin observes the bind write without invoking its stored callback.
+        store: { persistPtyBinding } as unknown as NonNullable<
+          typeof ctx.hostSessionBinding
+        >['store'],
+        worktreeId: 'wt-1',
+        tabId: 'tab-1',
+        leafId: 'leaf-1'
+      }
+    })
+
+    expect(persistPtyBinding).toHaveBeenCalledOnce()
   })
 
   it('records nothing for a spawn discarded because its binding save failed', async () => {

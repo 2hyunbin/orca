@@ -16,19 +16,15 @@ import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { StructuredAgentSessionFirstMessage } from '../../shared/structured-agent-session-create'
 
-/** How a surface is built once the executor has decided which one. Injected because an
- *  orchestration worker's session carries a redrive subscription and a mailbox a plain launch
- *  must not take, while the decision and ordering above it are identical. */
+/** Inject creation so orchestration can add subscriptions without duplicating launch sequencing. */
 export type AgentLaunchSurfaceFactory = {
   createStructuredSession(args: {
     worktreeId: string
-    /** An agent this host registered as structured; the launch mode already checked it. */
     agent: StructuredAgentId
     options?: Readonly<Record<string, unknown>>
-    /** The caller-minted session id; refused with `AgentLaunchSessionAlreadyExistsError` if taken. */
+    /** Caller-minted ID; reject with AgentLaunchSessionAlreadyExistsError if taken. */
     sessionId?: string
-    /** The caller-reserved tab id (the tab half of `paneKey`), so the host records where this chat
-     *  is shown; absent records the id clients derive. */
+    /** Caller-reserved tab ID; omit to use the ID clients derive. */
     tabId?: string
     hostFoundingAttempt?: HostFoundingAttempt
     firstMessage?: StructuredAgentSessionFirstMessage['body']
@@ -38,26 +34,22 @@ export type AgentLaunchSurfaceFactory = {
     sequenceTerminalCommand?: AgentLaunchTerminalSequence
     agent: TuiAgent
     options?: Readonly<Record<string, unknown>>
-    /** Offered only for an agent whose CLI takes the prompt on argv. It rides the launch command
-     *  only when the typed line can carry it; `promptRodeLaunchCommand` reports which happened. */
+    /** Offer on argv; promptRodeLaunchCommand confirms whether the typed line carried it. */
     startupPrompt?: string
     /** Replaces the settings default for this launch only; `null` means no arguments at all. */
     agentArgs?: string | null
     cwd?: string
-    /** The one member of the `agent_started` triple the host cannot derive for itself. */
     launchSource?: string
-    /** The caller-minted pane to create; refused with `AgentLaunchPaneAlreadyLiveError` if live. */
+    /** Caller-minted pane; reject with AgentLaunchPaneAlreadyLiveError if live. */
     paneKey?: string
-    /** The tab's first view, derived on the host by the window's own rule. */
     viewMode?: 'terminal' | 'chat'
-    /** Account routing env merged over the agent's own (`agent.launch`'s `accountEnv`). */
+    /** Account routing overrides merged over the agent environment. */
     accountEnv?: Readonly<Record<string, string>>
   }): Promise<{
     handle: string
-    /** The pane this create minted; a factory whose runtime reports none omits it, never invents. */
+    /** Omit when the runtime reports no pane; never invent one. */
     paneKey?: string
     warning?: string
-    /** Reported by the surface that built the typed line, never predicted by the executor. */
     promptRodeLaunchCommand?: boolean
   }>
   /**
@@ -70,11 +62,12 @@ export type AgentLaunchSurfaceFactory = {
    */
   deliverTerminalPrompt?(args: {
     handle: string
-    /** The launched agent, whose own readiness signal the write waits for. */
     agent: TuiAgent
-    /** False for a reused terminal, which has no fresh launch readiness to wait for. */
+    /** Reused terminals have no fresh launch readiness signal to await. */
     freshLaunch: boolean
     prompt: AgentLaunchPrompt
+    /** Abort readiness waits and refuse pending pastes. */
+    signal?: AbortSignal
   }): Promise<boolean>
 }
 
@@ -82,12 +75,12 @@ export type AgentLaunchStructuredSurface = {
   sessionId: string
   handle: string
   fence: number
-  /** The host-owned id of the tab that shows this chat; a host that predates it reports none. */
+  /** Older hosts may omit the host-owned tab ID. */
   tabId?: string
   promptDisposal?: AgentLaunchPromptDisposal
 }
 
-/** A structured create refusal that proves no session was committed, so the launch may downgrade. */
+/** Proves no session was committed, permitting terminal fallback. */
 export class AgentLaunchStructuredSessionRefusedError extends Error {
   readonly code: string
 
@@ -124,7 +117,7 @@ export type AgentLaunchInitialSurfaceStage = (
 export type AgentLaunchWorkspaceFactory = {
   createWorktree(args: {
     create: Readonly<Record<string, unknown>>
-    /** Main-internal registration at the metadata boundary, before the workspace is announced. */
+    /** Register before announcing the workspace. */
     onWorkspaceCreated?: (worktreeId: string) => void
     promisedAgentChat?: boolean
     initializeSurface?: AgentLaunchInitialSurfaceStage
@@ -132,38 +125,31 @@ export type AgentLaunchWorkspaceFactory = {
      *  agent's startup command behind the setup runner, which is how a PTY launch gets its
      *  wait-for-setup gate. Chats are committed independently of setup. */
     startupAgent: TuiAgent | undefined
-    /** Offered only alongside a `startupAgent` whose CLI takes the prompt on argv: agent-first
-     *  creation builds the startup command, so that is where the typed line is measured. */
+    /** The startup command builder measures whether this argv prompt fits. */
     startupPrompt?: string
-    /** Set instead of `startupPrompt` under the `legacy-host` prompt policy: this create owns the
-     *  text for any agent and length, as `worktree.create` always has. */
+    /** Legacy delivery lets the create own all prompt lengths and agents. */
     legacyPrompt?: AgentLaunchPrompt
-    /** Inputs needed when this terminal is created as the worktree's startup surface. */
     agentArgs?: string | null
     cwd?: string
     launchSource?: string
     paneKey?: string
-    /** The launch's session options, read as the startup terminal's model/effort/mode preferences. */
     options?: Readonly<Record<string, unknown>>
-    /** Account routing env merged over the startup agent's own. */
+    /** Account routing overrides merged over the startup agent environment. */
     accountEnv?: Readonly<Record<string, string>>
   }): Promise<AgentLaunchWorkspace>
 
   /** Leave a usable workspace when chat creation has an indeterminate outcome. */
   createRecoveryShell?: (worktreeId: string) => Promise<void>
-  /** A folder workspace has no startup terminal: the launch starts its agent there afterwards.
-   *  Only `agent.launch` creates folders; callers that only create worktrees omit it. */
+  /** Folders have no startup terminal; the executor launches their agent after creation. */
   createFolderWorkspace?(args: {
     create: Readonly<Record<string, unknown>>
   }): Promise<{ worktreeId: string; workspacePath?: string; connectionId: string | null }>
 }
 
-/** What every route that builds a terminal agent passes on, so the startup terminal of a new
- *  workspace and the terminal of an existing one start the same agent. */
 export function terminalLaunchInputs(intent: AgentLaunchIntent) {
   return {
     ...(intent.sessionOptions ? { options: intent.sessionOptions } : {}),
-    // `null` is a value the caller meant, so this tests for absence rather than falsiness.
+    // Null explicitly suppresses default arguments.
     ...(intent.agentArgs !== undefined ? { agentArgs: intent.agentArgs } : {}),
     ...(intent.cwd ? { cwd: intent.cwd } : {}),
     ...(intent.launchSource ? { launchSource: intent.launchSource } : {}),

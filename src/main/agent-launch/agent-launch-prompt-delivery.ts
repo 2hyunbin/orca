@@ -31,12 +31,7 @@ export const HANDED_TO_TERMINAL: AgentLaunchPromptDisposal = { outcome: 'handed-
 const NOT_DELIVERED: AgentLaunchPromptDisposal = { outcome: 'not-delivered' }
 const UNCONFIRMED: AgentLaunchPromptDisposal = { outcome: 'unconfirmed' }
 
-/**
- * What the record may say before any delivery runs: only what creating the surface already settled.
- * A launch command that carried the text has handed it over, and a draft is never delivered by the
- * host. A submit still owed is `unconfirmed`: a host that stops mid-delivery cannot say whether the
- * paste or the commit landed, and "not delivered" would invite a duplicate turn.
- */
+/** Persist owed submits as unconfirmed: a crash during delivery must not invite duplicate turns. */
 export function settledAtCreation(
   intent: Pick<AgentLaunchIntent, 'prompt'>,
   created: Pick<CreatedSurface, 'promptRodeLaunchCommand' | 'structured'>
@@ -50,7 +45,6 @@ export function settledAtCreation(
   return intent.prompt?.delivery === 'submit' ? UNCONFIRMED : NOT_DELIVERED
 }
 
-/** Each surface delivers its own way, so the disposal is decided where the surface is known. */
 export async function settleLaunchPromptDisposal(
   execution: AgentLaunchSurfaceExecution,
   created: CreatedSurface
@@ -58,7 +52,6 @@ export async function settleLaunchPromptDisposal(
   if (created.structured) {
     return settledAtCreation(execution.intent, created)
   }
-  // The surface reported that the startup command carried the prompt; there is nothing left to write.
   if (created.promptRodeLaunchCommand) {
     return HANDED_TO_TERMINAL
   }
@@ -82,28 +75,25 @@ export async function deliverTerminalLaunchPrompt(
   handle: string,
   { freshLaunch }: { freshLaunch: boolean }
 ): Promise<AgentLaunchPromptDisposal> {
-  const { intent, surfaces } = execution
-  if (!intent.prompt || intent.prompt.delivery !== 'submit') {
+  const { intent, surfaces, signal } = execution
+  if (!intent.prompt || intent.prompt.delivery !== 'submit' || signal?.aborted) {
     return NOT_DELIVERED
   }
   const delivered = await surfaces.deliverTerminalPrompt?.({
     handle,
     agent: intent.agent,
     freshLaunch,
-    prompt: intent.prompt
+    prompt: intent.prompt,
+    ...(signal ? { signal } : {})
   })
   return delivered ? HANDED_TO_TERMINAL : NOT_DELIVERED
 }
 
-/** The launch text that has to reach a surface, or undefined when there is none to deliver. */
 function launchSubmitText(intent: AgentLaunchIntent): string | undefined {
   return intent.prompt?.delivery === 'submit' && intent.prompt.text ? intent.prompt.text : undefined
 }
 
-/**
- * The prompt offered to a terminal's launch command, which is an argv-mode agent's and only an
- * argv-mode agent's. An offer, not a decision: the surface reports whether the typed line took it.
- */
+/** Offer argv prompts; only the surface building the typed line can confirm that they fit. */
 export function argvLaunchPrompt(intent: AgentLaunchIntent): string | undefined {
   const text = launchSubmitText(intent)
   return text && agentPromptRidesLaunchCommand(intent.agent) ? text : undefined

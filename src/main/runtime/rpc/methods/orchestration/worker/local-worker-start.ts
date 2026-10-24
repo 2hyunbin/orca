@@ -2,9 +2,8 @@ import { probeWorkerOpenCodeModelLaunchSupport } from './worker-opencode-model-p
 import { resolveWorkerConfiguredAgentParams } from './worker-configured-agent-preflight'
 import { waitForWorkerAgentReady } from '../../../../launched-agent-composer-readiness'
 import type { OrcaRuntimeService } from '../../../../orca-runtime'
-import { describeTerminalWaitBlockedReason } from '../../../../../../shared/terminal-wait-blocked-reason-legacy-alias'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import type { RunRow, TaskRow } from '../../../../orchestration/types'
+import type { DispatchContextRow, RunRow, TaskRow } from '../../../../orchestration/types'
 import type {
   OrchestrationCallerIdentity,
   OrchestrationSessionCaller
@@ -20,6 +19,7 @@ import { awaitStructuredWorkerSetupGate } from './worker-start-structured-setup-
 import { assertOrchestrationWorktreeCreationSupported } from './folder-worktree-placement'
 import type { WorkerStartInput } from './worker-start-schema'
 import {
+  describeWorkerReadinessFailure,
   persistGatedSetupSpawnFailure,
   persistWorkerReadinessStage,
   persistWorkerSetupWaitOutcome
@@ -48,6 +48,8 @@ export async function startLocalWorker(args: {
   orchestrationMutation?: WorkerStartMutation
   /** Settings-driven; the executing host still gets to refuse below. */
   mode: WorkerStartModeReceipt
+  /** Set when a worker starts its own helper; the helper reports to this Dispatch. */
+  helperCreator?: DispatchContextRow
 }): Promise<unknown> {
   const { runtime, db, run, coordinator, callerSession, existingTask, orchestrationMutation } = args
   // `--terminal` names a party: a chat by its `/clear` root address, as its Dispatch does.
@@ -147,11 +149,13 @@ export async function startLocalWorker(args: {
   const started = db.createStartingWorkerDispatch({
     creator: resolveDispatchCreator(runtime, params.from, callerSession),
     maxDepth: runtime.getNestedWorkerMaxDepth(),
+    requiredCreatorDispatchId: args.helperCreator?.id,
     taskId: existingTask?.id,
     taskSpec: params.spec,
     taskTitle: params.taskTitle,
     taskDeps: parseTaskDeps(params.deps),
-    taskParentId: params.parent,
+    // A helper's Task sits under its creator's Task, so the Run's Task tree shows who started it.
+    taskParentId: params.parent ?? args.helperCreator?.task_id,
     taskRunId: run.id,
     // A handle-less session creates root Tasks: Task lineage is recorded by terminal only.
     taskCreatedByTerminalHandle: coordinator?.terminalHandle ?? undefined,
@@ -246,13 +250,7 @@ export async function startLocalWorker(args: {
         if (setupReceipt.state === 'failed') {
           failedStage = 'setup_wait'
         }
-        throw new Error(
-          wait.blockedReason
-            ? `Agent startup blocked: ${describeTerminalWaitBlockedReason(wait.blockedReason)}`
-            : structuredSession
-              ? `Setup did not finish before the structured worker started (${wait.status}).`
-              : `Agent did not become ready (${wait.status}).`
-        )
+        throw new Error(describeWorkerReadinessFailure(wait, !!structuredSession))
       }
     }
     // A chat has no pane or process; its Dispatch names it by its Orca session ID alone.

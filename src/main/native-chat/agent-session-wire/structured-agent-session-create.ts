@@ -39,7 +39,6 @@ import { observedReceipt } from './structured-agent-session-operation-settlement
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 
-/** Founds a chat and its opening message; only the delivery loop acquires the agent. */
 export function createStructuredAgentSession(
   context: StructuredAgentSessionAttachContext,
   callerKey: string,

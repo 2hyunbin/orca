@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import { isLayoutOracleSource } from './pr-layout-oracle-route.mjs'
-import { LINUX_PACKAGE_TESTS, WINDOWS_PACKAGE_TESTS } from './pr-package-test-paths.mjs'
+import {
+  isWindowsProcessProbePath,
+  LINUX_PACKAGE_TESTS,
+  WINDOWS_PACKAGE_TESTS
+} from './pr-package-test-paths.mjs'
 
 const DOCS_ONLY_FILES = new Set([
   'README.md',
@@ -50,6 +53,7 @@ const MOBILE_CI_TOOL_FILES = new Set([
 const GLOBAL_FORCE_PREFIXES = [
   '.github/workflows/pr.yml',
   '.github/actions/install-node-dependencies/',
+  '.github/actions/setup-pnpm/',
   '.github/actions/restore-pnpm-verification/',
   '.github/actions/prepare-native-runtime/',
   'config/scripts/pr-code-change-scope',
@@ -172,11 +176,13 @@ const DEPENDENCY_ISOLATION_PREFIXES = [
 ]
 
 const MOBILE_WEB_APP_PREFIXES = [
+  '.github/scripts/prepare-ubuntu-apt.sh',
   'config/scripts/build-mobile-web-app',
   'config/scripts/run-mobile-web-app-checks',
   'src/packages/process-host/',
   'config/scripts/verify-mobile-web-app-bundle',
   'config/scripts/mobile-web-app-',
+  'config/scripts/mobile-web-app/',
   'config/scripts/mobile-web-bundle-',
   'config/scripts/verify-packaged-mobile-web-bundle',
   'config/scripts/mobile-web-source-line-endings',
@@ -473,13 +479,11 @@ function readFormatIgnoredPrefixes() {
 const FORMAT_IGNORED_PREFIXES = readFormatIgnoredPrefixes()
 
 export function isDocsOnlyPath(file) {
-  if (DOCS_ONLY_FILES.has(file)) {
-    return true
-  }
-  if (DOCS_ONLY_PREFIXES.some((prefix) => file.startsWith(prefix))) {
-    return true
-  }
-  return /^README\.[^/]+\.md$/.test(file)
+  return (
+    DOCS_ONLY_FILES.has(file) ||
+    DOCS_ONLY_PREFIXES.some((prefix) => file.startsWith(prefix)) ||
+    /^README\.[^/]+\.md$/.test(file)
+  )
 }
 
 export function shouldRunPrChecks(changedFiles) {
@@ -559,6 +563,12 @@ export function classifyPrJobs(
   return {
     should_run: shouldRun,
     mobile_ci_tools: mobileCiTools,
+    windows_process_probe: shouldRun && (forceAll || changedFiles.some(isWindowsProcessProbePath)),
+    // Relay contracts exercise host/cloud code; any input outside the renderer keeps them.
+    relay_integration:
+      shouldRun &&
+      (forceAll ||
+        changedFiles.some((file) => !file.startsWith('src/renderer/') && !isDocsOnlyPath(file))),
     native_cache_changed: shouldRun && (emptyDiff || changedFiles.some(isNativeCacheInputPath)),
     mobile_dependencies:
       (shouldRun || jobs.static_analysis) && needsMobileDependencies(changedFiles),
@@ -609,7 +619,11 @@ function isLinuxPackagePath(file) {
 }
 
 function isWindowsPackagePath(file) {
-  return WINDOWS_PACKAGE_TESTS.includes(file) || isProductBundlePath(file, WINDOWS_PACKAGE_PREFIXES)
+  return (
+    WINDOWS_PACKAGE_TESTS.includes(file) ||
+    isWindowsProcessProbePath(file) ||
+    isProductBundlePath(file, WINDOWS_PACKAGE_PREFIXES)
+  )
 }
 
 function isProductBundlePath(file, extraPrefixes) {
@@ -659,7 +673,11 @@ function isNativeCacheInputPath(file) {
 }
 
 function isGlobalForcePath(file) {
-  return GLOBAL_FORCE_FILES.has(file) || matchesPrefix(file, GLOBAL_FORCE_PREFIXES)
+  return (
+    GLOBAL_FORCE_FILES.has(file) ||
+    (matchesPrefix(file, GLOBAL_FORCE_PREFIXES) &&
+      !(file.startsWith('config/scripts/') && isTestFile(file)))
+  )
 }
 
 function matchesPrefix(file, prefixes) {

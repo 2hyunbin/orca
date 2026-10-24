@@ -2,18 +2,14 @@ import type { StructuredLaunchSlotOwner } from '@/lib/structured-agent-session-l
 import { retireDesktopCreatePresentation } from '@/lib/structured-agent-session-desktop-create'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import {
-  markStructuredAgentSessionLaunchesPublished,
-  publishedStructuredSessions
-} from '@/lib/structured-agent-session-launch-publication'
-import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
   markStructuredAgentSessionLaunchCancelled
 } from '@/lib/structured-agent-session-launch-registry'
-import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import {
   abandonHostCreatedLaunchPrompts,
   discardStructuredAgentSessionChatSends
 } from '@/lib/structured-agent-session-launch-prompt'
+import { forgetUnlistedCreatedChat } from '@/lib/structured-agent-session-unlisted-created-chats'
 import { stopStructuredAgentSessionSends } from '@/components/native-chat/structured-agent-session-message-sender'
 import { retireStructuredAgentSessionReadOwner } from '@/components/native-chat/structured-agent-session-read-owner-registry'
 import { closeStructuredAgentSession } from './structured-agent-session-close'
@@ -137,6 +133,7 @@ export function beginStructuredAgentSessionTabClose(args: {
     retireDesktopCreatePresentation(args.sessionId, executionHostIdForStructuredTarget(args.target))
   }
   abandonHostCreatedLaunchPrompts(args.sessionId, executionHostIdForStructuredTarget(args.target))
+  forgetUnlistedCreatedChat(args.worktreeId, args.sessionId)
   if (args.provisional) {
     markStructuredAgentSessionLaunchCancelled(
       args.worktreeId,
@@ -177,25 +174,6 @@ export function beginStructuredAgentSessionTabClose(args: {
       )
     }
   })
-}
-
-/**
- * A paired host's frame, as this client may apply it: chats cancelled before their create landed
- * are retired on that host, and the rest settle any launch still waiting to learn they exist.
- */
-export function acceptPairedHostStructuredSessions(
-  frame: RuntimeMobileSessionTabsResult,
-  environmentId: string
-): RuntimeMobileSessionTabsResult {
-  const snapshot = suppressCancelledStructuredSessionTabs(frame, {
-    kind: 'environment',
-    environmentId
-  })
-  markStructuredAgentSessionLaunchesPublished(
-    toRuntimeExecutionHostId(environmentId),
-    publishedStructuredSessions([snapshot])
-  )
-  return snapshot
 }
 
 /** A host snapshot containing a cancelled session is suppressed and retired again idempotently. */
