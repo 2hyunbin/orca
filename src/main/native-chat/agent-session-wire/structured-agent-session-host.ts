@@ -172,8 +172,7 @@ export class StructuredAgentSessionHost {
   hasLoadedProviders = (): boolean => this.loadedSessionIds().length > 0
   sessionAgent = (sessionId: string) => this.deps.store.getRecord(sessionId)?.provider ?? null
 
-  handleAdapterEvent = (event: Parameters<StructuredAgentSessionEventRecovery['handle']>[0]) =>
-    this.eventRecovery.handle(event)
+  handleAdapterEvent: typeof this.eventRecovery.handle = (event) => this.eventRecovery.handle(event)
 
   // Keep inference so publishStatus stays required in the attach-context spread.
   private lifetimeContext() {
@@ -316,8 +315,7 @@ export class StructuredAgentSessionHost {
   /** Read the store; idle-released chats have no session-map entry. */
   handoffStatus = (sessionId: string) => structuredAgentSessionOwnerStatus(this.deps, sessionId)
 
-  history: StructuredAgentSessionBackgroundTaskChannel['history'] = (request, scope) =>
-    this.backgroundTasks.history(request, scope)
+  history: typeof this.backgroundTasks.history = (...args) => this.backgroundTasks.history(...args)
 
   /** Full reduction: absence from a bounded page cannot prove a revised/tombstoned item is absent. */
   journalSnapshot = mailEvidence.snapshot(() => this.lifetime)
