@@ -22,9 +22,8 @@ import type { TerminalMailTarget } from './terminal-mail-target'
 
 export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFences {
   readTerminalMailTarget(paneKey: string): TerminalMailTarget | null {
-    return this.terminalMailTargets.read(
-      this.state.lastStatusByPaneKey.get(this.resolvePaneKeyAlias(paneKey))
-    )
+    const key = this.resolvePaneKeyAlias(paneKey)
+    return this.terminalMailTargets.read(this.state.lastStatusByPaneKey.get(key))
   }
 
   terminalMailTargetWasAbandoned(target: TerminalMailTarget): boolean {
@@ -124,10 +123,8 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     for (const paneKey of paneKeys) {
       const resolvedPaneKey = this.resolvePaneKeyAlias(paneKey)
       if (options?.endedPresence) {
-        this.terminalMailTargets.observeExit(
-          this.state.lastStatusByPaneKey.get(resolvedPaneKey),
-          options.endedPresence.process
-        )
+        const row = this.state.lastStatusByPaneKey.get(resolvedPaneKey)
+        this.terminalMailTargets.observeExit(row, options.endedPresence.process)
         // Cleanup drops aliases, but readers may still hold either key.
         const paneKeys = new Set([resolvedPaneKey, paneKey])
         for (const [aliasKey, alias] of this.legacyPaneKeyAliases) {
@@ -141,11 +138,12 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       if (!this.hasLiveClaimsForPaneKey(resolvedPaneKey)) {
         continue
       }
-      type MainCleanupRow = EnrichedAgentHookEventPayload | undefined
       const resumeRow = options?.preserveResumeIdentity
         ? this.toRetainedProviderSessionRow(
             // SAFETY: Main writers attach or preserve both status clocks before admitting this row.
-            this.state.lastStatusByPaneKey.get(resolvedPaneKey) as MainCleanupRow
+            this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
+              | EnrichedAgentHookEventPayload
+              | undefined
           )
         : null
       const retained =
@@ -153,7 +151,9 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
           ? { ...resumeRow, agentPresence: options.endedPresence }
           : resumeRow
       // SAFETY: This same main-only raw map admits rows with both status clocks preserved.
-      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as MainCleanupRow
+      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
+        | EnrichedAgentHookEventPayload
+        | undefined
       this.clearPaneState(resolvedPaneKey, { emitStatusRowMutation: false })
       if (retained) {
         admitLegacyAgentStatus(
