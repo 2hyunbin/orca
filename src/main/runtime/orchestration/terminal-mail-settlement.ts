@@ -2,8 +2,7 @@ import {
   sameTerminalMailTarget,
   type TerminalMailTarget
 } from '../../agent-hooks/server/terminal-mail-target'
-import type { OrchestrationDb } from './db'
-import { ORCHESTRATION_DELIVERY_BATCH_LIMIT, type MessageRow } from './db'
+import { ORCHESTRATION_DELIVERY_BATCH_LIMIT, type MessageRow, type OrchestrationDb } from './db'
 import { readMailHandoff, type TerminalMailHandoff } from './mail-handoff'
 import { mintAgentSessionOperationId } from './structured-pointer-operation-id'
 import {
