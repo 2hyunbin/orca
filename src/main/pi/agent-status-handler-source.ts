@@ -14,8 +14,6 @@ import {
   getAgentStatusSessionBoundaryHandlerSourceLines
 } from './agent-status-session-boundary-source'
 
-// Why: keep the generated handler registrations separate from hook transport;
-// both are independently sizeable and the installed extension concatenates them.
 export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] {
   const sessionStartHandler =
     kind !== 'omp'
@@ -30,7 +28,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           ...(kind === 'pi'
             ? [
                 '    restoreParkedSubagents()',
-                // Why: the host reads session_start as an idle session; children still hold this one.
+                // session_start reports idle; restore busy status while children still own the run.
                 "    if (lifecycleState.waiting) post('agent_start')"
               ]
             : []),
@@ -39,7 +37,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
         ]
       : []
 
-  // Why: OMP can switch sessions in-process, so each latest-only post needs fresh identity.
+  // OMP switches in-process, so every post needs current session identity.
   const ctxParam = ', ctx'
   const bareCtxParams = '_event, ctx'
   const captureSessionMetadata = ['    updateRuntimeOmpSessionMetadata(ctx)']
@@ -52,9 +50,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
       : []
   const ownerEnv = kind === 'prime-agent' ? 'ORCA_PRIME_AGENT_STATUS_OWNED' : 'ORCA_PI_STATUS_OWNED'
 
-  // Why: OMP suppresses its approval lifecycle unless an extension listens for it,
-  // and it is the only signal that the run is parked on a permission prompt rather
-  // than still working. Prime has no OMP runtime, so the handlers would be dead there.
+  // OMP emits permission-wait lifecycle only with listeners; Prime has no such runtime.
   const approvalHandlers =
     kind === 'prime-agent'
       ? []
@@ -80,8 +76,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           ''
         ]
 
-  // Why: OMP does not fire model_select today, but Pi does and OMP wraps Pi's
-  // runtime; when it arrives it is the one event that reports a switch between turns.
+  // OMP wraps Pi, so future Pi model_select events can report between-turn switches.
   const modelSelectHandler =
     kind === 'prime-agent'
       ? []
@@ -161,8 +156,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '    clearPendingAgentEndCheck()',
     '    lifecycleState.waiting = false',
     '    lifecycleState.runGeneration += 1',
-    // Why: a turn cannot begin under a dialog holding input focus, so this is the one
-    // boundary that can recover a modal whose close never arrived.
+    // Turn start proves no input-holding modal remains; recover missing dialog-close events.
     ...(kind === 'pi' ? ['    piUiPromptDepth = 0', '    piTurnInFlight = true'] : []),
     "    post('agent_start')",
     '  })',
@@ -223,7 +217,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '    pendingAgentEndContext = null',
     '  }',
     ...getPiSubagentRosterEventSourceLines(),
-    // The one answer to "do children still hold this pane"; an exited runner holds through its grace.
+    // Exited child runners retain ownership through their grace period.
     '  function isHeldByChildren(): boolean {',
     '    return lifecycleState.active.size > 0',
     '  }',
@@ -241,10 +235,9 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '    lifecycleState.waiting = false',
     '    if (lifecycleState.completionPostedGeneration === lifecycleState.endedRunGeneration) return false',
     '    lifecycleState.completionPostedGeneration = lifecycleState.endedRunGeneration',
-    // Why: distinct from the completion guard, which holds the generation of the posted run
-    // and so starts clean on a pane that has not run a turn yet — that pane is idle, not busy.
+    // Separate from completion generation: a fresh pane without a turn is idle.
     ...(kind === 'pi' ? ['    piTurnInFlight = false'] : []),
-    // Why: a run that ends because its session did has not completed; the host records it quietly.
+    // Session boundary is not successful completion; record it quietly.
     "    post('agent_end', final ? { session_boundary: true } : {}, final)",
     '    return true',
     '  }',

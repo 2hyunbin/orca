@@ -1,16 +1,5 @@
 import { getPiAgentStatusPostQueueSourceLines } from './agent-status-post-queue-source'
-// Why: pi has no settings.json hook surface — its extensibility is the
-// in-process TypeScript extension API (pi.on('agent_start'), 'tool_call',
-// etc.). To get pi panes into the unified agent-hooks pipeline alongside
-// Claude/Codex/Gemini/OpenCode/Cursor, we ship a bundled extension into
-// the selected Pi/OMP extension dir (PiTitlebarExtensionService) that POSTs to
-// /hook/<kind> using the same ORCA_AGENT_HOOK_* + ORCA_PANE_KEY env that every
-// PTY already receives from ipc/pty.ts.
-//
-// Each Pi process gets its own paneKey through env. Like the OpenCode plugin,
-// the returned source is a string (loaded by jiti from disk inside the pi process), so we
-// keep the source body in plain JS without TS types and avoid pulling pi or
-// any Orca dep into the pi runtime.
+// Pi has no settings hook surface; install a self-contained extension that posts through the pane's Orca endpoint.
 import type { PiAgentKind } from '../../shared/pi-agent-kind'
 import { getPiAgentStatusHandlerSourceLines } from './agent-status-handler-source'
 import { getPiAgentStatusRuntimeDetectionSourceLines } from './agent-status-runtime-detection-source'
@@ -19,9 +8,7 @@ import { getPiSubagentSnapshotSourceLines } from './agent-status-subagent-roster
 
 export const ORCA_PI_AGENT_STATUS_EXTENSION_FILE = 'orca-agent-status.ts'
 
-/** Source of the status extension installed into a Pi-family agent's extension
- *  dir: it POSTs lifecycle, tool, and (under OMP) model events to Orca's hook
- *  endpoint. Returned as one self-contained string — it runs inside the agent. */
+/** Self-contained source runs inside Pi-family agents without Orca module imports. */
 export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): string {
   // OMP resumes by id; its persistent file path lets native chat skip discovery.
   const sessionMetadataSourceLines =
@@ -89,9 +76,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
           '}',
           ''
         ]
-  // Why: OMP emits no model_select of its own, so the active model is re-read from
-  // the event context on every post; the pane's status then always carries it.
-  // Reported only under the OMP runtime — Pi has no chat surface consuming it yet.
+  // OMP lacks model_select today, so reread its active model on every post.
   const modelMetadataSourceLines = [
     'let modelMetadata: Record<string, unknown> = {}',
     'let ompModelSwitchSupported = false',
@@ -121,16 +106,13 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '}'
   ]
 
-  // Why: Pi resumes from an existing transcript; OMP resumes directly by session id (#8962).
+  // Pi resumes by transcript; OMP resumes by session ID (#8962).
   const payloadLine =
     kind !== 'omp'
       ? '    payload: { hook_event_name: hookEventName, ...(ompRuntime ? metadata : getPersistedSessionMetadata(metadata)), ...subagents, ...extra },'
       : '    payload: { hook_event_name: hookEventName, ...metadata, ...subagents, ...extra },'
 
-  // Why: keep this string self-contained — it runs inside the pi process,
-  // so it cannot import from Orca's main bundle. fs/http coords come from
-  // the same endpoint file the OpenCode plugin reads (process.env is frozen
-  // at PTY spawn, so on Orca restart we have to re-read it from disk).
+  // Read endpoint files after Orca restarts because PTY-spawn environment stays frozen.
   return [
     '// Why: no package-specific type import here. Pi and OMP expose the same',
     '// extension API, but publish their types under different package names.',
@@ -204,10 +186,9 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '',
     ...getPiAgentStatusRuntimeDetectionSourceLines(kind),
     '',
-    // `final` marks the last post of a session that is being closed.
     'function post(hookEventName: string, extra: Record<string, unknown> = {}, final = false): void {',
     '  const ompRuntime = isOmpRuntime()',
-    // Why: the body is built at delivery, so the session is pinned here, where the event happened.
+    // Pin identity at event time because payload construction waits until delivery.
     '  const metadata = getPostSessionMetadata(ompRuntime)',
     '  if (final) {',
     '    postQueue.finalPosts.push({ revision: postQueue.postRevision, attempts: 0, delivered: false, hookEventName, extra, metadata, ompRuntime, final })',
@@ -215,7 +196,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '    return',
     '  }',
     '  cancelPostRetry()',
-    // Why: a new turn supersedes a same-session completion even when /reload preserved its delivery.
+    // New turns supersede same-session completions preserved across reload.
     "  if (hookEventName === 'before_agent_start' || hookEventName === 'agent_start') retireTurnCompletionPosts(metadata)",
     '// Model changes must not erase an unacknowledged completion in the latest-only slot.',
     "  const previousCompletion = postQueue.latestPost?.hookEventName === 'agent_end' && !postQueue.latestPost.delivered && postQueue.latestPost.metadata.session_id === metadata.session_id",
@@ -224,7 +205,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '    attempts: 0,',
     '    delivered: false,',
     "    hookEventName: ompRuntime && hookEventName === 'model_select' && previousCompletion ? 'agent_end' : hookEventName,",
-    // Why: every coalesced snapshot must retain an open modal, not just its start event.
+    // Every coalesced snapshot must retain current modal state.
     kind === 'pi'
       ? '    extra: { ...extra, ...(!ompRuntime && piUiPromptDepth > 0 ? { ui_prompt_active: true } : {}) },'
       : '    extra,',
