@@ -1,3 +1,4 @@
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   resolveWorktreeOperationRoute,
@@ -44,7 +45,12 @@ type LineageInputs = {
 }
 const inputCache = new WeakMap<object, WeakMap<object, WeakMap<object, LineageInputs>>>()
 export function getLineageInputs(state: LineageState) {
-  const worktreeMap = getWorkspaceLineageRows(state.worktreesByRepo, state.folderWorkspaces)
+  const worktreeMap = getWorkspaceLineageRows(
+    selectWorktreesByRepo(state),
+    state.folderWorkspaces
+      ? selectFolderWorkspaces({ folderWorkspaces: state.folderWorkspaces })
+      : undefined
+  )
   const worktreeEdges = state.worktreeLineageById ?? noEdges
   const workspaceEdges = state.workspaceLineageByChildKey ?? noEdges
   // Renderer subscribers need stable snapshots of their immutable source maps.

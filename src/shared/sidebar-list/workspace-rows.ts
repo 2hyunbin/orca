@@ -11,7 +11,10 @@ import type { Repo } from '../repo-types'
 import { WorkspaceAttachmentsSchema } from '../workspace-attachment-schema'
 import { getWorkspaceAttachments } from '../workspace-attachments'
 import { DEFAULT_WORKSPACE_STATUS_ID } from '../workspace-statuses'
-import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import {
+  composeWorktreeHostIdentity,
+  type HostScopedWorktreeKey
+} from '../worktree/host-qualified-identity'
 import {
   projectResolvedWorktreeLineage,
   mergeWorkspaceLineageRecords
@@ -156,10 +159,12 @@ function toWorkspaceRow(
   }
 }
 
-type ListedRow = { identity: string; hostId: ExecutionHostId }
+type ListedRow = { identity: HostScopedWorktreeKey; hostId: ExecutionHostId }
+type ListedWorktree = Pick<Worktree, 'id' | 'repoId' | 'hostId'>
+type ListedRepo = Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
 
 /** Where this host lists a workspace, or null for one it does not (a paired server's). */
-function listedRow(worktree: Worktree, repo: Repo | undefined): ListedRow | null {
+function listedRow(worktree: ListedWorktree, repo: ListedRepo | undefined): ListedRow | null {
   const hostId = worktree.hostId ?? (repo ? getRepoExecutionHostId(repo) : undefined)
   if (!hostId || parseExecutionHostId(hostId)?.kind === 'runtime') {
     return null
@@ -171,11 +176,11 @@ function listedRow(worktree: Worktree, repo: Repo | undefined): ListedRow | null
 }
 
 /** Each git worktree with the repo it belongs to; the same repo id can be registered on two hosts. */
-function withOwnerRepos(
-  worktrees: readonly Worktree[],
-  repos: readonly Repo[]
-): { worktree: Worktree; repo: Repo | undefined }[] {
-  const reposById = new Map<string, Repo[]>()
+function withOwnerRepos<W extends ListedWorktree, R extends ListedRepo>(
+  worktrees: readonly W[],
+  repos: readonly R[]
+): { worktree: W; repo: R | undefined }[] {
+  const reposById = new Map<string, R[]>()
   for (const repo of repos) {
     reposById.set(repo.id, [...(reposById.get(repo.id) ?? []), repo])
   }
@@ -188,14 +193,23 @@ function withOwnerRepos(
   })
 }
 
+/** Each git worktree this host lists, under the key `buildWorkspaceRows` lists it and with its own repo. */
+export function listGitWorkspaceRows<W extends ListedWorktree, R extends ListedRepo>(
+  worktrees: readonly W[],
+  repos: readonly R[]
+): { identity: HostScopedWorktreeKey; worktree: W; repo: R | undefined }[] {
+  return withOwnerRepos(worktrees, repos).flatMap(({ worktree, repo }) => {
+    const listed = listedRow(worktree, repo)
+    return listed ? [{ identity: listed.identity, worktree, repo }] : []
+  })
+}
+
 /** The keys `buildWorkspaceRows` lists these git worktrees under. */
 export function listGitWorkspaceRowKeys(
   worktrees: readonly Worktree[],
   repos: readonly Repo[]
-): string[] {
-  return withOwnerRepos(worktrees, repos).flatMap(
-    ({ worktree, repo }) => listedRow(worktree, repo)?.identity ?? []
-  )
+): HostScopedWorktreeKey[] {
+  return listGitWorkspaceRows(worktrees, repos).map(({ identity }) => identity)
 }
 
 /**
@@ -210,8 +224,9 @@ export function buildWorkspaceRows(catalog: {
   workspaceLineageByChildKey?: Readonly<Record<string, WorkspaceLineage>>
   knownPeers?: readonly Worktree[]
   metadata?: Readonly<Record<string, WorktreeMeta>>
-}): Map<string, WorkspaceRow> {
-  const rows = new Map<string, WorkspaceRow>()
+  projected?: readonly Worktree[]
+}): Map<HostScopedWorktreeKey, WorkspaceRow> {
+  const rows = new Map<HostScopedWorktreeKey, WorkspaceRow>()
   const add = (
     worktree: Worktree,
     kind: WorkspaceRow['kind'],
@@ -224,12 +239,14 @@ export function buildWorkspaceRows(catalog: {
     }
   }
   const all = [...catalog.worktrees, ...catalog.folderWorkspaces.map(folderWorkspaceToWorktree)]
-  const projected = projectResolvedWorktreeLineage(
-    all,
-    mergeWorkspaceLineageRecords(catalog.lineageById, catalog.workspaceLineageByChildKey ?? {}),
-    catalog.knownPeers,
-    catalog.metadata
-  )
+  const projected =
+    catalog.projected ??
+    projectResolvedWorktreeLineage(
+      all,
+      mergeWorkspaceLineageRecords(catalog.lineageById, catalog.workspaceLineageByChildKey ?? {}),
+      catalog.knownPeers,
+      catalog.metadata
+    )
   for (const [index, { worktree, repo }] of withOwnerRepos(projected, catalog.repos).entries()) {
     add(
       worktree,

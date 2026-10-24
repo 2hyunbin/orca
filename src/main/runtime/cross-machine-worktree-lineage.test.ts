@@ -84,7 +84,7 @@ function setup(links: Record<string, WorktreeLineage>) {
   return { controller, store }
 }
 describe('cross-machine lineage writes', () => {
-  it('follows renamed saved ancestors and rejects a repeated chain without flattening it first', () => {
+  it('follows renamed saved ancestors and permits an unrelated saved cycle', () => {
     const renamed = { ...row('renamed'), instanceId: 'Q' }
     const links = {
       P: edge('P', 'old'),
@@ -102,7 +102,7 @@ describe('cross-machine lineage writes', () => {
       parentWorktreeId: 'P',
       parentWorktreeInstanceId: 'P'
     }
-    expect(() => controller.validateParent(row('C'), row('P'))).toThrow('cycle')
+    expect(() => controller.validateParent(row('C'), row('P'))).not.toThrow()
   })
   it('records a caller-resolved external parent without resolving that parent on the child server', async () => {
     const resolveParent = vi.fn()

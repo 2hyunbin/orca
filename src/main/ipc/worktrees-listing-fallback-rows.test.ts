@@ -1,10 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listWorktreesMock } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
-import { makeWorktreeMeta } from './worktrees-test-fixtures'
+import { makeWorktreeMeta, expectDetectedWorktreeListResult } from './worktrees-test-fixtures'
 import { buildDetectedGitWorktrees } from './worktrees/listing/ssh-worktree-fallback'
 import type { Store } from '../persistence/loading-store/store'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
+import type { DetectedWorktree } from '../../shared/worktree/types'
 
 vi.mock('electron', async () =>
   (await import('./worktrees-test-module-mocks')).electronModuleMock()
@@ -28,9 +29,6 @@ vi.mock('../github/client', async () =>
 )
 vi.mock('../source-control/hosted-review', async () =>
   (await import('./worktrees-test-module-mocks')).hostedReviewModuleMock()
-)
-vi.mock('../providers/ssh-filesystem-dispatch', async () =>
-  (await import('./worktrees-test-module-mocks')).sshFilesystemDispatchModuleMock()
 )
 vi.mock('./worktree-symlinks', async () =>
   (await import('./worktrees-test-module-mocks')).worktreeSymlinksModuleMock()
@@ -99,6 +97,14 @@ const observableStore = Object.assign(store, {
 afterAll(() => {
   Reflect.deleteProperty(observableStore, 'onStateWritten')
 })
+async function listDetectedRows(repoId: string): Promise<DetectedWorktree[]> {
+  const result = expectDetectedWorktreeListResult(
+    await handlers['worktrees:listDetected'](null, {
+      repoId
+    })
+  )
+  return result.worktrees
+}
 
 describe('registerWorktreeHandlers', () => {
   beforeEach(() => {
@@ -142,7 +148,7 @@ describe('registerWorktreeHandlers', () => {
       worktreeId === rootWorktreeId ? rootMeta : undefined
     )
 
-    const listed = await handlers['worktrees:list'](null, { repoId: 'repo-1' })
+    const listed = await listDetectedRows('repo-1')
 
     expect(listed).toEqual([
       expect.objectContaining({
@@ -159,13 +165,6 @@ describe('registerWorktreeHandlers', () => {
     expect(listWorktreesMock).not.toHaveBeenCalled()
   })
 
-  it('fails closed when the renderer has not selected a repo yet', async () => {
-    const listed = await handlers['worktrees:list'](null, undefined)
-
-    expect(listed).toEqual([])
-    expect(store.getRepo).not.toHaveBeenCalled()
-  })
-
   it('returns reconstructed rows when an SSH provider is unavailable', async () => {
     const repo = {
       id: 'repo-ssh',
@@ -175,6 +174,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({
@@ -206,7 +206,7 @@ describe('registerWorktreeHandlers', () => {
       })
     })
 
-    const listed = await handlers['worktrees:list'](null, { repoId: 'repo-ssh' })
+    const listed = await listDetectedRows('repo-ssh')
 
     expect(listed).toEqual([
       expect.objectContaining({
@@ -240,7 +240,6 @@ describe('registerWorktreeHandlers', () => {
         ]
       })
     ])
-    expect(store.getWorktreeMeta).not.toHaveBeenCalled()
     expect(store.setWorktreeMeta).toHaveBeenCalledWith(
       hostWorktreeTarget({ id: 'repo-ssh::/remote/feature-wt', hostId: 'ssh:conn-1' }),
       {
@@ -265,6 +264,7 @@ describe('registerWorktreeHandlers', () => {
       displayName: 'Canonical remote',
       hostId: 'ssh:conn-1'
     })
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       [worktreeId]: makeWorktreeMeta({ displayName: 'Legacy local', hostId: 'local' })
@@ -275,7 +275,7 @@ describe('registerWorktreeHandlers', () => {
       getWorktreeLineageMetadata: vi.fn(() => [{ id: worktreeId, meta: canonicalRemote }])
     })
 
-    const listed = await handlers['worktrees:list'](null, { repoId: repo.id })
+    const listed = await listDetectedRows(repo.id)
 
     expect(listed).toEqual([
       expect.objectContaining({
@@ -295,6 +295,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({
@@ -303,7 +304,7 @@ describe('registerWorktreeHandlers', () => {
       })
     })
 
-    const listed = await handlers['worktrees:list'](null, { repoId: 'repo-ssh' })
+    const listed = await listDetectedRows('repo-ssh')
 
     expect(listWorktreesMock).not.toHaveBeenCalled()
     expect(listed).toEqual([
@@ -315,20 +316,6 @@ describe('registerWorktreeHandlers', () => {
     ])
   })
 
-  it('keeps local listing failure behavior as an empty list', async () => {
-    listWorktreesMock.mockRejectedValue(new Error('filesystem denied'))
-    store.getAllWorktreeMeta.mockReturnValue({
-      'repo-1::/workspace/feature-wt': makeWorktreeMeta({
-        displayName: 'Should not appear'
-      })
-    })
-
-    const listed = await handlers['worktrees:list'](null, { repoId: 'repo-1' })
-
-    expect(listed).toEqual([])
-    expect(store.getAllWorktreeMeta).not.toHaveBeenCalled()
-  })
-
   it('ignores malformed metadata keys during SSH fallback', async () => {
     const repo = {
       id: 'repo-ssh',
@@ -338,13 +325,14 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'not-a-worktree-id': makeWorktreeMeta({ displayName: 'Bad row' }),
       'repo-ssh::/remote/feature-wt': makeWorktreeMeta({ displayName: 'Good row' })
     })
 
-    const listed = await handlers['worktrees:list'](null, { repoId: 'repo-ssh' })
+    const listed = await listDetectedRows('repo-ssh')
 
     expect(listed).toEqual([
       expect.objectContaining({
@@ -363,6 +351,7 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::/remote/custom-name': makeWorktreeMeta({
@@ -370,11 +359,7 @@ describe('registerWorktreeHandlers', () => {
       })
     })
 
-    const listed = (await handlers['worktrees:list'](null, { repoId: 'repo-ssh' })) as {
-      displayName: string
-      isSparse?: boolean
-      sparseDirectories?: string[]
-    }[]
+    const listed = await listDetectedRows('repo-ssh')
 
     expect(listed[0]).toMatchObject({
       displayName: 'custom-name',
@@ -392,19 +377,18 @@ describe('registerWorktreeHandlers', () => {
       addedAt: 0,
       connectionId: 'conn-1'
     }
+    store.getRepos.mockReturnValue([repo])
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
       'repo-ssh::c:/remote/repo': makeWorktreeMeta()
     })
 
-    const listed = (await handlers['worktrees:list'](null, { repoId: 'repo-ssh' })) as {
-      isMainWorktree: boolean
-    }[]
+    const listed = await listDetectedRows('repo-ssh')
 
     expect(listed[0].isMainWorktree).toBe(true)
   })
 
-  it('includes SSH fallback rows in listAll alongside healthy local rows', async () => {
+  it('includes SSH fallback rows from live detected listing alongside healthy local rows', async () => {
     const sshRepo = {
       id: 'repo-ssh',
       path: '/remote/repo',
@@ -436,7 +420,9 @@ describe('registerWorktreeHandlers', () => {
 
     const complete = vi.fn()
     Object.assign(store, { getWorktreeLineageMetadata: complete })
-    const listed = await handlers['worktrees:listAll'](null, undefined)
+    const listed = (
+      await Promise.all(store.getRepos().map((repo) => listDetectedRows(repo.id)))
+    ).flat()
 
     // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
     expect(complete).not.toHaveBeenCalled()
@@ -454,7 +440,7 @@ describe('registerWorktreeHandlers', () => {
     )
   })
 
-  it('snapshots SSH fallback metadata once for listAll', async () => {
+  it('does not enumerate the canonical corpus for zero-edge SSH detected listings', async () => {
     const sshRepoA = {
       id: 'repo-ssh-a',
       path: '/remote/a',
@@ -479,7 +465,9 @@ describe('registerWorktreeHandlers', () => {
 
     const complete = vi.fn()
     Object.assign(store, { getWorktreeLineageMetadata: complete })
-    const listed = await handlers['worktrees:listAll'](null, undefined)
+    const listed = (
+      await Promise.all(store.getRepos().map((repo) => listDetectedRows(repo.id)))
+    ).flat()
 
     // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
     expect(complete).not.toHaveBeenCalled()

@@ -24,6 +24,7 @@ import {
   runWorktreeDeletesInParallel,
   runWorktreeDeleteWithToast
 } from './worktree-delete-execution'
+import { collectRemovalUnsavedFiles } from '@/components/editor/removal-unsaved-editor-files'
 
 export { runWorktreeDeletesInParallel, runWorktreeDeleteWithToast }
 
@@ -107,7 +108,10 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
     getLineageInputs(state).lineageById
   )
   const hasLineageChildren = deleteLineage.descendants.length > 0
-  const skipConfirm = state.settings?.skipDeleteWorktreeConfirm ?? false
+  // Why: "Don't ask again" never covers discarding unsaved editor text.
+  const skipConfirm =
+    (state.settings?.skipDeleteWorktreeConfirm ?? false) &&
+    collectRemovalUnsavedFiles(useAppStore.getState, [target]).length === 0
   if (skipConfirm && !hasLineageChildren) {
     void runWorktreeDeleteWithToast(toWorktreeRemovalTarget(target), target.displayName, {
       assertBeforeDispatch: createWorktreeDeleteAdmission(target)
@@ -168,7 +172,8 @@ export function runWorktreeBatchDelete(
     !options.forceConfirm &&
     targets.length === 1 &&
     !singleTargetHasLineageChildren &&
-    (state.settings?.skipDeleteWorktreeConfirm ?? false)
+    (state.settings?.skipDeleteWorktreeConfirm ?? false) &&
+    collectRemovalUnsavedFiles(useAppStore.getState, targets).length === 0
   if (skipConfirm) {
     void runWorktreeDeletesInParallel(targets, {
       onForceDeleted: (deletedTarget) => options.onDeleted?.([deletedTarget])

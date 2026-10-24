@@ -4,6 +4,7 @@ import {
   getRepresentedWorktreeLineageRow
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
+import type { AgentLaunchRouteView } from '@/lib/agent-launch-route-input'
 import type { AppState } from '@/store/types'
 import {
   DASHBOARD_MAX_MAP_WORKSPACES,
@@ -91,6 +92,7 @@ export function buildDashboardSnapshot(
   state: DashboardSnapshotState,
   now: number,
   options: {
+    launchRouteStore?: AgentLaunchRouteView
     includeCardDetails?: boolean
     includeFilterOptions?: boolean
     /** Optional per-worktree row-pipeline reuse; card assembly always runs fresh
@@ -298,7 +300,8 @@ export function buildDashboardSnapshot(
           launchableAgentsByWorktreeId: buildDashboardWorktreeLaunchOptions(
             state,
             cards,
-            workspaces
+            workspaces,
+            options.launchRouteStore
           )
         }
       : {}),

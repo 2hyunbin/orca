@@ -18,6 +18,7 @@ import type {
   NewExternalWorktreesInboxRow,
   PendingCreationRef,
   PendingCreationRow,
+  RepoOfWorktree,
   Row
 } from './row-types'
 
@@ -67,7 +68,7 @@ export function buildNewExternalWorktreesInboxRow(
 
 export function appendWorktreeRows(
   result: Row[],
-  repoMap: Map<string, Repo>,
+  repoOf: RepoOfWorktree,
   plan: WorktreeOccurrencePlan<Worktree>,
   options: {
     folderByIdentity?: ReadonlyMap<string, RenderableFolderWorkspace>
@@ -98,7 +99,7 @@ export function appendWorktreeRows(
       rowKey: occurrence.key,
       sectionKey: occurrence.sectionKey,
       worktree,
-      repo: repoMap.get(worktree.repoId),
+      repo: repoOf(worktree),
       depth: occurrence.depth,
       groupDepth: options.groupDepth,
       isLastLineageChild: occurrence.isLastChild,

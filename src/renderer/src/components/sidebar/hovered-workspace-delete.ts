@@ -15,6 +15,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { runWorktreeDelete } from './delete-worktree-flow'
+import { deleteFolderWorkspaceUnlessUnsaved } from './folder-workspace-delete'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
 
 const pendingFolderDeletes = new Set<string>()
@@ -29,13 +30,9 @@ type HoveredWorkspaceDeleteState = Pick<
   | 'worktreesByRepo'
   | 'folderWorkspaces'
 >
-type CurrentWorkspaceState = Pick<
-  AppState,
-  'activeWorkspaceExecutionHostId' | 'activeWorktreeId' | 'setActiveWorktree'
->
 type HoveredWorkspaceDeleteDependencies = {
   deleteWorktree: DeleteWorktree
-  getCurrentState: () => CurrentWorkspaceState
+  getCurrentState: () => AppState
 }
 type HoveredWorkspaceDocument = Pick<Document, 'activeElement' | 'querySelectorAll'>
 
@@ -129,22 +126,15 @@ export function deleteHoveredWorkspaceImmediately(
     if (pendingFolderDeletes.has(pendingIdentity)) {
       return false
     }
-    pendingFolderDeletes.add(pendingIdentity)
-    void state
-      .deleteFolderWorkspace(target.folderWorkspaceId, {
-        executionHostId: target.executionHostId
-      })
-      .then((deleted) => {
-        const current = dependencies.getCurrentState()
-        if (
-          deleted &&
-          current.activeWorktreeId === target.workspaceKey &&
-          current.activeWorkspaceExecutionHostId === target.executionHostId
-        ) {
-          current.setActiveWorktree(null)
-        }
-      })
-      .finally(() => pendingFolderDeletes.delete(pendingIdentity))
+    const deletion = deleteFolderWorkspaceUnlessUnsaved(
+      dependencies.getCurrentState,
+      target.folderWorkspaceId,
+      target.executionHostId
+    )
+    if (deletion) {
+      pendingFolderDeletes.add(pendingIdentity)
+      void deletion.finally(() => pendingFolderDeletes.delete(pendingIdentity))
+    }
     return true
   }
   dependencies.deleteWorktree(target.worktree.id, {

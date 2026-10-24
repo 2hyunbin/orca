@@ -49,6 +49,7 @@ export type RuntimeStore = {
   getAllWorkspaceLineage?: Store['getAllWorkspaceLineage']
   setWorkspaceLineage?: Store['setWorkspaceLineage']
   getGitHubCache: Store['getGitHubCache']
+  onGitHubCacheWritten?: Store['onGitHubCacheWritten']
   getWorkspaceSession?: Store['getWorkspaceSession']
   getWorkspaceSessionHostIds?: Store['getWorkspaceSessionHostIds']
   onWorkspaceSessionWritten?: Store['onWorkspaceSessionWritten']
@@ -74,11 +75,13 @@ export type RuntimeStore = {
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']
   getPtyBindingGeneration?: Store['getPtyBindingGeneration']
+  getLayoutEditorViews?: Store['getLayoutEditorViews']
   admitTerminalPane?: Store['admitTerminalPane']
   withdrawTerminalPane?: Store['withdrawTerminalPane']
   applyLayoutCommand?: Store['applyLayoutCommand']
   applyTabRenames?: Store['applyTabRenames']
   moveTabToWorkspaceAcrossPartitions?: Store['moveTabToWorkspaceAcrossPartitions']
+  applyEditorFileRenamesAcrossPartitions?: Store['applyEditorFileRenamesAcrossPartitions']
   getSshRemotePtyLeases?: Store['getSshRemotePtyLeases']
   getUI?: Store['getUI']
   onUIChanged?: Store['onUIChanged']
@@ -110,6 +113,7 @@ export type RuntimeStore = {
     agentWorkspaceTrustEnabled?: GlobalSettings['agentWorkspaceTrustEnabled']
     codexManagedAccounts?: GlobalSettings['codexManagedAccounts']
     nestedWorkerMaxDepth?: GlobalSettings['nestedWorkerMaxDepth']
+    orchestrationChatErrorEscalationEnabled?: GlobalSettings['orchestrationChatErrorEscalationEnabled']
     workspaceDir: string
     nestWorkspaces: boolean
     workspaceDirHistory?: GlobalSettings['workspaceDirHistory']
@@ -126,6 +130,8 @@ export type RuntimeStore = {
     agentCmdOverrides?: GlobalSettings['agentCmdOverrides']
     agentDefaultArgs?: GlobalSettings['agentDefaultArgs']
     agentDefaultEnv?: GlobalSettings['agentDefaultEnv']
+    agentPermissionDefault?: GlobalSettings['agentPermissionDefault']
+    agentPermissionOverrides?: GlobalSettings['agentPermissionOverrides']
     terminalWindowsShell?: GlobalSettings['terminalWindowsShell']
     // Read by the launch-line carry rule to name the shell a local line is typed into.
     terminalDefaultShell?: GlobalSettings['terminalDefaultShell']

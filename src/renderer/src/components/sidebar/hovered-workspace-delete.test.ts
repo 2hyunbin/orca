@@ -1,3 +1,4 @@
+import { createTestStore } from '@/store/slices/worktrees-slice-test-harness'
 import { describe, expect, it, vi, afterEach } from 'vitest'
 import type { AppState } from '@/store/types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -41,23 +42,15 @@ function hoveredDocument(...rows: { workspaceId: string; hostIdentity: string }[
   } as unknown as Pick<Document, 'activeElement' | 'querySelectorAll'>
 }
 
-type WorkspaceDeleteTestState = Pick<
-  AppState,
-  | 'activeModal'
-  | 'activeWorkspaceExecutionHostId'
-  | 'activeWorktreeId'
-  | 'deleteFolderWorkspace'
-  | 'deleteStateByWorktreeId'
-  | 'setActiveWorktree'
-  | 'worktreesByRepo'
-  | 'folderWorkspaces'
->
-
 function state(
   worktrees: Worktree[] = [],
   folderWorkspaces: AppState['folderWorkspaces'] = []
-): WorkspaceDeleteTestState {
+): AppState {
   return {
+    ...createTestStore().getState(),
+    projectGroups: [],
+    editorBufferIdOf: {},
+    editorBufferViews: {},
     activeModal: 'none',
     activeWorkspaceExecutionHostId: worktrees[0]?.hostId ?? null,
     activeWorktreeId: worktrees[0]?.id ?? null,

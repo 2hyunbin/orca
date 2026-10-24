@@ -1,3 +1,4 @@
+import { parentCwdNextSteps, withWorktreeSelectorRecovery } from '../worktree-selector-recovery'
 import { getOptionalStartupAgent, getOptionalSetupDecision } from './worktree-create-options'
 import type {
   RuntimeWorktreeListResult,
@@ -40,6 +41,7 @@ import {
   getEnvParentWorkspace,
   localParentClient,
   resolveCallerParentRef,
+  getWorkspaceKeyParentSelector,
   resolveCreateParentSelector
 } from './worktree-create-parent-selector'
 import { getOptionalLinearIssueLinkFlag } from './worktree-linear-issue-link'
@@ -191,6 +193,16 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       flags,
       'Choose either --parent-worktree or --no-parent, not both.'
     )
+    const rawParentSelector = getOptionalStringFlag(flags, 'parent-worktree')
+    if (
+      rawParentSelector &&
+      getWorkspaceKeyParentSelector(rawParentSelector)?.startsWith('folder:')
+    ) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        `Parent selector "${rawParentSelector}" is a folder. Folder parents are accepted only by orca worktree create.`
+      )
+    }
     const isUnread = getOptionalWorktreeUnreadFlag(flags)
     const reviewLinks = getReviewTargetLinkFlags(flags, { nullable: true })
     const linearIssueLink = getOptionalLinearIssueLinkFlag(flags, 'linear-issue', {
@@ -198,13 +210,17 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     })
     const worktree = await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
     await assertGitLabLinkFlagProjectsMatch(flags, client, { worktree })
-    const parentSelection = await resolveCreateParentSelector(flags, cwd, client)
+    const parentSelection = await withWorktreeSelectorRecovery(
+      resolveCreateParentSelector(flags, cwd, client),
+      parentCwdNextSteps(rawParentSelector),
+      rawParentSelector
+    )
     const parentSelector = parentSelection.parentWorktree ?? parentSelection.parentWorkspace
     const parentWorktreeRef =
       parentSelection.origin === 'caller'
         ? await resolveCallerParentRef(client, parentSelector, true)
         : undefined
-    const result = await client.call<RuntimeWorktreeSetResult>('worktree.set', {
+    const pending = client.call<RuntimeWorktreeSetResult>('worktree.set', {
       worktree,
       displayName: getOptionalStringFlag(flags, 'display-name'),
       ...reviewLinks,
@@ -216,6 +232,15 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       parentWorktree: parentWorktreeRef ? undefined : parentSelector,
       noParent: flags.get('no-parent') === true
     })
+    const result = await withWorktreeSelectorRecovery(
+      pending,
+      parentSelector
+        ? [
+            `Orca could not find the worktree selector "${worktree}" or the parent selector "${parentSelector}". The server did not identify which selector failed.`,
+            'Check both selectors with orca worktree show --worktree <selector> --json.'
+          ]
+        : []
+    )
     if (!json) {
       for (const warning of result.result.warnings ?? []) {
         console.error(`warning: ${warning.message}`)
@@ -235,8 +260,6 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
         'Orca cannot tell which host owns this workspace. Refresh projects and try again.'
       )
     }
-    // Why (#19334): the waiver only ever applies to a hook that ran, so without --run-hooks it
-    // silently does nothing. Rejecting it beats letting someone believe they waived something.
     if (flags.get('allow-failed-archive-hook') === true && flags.get('run-hooks') !== true) {
       throw new RuntimeClientError(
         'invalid_argument',
@@ -247,11 +270,10 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       worktree,
       hostId,
       force: flags.get('force') === true,
-      // Why (#11960): --force is explicit here, so it may also waive PTY-stop proof.
+      // --force also waives PTY-stop proof.
       allowUnverifiedPtyStop: flags.get('force') === true,
       runHooks: flags.get('run-hooks') === true,
-      // Why (#19334): deliberately NOT coupled to --force, which above already waives PTY-stop
-      // proof. Waiving a failed archive hook is a separate decision about the user's data.
+      // Archive failure waivers protect user data separately from --force's PTY-stop waiver.
       allowFailedArchiveHook: flags.get('allow-failed-archive-hook') === true
     })
     printHookWarning(result.result, json)

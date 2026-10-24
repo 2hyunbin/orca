@@ -19,6 +19,7 @@ import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-w
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 export type ActiveDashboardWorkspace = {
   projectId: string
@@ -97,7 +98,7 @@ export function collectActiveDashboardWorkspaces(
   }
 
   for (const repo of state.repos ?? []) {
-    for (const worktree of state.worktreesByRepo?.[repo.id] ?? []) {
+    for (const worktree of selectWorktreesByRepo(state)?.[repo.id] ?? []) {
       if (worktree.isArchived) {
         continue
       }

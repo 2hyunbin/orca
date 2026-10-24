@@ -47,6 +47,7 @@ import type {
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,
+  RepoOfWorktree,
   Row,
   SidebarPRGroupReader,
   WorktreeGroupBy
@@ -63,6 +64,8 @@ export type SidebarRowPlanInputs = {
   /** Visible worktrees in the frozen sort order. */
   worktrees: Worktree[]
   repoMap: Map<string, Repo>
+  /** Defaults to repoMap's registration for the row's repo id. */
+  repoOfWorktree?: RepoOfWorktree
   prGroupOf: SidebarPRGroupReader
   repoOrder?: Map<string, number>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
@@ -89,6 +92,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     groupBy,
     worktrees,
     repoMap,
+    repoOfWorktree,
     prGroupOf,
     repoOrder,
     workspaceStatuses,
@@ -109,6 +113,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     filterRepoIds
   } = inputs
   const projectIndex = buildProjectGroupingIndex(projectGrouping)
+  const repoOf = repoOfWorktree ?? ((worktree: Worktree) => repoMap.get(worktree.repoId))
   // Membership is decided once, above the groupBy switch: every mode renders the
   // same set of folder workspaces and only chooses where they land (#15362).
   const renderableFolderWorkspaces = getRenderableFolderWorkspaces(folderWorkspaces, projectGroups)
@@ -170,20 +175,15 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
         groups.unshift([PINNED_GROUP_KEY, { label: '', items: pinned, repoIds: new Set() }])
       }
       return groups.map(([key, group]): SidebarOccurrenceSection => {
-        const revealPath =
-          groupBy === 'repo' && key !== PINNED_GROUP_KEY
-            ? projectGroupPaths.get(
-                projectGroupIdFromRepoId(key) ?? group.repo?.projectGroupId ?? ''
-              )
-            : undefined
+        const naturalRepoSection = groupBy === 'repo' && key !== PINNED_GROUP_KEY
+        const revealPath = naturalRepoSection
+          ? projectGroupPaths.get(projectGroupIdFromRepoId(key) ?? group.repo?.projectGroupId ?? '')
+          : undefined
         return {
           key,
           group,
           placement: key === PINNED_GROUP_KEY ? 'pinned' : 'natural',
-          items:
-            groupBy === 'repo' && key !== PINNED_GROUP_KEY
-              ? orderMainWorktreeFirst(group.items)
-              : group.items,
+          items: naturalRepoSection ? orderMainWorktreeFirst(group.items) : group.items,
           revealPath:
             projectGroupIdFromRepoId(key) && revealPath ? revealPath : { key, parent: revealPath }
         }
@@ -208,7 +208,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     // mixed at all. Scoping to naturalWorktrees left pinned remotes unlabelled.
     const mixedWorktreeHostContextLabels = getMixedWorktreeHostContextLabels(
       worktrees,
-      repoMap,
+      repoOf,
       hostLabelById,
       defaultHostId
     )
@@ -234,7 +234,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     })
     emitPinnedGroup(
       pinnedSectionWorktrees,
-      repoMap,
+      repoOf,
       defaultHostId,
       collapsedGroups,
       renderedNaturalAnchorRepoIds,
@@ -250,7 +250,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       // Why folder workspaces gate this too: an account with only folder
       // workspaces rendered nothing at all in flat mode before (#15362).
       if (naturalWorktrees.length > 0 || unplacedFolders.length > 0) {
-        const laneArgs = [naturalWorktrees, unplacedFolders, repoMap, defaultHostId] as const
+        const laneArgs = [naturalWorktrees, unplacedFolders, repoOf, defaultHostId] as const
         result.push({
           type: 'header',
           key: ALL_GROUP_KEY,
@@ -261,7 +261,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
           worktreeIds: naturalWorktrees.map((worktree) => worktree.id)
         })
         if (!collapsedGroups.has(ALL_GROUP_KEY)) {
-          appendWorktreeRows(result, repoMap, occurrencePlan, {
+          appendWorktreeRows(result, repoOf, occurrencePlan, {
             folderByIdentity,
             collapsedGroups,
             groupDepth: 0,
@@ -284,6 +284,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
       collapsedGroups,
       workspaceStatuses,
       repoMap,
+      repoOf,
       defaultHostId,
       hostLabelById,
       projectIndex,

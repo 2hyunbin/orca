@@ -19,9 +19,13 @@ const { pruneLineageMock, pruneMetadataMock } = vi.hoisted(() => ({
 vi.mock('../worktree-lineage-pruning', () => ({
   pruneLineageForMissingRepoWorktrees: pruneLineageMock
 }))
-vi.mock('../ipc/worktrees/listing/authoritative-local-worktree-metadata-pruning', () => ({
-  pruneMetadataMissingFromAuthoritativeLocalScan: pruneMetadataMock
-}))
+vi.mock(
+  '../ipc/worktrees/listing/authoritative-local-worktree-metadata-pruning',
+  async (importOriginal) => ({
+    ...(await importOriginal<Record<string, unknown>>()),
+    pruneMetadataMissingFromAuthoritativeLocalScan: pruneMetadataMock
+  })
+)
 const { hiddenHostIds } = vi.hoisted(() => ({ hiddenHostIds: new Set<string>() }))
 vi.mock('./runtime-visible-catalog', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -360,6 +364,8 @@ describe('RuntimeManagedWorktreeQueries.listDetected overtaken scan', () => {
     const expectations: unknown[] = []
     const generations: number[] = []
     const store = gitStore({
+      pruneSessionlessMissingLocalWorktreeMetadataForRepo: vi.fn(() => []),
+      getProfileStorageDirectory: () => '/profile',
       captureNativeLocalWorktreeMetadataScanExpectation: vi.fn(() => {
         const expectation = { repo, metadata: [] }
         expectations.push(expectation)
@@ -434,11 +440,9 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
     __bound: (actual: number, limit: number, label: string) =>
       expect.soft(actual, label).toBeLessThanOrEqual(limit)
   })
-  const descriptors = Object.entries(Object.getOwnPropertyDescriptors(globalThis))
-  Object.defineProperties(
-    context,
-    Object.fromEntries(descriptors.filter(([name]) => globals.split(' ').includes(name)))
-  )
+  Object.entries(Object.getOwnPropertyDescriptors(globalThis))
+    .filter(([name]) => globals.split(' ').includes(name))
+    .forEach(([name, descriptor]) => Object.defineProperty(context, name, descriptor))
   const modules = new Map<string, { exports: unknown }>()
   const exists = (file: string) => statSync(join(root, file), { throwIfNoEntry: false })?.isFile()
   const suffixes = ['', '.ts', '.tsx', '.js', '.mjs', '/index.ts', '/index.js']
@@ -448,7 +452,9 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
     if (cached) {
       return cached.exports
     }
-    const source = readFileSync(join(root, file), 'utf8')
+    const filename = join(root, file)
+    const directory = dirname(filename)
+    const source = readFileSync(filename, 'utf8')
     if (file.endsWith('.json')) {
       return JSON.parse(source)
     }
@@ -508,15 +514,13 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
           ? { ...native('node:os'), homedir: () => home }
           : context.process
       }
-      const candidate = relative(root, resolve(root, dirname(file), specifier)).replaceAll(sep, '/')
+      const candidate = relative(root, resolve(directory, specifier)).replaceAll(sep, '/')
       const local = specifier.startsWith('.') ? sourcePath(candidate) : undefined
-      const absolute = local
-        ? join(root, local)
-        : native.resolve(specifier, { paths: [join(root, dirname(file))] })
+      const absolute = local ? join(root, local) : native.resolve(specifier, { paths: [directory] })
       const tracked = relative(root, absolute).replaceAll(sep, '/')
       return /^(src|packages)\//.test(tracked) && exists(tracked) ? load(tracked) : native(absolute)
     }
-    const moduleMeta = JSON.stringify({ url: pathToFileURL(join(root, file)).href })
+    const moduleMeta = JSON.stringify({ url: pathToFileURL(filename).href })
     const invoke: unknown = runInContext(
       `(function(require,module,exports,__filename,__dirname){'use strict';const __moduleMeta=${moduleMeta};${output}\n})`,
       context,
@@ -525,13 +529,8 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
     if (typeof invoke !== 'function') {
       throw new Error('Invalid source wrapper')
     }
-    invoke(
-      Object.assign(requireSource, { resolve: native.resolve }),
-      module,
-      module.exports,
-      join(root, file),
-      join(root, dirname(file))
-    )
+    Object.assign(requireSource, { resolve: native.resolve })
+    invoke(requireSource, module, module.exports, filename, directory)
     return module.exports
   }
   Object.assign(context, { __load: load })
@@ -545,8 +544,7 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
       const measure = async action => {
         for (const key of [...metrics, 'corpusAcquisitions', 'workspaceMapReads']) counts[key] = 0;
         active = true;
-        try { await action(); } finally { active = false; }
-        return { ...counts };
+        try { return { rows: await action(), sample: { ...counts } }; } finally { active = false; }
       };
       const NativeMap = Map;
       globalThis.Map = class extends NativeMap {
@@ -570,18 +568,19 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
       const { Store } = __load('src/main/persistence/loading-store/store.ts');
       const { RuntimeWorkspaceCatalog } = __load('src/main/runtime/workspaces/workspace-catalog.ts');
       const { RuntimeResolvedWorktreeCache } = __load('src/main/runtime/runtime-resolved-worktree-cache.ts');
+      const { WorkspaceRowsProducer } = __load('src/main/runtime/sidebar-inputs/workspace-rows-producer.ts');
       const { RuntimeManagedWorktreeQueries } = __load('src/main/runtime/runtime-managed-worktree-queries.ts');
       const { canonicalWorktreeIdentity } = __load('src/shared/worktree/identity.ts');
       const host = __load('src/shared/worktree/host-qualified-identity.ts');
       const { getProjectHostSetupWorktreeMeta } = __load('src/shared/project-host-setup-lookup.ts');
-      // Fixed BASE b2ddb251 actual trigger vectors; order is metrics above, publication | listing.
+      // Pinned MAIN 5a2d2f49 actual trigger vectors: catalog | listing | synchronous producer.
       const baselines = {
-        'zero:100': '503 200 2 0 60801 6 300|800 100 300 200 91000 900 400',
-        'zero:1000': '5003 2000 2 0 6008001 6 3000|8000 1000 3000 2000 9010000 9000 4000',
-        'pair:100': '505 202 2 4 60801 7 304|806 104 300 518 91604 904 710',
-        'pair:1000': '5005 2002 2 4 6008001 7 3004|8006 1004 3000 5018 9016004 9004 7010',
-        'chain:100': '701 398 2 396 60801 105 696|1198 10198 300 99400 140800 6049 69800',
-        'chain:1000': '7001 3998 2 3996 6008001 1005 6996|11998 1001998 3000 9994000 14008000 510499 6998000',
+        "zero:100": "503 200 2 0 60801 6 300|800 100 300 200 91000 900 400|205 200 2 0 31301 910 2800",
+        "zero:1000": "5003 2000 2 0 6008001 6 3000|8000 1000 3000 2000 9010000 9000 4000|2005 2000 2 0 3013001 9010 28000",
+        "pair:100": "505 202 2 4 60801 7 304|806 104 300 518 91604 904 710|205 200 2 4 31301 911 2804",
+        "pair:1000": "5005 2002 2 4 6008001 7 3004|8006 1004 3000 5018 9016004 9004 7010|2005 2000 2 4 3013001 9011 28004",
+        "chain:100": "701 398 2 396 60801 105 696|1198 10198 300 99400 140800 6049 69800|205 200 2 396 31301 1009 3196",
+        "chain:1000": "7001 3998 2 3996 6008001 1005 6996|11998 1001998 3000 9994000 14008000 510499 6998000|2005 2000 2 3996 3013001 10009 31996"
       };
       const proxies = new WeakMap();
       function observe(result, metric) {
@@ -649,17 +648,18 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
           const scan = async repo => ({ ok: true, worktrees: [{ path: repo.path,
             head: 'abc1234', branch: 'main', isBare: false, isMainWorktree: true }] });
           const catalog = Object.assign(Object.create(RuntimeWorkspaceCatalog.prototype), {
-            store, resolvedWorktrees: new RuntimeResolvedWorktreeCache(),
+            store, worktreeScanCache: new Map(), resolvedWorktrees: new RuntimeResolvedWorktreeCache(),
             requireStore: () => store, listRepoWorktreesForListing: scan });
           const listing = new RuntimeManagedWorktreeQueries({ getStore: () => store,
             listResolved: () => catalog.listResolvedWorktrees(), resolveRepo: async () => repos[0],
             selectRepos: () => repos, scanRepo: scan, listKnownHostIds: () => ['local'] });
-          const check = rows => {
+          const check = (rows, feed = false) => {
             __equal(rows.map(row => row.id), ids);
             rows.forEach((row, i) => {
               const parent = i > 0 && (shape === 'chain' || (shape === 'pair' && i === 1));
-              __equal(row.parentWorktreeId ?? null, parent ? ids[i - 1] : null);
-              __equal(row.childWorktreeIds ?? [],
+              __equal((feed ? row.lineage?.parentWorktreeId : row.parentWorktreeId) ?? null,
+                parent ? ids[i - 1] : null);
+              if (!feed) __equal(row.childWorktreeIds ?? [],
                 (shape === 'chain' && i < n - 1) || (shape === 'pair' && i === 0) ? [ids[i + 1]] : []);
             });
           };
@@ -672,23 +672,30 @@ it('bounds publication and listing to base work plus one linear nesting pass', a
             }
             return rows;
           };
+          const producer = new WorkspaceRowsProducer({ store, onClientEvent: () => () => {},
+            scan: () => catalog.scanResolvedWorktreeRepos(),
+            join: scans => catalog.joinResolvedWorktreeScans(scans), visible: snapshot => snapshot });
+          await producer.ready();
+          const published = () => {
+            producer.revision.bump();
+            return Object.values(producer.snapshot().rows);
+          };
           check(await catalog.listResolvedWorktrees());
           check(await detected());
           catalog.resolvedWorktrees.invalidateResolved();
-          for (const [route, action] of [() => catalog.listResolvedWorktrees(), detected].entries()) {
-            let rows;
-            const sample = await measure(async () => { rows = await action(); });
-            check(rows);
+          for (const [route, action] of [() => catalog.listResolvedWorktrees(), detected, published].entries()) {
+            const { rows, sample } = await measure(async () => await action());
+            check(rows, route === 2);
             const base = baselines[shape + ':' + n].split('|')[route].split(' ').map(Number);
             for (const key of ['storeReads', 'metadataRowsVisited', 'rowCopies', 'mapBuilds', 'mapEntries'])
               __equal(sample[key] > 0, true);
             if (shape !== 'zero') __equal(sample.resolverPasses > 0, true);
             // One corpus contributes 3N metadata visits and 4N+E map entries; final projection adds the rest.
-            const allowance = route === 0 ? [3, 3*n, 1, 2*n, 0, 16, 15*n+1]
+            const allowance = route !== 1 ? [3, 3*n, 1, 2*n, 0, 16, 15*n+1]
               : [n, shape === 'pair' ? 1 : n-1, 0, n, 0, 0, 0];
             metrics.forEach((key, i) => __bound(sample[key], base[i] + (shape === 'zero' ? 0 : allowance[i]),
               shape + '/' + n + '/' + route + '/' + key));
-            __bound(sample.corpusAcquisitions, shape !== 'zero' && route === 0 ? 1 : 0, 'one corpus');
+            __bound(sample.corpusAcquisitions, shape !== 'zero' && route !== 1 ? 1 : 0, 'one corpus');
             if (route === 1) __bound(sample.workspaceMapReads, n, 'one workspace map per listing');
           }
         }

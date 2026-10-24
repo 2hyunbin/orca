@@ -113,7 +113,13 @@ export class RuntimeWorktreeLineageController {
         'The workspace changed. Refresh and try again.'
       )
     }
-    const edgeOf = (row: Worktree) => snapshot?.edgeOf(row)
+    const store = this.deps.getStore()
+    const edgeOf = (row: Worktree) =>
+      store?.getAllWorktreeLineage
+        ? snapshot?.edgeOf(row)
+        : snapshot?.hasCurrent(row) && row.hostId === child.hostId
+          ? store?.getWorktreeLineage?.(row.id)
+          : undefined
     const existing = edgeOf(child)
     if (
       isSameSavedWorktreeParent(existing, child, {
@@ -151,11 +157,15 @@ export class RuntimeWorktreeLineageController {
     let cursor: Worktree | undefined = parent
     const visited = new Set<Worktree>()
     while (cursor) {
-      if (cursor === child || visited.has(cursor)) {
+      if (cursor === child) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CYCLE',
           'Parent selector would create a lineage cycle.'
         )
+      }
+      // Why: a loop saved before this walk read saved data must not block unrelated parents.
+      if (visited.has(cursor)) {
+        break
       }
       visited.add(cursor)
       const edge = edgeOf(cursor)

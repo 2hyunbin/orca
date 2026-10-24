@@ -27,6 +27,15 @@ import {
   retirePurgedTabLaunches
 } from './purged-structured-launch-retirement'
 import { buildWorktreePurgeSurfacePatch } from './worktree-purge-surface-patch'
+import {
+  noticeRemovedUnsavedFiles,
+  type ConfirmedUnsavedDiscards
+} from './removed-workspace-unsaved-files'
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '../../../workspace-record-selectors'
 
 type PublisherRow = {
   id: string
@@ -48,7 +57,7 @@ function resolvePurgedPublishers(
   const attributedHostIds = new Map([...purgedHosts].map((hostId) => [hostId, hostId]))
   if (scope?.type === 'folder') {
     const groups = s.projectGroups ?? []
-    const hosts = (s.folderWorkspaces ?? [])
+    const hosts = (selectFolderWorkspaces(s) ?? [])
       .filter((folder) => folder.id === scope.folderWorkspaceId)
       .flatMap((folder) => {
         const groupHosts = groups
@@ -67,8 +76,8 @@ function resolvePurgedPublishers(
   const worktreeId = scope?.type === 'worktree' ? scope.worktreeId : workspaceId
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   const rows: PublisherRow[] = [
-    ...(s.worktreesByRepo[repoId] ?? []),
-    ...(s.detectedWorktreesByRepo[repoId]?.worktrees ?? [])
+    ...(selectWorktreesByRepo(s)[repoId] ?? []),
+    ...(selectDetectedWorktreesByRepo(s)[repoId]?.worktrees ?? [])
   ].filter((row) => row.id === worktreeId)
   const survivors = new Set<ExecutionHostId>()
   for (const row of rows) {
@@ -137,7 +146,8 @@ export function collectHostTwinPurgeScopes(
 export function buildHostTwinPurgeState(
   s: AppState,
   hostId: ExecutionHostId,
-  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>
+  twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>,
+  confirmedDiscards?: ConfirmedUnsavedDiscards
 ): Partial<AppState> {
   const twinIds = new Set(twinHostIds.keys())
   const removed = collectRemovedHostTwinState(s, twinIds, hostId, twinHostIds)
@@ -195,6 +205,11 @@ export function buildHostTwinPurgeState(
       }
     }
   }
+  const editorBufferKeepRequest = noticeRemovedUnsavedFiles(
+    s,
+    doomed.removedFileIds,
+    confirmedDiscards
+  )
   const omitters = createWorktreePurgeOmitters(s, new Set(), doomed)
   const tabPrefixedSleeping = {
     sleepingAgentSessionsByPaneKey: omitters.omitByPaneKeyTabPrefix(
@@ -234,6 +249,7 @@ export function buildHostTwinPurgeState(
         (group, index) => group.activeTabId !== s.groupsByWorktree[active]?.[index]?.activeTabId
       ))
   return {
+    editorBufferKeepRequest,
     ...layout,
     // Why: a group may now show a surviving tab of another kind, so selection is derived again.
     ...(selectionRemoved ? buildActiveSurfacePatch({ ...s, ...layout }, active) : {}),

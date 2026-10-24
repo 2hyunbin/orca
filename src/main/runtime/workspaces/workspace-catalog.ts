@@ -13,12 +13,18 @@ import {
   resolveLocalProjectRuntimeForRepo,
   resolveLocalProjectRuntimesForRepos
 } from '../../project-runtime-git-options'
-import { getAgentLaunchPlatformForRepo } from '../runtime-agent-launch-resolution'
 import {
   resolveRepoWorktreeRows,
-  resolveScopedWorktreeIdRow
+  resolveScopedWorktreeIdRow,
+  type RepoWorktreeRowDeps
 } from '../repo-worktree-row-resolution'
-import type { RepoWorktreeRowDeps } from '../repo-worktree-row-resolution'
+import {
+  joinResolvedWorktreeScans,
+  platformsByRepoId,
+  scanResolvedWorktreeRepos,
+  type ResolvedWorktreeRepoScans,
+  type ResolvedWorktreeScanJoin
+} from './resolved-worktree-scan-join'
 import { listRuntimeFolderWorkspaces } from '../runtime-worktree-filesystem'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { Repo } from '../../../shared/repo-types'
@@ -113,12 +119,7 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
       repoOwnerCounts.set(repo.id, (repoOwnerCounts.get(repo.id) ?? 0) + 1)
     }
     const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
-    const platformByRepoId = new Map(
-      repos.map((repo) => [
-        repo.id,
-        getAgentLaunchPlatformForRepo(repo, projectRuntimeByRepoId.get(repo.id))
-      ])
-    )
+    const platformByRepoId = platformsByRepoId(repos, projectRuntimeByRepoId)
     const deps = this.repoWorktreeRowDeps()
     const perRepoWorktrees = await Promise.all(
       repos.map(
@@ -142,6 +143,18 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
       .slice(0, gitRows.length)
       .filter((row): row is ResolvedWorktree => row.git !== undefined)
     return { worktrees, folderWorktrees: projected.slice(gitRows.length), platformByRepoId }
+  }
+
+  /** Every git repo's scan, with no metadata: `joinResolvedWorktreeScans` adds that at read. */
+  protected scanResolvedWorktreeRepos(): Promise<ResolvedWorktreeRepoScans> {
+    return scanResolvedWorktreeRepos(this.store, this.repoWorktreeRowDeps.bind(this), (key) =>
+      this.worktreeScanCache.get(key)
+    )
+  }
+
+  /** The fleet listing from cached scans and the store as it is now, synchronously. */
+  protected joinResolvedWorktreeScans(scans: ResolvedWorktreeRepoScans): ResolvedWorktreeScanJoin {
+    return joinResolvedWorktreeScans(this.store, this.repoWorktreeRowDeps.bind(this), scans)
   }
 
   /** Bind the runtime-owned scan cache and folder-workspace stamping into the row resolver. */

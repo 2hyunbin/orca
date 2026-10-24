@@ -14,20 +14,32 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   refresh: vi.fn()
 }))
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => ({
-      activeWorktreeId: 'repo::/workspaces/parent',
-      worktreesByRepo: { repo: mocks.rows },
-      folderWorkspaces: [],
-      removeWorktree: mocks.remove,
-      markWorktreesDeleting: vi.fn(),
-      clearWorktreeDeleteState: vi.fn(),
-      fetchAllWorktrees: mocks.refresh
+vi.mock('@/store', () => {
+  const state = {
+    activeWorktreeId: 'repo::/workspaces/parent',
+    removeWorktree: mocks.remove,
+    markWorktreesDeleting: vi.fn(),
+    clearWorktreeDeleteState: vi.fn(),
+    fetchAllWorktrees: mocks.refresh,
+    get worktreesByRepo() {
+      return { repo: mocks.rows }
+    },
+    detectedWorktreesByRepo: {},
+    folderWorkspaces: [],
+    projectGroups: [],
+    openFiles: [],
+    editorDrafts: {}
+  }
+  return {
+    useAppStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), {
+      getState: () => state
     })
   }
+})
+vi.mock('@/store/selectors', () => ({
+  getWorktreeOnHostFromState: () => null,
+  getAllWorktreesFromState: () => []
 }))
-vi.mock('@/store/selectors', () => ({ getWorktreeOnHostFromState: () => null }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 const target = { id: 'repo::/workspaces/parent', executionHostId: 'local' as const }
@@ -93,7 +105,8 @@ describe('nested deletion confirmation', () => {
     await vi.waitFor(() => expect(mocks.refresh).toHaveBeenCalled())
     expect(mocks.remove).toHaveBeenCalledWith(target, true, {
       approvedNestedWorktrees: plan,
-      assertBeforeDispatch: undefined
+      assertBeforeDispatch: undefined,
+      confirmedDiscards: expect.any(Map)
     })
     expect(dismissToast).toHaveBeenCalledOnce()
     expect(onDeleted).toHaveBeenCalledOnce()

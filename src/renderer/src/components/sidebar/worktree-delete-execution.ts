@@ -168,7 +168,8 @@ export async function runWorktreeDeletesInParallel(
                       const removed = await useAppStore
                         .getState()
                         .deleteFolderWorkspace(folder.folderWorkspaceId, {
-                          executionHostId: currentTarget.hostId
+                          executionHostId: currentTarget.hostId,
+                          confirmedDiscards: options.confirmedDiscards
                         })
                       const state = useAppStore.getState()
                       if (

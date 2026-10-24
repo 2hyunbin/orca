@@ -1,5 +1,6 @@
+import type { ConfirmedUnsavedDiscards } from './worktrees/teardown/removed-workspace-unsaved-files'
 import type { WorkspaceAttachmentMutation } from '../../../../shared/workspace-attachment-mutation'
-import type { WorkspaceReferenceTerminalContext } from '@/lib/workspace-attachment-terminal-origin'
+import type { WorkspaceReferenceObservationContext } from '@/lib/workspace-attachment-observed-origin'
 import type { CreateWorktreeCallOptions } from './worktrees/create/worktree-create-payload'
 import type { WorktreeCatalogVersion } from '../../../../shared/worktree/catalog-version'
 import type { WorkspaceKey } from '../../../../shared/folder-workspace-types'
@@ -162,7 +163,7 @@ export type WorktreeSlice = {
   lastVisitedAtByWorktreeId: Record<string, number>
   /**
    * Guards the one-shot hydration-time purge in `fetchAllWorktrees`. Set to
-   * `true` only after the first launch where every repo's `worktrees.list` IPC
+   * `true` only after the first launch where every repo's `worktrees.listDetected` IPC
    * call succeeded AND at least one repo returned a non-empty result — at that
    * moment the renderer has enough signal to treat the union of fetched ids as
    * authoritative and purge stale `tabsByWorktree` keys left behind by pre-fix
@@ -288,7 +289,7 @@ export type WorktreeSlice = {
   observeTerminalGitHubPullRequestLink: (
     worktreeId: string,
     link: TerminalGitHubPRLink,
-    context?: WorkspaceReferenceTerminalContext
+    context?: WorkspaceReferenceObservationContext
   ) => void
   bumpWorktreeActivity: (worktreeId: string) => void
   /**
@@ -361,7 +362,10 @@ export type WorktreeSlice = {
    * Called by the `worktrees:changed` listener on server-side deletions and
    * one-shot at hydration time. See design §4.4.
    */
-  purgeWorktreeTerminalState: (worktreeTargets: WorktreePurgeTargets) => void
+  purgeWorktreeTerminalState: (
+    worktreeTargets: WorktreePurgeTargets,
+    confirmedDiscards?: ConfirmedUnsavedDiscards
+  ) => void
   /**
    * Retires every client-store row (repos, project host setups, worktree +
    * detected-worktree rows, and their tab/PTY/browser/editor cascade) owned by a

@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { lineageStoreKeyForRow } from '../../../../shared/resolved-worktree-lineage'
 import type { AppState } from '@/store/types'
+import type { ConfirmedUnsavedDiscards } from '@/store/slices/worktrees/teardown/removed-workspace-unsaved-files'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { PreservedBranchCleanup } from '@/lib/preserved-branch-cleanup'
 import { normalizeExecutionHostId } from '../../../../shared/execution-host'
@@ -40,6 +41,7 @@ export type WorktreeDeleteWithToastOptions = {
   suppressPreservedBranchToast?: boolean
   assertBeforeDispatch?: () => void
   snapshotPruneBatchId?: string
+  confirmedDiscards?: ConfirmedUnsavedDiscards
 }
 
 export function toWorktreeDeleteIdentities(

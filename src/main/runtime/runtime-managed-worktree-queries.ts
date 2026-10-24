@@ -30,16 +30,19 @@ import {
 } from '../../shared/worktree/visibility-sources'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
 import { pruneLineageForMissingRepoWorktrees } from '../worktree-lineage-pruning'
-import { pruneMetadataMissingFromAuthoritativeLocalScan } from '../ipc/worktrees/listing/authoritative-local-worktree-metadata-pruning'
-import type { Store } from '../persistence'
+import {
+  canPruneAuthoritativeLocalMetadata,
+  pruneMetadataMissingFromAuthoritativeLocalScan
+} from '../ipc/worktrees/listing/authoritative-local-worktree-metadata-pruning'
 import type { RuntimeStore } from './runtime-store-contract'
+import type { Store } from '../persistence/loading-store/store'
 import { getWorkspaceAttachments } from '../../shared/workspace-attachments'
 import type { RuntimeWorktreeScanResult } from './repo-worktree-resolution-scan'
 import { scanRuntimeWorktreesUntilNotOvertaken } from './runtime-witnessed-worktree-scan'
 import { listRuntimeFolderWorkspaces } from './runtime-worktree-filesystem'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { resolveConfiguredWorktreeBasePaths } from '../../shared/worktree/configured-worktree-base-path'
-import { canListRetiredNames, listRetiredWorktreeNamesForRepo } from '../worktree-name-retirement'
+import { listRetiredWorktreeNamesForRepo } from '../worktree-name-retirement'
 
 type Dependencies = {
   getStore(): RuntimeStore | null
@@ -168,9 +171,9 @@ export class RuntimeManagedWorktreeQueries {
     if (scan.ok && !scan.superseded) {
       // Why the runtime sweeps too: the desktop listing that used to own this runs off `ipcMain`,
       // so a headless host -- which has no renderer -- never pruned its own repos' rows (#17776).
-      if (scan.metadataPruneExpectation) {
+      if (scan.metadataPruneExpectation && canPruneAuthoritativeLocalMetadata(store)) {
         await pruneMetadataMissingFromAuthoritativeLocalScan({
-          store: store as unknown as Store,
+          store,
           repo,
           gitWorktrees: scan.worktrees,
           scan: scan.metadataPruneExpectation,
@@ -193,7 +196,7 @@ export class RuntimeManagedWorktreeQueries {
     const detected = scan.worktrees.map((gitWorktree) => {
       const id = `${repo.id}::${gitWorktree.path}`
       const meta =
-        readWorktreeMetaForHost(store as unknown as Store, id, expectedHostId) ??
+        readWorktreeMetaForHost(store, id, expectedHostId) ??
         getRepoOwnedWorktreeMeta(repo, id, metaById, repoOwnerCount)
       const worktree = {
         ...mergeWorktree(repo.id, gitWorktree, meta, repo.displayName),
@@ -300,12 +303,9 @@ export class RuntimeManagedWorktreeQueries {
     retiredNamesByRepo: Record<string, readonly string[]>
     retiredNameTiersByRepo: Record<string, number>
   }> {
-    const store = this.deps.getStore()
-    if (!canListRetiredNames(store)) {
-      return { retiredNamesByRepo: {}, retiredNameTiersByRepo: {} }
-    }
-    const repo = await this.deps.resolveRepo(repoSelector)
-    return listRetiredWorktreeNamesForRepo(store, repo)
+    return listRetiredWorktreeNamesForRepo(this.deps.getStore(), () =>
+      this.deps.resolveRepo(repoSelector)
+    )
   }
 
   private visibilityDefaults(

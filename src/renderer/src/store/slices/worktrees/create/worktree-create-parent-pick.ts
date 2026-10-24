@@ -17,6 +17,7 @@ import {
 } from '../../../../../../shared/execution-host'
 import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
+import { selectFolderWorkspaces } from '../../../workspace-record-selectors'
 
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
@@ -105,7 +106,7 @@ function parentLabel(state: AppState, parent: WorktreeCreateParentPick): string 
   if (scope?.type !== 'folder') {
     return null
   }
-  const workspace = state.folderWorkspaces?.find(
+  const workspace = selectFolderWorkspaces(state)?.find(
     (candidate) => candidate.id === scope.folderWorkspaceId
   )
   return workspace?.name.trim() || null

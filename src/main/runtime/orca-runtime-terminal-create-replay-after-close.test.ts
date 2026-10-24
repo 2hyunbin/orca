@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, expect, it, vi } from 'vitest'
 import type { PtyProcessInfo } from '../providers/pty-provider-contract'
 import { setupLayoutOwnerRuntime, WORKTREE_ID } from './orca-runtime-layout-owner-start-fixture'
+import { committingSpawn } from './bind-first-pane.test-fixture'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -11,7 +12,8 @@ function pairedDesktopCreate() {
   const fixture = setupLayoutOwnerRuntime()
   const live: PtyProcessInfo[] = []
   fixture.runtime.setPtyController({
-    spawn: fixture.spawn,
+    // As the PTY host's spawn commit: the pane is bound before the terminal registers.
+    spawn: committingSpawn(fixture.runtime, fixture.spawn),
     write: () => true,
     kill: () => true,
     getForegroundProcess: async () => null,
@@ -49,7 +51,7 @@ describe('a paired desktop terminal.create replayed with its pane ids', () => {
     })
     expect(session().tabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
 
-    await expect(create(true)).rejects.toThrow('tab_closed')
+    await expect(create(true)).rejects.toThrow('tab_not_found')
     expect(spawn).toHaveBeenCalledTimes(1)
     expect(session().tabsByWorktree[WORKTREE_ID] ?? []).toEqual([])
   })

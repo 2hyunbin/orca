@@ -13,6 +13,7 @@ import {
 import { describePairedServerHosts } from '../../../../shared/paired-server-hosts'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 /** The paired-server rows the window fetched itself, keyed by host-qualified id, for these hosts. */
 export function readWindowPairedServerRows(
@@ -34,7 +35,7 @@ export function readWindowPairedServerRows(
     )
     rows.set(row.key, row)
   }
-  const folders = (state.folderWorkspaces ?? []).map((folder) => {
+  const folders = (selectFolderWorkspaces(state) ?? []).map((folder) => {
     const row = folderWorkspaceToWorktree(folder)
     const edge = state.workspaceLineageByChildKey?.[row.id]
     return { ...row, savedLineage: edge ? worktreeLineageFromWorkspaceLineage(edge) : null }

@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import { shouldRetainDisposedPaneSpawn } from './disposed-spawn-retention'
+import { requestTerminalPaneRecovery } from '../terminal-pane-recovery'
 import type { IpcPtyTransportOptions } from '../pty-transport-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -18,10 +19,6 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
     ...(session.deps.onPreconnectInput
       ? { onPreconnectInput: session.deps.onPreconnectInput }
       : {}),
-    // Why: only fresh local IPC spawns may recover from a saved startup cwd
-    // whose directory was deleted (#7239); remote-runtime spawns resolve cwd
-    // on another host and must keep exact cwd semantics.
-    ...(session.runtimeEnvironmentId === null ? { cwdFallback: 'worktree' as const } : {}),
     env: session.paneEnv,
     ...(session.paneStartup?.envToDelete ? { envToDelete: session.paneStartup.envToDelete } : {}),
     command: session.shouldDeliverStartupViaTerminalPaste
@@ -74,6 +71,17 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
     onPtyExit: session.onExit,
     onPtySpawn: session.onPtySpawn,
     onPtyRebind: session.onPtyRebind,
+    // Why a remount: the exit already tore down this mount's PTY state, so a fresh mount attaches.
+    onHostReboundExitedPty: (ptyId) =>
+      void requestTerminalPaneRecovery({
+        tabId: session.deps.tabId,
+        ptyId,
+        reason: 'host-rebound-exited-pane',
+        // Why: a new host process is fresh evidence a failed attempt can't refuse; the cap still holds.
+        trigger: 'host-evidence',
+        terminalRecoveryGeneration: session.terminalRecoveryGeneration,
+        terminalRecoveryInstanceId: session.terminalRecoveryInstance.id
+      }),
     retainDisposedSpawn: () =>
       shouldRetainDisposedPaneSpawn(
         useAppStore.getState(),
