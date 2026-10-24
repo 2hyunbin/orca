@@ -166,7 +166,7 @@ async function renderPalette(overrides: Partial<AgentStatusReadState>): Promise<
     alwaysShowDefaultBranchWorkspace: true,
     lastVisitedAtByWorktreeId: {},
     ...overrides
-  } as Partial<AgentStatusReadState>)
+  })
 
   await act(async () => {
     testRoot.render(<WorktreeJumpPalette />)
@@ -296,7 +296,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         unreadTerminalTabs: { 'term-alpha': true }
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -325,7 +325,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
         agentStatusByPaneKey: {
           [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'working', Date.now())
         }
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -356,7 +356,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
         agentStatusByPaneKey: {
           [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'done', Date.now())
         }
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 

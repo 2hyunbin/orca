@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { describe, expect, it } from 'vitest'
@@ -34,7 +35,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     store.getState().registerAgentLaunchConfig(
       'tab-1:leaf-1',
       {
@@ -77,7 +78,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().setAgentStatus(
       'tab-1:leaf-1',
@@ -121,7 +122,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const launchToken = 'launch-token-1'
     const launchConfig = {
       agentCommand: "codex '--model' 'gpt-5'",
@@ -181,7 +182,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const launchToken = 'launch-token-1'
     const launchConfig = {
       agentCommand: "codex '--model' 'gpt-5'",
@@ -224,7 +225,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = { key: 'session_id' as const, id: 'codex-session-1' }
     store
       .getState()
@@ -269,7 +270,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = { key: 'session_id' as const, id: 'codex-session-1' }
     store
       .getState()
@@ -312,7 +313,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = { key: 'session_id' as const, id: 'codex-session-1' }
     const launchConfig = {
       agentCommand: "codex '--model' 'gpt-5'",
@@ -335,7 +336,7 @@ describe('captureAllSleepingAgentSessions', () => {
           origin: 'live'
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
     expect(store.getState().agentLaunchConfigByPaneKey['tab-1:leaf-1']).toBeUndefined()
 
     store
@@ -371,7 +372,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const launchToken = 'launch-token-1'
 
     store.getState().registerAgentLaunchConfig(
@@ -431,7 +432,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().registerAgentLaunchConfig(
       'tab-1:leaf-1',
@@ -491,7 +492,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     store.getState().registerAgentLaunchConfig(
       'tab-1:leaf-1',
       {
@@ -513,7 +514,7 @@ describe('captureAllSleepingAgentSessions', () => {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })],
         'wt-2': [makeTab({ id: 'tab-2', worktreeId: 'wt-2' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store
       .getState()
@@ -561,7 +562,7 @@ describe('captureAllSleepingAgentSessions', () => {
       'tab-1:leaf-1': { paneKey: 'tab-1:leaf-1' },
       'tab-2:leaf-2': { paneKey: 'tab-2:leaf-2' },
       'tab-3:leaf-3': { paneKey: 'tab-3:leaf-3' }
-    } as unknown as AgentStatusReadState['sleepingAgentSessionsByPaneKey']
+    } as unknown as AppState['sleepingAgentSessionsByPaneKey']
     const launchConfigs = {
       'tab-1:leaf-1': {
         launchConfig: { agentArgs: '', agentEnv: {} },
@@ -578,7 +579,7 @@ describe('captureAllSleepingAgentSessions', () => {
         registeredAt: 1,
         identity: {}
       }
-    } as AgentStatusReadState['agentLaunchConfigByPaneKey']
+    } as AppState['agentLaunchConfigByPaneKey']
     applyAgentStatusPatch(store, {
       sleepingAgentSessionsByPaneKey: sleeping,
       agentLaunchConfigByPaneKey: launchConfigs
@@ -611,7 +612,7 @@ describe('captureAllSleepingAgentSessions', () => {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })],
         'wt-2': [makeTab({ id: 'tab-2', worktreeId: 'wt-2' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store
       .getState()
@@ -659,7 +660,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().setAgentStatus(
       'tab-1:leaf-1',
@@ -704,7 +705,7 @@ describe('captureAllSleepingAgentSessions', () => {
       const store = createTestStore()
       applyAgentStatusPatch(store, {
         tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] }
-      } as Partial<AgentStatusReadState>)
+      })
       const providerSession = { key: 'session_id', id: `${agentType}-session-1` } as const
 
       for (const [state, updatedAt] of [
@@ -740,7 +741,7 @@ describe('captureAllSleepingAgentSessions', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const launchToken = 'launch-token-1'
 
     store.getState().setAgentStatus(
@@ -807,7 +808,7 @@ describe('captureAllSleepingAgentSessions', () => {
           sessionId: 'sess-2'
         })
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().captureAllSleepingAgentSessions('quit')
 
@@ -841,7 +842,7 @@ describe('captureAllSleepingAgentSessions', () => {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       },
       agentStatusByPaneKey: { 'tab-1:leaf-1': entry }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().captureAllSleepingAgentSessions('quit')
 
@@ -857,7 +858,7 @@ describe('captureAllSleepingAgentSessions', () => {
       agentStatusByPaneKey: {
         'tab-1:leaf-1': makeAgentEntry({ paneKey: 'tab-1:leaf-1', worktreeId: 'wt-1' })
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().captureAllSleepingAgentSessions('quit')
 
@@ -877,7 +878,7 @@ describe('captureAllSleepingAgentSessions', () => {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       },
       agentStatusByPaneKey: { 'tab-1:leaf-1': entry }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().captureAllSleepingAgentSessions('quit')
 

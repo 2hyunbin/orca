@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 /**
  * Memory-leak regression: pane-scoped agent-status, unread, and terminal-input
@@ -66,7 +67,7 @@ function liveEntry(paneKey: string): AgentStatusEntry {
   }
 }
 
-function launchEntry(): AgentStatusReadState['agentLaunchConfigByPaneKey'][string] {
+function launchEntry(): AppState['agentLaunchConfigByPaneKey'][string] {
   return { launchConfig: { agentArgs: '', agentEnv: {} }, registeredAt: 0, identity: {} }
 }
 
@@ -92,12 +93,12 @@ function seedPaneState(store: ReturnType<typeof createTestStore>): void {
     agentStatusByPaneKey: { [PANE]: liveEntry(PANE) },
     agentLaunchConfigByPaneKey: {
       [PANE]: { launchConfig: {}, registeredAt: 0, identity: {} }
-    } as unknown as AgentStatusReadState['agentLaunchConfigByPaneKey'],
+    } as unknown as AppState['agentLaunchConfigByPaneKey'],
     acknowledgedAgentsByPaneKey: { [PANE]: 1 },
     paneForegroundAgentByPaneKey: { [PANE]: { agent: null, shellForeground: true } },
     sleepingAgentSessionsByPaneKey: {
       [PANE]: {}
-    } as unknown as AgentStatusReadState['sleepingAgentSessionsByPaneKey'],
+    } as unknown as AppState['sleepingAgentSessionsByPaneKey'],
     unreadTerminalTabs: { [TAB]: true },
     unreadTerminalPanes: { [PANE]: true },
     unreadAgentCompletionPanes: { [PANE]: true },

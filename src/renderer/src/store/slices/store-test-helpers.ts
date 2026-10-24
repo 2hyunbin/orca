@@ -1,6 +1,6 @@
 import { applyAgentStatusPatch } from '../agent-status-patch'
 import type { AgentStatusReadState } from '../agent-status-observers'
-import { withAgentStatusCommit } from '../agent-status-commit'
+import { getAgentStatusOwner, withAgentStatusCommit } from '../agent-status-commit'
 import { create } from 'zustand'
 import type { AppState } from '../types'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -127,6 +127,12 @@ export function createTestStore() {
       )
     )
   )
+}
+
+export function makeAgentStatusReadState(
+  overrides: Partial<AgentStatusReadState> = {}
+): AgentStatusReadState {
+  return { ...getAgentStatusOwner(createTestStore()).getState(), ...overrides }
 }
 
 export function seedStore(

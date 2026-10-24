@@ -1,3 +1,5 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * Zustand reruns every subscriber's selector on every store write, so an O(N)
@@ -40,7 +42,7 @@ function makeRepoRows(counter: ReadCounter): Repo[] {
   })
 }
 
-function makeWorktreesByRepo(counter: ReadCounter): AgentStatusReadState['worktreesByRepo'] {
+function makeWorktreesByRepo(counter: ReadCounter): AppState['worktreesByRepo'] {
   const worktreesByRepo: Record<string, Worktree[]> = {}
   for (let repoIndex = 0; repoIndex < REPO_COUNT; repoIndex += 1) {
     const repoId = `repo-${repoIndex}`
@@ -61,7 +63,7 @@ function makeWorktreesByRepo(counter: ReadCounter): AgentStatusReadState['worktr
 }
 
 /** The worst case for a first-wins linear scan: the last row of the last repo. */
-function lastWorktreeId(worktreesByRepo: AgentStatusReadState['worktreesByRepo']): string {
+function lastWorktreeId(worktreesByRepo: AppState['worktreesByRepo']): string {
   const lastBucket = Object.values(worktreesByRepo).at(-1) ?? []
   return (lastBucket.at(-1) as Worktree).id
 }
@@ -76,7 +78,7 @@ describe('local preflight context worktree lookup', () => {
     const worktreesByRepo = makeWorktreesByRepo(worktreeReads)
     const activeWorktreeId = lastWorktreeId(worktreesByRepo)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the preflight lookup reads only these AppState fields.
-    const state = {
+    const state = makeAgentStatusReadState({
       activeRepoId: `repo-${REPO_COUNT - 1}`,
       activeWorktreeId,
       repos: makeRepoRows(repoReads),
@@ -84,7 +86,7 @@ describe('local preflight context worktree lookup', () => {
       projects: [],
       runtimeEnvironments,
       runtimeEnvironmentCatalogHydrated: true
-    } as unknown as AgentStatusReadState
+    })
     worktreeReads.count = 0
     repoReads.count = 0
 
@@ -118,12 +120,12 @@ describe('local preflight context worktree lookup', () => {
     const repos = makeRepoRows({ count: 0 })
     const activeWorktreeId = lastWorktreeId(worktreesByRepo)
     const before = getLocalPreflightContext(
-      {
+      makeAgentStatusReadState({
         activeRepoId: 'repo-0',
         activeWorktreeId,
         repos,
         worktreesByRepo
-      } as unknown as AgentStatusReadState,
+      }),
       'darwin'
     )
     expect(before).toEqual({ wslDistro: 'Ubuntu' })
@@ -134,12 +136,12 @@ describe('local preflight context worktree lookup', () => {
       path: String.raw`\\wsl.localhost\Debian\home\alice\moved`
     } as Worktree
     const after = getLocalPreflightContext(
-      {
+      makeAgentStatusReadState({
         activeRepoId: 'repo-0',
         activeWorktreeId,
         repos,
         worktreesByRepo: { [`repo-${REPO_COUNT - 1}`]: [movedWorktree] }
-      } as unknown as AgentStatusReadState,
+      }),
       'darwin'
     )
 
@@ -149,12 +151,12 @@ describe('local preflight context worktree lookup', () => {
 
 describe('selectRepoByIdForActiveWorkspace', () => {
   function makeActiveWorkspaceState(counter: ReadCounter): AgentStatusReadState {
-    return {
+    return makeAgentStatusReadState({
       repos: makeRepoRows(counter),
       activeRepoId: 'repo-0',
       // No repo row carries this host, so the fallback branch runs every time.
       activeWorkspaceExecutionHostId: 'ssh:host-a'
-    } as unknown as AgentStatusReadState
+    })
   }
 
   it('resolves the active-workspace host once per repos snapshot', () => {
@@ -182,11 +184,11 @@ describe('selectRepoByIdForActiveWorkspace', () => {
       displayName: 'a',
       connectionId: 'host-a'
     } as Repo
-    const state = {
+    const state = makeAgentStatusReadState({
       repos: [localRepo, sshRepo],
       activeRepoId: 'repo-0',
       activeWorkspaceExecutionHostId: 'ssh:host-a'
-    } as unknown as AgentStatusReadState
+    })
 
     expect(selectRepoByIdForActiveWorkspace(state, 'repo-0')).toBe(sshRepo)
     expect(selectRepoByIdForActiveWorkspace(state, 'repo-0')).toBe(sshRepo)
@@ -225,11 +227,11 @@ describe('project runtime session summary', () => {
         )
       }
     }
-    return {
+    return makeAgentStatusReadState({
       tabsByWorktree,
       ptyIdsByTabId: {},
       agentStatusByPaneKey: {}
-    } as unknown as AgentStatusReadState
+    })
   }
 
   it('reuses the tab index across repos and store writes', () => {
@@ -269,7 +271,7 @@ describe('project runtime session summary', () => {
         tabsByWorktree: {
           [worktreeId]: [{ id: 'tab-new', ptyId: 'pty-new', worktreeId } as TerminalTab]
         }
-      } as unknown as AgentStatusReadState,
+      },
       'repo-0'
     )
 
@@ -287,7 +289,7 @@ describe('project runtime session summary', () => {
           'tab-1-0-0:leaf': { state: 'working', tabId: 'tab-1-0-0' },
           'tab-0-1-0:leaf': { state: 'done', tabId: 'tab-0-1-0' }
         }
-      } as unknown as AgentStatusReadState,
+      },
       'repo-0'
     )
 

@@ -1,7 +1,6 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import { shallow } from 'zustand/shallow'
-
+import type { AppState } from '@/store/types'
 import { useAppStore } from '@/store'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Tab } from '../../../../shared/tab-types'
@@ -12,7 +11,7 @@ import {
 } from './native-chat-image-runtime-context'
 import { repoFixture, worktreeFixture } from './native-chat-workspace-test-fixtures'
 
-function state(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
+function state(overrides: Partial<AppState> = {}): AppState {
   const tab: TerminalTab = {
     id: 'tab-1',
     ptyId: null,
@@ -51,10 +50,8 @@ describe('resolveNativeChatImageRuntimeContext', () => {
   it('keeps unrelated store writes out of the image-owner selector', () => {
     const storeState = state()
     const first = selectNativeChatImageOwnerState(storeState)
-    const second = selectNativeChatImageOwnerState({
-      ...storeState,
-      agentStatusByPaneKey: {} as AgentStatusReadState['agentStatusByPaneKey']
-    })
+    const unrelated = { ...storeState, agentStatusByPaneKey: {} }
+    const second = selectNativeChatImageOwnerState(unrelated)
 
     expect(shallow(second, first)).toBe(true)
   })
@@ -84,7 +81,7 @@ describe('resolveNativeChatImageRuntimeContext', () => {
       getKnownWorktreeById: () => ownerOnlyWorktree,
       worktreesByRepo: { repo: [ownerOnlyWorktree] },
       runtimeEnvironments: [{ id: 'owner-a' }]
-    } as unknown as AgentStatusReadState
+    } as unknown as AppState
 
     const context = resolveNativeChatImageRuntimeContext(ownerState, 'tab-1')
 
@@ -123,7 +120,7 @@ describe('resolveNativeChatImageRuntimeContext', () => {
       isPinned: false,
       agentSessionAgent: 'codex'
     }
-    const floatingState: AgentStatusReadState = {
+    const floatingState: AppState = {
       ...state(),
       tabsByWorktree: {},
       unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [floatingTab] },

@@ -171,7 +171,7 @@ async function renderPalette(overrides: Partial<AgentStatusReadState>): Promise<
     alwaysShowDefaultBranchWorkspace: true,
     lastVisitedAtByWorktreeId: {},
     ...overrides
-  } as Partial<AgentStatusReadState>)
+  })
 
   await act(async () => {
     testRoot.render(<WorktreeJumpPalette />)
@@ -339,7 +339,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
             (tab) => !before.includes(tab.id)
           )
         }
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -522,7 +522,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       applyAgentStatusPatch(useAppStore, {
         tabsByWorktree: hydrated.tabsByWorktree,
         unifiedTabsByWorktree: hydrated.unifiedTabsByWorktree
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -567,7 +567,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
       applyAgentStatusPatch(useAppStore, {
         tabsByWorktree: hydrated.tabsByWorktree,
         unifiedTabsByWorktree: hydrated.unifiedTabsByWorktree
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -607,7 +607,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         tabsByWorktree: hydrated.tabsByWorktree
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
     expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
@@ -633,7 +633,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         tabsByWorktree: hydrated.tabsByWorktree
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -693,7 +693,7 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
         agentStatusByPaneKey: {
           [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'blocked', Date.now())
         }
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 
@@ -713,13 +713,13 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         activeModal: undefined
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
     await act(async () => {
       applyAgentStatusPatch(useAppStore, {
         activeModal: 'worktree-palette'
-      } as Partial<AgentStatusReadState>)
+      })
     })
     await flushEffects()
 

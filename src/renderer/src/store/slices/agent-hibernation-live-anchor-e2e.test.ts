@@ -37,7 +37,7 @@ function seedWorkspace(store: ReturnType<typeof createTestStore>): void {
       experimentalAgentHibernation: true,
       agentHibernationIdleMs: DEFAULT_AGENT_HIBERNATION_IDLE_MS
     }
-  } as unknown as Partial<AgentStatusReadState>)
+  } as unknown)
 }
 
 function planFrom(state: AgentStatusReadState, ptyBindingFirstSeenAt: number): string[] {

@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // @vitest-environment happy-dom
@@ -235,7 +236,7 @@ function seedRemoteMirrorState(): void {
     runtimeStatusByEnvironmentId: new Map([
       [ENV_A, { status: { runtimeId: 'runtime-a' }, connectionGeneration: 1 }],
       [ENV_B, { status: { runtimeId: 'runtime-b' }, connectionGeneration: 2 }]
-    ]) as AgentStatusReadState['runtimeStatusByEnvironmentId']
+    ]) as AppState['runtimeStatusByEnvironmentId']
   })
 }
 

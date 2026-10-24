@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
@@ -191,7 +192,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: ['unified-url']
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       layoutByWorktree: {
         'wt-1': {
           type: 'split',
@@ -199,7 +200,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           first: { type: 'leaf', groupId: 'group-left' },
           second: { type: 'leaf', groupId: 'group-right' }
         }
-      } as unknown as AgentStatusReadState['layoutByWorktree'],
+      } as unknown as AppState['layoutByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -217,7 +218,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'Example'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       browserTabsByWorktree: {
         'wt-1': [
           {
@@ -290,7 +291,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: []
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -301,7 +302,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'Branch Changes (main)'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       openFiles: [
         {
           id: combinedId,
@@ -341,7 +342,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: []
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       layoutByWorktree: {
         'wt-1': {
           type: 'split',
@@ -349,7 +350,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           first: { type: 'leaf', groupId: 'group-left' },
           second: { type: 'leaf', groupId: 'group-right' }
         }
-      } as unknown as AgentStatusReadState['layoutByWorktree'],
+      } as unknown as AppState['layoutByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -367,7 +368,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'app.ts'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       browserTabsByWorktree: {
         'wt-1': [
           {
@@ -385,7 +386,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             createdAt: 1
           }
         ]
-      } as unknown as AgentStatusReadState['browserTabsByWorktree'],
+      } as unknown as AppState['browserTabsByWorktree'],
       browserPagesByWorkspace: {
         'browser-1': [
           {
@@ -402,7 +403,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             createdAt: 1
           }
         ]
-      } as unknown as AgentStatusReadState['browserPagesByWorkspace'],
+      } as unknown as AppState['browserPagesByWorkspace'],
       openFiles: [
         {
           id: fileId,
@@ -462,7 +463,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: ['editor-tab-1']
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -473,7 +474,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'app.ts'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       openFiles: [
         {
           id: fileId,
@@ -545,7 +546,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: []
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       layoutByWorktree: {
         'wt-1': {
           type: 'split',
@@ -553,7 +554,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           first: { type: 'leaf', groupId: 'group-left' },
           second: { type: 'leaf', groupId: 'group-right' }
         }
-      } as unknown as AgentStatusReadState['layoutByWorktree'],
+      } as unknown as AppState['layoutByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -571,7 +572,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'app.ts'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       openFiles: [
         {
           id: fileId,
@@ -627,7 +628,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'app.ts'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       openFiles: [
         {
           id: fileId,
@@ -668,7 +669,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: []
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       layoutByWorktree: {
         'wt-1': {
           type: 'split',
@@ -676,7 +677,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           first: { type: 'leaf', groupId: 'group-left' },
           second: { type: 'leaf', groupId: 'group-right' }
         }
-      } as unknown as AgentStatusReadState['layoutByWorktree'],
+      } as unknown as AppState['layoutByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -687,7 +688,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             title: 'app.ts'
           }
         ]
-      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
+      } as unknown as AppState['unifiedTabsByWorktree'],
       openFiles: [
         {
           id: diffId,
@@ -738,7 +739,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             recentTabIds: []
           }
         ]
-      } as unknown as AgentStatusReadState['groupsByWorktree'],
+      } as unknown as AppState['groupsByWorktree'],
       openFiles: [
         {
           id: fileId,

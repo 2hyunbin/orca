@@ -1,3 +1,5 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * Cold-parked tabs keep their runtime-graph leaf while their PTY is alive.
@@ -35,10 +37,10 @@ const PARKED_PTY = 'wt-1::/tmp/wt@@parked-pty'
 const TAB_ID = 'parked-tab-1'
 
 function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
-  return {
+  return makeAgentStatusReadState({
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     layoutByWorktree: {},
@@ -50,7 +52,7 @@ function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusRe
     editorDrafts: {},
     activeTabId: null,
     ...overrides
-  } as AgentStatusReadState
+  })
 }
 
 function parkedTab(): TerminalTab {
@@ -81,7 +83,7 @@ function parkedState(
     { type: 'leaf', leafId: leafIds[0] }
   )
   return makeState({
-    tabsByWorktree: { 'wt-1': [parkedTab()] } as AgentStatusReadState['tabsByWorktree'],
+    tabsByWorktree: { 'wt-1': [parkedTab()] } as AppState['tabsByWorktree'],
     terminalLayoutsByTabId: {
       [TAB_ID]: {
         root,
@@ -89,7 +91,7 @@ function parkedState(
         expandedLeafId: null,
         ptyIdsByLeafId
       }
-    } as unknown as AgentStatusReadState['terminalLayoutsByTabId']
+    } as unknown as AppState['terminalLayoutsByTabId']
   })
 }
 

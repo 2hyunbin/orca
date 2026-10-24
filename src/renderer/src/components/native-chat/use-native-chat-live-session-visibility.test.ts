@@ -123,9 +123,15 @@ describe('useNativeChatLiveSession visibility', () => {
   it('unsubscribes on hide, retains committed messages, and rejects hidden work', async () => {
     applyAgentStatusPatch(useAppStore, {
       agentStatusByPaneKey: {
-        [BASE_ARGS.paneKey]: { state: 'working', stateStartedAt: 100, updatedAt: Date.now() }
+        [BASE_ARGS.paneKey]: {
+          state: 'working',
+          prompt: '',
+          stateHistory: [],
+          stateStartedAt: 100,
+          updatedAt: Date.now()
+        }
       }
-    } as never)
+    })
     await render(BASE_ARGS)
     await emit(0, {
       type: 'snapshot',

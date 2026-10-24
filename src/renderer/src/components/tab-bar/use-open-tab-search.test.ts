@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -201,9 +202,9 @@ function seedStore(
     settings: {
       ...initialAppState.settings,
       tabAutoGenerateTitle: false
-    } as AgentStatusReadState['settings'],
+    } as AppState['settings'],
     ...overrides
-  } as AgentStatusReadState)
+  })
 }
 
 function renderSearch(options: { enabled?: boolean; query?: string } = {}) {
@@ -426,7 +427,7 @@ describe('useOpenTabSearch', () => {
       settings: {
         ...initialAppState.settings,
         tabAutoGenerateTitle: true
-      } as AgentStatusReadState['settings']
+      } as AppState['settings']
     })
 
     const { result } = renderSearch({ query: 'generated' })

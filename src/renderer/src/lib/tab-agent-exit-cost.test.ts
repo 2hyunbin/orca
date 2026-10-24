@@ -19,15 +19,15 @@ afterEach(() => {
 })
 
 function countedRows<T>(rows: T[], count: () => void): T[] {
-  return new Proxy(rows, {
-    get(target, key) {
-      if (typeof key === 'string' && /^\d+$/.test(key)) {
+  rows.forEach((value, index) => {
+    Object.defineProperty(rows, index, {
+      get: () => {
         count()
+        return value
       }
-      // SAFETY: array proxy keys are forwarded unchanged, including iterator symbols.
-      return target[key as keyof T[]]
-    }
+    })
   })
+  return rows
 }
 function setup(size: number) {
   const counts = { groupLeaves: 0, rawRows: 0, unifiedRows: 0 }

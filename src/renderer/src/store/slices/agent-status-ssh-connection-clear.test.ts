@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -63,7 +62,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
       },
       acknowledgedAgentsByPaneKey: { [oldA]: 2 },
       retentionSuppressedPaneKeys: { [oldA]: true }
-    } as Partial<AgentStatusReadState>)
+    })
     const subscriber = vi.fn()
     const unsubscribe = store.subscribe(subscriber)
     const queueMicrotaskSpy = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation(() => {})
@@ -115,7 +114,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
         'repo-a': [{ id: 'wt-a', repoId: 'repo-a' }],
         'repo-b': [{ id: 'wt-b', repoId: 'repo-b' }]
       }
-    } as unknown as Partial<AgentStatusReadState>)
+    } as unknown)
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const freshOrphanA = 'tab-a2:22222222-2222-4222-8222-222222222222'
@@ -188,7 +187,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
           { id: 'wt-b', repoId: 'shared', hostId: 'ssh:ssh-b' }
         ]
       }
-    } as unknown as Partial<AgentStatusReadState>)
+    } as unknown)
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const liveB = 'tab-b:22222222-2222-4222-8222-222222222222'
@@ -248,7 +247,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
           { id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-b' }
         ]
       }
-    } as unknown as Partial<AgentStatusReadState>)
+    } as unknown)
 
     const liveOnB = 'tab-b:11111111-1111-4111-8111-111111111111'
     const collidedOrphan = 'tab-x:22222222-2222-4222-8222-222222222222'

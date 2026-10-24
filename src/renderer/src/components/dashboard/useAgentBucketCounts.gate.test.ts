@@ -1,3 +1,4 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { shallow } from 'zustand/shallow'
@@ -13,7 +14,7 @@ const STORE_WRITES = 2_000
 
 function storeState(): AgentStatusReadState {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the selector reads only the slices listed here; the rest of AppState is never touched in this test.
-  return {
+  return makeAgentStatusReadState({
     repos: [],
     worktreesByRepo: {},
     tabsByWorktree: {},
@@ -31,7 +32,7 @@ function storeState(): AgentStatusReadState {
     agentStatusEpoch: 0,
     // A slice the counts never read: writing it is what "unrelated store write" means.
     unreadCountsByWorktree: {}
-  } as unknown as AgentStatusReadState
+  })
 }
 
 // What `useShallow` did before the gate, unwrapped from the hook so it can be
@@ -128,10 +129,10 @@ describe('agent bucket count input gate', () => {
     const unrelated = {
       ...state,
       unreadCountsByWorktree: {}
-    } as unknown as AgentStatusReadState
+    }
     expect(selectAgentBucketCountState(unrelated)).toBe(first)
 
-    const moved = { ...state, agentStatusEpoch: 1 } as unknown as AgentStatusReadState
+    const moved = { ...state, agentStatusEpoch: 1 }
     const second = selectAgentBucketCountState(moved)
     expect(second).not.toBe(first)
     expect(second.agentStatusEpoch).toBe(1)

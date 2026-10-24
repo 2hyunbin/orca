@@ -23,9 +23,11 @@ export function applyAgentStatusPatch(
         transaction.setEntry(key, agentStatusByPaneKey[key])
       }
     }
-    // SAFETY: app contains only fields from the typed AppState patch.
-    const keys = Object.keys(app) as (keyof AppState)[]
-    if (keys.some((key) => state[key] !== app[key])) {
+    if (
+      Object.entries(app).some(
+        ([key, value]) => Object.getOwnPropertyDescriptor(state, key)?.value !== value
+      )
+    ) {
       store.setState(app)
     }
   })

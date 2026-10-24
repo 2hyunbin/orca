@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * STA-3107: a paired client working against a remote Orca host is slept
  * (laptop closed), then woken. Every terminal tab is still open and still has a
@@ -191,7 +190,7 @@ function applyHostSnapshot(
   const state = store.getState()
   const patch = applyFreshWebSessionTabsSnapshot(state, snapshot, ENV, now)
   expect(patch, 'host snapshot must pass the freshness gate').not.toBe(state)
-  store.setState(patch as Partial<AgentStatusReadState>)
+  store.setState(patch)
 }
 
 /**
@@ -223,7 +222,7 @@ function seedPairedClientStore(): TestStore {
     settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
     worktreesByRepo: { repo1: [makeWorktree({ id: WT, repoId: 'repo1', path: '/path/wt1' })] },
     activeWorktreeId: WT
-  } as Partial<AgentStatusReadState>)
+  })
   return store
 }
 

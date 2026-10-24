@@ -1,3 +1,4 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -34,7 +35,7 @@ function makeSessionState(overrides: Partial<AgentStatusReadState> = {}): AgentS
   base.activeWorktreeId = null
   base.activeTabId = null
   base.activeWorkspaceExecutionHostId = null
-  return { ...base, ...overrides } as AgentStatusReadState
+  return makeAgentStatusReadState({ ...base, ...overrides })
 }
 
 function createHarness() {
@@ -59,7 +60,7 @@ function createHarness() {
     dispose,
     persisted,
     write(mutate?: (previous: AgentStatusReadState) => Partial<AgentStatusReadState>) {
-      state = { ...state, ...mutate?.(state) } as AgentStatusReadState
+      state = { ...state, ...mutate?.(state) }
       for (const listener of listeners.slice()) {
         listener(state)
       }
@@ -185,7 +186,7 @@ describe('session write subscriber allocation', () => {
       }
     })
     const write = (patch: Partial<AgentStatusReadState>): void => {
-      state = { ...state, ...patch } as AgentStatusReadState
+      state = { ...state, ...patch }
       for (const listener of listeners.slice()) {
         listener(state)
       }

@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 /** Regression for #9872: missed pane teardown must not let heavy live status rows grow unbounded. */
@@ -40,7 +39,7 @@ function seedWorktree(store: ReturnType<typeof createTestStore>): void {
         expandedLeafId: null
       }
     }
-  } as Partial<AgentStatusReadState>)
+  })
 }
 
 function donePayload(index: number): ParsedAgentStatusPayload {
@@ -166,7 +165,7 @@ describe('agentStatusByPaneKey stays bounded (leak regression #9872)', () => {
           expandedLeafId: null
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
     setAgentAt(store, 'tab-w:leaf-w', {
       state: 'waiting',
       prompt: 'needs input',
@@ -221,7 +220,7 @@ describe('agentStatusByPaneKey stays bounded (leak regression #9872)', () => {
           ptyIdsByLeafId: { 'leaf-bound': 'pty-1' }
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
     setAgentAt(store, 'bg-empty:leaf-bg', {
       state: 'waiting',
       prompt: 'needs input',
@@ -289,7 +288,7 @@ describe('agentStatusByPaneKey stays bounded (leak regression #9872)', () => {
           identity: {}
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     setAgentAt(store, 'tab-live:dead-extra', donePayload(MAX_LIVE_AGENT_STATUSES))
 
@@ -316,7 +315,7 @@ describe('agentStatusByPaneKey stays bounded (leak regression #9872)', () => {
           paneKey: 'tab-live:dead-extra'
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const statusEpochBefore = store.getState().agentStatusEpoch
     const sortEpochBefore = store.getState().sortEpoch
 

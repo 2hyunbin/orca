@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -207,7 +206,7 @@ describe('agent status retention + prefix sweep', () => {
       )
     applyAgentStatusPatch(store, {
       acknowledgedAgentsByPaneKey: { [paneKey]: Date.now() }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().dropAgentStatusByWorktree('wt-a')
 

@@ -1,3 +1,4 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -48,7 +49,7 @@ const RESUMABLE_DONE_ENTRY: AgentStatusEntry = {
 function createStore() {
   const closeTab = vi.fn()
   const shutdownCompletedAgentPaneForHibernation = vi.fn(async () => {})
-  let state: OwnershipState = {
+  let state: AgentStatusReadState = makeAgentStatusReadState({
     activeWorktreeId: 'other-worktree',
     activeTabId: 'other-tab',
     activeTabType: 'terminal' as const,
@@ -77,12 +78,12 @@ function createStore() {
     agentLaunchConfigByPaneKey: {},
     closeTab,
     shutdownCompletedAgentPaneForHibernation
-  }
+  })
   const listeners = new Set<
     (state: AgentStatusReadState, previousState: AgentStatusReadState) => void
   >()
   const store: AutomationTerminalOwnershipStore = {
-    getState: () => state as unknown as AgentStatusReadState,
+    getState: () => state,
     subscribe: (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -92,10 +93,7 @@ function createStore() {
     const previousState = state
     state = { ...state, ...patch }
     for (const listener of listeners) {
-      listener(
-        state as unknown as AgentStatusReadState,
-        previousState as unknown as AgentStatusReadState
-      )
+      listener(state, previousState)
     }
   }
   return {

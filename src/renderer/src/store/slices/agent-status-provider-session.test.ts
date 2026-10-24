@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -188,7 +187,7 @@ describe('recordAgentProviderSession', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const launchConfig = {
       agentCommand: "pi '--model' 'anthropic/claude-sonnet-4'",
       agentArgs: '--model anthropic/claude-sonnet-4',
@@ -257,7 +256,7 @@ describe('recordAgentProviderSession', () => {
     const store = createTestStore()
     applyAgentStatusPatch(store, {
       tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = {
       key: 'session_id' as const,
       id: 'pi-session-1',
@@ -318,7 +317,7 @@ describe('recordAgentProviderSession', () => {
           origin: 'live'
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().recordAgentProviderSession(
       'tab-1:leaf-1',
@@ -345,7 +344,7 @@ describe('recordAgentProviderSession', () => {
         tabsByWorktree: {
           'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
         }
-      } as Partial<AgentStatusReadState>)
+      })
       const providerSession = makePiCompatibleProviderSession(agent)
 
       store
@@ -418,7 +417,7 @@ describe('recordAgentProviderSession', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = makePiCompatibleProviderSession('pi')
 
     store
@@ -475,7 +474,7 @@ describe('recordAgentProviderSession', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = makePiCompatibleProviderSession('pi')
 
     store
@@ -530,7 +529,7 @@ describe('recordAgentProviderSession', () => {
       tabsByWorktree: {
         'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
       }
-    } as Partial<AgentStatusReadState>)
+    })
     const providerSession = makePiCompatibleProviderSession('pi')
 
     store
@@ -589,7 +588,7 @@ describe('recordAgentProviderSession', () => {
         tabsByWorktree: {
           'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })]
         }
-      } as Partial<AgentStatusReadState>)
+      })
       const providerSession = makePiCompatibleProviderSession(agent)
 
       store

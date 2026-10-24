@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -41,9 +42,7 @@ function mainAgentKey(mainAgent: MainAgentStatus) {
   return mainAgent ? [mainAgent.state, mainAgent.outcome ?? null, mainAgent.stateStartedAt] : null
 }
 
-function referenceEditorDraftsProjection(
-  editorDrafts: AgentStatusReadState['editorDrafts']
-): string {
+function referenceEditorDraftsProjection(editorDrafts: AppState['editorDrafts']): string {
   return JSON.stringify(
     Object.fromEntries(
       Object.entries(editorDrafts).map(([fileId, content]) => [fileId, stableHashString(content)])
@@ -51,7 +50,7 @@ function referenceEditorDraftsProjection(
   )
 }
 
-function referenceOpenFilesProjection(openFiles: AgentStatusReadState['openFiles']): string {
+function referenceOpenFilesProjection(openFiles: AppState['openFiles']): string {
   return JSON.stringify(
     openFiles.map((file) => ({
       id: file.id,
@@ -361,15 +360,13 @@ describe('open-files and browser projections', () => {
   it('re-serializes only the changed entry per store write', () => {
     const files = Array.from({ length: 20 }, (_value, index) => makeOpenFile(index))
     const writes = 50
-    const driveWrites = (
-      project: (openFiles: AgentStatusReadState['openFiles']) => string
-    ): void => {
-      let openFiles = files as unknown as AgentStatusReadState['openFiles']
+    const driveWrites = (project: (openFiles: AppState['openFiles']) => string): void => {
+      let openFiles = files as unknown as AppState['openFiles']
       project(openFiles)
       for (let write = 0; write < writes; write += 1) {
         const next = [...openFiles]
         next[0] = makeOpenFile(0, { isDirty: write % 2 === 0 })
-        openFiles = next as unknown as AgentStatusReadState['openFiles']
+        openFiles = next as unknown as AppState['openFiles']
         project(openFiles)
       }
     }
@@ -425,15 +422,15 @@ describe('open-files and browser projections', () => {
   })
 
   it('matches the uncached projections byte for byte across shapes', () => {
-    const openFileCases: AgentStatusReadState['openFiles'][] = [
-      [] as unknown as AgentStatusReadState['openFiles'],
-      [makeOpenFile(0)] as unknown as AgentStatusReadState['openFiles'],
-      [makeOpenFile(0, { isDirty: true })] as unknown as AgentStatusReadState['openFiles'],
+    const openFileCases: AppState['openFiles'][] = [
+      [] as unknown as AppState['openFiles'],
+      [makeOpenFile(0)] as unknown as AppState['openFiles'],
+      [makeOpenFile(0, { isDirty: true })] as unknown as AppState['openFiles'],
       [
         makeOpenFile(0, { isDirty: true, diffSource: 'working' }),
         makeOpenFile(1, { mode: 'diff', markdownPreviewSourceFileId: 'file-0' }),
         makeOpenFile(2, { isUntitled: true, deleteUntouchedOnClose: true, language: undefined })
-      ] as unknown as AgentStatusReadState['openFiles']
+      ] as unknown as AppState['openFiles']
     ]
     for (const [index, openFiles] of openFileCases.entries()) {
       expect({ index, projection: buildRuntimeMobileOpenFilesProjection(openFiles) }).toEqual({
@@ -472,7 +469,7 @@ describe('open-files and browser projections', () => {
 describe('sync key transitions', () => {
   it('fires on exactly the transitions the uncached projections would have fired on', () => {
     const drafts = { 'file-0': 'aaa', 'file-1': 'bbb' }
-    const files = [makeOpenFile(0), makeOpenFile(1)] as unknown as AgentStatusReadState['openFiles']
+    const files = [makeOpenFile(0), makeOpenFile(1)] as unknown as AppState['openFiles']
     const workspaces = [makeBrowserWorkspace(0)] as never
     const status = {
       'tab-0:leaf-0': makeAgentStatusEntry({ paneKey: 'tab-0:leaf-0' })

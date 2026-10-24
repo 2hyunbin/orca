@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest'
@@ -39,7 +40,7 @@ function duplicateTabState(): AgentStatusReadState {
     tabsByWorktree: {
       [WORKTREE_A]: [{ id: TAB_ID, worktreeId: WORKTREE_A, title: 'A', ptyId: 'pty-a' }],
       [WORKTREE_B]: [{ id: TAB_ID, worktreeId: WORKTREE_B, title: 'B', ptyId: 'pty-b' }]
-    } as unknown as AgentStatusReadState['tabsByWorktree'],
+    } as unknown as AppState['tabsByWorktree'],
     // The persisted layout map is legacy tab-id keyed. Mounted captures must
     // still remain isolated by their worktree registration.
     terminalLayoutsByTabId: {
@@ -48,7 +49,7 @@ function duplicateTabState(): AgentStatusReadState {
         activeLeafId: LEAF_A,
         expandedLeafId: null
       }
-    } as unknown as AgentStatusReadState['terminalLayoutsByTabId']
+    } as unknown as AppState['terminalLayoutsByTabId']
   })
 }
 

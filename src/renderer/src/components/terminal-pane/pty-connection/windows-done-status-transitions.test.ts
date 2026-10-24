@@ -13,14 +13,14 @@ it('resets Windows modes for an accepted completion even if recursive removal wi
   applyAgentStatusPatch(useAppStore, { agentStatusByPaneKey: {} })
   const reset = vi.fn(),
     suppress = vi.fn()
-  const session = {
+  const session: Parameters<typeof installWindowsDoneTerminalModeReset>[0] = {
     state: owner.getState(),
     cacheKey: key,
     paneStartup: null,
     suppressNativeWindowsIdleCodexFocusReports: false,
     setFocusReportSuppressionForAgentCompletion: suppress,
     queueAgentIdleTerminalModeReset: reset,
-    unsubscribeWindowsDoneTerminalModeReset: null as (() => void) | null
+    unsubscribeWindowsDoneTerminalModeReset: null
   }
   installWindowsDoneTerminalModeReset(session)
   const row: AgentStatusEntry = {

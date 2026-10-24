@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -109,7 +108,7 @@ export function registerAgentStatusToolAssistantFieldsTests(): void {
       applyAgentStatusPatch(store, {
         settings: { ...store.getState().settings, tabAutoGenerateTitle: true },
         setGeneratedTabTitleFromAgentPrompt
-      } as Partial<AgentStatusReadState>)
+      })
       store
         .getState()
         .setAgentStatus(

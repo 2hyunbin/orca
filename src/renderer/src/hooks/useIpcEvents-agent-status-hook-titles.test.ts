@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -381,7 +382,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       }
     })
     const setAgentStatusBatch = vi.mocked(
-      storeState.setAgentStatuses as AgentStatusReadState['setAgentStatuses']
+      storeState.setAgentStatuses as AppState['setAgentStatuses']
     )
 
     stubReactSyncEffect()

@@ -821,9 +821,15 @@ describe('useNativeChatLiveSession — notFound retry (#8401)', () => {
     transport.readSession.mockResolvedValue({ error: 'No transcript found', notFound: true })
     applyAgentStatusPatch(useAppStore, {
       agentStatusByPaneKey: {
-        [PANE]: { state: 'working', stateStartedAt: 1, updatedAt: Date.now() }
+        [PANE]: {
+          state: 'working',
+          prompt: '',
+          stateHistory: [],
+          stateStartedAt: 1,
+          updatedAt: Date.now()
+        }
       }
-    } as never)
+    })
 
     await render({ paneKey: PANE, agent: AGENT, sessionId: SESSION, runtimeEnvironmentId: 'env-1' })
 

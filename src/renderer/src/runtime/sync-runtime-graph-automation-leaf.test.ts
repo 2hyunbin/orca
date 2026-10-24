@@ -1,3 +1,5 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
@@ -30,10 +32,10 @@ const LEAF = '11111111-1111-4111-8111-111111111111'
 const AUTO_PTY = 'auto-bg-pty'
 
 function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
-  return {
+  return makeAgentStatusReadState({
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     layoutByWorktree: {},
@@ -45,7 +47,7 @@ function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusRe
     editorDrafts: {},
     activeTabId: null,
     ...overrides
-  } as AgentStatusReadState
+  })
 }
 
 function makeAutomationTab(): TerminalTab {
@@ -63,7 +65,7 @@ function makeAutomationTab(): TerminalTab {
 
 function automationState(): AgentStatusReadState {
   return makeState({
-    tabsByWorktree: { 'wt-1': [makeAutomationTab()] } as AgentStatusReadState['tabsByWorktree'],
+    tabsByWorktree: { 'wt-1': [makeAutomationTab()] } as AppState['tabsByWorktree'],
     terminalLayoutsByTabId: {
       'auto-tab-1': {
         root: { type: 'leaf', leafId: LEAF },
@@ -71,7 +73,7 @@ function automationState(): AgentStatusReadState {
         expandedLeafId: null,
         ptyIdsByLeafId: { [LEAF]: AUTO_PTY }
       }
-    } as AgentStatusReadState['terminalLayoutsByTabId']
+    } as AppState['terminalLayoutsByTabId']
   })
 }
 

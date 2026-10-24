@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -26,9 +27,9 @@ const BETA_ID = 'repo-beta::/workspace/beta'
 const PROJECTION_CANDIDATE_COUNT = 1_000
 
 function countOpenFileScans(
-  openFiles: AgentStatusReadState['openFiles'],
+  openFiles: AppState['openFiles'],
   counts: GlobalCollectionScanCounts
-): AgentStatusReadState['openFiles'] {
+): AppState['openFiles'] {
   return new Proxy(openFiles, {
     get(target, property, receiver) {
       if (property === Symbol.iterator) {
@@ -38,7 +39,7 @@ function countOpenFileScans(
         }
       }
       if (property === 'filter') {
-        return (predicate: (file: AgentStatusReadState['openFiles'][number]) => boolean) => {
+        return (predicate: (file: AppState['openFiles'][number]) => boolean) => {
           counts.openFiles += 1
           return target.filter(predicate)
         }
@@ -144,7 +145,7 @@ describe('workspace cleanup enrichment performance', () => {
           language: 'typescript',
           isDirty: false
         }
-      ] as AgentStatusReadState['openFiles'],
+      ] as AppState['openFiles'],
       counts
     )
     const retainedAgentsByPaneKey = countRecordScans(
@@ -163,7 +164,7 @@ describe('workspace cleanup enrichment performance', () => {
           agentType: 'codex',
           startedAt: NOW
         }
-      } as unknown as AgentStatusReadState['retainedAgentsByPaneKey'],
+      } as unknown as AppState['retainedAgentsByPaneKey'],
       () => {
         counts.retainedAgents += 1
       }
@@ -207,7 +208,7 @@ describe('workspace cleanup enrichment performance', () => {
         }
         return [candidate.worktreeId, [{ id: `tab-projection-${index}`, title: 'shell' }]]
       })
-    ) as unknown as AgentStatusReadState['tabsByWorktree']
+    ) as unknown as AppState['tabsByWorktree']
     const store = createCleanupTestStore()
     store.setState({
       activeWorktreeId: BETA_ID,
@@ -215,11 +216,11 @@ describe('workspace cleanup enrichment performance', () => {
       openFiles,
       browserTabsByWorktree: {
         [ALPHA_ID]: [{}]
-      } as unknown as AgentStatusReadState['browserTabsByWorktree'],
+      } as unknown as AppState['browserTabsByWorktree'],
       retainedAgentsByPaneKey,
       agentStatusByPaneKey,
       lastVisitedAtByWorktreeId: { [ALPHA_ID]: NOW - 1 }
-    } as Partial<AgentStatusReadState>)
+    })
 
     const scanPromise = store.getState().scanWorkspaceCleanup()
     expect(counts).toEqual({ openFiles: 1, retainedAgents: 0, agentStatuses: 1 })
@@ -282,7 +283,7 @@ describe('workspace cleanup enrichment performance', () => {
         candidate.worktreeId,
         [{ id: `tab-${index}`, title: 'shell' }]
       ])
-    ) as AgentStatusReadState['tabsByWorktree']
+    ) as AppState['tabsByWorktree']
     const ptyIdsByTabId = Object.fromEntries(
       streamCandidates.map((_, index) => [`tab-${index}`, [`pty-${index}`]])
     )
@@ -327,7 +328,7 @@ describe('workspace cleanup enrichment performance', () => {
       getForegroundProcess: vi.fn().mockResolvedValue('zsh')
     }
     const store = createCleanupTestStore()
-    store.setState({ tabsByWorktree, ptyIdsByTabId } as Partial<AgentStatusReadState>)
+    store.setState({ tabsByWorktree, ptyIdsByTabId })
 
     const scanPromise = store.getState().scanWorkspaceCleanup()
     onProgress?.({
@@ -375,7 +376,7 @@ describe('workspace cleanup enrichment performance', () => {
         candidate.worktreeId,
         [{ id: `tab-overlap-${index}`, title: 'shell' }]
       ])
-    ) as AgentStatusReadState['tabsByWorktree']
+    ) as AppState['tabsByWorktree']
     const ptyIdsByTabId = Object.fromEntries(
       candidates.map((_, index) => [`tab-overlap-${index}`, [`pty-overlap-${index}`]])
     )
@@ -417,7 +418,7 @@ describe('workspace cleanup enrichment performance', () => {
       getForegroundProcess: vi.fn().mockResolvedValue('zsh')
     }
     const store = createCleanupTestStore()
-    store.setState({ tabsByWorktree, ptyIdsByTabId } as Partial<AgentStatusReadState>)
+    store.setState({ tabsByWorktree, ptyIdsByTabId })
 
     const scanPromise = store.getState().scanWorkspaceCleanup()
     onProgress?.({
@@ -476,10 +477,10 @@ describe('workspace cleanup enrichment performance', () => {
       tabsByWorktree: {
         [candidate.worktreeId]: [
           { id: 'post-scan-tab', title: 'shell' }
-        ] as AgentStatusReadState['tabsByWorktree'][string]
+        ] as AppState['tabsByWorktree'][string]
       },
       ptyIdsByTabId: { 'post-scan-tab': ['post-scan-pty'] }
-    } as Partial<AgentStatusReadState>)
+    })
     focusedScan.resolve({ scannedAt: NOW, candidates: [candidate], errors: [] })
 
     await expect(removal).resolves.toMatchObject({ removedIds: [candidate.worktreeId] })

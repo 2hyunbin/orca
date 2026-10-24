@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import type * as ReactModule from 'react'
@@ -279,9 +280,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       tabsByWorktree: {},
       workspaceSessionReady: false
     })
-    const setAgentStatuses = vi.mocked(
-      storeState.setAgentStatuses as AgentStatusReadState['setAgentStatuses']
-    )
+    const setAgentStatuses = vi.mocked(storeState.setAgentStatuses as AppState['setAgentStatuses'])
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -367,11 +366,11 @@ describe('useIpcEvents agent status snapshot integration', () => {
   it('applies a large snapshot with one status and bounded title publications', async () => {
     const paneCount = 100
     const snapshot: AgentStatusSetData[] = []
-    const worktrees: AgentStatusReadState['worktreesByRepo'][string] = []
-    const tabsByWorktree: AgentStatusReadState['tabsByWorktree'] = {}
+    const worktrees: AppState['worktreesByRepo'][string] = []
+    const tabsByWorktree: AppState['tabsByWorktree'] = {}
     // Tab-bar entries, so a layout-owner build leaves the titles to main.
-    const unifiedTabsByWorktree: AgentStatusReadState['unifiedTabsByWorktree'] = {}
-    const terminalLayoutsByTabId: AgentStatusReadState['terminalLayoutsByTabId'] = {}
+    const unifiedTabsByWorktree: AppState['unifiedTabsByWorktree'] = {}
+    const terminalLayoutsByTabId: AppState['terminalLayoutsByTabId'] = {}
     for (let index = 0; index < paneCount; index += 1) {
       const worktreeId = `wt-snapshot-${index}`
       const tabId = `tab-snapshot-${index}`
@@ -417,7 +416,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
         tabAutoGenerateTitle: true,
         terminalFontSize: 13
       }
-    } as Partial<AgentStatusReadState>)
+    })
     applyAgentStatusPatch(store, { unifiedTabsByWorktree })
 
     stubReactSyncEffect()
@@ -547,7 +546,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       },
       setGeneratedTabTitlesFromAgentPrompts: vi.fn(),
       settings: { ...store.getState().settings, terminalFontSize: 13 }
-    } as Partial<AgentStatusReadState>)
+    })
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -579,7 +578,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
   it('indexes 100 distinct tab owners once per snapshot', async () => {
     const paneCount = 100
     const worktreeId = 'wt-indexed-tabs'
-    const tabs: AgentStatusReadState['tabsByWorktree'][string] = []
+    const tabs: AppState['tabsByWorktree'][string] = []
     const snapshot: AgentStatusSetData[] = []
     const unsupportedSnapshot: MigrationUnsupportedPtyEntry[] = []
     let tabIdLookupCount = 0
@@ -649,7 +648,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
         terminalFontSize: 13,
         tabAutoGenerateTitle: false
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({

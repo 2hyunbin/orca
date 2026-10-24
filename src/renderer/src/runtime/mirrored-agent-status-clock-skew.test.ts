@@ -1,4 +1,3 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 /**
@@ -87,7 +86,7 @@ function seedPairedClientStore(): TestStore {
     settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
     worktreesByRepo: { repo1: [makeWorktree({ id: WT, repoId: 'repo1', path: '/path/wt1' })] },
     activeWorktreeId: WT
-  } as Partial<AgentStatusReadState>)
+  })
   return store
 }
 
@@ -109,7 +108,7 @@ function applyHostSnapshot(
   if (patch === state) {
     return false
   }
-  applyAgentStatusPatch(store, patch as Partial<AgentStatusReadState>)
+  applyAgentStatusPatch(store, patch)
   return true
 }
 

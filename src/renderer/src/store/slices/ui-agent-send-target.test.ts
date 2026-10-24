@@ -187,7 +187,7 @@ describe('createUISlice agent send target mode', () => {
           stateHistory: []
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
   }
 
   it('opens target mode with derived eligible and disabled pane keys', () => {
@@ -246,7 +246,7 @@ describe('createUISlice agent send target mode', () => {
           state: 'blocked'
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().openAgentSendPopoverTargetMode({
       id: 'send-1',
@@ -715,7 +715,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
       acknowledgedAgentsByPaneKey: {
         [skippedPaneKey]: 4_000
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().acknowledgeAgents([livePaneKey, retainedPaneKey, skippedPaneKey])
 
@@ -758,7 +758,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
         [livePaneKey]: makeAgentEntry(livePaneKey, 2_000)
       },
       retainedAgentsByPaneKey: {}
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().acknowledgeAgents([fallbackPaneKey, livePaneKey])
 
@@ -794,7 +794,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
           startedAt: 1_000
         }
       }
-    } as Partial<AgentStatusReadState>)
+    })
 
     store.getState().acknowledgeAgents([livePaneKey])
 
@@ -823,7 +823,7 @@ describe('openDiffNotesSendMenuForActiveWorktree', () => {
       getDiffComments: () => comments,
       setRightSidebarTab,
       setRightSidebarOpen: vi.fn()
-    } as unknown as Partial<AgentStatusReadState>)
+    } as unknown)
     return { store, setRightSidebarTab }
   }
 

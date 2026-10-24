@@ -54,7 +54,7 @@ function seedBatchStore() {
     retainedAgentsByPaneKey: { [FIRST_PANE]: retained },
     retentionSuppressedPaneKeys: { [FIRST_PANE]: true },
     refreshGitHubForWorktreeIfStale: vi.fn().mockResolvedValue(undefined)
-  } as Partial<AgentStatusReadState>)
+  })
   return store
 }
 
@@ -154,10 +154,10 @@ describe('setAgentStatuses', () => {
     })
     sequentialStore.setState({
       setGeneratedTabTitleFromAgentPrompt: sequentialTitleGeneration
-    } as Partial<AgentStatusReadState>)
+    })
     batchStore.setState({
       setGeneratedTabTitlesFromAgentPrompts: batchTitleGenerationBulk
-    } as Partial<AgentStatusReadState>)
+    })
     const updates = makeUpdates()
 
     for (const update of updates) {
@@ -254,7 +254,7 @@ describe('setAgentStatuses', () => {
     applyAgentStatusPatch(store, {
       settings: { ...store.getState().settings, tabAutoGenerateTitle: true },
       tabsByWorktree
-    } as Partial<AgentStatusReadState>)
+    })
     applyAgentStatusPatch(store, { unifiedTabsByWorktree })
     const updates: AgentStatusBatchUpdate[] = Array.from({ length: paneCount }, (_, index) => ({
       paneKey: `tab-${index}:11111111-1111-4111-8111-111111111111`,
@@ -418,7 +418,7 @@ describe('setAgentStatuses', () => {
         ]
       })
     )
-    applyAgentStatusPatch(store, { agentStatusByPaneKey: entries } as Partial<AgentStatusReadState>)
+    applyAgentStatusPatch(store, { agentStatusByPaneKey: entries })
     let publications = 0
     const unsubscribe = store.subscribe(() => {
       publications += 1
@@ -461,7 +461,7 @@ describe('setAgentStatuses', () => {
       // REPLACE commit of the fold's snapshot would silently revert it.
       applyAgentStatusPatch(store, {
         worktreesByRepo: { 'repo-late': [] }
-      } as Partial<AgentStatusReadState>)
+      })
       return applied
     })
 

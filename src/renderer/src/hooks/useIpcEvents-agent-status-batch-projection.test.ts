@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -93,8 +94,8 @@ describe('useIpcEvents agent status snapshot integration', () => {
         expected: true
       }
     ]
-    const tabsByWorktree: AgentStatusReadState['tabsByWorktree'] = {}
-    const terminalLayoutsByTabId: AgentStatusReadState['terminalLayoutsByTabId'] = {}
+    const tabsByWorktree: AppState['tabsByWorktree'] = {}
+    const terminalLayoutsByTabId: AppState['terminalLayoutsByTabId'] = {}
     for (const entry of cases) {
       ;(tabsByWorktree[entry.ownerId] ??= []).push(
         makeTab({
@@ -152,7 +153,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       terminalLayoutsByTabId,
       activeWorktreeId: null,
       settings: { ...store.getState().settings, terminalFontSize: 13 }
-    } as Partial<AgentStatusReadState>)
+    })
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -237,7 +238,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       },
       activeWorktreeId: null,
       settings: { ...store.getState().settings, terminalFontSize: 13 }
-    } as Partial<AgentStatusReadState>)
+    })
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -552,9 +553,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
         }
       }
     })
-    const updateTabTitles = vi.mocked(
-      storeState.updateTabTitles as AgentStatusReadState['updateTabTitles']
-    )
+    const updateTabTitles = vi.mocked(storeState.updateTabTitles as AppState['updateTabTitles'])
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({

@@ -1,4 +1,5 @@
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AppState } from '@/store/types'
+
 import { describe, expect, it } from 'vitest'
 import { buildMobileSessionTabSnapshots } from './sync-runtime-graph/mobile-session-snapshots'
 import { registerRuntimeTerminalTab } from './mounted-terminal-tab-registry'
@@ -52,7 +53,7 @@ describe('buildMobileSessionTabSnapshots', () => {
     const state = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1', launchAgent: 'claude' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -60,7 +61,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as unknown as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as unknown as AppState['terminalLayoutsByTabId'],
       nativeChatLaunchDraftByTabId: {
         'term-1': {
           tabId: 'term-1',
@@ -88,7 +89,7 @@ describe('buildMobileSessionTabSnapshots', () => {
     const state = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1', launchAgent: 'claude' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -96,7 +97,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as unknown as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as unknown as AppState['terminalLayoutsByTabId'],
       nativeChatLaunchDraftByTabId: {
         'term-1': {
           tabId: 'term-1',
@@ -119,7 +120,7 @@ describe('buildMobileSessionTabSnapshots', () => {
     const state = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1', launchAgent: 'codex' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -127,7 +128,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as unknown as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as unknown as AppState['terminalLayoutsByTabId'],
       nativeChatLaunchDraftByTabId: {
         'term-1': {
           tabId: 'term-1',
@@ -169,7 +170,7 @@ describe('buildMobileSessionTabSnapshots', () => {
               }
             }
           ]
-        } as unknown as AgentStatusReadState['tabsByWorktree'],
+        } as unknown as AppState['tabsByWorktree'],
         terminalLayoutsByTabId: {
           'term-1': {
             root: {
@@ -181,7 +182,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             activeLeafId: shellLeafId,
             expandedLeafId: null
           }
-        } as AgentStatusReadState['terminalLayoutsByTabId'],
+        } as AppState['terminalLayoutsByTabId'],
         runtimePaneTitlesByTabId: {
           'term-1': { 1: 'Codex working', 2: 'zsh' }
         },
@@ -246,14 +247,14 @@ describe('buildMobileSessionTabSnapshots', () => {
               }
             }
           ]
-        } as unknown as AgentStatusReadState['tabsByWorktree'],
+        } as unknown as AppState['tabsByWorktree'],
         terminalLayoutsByTabId: {
           'term-collapse': {
             root: { type: 'leaf', leafId: agentLeafId },
             activeLeafId: agentLeafId,
             expandedLeafId: null
           }
-        } as AgentStatusReadState['terminalLayoutsByTabId'],
+        } as AppState['terminalLayoutsByTabId'],
         nativeChatLaunchDraftByTabId: {
           'term-collapse': {
             tabId: 'term-collapse',
@@ -300,7 +301,7 @@ describe('buildMobileSessionTabSnapshots', () => {
               launchAgent: 'codex'
             }
           ]
-        } as unknown as AgentStatusReadState['tabsByWorktree'],
+        } as unknown as AppState['tabsByWorktree'],
         terminalLayoutsByTabId: {
           'term-reorder': {
             root: {
@@ -312,7 +313,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             activeLeafId: shellLeafId,
             expandedLeafId: null
           }
-        } as AgentStatusReadState['terminalLayoutsByTabId'],
+        } as AppState['terminalLayoutsByTabId'],
         runtimePaneTitlesByTabId: {
           'term-reorder': { 1: 'Codex working', 2: 'fish' }
         },
@@ -349,14 +350,14 @@ describe('buildMobileSessionTabSnapshots', () => {
             generatedTitle: 'Prepare the release'
           }
         ]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-pending-status': {
           root: { type: 'leaf', leafId },
           activeLeafId: leafId,
           expandedLeafId: null
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as AppState['terminalLayoutsByTabId'],
       settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
       agentStatusByPaneKey: {}
     })
@@ -377,7 +378,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       tabBarOrderByWorktree: { 'wt-1': ['term-1'] },
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'codex [working]', customTitle: null, ptyId: 'pty-1' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -385,7 +386,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as AppState['terminalLayoutsByTabId'],
       agentStatusByPaneKey: {
         [paneKey]: {
           state: 'working',
@@ -421,7 +422,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       tabBarOrderByWorktree: { 'wt-1': ['term-1'] },
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'claude agents', customTitle: 'Pinned', ptyId: 'pty-1' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -429,7 +430,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId'],
+      } as AppState['terminalLayoutsByTabId'],
       agentStatusByPaneKey: {
         [paneKey]: {
           state: 'working',
@@ -469,7 +470,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             ptyId: 'pty-1'
           }
         ]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -477,7 +478,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId']
+      } as AppState['terminalLayoutsByTabId']
     })
 
     expect(buildMobileSessionTabSnapshots(base)[0]?.tabs[0]).toMatchObject({
@@ -511,7 +512,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             ptyId: 'pty-1'
           }
         ]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -519,7 +520,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId']
+      } as AppState['terminalLayoutsByTabId']
     })
 
     expect(buildMobileSessionTabSnapshots(state)[0]?.tabs[0]).toMatchObject({
@@ -547,7 +548,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       tabBarOrderByWorktree: { 'wt-1': ['term-1'] },
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal', customTitle: null, ptyId: 'pty-1' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -555,7 +556,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId']
+      } as AppState['terminalLayoutsByTabId']
     })
 
     expect(buildMobileSessionTabSnapshots(state)[0]?.tabs).toMatchObject([
@@ -584,7 +585,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       tabBarOrderByWorktree: { 'wt-1': ['term-1'] },
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal', customTitle: null, ptyId: 'pty-1' }]
-      } as unknown as AgentStatusReadState['tabsByWorktree'],
+      } as unknown as AppState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId },
@@ -592,7 +593,7 @@ describe('buildMobileSessionTabSnapshots', () => {
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }
         }
-      } as AgentStatusReadState['terminalLayoutsByTabId']
+      } as AppState['terminalLayoutsByTabId']
     })
 
     expect(buildMobileSessionTabSnapshots(state, false)[0]?.tabs).toMatchObject([

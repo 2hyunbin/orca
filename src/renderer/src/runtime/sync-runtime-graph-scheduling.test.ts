@@ -1,3 +1,5 @@
+import { makeAgentStatusReadState } from '@/store/slices/store-test-helpers'
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -17,10 +19,10 @@ import {
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 
 function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
-  return {
+  return makeAgentStatusReadState({
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     layoutByWorktree: {},
@@ -32,7 +34,7 @@ function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusRe
     editorDrafts: {},
     activeTabId: null,
     ...overrides
-  } as AgentStatusReadState
+  })
 }
 
 function makeTerminalTab(): TerminalTab {
@@ -127,7 +129,7 @@ describe('scheduleRuntimeGraphSync', () => {
     })
     setRuntimeGraphStoreStateGetter(() =>
       makeState({
-        tabsByWorktree: { 'wt-1': [makeTerminalTab()] } as AgentStatusReadState['tabsByWorktree']
+        tabsByWorktree: { 'wt-1': [makeTerminalTab()] } as AppState['tabsByWorktree']
       })
     )
 
@@ -164,7 +166,7 @@ describe('scheduleRuntimeGraphSync', () => {
     })
     setRuntimeGraphStoreStateGetter(() =>
       makeState({
-        tabsByWorktree: { 'wt-1': [makeTerminalTab()] } as AgentStatusReadState['tabsByWorktree']
+        tabsByWorktree: { 'wt-1': [makeTerminalTab()] } as AppState['tabsByWorktree']
       })
     )
 
@@ -192,7 +194,7 @@ describe('getRuntimeMobileSessionSyncKey scheduling inputs', () => {
           second: { type: 'leaf', groupId: 'group-right' },
           ratio: 0.5
         }
-      } as AgentStatusReadState['layoutByWorktree']
+      } as AppState['layoutByWorktree']
     })
     const baseKey = getRuntimeMobileSessionSyncKey(base)
     const resized = makeState({
@@ -205,7 +207,7 @@ describe('getRuntimeMobileSessionSyncKey scheduling inputs', () => {
           second: { type: 'leaf', groupId: 'group-right' },
           ratio: 0.65
         }
-      } as AgentStatusReadState['layoutByWorktree']
+      } as AppState['layoutByWorktree']
     })
 
     const resizedKey = getRuntimeMobileSessionSyncKey(resized, base, baseKey)
