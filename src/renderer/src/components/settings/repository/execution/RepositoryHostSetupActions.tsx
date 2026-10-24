@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import { Plus, X } from 'lucide-react'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type {
   ProjectHostSetup,
   ProjectHostSetupCreateResult,
   ProjectHostSetupResult
-} from '../../../../shared/project-types'
+} from '../../../../../../shared/project-types'
 import { translate } from '@/i18n/i18n'
-import { Button } from '../ui/button'
-import { Label } from '../ui/label'
-import { HostCombobox } from '../host-picker/HostCombobox'
+import { Button } from '../../../ui/button'
+import { Label } from '../../../ui/label'
+import { HostCombobox } from '../../../host-picker/HostCombobox'
 import type { SetupHostOption } from './repository-host-setup-options'
 import {
   HostSetupCloneStep,

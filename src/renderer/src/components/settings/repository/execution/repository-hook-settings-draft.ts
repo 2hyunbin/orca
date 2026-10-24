@@ -2,9 +2,9 @@ import type {
   HookCommandSourcePolicy,
   OrcaHooks,
   RepoHookSettings
-} from '../../../../shared/orca-yaml-hook-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { DEFAULT_REPO_HOOK_SETTINGS } from './SettingsConstants'
+} from '../../../../../../shared/orca-yaml-hook-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { DEFAULT_REPO_HOOK_SETTINGS } from '../../SettingsConstants'
 import { translate } from '@/i18n/i18n'
 
 export type LocalHookName = 'setup' | 'archive'

@@ -6,18 +6,17 @@ import type {
   RepoHookSettings,
   SetupAgentStartupPolicy,
   SetupRunPolicy
-} from '../../../../shared/orca-yaml-hook-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
-import { resolveHookCommandSourcePolicy } from '../../../../shared/hook-command-source-policy'
-import { useAppStore } from '@/store'
+} from '../../../../../../shared/orca-yaml-hook-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
+import { resolveHookCommandSourcePolicy } from '../../../../../../shared/hook-command-source-policy'
+import { useAppStore } from '@/store/index'
 import { translate } from '@/i18n/i18n'
-import { SearchableSetting } from './SearchableSetting'
-import { getRepositoryLocalCommandsSectionId } from './repository-settings-targets'
+import { SearchableSetting } from '../../SearchableSetting'
+import { getRepositoryLocalCommandsSectionId } from '../../repository-settings-targets'
 import {
   getLocalHookFields,
-  getLocalCommandSourcePolicyNotice,
-  type LocalCommandSourcePolicyNotice
+  getLocalCommandSourcePolicyNotice
 } from './repository-hook-settings-draft'
 import {
   LocalCommandSourceNotice,
@@ -28,11 +27,8 @@ import {
   RepositorySetupPolicySetting
 } from './RepositoryHookPolicySettings'
 import { RepositoryIssueCommandSetting } from './RepositoryIssueCommandSetting'
-import { useRepositoryHookSettingsDraft } from './use-repository-hook-settings-draft'
-import { useRepositoryIssueCommand } from './use-repository-issue-command'
-
-export { getLocalCommandSourcePolicyNotice }
-export type { LocalCommandSourcePolicyNotice }
+import { useRepositoryHookSettingsDraft } from '../../use-repository-hook-settings-draft'
+import { useRepositoryIssueCommand } from '../../use-repository-issue-command'
 
 type RepositoryHooksSectionProps = {
   repo: Repo

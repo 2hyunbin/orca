@@ -3,11 +3,12 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
+import type { Repo } from '../../../../../../shared/repo-types'
 import { readRuntimeIssueCommand } from '@/runtime/runtime-hooks-client'
-import { getLocalCommandSourcePolicyNotice, RepositoryHooksSection } from './RepositoryHooksSection'
+import { getLocalCommandSourcePolicyNotice } from './repository-hook-settings-draft'
+import { RepositoryHooksSection } from './RepositoryHooksSection'
 
-vi.mock('@/store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: (selector: (state: unknown) => unknown) =>
     selector({
       settings: {},

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ExecutionHostRegistryEntry } from '../../../../shared/execution-host-registry'
+import type { ExecutionHostRegistryEntry } from '../../../../../../shared/execution-host-registry'
 import {
   PROJECT_HOST_SETUP_RUNTIME_CAPABILITY,
   WORKSPACE_RUN_CONTEXT_RUNTIME_CAPABILITY
-} from '../../../../shared/protocol-version'
+} from '../../../../../../shared/worktree-runtime-capabilities'
 import { buildSetupHostOptions } from './repository-host-setup-options'
 
 vi.mock('@/i18n/i18n', () => ({

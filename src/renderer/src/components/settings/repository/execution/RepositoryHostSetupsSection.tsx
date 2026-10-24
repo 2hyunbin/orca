@@ -4,28 +4,28 @@ import {
   parseExecutionHostId,
   toRuntimeExecutionHostId,
   type ExecutionHostId
-} from '../../../../shared/execution-host'
-import { buildExecutionHostRegistry } from '../../../../shared/execution-host-registry'
-import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
-import type { ProjectHostSetup } from '../../../../shared/project-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { useAppStore } from '../../store'
-import { getProjectHostSetupProjectionFromState } from '../../store/selectors'
-import { cn } from '../../lib/utils'
-import { Button } from '../ui/button'
-import { Label } from '../ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { SearchableSetting } from './SearchableSetting'
-import { SettingsBadge } from './SettingsFormControls'
-import { matchesSettingsSearch } from './settings-search'
-import type { SettingsSearchEntry } from './settings-search'
+} from '../../../../../../shared/execution-host'
+import { buildExecutionHostRegistry } from '../../../../../../shared/execution-host-registry'
+import { getHostDisplayLabelOverrides } from '../../../../../../shared/host-setting-overrides'
+import type { ProjectHostSetup } from '../../../../../../shared/project-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { useAppStore } from '../../../../store/index'
+import { getProjectHostSetupProjectionFromState } from '../../../../store/project-host-setup-selector'
+import { cn } from '../../../../lib/utils'
+import { Button } from '../../../ui/button'
+import { Label } from '../../../ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select'
+import { SearchableSetting } from '../../SearchableSetting'
+import { SettingsBadge } from '../../SettingsFormControls'
+import { matchesSettingsSearch } from '../../settings-search'
+import type { SettingsSearchEntry } from '../../settings-search'
 import { translate } from '@/i18n/i18n'
 import { buildSetupHostOptions, getSetupStateLabel } from './repository-host-setup-options'
 import { RepositoryHostSetupActions } from './RepositoryHostSetupActions'
 import {
   selectRuntimeAwareSshStatus,
   selectRuntimeAwareSshTargetLabel
-} from '@/store/slices/runtime-environment-ssh'
+} from '@/store/slices/runtime-environment-ssh-selectors'
 import {
   isConnectedRuntimeHostState,
   runtimeHostConnectionStateForEntry
