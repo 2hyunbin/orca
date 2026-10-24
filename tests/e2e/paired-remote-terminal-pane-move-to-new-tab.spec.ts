@@ -84,11 +84,41 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
           .locator(TAB)
           .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('data-tab-id') ?? ''))
 
+      // The server makes the source tab, as for a long-running agent; a tab the desktop seeds into an
+      // empty workspace is still settling its first spawn when the split lands.
+      const created = await host.client.call<{ tab: { parentTabId: string } }>(
+        'session.tabs.createTerminal',
+        { worktree, activate: false, select: false, navigation: 'caller' }
+      )
+      const sourceTabId = toWebTerminalSurfaceTabId(created.result.tab.parentTabId)
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              ({ id, tabId }) =>
+                (window.__store?.getState().tabsByWorktree[id] ?? []).some(
+                  (tab) => tab.id === tabId
+                ),
+              { id: worktreeId, tabId: sourceTabId }
+            ),
+          { timeout: 30_000 }
+        )
+        .toBe(true)
       await page.evaluate((id) => window.__store?.getState().setActiveWorktree(id), worktreeId)
-      await expect(page.locator(PANE)).toHaveCount(1, { timeout: 60_000 })
+      const sourceTab = page.locator(`${TAB}[data-tab-id="${sourceTabId}"]`)
+      await expect(sourceTab).toBeVisible({ timeout: 30_000 })
+      await sourceTab.click()
       await waitForBoundPanes(page, 1)
-      const sourceTabId = await page.evaluate(() => window.__store?.getState().activeTabId ?? '')
       const firstLeafId = await page.locator(PANE).first().getAttribute('data-leaf-id')
+      const hostTerminal = async (leafId: string | null) =>
+        (
+          await host.client.call<RuntimeTerminalListResult>('terminal.list', { worktree })
+        ).result.terminals.find((terminal) => terminal.leafId === leafId)
+      // Split once the first shell is up, as a user does.
+      await expect
+        .poll(async () => (await hostTerminal(firstLeafId))?.preview ?? '', { timeout: 30_000 })
+        .not.toBe('')
+      const tabCount = await page.locator(TAB).count()
       await splitActiveTerminalPane(page, 'vertical')
       await waitForBoundPanes(page, 2)
       const leafIds = await page
@@ -96,14 +126,14 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
         .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
       const movedLeafId = leafIds.find((id) => id !== firstLeafId)!
       await expect
-        .poll(async () => Object.values(await readHost()).map((leaves) => leaves.length), {
+        .poll(async () => (await readHost())[created.result.tab.parentTabId]?.length, {
           timeout: 30_000
         })
-        .toEqual([2])
+        .toBe(2)
 
       // Dropped before the first tab, so the new tab's place differs from the server's append.
       await dragPaneOutToTabStrip(page, worktreeId, movedLeafId, 'start')
-      await expect(page.locator(TAB)).toHaveCount(2, { timeout: 15_000 })
+      await expect(page.locator(TAB)).toHaveCount(tabCount + 1, { timeout: 15_000 })
       const [movedTabId] = await readClientTabOrder()
       expect(movedTabId).not.toBe(sourceTabId)
 
@@ -112,11 +142,11 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
         .poll(
           async () =>
             Object.values(await readHost())
-              .map((leaves) => leaves.toSorted().join(','))
-              .toSorted(),
+              .filter((leaves) => leaves.includes(movedLeafId))
+              .map((leaves) => leaves.join(',')),
           { timeout: 15_000, message: 'the server never moved the pane' }
         )
-        .toEqual([firstLeafId, movedLeafId].toSorted())
+        .toEqual([movedLeafId])
       const hostTabOfMovedLeaf = Object.entries(await readHost()).find(([, leaves]) =>
         leaves.includes(movedLeafId)
       )?.[0]
@@ -128,22 +158,39 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
       )
       // The server keeps the tab where it was dropped, selected as the window shows it.
       await expect
-        .poll(readHostPlacement, { timeout: 15_000, message: 'the server misplaced the tab' })
-        .toEqual([
-          [
-            hostTabOfMovedLeaf,
-            Object.keys(await readHost()).find((id) => id !== hostTabOfMovedLeaf)
-          ],
-          hostTabOfMovedLeaf
-        ])
+        .poll(
+          async () => {
+            const [order, active] = await readHostPlacement()
+            return [order[0], active]
+          },
+          { timeout: 15_000, message: 'the server misplaced the tab' }
+        )
+        .toEqual([hostTabOfMovedLeaf, hostTabOfMovedLeaf])
 
       // Switching back to the source tab must not pull the pane back into its split.
-      await page.locator(`${TAB}[data-tab-id="${sourceTabId}"]`).click()
-      await page.waitForTimeout(2_000)
-      await expect(page.locator(TAB)).toHaveCount(2)
-      await expect(page.locator(PANE)).toHaveCount(1)
-      await expect(page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`)).toHaveCount(0)
-      expect(await readClientTabOrder()).toEqual([movedTabId, sourceTabId])
+      // Then the moved pane writes output, the server's next publish follows, and the pane stays out.
+      await sourceTab.click()
+      const marker = `MOVED_PANE_OUTPUT_${Date.now()}`
+      const moved = await hostTerminal(movedLeafId)
+      await host.client.call('terminal.send', {
+        terminal: moved!.handle,
+        text: `echo ${marker}`,
+        enter: true
+      })
+      await expect
+        .poll(async () => (await hostTerminal(movedLeafId))?.preview ?? '', { timeout: 15_000 })
+        .toContain(marker)
+      const readClient = async () => ({
+        tabs: await page.locator(TAB).count(),
+        sourcePanes: await page.locator(PANE).count(),
+        movedInSource: await page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`).count(),
+        movedFirst: (await readClientTabOrder())[0] === movedTabId
+      })
+      const settled = { tabs: tabCount + 1, sourcePanes: 1, movedInSource: 0, movedFirst: true }
+      for (let sample = 0; sample < 10; sample += 1) {
+        expect(await readClient()).toEqual(settled)
+        await page.waitForTimeout(300)
+      }
     } finally {
       await desktop.dispose()
     }
@@ -180,14 +227,7 @@ test('a pane move the server refuses goes back into its split, terminal intact',
     await sourceTab.click()
     await waitForBoundPanes(page, 1)
     const firstLeafId = await page.locator(PANE).first().getAttribute('data-leaf-id')
-    await splitActiveTerminalPane(page, 'vertical')
-    await waitForBoundPanes(page, 2)
-    const leafIds = await page
-      .locator(PANE)
-      .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
-    const movedLeafId = leafIds.find((id) => id !== firstLeafId)!
-    const tabCount = await page.locator(TAB).count()
-    const hostTerminalOf = async (leafId: string): Promise<string | null> => {
+    const hostTerminalOf = async (leafId: string | null): Promise<string | null> => {
       const { terminals } = await callPairedRuntime<RuntimeTerminalListResult>(
         page,
         desktop.environmentId,
@@ -196,12 +236,37 @@ test('a pane move the server refuses goes back into its split, terminal intact',
       )
       return terminals.find((terminal) => terminal.leafId === leafId)?.tabId ?? null
     }
+    // Split once the server lists the first terminal, as a user splits a pane that is up.
+    await expect.poll(() => hostTerminalOf(firstLeafId), { timeout: 30_000 }).not.toBeNull()
+    await splitActiveTerminalPane(page, 'vertical')
+    await waitForBoundPanes(page, 2)
+    const leafIds = await page
+      .locator(PANE)
+      .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
+    const movedLeafId = leafIds.find((id) => id !== firstLeafId)!
+    const tabCount = await page.locator(TAB).count()
     await expect.poll(() => hostTerminalOf(movedLeafId)).toBe(created.tab.parentTabId)
 
+    // The move is asynchronous, so only a tab that appeared and went proves the window moved it and
+    // then put it back.
+    await page.evaluate((id) => {
+      const counts: number[] = []
+      Reflect.set(window, '__paneMoveTabCounts', counts)
+      window.__store?.subscribe((state) => counts.push((state.tabsByWorktree[id] ?? []).length))
+    }, worktreeId)
     await dragPaneOutToTabStrip(page, worktreeId, movedLeafId)
-    // The move is asynchronous, so the tab count right after the drop proves nothing; an unrevised
-    // move still shows its extra tab seconds later.
-    await page.waitForTimeout(3_000)
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const counts: unknown = Reflect.get(window, '__paneMoveTabCounts')
+            return Array.isArray(counts) && counts.length > 0
+              ? { max: Math.max(...counts), now: counts.at(-1) }
+              : null
+          }),
+        { timeout: 15_000, message: 'the refused move was never drawn and put back' }
+      )
+      .toEqual({ max: tabCount + 1, now: tabCount })
     await expect(page.locator(TAB)).toHaveCount(tabCount)
     await expect(page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`)).toHaveCount(1, {
       timeout: 15_000
