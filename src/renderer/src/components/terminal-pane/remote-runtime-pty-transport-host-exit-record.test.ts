@@ -301,6 +301,46 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     transport.destroy?.()
   })
 
+  it('hands a settled pane back to a process the host published while the exit was confirming', async () => {
+    const onHostReboundExitedPty = vi.fn()
+    const transport = await attachRestoredHostTab(vi.fn(), onHostReboundExitedPty)
+    answerShow({ connected: false, verdict: 'exited', incarnationId: 'inc-1' })
+    let answerPane: (value: unknown) => void = () => {}
+    const answer = runtimeCall.getMockImplementation()
+    runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) =>
+      args.method === 'terminal.resolvePane'
+        ? new Promise((resolve) => {
+            answerPane = resolve
+          })
+        : answer?.(args)
+    )
+    refuseStream('terminal_handle_stale')
+    await vi.waitFor(() =>
+      expect(runtimeCall).toHaveBeenCalledWith(
+        expect.objectContaining({ method: 'terminal.resolvePane' })
+      )
+    )
+
+    await publishHostSurface({ terminal: 'terminal-ended', incarnationId: 'inc-2' }, 4)
+    answerPane({
+      ok: true,
+      result: {
+        terminal: {
+          handle: 'terminal-ended',
+          tabId: 'host-tab-1',
+          leafId: 'pane:1',
+          worktreeId: 'wt-1',
+          incarnationId: 'inc-1'
+        }
+      }
+    })
+
+    await vi.waitFor(() =>
+      expect(onHostReboundExitedPty.mock.calls).toEqual([['remote:hub-env@@terminal-ended']])
+    )
+    transport.destroy?.()
+  })
+
   it('settles a pane whose restore attach is refused as stale before it binds', async () => {
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const onPtyExit = vi.fn()
