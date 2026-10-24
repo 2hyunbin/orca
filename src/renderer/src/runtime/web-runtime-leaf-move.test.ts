@@ -4,7 +4,10 @@ import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixtu
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 const ENVIRONMENT_ID = 'web-env-1'
 const WORKTREE_ID = 'repo::/worktree'
-const store = vi.hoisted(() => ({ state: {} as Record<string, unknown> }))
+const store = vi.hoisted(() => {
+  const state: Record<string, unknown> = {}
+  return { state }
+})
 const supports = vi.hoisted(() => vi.fn())
 vi.mock('../store', () => ({ useAppStore: { getState: () => store.state } }))
 vi.mock('./runtime-rpc-client', () => ({ runtimeEnvironmentSupportsCapability: supports }))

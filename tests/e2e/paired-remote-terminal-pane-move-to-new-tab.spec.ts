@@ -70,7 +70,7 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
       await waitForBoundPanes(page, 2)
       const leafIds = await page
         .locator(PANE)
-        .evaluateAll((panes) => panes.map((pane) => (pane as HTMLElement).dataset.leafId ?? ''))
+        .evaluateAll((panes) => panes.map((pane) => pane.getAttribute('data-leaf-id') ?? ''))
       const movedLeafId = leafIds.find((id) => id !== firstLeafId)!
       await expect
         .poll(async () => Object.values(await readHost()).map((leaves) => leaves.length), {
