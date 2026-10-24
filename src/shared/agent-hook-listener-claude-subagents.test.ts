@@ -221,80 +221,32 @@ describe('shared agent-hook-listener', () => {
       expect(stopped?.payload.state).toBe('done')
     })
 
-    it('does not mint rows from untyped tool events of agents it never saw start', () => {
+    it('does not mint rows for agent-hook runs on the lead or inside a subagent', () => {
       claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
-
-      // Why: `"type": "agent"` hooks run a verifier whose tool hooks carry
-      // `hook-agent-<uuid>` ids with no agent_type and no SubagentStart/Stop;
-      // each one used to pin a "Working - Agent" row until the 32-row cap.
-      for (const agentId of ['hook-agent-d9ea3fa2', 'hook-agent-6c7000a5', 'a5607a3521aa9a9ed']) {
-        const tool = claudeEvent({
-          hook_event_name: 'PreToolUse',
-          agent_id: agentId,
-          tool_name: 'Bash',
-          tool_input: { command: 'git diff --cached' }
-        })
-        expect(tool?.payload.state).toBe('working')
-        expect(tool?.payload.subagents ?? []).toEqual([])
-      }
-
-      claudeEvent({ hook_event_name: 'SubagentStart', agent_id: 'a1', agent_type: 'Explore' })
-      const known = claudeEvent({
-        hook_event_name: 'PostToolUse',
-        agent_id: 'a1',
+      // Why: payloads captured from Claude Code 2.1.310; a hook run inside a subagent inherits its agent_type.
+      const leadHook = claudeEvent({
+        hook_event_name: 'PreToolUse',
+        agent_id: 'hook-agent-f91f48da-b4db-45e3-a8a1-3debdaa4f2f5',
         tool_name: 'Read',
-        tool_input: { file_path: '/tmp/x' }
+        tool_input: { file_path: '/tmp/README.md' }
       })
-      expect(known?.payload.subagents).toEqual([
-        expect.objectContaining({ id: 'a1', state: 'working' })
-      ])
+      expect(leadHook?.payload.state).toBe('working')
+      expect(leadHook?.payload.subagents ?? []).toEqual([])
 
-      const stop = claudeEvent({ hook_event_name: 'SubagentStop', agent_id: 'a1' })
-      expect(stop?.payload.subagents ?? []).toEqual([])
-    })
-
-    it('does not mint a row for an agent hook that fires inside a subagent', () => {
-      claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
       claudeEvent({
         hook_event_name: 'SubagentStart',
         agent_id: 'aa34e9e23451d1f6b',
         agent_type: 'general-purpose'
       })
-      // Why: observed on Claude Code 2.1.310 — the hook agent inherits the subagent's agent_type.
-      const hookTool = claudeEvent({
+      const childHook = claudeEvent({
         hook_event_name: 'PreToolUse',
         agent_id: 'hook-agent-5179ea04-58c0-440a-b861-04ead9f87aaa',
         agent_type: 'general-purpose',
         tool_name: 'Read',
         tool_input: { file_path: '/tmp/README.md' }
       })
-      expect(hookTool?.payload.subagents).toEqual([
+      expect(childHook?.payload.subagents).toEqual([
         expect.objectContaining({ id: 'aa34e9e23451d1f6b' })
-      ])
-    })
-
-    it('revives an idle known child from its untyped tool event', () => {
-      claudeEvent({ hook_event_name: 'UserPromptSubmit', prompt: 'spawn probe' })
-      const agentId = 'aprobe1-6d3cb5b52120b7bf'
-      const teammateTask = { id: 'tlkjjs0jv', type: 'teammate', status: 'running' }
-      claudeEvent({ hook_event_name: 'SubagentStart', agent_id: agentId, agent_type: 'probe1' })
-      const parked = claudeEvent({
-        hook_event_name: 'SubagentStop',
-        agent_id: agentId,
-        background_tasks: [teammateTask]
-      })
-      expect(parked?.payload.subagents).toEqual([
-        expect.objectContaining({ id: agentId, state: 'idle' })
-      ])
-
-      const revived = claudeEvent({
-        hook_event_name: 'PostToolUse',
-        agent_id: agentId,
-        tool_name: 'Read',
-        tool_input: { file_path: '/tmp/x' }
-      })
-      expect(revived?.payload.subagents).toEqual([
-        expect.objectContaining({ id: agentId, state: 'working' })
       ])
     })
 

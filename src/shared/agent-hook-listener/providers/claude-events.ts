@@ -181,13 +181,9 @@ export function normalizeClaudeEvent(
       eventName === 'PostToolUseFailure')
       ? eventAgentId
       : undefined
-  // Why: `"type": "agent"` hook runs (`hook-agent-<uuid>`, typed only when inherited from the hooked subagent) and long-lived async agents emit tool hooks but never SubagentStop, so a row minted from them stays working forever.
-  const isMintableChildEvent =
-    eventAgentId?.startsWith(CLAUDE_HOOK_AGENT_ID_PREFIX) !== true &&
-    (!subagentOriginId ||
-      readString(hookPayload, 'agent_type') !== undefined ||
-      state.claudeSubagentRosterByPaneKey.get(paneKey)?.has(subagentOriginId) === true)
-  if (eventAgentId && (subagentOriginId || isWaitingInducing) && isMintableChildEvent) {
+  // Why: `"type": "agent"` hook runs emit tool hooks (agent_type only if inherited) but never SubagentStop, so their row would stay working forever; real children may be untyped and start-less.
+  const isClaudeHookAgent = eventAgentId?.startsWith(CLAUDE_HOOK_AGENT_ID_PREFIX) === true
+  if (eventAgentId && (subagentOriginId || isWaitingInducing) && !isClaudeHookAgent) {
     upsertWorkingClaudeSubagent(
       getOrCreateClaudeSubagentRoster(state, paneKey),
       eventAgentId,
