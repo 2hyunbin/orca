@@ -76,8 +76,7 @@ function createTokensProvider(
         endState: new TextMateTokenizerState(result.ruleStack),
         tokens: result.tokens.map((token) => ({
           startIndex: token.startIndex,
-          // Why: Monaco themes match a single token scope; TextMate returns a
-          // scope stack, and the final entry is the most specific reusable one.
+          // Use the most specific TextMate scope because Monaco themes match one scope per token.
           scopes: token.scopes.at(-1) ?? fallbackScopeName
         }))
       }
