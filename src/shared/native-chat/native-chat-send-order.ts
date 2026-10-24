@@ -1,6 +1,6 @@
 // The order a client's sends were made in, as the host published it.
 
-import type { AgentJournalSubmission } from './agent-session-journal-types'
+import type { AgentJournalSubmission } from '../agent-session-journal-types'
 
 type SendTimes = Pick<AgentJournalSubmission, 'submittedSequence' | 'submittedAt'>
 

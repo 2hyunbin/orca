@@ -4,7 +4,7 @@
 // completed turn is flushed to the transcript. Desktop and mobile both use this
 // so the show/hide rule can't drift between platforms.
 
-import type { NativeChatMessage } from './native-chat-types'
+import type { NativeChatMessage } from '../native-chat-types'
 
 /** The synthetic streaming bubble's stable id (kept stable so the list keys it
  *  consistently across ticks and the real turn can replace it cleanly). */

@@ -1,10 +1,10 @@
 // A turn one of the agent's usage limits ended, as its row says, and whether the chat still sits on
 // it. Derived from the journal each time, never stored; the chat offers Continue from it.
 
-import { isRootAgentJournalItem } from './agent-session-journal-producer'
-import { readAgentSessionFailureFact } from './agent-session-failure'
-import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-session-journal-types'
-import type { AgentSessionUsageLimit } from './agent-session-usage-limit'
+import { isRootAgentJournalItem } from '../agent-session-journal-producer'
+import { readAgentSessionFailureFact } from '../agent-session-failure'
+import type { AgentJournalRenderItem, AgentJournalSubmission } from '../agent-session-journal-types'
+import type { AgentSessionUsageLimit } from '../agent-session-usage-limit'
 import { findInNativeChatTurn, latestNativeChatTurnSinceRequest } from './native-chat-orca-stop-cut'
 
 /** What the agent is sent when the person continues a turn its usage limit ended. */

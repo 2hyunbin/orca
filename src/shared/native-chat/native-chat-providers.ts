@@ -3,10 +3,10 @@
  * Settings shows unchosen non-built-ins as on where their CLI or chat program is installed here.
  */
 
-import { isAgentSessionHandleProvider } from './agent-session-provider-handle'
-import type { GlobalSettings } from './global-settings-types'
-import type { TuiAgent } from './tui-agent'
-import { isTuiAgent } from './tui-agent-config'
+import { isAgentSessionHandleProvider } from '../agent-session-provider-handle'
+import type { GlobalSettings } from '../global-settings-types'
+import type { TuiAgent } from '../tui-agent'
+import { isTuiAgent } from '../tui-agent-config'
 
 export type NativeChatProviderChoices = Partial<Record<TuiAgent, boolean>>
 

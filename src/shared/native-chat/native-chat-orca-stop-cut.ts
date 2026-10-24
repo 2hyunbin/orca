@@ -3,14 +3,17 @@
 // journal each time, never stored: the client shows Continue from it, and the host re-checks it
 // under the session lock before Continue sends anything.
 
-import { readAgentSessionOrcaStop, type AgentSessionOrcaStopCause } from './agent-session-orca-stop'
-import { isRootAgentJournalItem } from './agent-session-journal-producer'
-import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-session-journal-types'
-import { STALE_SESSION_ROW_PREFIX } from './agent-session-stop-row-identity'
-import { readAgentJournalTurn, readAgentJournalTurnOutcome } from './agent-session-turn-record'
-import { agentTurnVerdict, type AgentTurnOutcome } from './agent-turn-outcome'
-import { structuredAgentSessionCommandTurnItemIds } from './structured-agent-session-command-entry'
-import { isStructuredAgentSessionNonRequestRow } from './structured-agent-session-latest-request'
+import {
+  readAgentSessionOrcaStop,
+  type AgentSessionOrcaStopCause
+} from '../agent-session-orca-stop'
+import { isRootAgentJournalItem } from '../agent-session-journal-producer'
+import type { AgentJournalRenderItem, AgentJournalSubmission } from '../agent-session-journal-types'
+import { STALE_SESSION_ROW_PREFIX } from '../agent-session-stop-row-identity'
+import { readAgentJournalTurn, readAgentJournalTurnOutcome } from '../agent-session-turn-record'
+import { agentTurnVerdict, type AgentTurnOutcome } from '../agent-turn-outcome'
+import { structuredAgentSessionCommandTurnItemIds } from '../structured-agent-session-command-entry'
+import { isStructuredAgentSessionNonRequestRow } from '../structured-agent-session-latest-request'
 
 /** The row a quit or update writes for the turn it cut, keyed by the child the quit stopped, so a
  *  retried stop of that child writes no second row. The prefix is one older clients already read
