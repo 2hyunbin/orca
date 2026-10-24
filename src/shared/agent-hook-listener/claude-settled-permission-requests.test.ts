@@ -63,7 +63,11 @@ describe('retained Claude request settlements', () => {
       retained = retainClaudeSettledRequests(retained, base, ended(`tool-${index}`))
     }
     expect(retained).toHaveLength(MAX_CLAUDE_SETTLED_REQUESTS)
-    expect(retained?.at(-1)).toEqual({ toolUseId: 'tool-39' })
+    expect(retained).toEqual(
+      Array.from({ length: MAX_CLAUDE_SETTLED_REQUESTS }, (_, index) => ({
+        toolUseId: `tool-${40 - MAX_CLAUDE_SETTLED_REQUESTS + index}`
+      }))
+    )
   })
 
   it('rejects a malformed or oversized wire list whole', () => {
@@ -86,18 +90,29 @@ describe('retained Claude request settlements', () => {
       hookEventName: 'PermissionRequest',
       toolUseId: 'tool-1',
       toolAgentId: 'child-1',
+      toolAgentType: 'Explore',
       payload: { ...base.payload, state: 'waiting' }
     }
     const replay: AgentHookEventPayload = {
       ...base,
       connectionId: 'conn-1',
       isReplay: true,
-      claudeSettledRequests: [{ toolUseId: 'tool-1', toolAgentId: 'child-1' }]
+      claudeSettledRequests: [
+        { toolUseId: 'tool-1', toolAgentId: 'child-1', toolAgentType: 'Explore' }
+      ]
     }
     expect(isClaudePermissionSettled(waiting, replay)).toBe(true)
     expect(isClaudePermissionSettled(waiting, { ...replay, isReplay: undefined })).toBe(true)
     expect(isClaudePermissionSettled({ ...waiting, toolAgentId: undefined }, replay)).toBe(false)
     expect(isClaudePermissionSettled(waiting, { ...replay, connectionId: 'conn-2' })).toBe(false)
     expect(isClaudePermissionSettled(waiting, { ...replay, launchToken: 'launch-2' })).toBe(false)
+    expect(isClaudePermissionSettled({ ...waiting, toolUseId: 'tool-2' }, replay)).toBe(false)
+    expect(isClaudePermissionSettled({ ...waiting, toolAgentType: 'Review' }, replay)).toBe(false)
+    expect(
+      isClaudePermissionSettled(waiting, {
+        ...replay,
+        providerSession: { key: 'session_id', id: 'session-2' }
+      })
+    ).toBe(false)
   })
 })
