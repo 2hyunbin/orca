@@ -57,9 +57,7 @@ describe('git reads over wsl.exe on a booting distro', () => {
 
   function answerWith(results: ({ fail: string } | { stdout: string })[]): void {
     execFileMock.mockImplementation((_command, _args, _options, callback) => {
-      const child = new EventEmitter() as EventEmitter & { pid: number; kill: () => void }
-      child.pid = 4321
-      child.kill = () => {}
+      const child = Object.assign(new EventEmitter(), { pid: 4321, kill: () => {} })
       const next = results.shift() ?? { stdout: '' }
       queueMicrotask(() =>
         'fail' in next
@@ -75,7 +73,7 @@ describe('git reads over wsl.exe on a booting distro', () => {
     withPlatform('win32', () =>
       gitExecFileAsync(['worktree', 'list', '--porcelain', '-z'], { cwd: UNC, ...options }).then(
         (result) => result.stdout,
-        (error: unknown) => error as Error
+        (error: unknown) => error
       )
     )
 
