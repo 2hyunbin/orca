@@ -184,6 +184,7 @@ export function useWorkItemSourceFoundation(props: NormalizedWorkItemSourceSearc
     linearStatus,
     // A host-scoped source loads independently instead of refreshing the focused runtime's store.
     linearStatusChecked: hasLinearSearchSource || linearStatusChecked,
+    linearStatusPending: hasLinearSearchSource && !linearConnection.loaded,
     checkLinearConnection,
     jiraSourceConnected
   })
