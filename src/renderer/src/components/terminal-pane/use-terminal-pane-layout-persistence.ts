@@ -38,8 +38,7 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
     terminalTab,
     worktreeId
   } = controller
-  // Leaves a host-authoritative layout dropped whose panes are still mounted, kept out of every
-  // write so a persist cannot re-add one while its PTY is still ending.
+  // Exclude host-dropped layouts from writes while their panes finish exiting, or persistence can resurrect them.
   const hostRetiredLeafIdsRef = useRef<ReadonlySet<string>>(new Set())
   const chatOwnerRef = useRef({ chatLeafId, isChatViewMode })
   useLayoutEffect(() => {
@@ -195,7 +194,6 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
       if (leafId) {
         removedTitleLeafIdsRef.current.add(leafId)
       }
-      // Why: every caller is a user clearing a pane title.
       persistLayoutSnapshot()
     },
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
@@ -214,13 +212,11 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Refs are stable.
     [persistLayoutSnapshot]
   )
-  /** Shows a title main already holds, without asking main again. */
   const showPaneTitle = useCallback(
     (paneId: number, title: string | null): void =>
       title === null ? removePaneTitleLocally(paneId) : setPaneTitleLocally(paneId, title),
     [removePaneTitleLocally, setPaneTitleLocally]
   )
-  /** A user's title for a pane, trimmed and non-empty; null clears it. */
   const changePaneTitle = useCallback(
     (paneId: number, title: string | null) => {
       const leafId = managerRef.current?.getPanes().find((pane) => pane.id === paneId)?.leafId
@@ -231,7 +227,6 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
         }
         showPaneTitle(paneId, title)
       }
-      // Switch point: main renames the pane and its frame draws the title.
       if (
         ORCA_LAYOUT_OWNER_IS_MAIN &&
         leafId &&
