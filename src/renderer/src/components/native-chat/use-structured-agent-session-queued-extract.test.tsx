@@ -81,6 +81,7 @@ afterEach(() => {
 function harness(write: StructuredAgentSessionWrite, prompt = false, queued = message) {
   const send = vi.fn<NativeChatStructuredComposerTransport['send']>(() => true)
   const transport: NativeChatStructuredComposerTransport = {
+    capturePresentation: () => () => true,
     send,
     runtime: 'local',
     sessionId: 'session',
@@ -98,6 +99,8 @@ function harness(write: StructuredAgentSessionWrite, prompt = false, queued = me
   const mutate = vi.fn(async () => null)
   const hook = renderHook(() => {
     const queue = useStructuredAgentSessionQueuedMessages({
+      admit: () => null,
+      capturePresentation: () => () => true,
       enabled: true,
       queuedMessages: [queued],
       queuePause: { reason: 'stopped' },

@@ -213,7 +213,6 @@ describe('installer-utils-remote', () => {
     const contents = fs.files.get('/home/u/.claude/settings.json')!
     const parsed = JSON.parse(contents)
     expect(parsed.hooks.Stop[0].hooks[0].command).toBe('foo')
-    // Tmp must be cleaned up.
     const tmp = Array.from(fs.files.keys()).find((k) => k.includes('.tmp'))
     expect(tmp).toBeUndefined()
     expect(fs.modes.get('/home/u/.claude/settings.json')).toBe(0o600)

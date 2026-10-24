@@ -161,6 +161,15 @@ vi.mock('./use-native-chat-send-lifecycle', () => ({
 import { NativeChatComposer } from './NativeChatComposer'
 import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
 
+function createOptionsSurface(): SessionOptionsSurface {
+  return {
+    getSnapshot: () => [],
+    setOption: vi.fn(),
+    invokeAction: vi.fn(),
+    subscribe: () => () => {}
+  }
+}
+
 describe('NativeChatComposer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -289,12 +298,7 @@ describe('NativeChatComposer', () => {
       accepted: false,
       error: null
     }))
-    const optionsSurface = {
-      getSnapshot: () => [],
-      setOption: vi.fn(),
-      invokeAction: vi.fn(),
-      subscribe: () => () => {}
-    } satisfies SessionOptionsSurface
+    const optionsSurface = createOptionsSurface()
     const optionSnapshot = [{ id: 'model' }] as SessionOptionDescriptor[]
     const composer = (sessionPending = false) => (
       <NativeChatComposer
@@ -303,6 +307,7 @@ describe('NativeChatComposer', () => {
         targetPtyId={null}
         agent="codex"
         structuredTransport={{
+          capturePresentation: () => () => true,
           send,
           dispatchCommand,
           optionsSurface,
@@ -348,14 +353,10 @@ describe('NativeChatComposer', () => {
         targetPtyId={null}
         agent={agent}
         structuredTransport={{
+          capturePresentation: () => () => true,
           send: vi.fn(() => true),
           dispatchCommand: vi.fn(async () => ({ handled: false, accepted: false, error: null })),
-          optionsSurface: {
-            getSnapshot: () => [],
-            setOption: vi.fn(),
-            invokeAction: vi.fn(),
-            subscribe: () => () => {}
-          },
+          optionsSurface: createOptionsSurface(),
           optionSnapshot: [],
           onError: vi.fn(),
           runtime: 'local',
@@ -383,18 +384,14 @@ describe('NativeChatComposer', () => {
         targetPtyId={null}
         agent="codex"
         structuredTransport={{
+          capturePresentation: () => () => true,
           send,
           dispatchCommand: vi.fn(async () => ({
             handled: false,
             accepted: false,
             error: null
           })),
-          optionsSurface: {
-            getSnapshot: () => [],
-            setOption: vi.fn(),
-            invokeAction: vi.fn(),
-            subscribe: () => () => {}
-          },
+          optionsSurface: createOptionsSurface(),
           optionSnapshot: [],
           worktreeId: 'wt-1',
           onError: vi.fn(),

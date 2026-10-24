@@ -1,3 +1,4 @@
+import { AGENT_LAUNCH_PERMISSION_CHOICE_CAPABILITY } from '../../../shared/agent-launch-runtime-capability'
 import { useEffect, useState } from 'react'
 import {
   AGENT_SESSION_CONVERSATION_STOP_RUNTIME_CAPABILITY,
@@ -176,5 +177,13 @@ export function useStructuredAgentSessionHostReordersQueuedMessages(
   return useStructuredAgentSessionHostCapability(
     target,
     AGENT_SESSION_QUEUED_MESSAGE_REORDER_RUNTIME_CAPABILITY
+  )
+}
+
+/** The API runtime owns Chat settings; on web the local API forwards to the active paired host. */
+export function useChatSettingsTypedPermissions(): boolean {
+  return useStructuredAgentSessionHostCapability(
+    { kind: 'local' },
+    AGENT_LAUNCH_PERMISSION_CHOICE_CAPABILITY
   )
 }

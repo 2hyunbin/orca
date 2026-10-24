@@ -275,7 +275,7 @@ describe('ssh-browser-e2e-routing', () => {
     const run = job.steps.find(
       (step) => step.name === 'Run Docker SSH browser network route journeys'
     )
-    expect(job['runs-on']).toBe('ubuntu-latest')
+    expect(job['runs-on']).toBe('blacksmith-4vcpu-ubuntu-2404')
     expect(job.if).toContain("inputs.test_files == ''")
     expect(job.if).toContain(spec)
     expect(install.with['native-runtime']).toBe('node')

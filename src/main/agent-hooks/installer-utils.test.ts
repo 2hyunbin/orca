@@ -222,7 +222,6 @@ describe('writeHooksJson', () => {
     // .bak should hold v2 (the version before v3)
     const bak = JSON.parse(readFileSync(`${configPath}.bak`, 'utf-8'))
     expect(bak).toEqual(v2)
-    // configPath should hold v3
     const current = JSON.parse(readFileSync(configPath, 'utf-8'))
     expect(current).toEqual(v3)
   })
@@ -258,8 +257,7 @@ describe('createManagedCommandMatcher', () => {
     expect(match(undefined)).toBe(false)
     expect(match('')).toBe(false)
     expect(match('echo "user-authored hook"')).toBe(false)
-    // Same filename but not under an agent-hooks/ directory — treat as
-    // user-authored to avoid stomping on someone else's hook.
+    // A matching filename outside agent-hooks remains user-owned.
     expect(match('/bin/sh "/home/alice/scripts/claude-hook.sh"')).toBe(false)
   })
 
@@ -268,8 +266,6 @@ describe('createManagedCommandMatcher', () => {
   })
 
   it('matches the guarded launcher form so wrapped commands sweep correctly', () => {
-    // Why: older guarded launchers used a single `-x` check. The sweep must
-    // still recognize them or reinstalling would retain a stale duplicate.
     expect(
       match(
         'if [ -x "/Users/alice/Library/Application Support/Orca/agent-hooks/claude-hook.sh" ]; then /bin/sh "/Users/alice/Library/Application Support/Orca/agent-hooks/claude-hook.sh"; fi'
@@ -283,8 +279,6 @@ describe('createManagedCommandMatcher', () => {
   })
 
   it('matches the pre-default-form launcher so upgrades replace it instead of duplicating', () => {
-    // Why: installs before the ${VAR-} conversion emitted bare $HOME/$SYSTEMROOT. The sweep must
-    // still recognize them, or an upgrade would leave the stale entry beside the new one.
     expect(
       match(
         'if [ -z "$HOME" ]; then :; else if [ -f "$HOME/.orca/agent-hooks/claude-hook.sh" ]; then /bin/sh "$HOME/.orca/agent-hooks/claude-hook.sh"; fi; fi'
@@ -647,9 +641,7 @@ describe('wrapWindowsHookCommand', () => {
     )
   })
 
-  // Why the ordering matters: a gate event reads silence as deny (#2426), and outside an
-  // Orca pane the guard exits before the read — so an answer placed after the drain never
-  // reaches the agent at all when the caller abandons the pipe (#11549).
+  // Gate events read silence as denial, so answer before a missing-context guard can exit.
   it('answers before it guards, and guards before it owns stdin', () => {
     const decoded = decodeWindowsHookCommand(
       wrapWindowsHookCommand(
@@ -712,8 +704,7 @@ describe('wrapRuntimeHomeHookCommand', () => {
     expect(command).not.toMatch(/[A-Z]:[\\/]|\/Users\/|\/home\//)
   })
 
-  // Why: a static hook precheck (Grok) rejects the whole command on any bare reference it cannot
-  // resolve, including one in a branch that platform never takes.
+  // Grok rejects unresolved bare variables even in untaken branches.
   it.each([
     ['default', undefined],
     ['neutral-json', { neutralJsonWhenMissing: true }]
@@ -916,8 +907,6 @@ describe('buildWindowsAgentHookCurlPostCommand', () => {
   it('posts form fields via curl.exe and reads the payload from stdin', () => {
     const command = buildWindowsAgentHookCurlPostCommand('codex')
 
-    // Why: the fast path must not spawn a second PowerShell; that startup cost
-    // is the regression this replaces.
     expect(command).not.toMatch(/powershell/i)
     expect(command).toContain('%SystemRoot%\\System32\\curl.exe')
     expect(command).toContain('http://127.0.0.1:%ORCA_AGENT_HOOK_PORT%/hook/codex')
@@ -928,8 +917,6 @@ describe('buildWindowsAgentHookCurlPostCommand', () => {
     // Why: `payload@-` makes curl read raw bytes from stdin and urlencode them,
     // so UTF-8 prompts survive without a code-page conversion.
     expect(command).toContain('--data-urlencode "payload@-"')
-    // Why: same dead-listener bound as the POSIX hook so a stalled server can't
-    // hold up the agent.
     expect(command).toContain('--connect-timeout 0.5 --max-time 1.5')
   })
 })
