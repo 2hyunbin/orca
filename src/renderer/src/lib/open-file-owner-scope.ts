@@ -20,22 +20,16 @@ type OwnerScopedFile = Pick<
 type OwnerScope = { worktreeId: string; relativePath: string }
 const ownerScopeCache = new WeakMap<object, { epoch: object; scope: OwnerScope }>()
 
-/**
- * The workspace whose watch covers an open file. A read-only view of a file another workspace on
- * this computer holds (#32158) lives in one workspace but is watched with the one that holds the
- * file, derived from the catalog so a restored view needs nothing stored.
- */
+/** Read-only local views can live outside the file’s workspace; derive watch scope from the current catalog so restored tabs need no saved owner (#32158). */
 export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): OwnerScope {
   const own = { worktreeId: file.worktreeId, relativePath: file.relativePath }
-  // Why: only a read-only absolute view may sit outside the workspace holding its file; a live-tail
-  // log follows itself and must not pull in a recursive watch of a folder that holds it.
+  // Only read-only absolute views can borrow another workspace watch; live-tail logs must not acquire recursive folder watches.
   if (
     file.readOnly !== true ||
     file.liveTail === true ||
     file.relativePath !== file.filePath ||
     file.terminalArtifactGrantId ||
-    // Why: only this computer's files are viewed outside their workspace; an SSH or server
-    // tab naming another workspace's path is moved there by the loader instead.
+    // Only local files get outside-workspace views; remote tabs are relocated to their file’s workspace by the loader.
     file.externalSshTargetId ||
     file.runtimeEnvironmentId?.trim() ||
     isFloatingWorkspaceId(file.worktreeId)
@@ -54,7 +48,6 @@ export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): Owne
   return scope
 }
 
-/** The workspace an open file is scoped to; without a catalog, the one it lives in. */
 export function openFileOwnerWorktreeId(
   file: OwnerScopedFile,
   state: AppState | undefined
