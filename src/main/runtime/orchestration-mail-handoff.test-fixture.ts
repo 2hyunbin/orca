@@ -3,8 +3,44 @@ import type { MessageRow, MessageType } from './orchestration/types'
 import { readMailHandoff, type AutomaticMailHandoff } from './orchestration/mail-handoff'
 import type { InMemoryMessageQueue } from './orca-runtime-test-orchestration-messages.spec'
 
+export type MailHandoffQueue = InMemoryMessageQueue & {
+  readonly rows: MessageRow[]
+  getMessageById(id: string): MessageRow | undefined
+  mailboxHandoffAuthority(mailbox: string): string
+  getAutomaticMailCandidates(
+    mailbox: string,
+    options: { afterSequence: number; excludeTypes: readonly string[]; limit: number }
+  ): MessageRow[]
+  reserveMailHandoff(
+    mailbox: string,
+    snapshot: MessageRow,
+    reference: AutomaticMailHandoff,
+    recovery: boolean
+  ): MessageRow | undefined
+  isMailHandoffCurrent(
+    mailbox: string,
+    snapshots: readonly MessageRow[],
+    authority: string
+  ): boolean
+  recordMailHandoff(
+    mailbox: string,
+    snapshots: readonly MessageRow[],
+    reference: AutomaticMailHandoff
+  ): void
+  recordUnknownMailRead(snapshots: readonly MessageRow[]): void
+  getOpenMailHandoffHandles(): string[]
+  getActiveDispatchForTerminal(): undefined
+  markMailboxPointerWriteAttempted(
+    ids: string[],
+    target: { ptyId: string; processIncarnation: string },
+    refusedEnter?: boolean
+  ): boolean
+}
+
+export type MailHandoffQueueConstructor = new () => MailHandoffQueue
+
 /** Adds handoff ownership while retaining the queue's message and transport lifecycle. */
-export function withMailHandoffs(Queue: typeof InMemoryMessageQueue) {
+export function withMailHandoffs(Queue: typeof InMemoryMessageQueue): MailHandoffQueueConstructor {
   return class extends Queue {
     get rows(): MessageRow[] {
       return this.messages
