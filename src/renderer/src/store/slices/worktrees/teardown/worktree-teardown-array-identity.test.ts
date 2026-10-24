@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AppState } from '../../../types'
+import { createTestStore } from '../../store-test-helpers'
 import { applyRemoveWorktreeSuccessState } from './remove-worktree-store-cleanup'
 
 type OpenFile = AppState['openFiles'][number]
@@ -13,6 +14,7 @@ function fileFor(worktreeId: string, id: string): OpenFile {
 
 function buildState(openFiles: OpenFile[]): AppState {
   return {
+    ...createTestStore().getState(),
     worktreesByRepo: { 'repo-1': [] },
     tabsByWorktree: { [KEPT]: [] },
     openFiles,

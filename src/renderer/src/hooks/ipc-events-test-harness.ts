@@ -113,9 +113,11 @@ export async function loadIpcEventsHarness(
     const actual = await vi.importActual<typeof ReactModule>('react')
     return { ...actual, useEffect: (effect: () => void | (() => void)) => void effect() }
   })
-  vi.doMock('../store', () => ({
-    useAppStore: { subscribe: vi.fn(() => () => {}), getState: () => storeState }
-  }))
+  const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
+  const store = createTestStore()
+  applyAgentStatusPatch(store, storeState)
+  vi.doMock('../store', () => ({ useAppStore: store }))
   vi.doMock('@/lib/ui-zoom', () => ({ applyUIZoom: vi.fn() }))
   vi.doMock('@/lib/worktree-activation', () => ({
     activateAndRevealWorktree: vi.fn(),
@@ -146,7 +148,8 @@ export async function loadIpcEventsHarness(
   }))
   vi.doMock('@/lib/focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi.fn() }))
   vi.doMock('@/runtime/mounted-terminal-tab-registry', () => ({
-    focusRuntimeTerminalSurface: vi.fn(() => false)
+    focusRuntimeTerminalSurface: vi.fn(() => false),
+    subscribeMountedTerminalTabChanges: vi.fn(() => () => {})
   }))
   vi.doMock('@/lib/activate-tab-and-focus-pane', () => ({ activateTabAndFocusPane: vi.fn() }))
 

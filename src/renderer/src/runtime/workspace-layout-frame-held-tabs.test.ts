@@ -265,7 +265,7 @@ describe('a tab the window drew, closed or moved, with a frame from before main 
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { store, sync, before } = await boot()
     // Why: spied before the create, whose start mark publishes a new state after the tab's.
-    const closeTab = vi.spyOn(getAgentStatusOwner(store).getState(), 'closeTab')
+    const closeTab = vi.spyOn(store.getState(), 'closeTab')
     const tab = store.getState().createTab(GIT_KEY)
     sendStaleFrame(before)
     await settle()

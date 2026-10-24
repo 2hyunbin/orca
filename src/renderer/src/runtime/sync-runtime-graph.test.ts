@@ -22,6 +22,7 @@ import { getDefaultSettings } from '../../../shared/constants'
 // `makeState` calls.
 function makeSharedOverrides(): Partial<AgentStatusReadState> {
   return {
+    ...makeState(),
     tabsByWorktree: {},
     terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
     runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],

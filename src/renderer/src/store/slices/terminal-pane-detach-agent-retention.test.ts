@@ -1,12 +1,23 @@
+import type { AppState } from '../types'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { collectRetainedAgentsOnDisappear } from '@/components/dashboard/useRetainedAgents'
 import { createTestStore, makeTab, makeWorktree, seedStore } from './store-test-helpers'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { DashboardAgentRow } from '@/components/dashboard/useDashboardData'
+
+const defaultStore = vi.hoisted(() => ({
+  getState: (): AppState => {
+    throw new Error('No test store')
+  }
+}))
+vi.mock('@/store', () => ({ useAppStore: defaultStore }))
+beforeEach(() => {
+  defaultStore.getState = createTestStore().getState
+})
 
 const WORKTREE_ID = 'repo::/repo/worktree'
 const SOURCE_TAB = 'tab-source'
@@ -72,6 +83,7 @@ function makeRow(
 
 function createDetachStore() {
   const store = createTestStore()
+  defaultStore.getState = store.getState
   seedStore(store, {
     worktreesByRepo: {
       repo: [makeWorktree({ id: WORKTREE_ID, repoId: 'repo', path: '/repo/worktree' })]

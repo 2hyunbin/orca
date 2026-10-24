@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { makePaneKey } from '../../../shared/stable-pane-id'
@@ -17,7 +18,7 @@ const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_LEAF_ID = '22222222-2222-4222-8222-222222222222'
 
 afterEach(() => {
-  useAppStore.setState(initialAppStoreState, true)
+  applyAgentStatusPatch(useAppStore, { ...initialAppStoreState, agentStatusByPaneKey: {} })
 })
 
 function makeRecord(
@@ -97,7 +98,7 @@ describe('resume sleeping agent provider claims', () => {
   it('keeps a pane-owned quit record when its own persisted status is still working', () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord(paneKey)
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       ...makePreservedPaneState(record),
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-1')] },
       agentStatusByPaneKey: { [paneKey]: makeWorkingStatus(paneKey, 'tab-1', record) }
@@ -114,7 +115,7 @@ describe('resume sleeping agent provider claims', () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const otherPaneKey = makePaneKey('tab-2', OTHER_LEAF_ID)
     const record = makeRecord(paneKey)
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       ...makePreservedPaneState(record),
       tabsByWorktree: {
         'wt-1': [makeTerminalTab('tab-1'), makeTerminalTab('tab-2')]
@@ -134,7 +135,7 @@ describe('resume sleeping agent provider claims', () => {
   it('does not launch a hidden pane whose same provider session is still working', () => {
     const paneKey = makePaneKey('tab-1', LEAF_ID)
     const record = makeRecord(paneKey, 'quit')
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       ...makePreservedPaneState(record),
       activeWorktreeId: 'wt-other',
       activeTabId: null,
@@ -162,7 +163,7 @@ describe('resume sleeping agent provider claims', () => {
     const peerPaneKey = makePaneKey('tab-peer', OTHER_LEAF_ID)
     const record = makeRecord(paneKey)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       activeWorktreeId: 'wt-1',
       activeTabType: 'terminal',
       tabsByWorktree: { 'wt-1': [makeTerminalTab('tab-peer')] },
@@ -193,7 +194,7 @@ describe('resume sleeping agent provider claims', () => {
     const peerPaneKey = makePaneKey('tab-peer', OTHER_LEAF_ID)
     const record = makeRecord(paneKey)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       activeWorktreeId: 'wt-1',
       activeTabType: 'terminal',
       // The record's own pane is gone, so nothing local can own its recovery.
@@ -230,7 +231,7 @@ describe('resume sleeping agent provider claims', () => {
     const peerPaneKey = makePaneKey('tab-peer', OTHER_LEAF_ID)
     const record = makeRecord(paneKey)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       activeWorktreeId: 'wt-1',
       activeTabType: 'terminal',
       tabsByWorktree: { 'wt-1': [], 'wt-2': [makeTerminalTab('tab-peer')] },

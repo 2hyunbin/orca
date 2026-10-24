@@ -272,17 +272,17 @@ describe('useNativeChatComposerAttachments', () => {
       expect(nativeChatImagesHoldSend(terminal.latest().imageAttachments)).toBe(false)
       act(() => terminal.root.unmount())
       const probe = await renderProbe(scope, true)
-      publishOwner(scope, { workspaceId: 'wt', executionHostId: 'runtime:remote' })
-      act(() => applyAgentStatusPatch(useAppStore, {}))
+      await act(async () =>
+        publishOwner(scope, { workspaceId: 'wt', executionHostId: 'runtime:remote' })
+      )
       expect(pathExists).not.toHaveBeenCalled()
-      publishOwner(scope, { workspaceId: 'wt', executionHostId: 'local' })
-      act(() => applyAgentStatusPatch(useAppStore, {}))
+      await act(async () => publishOwner(scope, { workspaceId: 'wt', executionHostId: 'local' }))
       expect(nativeChatImagesHoldSend(probe.latest().imageAttachments)).toBe(true)
-      publishOwner(scope, { workspaceId: 'wt', executionHostId: 'runtime:remote' })
-      await act(async () => applyAgentStatusPatch(useAppStore, {}))
+      await act(async () =>
+        publishOwner(scope, { workspaceId: 'wt', executionHostId: 'runtime:remote' })
+      )
       expect(nativeChatImagesHoldSend(probe.latest().imageAttachments)).toBe(false)
-      publishOwner(scope, { workspaceId: 'wt', executionHostId: 'local' })
-      act(() => applyAgentStatusPatch(useAppStore, {}))
+      await act(async () => publishOwner(scope, { workspaceId: 'wt', executionHostId: 'local' }))
       const newer = { id: 'edit', path: '/repo/new.png' }
       await act(async () => {
         draftStore.updateNativeChatComposerDraft(scope, { images: [image, newer] }, 'immediate')

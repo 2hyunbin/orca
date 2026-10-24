@@ -40,7 +40,9 @@ const mocks = vi.hoisted(() => {
   return { state }
 })
 vi.mock('../../store', async () => {
-  const { create } = await import('zustand')
+  const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
+  const { useStore } = await import('zustand')
   const { terminalLayoutEqual } = await import('../../../../shared/terminal-layout-equality')
   mocks.state.setTabLayout = (id, layout) => {
     if (terminalLayoutEqual(mocks.state.terminalLayoutsByTabId[id], layout)) {
@@ -55,7 +57,12 @@ vi.mock('../../store', async () => {
     }
     useAppStore.setState({ unifiedTabsByWorktree: mocks.state.unifiedTabsByWorktree })
   }
-  const useAppStore = create(() => mocks.state)
+  const store = createTestStore()
+  applyAgentStatusPatch(store, mocks.state)
+  const useAppStore = Object.assign(
+    (selector: (state: ReturnType<typeof store.getState>) => unknown) => useStore(store, selector),
+    store
+  )
   return { useAppStore }
 })
 vi.mock('@/runtime/web-runtime-terminal-buffer-actions', () => ({
