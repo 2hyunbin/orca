@@ -2,20 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { getDefaultPersistedState } from '../shared/constants'
+import { getDefaultPersistedState } from '../../../shared/constants'
 import {
   closeTestStores,
   testState,
   createStore,
   readDataFile,
   writeDataFile
-} from './persistence-test-harness'
+} from '../../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'orca-compact-notice-'))
