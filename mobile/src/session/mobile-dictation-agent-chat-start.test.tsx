@@ -73,8 +73,7 @@ vi.mock('./use-mobile-native-chat-controller', async () => {
         hostId: args.hostId,
         worktreeId: args.worktreeId,
         tabId: args.activeSessionTabId,
-        sessionId:
-          args.activeSessionTab?.type === 'agent-session' ? args.activeSessionTab.sessionId : null,
+        sessionId: resolution.activeChatSessionId,
         messages: [],
         transcriptSettled: true
       })
