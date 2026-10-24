@@ -23,6 +23,83 @@ const FINGERPRINT = agentModelCatalogFingerprint({
 })
 const SIGNED_OUT = { reason: 'notSignedIn', account: 'system' } as const
 
+it('keeps a released claim separate while two eligible chats share their first project listing', async () => {
+  const released = {
+    ...agentSessionRecordFixture(
+      agentSessionLeaseFixture({
+        sessionId: 'released',
+        claimStatus: 'released',
+        ownerProcess: null,
+        deathEvidence: {
+          kind: 'pid-absent',
+          detail: 'failed before spawn',
+          observedAt: 1000,
+          ownerFence: 7
+        }
+      })
+    ),
+    provider: 'opencode',
+    accountHome: { kind: 'opencode' as const, locator: { kind: 'unmanaged' as const } },
+    providerHandleChain: []
+  }
+  const liveA = {
+    ...released,
+    ...agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: 'live-a' })),
+    provider: released.provider,
+    accountHome: released.accountHome,
+    providerHandleChain: []
+  }
+  const liveB = {
+    ...liveA,
+    ...agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: 'live-b' })),
+    provider: released.provider,
+    accountHome: released.accountHome,
+    providerHandleChain: []
+  }
+  const records = new Map([released, liveA, liveB].map((record) => [record.sessionId, record]))
+  const folder = Promise.withResolvers<string>()
+  const answer = Promise.withResolvers<AgentModelCatalogSuccess>()
+  const probe = vi.fn(() => answer.promise)
+  const service = createAgentModelCatalogService({
+    store: new AgentModelCatalogStore(),
+    getRecord: (id) => records.get(id),
+    drivesRecord: () => true,
+    resolveAccountHome: async () => HOME,
+    recordWorkspacePath: async () => folder.promise,
+    listsInChatFolder: new Set(['opencode']),
+    probes: { opencode: probe }
+  })
+  const request = (sessionId: string) => ({
+    agent: 'opencode',
+    sessionId,
+    inSessionWorkspace: true
+  })
+  try {
+    const first = service.demand(request(released.sessionId))
+    const eligible = service.demand(request(liveA.sessionId))
+    const joined = service.demand(request(liveB.sessionId))
+    expect(first).not.toBe(eligible)
+    expect(joined).toBe(eligible)
+    folder.resolve('/project')
+    await first
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
+    answer.resolve(listing('project-model'))
+    await Promise.all([eligible, joined])
+    expect(service.snapshot(request(liveA.sessionId))).toMatchObject({
+      models: [{ id: 'project-model' }]
+    })
+    expect(service.snapshot(request(liveB.sessionId))).toMatchObject({
+      models: [{ id: 'project-model' }]
+    })
+    await service.demand(request(released.sessionId))
+    expect(probe).toHaveBeenCalledOnce()
+  } finally {
+    answer.resolve(listing('project-model'))
+    folder.resolve('/project')
+    service.stop()
+  }
+})
+
 function listing(id: string): AgentModelCatalogSuccess {
   return {
     models: [{ id, label: id, isDefault: true, efforts: [] }],

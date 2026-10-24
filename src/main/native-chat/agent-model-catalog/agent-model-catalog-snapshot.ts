@@ -25,6 +25,10 @@ export type AgentModelCatalogBinding = {
   projecting?: Promise<void>
 }
 
+export function agentModelCatalogReleasedOwner(record: AgentSessionRecord | undefined): boolean {
+  return record?.lease?.claimStatus === 'released' && !!record.lease.deathEvidence
+}
+
 export function agentModelCatalogRequestKey(
   deps: AgentModelCatalogServiceDeps,
   params: AgentModelCatalogReadParams
@@ -48,6 +52,7 @@ export function agentModelCatalogRequestKey(
       record.location.wslDistro,
       deps.drivesRecord(record)
     ],
+    released: agentModelCatalogReleasedOwner(record),
     selector: params.workspace?.selector,
     workspacePath: params.workspacePath,
     inSessionWorkspace:

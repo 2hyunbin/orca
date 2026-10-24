@@ -1,3 +1,4 @@
+import { AcpStructuredOptions } from './acp-structured-options'
 import { createAgentModelCatalogService } from '../native-chat/agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
@@ -116,3 +117,98 @@ describe('a live Grok listing', () => {
     expect(store.getRecord(SESSION)?.options).toBeUndefined()
   })
 })
+
+it.each([
+  [5, 20],
+  [50, 20],
+  [1, 200]
+] as const)(
+  'catalog-scale config notifications updates=%i models=%i',
+  async (updates, modelRows) => {
+    let records: AgentSessionRecordStore | undefined
+    const store = new AgentModelCatalogStore()
+    let saves = 0
+    let savedBytes = 0
+    await store.attachPersistence({
+      load: async () => [],
+      save: (entries) => {
+        saves++
+        savedBytes += Buffer.byteLength(JSON.stringify(entries))
+      },
+      flush: async () => {}
+    })
+    const catalog = createAgentModelCatalogService({
+      store,
+      getRecord: (id) => records?.getRecord(id) ?? undefined,
+      drivesRecord: () => true,
+      resolveAccountHome: async () => ({ variable: 'GROK_HOME', path: '/grok' }),
+      recordWorkspacePath: async () => '/generated-project',
+      agentReadsProjectModelConfig,
+      workspaceMayOverrideDefaultModel: async () => false
+    })
+    const reads = vi.spyOn(AcpStructuredOptions.prototype, 'read')
+    const publications = vi.spyOn(store, 'recordSuccess')
+    try {
+      const { host, rig, store: recordsStore, ready } = await openHostRig({ modelCatalog: catalog })
+      records = recordsStore
+      expect(await host.attach(CALLER, attachParams())).toMatchObject({ ok: true })
+      await ready()
+      await rig.settle()
+      saves = 0
+      savedBytes = 0
+      reads.mockClear()
+      publications.mockClear()
+      const configOptions = GROK_CONFIG_OPTIONS.map((option) =>
+        option.id === 'model'
+          ? {
+              ...option,
+              currentValue: 'grok-4.7',
+              options: Array.from({ length: modelRows }, (_, index) => ({
+                value: index === 0 ? 'grok-4.7' : `grok-model-${index}`,
+                name: `Grok model ${index}`
+              }))
+            }
+          : option
+      )
+      const notificationBytes = Buffer.byteLength(JSON.stringify(configOptions))
+      const start = performance.now()
+      for (let update = 0; update < updates; update++) {
+        rig.child().agent.notify('session/update', {
+          sessionId: PROVIDER_SESSION,
+          update: { sessionUpdate: 'config_option_update', configOptions }
+        })
+      }
+      await rig.settle()
+      await vi.waitFor(() => expect(publications).toHaveBeenCalledTimes(updates))
+      const projectionReads = reads.mock.calls.length
+      const projectedModelRows = reads.mock.results.reduce(
+        (count, result) => count + (result.type === 'return' ? result.value.models.length : 0),
+        0
+      )
+      expect(projectionReads).toBe(updates * 2)
+      expect(projectedModelRows).toBe(updates * modelRows * 2)
+      expect(saves).toBe(1)
+      const saved = catalog.snapshot({ agent: 'grok', sessionId: SESSION })
+      expect(saved.models).toHaveLength(modelRows)
+      expect(saved.models[0]).toMatchObject({ id: 'grok-4.7', isDefault: true })
+      process.stdout.write(
+        `CATALOG_NOTIFICATIONS ${JSON.stringify({
+          updates,
+          modelRows,
+          projectionReads,
+          projectedModelRows,
+          publicationCalls: publications.mock.calls.length,
+          saves,
+          savedBytes,
+          notificationBytes,
+          elapsedMs: performance.now() - start
+        })}\n`
+      )
+    } finally {
+      catalog.stop()
+      reads.mockRestore()
+      publications.mockRestore()
+      await closeProviderTimelineRigs()
+    }
+  }
+)

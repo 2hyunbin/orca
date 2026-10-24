@@ -21,6 +21,7 @@ import { onAtRestCommandContextRetired } from '../agent-session-wire/at-rest-com
 import {
   createAgentModelCatalogSnapshot,
   agentModelCatalogRequestKey,
+  agentModelCatalogReleasedOwner,
   agentModelCatalogScopeIdentity,
   retireAgentModelCatalogRequests,
   agentModelCatalogMemoryBinding,
@@ -227,7 +228,7 @@ export function createAgentModelCatalogService(
         await bound.projecting
         return
       }
-      if (!exact && scoped?.lease?.claimStatus === 'released' && scoped.lease.deathEvidence) {
+      if (!exact && agentModelCatalogReleasedOwner(scoped)) {
         return
       }
       const probe = deps.probes?.[params.agent]
