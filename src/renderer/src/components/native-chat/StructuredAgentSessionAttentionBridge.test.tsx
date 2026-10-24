@@ -50,8 +50,13 @@ const mocks = vi.hoisted<BridgeMocks>(() => ({
 
 vi.mock('@/store', async () => {
   const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
+  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
   const useAppStore = createTestStore()
-  mocks.store = useAppStore
+  mocks.store = {
+    getState: getAgentStatusOwner(useAppStore).getState,
+    setState: (patch) => applyAgentStatusPatch(useAppStore, patch)
+  }
   return { useAppStore }
 })
 

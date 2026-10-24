@@ -1,5 +1,5 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getAgentStatusState } from '@/store/agent-status'
-import type { useAppStore } from '@/store'
 import { isWorkspaceSleepRecord } from '../../../shared/workspace-sleep'
 import {
   agentProviderSessionsEqual,
@@ -82,7 +82,7 @@ function getAgentStatusTabId(entry: {
 
 function activeOrQueuedResumeClaimsProviderSession(
   record: SleepingAgentSessionRecord,
-  state: ReturnType<typeof useAppStore.getState>,
+  state: AgentStatusReadState,
   samePaneOwnsRecovery: boolean
 ): boolean {
   const worktreeTabIds = new Set(
@@ -165,7 +165,7 @@ function activeOrQueuedResumeClaimsProviderSession(
 
 function providerSessionOwnedElsewhere(
   record: SleepingAgentSessionRecord,
-  state: ReturnType<typeof useAppStore.getState>
+  state: AgentStatusReadState
 ): boolean {
   // Same-worktree duplicates are handled by claim keys; finished notes never claim a session, and
   // neither does a record whose host moved or that names a different machine than this record.

@@ -79,8 +79,8 @@ export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): 
         options.agentCompletionSource === 'process-exit' &&
         isFreshNonDoneAgentStatus(currentStatus) &&
         (!agentStatusAtSchedule ||
-          currentStatus.state !== agentStatusAtSchedule.state ||
-          currentStatus.stateStartedAt !== agentStatusAtSchedule.stateStartedAt ||
+          currentStatus?.state !== agentStatusAtSchedule.state ||
+          currentStatus?.stateStartedAt !== agentStatusAtSchedule.stateStartedAt ||
           hasDifferentKnownAgent)
       )
     }

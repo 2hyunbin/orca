@@ -119,9 +119,8 @@ export function createAgentStatusProviderSessionActions(
             origin: preservesQuitOrigin ? 'quit' : 'live'
           }
           removedLiveStatus = existingStatus !== undefined
-          const nextLive = removedLiveStatus
-            ? { ...s.agentStatusByPaneKey }
-            : s.agentStatusByPaneKey
+          const nextLive: Record<string, (typeof s.agentStatusByPaneKey)[string]> =
+            removedLiveStatus ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
           if (removedLiveStatus) {
             delete nextLive[paneKey]
           }

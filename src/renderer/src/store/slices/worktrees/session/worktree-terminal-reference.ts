@@ -1,3 +1,4 @@
+import { getAgentStatusOwner } from '../../../agent-status-commit'
 import type { Repo } from '../../../../../../shared/repo-types'
 import {
   getRepoExecutionHostId,
@@ -45,7 +46,7 @@ export function createObserveTerminalGitHubPullRequestLink(
   const pending = new Set<string>()
   const confirmations = new PrioritySemaphore(3)
   return (worktreeId, link, context) => {
-    const state = get()
+    const state = getAgentStatusOwner({ getState: get }).getState()
     const owner = context ? resolveTerminalNotificationOwner(state, worktreeId, context) : null
     const hostId = owner?.executionHostId ?? undefined
     if (context && (!hostId || (context.executionHostId && context.executionHostId !== hostId))) {
@@ -84,7 +85,7 @@ export function createObserveTerminalGitHubPullRequestLink(
       if (!context) {
         return true
       }
-      const latest = get()
+      const latest = getAgentStatusOwner({ getState: get }).getState()
       const latestOwner = resolveTerminalNotificationOwner(latest, worktreeId, context)
       const latestOrigin = getWorkspaceAttachmentTerminalOrigin(latest, worktreeId, context, hostId)
       return (

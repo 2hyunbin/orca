@@ -218,7 +218,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       // only a different known active owner can veto confirmed old-process exit.
       return Boolean(
         isFreshNonDoneAgentStatus(currentStatus) &&
-        currentStatus.agentType &&
+        currentStatus?.agentType &&
         currentStatus.agentType !== 'unknown' &&
         currentAgentForExited !== exited.agent
       )

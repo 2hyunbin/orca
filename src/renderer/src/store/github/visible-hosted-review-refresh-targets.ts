@@ -1,3 +1,4 @@
+import type { AppState } from '../types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getDetachedWorkspaceReviewRequest } from '@/components/sidebar/workspace-detached-review-request'
 
@@ -25,7 +26,7 @@ import { shouldCoordinateVisibleGitHubReview } from './visible-hosted-review-ref
 import { selectDetectedWorktreesByRepo, selectWorktreesByRepo } from '../workspace-record-selectors'
 
 export function* getVisibleHostedReviewWorkspaces(
-  state: AgentStatusReadState,
+  state: AppState,
   options?: { selectedOnly?: boolean }
 ) {
   const visibleHosts =
@@ -79,8 +80,8 @@ export function* getVisibleHostedReviewWorkspaces(
 }
 
 export function getVisibleHostedReviewRefreshTargets(
-  state: AgentStatusReadState,
-  getState: () => AgentStatusReadState,
+  state: AppState,
+  getState: () => AppState,
   options?: { selectedOnly?: boolean }
 ): VisibleHostedReviewRefreshTarget[] {
   const targets = new Map<string, VisibleHostedReviewRefreshTarget>()

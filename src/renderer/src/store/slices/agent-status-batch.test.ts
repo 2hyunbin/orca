@@ -153,7 +153,15 @@ describe('setAgentStatuses', () => {
       }
     })
     sequentialStore.setState({
-      setGeneratedTabTitleFromAgentPrompt: sequentialTitleGeneration
+      setGeneratedTabTitlesFromAgentPrompts: (updates) => {
+        for (const update of updates) {
+          if (update.options) {
+            sequentialTitleGeneration(update.paneKey, update.prompt, update.options)
+          } else {
+            sequentialTitleGeneration(update.paneKey, update.prompt)
+          }
+        }
+      }
     })
     batchStore.setState({
       setGeneratedTabTitlesFromAgentPrompts: batchTitleGenerationBulk
@@ -190,15 +198,15 @@ describe('setAgentStatuses', () => {
     const outcomes = batchStore.getState().setAgentStatuses(updates)
 
     expect(outcomes).toEqual([true, true, true, true, false, true, true])
-    expect(selectBatchState(batchStore.getState())).toEqual(
-      selectBatchState(sequentialStore.getState())
+    expect(selectBatchState(getAgentStatusOwner(batchStore).getState())).toEqual(
+      selectBatchState(getAgentStatusOwner(sequentialStore).getState())
     )
     expect(
-      batchStore.getState().agentStatusByPaneKey[FIRST_PANE].stateHistory.at(-1)
+      getAgentStatusOwner(batchStore).getSnapshot()[FIRST_PANE].stateHistory.at(-1)
     ).toMatchObject({ state: 'done' })
     // The swallowed `done`'s output survives on the entry, not on the history row.
     expect(
-      batchStore.getState().agentStatusByPaneKey[FIRST_PANE].lastCompletedAssistantMessage
+      getAgentStatusOwner(batchStore).getSnapshot()[FIRST_PANE].lastCompletedAssistantMessage
     ).toBe('Finished.')
     expect(batchTitleGeneration.mock.calls).toEqual(sequentialTitleGeneration.mock.calls)
     expect(batchTitleGeneration).toHaveBeenCalledTimes(5)
@@ -208,8 +216,8 @@ describe('setAgentStatuses', () => {
     expect(sequentialStore.getState().refreshGitHubForWorktreeIfStale).toHaveBeenCalledTimes(1)
 
     vi.advanceTimersByTime(AGENT_STATUS_STALE_AFTER_MS + 1)
-    expect(selectBatchState(batchStore.getState())).toEqual(
-      selectBatchState(sequentialStore.getState())
+    expect(selectBatchState(getAgentStatusOwner(batchStore).getState())).toEqual(
+      selectBatchState(getAgentStatusOwner(sequentialStore).getState())
     )
   })
 

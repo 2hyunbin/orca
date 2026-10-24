@@ -65,7 +65,9 @@ export function createAgentStatusCleanupActions(
       }
       set((s) => {
         const hasLive = paneKey in s.agentStatusByPaneKey
-        const next = hasLive ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
+        const next: Record<string, (typeof s.agentStatusByPaneKey)[string]> = hasLive
+          ? { ...s.agentStatusByPaneKey }
+          : s.agentStatusByPaneKey
         if (hasLive) {
           delete next[paneKey]
         }

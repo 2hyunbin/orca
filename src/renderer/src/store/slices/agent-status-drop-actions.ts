@@ -75,7 +75,9 @@ export function createAgentStatusDropActions(
           }
           return Object.keys(cleanupPatch).length > 0 ? cleanupPatch : s
         }
-        const nextLive = hasLive ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
+        const nextLive: Record<string, (typeof s.agentStatusByPaneKey)[string]> = hasLive
+          ? { ...s.agentStatusByPaneKey }
+          : s.agentStatusByPaneKey
         if (hasLive) {
           delete nextLive[paneKey]
         }
@@ -202,7 +204,9 @@ export function createAgentStatusDropActions(
           return Object.keys(cleanupPatch).length > 0 ? cleanupPatch : s
         }
         hadLive = hasLive
-        const nextLive = hasLive ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
+        const nextLive: Record<string, (typeof s.agentStatusByPaneKey)[string]> = hasLive
+          ? { ...s.agentStatusByPaneKey }
+          : s.agentStatusByPaneKey
         if (hasLive) {
           delete nextLive[paneKey]
         }

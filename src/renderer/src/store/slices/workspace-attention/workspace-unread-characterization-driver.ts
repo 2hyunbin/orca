@@ -67,7 +67,7 @@ export function toggleUnreadByUser(
 
 /** on-screen-attention-scan: the viewed terminal tab's agent is acknowledged (markers are the scan's). */
 export function autoAckViewedTab(store: AttentionStore, target: PaneTarget): void {
-  acknowledgeViewedAutoAckTarget(store.getState(), {
+  acknowledgeViewedAutoAckTarget(getAgentStatusOwner(store).getState(), {
     tabId: target.tabId,
     worktreeId: target.worktreeId,
     surfaceKind: 'terminal'

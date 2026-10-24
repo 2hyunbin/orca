@@ -134,7 +134,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     const entry = getAgentStatusEntry(session.cacheKey)
     return (
       session.commandInferredPaneAgent ??
-      (session.isFreshActivePaneAgentEntry(entry) ? entry.agentType : undefined)
+      (session.isFreshActivePaneAgentEntry(entry) ? entry?.agentType : undefined)
     )
   }
   session.clearInferredInterruptWorkingTitle = (): void => {

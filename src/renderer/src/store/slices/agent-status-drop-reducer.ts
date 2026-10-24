@@ -137,7 +137,8 @@ export function buildAgentStatusTabPrefixDropPatch(
     }
     hadLive = liveKeys.length > 0
 
-    const nextLive = liveKeys.length > 0 ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
+    const nextLive: Record<string, (typeof s.agentStatusByPaneKey)[string]> =
+      liveKeys.length > 0 ? { ...s.agentStatusByPaneKey } : s.agentStatusByPaneKey
     for (const key of liveKeys) {
       delete nextLive[key]
     }

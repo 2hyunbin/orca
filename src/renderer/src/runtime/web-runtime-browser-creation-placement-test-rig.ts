@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '../store/agent-status-patch'
 import { getAgentStatusState } from '@/store/agent-status'
 import { vi } from 'vitest'
 import type { BrowserPage, BrowserWorkspace } from '../../../shared/browser-workspace-types'
@@ -170,7 +171,7 @@ export function publishHostSnapshot(): void {
     [SOURCE.pageId, AFTER.pageId, OTHER.pageId, ...hostPages].map((id) => hostBrowserTab(id)),
     { snapshotVersion, activeTabType: 'browser', activeTabId: null }
   )
-  useAppStore.setState((state) =>
+  applyAgentStatusPatch(useAppStore, (state) =>
     applyWebSessionTabsSnapshot(state, snapshot, ENV, NOW + snapshotVersion)
   )
 }

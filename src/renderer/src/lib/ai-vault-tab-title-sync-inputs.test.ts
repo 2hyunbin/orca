@@ -1,5 +1,13 @@
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
-import { createStore } from 'zustand/vanilla'
+import {
+  createTestStore,
+  makeAgentStatusReadState,
+  makeWorktree
+} from '@/store/slices/store-test-helpers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
+import { subscribeAgentStatusState } from '@/store/agent-status'
+import type { AgentStatusEntry } from '../../../shared/agent-status-types'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
@@ -15,7 +23,7 @@ const COLLECTIONS = [
 type Collection = (typeof COLLECTIONS)[number]
 
 function makeState(count = 1): AgentStatusReadState {
-  const live: AgentStatusReadState['agentStatusByPaneKey'] = {}
+  const live: Record<string, AgentStatusEntry> = {}
   const retained: AgentStatusReadState['retainedAgentsByPaneKey'] = {}
   const sleeping: AgentStatusReadState['sleepingAgentSessionsByPaneKey'] = {}
   const tabs: TerminalTab[] = []
@@ -62,7 +70,7 @@ function makeState(count = 1): AgentStatusReadState {
       }
     }
   }
-  return {
+  return makeAgentStatusReadState({
     agentStatusByPaneKey: live,
     retainedAgentsByPaneKey: retained,
     sleepingAgentSessionsByPaneKey: sleeping,
@@ -70,12 +78,13 @@ function makeState(count = 1): AgentStatusReadState {
     terminalLayoutsByTabId: {},
     activeWorktreeId: 'wt-title',
     activeWorkspaceExecutionHostId: 'local',
-    worktreesByRepo: { fixture: [{ id: 'wt-title', repoId: 'fixture', hostId: 'local' }] },
+    worktreesByRepo: {
+      fixture: [makeWorktree({ id: 'wt-title', repoId: 'fixture', hostId: 'local' })]
+    },
     detectedWorktreesByRepo: {},
     folderWorkspaces: [],
-    repos: [],
-    settings: {}
-  } as unknown as AgentStatusReadState
+    repos: []
+  })
 }
 
 function replaceProvider(
@@ -105,18 +114,20 @@ describe('AI Vault title subscription inputs', () => {
       })
     state.retainedAgentsByPaneKey = observeEnumerations(state.retainedAgentsByPaneKey)
     state.sleepingAgentSessionsByPaneKey = observeEnumerations(state.sleepingAgentSessionsByPaneKey)
-    const store = createStore<AgentStatusReadState>(() => state)
+    const store = createTestStore()
+    applyAgentStatusPatch(store, state)
+    const owner = getAgentStatusOwner(store)
     const scheduleReconcile = vi.fn(() => () => {})
     const stop = startAiVaultTabTitleSync({
-      getState: store.getState,
-      subscribe: store.subscribe,
+      getState: owner.getState,
+      subscribe: (listener) => subscribeAgentStatusState(listener, store),
       scheduleReconcile,
       resolveSessionTitles: vi.fn()
     })
     try {
       const paneKey = Object.keys(state.agentStatusByPaneKey)[0]
       for (let index = 0; index < 50; index++) {
-        store.setState((current) => ({
+        applyAgentStatusPatch(store, (current) => ({
           agentStatusByPaneKey: {
             ...current.agentStatusByPaneKey,
             [paneKey]: { ...current.agentStatusByPaneKey[paneKey], updatedAt: index + 2 }
@@ -135,11 +146,8 @@ describe('AI Vault title subscription inputs', () => {
     (collection) => {
       const state = makeState()
       const paneKey = Object.keys(state[collection])[0]
-      const provider =
-        collection === 'retainedAgentsByPaneKey'
-          ? state.retainedAgentsByPaneKey[paneKey].entry.providerSession!
-          : (state[collection][paneKey] as { providerSession: AgentProviderSessionMetadata })
-              .providerSession
+      const record = state[collection][paneKey]
+      const provider = 'entry' in record ? record.entry.providerSession! : record.providerSession!
       for (const patch of [
         { id: 'changed' },
         { key: 'conversation_id' as const },

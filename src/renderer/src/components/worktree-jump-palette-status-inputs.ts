@@ -67,7 +67,7 @@ export const EMPTY_PALETTE_STATUS_INPUTS: PaletteStatusInputs = Object.freeze({
  * The two hot maps are deliberately absent — see `selectPaletteIndexStatusSnapshot`.
  */
 export function selectPaletteStatusInputs(
-  s: PaletteStatusInputsState,
+  s: PaletteStatusInputs,
   active: boolean
 ): PaletteStatusInputs {
   if (!active) {

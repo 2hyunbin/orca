@@ -65,7 +65,11 @@ export function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentS
   } as AgentStatusReadState
 }
 
-export function createCleanupTestStore(removeWorktree: ReturnType<typeof vi.fn> = vi.fn()) {
+export function createCleanupTestStore(
+  removeWorktree: AgentStatusReadState['removeWorktree'] = vi.fn<
+    AgentStatusReadState['removeWorktree']
+  >()
+) {
   const store = createTestStore()
   seedStore(store, { removeWorktree })
   return store

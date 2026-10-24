@@ -47,8 +47,13 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', async () => {
   const { createTestStore } = await import('@/store/slices/store-test-helpers')
+  const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
+  const { applyAgentStatusPatch } = await import('@/store/agent-status-patch')
   const useAppStore = createTestStore()
-  mocks.holder.store = useAppStore
+  mocks.holder.store = {
+    getState: getAgentStatusOwner(useAppStore).getState,
+    setState: (patch) => applyAgentStatusPatch(useAppStore, patch)
+  }
   return { useAppStore }
 })
 

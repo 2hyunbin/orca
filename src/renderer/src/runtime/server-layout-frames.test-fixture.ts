@@ -1,3 +1,4 @@
+import type { AppState } from '../store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -159,8 +160,8 @@ export function runtimeEnvironment(
 }
 
 type MirrorStore = {
-  getState: () => AgentStatusReadState
-  setState: (patch: Partial<AgentStatusReadState>) => void
+  getState: () => AppState
+  setState: (patch: Partial<AppState>) => void
 }
 
 /** Applies one session.tabs snapshot the way the mirror commits it. */

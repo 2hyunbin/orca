@@ -47,7 +47,7 @@ type PublisherRow = {
  * legacy row or a paired runtime's SSH row counts as the purged copy, not a twin.
  */
 function resolvePurgedPublishers(
-  s: AgentStatusReadState,
+  s: AppState,
   workspaceId: string,
   purgedHosts: ReadonlySet<ExecutionHostId>
 ): { survivors: ExecutionHostId[]; attributedHostIds: Map<ExecutionHostId, ExecutionHostId> } {
@@ -112,7 +112,7 @@ export type HostTwinPurgeScopes = Map<ExecutionHostId, Map<string, ExecutionHost
 
 /** Host targets whose id a host outside the purge still publishes. A raw id for the same id wins. */
 export function collectHostTwinPurgeScopes(
-  s: AgentStatusReadState,
+  s: AppState,
   targets: readonly WorktreePurgeTarget[]
 ): HostTwinPurgeScopes {
   const rawIds = new Set(targets.filter((target) => !target.hostId).map((target) => target.id))

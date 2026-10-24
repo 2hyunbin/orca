@@ -61,7 +61,7 @@ export function enqueueWorkspaceCleanupProgress(
   scanToken: number,
   getState: () => AgentStatusReadState,
   setState: (
-    partial: Partial<AppState> | ((state: AgentStatusReadState) => Partial<AppState>),
+    partial: Partial<AppState> | ((state: AppState) => Partial<AppState>),
     replace?: false
   ) => void
 ): void {
@@ -100,7 +100,7 @@ async function applyWorkspaceCleanupProgress(
   scanToken: number,
   getState: () => AgentStatusReadState,
   setState: (
-    partial: Partial<AppState> | ((state: AgentStatusReadState) => Partial<AppState>),
+    partial: Partial<AppState> | ((state: AppState) => Partial<AppState>),
     replace?: false
   ) => void
 ): Promise<void> {

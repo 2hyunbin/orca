@@ -10,6 +10,7 @@ import {
   createAgentStatusReadViews,
   createAgentStatusTransaction,
   writeAgentStatusFold,
+  type AgentStatusTransaction,
   type StatusStage
 } from './agent-status-fold'
 import { bindTerminalFactGetters } from './terminal-fact-publication'

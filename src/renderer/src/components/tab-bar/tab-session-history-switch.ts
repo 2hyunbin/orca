@@ -1,3 +1,4 @@
+import type { AppState } from '@/store/types'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // Resolves a tab to its Agent Session History row so both menus offer the same surface switches.
 

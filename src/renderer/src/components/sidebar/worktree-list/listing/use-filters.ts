@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getAgentStatusState } from '@/store/agent-status'
 import { useCallback } from 'react'
 import { useAppStore } from '@/store'
@@ -46,7 +47,7 @@ import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 export type SidebarWorktreeFilters = ReturnType<typeof useSidebarWorktreeFilters>
 
 type RevealContext = {
-  state: AppState
+  state: AgentStatusReadState
   worktree: Worktree
   repo: Repo | undefined
   targetHostId: ExecutionHostId

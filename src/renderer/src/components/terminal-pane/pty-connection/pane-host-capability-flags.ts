@@ -239,16 +239,18 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
 }
 
 export function installWindowsDoneTerminalModeReset(
-  session: Pick<
-    ConnectPanePtySession,
-    | 'state'
-    | 'cacheKey'
-    | 'paneStartup'
-    | 'suppressNativeWindowsIdleCodexFocusReports'
-    | 'setFocusReportSuppressionForAgentCompletion'
-    | 'unsubscribeWindowsDoneTerminalModeReset'
-    | 'queueAgentIdleTerminalModeReset'
-  >
+  session:
+    | Pick<
+        ConnectPanePtySession,
+        | 'state'
+        | 'cacheKey'
+        | 'paneStartup'
+        | 'suppressNativeWindowsIdleCodexFocusReports'
+        | 'setFocusReportSuppressionForAgentCompletion'
+        | 'unsubscribeWindowsDoneTerminalModeReset'
+        | 'queueAgentIdleTerminalModeReset'
+      >
+    | ConnectPanePtySession
 ): void {
   const initialAgentStatus = session.state.agentStatusByPaneKey[session.cacheKey]
   let lastAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(initialAgentStatus)

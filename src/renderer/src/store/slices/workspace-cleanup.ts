@@ -162,10 +162,15 @@ export const createWorkspaceCleanupSlice: StateCreator<AppState, [], [], Workspa
     return attemptId
   },
   removeWorkspaceCleanupCandidates: (worktreeIds, options) =>
-    removeWorkspaceCleanupCandidates(get, set, worktreeIds, {
-      ...options,
-      getConsentAttemptId: (identity) => unverifiedRemovalConsentByStore.get(get)?.get(identity)
-    }).finally(() => {
+    removeWorkspaceCleanupCandidates(
+      getAgentStatusOwner({ getState: get }).getState,
+      set,
+      worktreeIds,
+      {
+        ...options,
+        getConsentAttemptId: (identity) => unverifiedRemovalConsentByStore.get(get)?.get(identity)
+      }
+    ).finally(() => {
       const consent = options?.unverifiedRemovalConsent as
         | WorkspaceCleanupUnverifiedRemovalConsent
         | undefined

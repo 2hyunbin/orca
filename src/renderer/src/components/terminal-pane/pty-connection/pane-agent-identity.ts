@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getAgentStatusState, getAgentStatusEntry } from '@/store/agent-status'
 import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { dismissRetainedProgramResult } from '@/lib/program-status/result-retention'
@@ -31,7 +32,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   // Why: the 133;D confirmation guard and the visible-pane resampler both key off
   // "does this pane expect an agent"; derive each signal once so the two callers
   // can't drift and silently reintroduce the icon bug this fix closes.
-  session.paneHasLiveHookAgentIcon = (state: ReturnType<typeof useAppStore.getState>): boolean => {
+  session.paneHasLiveHookAgentIcon = (state: AgentStatusReadState): boolean => {
     const entry = state.agentStatusByPaneKey[session.cacheKey]
     return entry?.state !== 'done' && Boolean(agentTypeToIconAgent(entry?.agentType))
   }
@@ -248,8 +249,7 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
     // Why: the finished command may have moved HEAD or the index (e.g.
     // `git checkout`); nudge git UI now instead of waiting for a poll.
     dispatchTerminalCommandFinishedEvent(session.deps.worktreeId, bestEffortExitCode)
-    const state = getAgentStatusState()
-    const entry = state.agentStatusByPaneKey[session.cacheKey]
+    const entry = getAgentStatusEntry(session.cacheKey)
     const inferenceResult = session.flushPendingInterruptInference()
     const dropStatus = (): void => {
       if (inferenceResult === true) {
