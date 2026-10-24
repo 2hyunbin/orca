@@ -45,10 +45,10 @@ import type { AgentSessionExecutionOptions } from '../../../shared/agent-session
 import type { AgentSessionPromptResponse } from '../../../shared/agent-session-question-answer'
 import type { ProviderHistoryWindow } from '../agent-session-journal/journal-submission-reconciler'
 import type {
-  StructuredAgentSessionStartupAttempt,
+  StructuredAgentSessionAcquireInput,
   StructuredAgentSessionAcquisitionReceipt
 } from './structured-agent-session-startup-attempt-contract'
-import type { AgentSessionCreatePhaseRecorder } from '../../observability/agent-session-instrumentation'
+export type { StructuredAgentSessionAcquireInput } from './structured-agent-session-startup-attempt-contract'
 import type {
   StructuredAgentSessionProviderOpen,
   StructuredAgentSessionProviderOpenResult
@@ -206,17 +206,6 @@ export type StructuredAgentSessionLifecycleEvent =
   | StructuredAgentSessionOptionsReportedEvent
 
 export type StructuredAgentSessionProviderChildPhase = 'starting' | 'ready'
-
-/** Host passes the whole startup attempt; optional fields permit minimal adapter test inputs. */
-export type StructuredAgentSessionAcquireInput = Pick<
-  StructuredAgentSessionStartupAttempt,
-  'identity' | 'fence' | 'spawnToken'
-> &
-  Partial<Omit<StructuredAgentSessionStartupAttempt, 'identity' | 'fence' | 'spawnToken'>> & {
-    recordPhase?: AgentSessionCreatePhaseRecorder
-    /** Persist process identity before handshake so mid-start crashes leave a recoverable owner; returned process must match. */
-    onSpawned?: (process: AgentSessionProcessIdentity) => Promise<void>
-  }
 
 export type StructuredAgentSessionSetOptionInput = {
   sessionId: string
