@@ -256,7 +256,8 @@
         "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account.",
         "antigravityAccount": "Account",
         "antigravitySignInNeeded": "Chats need an Antigravity sign-in, separate from your agy terminal account."
-      }
+      },
+      "permissionsDescriptionOwnAgents": "New chats of agents set to their own settings in Settings → Agents. Other agents start chats in their permission there."
     },
     "terminal": {
       "optionLayoutAlt": "ABC or U.S. — Option sends Alt/Esc sequences",
@@ -479,7 +480,23 @@
       "customPermissions": "Custom arguments",
       "replaceWithPermissionMode": "Replace with {{mode}}",
       "expandAgentSettings": "Expand agent settings",
-      "collapseAgentSettings": "Collapse agent settings"
+      "collapseAgentSettings": "Collapse agent settings",
+      "permissionArgsTerminalOnly": "These arguments may control {{agent}}’s terminal permissions, so Orca adds no flag. Chats use the Permissions choice above.",
+      "localSaveFailed": "Agent settings could not be saved. Try again.",
+      "localSaveFailedAgent": "{{agent}} settings could not be saved. Try again.",
+      "permissionFromArgs": "{{agent}} set to {{mode}} in terminals and new chats.",
+      "permissionFromArgsTerminals": "{{agent}} set to {{mode}} in terminals.",
+      "permissionOwnAgent": "Use {{agent}}'s own settings",
+      "permissionOwnAll": "Agents' own settings",
+      "permissionOwnDescription": "Orca adds no permission flag in terminals; chats use Settings → Chat.",
+      "permissionChoiceDescription": "Applies where each agent supports this mode. Change one agent below.",
+      "permissionOwnShort": "Own settings",
+      "permissionWithoutAuto": "Agents without Approve for me",
+      "permissionSurfaceDifference": "Terminals use the agent’s own settings; new chats use {{mode}}.",
+      "permissionSameAsAll": "Same as all agents",
+      "permissionChipRemove": "Remove {{flag}} and use {{agent}}'s own settings",
+      "permissionChipTooltip": "Added by Permissions. Remove it to use {{agent}}’s own settings.",
+      "permissionResetsOwnChoices": "Choosing a mode here resets the agents marked as set separately."
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -1408,6 +1425,8 @@
         "nativeDropPathsTooLargeDescription": "Drop fewer files or use a shorter path list.",
         "nativeDropPathsTooLarge": "Drop path list is too large.",
         "ownerChanged": "Couldn't verify which host owns this workspace. Try again after it reconnects.",
+        "hostMismatch": "This editor is on a different host. Open the file from its source workspace.",
+        "workspaceOpenFailed": "Could not open {{fileName}}. Open it from its source workspace and try again.",
         "nativeDropUnresolvedPathsDescription": "Save them to disk first, then drop the saved files.",
         "nativeDropUnresolvedPaths": "Orca couldn't read a path for the dropped files.",
         "nativeDropTempCopyFailed": "Orca couldn't copy {{count}} dropped files.",
@@ -3794,12 +3813,15 @@
             "restoring": "Restoring terminal…"
           },
           "AgentLaunchPaneNotice": {
-            "commandNotFound": "Its command wasn't found on this machine.",
+            "agent": "The agent",
+            "commandNotFound": "{{agent}} couldn't start because its command wasn't found on this machine.",
             "copyPrompt": "Copy prompt",
-            "exitedDuringStart": "It exited while starting.",
-            "notStarted": "The agent couldn't start.",
-            "unconfirmed": "Couldn't confirm the agent started.",
-            "workspaceGone": "Its workspace is no longer available."
+            "exitedDuringStart": "{{agent}} exited while starting.",
+            "notStarted": "{{agent}} couldn't start.",
+            "restoreWorkspace": "Restore the workspace folder or open an available workspace, then try again.",
+            "tryInTerminal": "Run it in a terminal in this folder to see why, then try again.",
+            "unconfirmed": "Couldn't confirm {{agent}} started. Check its terminal before trying again.",
+            "workspaceGone": "{{agent}} couldn't start because its workspace is no longer available."
           },
           "TerminalSleepingPaneOverlay": {
             "pausedDetail": "Automatic restores are paused because the host stopped unexpectedly. Your session is saved.",
@@ -18807,7 +18829,8 @@
     "jiraUserPicker": {
       "select": "Select {{value0}}",
       "search": "Search users",
-      "empty": "No users found"
+      "empty": "No users found",
+      "useKnownId": "Use known user ID \"{{value0}}\""
     },
     "native-chat": {
       "install": {
