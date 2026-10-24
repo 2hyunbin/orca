@@ -49,10 +49,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
     notifyRuntimeListeners(listeners, (listener) => listener(event), 'pty-resize')
   }
 
-  // Why: Section 7.2 — the runtime detects agent exit directly and updates
-  // dispatch contexts immediately, rather than waiting for the coordinator's
-  // next poll cycle. This catches agent crashes and unexpected exits within
-  // milliseconds. The task is set back to 'pending' so it can be re-dispatched.
+  // Fail active dispatches immediately on unexpected agent exit and return tasks to pending, without waiting for coordinator polling.
   protected failActiveDispatchOnExit(
     handle: string,
     paneKey: string | null,
@@ -72,10 +69,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
     if (!dispatch) {
       return
     }
-    // A process that dies while we are stopping it is that stop succeeding, not a failure:
-    // settling it as `failed` here made the in-flight worker-stop report its own success as an error.
-    // Only a stop begun in THIS runtime can claim the exit; a `stopping` row left durable by a
-    // killed process would otherwise absorb a much later crash as a clean stop.
+    // Only this runtime's in-flight stop claims a clean exit; durable stopping rows from a crashed runtime cannot absorb later crashes.
     const stopping = this._orchestrationDb.getWorkerDispatch?.(dispatch.id)
     if (stopping?.state === 'stopping' && stopping.runtime_epoch === this.getRuntimeId()) {
       this._orchestrationDb.settleWorkerStop(dispatch.id)
@@ -91,9 +85,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
       return
     }
 
-    // Why: create an escalation message so the coordinator is notified about
-    // the unexpected exit on its next check cycle, even if the circuit breaker
-    // hasn't tripped yet.
+    // Escalate unexpected exits on the next coordinator check even before its circuit breaker trips.
     try {
       const owningRun = this._orchestrationDb.getRun?.(dispatch.run_id)
       const active = this._orchestrationDb.getActiveCoordinatorRun?.()
@@ -107,8 +99,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
         return
       }
       const task = this._orchestrationDb.getTask?.(dispatch.task_id, dispatch.run_id)
-      // Why: prefer the explicit task title and keep the derived one single-line and bounded;
-      // a raw multi-paragraph spec inlined here breaks the coordinator's escalation banner.
+      // Prefer explicit task titles; bound derived titles to one line so specs cannot break escalation banners.
       const title =
         typeof task?.spec === 'string'
           ? buildOrchestrationTaskDisplayMetadata({
@@ -162,12 +153,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
   ): Promise<'live' | 'exited' | 'unverifiable'> {
     const structuredSessionId = sessionIdFromStructuredWorkerIncarnation(processIncarnation)
     if (structuredSessionId) {
-      // A structured session has no PTY, so the process table can only ever fail to find it —
-      // answering `exited` from that absence would release a running provider child. The durable
-      // agent-session records, walked forward to any `/clear` successor, are asked directly rather
-      // than the in-memory identity registry: settlement forgets the registry entry, so gating on
-      // one made a stopped worker's resource answer `unverifiable` forever and stay in
-      // `worker-list --terminalState retained` for the life of the DB.
+      // Structured workers have no PTY; ask durable session records through /clear successors, since settlement removes in-memory identity entries.
       return observeStructuredWorker({ sessionId: structuredSessionId }).status
     }
     const hostScope = parseWorkerTerminalHostScope(serializedHostScope)
