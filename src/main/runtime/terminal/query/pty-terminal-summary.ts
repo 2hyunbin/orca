@@ -182,6 +182,14 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     return { leaf: ptyMailboxLeaf(pane, pty), pty, handle }
   }
 
+  /** Whether a handle names a terminal; a cancelled promotion clears records the PTY still owns. */
+  protected hasMailboxTerminalHandle(handle: string): boolean {
+    return (
+      this.handles.has(handle) ||
+      (this.servesHeadlessMailboxLane() && this.getLivePtyForHandle(handle) !== null)
+    )
+  }
+
   /** Off a headless graph the lane has no say; on one, only its single pane owner is typed into. */
   protected headlessMailboxLaneAdmitsPty(pty: RuntimePtyWorktreeRecord): boolean {
     return !this.servesHeadlessMailboxLane() || this.getPtyLaneMailboxTargetForPty(pty) !== null

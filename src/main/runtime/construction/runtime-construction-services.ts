@@ -123,6 +123,7 @@ export abstract class RuntimeConstructionServices {
   }
   protected abstract getOrchestrationMailboxLeafForHandle(handle: string): OrchestrationMailboxLeaf
   protected abstract getPtyLaneMailboxTarget(leafKey: string): PtyLaneMailboxTarget | null
+  protected abstract hasMailboxTerminalHandle(handle: string): boolean
   protected abstract startTuiIdleVisibleReadProbe(
     waiter: TerminalWaiter,
     waiterTimeoutMs: number,

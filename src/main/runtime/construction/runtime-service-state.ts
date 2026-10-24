@@ -229,7 +229,7 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
   protected readonly orchestrationMailboxDeliveryTarget = new OrchestrationMailboxDeliveryTarget({
     getDb: () => this._orchestrationDb,
     getTerminalHandleForPaneKey: (paneKey) => this.getTerminalHandleForPaneKey(paneKey),
-    hasTerminalHandle: (handle) => this.handles.has(handle),
+    hasTerminalHandle: (handle) => this.hasMailboxTerminalHandle(handle),
     isStructuredSessionOwner: (handle) =>
       isStructuredWorkerHandle(handle) || handle.startsWith(ORCA_SESSION_ADDRESS_PREFIX),
     canProbePtyLiveness: () => Boolean(this.ptyController?.probePtyLiveness),
@@ -296,7 +296,7 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
         return record ? `${record.tabId}:${record.leafId}` : undefined
       },
       getMessageWaiters: (mailboxHandle) => this.messageWaiters.get(mailboxHandle),
-      hasTerminalHandle: (handle) => this.handles.has(handle),
+      hasTerminalHandle: (handle) => this.hasMailboxTerminalHandle(handle),
       deliverForHandle: (handle, reservedTypes) =>
         this.deliverPendingMessagesForHandle(handle, reservedTypes),
       notifyMessageArrived: (handle, messageType) => this.notifyMessageArrived(handle, messageType),

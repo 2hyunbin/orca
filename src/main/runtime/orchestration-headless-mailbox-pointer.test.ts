@@ -134,11 +134,31 @@ describe('headless orchestration mailbox pointer', () => {
     db.close()
   })
 
+  it('still points an idle coordinator after a desktop promotion is cancelled', async () => {
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    await goIdle(runtime)
+    runtime.attachWindow(1)
+    runtime.markGraphUnavailable(1)
+
+    sendRunMail()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pointerCount(write)).toBe(1)
+    db.close()
+  })
+
   it('does not revive a pane a serve window retracted before it closed', async () => {
     const { db, runtime, write, sendRunMail } = await coordinator()
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
-      tabs: [{ tabId: TAB_ID, worktreeId: WORKTREE_ID, title: 'Codex', activeLeafId: LEAF_ID }],
+      tabs: [
+        {
+          tabId: TAB_ID,
+          worktreeId: WORKTREE_ID,
+          title: 'Codex',
+          activeLeafId: LEAF_ID,
+          layout: null
+        }
+      ],
       leaves: [
         { tabId: TAB_ID, worktreeId: WORKTREE_ID, leafId: LEAF_ID, paneRuntimeId: 1, ptyId: PTY_ID }
       ]
