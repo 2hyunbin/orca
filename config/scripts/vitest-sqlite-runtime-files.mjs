@@ -224,6 +224,7 @@ export const SQLITE_RUNTIME_INCLUDE = [
   'src/main/runtime/agent-session-store-transactions.test.ts',
   'src/main/runtime/agent-session-unsaved-creation-supersession.test.ts',
   'src/main/runtime/automation-change-publication.test.ts',
+  'src/main/runtime/cross-machine-worktree-lineage.test.ts',
   'src/main/runtime/host-terminal-close-persistence-durability.test.ts',
   'src/main/runtime/orca-runtime-terminal-close-records.test.ts',
   'src/main/runtime/orca-runtime-terminal-surface-close.test.ts',

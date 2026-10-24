@@ -4,7 +4,8 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import {
   getCyclicProjectedWorktreeLineageIds,
   getLineageRenderInfo,
-  getWorktreeLineageProjection
+  getWorktreeLineageProjection,
+  getWorktreeLineageIdentity
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 function makeWorktree(id: string): Worktree {
@@ -120,7 +121,9 @@ describe('worktree lineage projection cache', () => {
       b: makeLineage('b', 'a')
     }
     const cyclic = getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)
-    expect([...cyclic].sort()).toEqual(['|a', '|b'])
+    expect([...cyclic].sort()).toEqual(
+      [...worktreeMap.values()].map(getWorktreeLineageIdentity).sort()
+    )
     expect(getCyclicProjectedWorktreeLineageIds(lineageById, worktreeMap)).toBe(cyclic)
     expect(getWorktreeLineageProjection(lineageById, worktreeMap).children.size).toBe(0)
   })
