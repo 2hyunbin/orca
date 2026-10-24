@@ -228,7 +228,8 @@ describe('Antigravity usage gating', () => {
       expect(vi.mocked(fetchCodexRateLimits).mock.calls.length).toBeGreaterThan(1)
       expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(1)
 
-      await vi.advanceTimersByTimeAsync(15 * 60 * 1000)
+      // The 75-minute poll is the first past the hour-long cooldown.
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
       expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(2)
       expect(service.getState().antigravity?.status).toBe('ok')
 
