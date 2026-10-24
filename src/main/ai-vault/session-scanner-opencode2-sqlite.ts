@@ -15,6 +15,7 @@ import {
   shouldCaptureFullFirstUserPrompt
 } from './session-scanner-first-user-prompt'
 import { normalizeTitleText } from './session-scanner-values'
+import { asRecord } from './session-scanner-record-value'
 import {
   extractOpenCode2MessageText,
   decodeOpenCode2Message,
@@ -122,13 +123,7 @@ function extractModelId(modelText: string | null): string | null {
     return trimmed
   }
   try {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
-    const parsed = JSON.parse(trimmed) as unknown
-    const record =
-      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-        ? // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Runtime validation or the local test fixture establishes the asserted shape.
-          (parsed as Record<string, unknown>)
-        : null
+    const record = asRecord(JSON.parse(trimmed))
     if (typeof record?.id === 'string' && record.id.trim()) {
       return record.id
     }
