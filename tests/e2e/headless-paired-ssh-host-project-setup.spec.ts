@@ -6,6 +6,7 @@
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedWebClient } from './helpers/paired-electron-client'
+import { toSshExecutionHostId } from '../../src/shared/execution-host'
 
 const REFUSAL = "This Orca server can't add projects on its SSH hosts."
 
@@ -46,7 +47,7 @@ test('a paired client refuses project setup on its server’s SSH host with a cl
         } finally {
           console.error = original
         }
-      }, `ssh:${sshTarget.result.target.id}`)
+      }, toSshExecutionHostId(sshTarget.result.target.id))
 
       expect(errors.added).toBeNull()
       expect(errors.cloned).toBeNull()
