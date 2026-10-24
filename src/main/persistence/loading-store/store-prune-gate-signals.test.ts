@@ -1,5 +1,5 @@
 import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
-import { closeTestStores, createSqliteTestStore } from '../../persistence-test-harness'
+import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
 // Drive real Store writers so disconnected prune-gate call sites cannot pass unnoticed.
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -43,7 +43,7 @@ beforeEach(() => {
 })
 
 afterEach(async () => {
-  // Cancel debounced writes before deleting temporary roots.
+  // Freeze debounced writes before their temporary directories disappear.
   for (const store of stores.splice(0)) {
     store.freezeWrites()
   }
@@ -108,7 +108,7 @@ describe('store signals to the worktree metadata prune gate', () => {
       hostId: 'local'
     })
 
-    // Ordinary listing scans stamp metadata; rearming on every write would restore the prune storm.
+    // Ordinary scan writes must not rearm pruning and recreate the scan storm.
     expect(isLocalWorktreeMetadataPruneDue(REPO_ID)).toBe(false)
   })
 })

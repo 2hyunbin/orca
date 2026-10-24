@@ -1,4 +1,4 @@
-import { JIRA_ISSUE_KEY_PATTERN } from '../jira-issue-url'
+import { JIRA_ISSUE_KEY_PATTERN } from './jira-issue-url'
 
 // JQL has a closed operator set (plugins add functions); without an operator/leading ORDER BY, treat input as text. Exclude hyphens for sign-in.
 const JQL_OPERATOR_PATTERN = new RegExp(

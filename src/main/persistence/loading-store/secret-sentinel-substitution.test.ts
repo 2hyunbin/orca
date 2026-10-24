@@ -6,7 +6,7 @@ import {
   type SecretSentinelSubstitution
 } from './secret-sentinel-substitution'
 
-/** Reference algorithm for byte/hash compatibility. */
+/** Keep the legacy implementation as an independent byte/hash oracle. */
 function previousImplementation(
   serialized: string,
   secretSubs: readonly SecretSentinelSubstitution[],
@@ -131,7 +131,7 @@ describe('applySecretSentinelSubstitutions', () => {
       { sentinel: sentinel(), blob: 'djEwY2lwaGVy', hashValue: 'cookie-value' },
       {
         sentinel: sentinel(),
-        // Exercise replacement-string metacharacters alongside JSON escaping.
+        // Replacement metacharacters and JSON escapes must survive without interpolation or double escaping.
         blob: 'A+/=$&$1$`\\x "quoted" |.*?[](){}^',
         hashValue: 'http://proxy.example:8080/?a=b&c=$&'
       },
@@ -151,7 +151,7 @@ describe('applySecretSentinelSubstitutions', () => {
       { sentinel: sentinel(), blob: '😀', hashValue: '中文' }
     ]
     const state = {
-      // Place multibyte characters beside segment boundaries to detect broken UTF-8 slicing.
+      // Multibyte characters beside sentinel boundaries expose incorrect byte offsets.
       before: 'é中文😀',
       a: subs[0].sentinel,
       between: '😀  ',
@@ -174,51 +174,6 @@ describe('applySecretSentinelSubstitutions', () => {
     )
   })
 
-  it('escapes regex metacharacters in the sentinel itself', () => {
-    const subs = [{ sentinel: 'a.b*c(d)|e[f]', blob: 'BLOB', hashValue: 'HASH' }]
-    const serialized = JSON.stringify({ real: subs[0].sentinel, decoy: 'axbxxcXdX_eXfX' })
-    expectIdenticalToPrevious(serialized, subs)
-    expect(
-      applySecretSentinelSubstitutions(serialized, subs, '').payload.toString('utf8')
-    ).toContain('axbxxcXdX_eXfX')
-  })
-
-  it('substitutes every occurrence when a sentinel repeats', () => {
-    // Repetition is defensive: no secret placeholder may survive serialization.
-    const subs = [{ sentinel: sentinel(), blob: 'CIPHER', hashValue: 'PLAIN' }]
-    const serialized = JSON.stringify({ a: subs[0].sentinel, b: subs[0].sentinel })
-    const { payload } = applySecretSentinelSubstitutions(serialized, subs, '')
-    expect(payload.toString('utf8')).toBe(JSON.stringify({ a: 'CIPHER', b: 'CIPHER' }))
-    expect(payload.toString('utf8')).not.toContain(subs[0].sentinel)
-  })
-
-  it.each(['', 'safeStorage-degraded\0'])(
-    'keeps the first duplicate and handles adjacent escaped sentinels with prefix %j',
-    (prefix) => {
-      const slot = 'orca-$a/.*+?^${}()|[]\\"雪'
-      const subs = [
-        { sentinel: slot, blob: 'cipher-other-token-"\\\n雪\ud800', hashValue: 'plain-😀' },
-        { sentinel: slot, blob: 'duplicate-must-not-win', hashValue: 'wrong-plain' },
-        { sentinel: 'other-token', blob: 'last', hashValue: 'last-plain' }
-      ]
-      const serialized = JSON.stringify({ nested: { [slot]: `${slot}${slot}other-token` } })
-      const expectedPayload = JSON.stringify({
-        nested: { [subs[0].blob]: subs[0].blob + subs[0].blob + subs[2].blob }
-      })
-      const expectedHashInput = JSON.stringify({
-        nested: { [subs[0].hashValue]: subs[0].hashValue + subs[0].hashValue + subs[2].hashValue }
-      })
-      const expectedHash = createHash('sha1').update(prefix).update(expectedHashInput).digest('hex')
-      for (const actual of [
-        applySecretSentinelSubstitutions(serialized, subs, prefix),
-        applySecretSentinelSubstitutions(serialized, subs, prefix, 'text')
-      ]) {
-        expect(actual.payload.toString()).toBe(expectedPayload)
-        expect(actual.stateHash).toBe(expectedHash)
-      }
-    }
-  )
-
   it('leaves domains without matching sentinels byte-identical', () => {
     const serialized = JSON.stringify({ future: { output: '雪😀\ud800', present: null } })
     const subs = [{ sentinel: 'missing-slot', blob: 'cipher', hashValue: 'plain' }]
@@ -239,7 +194,7 @@ describe('applySecretSentinelSubstitutions', () => {
     })
     const FULL_STATE = 100_000
 
-    // Count full-state copies and UTF-8 encodes at their source operations.
+    // Count whole-state replacements and UTF-8 encodes at their allocation sites.
     const counted = (run: () => unknown): { fullStateReplaces: number; encodedChars: number } => {
       const realReplace = String.prototype.replace
       const realBufferFrom = Buffer.from

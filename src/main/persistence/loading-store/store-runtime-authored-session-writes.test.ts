@@ -1,6 +1,6 @@
 import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
-import { closeTestStores, createSqliteTestStore } from '../../persistence-test-harness'
-// Exercise normal saves and quit staging through Store so both production call sites preserve runtime fields.
+import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
+// Exercise normal saves and quit staging through Store so both production paths preserve runtime fields.
 import { mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,7 +34,7 @@ const WT = 'repo-1::/tmp/worktree-a'
 const stores: InstanceType<typeof Store>[] = []
 
 afterEach(async () => {
-  // Cancel debounced writes before deleting temporary roots.
+  // Freeze debounced writes before their temporary directories disappear.
   for (const store of stores.splice(0)) {
     store.freezeWrites()
   }
@@ -62,6 +62,7 @@ function page(): PersistedClientHostedBrowserPage {
   }
 }
 
+/** Model a renderer session that omits runtime-owned fields. */
 function rendererSession(activeTabId: string): WorkspaceSessionState {
   return {
     activeRepoId: 'repo-1',
@@ -99,6 +100,7 @@ describe('Store keeps runtime-authored session fields across desktop writes', ()
     const store = createStore()
     seedRuntimeRows(store)
 
+    // Quit persistence reaches this final staging write before process exit.
     store.stageWorkspaceSessionBeforeUnload(rendererSession('before-unload'))
 
     expect(store.getWorkspaceSession().clientHostedBrowserPagesByWorktree).toEqual({
@@ -125,7 +127,7 @@ describe('Store keeps runtime-authored session fields across desktop writes', ()
     const store = createStore()
     seedRuntimeRows(store)
 
-    // Empty is an authoritative runtime clear; omission means a renderer does not own the field.
+    // An explicit empty map clears runtime state; renderer omission must preserve it.
     store.setWorkspaceSession({
       ...rendererSession('runtime-clear'),
       clientHostedBrowserPagesByWorktree: {}

@@ -2,7 +2,7 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 // Compact serialization must load identically to legacy full defaults and replicated global fields.
 import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -37,7 +37,7 @@ const HISTORY_ENTRIES = 200
 const REMOTE_HOSTS = Array.from({ length: 9 }, (_, index) => `runtime:env-${index}`)
 const HOSTS_WITH_REPLICA = REMOTE_HOSTS.slice(0, 3)
 const LINKED_ROW_STRIDE = 40
-// Keep fixtures newer than the stale-metadata GC cutoff.
+// Keep fixture metadata newer than the 30-day GC cutoff.
 const RECENTLY = Date.now()
 
 const stores: InstanceType<typeof Store>[] = []
@@ -96,6 +96,7 @@ function session(overrides: Partial<WorkspaceSessionState>): WorkspaceSessionSta
   } as WorkspaceSessionState
 }
 
+/** Model legacy default slots and replicated local-owned global session fields. */
 function writeLegacyFile(dataFile: string): void {
   const worktreeMeta: Record<string, WorktreeMeta> = {}
   for (let index = 0; index < META_ROWS; index++) {
@@ -127,6 +128,7 @@ function writeLegacyFile(dataFile: string): void {
   writeFileSync(dataFile, JSON.stringify(state), 'utf-8')
 }
 
+/** Recreate legacy serialization to isolate savings from omitted defaults and replicated globals. */
 function reexpandToLegacySerialization(state: PersistedState): PersistedState {
   const expanded = structuredClone(state)
   for (const map of [expanded.worktreeMeta, expanded.worktreeMetaByIdentity]) {
@@ -160,7 +162,7 @@ describe('persisted-state redundancy', () => {
     const dataFile = tempDataFile()
     writeLegacyFile(dataFile)
 
-    // Settle startup migrations before comparing serialization shapes.
+    // Settle one-time fixture migrations before comparing serialization.
     openStore(dataFile).flush()
 
     const loaded = openStore(dataFile)
@@ -189,7 +191,7 @@ describe('persisted-state redundancy', () => {
         expect(onDisk.workspaceSessionsByHostId?.[hostId]).not.toHaveProperty(field)
       }
     }
-    // Reexpand the same file to measure redundancy without counting unrelated settings migrations.
+    // Compare equivalent states so missing synthetic-fixture settings do not inflate savings.
     expect(Buffer.byteLength(rewritten)).toBeLessThan(
       Buffer.byteLength(JSON.stringify(reexpandToLegacySerialization(onDisk))) * 0.6
     )

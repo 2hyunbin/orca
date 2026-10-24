@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TerminalQuickCommand } from '../../../shared/terminal-quick-command-types'
-import { MAX_QUICK_COMMANDS } from '../../../shared/terminal-quick-commands'
 import {
   getTerminalQuickCommandPromptMessageBytes,
   MAX_QUICK_COMMAND_AGENT_PROMPT_MESSAGE_BYTES,
@@ -46,7 +45,21 @@ function agentCommand(id: string, prompt: string): TerminalQuickCommand {
   }
 }
 
+// Local and paired saves enforce prompt bounds at this shared store entrypoint.
 describe('updateSettings terminalQuickCommands', () => {
+  it('stores every command in a list larger than forty, including missing projects', () => {
+    const commands = Array.from({ length: 100 }, (_, index) => ({
+      ...agentCommand(`command-${index}`, 'Review this project'),
+      scope: { type: 'repo' as const, repoId: `missing-project-${index}` }
+    }))
+    const operations = makeOperations()
+
+    const saved = updateSettings(operations, { terminalQuickCommands: commands })
+
+    expect(saved.terminalQuickCommands).toEqual(commands)
+    expect(operations.state.settings.terminalQuickCommands).toEqual(commands)
+  })
+
   it('stores a prompt at the limit whole', () => {
     const prompt = promptAtLimit('x')
     const saved = updateSettings(makeOperations(), {
@@ -71,7 +84,7 @@ describe('updateSettings terminalQuickCommands', () => {
   })
 
   it('refuses a list too large for one paired reply', () => {
-    const commands = Array.from({ length: MAX_QUICK_COMMANDS }, (_, index) =>
+    const commands = Array.from({ length: 40 }, (_, index) =>
       agentCommand(`c${index}`, promptAtLimit('界'))
     )
 
@@ -82,7 +95,7 @@ describe('updateSettings terminalQuickCommands', () => {
 })
 
 describe('the quick-command storage bound against every prompt limit on the run path', () => {
-  // Control characters expand to six JSON bytes; CJK stresses the UTF-8 limit.
+  // C0 controls cost six JSON bytes; CJK characters cost three UTF-8 bytes.
   const worstForJson = promptAtLimit('\u0001')
   const worstForUtf8 = promptAtLimit('界')
 

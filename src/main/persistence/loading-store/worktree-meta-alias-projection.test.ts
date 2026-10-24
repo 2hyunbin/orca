@@ -2,8 +2,8 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from '../../persistence-test-harness'
-// Regenerable identity rows may be omitted only when legacy/current readers retain complete locator metadata.
+} from '../persistence-test-harness'
+// Regenerable identity rows may be omitted only when readers retain complete locator metadata.
 import { mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,7 +34,7 @@ const REPO_ID = 'repo-1'
 const LOCAL = 'local'
 const REMOTE = 'ssh:user@host'
 const TWIN_ROWS = 400
-// Keep fixture activity newer than the stale-metadata GC cutoff.
+// Keep fixture metadata newer than the 30-day GC cutoff.
 const RECENTLY = Date.now()
 
 function seededRandom(seed: number): () => number {
@@ -95,9 +95,9 @@ function meta(index: number, random: () => number, overrides: Partial<WorktreeMe
 
 type Fixture = {
   state: PersistedState
-  /** Keys regenerated from locator rows and therefore omitted on disk. */
+  /** Identity keys the locator row regenerates on its own, so they must leave the file. */
   omittable: string[]
-  /** Keys requiring their own durable identity rows. */
+  /** Identity keys no locator row regenerates, so they must stay on disk. */
   irreducible: string[]
 }
 
@@ -140,16 +140,15 @@ function buildFixture(): Fixture {
     lastActivityAt: RECENTLY + 99_999
   })
   worktreeMeta[contested] = { ...localClaim }
-  // Only the host stamped on the locator can regenerate its identity key.
   omittable.push(link(contested, LOCAL, localClaim))
   irreducible.push(link(contested, REMOTE, remoteClaim))
-  // Do not resurrect locators removed by host-scoped pruning.
+  // A pruned locator must stay absent rather than resurrect a deleted workspace.
   const voided = worktreeId(TWIN_ROWS + 2)
   irreducible.push(link(voided, REMOTE, meta(TWIN_ROWS + 2, random, { hostId: REMOTE as never })))
   const dangling = worktreeId(TWIN_ROWS + 3)
   worktreeMeta[dangling] = meta(TWIN_ROWS + 3, random)
   worktreeIdentityAliases[composeWorktreeHostIdentity(LOCAL, dangling)] = ['wt2:local:missing']
-  // Ambiguous aliases must retain every identity row.
+  // Ambiguous aliases cannot regenerate a unique identity, so retain their full locator row.
   const ambiguous = worktreeId(TWIN_ROWS + 4)
   const claimA = meta(TWIN_ROWS + 4, random)
   const claimB = meta(TWIN_ROWS + 4, random, {
@@ -203,7 +202,7 @@ describe('worktree meta alias projection', () => {
     const dataFile = tempDataFile()
     writeFixture(dataFile, fixture.state)
 
-    // Settle one-time settings migrations before comparing metadata serialization.
+    // Settle one-time fixture migrations before comparing serialization.
     openStore(dataFile).flush()
 
     const loaded = openStore(dataFile)
@@ -216,7 +215,7 @@ describe('worktree meta alias projection', () => {
       [...fixture.irreducible].sort()
     )
     expect(fixture.omittable).toHaveLength(TWIN_ROWS + 1)
-    // Complete locator keys preserve downgrade compatibility; compare membership, not just counts.
+    // Assert complete locator keys because they are required for lossless downgrade.
     expect(Object.keys(onDisk.worktreeMeta).sort()).toEqual(Object.keys(before.meta).sort())
 
     const reloaded = openStore(dataFile)
@@ -233,8 +232,8 @@ describe('worktree meta alias projection', () => {
     expect(readPersistedStateJson(dataFile)).toBe(rewritten)
   })
 
-  // Older normalizers can remint identical identities from complete locator rows without the new rebuild.
-  it('loses no row on a build that has no rebuild at all', () => {
+  // Exercise metadata normalization before reimport without claiming this simulates every older build.
+  it('preserves rows through metadata normalization before current Store reimport', () => {
     const fixture = buildFixture()
     const dataFile = tempDataFile()
     writeFixture(dataFile, fixture.state)
@@ -258,7 +257,7 @@ describe('worktree meta alias projection', () => {
     expect(rolledBack.getAllWorktreeMetaForHost(LOCAL)).toEqual(before.local)
     expect(rolledBack.getAllWorktreeMetaForHost(REMOTE as never)).toEqual(before.remote)
 
-    // First touch must remint the original key so re-upgrade cannot fork lineage.
+    // First access must remint the same identity key so re-upgrade compacts the same lineage.
     expect(rolledBack.getWorktreeMetaForHost(worktreeId(0), LOCAL)).toEqual(
       before.meta[worktreeId(0)]
     )
@@ -284,7 +283,7 @@ describe('worktree meta alias projection', () => {
 
     const store = openStore(dataFile)
     const rebuilt = store.getAllWorktreeMeta()
-    // Restore shared references split by JSON.parse to avoid retaining duplicate row objects.
+    // JSON parsing duplicates shared objects; rebuild must restore shared references.
     let shared = 0
     for (let index = 0; index < TWIN_ROWS; index++) {
       if (store.getWorktreeMetaForHost(worktreeId(index), LOCAL) === rebuilt[worktreeId(index)]) {
@@ -323,6 +322,7 @@ describe('worktree meta alias projection', () => {
         worktreeIdentityAliases: aliases as never
       })
       const store = openStore(dataFile)
+      // Malformed aliases cannot justify omitting a locator row.
       expect(Object.keys(store.getAllWorktreeMeta()).length).toBe(
         Object.keys(fixture.state.worktreeMeta).length
       )
@@ -333,11 +333,12 @@ describe('worktree meta alias projection', () => {
       expect(Object.keys(onDisk.worktreeMeta).length).toBe(
         Object.keys(fixture.state.worktreeMeta).length
       )
+      // Projection may omit only rows that valid aliases can reconstruct.
       expect(openStore(dataFile).getAllWorktreeMeta()).toEqual(store.getAllWorktreeMeta())
     }
   })
 
-  // Absent maps must stay absent: an explicit undefined key would override defaults and change presence checks.
+  // Do not materialize an absent identity map as undefined and override reader defaults.
   it('never materializes an identity map a file did not have', () => {
     const dataFile = tempDataFile()
     writeFileSync(

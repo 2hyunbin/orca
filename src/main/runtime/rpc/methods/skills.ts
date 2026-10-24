@@ -43,7 +43,7 @@ import {
   SkillsGetInstallProgressParams
 } from '../../../../shared/rpc-contract/skills-params'
 
-/** Reuse discovery target resolution when rebuilding delete roots, including WSL. */
+// Use the same target resolution for discovery and delete-plan roots, including WSL.
 export function resolveDiscoveryTarget(
   params: z.infer<typeof SkillDiscoveryTargetSchema>,
   runtime: Pick<OrcaRuntimeService, 'resolveProjectRuntimeForWorktree'>
@@ -73,8 +73,8 @@ export const SKILL_METHODS = [
     permission: 'workspace',
     params: SkillsDiscoverParams,
     handler: async (params, { runtime }) => {
-      // Resolve WSL preferences on the executing host; remote clients provide workspace identity, not trusted projectRuntime absence.
-      const resolvedTarget = resolveDiscoveryTarget(params, runtime)
+      // Resolve WSL preferences on the executing host; remote clients provide workspace identity, not trusted runtime absence.
+      const resolvedTarget = await resolveDiscoveryTarget(params, runtime)
       return discoverSkillsOnTarget(resolvedTarget, runtime.listRepos(), {
         providerRootOverrides: await runtime.resolveSkillDiscoveryProviderRoots(resolvedTarget),
         refresh: params.refresh === true
@@ -88,7 +88,7 @@ export const SKILL_METHODS = [
     handler: async (params, { runtime }) =>
       previewSkillDeleteRequest(
         params,
-        resolveDiscoveryTarget(params.target ?? {}, runtime),
+        await resolveDiscoveryTarget(params.target ?? {}, runtime),
         skillDeleteDependencies(runtime)
       )
   }),
@@ -99,7 +99,7 @@ export const SKILL_METHODS = [
     handler: async (params, { runtime }) =>
       runSkillDeleteRequest(
         params,
-        resolveDiscoveryTarget(params.target ?? {}, runtime),
+        await resolveDiscoveryTarget(params.target ?? {}, runtime),
         skillDeleteDependencies(runtime)
       )
   }),
@@ -128,7 +128,7 @@ export const SKILL_METHODS = [
           'Publishing skills through a paired client is not supported. Run the command from Orca on the machine that stores the skills.'
         )
       }
-      const resolvedTarget = resolveDiscoveryTarget(params.target ?? {}, runtime)
+      const resolvedTarget = await resolveDiscoveryTarget(params.target ?? {}, runtime)
       if (resolvedTarget.kind !== 'native-host') {
         throw new AgentSkillSharingError(
           AGENT_SKILL_SHARING_UNSUPPORTED_ENVIRONMENT_CODE,

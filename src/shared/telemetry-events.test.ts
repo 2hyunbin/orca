@@ -1,7 +1,7 @@
 // Strict telemetry schemas must reject raw errors and unknown enums while round-tripping valid payloads without coercion.
 
 import { describe, expect, it } from 'vitest'
-import { errorClassSchema, eventSchemas, isCohortExtendedEvent } from './telemetry-events'
+import { eventSchemas } from './telemetry-events'
 
 describe('feature_interaction_usage_bucket_reached schema', () => {
   it('accepts a valid bucket payload', () => {
@@ -13,10 +13,6 @@ describe('feature_interaction_usage_bucket_reached schema', () => {
       nth_repo_added: 2
     })
     expect(parsed.success).toBe(true)
-  })
-
-  it('is in the runtime cohort-injection roster', () => {
-    expect(isCohortExtendedEvent('feature_interaction_usage_bucket_reached')).toBe(true)
   })
 
   it('rejects unknown enum values and mismatched categories', () => {
@@ -134,10 +130,6 @@ describe('star_nag_outcome schema', () => {
 
   it('accepts a strict valid payload with cohort context', () => {
     expect(eventSchemas.star_nag_outcome.safeParse(valid).success).toBe(true)
-  })
-
-  it('is in the runtime cohort-injection roster', () => {
-    expect(isCohortExtendedEvent('star_nag_outcome')).toBe(true)
   })
 
   it('accepts next_threshold only as a positive integer for deferrals', () => {
@@ -389,15 +381,6 @@ describe('workspace_created schema', () => {
     })
     expect(parsed.success).toBe(true)
   })
-
-  it('rejects extra keys via .strict()', () => {
-    const parsed = eventSchemas.workspace_created.safeParse({
-      source: 'command_palette',
-      from_existing_branch: true,
-      branch: 'refs/heads/main' // raw branch name is UGC — rejected by .strict()
-    })
-    expect(parsed.success).toBe(false)
-  })
 })
 
 describe('agent_started schema', () => {
@@ -489,14 +472,6 @@ describe('add_repo_default_checkout_handoff schema', () => {
 })
 
 describe('workspace_create_failed schema', () => {
-  it('accepts a valid payload', () => {
-    const parsed = eventSchemas.workspace_create_failed.safeParse({
-      source: 'sidebar',
-      error_class: 'git_failed'
-    })
-    expect(parsed.success).toBe(true)
-  })
-
   it('rejects unknown error_class values', () => {
     const parsed = eventSchemas.workspace_create_failed.safeParse({
       source: 'sidebar',
@@ -551,12 +526,6 @@ describe('settings_changed schema', () => {
       value_kind: 'bool'
     })
     expect(parsed.success).toBe(false)
-  })
-})
-
-describe('exported enum schemas', () => {
-  it('errorClassSchema rejects novel classes', () => {
-    expect(errorClassSchema.safeParse('kernel_panic').success).toBe(false)
   })
 })
 

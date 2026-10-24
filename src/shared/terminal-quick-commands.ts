@@ -7,7 +7,6 @@ import type {
   TerminalQuickCommandScope
 } from './terminal-quick-command-types'
 
-export const MAX_QUICK_COMMANDS = 40
 export const MAX_QUICK_COMMAND_ID_LENGTH = 80
 export const MAX_QUICK_COMMAND_LABEL_LENGTH = 80
 export const MAX_QUICK_COMMAND_REPO_ID_LENGTH = 200
@@ -146,10 +145,6 @@ export function normalizeTerminalQuickCommands(input: unknown): TerminalQuickCom
         appendEnter: record.appendEnter !== false
       })
     }
-
-    if (normalized.length >= MAX_QUICK_COMMANDS) {
-      break
-    }
   }
 
   return normalized
@@ -210,7 +205,7 @@ function isNormalizedTerminalQuickCommand(value: unknown, expected: TerminalQuic
 export function parseNormalizedTerminalQuickCommands(
   input: unknown
 ): TerminalQuickCommand[] | null {
-  if (!Array.isArray(input) || input.length > MAX_QUICK_COMMANDS) {
+  if (!Array.isArray(input)) {
     return null
   }
   const normalized = normalizeTerminalQuickCommands(input)

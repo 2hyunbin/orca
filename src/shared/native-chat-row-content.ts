@@ -2,7 +2,7 @@
 // Cache by block-array revision so streaming consumers derive content once per frame.
 
 import { backgroundTaskBlocks, claimBackgroundTaskTwins } from './native-chat-background-task-row'
-import { isWordlessProviderFrameBlock } from './native-chat-provider-frame-summary'
+import { isWordlessProviderFrameBlock } from './native-chat/native-chat-provider-frame-summary'
 import { isReplacedSubagentGroupTwin, subagentGroupBlocks } from './native-chat-subagent-summary'
 import {
   isBackgroundTaskBlock,

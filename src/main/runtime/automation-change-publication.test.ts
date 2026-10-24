@@ -1,6 +1,5 @@
-import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
-/** Moving a definition must publish both hosts or source subscribers retain a stale row.
- * Exercise real Store selectors through the runtime publication shared by IPC and RPC. */
+import { closeTestStores, createSqliteTestStore } from '../persistence/persistence-test-harness'
+// Moving a definition must publish both hosts or source subscribers retain a stale row.
 
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -141,7 +140,7 @@ const runNow = async (
 
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'automation-publish-'))
-  // Point the app's userData at the fixture to isolate orca-data.json.
+  // Store resolves its data path through the app environment; point it at the fixture.
   installFakeAppEnvironment({
     getPath: (name) => (name === 'userData' ? testState.dir : tmpdir())
   })
@@ -153,6 +152,7 @@ afterEach(async () => {
     await closeTestStores()
   } finally {
     try {
+      // Runtime callbacks must end with their fixture.
       for (const result of registrationSpy?.mock.results ?? []) {
         if (result.type === 'return') {
           result.value()
@@ -242,7 +242,7 @@ describe('scoped automationsChanged publication', () => {
     expect(published).toEqual([{ reason: 'definition', selector: { kind: 'self' } }])
   })
 
-  // Unknown destination requires unscoped publication so every subscriber can remove its stale row.
+  // Unknown destinations require an unscoped event so every affected subscriber hears the change.
   it('degrades to an unscoped event when the store cannot name the destination', async () => {
     const { store, runtime, published } = await makeRuntime()
     const selector = store.automationChangeSelector.bind(store)
@@ -279,6 +279,7 @@ describe('manual run refused before dispatch', () => {
     ])
   })
 
+  // A stale caller must not fill run history with refusals the owner can still run.
   it('writes nothing when the refusal is about a stale caller, not a lost host', async () => {
     const { store, runtime } = await makeManualRunRuntime()
     const stale = {
