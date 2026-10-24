@@ -1,8 +1,24 @@
+import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { publishHeadlessRuntimeGraph } from '../../runtime/headless-runtime-graph'
+import { createOrchestrationRpcHarness } from '../../runtime/rpc/methods/orchestration/rpc-test-harness'
+import { createRootDispatch } from '../../runtime/orchestration/db/root-dispatch-test-fixture'
+import { createStructuredMailboxPointerHost } from '../../runtime/orchestration/structured-mailbox-pointer-host'
+import {
+  beginStructuredJournalForeground,
+  structuredJournalBackgroundReady,
+  setStructuredAgentSessionHost
+} from './structured-agent-session-registry'
+import { JournalLegacyRestInitializer } from '../agent-session-journal/journal-legacy-rest-initializer'
+import { readJournalRestFacts } from '../agent-session-journal/journal-row-table'
+import { agentSessionLeaseFixture } from '../../../shared/agent-session-record.test-fixture'
+import {
+  mintStructuredWorkerHandle,
+  mintStructuredWorkerPaneKey,
+  structuredWorkerIdentities,
+  structuredWorkerProcessIncarnation
+} from '../../runtime/structured-worker-identity'
 import { sendAgentTurn } from '../../runtime/orchestration/send-agent-turn'
 import { agentSessionProviderHandleRoot } from '../../../shared/agent-session-provider-handle-encoding'
-// A relaunched host lists every restored chat as Interrupted or Done and reads none of their
-// history: each row comes from the chat's record, its journal's saved open turn and the offers the
-// last quit recorded. Opening a chat is what reads it.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -34,7 +50,6 @@ import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 const NOW = 1_800_000_000_000
 const CUT = 'chat-cut-by-crash'
 const DONE = 'chat-done'
-/** Saved before journals kept an open turn: the quit's offer is what says it was working. */
 const LEGACY_WORKING = 'chat-working-at-quit'
 const NEVER_SENT = 'chat-never-sent'
 const UNWRITTEN = 'chat-without-journal'
@@ -80,11 +95,38 @@ async function seedJournal(sessionId: string, turn: 'running' | 'completed' | nu
     })
     await journal.appendItem(
       { provider: 'claude', sessionId: `${sessionId}-provider`, uuid: 'turn' },
-      { kind: 'turn', turnId: 'turn-1', state: turn, startedAt: NOW },
+      {
+        kind: 'turn',
+        turnId: 'turn-1',
+        state: turn,
+        startedAt: NOW,
+        userItemId: `orca:${sessionId}-send`
+      },
       { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
   }
   await journal.close()
+}
+
+function installAcquisitionFixture(): void {
+  host.deps.adapter.acquire = async ({ identity, fence, spawnToken }) => ({
+    acquisitionGeneration: 'generation',
+    process: {
+      hostId: 'local',
+      pid: 4242,
+      processStartTimeMs: NOW,
+      spawnToken
+    },
+    link: {
+      linkId: 'acquired',
+      handle: claudeProviderHandle(`${identity.sessionId}-provider`, null),
+      origin: 'resumed',
+      mintedAtFence: fence,
+      observedAt: NOW
+    }
+  })
+  host.deps.adapter.releaseAcquisition = async () => true
+  host.deps.adapter.cancelTurn = async () => ({ cancelled: true })
 }
 
 beforeEach(async () => {
@@ -123,10 +165,98 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  setStructuredAgentSessionHost(null)
+  structuredWorkerIdentities.clear()
   vi.restoreAllMocks()
   await host.flushAllStreamedEvents()
   closeTestJournalHostDatabases()
   await rm(root, { recursive: true, force: true })
+})
+
+it('initializes an unknown legacy chat only after responsiveness, yielding to a real foreground use', async () => {
+  const { db } = host.deps.journalDatabase
+  db.prepare(
+    'UPDATE journal_sessions SET open_turn_id = NULL, open_turn_since = NULL WHERE session_id = ?'
+  ).run(CUT)
+  const sink: AgentSessionStatusSummary[] = []
+  const stream: AgentSessionStatusSummary[] = []
+  host.deps.statusSink = { publish: (row) => sink.push(row), forget: () => {} }
+  host.subscribeStatus({
+    id: 'upgrade',
+    emit: (event) => {
+      if (event.type === 'status') {
+        stream.push(event.session)
+      }
+    }
+  })
+  const opened = vi.spyOn(AgentSessionJournal.prototype, 'open')
+  const advance = vi.spyOn(JournalLegacyRestInitializer.prototype, 'advance')
+  const sql = vi.spyOn(db, 'prepare')
+  const rowReads = () =>
+    sql.mock.calls.filter(([query]) => query.includes('ORDER BY seq ASC LIMIT'))
+  const runtime = new OrcaRuntimeService()
+  vi.spyOn(runtime, 'openAgentSessionRecordStore').mockResolvedValue(host.deps.store)
+  setStructuredAgentSessionHost(host)
+  await host.restoreReadableSessions([CUT])
+  expect(sink.at(-1)).toMatchObject({ sessionId: CUT, status: null })
+  expect(rowReads()).toHaveLength(0)
+  runtime.noteAgentLaunchStartupSettled()
+  runtime.noteAgentLaunchClientReady()
+  const graph = { tabs: [], leaves: [], rendererGeneration: 'first' }
+  runtime.syncWindowGraph(17, graph)
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  expect(rowReads()).toHaveLength(0)
+  const foreground = beginStructuredJournalForeground()
+  runtime.syncWindowGraph(17, { ...graph, startupRestorationReady: true })
+  await advance.mock.results.at(-1)?.value
+  expect(rowReads()).toHaveLength(0)
+  expect(readJournalRestFacts(db, CUT)?.known).toBe(false)
+  foreground()
+  await advance.mock.results.at(-1)?.value
+  expect(rowReads().length).toBeGreaterThan(0)
+  expect(readJournalRestFacts(db, CUT)?.openTurn?.since).toBe(NOW)
+  for (const rows of [sink, stream]) {
+    expect(rows.at(-1)).toMatchObject({
+      sessionId: CUT,
+      turnOutcome: 'cancellation',
+      restoredInterruption: true,
+      statusStartedAt: NOW
+    })
+  }
+  expect(opened).not.toHaveBeenCalled()
+  runtime.markRendererReloading(17)
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  expect(() => runtime.syncWindowGraph(17, { ...graph, startupRestorationReady: true })).toThrow(
+    'superseded'
+  )
+  expect(() =>
+    runtime.syncWindowGraph(18, {
+      ...graph,
+      rendererGeneration: 'foreign',
+      startupRestorationReady: true
+    })
+  ).toThrow('authoritative')
+  runtime.syncWindowGraph(17, { ...graph, rendererGeneration: 'replacement' })
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  runtime.syncWindowGraph(17, {
+    ...graph,
+    rendererGeneration: 'replacement',
+    startupRestorationReady: true
+  })
+  expect(structuredJournalBackgroundReady()).toBe(true)
+  const windowless = new OrcaRuntimeService()
+  publishHeadlessRuntimeGraph(windowless)
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  windowless.noteHeadlessStartupReady()
+  expect(structuredJournalBackgroundReady()).toBe(true)
+  windowless.attachWindow(19)
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  windowless.syncWindowGraph(19, { ...graph, startupRestorationReady: true })
+  expect(structuredJournalBackgroundReady()).toBe(true)
+  const count = rowReads().length
+  host.advanceLegacyRest()
+  await advance.mock.results.at(-1)?.value
+  expect(rowReads()).toHaveLength(count)
 })
 
 it('lists every restored chat as Interrupted or Done, on every status surface, opening none', async () => {
@@ -156,7 +286,6 @@ it('lists every restored chat as Interrupted or Done, on every status surface, o
       }
     }
   })
-  // Each row's state, verdict and saved name, as the sidebar and the agent-status store read them.
   const rows = (summaries: AgentSessionStatusSummary[]) =>
     summaries.map((row) => [row.sessionId, row.status, row.turnOutcome, row.conversationName])
   const expected = [
@@ -170,21 +299,220 @@ it('lists every restored chat as Interrupted or Done, on every status surface, o
   expect([CUT, DONE, LEGACY_WORKING, NEVER_SENT].some(host.hasSession)).toBe(false)
 })
 
-it('reads a chat when it is opened, and keeps only the resident cap of opened chats', async () => {
-  await host.restoreReadableSessions([CUT, DONE, LEGACY_WORKING])
-
-  for (const sessionId of [CUT, DONE, LEGACY_WORKING]) {
-    await host.journalSnapshot(sessionId)
-  }
-
-  // The first opened is the least recently active: it closes, and keeps its journal's own row.
-  await vi.waitFor(() => expect(host.hasSession(CUT)).toBe(false))
-  expect([DONE, LEGACY_WORKING].every(host.hasSession)).toBe(true)
-  expect(host.readStatusSummary(CUT)).toMatchObject({
-    status: 'idle',
-    turnOutcome: 'cancellation',
-    latestPrompt: `ask ${CUT}`
+it('classifies explicit Run targets serially through real ownership despite 25 failed ended-owner releases', async () => {
+  const victims = Array.from({ length: 25 }, (_, i) => `ended-owner-victim-${i}`)
+  const candidates = Array.from({ length: 30 }, (_, i) => `explicit-candidate-${i}`)
+  await seedTestAgentSessionRecordStore(root, {
+    sessionTabs: [...victims, ...candidates, CUT, DONE, UNWRITTEN].map((sessionId) => ({
+      tabId: `tab-${sessionId}`,
+      sessionId
+    })),
+    records: [...victims, ...candidates, CUT, DONE, UNWRITTEN].map((id) => ({
+      ...record(id),
+      ...(victims.includes(id) || id === CUT || id === DONE
+        ? {
+            lease: agentSessionLeaseFixture({
+              sessionId: id,
+              runtimeFence: 1,
+              provenHandleLinkId: `${id}-link`
+            })
+          }
+        : {})
+    }))
   })
+  host = new StructuredAgentSessionHost({
+    ...host.deps,
+    store: await openTestAgentSessionRecordStore(root),
+    idleSweep: { maxResident: 24 }
+  })
+  setStructuredAgentSessionHost(host)
+  const { sessions, lifetime } = host.collaboratorsForTests()
+  const transitionHandoff = host.deps.store.transitionHandoff
+  vi.spyOn(host.deps.store, 'transitionHandoff').mockImplementation((id, transition) =>
+    victims.includes(id)
+      ? Promise.reject(new Error('release write failed'))
+      : transitionHandoff(id, transition)
+  )
+  for (const id of victims) {
+    expect(host.deps.store.getRecord(id), id).not.toBeNull()
+    await seedJournal(id, 'completed')
+    await host.withConversationUse(id, async () => {
+      await host.journalSnapshot(id)
+      sessions.get(id)!.lastEndedChild = {
+        generation: null,
+        fence: 1,
+        rootGone: true,
+        cause: 'exit',
+        reason: null,
+        duringStartup: false,
+        endedAt: sessions.get(id)!.journal.cursor()
+      }
+    })
+  }
+  installAcquisitionFixture()
+  host.deps.adapter.dispatch = async (input) => {
+    await input.beforeDispatch?.()
+    return { state: 'accepted', providerIdentity: null }
+  }
+  for (const id of [CUT, DONE]) {
+    const sent = await sendAgentTurn({
+      kind: 'structured-session',
+      host,
+      sessionId: id,
+      callerKey: 'trusted-local:orchestration:test',
+      turn: {
+        delivery: 'now',
+        operationId: `${NOW}-${id === CUT ? '1'.repeat(32) : '2'.repeat(32)}`,
+        expectedRuntimeFence: host.deps.store.getRecord(id)!.lease.runtimeFence,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'current request' }] }
+      }
+    })
+    expect(sent).toMatchObject({ kind: 'sent', submission: { dispatchState: 'accepted' } })
+    expect(sessions.get(id)?.child?.fence).toBeGreaterThan(1)
+    const fence = host.deps.store.getRecord(id)!.lease.runtimeFence
+    await sessions
+      .get(id)!
+      .journal.appendItem(
+        { provider: 'claude', sessionId: `${id}-provider`, uuid: 'successor-turn' },
+        { kind: 'turn', turnId: 'successor-turn', state: id === CUT ? 'running' : 'completed' },
+        { fence, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+      )
+    if (id === DONE) {
+      await sessions.get(id)!.journal.appendItem(
+        { provider: 'claude', sessionId: `${id}-provider`, uuid: 'question' },
+        {
+          kind: 'question',
+          question: 'which?',
+          options: [],
+          resolution: {
+            state: 'pending',
+            selectedOptionId: null,
+            resolvedBy: null,
+            resolvedAt: null
+          }
+        },
+        { fence }
+      )
+    }
+  }
+  const held = [lifetime.residency.borrow(CUT), lifetime.residency.borrow(DONE)]
+  await seedJournal(UNWRITTEN, 'completed')
+  host.deps.journalDatabase.db
+    .prepare('UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND seq = 2')
+    .run('{}', UNWRITTEN)
+  for (const id of candidates) {
+    await seedJournal(id, 'completed')
+  }
+  const h = createOrchestrationRpcHarness()
+  const { db, runtime, ctx, activeRunId } = h.setup()
+  vi.spyOn(runtime, 'listTerminals').mockResolvedValue({
+    terminals: [],
+    totalCount: 0,
+    truncated: false
+  })
+  const handles = [...candidates, CUT, DONE, UNWRITTEN].map((id) => {
+    const handle = mintStructuredWorkerHandle()
+    const paneKey = mintStructuredWorkerPaneKey(id)
+    structuredWorkerIdentities.register({
+      handle,
+      sessionId: id,
+      agent: 'claude',
+      paneKey,
+      processIncarnation: structuredWorkerProcessIncarnation(id),
+      worktreeId: LOCATION.workspaceId,
+      hostScope: { kind: 'local', hostId: 'local' }
+    })
+    return {
+      id,
+      handle,
+      dispatch: createRootDispatch(db, db.createTask({ spec: id, runId: activeRunId }).id, handle)
+        .id
+    }
+  })
+  const work = host.currentWork
+  vi.spyOn(host, 'currentWork').mockImplementation((id) => {
+    expect(lifetime.residency.borrowed(id)).toBe(true)
+    return work(id)
+  })
+  const snapshot = host.journalSnapshot
+  const status = runtime.getAgentStatusForHandle.bind(runtime)
+  let classifying = false
+  vi.spyOn(runtime, 'getAgentStatusForHandle').mockImplementation(async (handle) => {
+    classifying = true
+    try {
+      return await status(handle)
+    } finally {
+      classifying = false
+    }
+  })
+  let active = 0,
+    peak = 0,
+    reads = 0
+  vi.spyOn(host, 'journalSnapshot').mockImplementation(async (id) => {
+    const classification = classifying
+    if (classification) {
+      peak = Math.max(peak, ++active)
+      reads++
+      expect(candidates.filter(host.hasSession)).toHaveLength(0)
+    }
+    try {
+      return await snapshot(id)
+    } finally {
+      if (classification) {
+        active--
+      }
+    }
+  })
+  try {
+    for (const count of [3, 30]) {
+      for (const row of handles.slice(count, 30)) {
+        db.completeDispatch(row.dispatch)
+      }
+      reads = 0
+      await h.call(
+        'orchestration.send',
+        { from: 'term_coord', to: '@idle', subject: `select-${count}` },
+        ctx
+      )
+      expect(reads).toBe(count + 3)
+      expect(peak).toBe(1)
+      for (const row of handles) {
+        expect(db.getUnreadMessages(`dispatch:${row.dispatch}`).length, row.id).toBe(
+          candidates.slice(0, count).includes(row.id) ? 1 : 0
+        )
+      }
+      expect(candidates.some(host.hasSession)).toBe(false)
+      if (count === 3) {
+        for (const row of handles.slice(3, 30)) {
+          db.db
+            .prepare("UPDATE dispatch_contexts SET status = 'dispatched' WHERE id = ?")
+            .run(row.dispatch)
+        }
+        db.db.prepare('DELETE FROM messages').run()
+      }
+    }
+    const pointer = createStructuredMailboxPointerHost()
+    expect(await pointer.readSessionFacts(candidates[0])).toBeNull()
+    expect(db.getUnreadMessages(`dispatch:${handles[0].dispatch}`)).toHaveLength(1)
+    await expect(host.withAutomaticConversation(CUT, async () => 'resident')).resolves.toBe(
+      'resident'
+    )
+    const original = new Error('original action error')
+    await expect(
+      host.withAutomaticConversation(victims[0], async () => {
+        throw original
+      })
+    ).rejects.toBe(original)
+    held.forEach((release) => {
+      release()
+      release()
+    })
+    expect(lifetime.residency.borrowed(CUT)).toBe(false)
+    expect(host.deps.store.transitionHandoff).toHaveBeenCalled()
+  } finally {
+    held.forEach((release) => release())
+    h.cleanup()
+  }
 })
 
 it('preserves waiting-card pause and failed-mark fallback across cache reacquisition', async () => {
@@ -284,24 +612,7 @@ it('releases common construction at adoption while awaited actions retain their 
   })
   await host.journalSnapshot(NEVER_SENT)
   const open = vi.spyOn(AgentSessionJournal.prototype, 'open')
-  host.deps.adapter.acquire = async ({ identity, fence, spawnToken }) => ({
-    acquisitionGeneration: 'generation',
-    process: {
-      hostId: 'local',
-      pid: 4242,
-      processStartTimeMs: NOW,
-      spawnToken
-    },
-    link: {
-      linkId: 'acquired',
-      handle: claudeProviderHandle(`${identity.sessionId}-provider`, null),
-      origin: 'resumed',
-      mintedAtFence: fence,
-      observedAt: NOW
-    }
-  })
-  host.deps.adapter.releaseAcquisition = async () => true
-  host.deps.adapter.cancelTurn = async () => ({ cancelled: true })
+  installAcquisitionFixture()
   host.deps.adapter.dispatch = async (input) => {
     await input.beforeDispatch?.()
     adopted()
@@ -344,7 +655,6 @@ it('releases common construction at adoption while awaited actions retain their 
     )
     expect(lifetime.residency.borrowed(CUT)).toBe(true)
     expect(open).toHaveBeenCalledTimes(2)
-    // All adoption routes clear the failed-reopen floor, including acquisition's direct open.
     lifetime.residency.closed(CUT, true, { epoch: 'old', sequence: 1 })
     const session = sessions.get(CUT)!
     await conversationDelivery.adoptOpened(CUT, { session })
@@ -371,7 +681,6 @@ it('does no unrelated history walk on real no-pressure release at N and 10N acti
       sessions.set(id, { ...original })
       releases.push(lifetime.residency.borrow(id))
     }
-    // These are settled submissions in a real opened canonical journal, not a Set of ids.
     expect(original.journal.submissions().length).toBeGreaterThan(0)
     await serialize(CUT, async () => {})
     await Promise.resolve()

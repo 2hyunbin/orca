@@ -1,3 +1,5 @@
+import type { StructuredAgentSessionSinkBarrier } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { StructuredAgentSessionAtRestCommands } from '../native-chat/agent-session-wire/structured-agent-session-at-rest-commands'
@@ -111,7 +113,7 @@ export type CodexStructuredSessionAdapterDeps = {
     sessionId: string,
     evidence: AgentChildWorkEvidence[],
     producer?: StructuredAgentSessionChildWorkProducer
-  ) => void
+  ) => ChildWorkAdmission | void
   /** A send admitted earlier: its identity once Codex echoes it, or its rejection when the turn
    *  Codex answered it into ended without taking it. */
   onDispatchSettledLate?: (
@@ -124,7 +126,11 @@ export type CodexStructuredSessionAdapterDeps = {
     )
   ) => void
   /** The sends Codex holds (`CodexDispatchEchoes.heldSends`) changed with no journal row. */
-  onHeldSendsChanged?: (input: { sessionId: string }) => void
+  onHeldSendsChanged?: (input: {
+    sessionId: string
+    changes: { clientMessageId: string; held: boolean }[]
+    producer: StructuredAgentSessionChildWorkProducer | undefined
+  }) => ChildWorkAdmission | void
   openConnection?: typeof openCodexAppServerConnection
   readProcessStartTime?: (pid: number) => Promise<number | null>
   mintLinkId?: () => string
@@ -181,6 +187,8 @@ export type CodexSession = {
   dispatchEchoes: CodexDispatchEchoes
   translator: CodexJournalTranslator | null
   /** Ephemeral roster behind the background-tasks strip; never durable state. */
+  workProducer?: StructuredAgentSessionChildWorkProducer
+  endWritten?: Promise<StructuredAgentSessionSinkBarrier>
   backgroundTasks: CodexBackgroundTaskTracker
   /** What this child's Codex lists as its skills; absent until the thread is open. */
   skillReport?: CodexSkillReport

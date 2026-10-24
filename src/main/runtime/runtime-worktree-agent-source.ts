@@ -22,6 +22,7 @@ export type RuntimeWorktreeAgentSource = Pick<AgentStatusIpcPayload, 'subagents'
   toolName: string | null
   toolInput: string | null
   interrupted: boolean
+  restoredInterruption?: true
   mainAgent?: AgentMainAgentStatus
   stateStartedAt: number
   updatedAt: number

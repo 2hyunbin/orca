@@ -19,7 +19,11 @@ import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { isAgentSessionContextClear } from '../../../shared/agent-session-context-clear'
 
 export class JournalDerivedTurnScope {
-  private openTurnItemId: string | null = null
+  constructor(private openTurnItemId: string | null = null) {}
+
+  checkpoint(): string | null {
+    return this.openTurnItemId
+  }
 
   fork(): JournalDerivedTurnScope {
     const staged = new JournalDerivedTurnScope()

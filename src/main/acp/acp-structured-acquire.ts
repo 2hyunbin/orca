@@ -197,7 +197,7 @@ export async function acquireAcpStructuredSession(input: {
       dialect: spec.dialect,
       now,
       childStops: () => session?.childStops ?? NO_ACP_CHILD_STOPS,
-      ...acpLaneChildWorkDelivery(deps, sessionId, events),
+      ...acpLaneChildWorkDelivery(deps, sessionId, events, () => lane),
       logger: deps.logger ?? createStructuredAgentSessionLogger(),
       onInputAccepted: (clientMessageId) => {
         if (isAcpReadySession(session)) {

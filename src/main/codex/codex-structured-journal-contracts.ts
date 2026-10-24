@@ -68,9 +68,10 @@ export type CodexJournalTranslator = {
   dispose: () => void
 }
 
-export type CodexJournalTranslationAdmission =
+export type CodexJournalTranslationAdmission = (
   | { accepted: true }
   | { accepted: false; reason: 'backpressure' | 'failed' | 'closed' | 'untranslated' }
+) & { retry?: () => CodexJournalTranslationAdmission }
 
 export type CodexItemTranslation =
   | { handled: false }

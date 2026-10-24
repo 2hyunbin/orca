@@ -3,6 +3,10 @@
 // action removes them — or files what went wrong. Starting the chat's agent again withdraws them.
 
 import { randomUUID } from 'node:crypto'
+import {
+  materializeRestartMarkers,
+  createRestartListing
+} from './structured-agent-session-restart-materialize'
 import { createRestartResumeProgress } from './structured-agent-session-restart-resume-progress'
 import {
   AgentSessionRefusalError,
@@ -21,8 +25,7 @@ import { createStructuredAgentSessionRestartOperationQueue } from './structured-
 import { createStructuredAgentSessionRestartOfferRecords } from './structured-agent-session-restart-offer-records'
 import {
   restartRowsFor,
-  type StructuredAgentSessionRestartAudience,
-  type StructuredAgentSessionResumeCandidate
+  type StructuredAgentSessionRestartAudience
 } from './structured-agent-session-restart-resume-set'
 import {
   resumeStructuredAgentSessionsFromRestart,
@@ -32,7 +35,6 @@ import type { StructuredAgentSessionRestartResume } from './structured-agent-ses
 import {
   continuationDeps,
   startStructuredAgentSessionContinuation,
-  type StructuredAgentSessionContinuationHost,
   type StructuredAgentSessionContinuationOutcome
 } from './structured-agent-session-restart-continuation'
 import { restartContinuationId } from './structured-agent-session-restart-continuation-envelope'
@@ -41,13 +43,15 @@ import {
   createStructuredAgentSessionRestartOfferWithdrawal,
   type StructuredAgentSessionRestartOfferSession
 } from './structured-agent-session-restart-offer-withdrawal'
-import type { StructuredAgentSessionRestartResumeSurfaces } from './structured-agent-session-restart-resume-wiring'
+import {
+  createRestartContinuationHost,
+  type StructuredAgentSessionRestartResumeSurfaces
+} from './structured-agent-session-restart-resume-wiring'
 import { createStructuredAgentSessionRestartWitnesses } from './structured-agent-session-restart-witnesses'
 import {
   remainingRestartRows,
   unstartedRestartRefusals
 } from './structured-agent-session-restart-action-result'
-import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
 type LiveSession = StructuredAgentSessionRestartOfferSession
@@ -110,31 +114,16 @@ export function createStructuredAgentSessionRestartResume(
       enqueue: enqueueRecoveryOperation
     })
 
-  const list = async (
-    audience?: StructuredAgentSessionRestartAudience
-  ): Promise<StructuredAgentSessionResumeCandidate[]> => {
-    const markers = await readMarkers()
-    // Listing opens no chat: the record and the marker are the offer. A send that moved a chat on
-    // started its agent, which withdrew the offer; an open chat is also read against its journal.
-    // A live chat remains an offer. The user may have opened it to inspect the context and still
-    // explicitly choose whether Orca should ask the agent to continue.
-    const { candidates, superseded } = derive(markers, 'may-be-held')
-    retireSuperseded(superseded)
-    return restartRowsFor(candidates, audience)
-  }
+  const list = createRestartListing(deps, readMarkers, derive, retireSuperseded)
   const listFailures = async (audience?: StructuredAgentSessionRestartAudience) =>
     restartRowsFor(await failures.list(), audience)
 
-  const continuationHost: StructuredAgentSessionContinuationHost = {
-    ...surfaces,
-    logger: deps.logger,
+  const continuationHost = createRestartContinuationHost(
+    deps,
     sessions,
-    conversationFence: (sessionId) =>
-      deps.store.getRecord(sessionId)
-        ? structuredAgentSessionConversationFence(deps.store, sessionId)
-        : null,
-    stillResumable: (marker) => deriveAtSend([marker], 'may-be-held').candidates.length === 1
-  }
+    surfaces,
+    (marker) => deriveAtSend([marker], 'may-be-held').candidates.length === 1
+  )
 
   /** One explicit action: reserve the offers, then continue each through `continueOne`, as many at
    *  once as the admission's host-wide start limit allows. A chat is done once `continueOne` returns. */
@@ -313,8 +302,19 @@ export function createStructuredAgentSessionRestartResume(
     listFailures,
     // Do not let a teardown witness already captured in this host republish after explicit
     // dismissal. A later capture is a new interruption and may create a fresh offer normally.
-    dismiss: (sessionIds, audience) =>
-      failures.dismiss(sessionIds, (clearAudience) => witnesses.clear(clearAudience), audience),
+    dismiss: async (sessionIds, audience) => {
+      materializeRestartMarkers(
+        deps,
+        (await readActionMarkers(sessionIds)).filter(
+          (marker) => !sessionIds || sessionIds.includes(marker.sessionId)
+        )
+      )
+      return failures.dismiss(
+        sessionIds,
+        (clearAudience) => witnesses.clear(clearAudience),
+        audience
+      )
+    },
     continueAfterRestart,
     onAgentStarted: withdrawal.onAgentStarted,
     noteReadResult: newerOrca.note,

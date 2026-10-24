@@ -124,11 +124,12 @@ export class StructuredAgentSessionResidency {
     return pending
   }
 
-  async run<T>(id: string, task: () => Promise<T>): Promise<T> {
+  async run<T>(id: string, task: () => Promise<T>, automatic = true): Promise<T> {
+    const cold = !this.deps.held(id)
     let finishConstruction = () => {}
     const release = this.borrow(id)
     try {
-      if (!this.deps.held(id)) {
+      if (automatic && cold) {
         const previous = this.automatic
         const permit = new Promise<void>((resolve) => {
           finishConstruction = resolve
@@ -153,7 +154,19 @@ export class StructuredAgentSessionResidency {
       }
       finishConstruction()
       release()
-      // Retention cannot replace a successful action or its original error.
+      // Explicit classification retires its own payload, never waits on unrelated victims.
+      if (!automatic && cold) {
+        await yieldToEventLoop()
+        try {
+          if (this.idle.size > this.deps.limit && !this.borrowed(id) && this.deps.eligible(id)) {
+            if (await this.deps.close(id)) {
+              this.idle.delete(id)
+            }
+          }
+        } catch (error) {
+          this.deps.report(error)
+        }
+      }
     }
   }
 }

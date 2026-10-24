@@ -61,6 +61,7 @@ export function journalItemRowBuilder(
     executionOwner?: number
     observedAt?: number
     recovered?: true
+    recoveredAt?: number
   },
   revisions?: Map<string, number>
 ): RowBuilder<JournalItemRow> {
@@ -76,6 +77,7 @@ export function journalItemRowBuilder(
       executionOwner: options.executionOwner,
       ts: options.observedAt ?? ts,
       recovered: options.recovered,
+      recoveredAt: options.recoveredAt,
       linkage: options,
       turnScope: options.turnScope,
       revisions
@@ -250,6 +252,7 @@ export function buildJournalItemRow(
     executionOwner?: number
     ts: number
     recovered?: true
+    recoveredAt?: number
     linkage?: AgentJournalProducerLinkage
     turnScope: AgentJournalTurnScope
     revisions?: Map<string, number>
@@ -270,7 +273,7 @@ export function buildJournalItemRow(
     ...journalRowBase(input.state.epoch, input.seq, input.fence, input.ts, [body]),
     ownerFence: journalItemOwnerFence(input.state, resolved, input),
     ...(input.executionOwner === undefined ? {} : { executionOwner: input.executionOwner }),
-    ...(input.recovered ? { recovered: input.recovered } : {}),
+    ...(input.recovered ? { recovered: input.recovered, recoveredAt: input.recoveredAt } : {}),
     turnScope: input.turnScope,
     ...agentJournalLinkageFields(input.linkage)
   }

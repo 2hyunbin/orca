@@ -31,6 +31,9 @@ export function observeJournalProviderActivity(
 }
 
 function isProviderActivity(body: AgentJournalItemBody): boolean {
+  if (body.kind === 'semantic-work') {
+    return false
+  }
   if (body.kind === 'message') {
     return body.role !== 'user'
   }

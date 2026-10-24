@@ -34,7 +34,7 @@ async function replaying(name: string) {
   const evidence: AgentChildWorkEvidence[] = []
   const rig = await openAcpAdapterRig({
     script: (agent) => replay.attach(agent),
-    deps: { onChildWorkEvidence: (_sessionId, batch) => evidence.push(...batch) }
+    deps: { onChildWorkEvidence: (_sessionId, batch) => void evidence.push(...batch) }
   })
   await rig.acquire()
   return { rig, replay, evidence }

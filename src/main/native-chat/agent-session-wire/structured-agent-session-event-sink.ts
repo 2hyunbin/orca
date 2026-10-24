@@ -1,3 +1,5 @@
+import { DEFAULT_WATERMARKS } from './structured-agent-session-sink-watermarks'
+import { publishCommitted } from './structured-agent-session-transition'
 import type { JournalItemEcho } from '../agent-session-journal/journal-item-echo'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type {
@@ -190,17 +192,6 @@ export type StructuredAgentSessionReadingControl = {
   resumeReading(): void
 }
 
-const DEFAULT_WATERMARKS: StructuredAgentSessionSinkWatermarks = {
-  pauseQueuedBytes: 16 * 1024 * 1024,
-  maxQueuedBytes: 32 * 1024 * 1024,
-  lowQueuedBytes: 8 * 1024 * 1024,
-  pauseQueuedOperations: 512,
-  maxQueuedOperations: 1_024,
-  lowQueuedOperations: 256,
-  maxLifecycleQueuedBytes: 16 * 1024 * 1024,
-  maxLifecycleQueuedOperations: 1_024
-}
-
 export function createDeferredStructuredAgentSessionEventSink(deps: {
   /** The session this sink writes for, named in every failure it logs. */
   sessionId: string
@@ -333,7 +324,11 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       },
       tryPublish: publish
     },
-    bind: (next) => queue.bind(next),
+    bind: (next) =>
+      queue.bind({
+        ...next,
+        publish: (activity) => publishCommitted(() => next.publish(activity))
+      }),
     unbind: () => queue.unbind(),
     close: () => queue.close(),
     drained: queue.barrier,

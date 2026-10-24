@@ -280,7 +280,7 @@ describe('Grok kill route check', () => {
     const evidence: AgentChildWorkEvidence[] = []
     const rig = await openAcpAdapterRig({
       script: (agent) => agent.on('_x.ai/task/kill', (frame) => answer(agent, frame)),
-      deps: { onChildWorkEvidence: (_session, edges) => evidence.push(...edges) }
+      deps: { onChildWorkEvidence: (_session, edges) => void evidence.push(...edges) }
     })
     cleanup.push(() => rig.adapter.closeAll())
     await rig.acquire()

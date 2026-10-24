@@ -7,6 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { semanticWorkRecordId } from '../../../shared/agent-session-semantic-work'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
@@ -121,3 +122,129 @@ describe('a rewind after a failed cleanup', () => {
     expect(journal.itemBody(agentJournalItemKey(UNDONE))).toBeNull()
   })
 })
+
+it.each(['epoch', 'context'])(
+  'retains recovered helper and nonqueued source through the actual %s cut',
+  async (mode) => {
+    const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+    if (mode === 'context') {
+      await journal.context.clear(
+        { operationId: 'clear', afterFence: DEAD, clearedAt: 1 },
+        { write: () => {}, committed: () => {} },
+        'clear'
+      )
+    }
+    const floor = journal.context.floor()
+    await journal.appendItem(
+      TURN,
+      { kind: 'turn', turnId: 'turn-dead', state: 'completed', outcome: 'success' },
+      { fence: DEAD }
+    )
+    const accepted = await journal.appendSubmission({
+      clientMessageId: 'unanswered',
+      payloadFingerprint: 'kept',
+      handoverRecorded: true,
+      fence: DEAD,
+      options: { model: 'original-model' },
+      body: { kind: 'message', role: 'user', blocks: [] }
+    })
+    await journal.resolveDispatch({
+      clientMessageId: 'unanswered',
+      fence: DEAD,
+      state: 'pending',
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    })
+    await journal.resolveDispatch({
+      clientMessageId: 'unanswered',
+      fence: DEAD,
+      state: 'unknown',
+      recovered: true,
+      reason: 'delivery uncertain'
+    })
+    const releaseSource = { kind: 'submission', clientMessageId: 'unanswered' } as const
+    await journal.appendItem(
+      {
+        provider: 'legacy',
+        agent: 'codex',
+        sessionId: IDENTITY.sessionId,
+        recordId: semanticWorkRecordId(releaseSource)
+      },
+      {
+        kind: 'semantic-work',
+        version: 1,
+        source: releaseSource,
+        startedAt: journal.submission('unanswered')!.submittedAt,
+        phase: 'settled'
+      },
+      { fence: DEAD }
+    )
+    const saved = journal.submission('unanswered')!
+    const source = {
+      kind: 'child',
+      idKind: 'task_id',
+      handleId: 'helper',
+      invocationId: 'a86c3fc1-47a1-4bad-9151-aaeffcc7bc30'
+    } as const
+    const identity = {
+      provider: 'legacy',
+      agent: 'codex',
+      sessionId: IDENTITY.sessionId,
+      recordId: semanticWorkRecordId(source)
+    } as const
+    const body = {
+      kind: 'semantic-work',
+      version: 1,
+      source,
+      startedAt: 10,
+      phase: 'open'
+    } as const
+    const scope = { kind: 'turn', turnItemId: agentJournalItemKey(TURN) } as const
+    await journal.appendItem(identity, body, { fence: DEAD, observedAt: 10, turnScope: scope })
+    await journal.appendItem(UNDONE, UNDONE_BODY, { fence: DEAD })
+    await journal.appendItem(
+      identity,
+      { ...body, phase: 'interrupted', afterRequest: journal.requestFrontier() },
+      { fence: DEAD, observedAt: 20, recovered: true, turnScope: scope }
+    )
+    const cut = structuredRewindCut(journal, {
+      itemId: agentJournalItemKey(UNDONE),
+      provider: 'codex',
+      nativeId: 'thread-1'
+    })!
+    expect(
+      cut.kept.find((item) => agentJournalItemKey(item.identity) === agentJournalItemKey(identity))
+    ).toMatchObject({
+      observedAt: 10,
+      recoveredAt: 20,
+      body: {
+        phase: 'interrupted',
+        afterRequest: agentJournalItemKey({ provider: 'orca', clientMessageId: 'unanswered' })
+      }
+    })
+    await (floor
+      ? journal.context.rewind(floor, LIVE, cut.kept, () => ({
+          write: () => {},
+          committed: () => {}
+        }))
+      : journal.replaceEpochItems('handle_forked', LIVE, cut.kept))
+    expect(journal.submission('unanswered')).toMatchObject({
+      clientMessageId: saved.clientMessageId,
+      options: saved.options,
+      submittedAt: saved.submittedAt,
+      dispatchState: saved.dispatchState,
+      reason: saved.reason,
+      recovered: true,
+      fence: DEAD
+    })
+    expect(journal.restFact()).toEqual({ itemId: agentJournalItemKey(identity), since: 10 })
+    expect(journal.item(agentJournalItemKey(identity))).toMatchObject({
+      observedAt: 10,
+      recoveredAt: 20
+    })
+    await journal.close()
+    const reopened = await journals.open({ identity: IDENTITY, stateDirectory: root })
+    expect(reopened.restFact()).toEqual({ itemId: agentJournalItemKey(identity), since: 10 })
+    expect(reopened.submission('unanswered')?.options).toEqual(saved.options)
+    expect(accepted.sequence).toBeGreaterThan(0)
+  }
+)

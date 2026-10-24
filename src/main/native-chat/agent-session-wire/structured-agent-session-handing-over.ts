@@ -24,7 +24,7 @@ export async function whileStructuredAgentSessionHandingOver<T>(
   journal: HandoverJournal,
   clientMessageId: string,
   handOver: (released: () => void) => Promise<T>,
-  workChanged?: () => void
+  workChanged?: (clientMessageId: string) => void
 ): Promise<T> {
   const released = beginStructuredAgentSessionHandover(journal, clientMessageId, workChanged)
   try {
@@ -38,7 +38,7 @@ export async function whileStructuredAgentSessionHandingOver<T>(
 export function beginStructuredAgentSessionHandover(
   journal: HandoverJournal,
   clientMessageId: string,
-  workChanged?: () => void
+  workChanged?: (clientMessageId: string) => void
 ): () => void {
   let sends = handingOver.get(journal)
   if (!sends) {
@@ -56,7 +56,7 @@ export function beginStructuredAgentSessionHandover(
       } else {
         sends.delete(clientMessageId)
       }
-      workChanged?.()
+      workChanged?.(clientMessageId)
     }
   }
 }

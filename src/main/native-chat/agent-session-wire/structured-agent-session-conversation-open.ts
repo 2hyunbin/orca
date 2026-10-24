@@ -10,6 +10,7 @@
 // rejected (`journal-unsent-send-hold.ts`). The cards then wait for the chat's next turn
 // (`queued-message-pause.ts`). Nothing here starts a provider child.
 
+import { materializeJournalLegacyCut } from '../agent-session-journal/journal-row-table'
 import type { JournalHostDatabase } from '../agent-session-journal/journal-host-database'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { openAgentSessionJournal } from '../agent-session-journal/journal-store-factory'
@@ -40,6 +41,7 @@ export type OpenedStructuredAgentSessionConversation = {
 export type StructuredAgentSessionConversationOpenDeps = {
   store: Pick<AgentSessionRecordStore, 'getRecord' | 'replacedRuntime'>
   journalDatabase: JournalHostDatabase
+  recoveryCapsule?: StructuredAgentSessionHostDeps['recoveryCapsule']
   logger: StructuredAgentSessionHostDeps['logger']
 }
 
@@ -106,7 +108,23 @@ export async function openStructuredAgentSessionConversationJournal(
     expectedRuntimeFence: fence
   })
   const identity = journalIdentityFor(record, params)
-  const journal = await openAgentSessionJournal({ identity, database: deps.journalDatabase })
+  let legacyCursor
+  try {
+    const marker = (await deps.recoveryCapsule?.list(Date.now()))?.find(
+      (entry) => entry.sessionId === sessionId
+    )
+    if (marker) {
+      materializeJournalLegacyCut(deps.journalDatabase.db, sessionId, marker.recordedAt)
+      legacyCursor = marker.journalCursor
+    }
+  } catch (error) {
+    deps.logger.warn('saving legacy restart fact on open failed', { sessionId, error })
+  }
+  const journal = await openAgentSessionJournal({
+    identity,
+    database: deps.journalDatabase,
+    legacyCursor
+  })
   try {
     // A handed-over row found here is only doubt, which provider history decides under a won lease.
     await journal.markPendingSubmissionsUnknown(fence)

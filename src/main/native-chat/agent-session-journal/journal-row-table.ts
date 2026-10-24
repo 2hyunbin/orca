@@ -10,7 +10,8 @@ import { AgentSessionJournalError } from './journal-write-guards'
 
 export type JournalStoredRow = { epoch: string; seq: number; ts: number; rowJson: string }
 
-const SELECT_EPOCH = 'SELECT epoch FROM journal_sessions WHERE session_id = ?'
+const SELECT_EPOCH =
+  'SELECT epoch, open_turn_id, open_turn_since FROM journal_sessions WHERE session_id = ?'
 // A new epoch holds no turn until its own rows open one.
 const PUBLISH_SESSION_EPOCH = `INSERT INTO journal_sessions (session_id, workspace_id, epoch)
 VALUES (?, ?, ?)
@@ -35,9 +36,24 @@ export function readJournalSessionEpoch(db: Database.Database, sessionId: string
   return typeof epoch === 'string' ? epoch : null
 }
 
+/** Actual load's SQL baseline; never inferred from the replayed semantic revision. */
+export function readJournalSessionProjection(db: Database.Database, sessionId: string) {
+  const row = db.prepare(SELECT_EPOCH).get(sessionId)
+  return typeof row?.epoch === 'string'
+    ? {
+        epoch: row.epoch,
+        pair: [
+          typeof row.open_turn_id === 'string' ? row.open_turn_id : null,
+          typeof row.open_turn_since === 'number' ? row.open_turn_since : null
+        ] as const
+      }
+    : null
+}
+
 /** What a restart reads of a chat without reading its history: its open root turn, and its newest
  *  row's place and save time. Two primary-key lookups. Null when the chat has no journal. */
 export type JournalRestFacts = {
+  known: boolean
   openTurn: { itemId: string; since: number } | null
   lastSequence: number
   lastSavedAt: number
@@ -53,6 +69,7 @@ export function readJournalRestFacts(
   }
   const { open_turn_id: itemId, open_turn_since: since, last_seq: seq, last_ts: ts } = row
   return {
+    known: itemId !== null || since === 0,
     openTurn:
       typeof itemId === 'string' ? { itemId, since: typeof since === 'number' ? since : 0 } : null,
     lastSequence: typeof seq === 'number' ? seq : 0,
@@ -97,7 +114,29 @@ export function writeJournalRestFact(
 ): void {
   db.prepare(
     'UPDATE journal_sessions SET open_turn_id = ?, open_turn_since = ? WHERE session_id = ?'
-  ).run(open?.itemId ?? null, open?.since ?? null, sessionId)
+  ).run(open?.itemId ?? null, open?.since ?? 0, sessionId)
+}
+
+export function materializeJournalLegacyCut(
+  db: Database.Database,
+  sessionId: string,
+  at: number
+): void {
+  const loaded = readJournalSessionProjection(db, sessionId)
+  if (!loaded || loaded.pair[0] !== null || loaded.pair[1] !== null) {
+    return
+  }
+  const result = db
+    .prepare(`UPDATE journal_sessions SET open_turn_id = '', open_turn_since = ?
+    WHERE session_id = ? AND epoch = ?
+    AND open_turn_id IS NULL AND open_turn_since IS NULL`)
+    .run(at, sessionId, loaded.epoch)
+  if (result.changes === 0) {
+    const current = readJournalSessionProjection(db, sessionId)
+    if (!current || (current.pair[0] === null && current.pair[1] === null)) {
+      throw new Error('legacy restart fact was not saved')
+    }
+  }
 }
 
 // Why pages, not `.iterate()`: a lazily consumed cursor pins a read snapshot for as long as the

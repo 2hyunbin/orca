@@ -30,6 +30,8 @@ export type JournalLifecycleMutationInput = JournalItemAddress &
         turnScope: AgentJournalTurnScope
         /** The writer's provenance claim (`journalItemOwnerFence`); absent for host bookkeeping. */
         ownerFence?: number
+        recovered?: true
+        recoveredAt?: number
       }
     | { kind: 'tombstone' }
   )
@@ -82,6 +84,7 @@ export function journalLifecycleMutationRow(
         itemId,
         revision,
         body: mutation.body,
+        ...(mutation.recovered ? { recovered: true, recoveredAt: mutation.recoveredAt } : {}),
         ...journalItemEchoFields(mutation),
         turnScope: mutation.turnScope,
         ownerFence,

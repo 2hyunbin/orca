@@ -11,7 +11,7 @@ import {
   shouldReplaceRetainedWithLive
 } from './agent-status-pane-key-tab-binding'
 import { removePaneKeys } from './agent-status-pane-keyed-records'
-import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
+import { agentTurnEligibleForAttention } from '../../../../shared/agent-main-agent-verdict'
 
 export function createAgentStatusWorktreeDropActions(
   runtime: AgentStatusRuntime
@@ -67,7 +67,7 @@ export function createAgentStatusWorktreeDropActions(
               allowedPaneKeys.has(paneKey) &&
               entry.state === 'done' &&
               entry.agentType !== undefined &&
-              !agentTurnEndedOnPurpose(entry)
+              !agentTurnEligibleForAttention(entry)
             ) {
               retainedEvidence.set(
                 paneKey,

@@ -67,6 +67,7 @@ export type SleepingAgentSessionRecord = {
   terminalTitle?: string
   lastAssistantMessage?: string
   interrupted?: boolean
+  restoredInterruption?: true
   /** The main agent's own status when captured, copied with `interrupted` by `agentVerdictFields`;
    *  read the verdict through `agentMainAgentVerdict`. */
   mainAgent?: AgentMainAgentStatus

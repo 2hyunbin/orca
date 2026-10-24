@@ -8,6 +8,7 @@ import {
 // One transaction: discard the old epoch's rows, insert the epoch row plus the
 // replacement items, and move the session projection.
 
+import { journalSubmissionAt } from './journal-submission-fold'
 import { sameJournalConversation } from './journal-history-origin'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import {
@@ -59,6 +60,8 @@ export type JournalReplacementItem = AgentJournalProducerLinkage & {
   identity: AgentJournalItemIdentity
   body: AgentJournalItemBody
   observedAt?: number
+  recovered?: true
+  recoveredAt?: number
   /** Absent for history rebuilt from a source that never stated one: derived from position, as
    *  a legacy row's is, and then written down. */
   turnScope?: AgentJournalTurnScope
@@ -106,11 +109,88 @@ export function replaceJournalEpoch(input: {
   }
   const rows: JournalRow[] = [epochRow]
   applyJournalRow(state, epochRow)
+  const retainedSources = new Map(
+    input.items.flatMap((item) => {
+      const key = agentJournalItemKey(item.identity)
+      const previous = input.previous
+      const source = previous && journalSubmissionAt(previous, previous.aliases.get(key) ?? key)
+      return source && !isQueuedAgentJournalSubmission(source)
+        ? [[source.clientMessageId, source] as const]
+        : []
+    })
+  )
+  const sources = [...retainedSources.values()].sort(
+    (a, b) => (a.submittedSequence ?? 0) - (b.submittedSequence ?? 0)
+  )
+  let sourceIndex = 0
   for (const item of input.items) {
+    const key = agentJournalItemKey(item.identity)
+    const previous = input.previous
+    const position = previous?.items.get(previous.aliases.get(key) ?? key)?.sequence ?? Infinity
+    while (sources[sourceIndex] && (sources[sourceIndex].submittedSequence ?? 0) <= position) {
+      const submission = sources[sourceIndex++]
+      const sourceItem = previous?.items.get(agentJournalSubmissionKey(submission.clientMessageId))
+      const source = sourceItem?.body
+      if (source?.kind !== 'message') {
+        throw new Error('retained submission source missing')
+      }
+      const accepted = buildJournalSubmissionRow({
+        ...submission,
+        state,
+        body: source,
+        providerHandle,
+        seq: state.lastSequence + 1,
+        fence: submission.fence,
+        ts: submission.submittedAt
+      })
+      applyJournalRow(state, accepted)
+      rows.push(accepted)
+      if (submission.handedOverAt !== undefined) {
+        const pending: JournalRow = {
+          kind: 'dispatch',
+          clientMessageId: submission.clientMessageId,
+          state: 'pending',
+          providerItemId: null,
+          reason: null,
+          turnScope: sourceItem?.turnScope,
+          ...journalRowBase(
+            epoch,
+            state.lastSequence + 1,
+            submission.fence,
+            submission.handedOverAt
+          )
+        }
+        applyJournalRow(state, pending)
+        rows.push(pending)
+      }
+      if (submission.dispatchState !== 'pending') {
+        const dispatch: JournalRow = {
+          kind: 'dispatch',
+          clientMessageId: submission.clientMessageId,
+          state: submission.dispatchState,
+          providerItemId: submission.providerItemId,
+          reason: submission.reason,
+          recovered: submission.recovered,
+          rejection: submission.rejection,
+          keptAsQueuedMessageId: submission.keptAsQueuedMessageId,
+          answeredInTurn: submission.answeredInTurn,
+          ...journalRowBase(
+            epoch,
+            state.lastSequence + 1,
+            submission.fence,
+            submission.resolvedAt ?? submission.submittedAt
+          )
+        }
+        applyJournalRow(state, dispatch)
+        rows.push(dispatch)
+      }
+    }
     const row = buildJournalItemRow({
       state,
       identity: item.identity,
       body: item.body,
+      recovered: item.recovered,
+      recoveredAt: item.recoveredAt,
       ...journalItemEchoFields(item),
       ...(input.previous && input.reason !== 'legacy_import' && input.reason !== 'session_created'
         ? journalItemEchoRestatement(
@@ -197,6 +277,8 @@ export function replaceJournalEpoch(input: {
   // live one. The caller adopts that immediately, or a later failure leaves the
   // live store writing into an epoch whose rows were just deleted.
   state.oldestSequence = 1
+  const fact = state.rest.fact()
+  state.persistedRest = [fact?.itemId ?? null, fact?.since ?? 0]
   input.onPublished({ state, newer: null, damage: null })
   receipt?.committed()
 }

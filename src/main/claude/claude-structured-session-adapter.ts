@@ -1,3 +1,4 @@
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { dispatchClaudeCommand } from './claude-structured-command-dispatch'
@@ -36,7 +37,10 @@ import {
 } from './claude-structured-session-exit-lifecycle'
 import type { AgentSessionBackgroundTaskState } from '../../shared/agent-session-wire'
 import { resolveClaudeProviderHistoryWindow } from './claude-structured-history-window'
-import { drainClaudeChildWork } from './claude-child-work-evidence'
+import {
+  publishClaudeChildWork,
+  finishClaudeChildWorkAfterClose
+} from './claude-structured-child-work-delivery'
 import { emitClaudeStructuredSessionEvent } from './claude-structured-event-delivery'
 import {
   answerClaudeStructuredPrompt,
@@ -148,11 +152,8 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     sessionId: string,
     session: ClaudeSession | null | undefined = this.sessions.get(sessionId),
     message: Record<string, unknown> | null = null
-  ): void {
-    const evidence = drainClaudeChildWork(session, message, this.deps.now?.() ?? Date.now())
-    if (evidence.length > 0) {
-      this.deps.onChildWorkEvidence?.(sessionId, evidence, session?.events)
-    }
+  ): ChildWorkAdmission {
+    return publishClaudeChildWork(this.deps, sessionId, session, message)
   }
 
   bindPromptItemId(sessionId: string, journalItemId: string, promptKey: string): void {
@@ -277,7 +278,9 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
     try {
       return await close()
     } finally {
-      this.publishChildWork(sessionId, session)
+      finishClaudeChildWorkAfterClose(this.deps, sessionId, session, (id, child) =>
+        this.publishChildWork(id, child)
+      )
     }
   }
 

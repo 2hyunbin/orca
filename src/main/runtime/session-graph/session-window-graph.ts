@@ -43,10 +43,6 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     )
   }
 
-  shouldRelayTerminalBrowserOpens(): boolean {
-    return this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID
-  }
-
   syncWindowGraph(
     windowId: number,
     graph: RuntimeSyncWindowGraph | RuntimeRendererSyncWindowGraph
@@ -91,6 +87,8 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
       this.servesHeadlessGraph = true
       this.rendererGeneration = null
     }
+    const startupRestorationReady =
+      'startupRestorationReady' in graph && graph.startupRestorationReady === true
     // Switch point: main's own panes stand in for the window's list of a workspace main owns.
     graph = ORCA_LAYOUT_OWNER_IS_MAIN ? this.withMainSurfaces(windowId, graph) : graph
 
@@ -329,6 +327,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     if (rendererGeneration !== undefined) {
       this.rendererGeneration = rendererGeneration
     }
+    this.noteStartupRestorationReady(windowId, startupRestorationReady)
     for (const leaf of this.leaves.values()) {
       this.adoptPreAllocatedHandle(leaf)
       const previousLeaf = previousLeaves.get(this.getLeafKey(leaf.tabId, leaf.leafId))

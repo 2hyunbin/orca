@@ -104,6 +104,28 @@ export function placeRejectedMessage(
   })
 }
 
+export function journalSubmissionAt(state: JournalReducerState, resolvedItemId: string) {
+  const identity = parseAgentJournalItemKey(resolvedItemId)
+  if (identity?.provider !== 'orca') {
+    return undefined
+  }
+  const known = state.submissions.get(identity.clientMessageId)
+  // Oversized components are digests; legacy keys may not recover the original send id.
+  if (agentJournalSubmissionKey(identity.clientMessageId) === resolvedItemId) {
+    return known
+  }
+  const indexed = state.submissionItemSource?.(resolvedItemId)
+  if (indexed !== undefined) {
+    return state.submissions.get(indexed)
+  }
+  for (const candidate of state.submissions.values()) {
+    if (agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId) {
+      return candidate
+    }
+  }
+  return undefined
+}
+
 export function acceptSubmissionFromProviderItem(
   state: JournalReducerState,
   providerItemId: string,
@@ -113,17 +135,7 @@ export function acceptSubmissionFromProviderItem(
   if (providerItemId === resolvedItemId) {
     return
   }
-  const identity = parseAgentJournalItemKey(resolvedItemId)
-  const known =
-    identity?.provider === 'orca' ? state.submissions.get(identity.clientMessageId) : undefined
-  // Oversized components are digests; legacy keys may not recover the original send id.
-  const original =
-    (known && agentJournalSubmissionKey(known.clientMessageId) === resolvedItemId
-      ? known
-      : undefined) ??
-    [...state.submissions.values()].find(
-      (candidate) => agentJournalSubmissionKey(candidate.clientMessageId) === resolvedItemId
-    )
+  const original = journalSubmissionAt(state, resolvedItemId)
   const submission = original ? { ...original } : undefined
   if (!submission || !journalDispatchRowApplies(submission)) {
     return
@@ -137,6 +149,7 @@ export function acceptSubmissionFromProviderItem(
   submission.reason = null
   submission.resolvedAt = row.ts
   delete submission.recovered
+  state.submissions.set(submission.clientMessageId, submission)
   state.receipts.set(submission.clientMessageId, {
     clientMessageId: submission.clientMessageId,
     providerItemId,

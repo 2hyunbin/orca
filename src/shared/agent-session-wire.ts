@@ -255,6 +255,7 @@ export type AgentSessionStatusSummary = {
    *  UNKNOWN, never success. Optional for mixed-version hosts; an older client reads an arm it
    *  does not know as no verdict. The agent-status row publishes it as `mainAgent.outcome`. */
   turnOutcome?: AgentTurnOutcome
+  restoredInterruption?: true
   /** Present only while `status` is 'working' and a person's Stop is still ending that work: while
    *  the Stop settles, then until the turn it stopped or failed to stop ends. A Stop that settles
    *  having stopped nothing clears it. Derived by the host, never stored. Absent from older hosts;

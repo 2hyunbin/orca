@@ -1,10 +1,16 @@
 import type { AgentStateHistoryEntry, AgentStatusEntry } from './agent-status-types'
-import { agentTurnEndedOnPurpose } from './agent-main-agent-verdict'
+import { agentTurnEligibleForAttention } from './agent-main-agent-verdict'
 
 /** The subset of a hook entry a completion time is derived from. */
 export type AgentCompletionSource = Pick<
   AgentStatusEntry,
-  'state' | 'stateStartedAt' | 'stateHistory' | 'interrupted' | 'mainAgent' | 'sessionBoundary'
+  | 'state'
+  | 'stateStartedAt'
+  | 'stateHistory'
+  | 'interrupted'
+  | 'mainAgent'
+  | 'restoredInterruption'
+  | 'sessionBoundary'
 >
 
 function mostRecentCompletedTurnInHistory(
@@ -14,7 +20,7 @@ function mostRecentCompletedTurnInHistory(
   for (const row of history ?? []) {
     if (
       row.state === 'done' &&
-      !agentTurnEndedOnPurpose(row) &&
+      agentTurnEligibleForAttention(row) &&
       Number.isFinite(row.startedAt) &&
       row.startedAt > max
     ) {
@@ -34,7 +40,7 @@ function mostRecentCompletedTurnInHistory(
  *   - for a session-boundary `done` (connected idle, not a turn), the real completion it displaced.
  */
 export function agentEntryCompletionAt(entry: AgentCompletionSource): number | null {
-  if (entry.state !== 'done' || agentTurnEndedOnPurpose(entry)) {
+  if (entry.state !== 'done' || !agentTurnEligibleForAttention(entry)) {
     return null
   }
   if (entry.sessionBoundary === true) {

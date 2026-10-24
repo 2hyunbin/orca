@@ -140,7 +140,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     currentWork: (sessionId) =>
       hostStructuredAgentSessionCurrentWork({ store: deps.store, sessions }, sessionId),
     readChildWork: input.clientDelivery.readChildWork,
-    workChanged: (sessionId) => input.clientDelivery.publishGenerationEnded(sessionId),
+    workChanged: input.clientDelivery.publishHandoverChanged,
     childWorkOpen: input.clientDelivery.childWorkOpen,
     stopping: input.clientDelivery.readStopping,
     now: () => deps.now?.() ?? Date.now(),

@@ -43,6 +43,7 @@ export const graphState = {
   syncInFlight: false,
   syncPendingAfterFlight: false,
   syncEnabled: false,
+  startupRestorationReady: false,
   syncTimer: null as ReturnType<typeof setTimeout> | null,
   getStoreState: null as (() => AppState) | null,
   mobileSessionSnapshotCacheByWorktree: new Map<

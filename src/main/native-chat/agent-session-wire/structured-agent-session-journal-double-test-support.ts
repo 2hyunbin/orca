@@ -6,7 +6,7 @@ import type {
   AgentJournalItemBody,
   AgentJournalItemIdentity
 } from '../../../shared/agent-session-journal-types'
-import type { JournalStep } from '../agent-session-journal/journal-step-writer'
+import type { JournalStep, JournalStepWriter } from '../agent-session-journal/journal-step-writer'
 import type {
   JournalItemAppendOptions,
   JournalLifecycleBatchInput
@@ -29,7 +29,7 @@ export function withJournalQueueMembers<T extends AppendingDouble>(
     resolve: () => { identity: AgentJournalItemIdentity; body: AgentJournalItemBody } | null,
     options: JournalItemAppendOptions
   ) => Promise<unknown>
-  appendSteps: (steps: readonly JournalStep[]) => Promise<boolean[]>
+  appendSteps: JournalStepWriter['append']
 } {
   return Object.assign(journal, {
     readInOrder: async <R>(read: () => R): Promise<R> => read(),
@@ -44,7 +44,10 @@ export function withJournalQueueMembers<T extends AppendingDouble>(
         : journal.appendItem(resolved.identity, resolved.body, options)
     },
     // A settlement lands through the double's own batch append, as an unresolved one does.
-    appendSteps: async (steps: readonly JournalStep[]): Promise<boolean[]> => {
+    appendSteps: async (
+      steps: readonly JournalStep[],
+      onWritten?: (wrote: boolean[]) => void
+    ): Promise<boolean[]> => {
       const wrote: boolean[] = []
       for (const step of steps) {
         if (step.kind === 'item') {
@@ -62,6 +65,7 @@ export function withJournalQueueMembers<T extends AppendingDouble>(
         }
         wrote.push(mutations.length > 0)
       }
+      onWritten?.(wrote)
       return wrote
     }
   })

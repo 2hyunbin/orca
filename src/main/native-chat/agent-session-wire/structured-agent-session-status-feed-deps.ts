@@ -19,7 +19,10 @@ import type { StructuredAgentSessionStatusSink } from './structured-agent-sessio
 export type StatusFeedSession = {
   journal: AgentSessionJournal
   params: { location: AgentSessionRecord['location']; provider: AgentSessionRecord['provider'] }
-  child?: Pick<StructuredAgentSessionProviderChild, 'phase' | 'generation' | 'fence'> | null
+  child?: Pick<
+    StructuredAgentSessionProviderChild,
+    'phase' | 'generation' | 'fence' | 'heldSends'
+  > | null
   /** What the current-work projection reads of the last child this host saw end. */
   lastEndedChild?: Pick<StructuredAgentSessionEndedChild, 'fence' | 'rootGone'>
   operationalRevision?: number

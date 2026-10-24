@@ -35,6 +35,7 @@ export type RuntimeWorktreeAgentRow = {
   toolName: string | null
   toolInput: string | null
   interrupted: boolean
+  restoredInterruption?: true
   /** The main agent's own state, verdict and clock, sent whenever the host row has one, including
    *  while subagents hold the row `working`. Optional on the wire: old hosts never send it, and a
    *  reader without it falls back to `interrupted`. */

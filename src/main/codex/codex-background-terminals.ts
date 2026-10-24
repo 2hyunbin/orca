@@ -1,3 +1,4 @@
+import { finishChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 // Stopping a command Codex left running, by the `processId` on its `commandExecution` item, through
 // the app-server's experimental background-terminal methods (Codex 0.140+). Each chat has its own
 // app-server, so one probe per app-server answers for the Codex binary on the host that runs it. The
@@ -190,7 +191,18 @@ export function startCodexTerminalStopProbe(
     }
     try {
       session.backgroundTasks.settleTerminalStopProbe(support)
-      session.backgroundTasks.publishChildWork()
+      void finishChildWorkAdmission(
+        session.backgroundTasks.publishChildWork(),
+        session.events
+      ).then((result) => {
+        if (!result.ok) {
+          deps.logger?.warn('Codex child work could not be written', {
+            scope: 'codex-child-work',
+            sessionId,
+            error: result.error
+          })
+        }
+      })
     } catch (error) {
       deps.logger?.warn('Codex background-terminal stops could not be published', {
         scope: 'codex-background-terminals',

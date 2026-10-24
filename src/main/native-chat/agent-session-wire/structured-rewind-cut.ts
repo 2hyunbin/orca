@@ -61,7 +61,7 @@ export function structuredRewindCut(
     })
     return {
       beforeMessage: { sessionId: key.sessionId, uuid: key.uuid },
-      kept: keptRows.map((item) => keptRow(journal, item, providerKey))
+      kept: retainedRows(journal, items, keptRows, providerKey)
     }
   }
   if (
@@ -92,7 +92,7 @@ export function structuredRewindCut(
       key.threadId,
       providerKey
     ),
-    kept: keptRows.map((item) => keptRow(journal, item, providerKey))
+    kept: retainedRows(journal, items, keptRows, providerKey)
   }
 }
 
@@ -190,9 +190,34 @@ function turnMembership(
   return (item) => byItem.get(item.itemId)
 }
 
+function retainedRows(
+  journal: AgentSessionJournal,
+  items: readonly AgentJournalRenderItem[],
+  selected: readonly AgentJournalRenderItem[],
+  rename: (id: string) => string
+): JournalReplacementItem[] {
+  const retained = new Set(selected.map((item) => item.itemId))
+  return items.flatMap((item) => {
+    const body = item.body
+    const keep =
+      body.kind === 'semantic-work' && body.source.kind === 'submission'
+        ? retained.has(agentJournalSubmissionKey(body.source.clientMessageId))
+        : retained.has(item.itemId)
+    if (!keep) {
+      return []
+    }
+    const row = keptRow(journal, item, rename)
+    if (body.kind === 'semantic-work' && body.phase === 'interrupted') {
+      const frontier = journal.retainedRequestFrontier(body.afterRequest ?? null, retained)
+      row.body = { ...body, afterRequest: frontier === null ? null : rename(frontier) }
+    }
+    return [row]
+  })
+}
+
 function keptRow(
   journal: AgentSessionJournal,
-  { itemId, observedAt, turnScope, ...linkage }: AgentJournalRenderItem,
+  { itemId, observedAt, turnScope, recovered, recoveredAt, ...linkage }: AgentJournalRenderItem,
   providerKey: (itemId: string) => string
 ): JournalReplacementItem {
   const body = journal.itemBody(itemId)
@@ -206,6 +231,7 @@ function keptRow(
     ...echo,
     body: renameRewindTurnOpener(body, providerKey),
     observedAt,
+    ...(recovered ? { recovered, recoveredAt } : {}),
     ...(turnScope ? { turnScope } : {}),
     // The old fold's provenance, so a rewind never makes a dead generation's work current.
     ownerFence: ownerFence ?? 0,

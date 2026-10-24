@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { StructuredAgentSessionAcquireInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -50,6 +51,7 @@ type CodexOpenContext = {
   setPrimaryThreadId: (threadId: string) => void
   forceCloseUnexpected: CodexStructuredSessionTeardown['forceCloseUnexpected']
   unbindReadingControl?: () => void
+  workProducer?: StructuredAgentSessionChildWorkProducer
 }
 
 /** The host owns the open promise and closes the spawned child if this rejects. */
@@ -138,6 +140,7 @@ export async function openCodexStructuredSession(
   const catalogAccess = codexAcquireCatalogAccess(deps, launch, sessionId)
   const session: CodexSession = {
     events: input.events,
+    workProducer: start.workProducer,
     account: start.account,
     connection,
     ...codexSessionLifecycle(input.fence, generation),
@@ -154,7 +157,7 @@ export async function openCodexStructuredSession(
     backgroundTasks: new CodexBackgroundTaskTracker(
       opened.threadId,
       start.subagentExecutions,
-      codexChildWorkSink(sessionId, deps, input.events)
+      codexChildWorkSink(sessionId, deps, start.workProducer ?? input.events)
     ),
     forceCloseUnexpected: (reason) =>
       start.forceCloseUnexpected(sessionId, input.fence, generation, reason),

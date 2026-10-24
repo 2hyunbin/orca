@@ -13,7 +13,7 @@ import {
   shouldReplaceRetainedWithLive
 } from './agent-status-pane-key-tab-binding'
 import { retireAgentPaneAuthorityAliasesByOwnerTab } from './agent-pane-authority'
-import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
+import { agentTurnEligibleForAttention } from '../../../../shared/agent-main-agent-verdict'
 
 function removeAcknowledgement(
   acknowledgements: Record<string, number>,
@@ -163,7 +163,7 @@ export function createAgentStatusDropActions(
         if (
           liveEntry?.state === 'done' &&
           liveEntry.agentType !== undefined &&
-          !agentTurnEndedOnPurpose(liveEntry)
+          agentTurnEligibleForAttention(liveEntry)
         ) {
           retainedEvidence.set(
             paneKey,

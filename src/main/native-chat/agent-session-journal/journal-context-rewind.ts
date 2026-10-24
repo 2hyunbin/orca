@@ -39,6 +39,12 @@ export async function rewindJournalContext(input: {
           .filter(isQueuedAgentJournalSubmission)
           .map((entry) => agentJournalSubmissionKey(entry.clientMessageId))
       )
+      const retained = new Set(
+        input.items.map((item) => {
+          const key = agentJournalItemKey(item.identity)
+          return state.aliases.get(key) ?? key
+        })
+      )
       const removed = new Map<string, boolean>()
       for (const item of state.items.values()) {
         if (item.sequence > input.floor.sequence && !queued.has(item.itemId)) {
@@ -50,7 +56,10 @@ export async function rewindJournalContext(input: {
           (submission.acceptedSequence ?? 0) > input.floor.sequence &&
           !isQueuedAgentJournalSubmission(submission)
         ) {
-          removed.set(agentJournalSubmissionKey(submission.clientMessageId), true)
+          removed.set(
+            agentJournalSubmissionKey(submission.clientMessageId),
+            !retained.has(agentJournalSubmissionKey(submission.clientMessageId))
+          )
         }
       }
       const revisions = new Map<string, number>()

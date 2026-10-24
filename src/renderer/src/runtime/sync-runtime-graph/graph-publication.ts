@@ -81,6 +81,7 @@ export async function syncRuntimeGraph(): Promise<void> {
     tabs: [],
     leaves: [],
     rendererGeneration: mobilePublicationEpoch,
+    startupRestorationReady: graphState.startupRestorationReady,
     mobileSessionTabs: publication.changed,
     unchangedMobileSessionWorktrees: publication.unchangedWorktrees,
     ...(gridSizes ? { terminalGroupGridSizes: gridSizes.groups } : {}),

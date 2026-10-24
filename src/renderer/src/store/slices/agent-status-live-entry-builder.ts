@@ -266,6 +266,7 @@ export function buildAgentStatusLiveEntry(
     ...(payload.observation ? { observation: payload.observation } : {}),
     ...(programStatus ? { programStatus } : {}),
     interrupted: payload.interrupted,
+    restoredInterruption: payload.restoredInterruption,
     sessionBoundary:
       payload.sessionBoundary ??
       (existing?.state === 'done' &&

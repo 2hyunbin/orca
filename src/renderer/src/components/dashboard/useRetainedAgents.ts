@@ -15,7 +15,7 @@ import {
   type AgentStatusEntry
 } from '../../../../shared/agent-status-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
-import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
+import { agentTurnEligibleForAttention } from '../../../../shared/agent-main-agent-verdict'
 
 import {
   createWorktreeTabBucketProjection,
@@ -307,7 +307,7 @@ export function collectRetainedAgentsOnDisappear(args: {
     // pane keys as suppression candidates, so a close/quit/crash cannot
     // resurrect a stale `done` row on the next sync.
     const lastState = prev.row.state
-    if (lastState !== 'done' || agentTurnEndedOnPurpose(prev.row.entry)) {
+    if (lastState !== 'done' || !agentTurnEligibleForAttention(prev.row.entry)) {
       continue
     }
     toRetain.push({

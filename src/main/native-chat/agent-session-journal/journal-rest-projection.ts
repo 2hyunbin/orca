@@ -1,25 +1,23 @@
-import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
+import { isDeepStrictEqual } from 'node:util'
+import { semanticWorkRecordId } from '../../../shared/agent-session-semantic-work'
 import { compareAgentJournalItems } from '../../../shared/agent-session-journal-position'
-import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { isAgentSessionContextClear } from '../../../shared/agent-session-context-clear'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { latestStructuredAgentSessionRequest } from '../../../shared/structured-agent-session-latest-request'
 import type { JournalReducerState } from './journal-reducer'
 import { JournalMutationMap } from './journal-mutation-map'
-import type { JournalRestFacts } from './journal-row-table'
+import { journalSubmissionAt } from './journal-submission-fold'
+import {
+  agentJournalItemKey,
+  agentJournalSubmissionKey
+} from '../../../shared/agent-session-journal-item-key'
+import { isStructuredAgentSessionCommandEntry } from '../../../shared/structured-agent-session-command-entry'
 
-type Request = { item: AgentJournalRenderItem; open: JournalRestFacts['openTurn'] }
+import { JournalRestProjectionIndex } from './journal-rest-projection-index'
+export type { JournalStructuralStorage } from './journal-rest-projection-index'
 
-/** A compact index of canonical requests, including finished heads that supersede older cuts. */
-export class JournalRestProjection {
-  private requests = new Map<string, Request>()
-  private clears = new Map<string, number>()
-  private users = new Map<string, Set<string>>()
-  private latest: Request | undefined
-  revision = 0
-  private dirty = false
-  private floor = 0
-
+export class JournalRestProjection extends JournalRestProjectionIndex {
   fork(): JournalRestProjection {
     const staged = new JournalRestProjection()
     staged.requests = new JournalMutationMap(this.requests)
@@ -29,36 +27,71 @@ export class JournalRestProjection {
     staged.revision = this.revision
     staged.latest = this.latest
     staged.floor = this.floor
+    staged.active = this.active.fork()
+    staged.cuts = new JournalMutationMap(this.cuts, (value) => value.fork())
+    staged.cutAt = new JournalMutationMap(this.cutAt)
+    staged.cutBuckets = new JournalMutationMap(this.cutBuckets)
+    staged.predecessors = new JournalMutationMap(this.predecessors)
+    staged.submissionWork = new JournalMutationMap(this.submissionWork)
+    staged.origins = new JournalMutationMap(this.origins)
+    staged.legacy = this.legacy
     return staged
   }
 
-  fact(): JournalRestFacts['openTurn'] {
-    if (this.dirty) {
-      this.latest = undefined
-      for (const candidate of this.requests.values()) {
-        if (!this.latest || compareAgentJournalItems(candidate.item, this.latest.item) > 0) {
-          this.latest = candidate
-        }
-      }
-      this.dirty = false
+  observe(state: JournalReducerState, itemId: string, visiting?: Set<string>): void {
+    if (!visiting) {
+      visiting = this.storage?.set('visiting') ?? new Set<string>()
+      visiting.clear()
     }
-    return this.latest && this.latest.item.sequence > this.floor ? this.latest.open : null
-  }
-
-  observe(state: JournalReducerState, itemId: string): void {
+    if (visiting.has(itemId)) {
+      return
+    }
+    visiting.add(itemId)
     const item = state.items.get(itemId)
+    if (
+      !readAgentJournalTurn(item?.body) &&
+      item?.body.kind !== 'semantic-work' &&
+      !(item?.body.kind === 'message' && item.body.role === 'user') &&
+      !isAgentSessionContextClear(item?.body) &&
+      !this.clears.has(itemId) &&
+      this.linked(itemId).size === 0 &&
+      !this.requests.has(itemId) &&
+      !this.active.entries.has(itemId) &&
+      !this.cutAt.has(itemId)
+    ) {
+      return
+    }
+    this.revision++
+    const oldFloor = this.floor
     const wasClear = this.clears.delete(itemId)
     if (item && isAgentSessionContextClear(item.body)) {
       this.clears.set(itemId, item.sequence)
       this.floor = Math.max(this.floor, item.sequence)
     } else if (wasClear) {
-      this.floor = Math.max(0, ...this.clears.values())
+      this.floor = 0
+      for (const sequence of this.clears.values()) {
+        this.floor = Math.max(this.floor, sequence)
+      }
     }
     const turn = readAgentJournalTurn(item?.body)
-    const identity = parseAgentJournalItemKey(itemId)
     const submission =
-      identity?.provider === 'orca' ? state.submissions.get(identity.clientMessageId) : undefined
-    const command = turn?.userItemId ? state.items.get(turn.userItemId) : undefined
+      item?.body.kind === 'message' && item.body.role === 'user'
+        ? journalSubmissionAt(state, itemId)
+        : undefined
+    let body = item?.body
+    const sourceKey =
+      body?.kind === 'semantic-work' && body.source.kind === 'submission'
+        ? agentJournalSubmissionKey(body.source.clientMessageId)
+        : itemId
+    const command = turn?.userItemId
+      ? state.items.get(state.aliases.get(turn.userItemId) ?? turn.userItemId)
+      : undefined
+    const requestSourceId = turn?.userItemId
+      ? (state.aliases.get(turn.userItemId) ?? turn.userItemId)
+      : itemId
+    const requestSubmission = turn?.userItemId
+      ? journalSubmissionAt(state, requestSourceId)
+      : submission
     const request = item
       ? latestStructuredAgentSessionRequest(
           command ? [command, item] : [item],
@@ -68,47 +101,182 @@ export class JournalRestProjection {
         )
       : null
     const previous = this.requests.get(itemId)
-    if (previous || request || wasClear || (item && isAgentSessionContextClear(item.body))) {
-      this.revision++
-    }
-    const previousUser = readAgentJournalTurn(previous?.item.body)?.userItemId
+    const previousUser = previous?.anchor
     if (previousUser) {
-      this.users.get(previousUser)?.delete(itemId)
+      this.linked(previousUser).delete(itemId)
     }
     if (turn?.userItemId) {
-      const linked = this.users.get(turn.userItemId) ?? new Set<string>()
+      const linked = this.linked(requestSourceId, true)
       linked.add(itemId)
-      this.users.set(turn.userItemId, linked)
     }
-    if (item && request) {
-      const cut =
-        request.kind === 'turn' &&
-        (request.turnState !== 'completed' || request.outcome === 'cancellation')
+    const independent =
+      submission &&
+      item &&
+      isRootAgentJournalItem(item) &&
+      item.turnScope?.kind !== 'turn' &&
+      submission.answeredInTurn?.via !== 'steer' &&
+      !isStructuredAgentSessionCommandEntry(item.body)
+    if (item && (request || independent)) {
       const next = {
-        item,
-        open: cut
-          ? { itemId, since: turn?.startedAt ?? turn?.requestedAt ?? item.observedAt }
-          : null
+        item: requestSubmission
+          ? { ...item, sequence: requestSubmission.submittedSequence ?? item.sequence }
+          : {
+              ...item,
+              sequence: previous?.item.sequence ?? item.sequence,
+              sequenceIndex: previous?.item.sequenceIndex ?? item.sequenceIndex
+            },
+        anchor: requestSubmission ? requestSourceId : itemId
+      }
+      if (!this.predecessors.has(next.anchor)) {
+        this.predecessors.set(next.anchor, this.frontier())
       }
       this.requests.set(itemId, next)
       if (
         !this.latest ||
         this.latest.item.itemId === itemId ||
-        compareAgentJournalItems(item, this.latest.item) > 0
+        compareAgentJournalItems(next.item, this.latest.item) > 0
       ) {
         this.latest = next
       }
     } else {
-      this.requests.delete(itemId)
+      if (previous) {
+        this.requests.set(itemId, { ...previous, retired: true })
+      }
       if (this.latest?.item.itemId === itemId) {
         this.dirty = true
       }
     }
-    // Command identity is resolved by the same selector as the sidebar, including late imports.
-    for (const linked of turn ? [] : [...(this.users.get(itemId) ?? [])]) {
-      if (linked !== itemId) {
-        this.observe(state, linked)
+    if (sourceKey !== itemId) {
+      this.submissionWork.set(sourceKey, itemId)
+    } else {
+      body = state.items.get(this.submissionWork.get(itemId) ?? '')?.body ?? body
+    }
+    if (
+      body?.kind === 'semantic-work' ||
+      submission ||
+      (turn && isRootAgentJournalItem(item)) ||
+      this.active.entries.has(itemId) ||
+      this.cutAt.has(itemId)
+    ) {
+      const originalCut = this.cutAt.get(sourceKey)
+      const old = this.cutBuckets.get(sourceKey)
+      if (old !== undefined) {
+        this.updateCut(old, sourceKey, undefined)
+        this.cutBuckets.delete(sourceKey)
+        this.cutAt.delete(sourceKey)
       }
+      const source =
+        body?.kind === 'semantic-work' &&
+        body.source.kind === 'submission' &&
+        state.submissions.get(body.source.clientMessageId)
+      const original = this.origins.get(this.submissionWork.get(itemId) ?? itemId)
+      if (
+        body?.kind === 'semantic-work' &&
+        ((original &&
+          (!isDeepStrictEqual(original.source, body.source) ||
+            original.startedAt !== body.startedAt)) ||
+          agentJournalItemKey({
+            provider: 'legacy',
+            agent: state.agent ?? '',
+            sessionId: state.sessionId,
+            recordId: semanticWorkRecordId(body.source)
+          }) !== (this.submissionWork.get(itemId) ?? itemId) ||
+          (body.source.kind === 'submission' && (!source || source.submittedAt !== body.startedAt)))
+      ) {
+        throw new Error('semantic work source mismatch')
+      }
+      if (body?.kind === 'semantic-work' && !original) {
+        this.origins.set(this.submissionWork.get(itemId) ?? itemId, body)
+      }
+      const phase =
+        body?.kind === 'semantic-work'
+          ? body.phase
+          : turn && isRootAgentJournalItem(item)
+            ? turn.state === 'running'
+              ? 'open'
+              : turn.state !== 'completed' || turn.outcome === 'cancellation'
+                ? 'interrupted'
+                : 'settled'
+            : submission && submission.dispatchState !== 'rejected'
+              ? submission.recovered
+                ? 'interrupted'
+                : 'open'
+              : submission?.recovered
+                ? 'interrupted'
+                : 'settled'
+      const fact = {
+        itemId,
+        since:
+          body?.kind === 'semantic-work'
+            ? body.startedAt
+            : (submission?.submittedAt ??
+              turn?.startedAt ??
+              turn?.requestedAt ??
+              item?.observedAt ??
+              0)
+      }
+      let attached = false
+      if (!turn) {
+        for (const id of this.linked(sourceKey)) {
+          if (readAgentJournalTurn(state.items.get(id)?.body)) {
+            attached = true
+            break
+          }
+        }
+      }
+      const work = item
+        ? {
+            fact,
+            item:
+              submission || source
+                ? { ...item, sequence: (submission || source).submittedSequence ?? item.sequence }
+                : item
+          }
+        : undefined
+      this.active.update(
+        sourceKey,
+        phase === 'open' && !attached && item && item.sequence > this.floor ? work : undefined
+      )
+      if (item && item.sequence > this.floor && !attached) {
+        if (phase === 'interrupted') {
+          const frontier =
+            body?.kind === 'semantic-work'
+              ? (state.aliases.get(body.afterRequest ?? '') ?? body.afterRequest ?? '')
+              : (originalCut ?? this.frontier() ?? '')
+          const linked = this.linked(frontier, true)
+          linked.add(itemId)
+          let at = frontier
+          while (
+            at &&
+            (!this.requests.has(at) || this.requests.get(at)?.retired) &&
+            this.predecessors.has(at)
+          ) {
+            at = this.predecessors.get(at) ?? ''
+          }
+          this.updateCut(at, sourceKey, work)
+          this.cutAt.set(sourceKey, frontier)
+          this.cutBuckets.set(sourceKey, at)
+        }
+      }
+    }
+    if (oldFloor !== this.floor) {
+      this.legacy = undefined
+      this.dirty = true
+      for (const key of this.active.entries.keys()) {
+        this.observe(state, key, visiting)
+      }
+      for (const key of this.cutAt.keys()) {
+        this.observe(state, key, visiting)
+      }
+    }
+    // Command identity is resolved by the same selector as the sidebar, including late imports.
+    for (const linked of this.linked(itemId)) {
+      if (linked !== itemId) {
+        this.observe(state, linked, visiting)
+      }
+    }
+    if (turn?.userItemId && requestSourceId !== itemId) {
+      this.observe(state, requestSourceId, visiting)
     }
   }
 }

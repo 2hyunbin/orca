@@ -12,6 +12,7 @@ vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry'
     hostRef.current === null
       ? null
       : {
+          withConversationUse: <T>(_id: string, task: () => Promise<T>) => task(),
           withAutomaticConversation: <T>(_id: string, task: () => Promise<T>) => task(),
           ...(typeof hostRef.current === 'object' ? hostRef.current : {})
         }

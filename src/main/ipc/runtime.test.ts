@@ -67,11 +67,26 @@ describe('registerRuntimeHandlers', () => {
     const currentMainFrame = {}
     const sender = { mainFrame: currentMainFrame }
     const handler = syncRegistration![1]
-    const graph = { tabs: [], leaves: [], rendererGeneration: 'renderer-1' }
+    const graph = {
+      tabs: [],
+      leaves: [],
+      rendererGeneration: 'renderer-1',
+      startupRestorationReady: true
+    }
     const result = handler({ sender, senderFrame: currentMainFrame }, graph)
 
     expect(runtime.syncWindowGraph).toHaveBeenCalledWith(17, graph)
     expect(result).toEqual({ graphStatus: 'ready' })
+    expect(() =>
+      handler(
+        { sender, senderFrame: currentMainFrame },
+        {
+          ...graph,
+          startupRestorationReady: 'yes'
+        }
+      )
+    ).toThrow('readiness must be boolean')
+    expect(runtime.syncWindowGraph).toHaveBeenCalledTimes(1)
   })
 
   it("serves the authoritative window's sidebar catalog to paired phones, and keeps it when omitted", () => {
@@ -128,7 +143,10 @@ describe('registerRuntimeHandlers', () => {
     fromWebContentsMock.mockReturnValue({ id: 17 })
 
     expect(() =>
-      handler({ sender, senderFrame: { generation: 1 } }, { tabs: [], leaves: [] })
+      handler(
+        { sender, senderFrame: { generation: 1 } },
+        { tabs: [], leaves: [], rendererGeneration: 'stale', startupRestorationReady: true }
+      )
     ).toThrow('Runtime graph sync must originate from the current main frame')
     expect(runtime.syncWindowGraph).not.toHaveBeenCalled()
   })

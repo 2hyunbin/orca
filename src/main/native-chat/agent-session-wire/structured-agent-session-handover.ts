@@ -35,7 +35,7 @@ import {
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   deliveryOrder?: StructuredAgentSessionDeliveryOrder
-  workChanged?: () => void
+  workChanged?: (clientMessageId: string) => void
   /** A message the agent took: a chat keeps, where it has none saved, the options it ran. */
   recordRanOptions?: ReturnType<StructuredAgentSessionRanRecorder>
 }

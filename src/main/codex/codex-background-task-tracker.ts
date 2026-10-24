@@ -1,3 +1,4 @@
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type {
   AgentSessionBackgroundTask,
@@ -18,7 +19,7 @@ import { boundSubagentLabel } from '../native-chat/agent-session-journal/journal
 
 /** Where a session's child-work evidence goes, and the host clock that stamps it. */
 export type CodexChildWorkSink = {
-  deliver: (evidence: AgentChildWorkEvidence[]) => void
+  deliver: (evidence: AgentChildWorkEvidence[]) => ChildWorkAdmission | void
   now: () => number
 }
 
@@ -176,12 +177,13 @@ export class CodexBackgroundTaskTracker {
 
   /** Hand the pending evidence to the host. Callers run this after the journal wrote the frame
    *  and the parent's own row republished, so a child record never lands ahead of either. */
-  publishChildWork(): void {
+  publishChildWork(): ChildWorkAdmission {
     // Drained even with no sink, so undelivered evidence never accumulates.
     const evidence = this.drainChildWorkEvidence(this.childWorkSink?.now() ?? Date.now())
     if (evidence.length > 0) {
-      this.childWorkSink?.deliver(evidence)
+      return this.childWorkSink?.deliver(evidence) ?? { accepted: true }
     }
+    return { accepted: true }
   }
 
   private tasks(): AgentSessionBackgroundTask[] {

@@ -87,6 +87,58 @@ async function rig(watermarks: Partial<StructuredAgentSessionSinkWatermarks> = {
 }
 
 describe('structured agent-session transitions', () => {
+  it.each([false, true])(
+    'publishes every transition in commit order (queued=%s)',
+    async (queued) => {
+      const { journal, deferred, sink, publishes, bind } = await rig()
+      bind()
+      const seen: unknown[] = []
+      const bodies = () => journal.snapshot().items.map((item) => item.body)
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const issue = () => {
+        for (const [label, steps] of [
+          [
+            'start',
+            [itemStep(() => ({ identity: identity('live'), body: tool('live', 'running') }))]
+          ],
+          ['update', []]
+        ] as const) {
+          sink.tryAppendTransition?.({
+            lifecycle: false,
+            publish: true,
+            steps,
+            onPublished: () => {
+              seen.push([label, publishes.length, bodies()])
+              if (label === 'update') {
+                sink.tryAppendItem?.(identity('nested'), tool('nested', 'running'), {
+                  turnScope: AGENT_JOURNAL_THREAD_SCOPE
+                })
+                throw new Error('optional publication')
+              }
+            }
+          })
+        }
+      }
+      if (queued) {
+        await journal.readInOrder(issue)
+      } else {
+        issue()
+      }
+      await expect(sink.written?.()).resolves.toEqual({ ok: true })
+      expect(seen).toEqual([
+        ['start', 1, [tool('live', 'running')]],
+        ['update', 1, [tool('live', 'running')]]
+      ])
+      expect(bodies()).toEqual([tool('live', 'running'), tool('nested', 'running')])
+      expect(warning).toHaveBeenCalledExactlyOnceWith(
+        '[agent-session] committed publication failed',
+        expect.any(Error)
+      )
+      warning.mockRestore()
+      deferred.close()
+    }
+  )
+
   it('lands its steps back to back, each resolved after the one before it', async () => {
     const { journal, deferred, sink, publishes, bind } = await rig()
     bind()
@@ -264,7 +316,7 @@ BEGIN SELECT RAISE(ABORT, 'second step refused'); END`)
           {
             kind: 'settlement',
             settlementId: 'settle-all',
-            reservedBytes: 1,
+            reservedBytes: running.length * 1024,
             // The settled row is a candidate too; the fold, not the caller, rules it out.
             resolve: (view) =>
               [...running, identity('done')].flatMap((id) => {
@@ -323,7 +375,7 @@ BEGIN SELECT RAISE(ABORT, 'second chunk refused'); END`)
         {
           kind: 'settlement',
           settlementId: 'settle-all',
-          reservedBytes: 1,
+          reservedBytes: running.length * 1024,
           resolve: () => running.map(failedTool)
         }
       ]

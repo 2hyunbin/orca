@@ -1,3 +1,6 @@
+import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
+import type { StructuredAgentSessionContinuationHost } from './structured-agent-session-restart-continuation'
+import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 // Binds the restart-resume surface to the host's own capabilities.
 //
 // Its own file because the bindings carry real decisions — which caller key the continuation sends
@@ -86,5 +89,23 @@ export function structuredAgentSessionRestartResumeSurfaces(
         budgetMs: MAX_TIMER_DELAY_MS
       }),
     now
+  }
+}
+
+export function createRestartContinuationHost(
+  deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'logger'>,
+  sessions: StructuredAgentSessionContinuationHost['sessions'],
+  surfaces: StructuredAgentSessionRestartResumeSurfaces,
+  stillResumable: StructuredAgentSessionContinuationHost['stillResumable']
+): StructuredAgentSessionContinuationHost {
+  return {
+    ...surfaces,
+    logger: deps.logger,
+    sessions,
+    conversationFence: (sessionId) =>
+      deps.store.getRecord(sessionId)
+        ? structuredAgentSessionConversationFence(deps.store, sessionId)
+        : null,
+    stillResumable
   }
 }

@@ -264,6 +264,7 @@ export type StructuredAgentSessionStatusProjection = {
    *  refused. A turn the provider gave none reads as its host-observed end. Present only while
    *  `status` is idle. */
   turnOutcome?: AgentTurnOutcome
+  restoredInterruption?: true
   statusStartedAt?: number
 }
 

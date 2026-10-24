@@ -125,11 +125,22 @@ export class StructuredAgentSessionClientDelivery {
 
   publishRecordNotes = (sessionId: string): void => this.statusFeed.publishRecordNotes(sessionId)
 
+  publishHandoverChanged = (sessionId: string, clientMessageId: string): void => {
+    this.statusFeed.handoverChanged(sessionId, clientMessageId)
+    this.publishGenerationEnded(sessionId)
+  }
+
+  publishHeldSends = (
+    sessionId: string,
+    changes: readonly { clientMessageId: string; held: boolean }[],
+    producer: StructuredAgentSessionChildWorkProducer | undefined
+  ) => this.statusFeed.publishHeldSends(sessionId, changes, producer)
+
   publishChildWork = (
     sessionId: string,
     evidence: AgentChildWorkEvidence[],
     producer?: StructuredAgentSessionChildWorkProducer
-  ): void => this.statusFeed.publishChildWork(sessionId, evidence, producer)
+  ) => this.statusFeed.publishChildWork(sessionId, evidence, producer)
 
   /** What the feed publishes as `stopping`: only a working session is still being stopped. */
   readStopping = (sessionId: string): boolean => {

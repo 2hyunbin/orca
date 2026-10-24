@@ -1,3 +1,4 @@
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import { claudePromptCardWritten } from './claude-child-work-evidence'
 import {
   resetClaudeRetiredModel,
@@ -17,7 +18,7 @@ type ClaudeEventDelivery = {
     sessionId: string,
     session?: ClaudeSession | null,
     message?: Record<string, unknown> | null
-  ) => void
+  ) => ChildWorkAdmission
 }
 
 export function emitClaudeStructuredSessionEvent({
@@ -41,13 +42,52 @@ export function emitClaudeStructuredSessionEvent({
     session.events?.publish()
   }
   session?.translator?.handle(event)
-  deps.onEvent?.(event)
   const retired =
     event.type === 'message' && session ? retireClaudeLaunchedModel(session, event.message) : null
   if (session && retired !== null) {
     resetClaudeRetiredModel(session, deps, event.sessionId, retired)
   }
-  publishChildWork(event.sessionId, session, event.type === 'message' ? event.message : null)
+  const admission = publishChildWork(
+    event.sessionId,
+    session,
+    event.type === 'message' ? event.message : null
+  )
+  const display = (): void => {
+    const notify = (): void => {
+      try {
+        deps.onEvent?.(event)
+      } catch (error) {
+        deps.logger?.warn('Claude event observer failed', { scope: 'claude-event', error })
+      }
+    }
+    if (session?.events?.tryAppendTransition) {
+      session.events.tryAppendTransition({
+        steps: [],
+        lifecycle: false,
+        publish: false,
+        onPublished: notify
+      })
+    } else {
+      notify()
+    }
+  }
+  if (!admission.accepted && session?.retryChildWork) {
+    const retry = session.retryChildWork
+    session.retryChildWork = () => {
+      const result = retry()
+      if (result.accepted) {
+        session.retryChildWork = undefined
+        display()
+      }
+      return result
+    }
+  } else if (admission.accepted) {
+    display()
+  }
   // A prompt blocks its child only after the journal has written its card.
-  void claudePromptCardWritten(session, event)?.then(() => publishChildWork(event.sessionId))
+  void claudePromptCardWritten(session, event)
+    ?.then(() => publishChildWork(event.sessionId))
+    .catch((error: unknown) =>
+      deps.logger?.warn('Claude prompt work ended unwritten', { scope: 'claude-child-work', error })
+    )
 }

@@ -109,7 +109,10 @@ function readRest(
   try {
     const rest = readJournalRestFacts(input.journalDatabase.db, sessionId)
     return rest
-      ? { ...rest, interrupted: rest.openTurn !== null || workingAtTeardown.has(sessionId) }
+      ? {
+          ...rest,
+          interrupted: rest.openTurn !== null || (!rest.known && workingAtTeardown.has(sessionId))
+        }
       : UNWRITTEN
   } catch (error) {
     input.logger.warn('reading a chat at startup failed', {

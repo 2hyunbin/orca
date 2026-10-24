@@ -33,6 +33,7 @@ import {
 } from './codex-structured-session-state'
 import type { CodexStructuredSessionTeardown } from './codex-structured-session-teardown'
 import type { CodexStructuredNotificationRetry } from './codex-structured-notification-retry'
+import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
 import type { deliverCodexServerRequest } from './codex-structured-provider-events'
 import { codexAcquisitionNotificationHandler } from './codex-structured-acquisition-notification'
 
@@ -66,8 +67,30 @@ export async function acquireCodexStructuredSession(input: {
     isAgentSessionProviderHandleInNamespace(provenHandle, CODEX_STRUCTURED_HANDLE_NAMESPACE)
       ? provenHandle.nativeId
       : null
+  let endedWork: Awaited<CodexSession['endWritten']>
+  const workProducer = acquireInput.events && {
+    ...acquireInput.events,
+    continueWork: (append: Parameters<CodexStructuredNotificationRetry['continueWork']>[1]) =>
+      notificationRetries.continueWork(sessionId, append),
+    written: async () => {
+      const result = await notificationRetries.written(sessionId, acquireInput.events?.written)
+      return endedWork && !endedWork.ok ? endedWork : result
+    }
+  }
   const subagentExecutions = new CodexSubagentExecutions()
-  const dispatchEchoes = createCodexDispatchEchoes(() => deps.onHeldSendsChanged?.({ sessionId }))
+  const dispatchEchoes = createCodexDispatchEchoes((changes) => {
+    let retry: (() => CodexJournalTranslationAdmission) | undefined
+    notificationRetries.continueWork(sessionId, () => {
+      const result = retry?.() ??
+        deps.onHeldSendsChanged?.({
+          sessionId,
+          changes,
+          producer: workProducer
+        }) ?? { accepted: true }
+      retry = result.retry
+      return result
+    })
+  })
   let account: AgentSessionAccountKind | undefined
   // Minted before the translator, which names this connection's frame rows with it.
   const acquisitionGeneration = mintCodexAcquisitionGeneration(deps)
@@ -196,7 +219,10 @@ export async function acquireCodexStructuredSession(input: {
               ...(deps.onEvent ? { onEvent: deps.onEvent } : {})
             })
           } finally {
-            notificationRetries.clear(sessionId, acquisition.connection)
+            void Promise.resolve(sessions.get(sessionId)?.endWritten).then((result) => {
+              endedWork = result
+              notificationRetries.clear(sessionId, acquisition.connection)
+            })
           }
         }
       }
@@ -241,6 +267,7 @@ export async function acquireCodexStructuredSession(input: {
           translator,
           dispatchEchoes,
           subagentExecutions,
+          workProducer,
           setPrimaryThreadId: (threadId) => {
             primaryThreadId = threadId
           },

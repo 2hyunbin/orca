@@ -8,6 +8,7 @@ import type {
 import { makeStructuredAgentStatusSubject } from '../../../shared/agent-status-subject'
 import { AgentHookServer } from '../../agent-hooks/server'
 import { StructuredAgentSessionStatusOwnership } from './structured-agent-session-status-ownership'
+import { attach, hostTestState } from './structured-agent-session-host-test-harness'
 
 const location: AgentSessionExecutionLocation = {
   executionHostId: 'local',
@@ -153,6 +154,17 @@ describe('child work the provider reported, recorded or not', () => {
     return { owner }
   }
 
+  async function bindJournal(owner: StructuredAgentSessionStatusOwnership) {
+    await attach()
+    const events = hostTestState().acquire.mock.calls[0][0].events
+    if (!events) {
+      throw new Error('acquisition did not bind its journal')
+    }
+    const publish = owner.publishChildWork.bind(owner)
+    owner.publishChildWork = (id, evidence, provider) => publish(id, evidence, provider, events)
+    return events.written
+  }
+
   const ended = (id: string): AgentChildWorkEvidence => ({
     type: 'ended',
     observedAt: 250,
@@ -211,8 +223,9 @@ describe('child work the provider reported, recorded or not', () => {
   })
 
   // Claude names the run a task ended on, and a resumed agent's earlier run may end late.
-  it('holds recorded work open, never incomplete, through a late ending of its earlier run', () => {
+  it('holds recorded work open, never incomplete, through a late ending of its earlier run', async () => {
     const { owner } = owners()
+    const written = await bindJournal(owner)
     owner.publish(summary, location)
     const run = (runId: string): AgentChildWorkEvidence => ({
       type: 'live',
@@ -234,6 +247,7 @@ describe('child work the provider reported, recorded or not', () => {
     owner.publishChildWork(summary.sessionId, [run('spawn-1'), endOf('spawn-1')], 'claude')
     owner.publishChildWork(summary.sessionId, [run('spawn-2')], 'claude')
     owner.publishChildWork(summary.sessionId, [run('spawn-1'), endOf('spawn-1')], 'claude')
+    expect(await written?.()).toEqual({ ok: true })
     expect(owner.childWorkOpen(summary.sessionId)).toBe(true)
     expect(owner.childWorkIncomplete(summary.sessionId)).toBe(false)
     owner.publishChildWork(summary.sessionId, [endOf('spawn-2')], 'claude')
@@ -243,6 +257,7 @@ describe('child work the provider reported, recorded or not', () => {
     expect(owner.childWorkOpen(summary.sessionId)).toBe(true)
     owner.publishChildWork(summary.sessionId, [endOf('spawn-4')], 'claude')
     expect(owner.childWorkOpen(summary.sessionId)).toBe(false)
+    expect(await written?.()).toEqual({ ok: true })
   })
 
   it('does not treat an idle ACP row as coverage of newly reported work', () => {
@@ -270,10 +285,12 @@ describe('child work the provider reported, recorded or not', () => {
     expect(owner.childWorkIncomplete(summary.sessionId)).toBe(false)
   })
 
-  it('closes only the captured Stop lifetime and reads a later live report as unlisted', () => {
+  it('closes only the captured Stop lifetime and reads a later live report as unlisted', async () => {
     const { owner } = owners()
+    const written = await bindJournal(owner)
     owner.publish(summary, location)
     owner.publishChildWork(summary.sessionId, [agentLive('helper')], 'claude')
+    expect(await written?.()).toEqual({ ok: true })
     const captured = owner.captureChildWorkStops(summary.sessionId, ['helper'])
     const [record] = owner.readChildWorkRecords(summary.sessionId)!
     const stop: AgentChildWorkEvidence = {
@@ -285,6 +302,7 @@ describe('child work the provider reported, recorded or not', () => {
     }
     captured.acknowledge([stop])
     owner.publishChildWork(summary.sessionId, [stop], 'claude')
+    expect(await written?.()).toEqual({ ok: true })
     expect(owner.childWorkOpen(summary.sessionId)).toBe(false)
     // The Stop did not take: the settled record lists nothing, so the work is open and unlisted.
     owner.publishChildWork(summary.sessionId, [agentLive('helper', 'new-run')], 'claude')

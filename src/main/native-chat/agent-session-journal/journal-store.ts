@@ -1,3 +1,4 @@
+import { createJournalCurrentWorkView } from './journal-current-work-view'
 // Append-only journal store for one agent session. It owns the chat's fold and write queue, and no
 // connection: every statement goes through the host's one journal database.
 
@@ -12,16 +13,9 @@ import type {
   AgentJournalSnapshot,
   AgentJournalSubmission,
   AgentJournalThreadGoal,
-  AgentJournalTurnLifecycle,
   AgentSessionJournalIdentity
 } from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import type { AgentSessionContextUsage } from '../../../shared/agent-session-context-usage'
-import { latestStructuredAgentContextFacts } from '../../../shared/structured-agent-session-context-usage'
-import {
-  newestStructuredAgentSessionTurnBySequence,
-  runningStructuredAgentSessionTurnItemBySequence
-} from '../../../shared/structured-agent-session-live-turn'
 import { readJournalSince } from './journal-cursor'
 import type { JournalHostDatabase } from './journal-host-database'
 import { journalRowsAfterReader, type JournalLoad } from './journal-open'
@@ -74,7 +68,6 @@ import type { JournalStepWriter } from './journal-step-writer'
 import type { JournalStopMarks } from './journal-stop-marks'
 import type { JournalContextController } from './journal-context-controller'
 import type { JournalStopAcceptor } from './journal-stop-acceptance'
-import { journalThreadGoalSource, type JournalThreadGoalSource } from './journal-thread-goal-source'
 
 export { AgentSessionJournalError } from './journal-write-guards'
 
@@ -89,6 +82,7 @@ export class AgentSessionJournal {
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: (() => void) | null = null
   private readonly queue: JournalWriteQueue
+  private readonly currentWorkView = createJournalCurrentWorkView(() => this.state)
   private readonly rowWriter: JournalRowWriter
   private readonly epochController: JournalEpochController
   private readonly itemAppender: JournalItemAppender
@@ -113,6 +107,7 @@ export class AgentSessionJournal {
     this.queue = new JournalWriteQueue(options.identity.sessionId)
     const collaborators = createJournalStoreCollaborators({
       identity: this.identity,
+      legacyCursor: options.legacyCursor,
       now: this.now,
       mintEpoch: this.mintEpoch,
       serialize: (run) => this.queue.serialize(run),
@@ -149,7 +144,12 @@ export class AgentSessionJournal {
     this.context = collaborators.context
   }
 
+  openedRestRevision = 0
+  restRevision = () => this.state.rest.revision
   restFact = () => this.state.rest.fact()
+  requestFrontier = () => this.state.rest.frontier()
+  retainedRequestFrontier = (anchor: string | null, retained: ReadonlySet<string>) =>
+    this.state.rest.retainedFrontier(anchor, retained)
 
   get epoch(): string {
     return this.state.epoch
@@ -157,6 +157,10 @@ export class AgentSessionJournal {
 
   get agent(): AgentSessionJournalIdentity['agent'] {
     return this.identity.agent
+  }
+
+  get sessionId(): string {
+    return this.identity.sessionId
   }
 
   /** Whether a row at this sequence was on disk when this handle opened, so an earlier handle
@@ -178,6 +182,7 @@ export class AgentSessionJournal {
   async open(): Promise<void> {
     await this.restore()
     this.openedThrough = this.cursor()
+    this.openedRestRevision = this.state.rest.revision
   }
 
   /** Refuses every later write and resolves once the admitted ones have landed. Holds no
@@ -232,23 +237,19 @@ export class AgentSessionJournal {
   /** The turn this journal records as running, with its record's item, whichever generation
    *  opened it — the same read a client's snapshot gives, without materialising one. Whether it is
    *  current work is the host projection's to say (`structuredAgentSessionCurrentWork`). */
-  runningTurn = (): { item: AgentJournalRenderItem; turnId: string } | null =>
-    runningStructuredAgentSessionTurnItemBySequence(this.state.items.values())
+  runningTurn = this.currentWorkView.runningTurn
 
   /** The newest turn record whatever state it settled in, for readers that need the outcome. */
-  newestTurn = (): AgentJournalTurnLifecycle | null =>
-    newestStructuredAgentSessionTurnBySequence(this.state.items.values())
+  newestTurn = this.currentWorkView.newestTurn
 
   /** The latest goal and its row, for a provider revising accounting after restart. */
-  threadGoalSource = (): JournalThreadGoalSource =>
-    journalThreadGoalSource(this.state.items.values())
+  threadGoalSource = this.currentWorkView.threadGoalSource
 
   /** The latest goal the whole journal records, not only a client's loaded page. */
   threadGoal = (): AgentJournalThreadGoal | null => this.threadGoalSource().goal
 
   /** The newest context facts the whole journal records, not only a client's loaded page. */
-  contextUsage = (): AgentSessionContextUsage =>
-    latestStructuredAgentContextFacts(this.state.items.values())
+  contextUsage = this.currentWorkView.contextUsage
 
   /** Includes revisions and completion tombstones, whose timestamps disappear from render items. */
   lastActivityAt = (): number => this.state.lastActivityAt
@@ -352,7 +353,8 @@ export class AgentSessionJournal {
     this.lifecycleBatchAppender.appendPlanned(input)
 
   /** Several writes as one turn in the queue; see `JournalStepWriter`. */
-  appendSteps: JournalStepWriter['append'] = (steps) => this.stepWriter.append(steps)
+  appendSteps: JournalStepWriter['append'] = (steps, onWritten) =>
+    this.stepWriter.append(steps, onWritten)
 
   /** The write-ahead submission row (`JournalSubmissionWriter.append`). */
   appendSubmission(

@@ -1,5 +1,5 @@
 import {
-  agentTurnEndedOnPurpose,
+  agentTurnEligibleForAttention,
   agentVerdictDisplayMark,
   type AgentMainAgentVerdictSource
 } from './agent-main-agent-verdict'
@@ -32,7 +32,7 @@ export function hookRowAgentPhase(row: AgentMainAgentVerdictSource): AgentPhase 
     case 'working':
       return 'working'
     case 'done':
-      return agentTurnEndedOnPurpose(row) ? 'rest' : 'done'
+      return agentTurnEligibleForAttention(row) ? 'done' : 'rest'
   }
 }
 

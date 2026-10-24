@@ -146,7 +146,14 @@ export function planStructuredAgentSessionDeadGeneration(
     const end = runningCallEnd(item.turnScope, (id) => bodies.get(id), input.verdict.state)
     const terminal = endedUnseenMessageBody(item.body) ?? terminalAgentJournalBody(item.body, end)
     // One revision per item: its live subagents and background tasks end with it.
-    const body = lostLiveWorkJournalBody(terminal ?? item.body) ?? terminal
+    const body =
+      item.body.kind === 'semantic-work' && item.body.phase === 'open'
+        ? {
+            ...item.body,
+            phase: 'interrupted' as const,
+            afterRequest: input.journal.requestFrontier?.() ?? null
+          }
+        : (lostLiveWorkJournalBody(terminal ?? item.body) ?? terminal)
     if (body) {
       mutations.push({
         kind: 'item',

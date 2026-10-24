@@ -47,7 +47,7 @@ export function structuredSessionPointerCallerKey(sessionId: string): string {
 export async function readStructuredSessionGateFacts(
   sessionId: string
 ): Promise<StructuredSessionGateFacts | null> {
-  return readSessionJournal(sessionId, (snapshot, host) => {
+  return readSessionJournal(sessionId, false, (snapshot, host) => {
     const work = host.currentWork(sessionId)
     return structuredSessionGateFacts(snapshot.items, work?.scope)
   })
@@ -57,7 +57,7 @@ export async function readStructuredSessionGateFacts(
 async function readPointerSessionFacts(
   sessionId: string
 ): Promise<StructuredPointerSessionFacts | null> {
-  return readSessionJournal(sessionId, (snapshot, host) => {
+  return readSessionJournal(sessionId, true, (snapshot, host) => {
     const boundary = host.deps.store.getRecord(sessionId)?.providerContextBoundary
     return {
       submissions: boundary
@@ -69,6 +69,7 @@ async function readPointerSessionFacts(
 
 async function readSessionJournal<T>(
   sessionId: string,
+  automatic: boolean,
   read: (snapshot: AgentJournalSnapshot, host: StructuredAgentSessionHost) => T
 ): Promise<T | null> {
   const host = getStructuredAgentSessionHost()
@@ -77,8 +78,9 @@ async function readSessionJournal<T>(
   }
   try {
     // Keep snapshot and execution provenance under the same operation borrow.
-    return await host.withAutomaticConversation(sessionId, async () =>
-      read(await host.journalSnapshot(sessionId), host)
+    return await (automatic ? host.withAutomaticConversation : host.withConversationUse)(
+      sessionId,
+      async () => read(await host.journalSnapshot(sessionId), host)
     )
   } catch (error) {
     if (!(error instanceof Error) || error.message !== AGENT_SESSION_NOT_ATTACHED.code) {

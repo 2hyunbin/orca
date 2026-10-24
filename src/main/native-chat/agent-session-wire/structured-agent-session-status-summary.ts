@@ -79,6 +79,7 @@ export function withoutLiveExecution(
 /** What a restart knows of a chat it has not opened (`atRestStructuredStatusSummary`). */
 export type StructuredAgentSessionAtRest = {
   interrupted: boolean
+  known?: boolean
   openTurn?: { itemId: string; since: number } | null
   lastSequence: number
   lastSavedAt: number
@@ -96,14 +97,18 @@ export function atRestStructuredStatusSummary(
   deps: Pick<StructuredAgentSessionStatusFeedDeps, 'namingFailure' | 'now'>
 ): AgentSessionStatusSummary {
   // Sequence 1 is the epoch row: a chat with nothing after it has never been sent anything.
-  const status = rest.interrupted || rest.lastSequence > 1 ? ('idle' as const) : null
+  const status =
+    rest.interrupted || (rest.known !== false && rest.lastSequence > 1) ? ('idle' as const) : null
   return {
     sessionId: record.sessionId,
     workspaceId: record.location.workspaceId,
     agent: record.provider,
     status,
     latestPrompt: '',
-    ...(status && rest.interrupted ? { turnOutcome: 'cancellation' as const } : {}),
+    ...(status && rest.interrupted
+      ? { turnOutcome: 'cancellation' as const, restoredInterruption: true as const }
+      : {}),
+    ...(status ? { statusStartedAt: rest.openTurn?.since ?? rest.lastSavedAt } : {}),
     ...structuredSummaryRecordFields(record, deps.namingFailure?.(record.sessionId)),
     updatedAt: rest.lastSavedAt || deps.now()
   }

@@ -17,6 +17,9 @@ import { endedJournalReasoning } from './journal-reasoning-row'
 /** True while an item is still awaiting the row that settles it, so a sink can
  *  treat that row as lifecycle-critical rather than sheddable under pressure. */
 export function requiresTerminalSettlement(body: AgentJournalItemBody): boolean {
+  if (body.kind === 'semantic-work') {
+    return body.phase === 'open'
+  }
   if (body.kind === 'tool-call') {
     return body.state === 'running'
   }

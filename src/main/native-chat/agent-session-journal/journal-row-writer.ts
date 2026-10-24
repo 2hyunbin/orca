@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { stageJournalMutation } from './journal-mutation-stage'
 import type { JournalReducerState } from './journal-reducer'
 import type Database from '../../sqlite/sync-database'
@@ -94,7 +95,7 @@ export class JournalRowWriter {
             receipt?.write(db, row)
             this.runBookkeeping(db, row)
           },
-          !hook && !receipt && this.streamed([row])
+          fact === undefined && !hook && !receipt && this.streamed([row])
         )
       } catch (error) {
         this.deps.rolledBack?.()
@@ -103,6 +104,7 @@ export class JournalRowWriter {
       // COMMIT landed, so the row is durable: adopt it before anything that can
       // fail. Rejecting here instead would leave the next append reusing a
       // sequence the table already holds. The ledger first: it cannot throw, the fold can.
+      this.rememberFact(fact)
       receipt?.committed()
       this.deps.commit([row], savedAt)
       return row
@@ -149,12 +151,13 @@ export class JournalRowWriter {
           }
           receipt?.write(db, receiptRow?.(rows))
         },
-        !receipt && this.streamed(rows)
+        fact === undefined && !receipt && this.streamed(rows)
       )
     } catch (error) {
       this.deps.rolledBack?.()
       throw error
     }
+    this.rememberFact(fact)
     receipt?.committed()
     this.deps.commit(rows, ts)
     return rows
@@ -175,11 +178,59 @@ export class JournalRowWriter {
 
   private prepareFact(rows: readonly JournalRow[]) {
     const state = this.deps.state?.()
-    if (!state || this.streamed(rows)) {
+    if (!state) {
       return undefined
     }
-    const staged = stageJournalMutation(state, rows)
-    return staged.rest.revision === state.rest.revision ? undefined : staged.rest.fact()
+    const next = this.streamed(rows) ? state : stageJournalMutation(state, rows)
+    const fact = next.rest.fact()
+    return isDeepStrictEqual(state.persistedRest, [fact?.itemId ?? null, fact?.since ?? 0])
+      ? undefined
+      : fact
+  }
+
+  private rememberFact(fact: ReturnType<JournalRowWriter['prepareFact']>): void {
+    if (fact !== undefined && this.deps.state) {
+      this.deps.state().persistedRest = [fact?.itemId ?? null, fact?.since ?? 0]
+    }
+  }
+
+  async synchronizeRestFact(): Promise<void> {
+    try {
+      await this.deps.serialize(() => {
+        const state = this.deps.state?.()
+        if (!state || this.deps.readOnly() || state.persistedRest?.[1] !== null) {
+          return
+        }
+        const fact = state.rest.fact()
+        const pair = [fact?.itemId ?? null, fact?.since ?? 0] as const
+        if (isDeepStrictEqual(state.persistedRest, pair)) {
+          return
+        }
+        this.deps.database().transaction((db) => {
+          const result = db
+            .prepare(`UPDATE journal_sessions SET open_turn_id = ?, open_turn_since = ?
+            WHERE session_id = ? AND epoch = ? AND open_turn_id IS ? AND open_turn_since IS ?
+            AND (SELECT MAX(seq) FROM journal_rows WHERE session_id = journal_sessions.session_id AND epoch = journal_sessions.epoch) = ?`)
+            .run(
+              ...pair,
+              this.deps.sessionId,
+              state.epoch,
+              ...(state.persistedRest ?? [null, null]),
+              state.lastSequence
+            )
+          if (result.changes !== 1) {
+            throw new Error('journal projection changed during open')
+          }
+        })
+        this.rememberFact(fact)
+      })
+    } catch (error) {
+      console.warn(
+        '[journal-open] rest projection synchronization failed',
+        this.deps.sessionId,
+        error
+      )
+    }
   }
 
   private streamed(rows: readonly JournalRow[]): boolean {

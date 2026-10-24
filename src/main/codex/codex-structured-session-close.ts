@@ -1,3 +1,7 @@
+import {
+  finishChildWorkAdmission,
+  type ChildWorkAdmission
+} from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import type { CodexAppServerConnection } from './codex-app-server-connection-types'
 import { closeProcessRegistry } from '@orca/process-host/close-process-registry'
@@ -47,25 +51,52 @@ export function handleCodexSessionExit(input: {
   // A synchronous sink rejection (usually backpressure) leaves the terminal rows to the host's
   // exit settlement, which writes its own bounded fallback. The exit itself is observed, so the
   // session ends either way: holding a dead child as unproven over a refused row would strand it.
-  const admission = session.translator?.handle(event) ?? { accepted: true }
-  if (!admission.accepted) {
-    input.logger?.warn("Codex's final rows were refused; the host settles the turn instead", {
-      scope: 'codex-exit-rows',
-      sessionId: input.sessionId,
-      reason: admission.reason
-    })
+  const producer = session.workProducer ?? session.events
+  let translate = () => session.translator?.handle(event) ?? { accepted: true as const }
+  let suffix: (() => ChildWorkAdmission) | undefined
+  const append = (): ChildWorkAdmission => {
+    if (suffix) {
+      return suffix()
+    }
+    const admission = translate()
+    if (!admission.accepted) {
+      const retry = admission.retry
+      translate = retry ?? (() => admission)
+      return {
+        accepted: false,
+        reason: admission.reason === 'untranslated' ? 'failed' : admission.reason,
+        retry: append
+      }
+    }
+    session.backgroundTasks.clear()
+    suffix = () => session.backgroundTasks.publishChildWork() ?? { accepted: true }
+    const result = suffix()
+    if (!result.accepted && result.retry) {
+      suffix = result.retry
+    }
+    return result
   }
+  const admission = producer?.continueWork?.(append) ?? append()
   session.ended = true
-  // Nothing can echo for this child any more; the journal's pending-submission
-  // recovery is what settles the sends these were armed for.
   session.dispatchEchoes.clear()
-  session.backgroundTasks.clear()
-  // Every close path funnels here, so the session's children end with it on each one.
-  session.backgroundTasks.publishChildWork()
-  session.unbindReadingControl?.()
-  input.onEvent?.(event)
   session.prompts.clear()
-  session.translator?.dispose()
+  session.endWritten = finishChildWorkAdmission(admission, producer).then((result) => {
+    if (!result.ok) {
+      input.logger?.warn('Codex final work ended unwritten', {
+        scope: 'codex-child-work',
+        sessionId: input.sessionId,
+        error: result.error
+      })
+    }
+    session.unbindReadingControl?.()
+    session.translator?.dispose()
+    try {
+      input.onEvent?.(event)
+    } catch (error) {
+      input.logger?.warn('Codex exit observer failed', { scope: 'codex-exit', error })
+    }
+    return result
+  })
   return true
 }
 
@@ -93,6 +124,7 @@ export async function closeCodexPublishedSession(
     return false
   }
   if (session.ended && session.connection.closed) {
+    await session.endWritten
     sessions.delete(sessionId)
     return true
   }
@@ -120,6 +152,7 @@ export async function closeCodexPublishedSession(
       ...(options?.logger ? { logger: options.logger } : {})
     })
   }
+  await session.endWritten
   sessions.delete(sessionId)
   return true
 }

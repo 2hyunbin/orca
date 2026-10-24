@@ -80,7 +80,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   /** The host's projection of the chat's current work (`hostStructuredAgentSessionCurrentWork`). */
   currentWork: (sessionId: string) => StructuredAgentSessionCurrentWork | null
   /** What is current changed with no row (`publishGenerationEnded`). */
-  workChanged?: (sessionId: string) => void
+  workChanged?: (sessionId: string, clientMessageId: string) => void
   readChildWork: (sessionId: string) => readonly AgentChildWorkView[] | undefined
   childWorkOpen: (sessionId: string) => boolean
   /** A person's Stop is still ending the session's work: the status feed's own reading. */
@@ -333,7 +333,7 @@ export class StructuredAgentSessionDeliveryLoop {
         now: this.deps.now,
         acquireAborts: this.deps.acquireAborts,
         deliveryOrder: this.deps.deliveryOrder,
-        workChanged: () => this.deps.workChanged?.(sessionId),
+        workChanged: (clientMessageId) => this.deps.workChanged?.(sessionId, clientMessageId),
         recordRanOptions: this.deps.recordRanOptions?.(sessionId, awaitedChild.fence)
       },
       next,

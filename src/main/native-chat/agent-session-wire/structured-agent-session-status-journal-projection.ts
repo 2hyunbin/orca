@@ -1,4 +1,3 @@
-import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import type { StructuredAgentSessionAtRest } from './structured-agent-session-status-summary'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
@@ -29,6 +28,7 @@ export type StructuredAgentSessionJournalProjection = {
   liveFence: number | null
   /** `StructuredAgentSessionCurrentWork.revision`: what this host saw end with no row or lease
    *  write still changes the row. */
+  restored: unknown
   workRevision: number
   /** The Stop marks' settle revision: a settle edge writes no row, so it is a key of its own. */
   stopRevision: number
@@ -41,11 +41,18 @@ export type StructuredAgentSessionJournalProjection = {
 }
 
 export class StructuredAgentSessionJournalProjections {
-  private readonly restartCuts = new Map<string, string | null>()
+  private readonly restored = new Map<
+    string,
+    {
+      rest: StructuredAgentSessionAtRest
+      baseline?: { epoch: string; revision: number }
+    }
+  >()
 
   noteRestart(sessionId: string, rest: StructuredAgentSessionAtRest): void {
-    if (rest.interrupted) {
-      this.restartCuts.set(sessionId, rest.openTurn?.itemId ?? null)
+    const previous = this.restored.get(sessionId)
+    if (!previous || (previous.rest.known === false && rest.known !== false)) {
+      this.restored.set(sessionId, { rest, baseline: previous?.baseline })
     }
   }
 
@@ -92,7 +99,8 @@ export class StructuredAgentSessionJournalProjections {
       projection.fence !== fence ||
       projection.liveFence !== work.liveFence ||
       projection.workRevision !== work.revision ||
-      projection.stopRevision !== stopRevision
+      projection.stopRevision !== stopRevision ||
+      projection.restored !== this.restored.get(journal.sessionId)
     ) {
       // A journalled submission bumps `lastSequence`, so the send-time working
       // signal reaches the cache; the lease fence does not, hence the extra key.
@@ -121,6 +129,7 @@ export class StructuredAgentSessionJournalProjections {
       }
       projection = {
         ...cursor,
+        restored: this.restored.get(journal.sessionId),
         firstInputSubmissionKey,
         submissionCount: snapshot.submissions.length,
         fence,
@@ -145,7 +154,12 @@ export class StructuredAgentSessionJournalProjections {
           work.scope
         )
       }
-      projection.state = this.restartVerdict(projection.state, journal, record)
+      projection.state = this.restartVerdict(
+        projection.state,
+        journal,
+        record,
+        seen?.child !== undefined && seen.child !== null
+      )
       this.byJournal.set(journal, projection)
     }
     return projection
@@ -153,37 +167,73 @@ export class StructuredAgentSessionJournalProjections {
   private restartVerdict(
     state: StructuredAgentSessionStatusState,
     journal: AgentSessionJournal,
-    record: AgentSessionRecord | null
+    record: AgentSessionRecord | null,
+    liveChild: boolean
   ): StructuredAgentSessionStatusState {
-    const id = record?.sessionId
-    if (!id) {
+    if (!record) {
       return state
+    }
+    const id = record.sessionId
+    if (liveChild) {
+      this.restored.delete(id)
+    }
+    const presentation = this.restored.get(id)
+    const version = { epoch: journal.epoch, revision: journal.restRevision() }
+    if (presentation) {
+      const before = presentation.baseline ?? {
+        epoch: journal.epoch,
+        revision: journal.openedRestRevision
+      }
+      if (before && (before.epoch !== version.epoch || before.revision !== version.revision)) {
+        this.restored.delete(id)
+      } else {
+        presentation.baseline = version
+        const lease = record.lease
+        const replaced = this.replacedRuntime?.(id)
+        const ended =
+          lease.claimStatus === 'released' ||
+          !!lease.deathEvidence?.runtimeEnd ||
+          (lease.claimStatus !== 'conflicted' && replaced && lease.runtimeFence <= replaced.fence)
+        if (!ended) {
+          return state
+        }
+        const rest = presentation.rest
+        return {
+          ...state,
+          summary: {
+            ...state.summary,
+            status:
+              rest.interrupted || (rest.known !== false && rest.lastSequence > 1) ? 'idle' : null,
+            turnOutcome: rest.interrupted ? 'cancellation' : undefined,
+            restoredInterruption: rest.interrupted ? true : undefined,
+            statusStartedAt: rest.openTurn?.since ?? rest.lastSavedAt
+          }
+        }
+      }
     }
     const cut = journal.restFact()
-    if (!cut) {
-      this.restartCuts.delete(id)
-      return state
-    }
-    const known = this.restartCuts.get(id)
-    if (known !== undefined && known !== null && known !== cut.itemId) {
-      this.restartCuts.delete(id)
-    }
-    const fence = journal.itemFence(cut.itemId)
     const replaced = this.replacedRuntime?.(id)
-    const oldHost = fence !== undefined && replaced !== undefined && fence <= replaced.fence
-    if (!this.restartCuts.has(id) && !oldHost && !record?.lease.deathEvidence?.runtimeEnd) {
-      return state
-    }
-    const request = state.latestRequest
-    if (
-      request?.kind !== 'turn' ||
-      request.id !== readAgentJournalTurn(journal.item(cut.itemId)?.body)?.turnId
-    ) {
-      return state
-    }
-    this.restartCuts.set(id, cut.itemId)
-    return state.summary.status === 'idle'
-      ? { ...state, summary: { ...state.summary, turnOutcome: 'cancellation' } }
+    const fence = cut && journal.itemFence(cut.itemId)
+    const ended =
+      !liveChild &&
+      (record.lease.claimStatus === 'released' ||
+        !!record.lease.deathEvidence?.runtimeEnd ||
+        (record.lease.claimStatus !== 'conflicted' &&
+          replaced &&
+          fence !== undefined &&
+          fence !== null &&
+          fence <= replaced.fence))
+    return cut && ended && (state.summary.status === 'idle' || state.summary.status === null)
+      ? {
+          ...state,
+          summary: {
+            ...state.summary,
+            status: 'idle',
+            turnOutcome: 'cancellation',
+            restoredInterruption: true,
+            statusStartedAt: cut.since
+          }
+        }
       : state
   }
 }

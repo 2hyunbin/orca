@@ -79,6 +79,7 @@ export abstract class AgentHookServerIngestStructured extends AgentHookServerIng
       mainAgent,
       // Readers that predate `mainAgent` read a cancellation off this flag, as the hook lanes publish it.
       interrupted: mainAgentTurnInterrupted(mainAgent),
+      ...(summary.restoredInterruption === true ? { restoredInterruption: true as const } : {}),
       prompt: summary.latestPrompt,
       agentType: summary.agent,
       ...(summary.model ? { model: summary.model } : {}),

@@ -26,7 +26,18 @@ import { structuredAgentSessionJournalAppendOptions } from './structured-agent-s
 /** What a transition step reads: rows by key, every row, and the turns they joined. */
 export type StructuredAgentSessionTransitionJournal = Pick<
   AgentSessionJournal,
-  'epoch' | 'visitItems' | 'itemBody' | 'item' | 'visitItemsWithLinkage' | 'canonicalItemId'
+  | 'epoch'
+  | 'visitItems'
+  | 'itemBody'
+  | 'item'
+  | 'visitItemsWithLinkage'
+  | 'canonicalItemId'
+  | 'agent'
+  | 'sessionId'
+  | 'submission'
+  | 'requestFrontier'
+  | 'runningTurn'
+  | 'readInOrder'
 >
 
 export type StructuredAgentSessionTransitionStep =
@@ -46,7 +57,7 @@ export type StructuredAgentSessionTransitionStep =
       /** Unique per settlement: the journal applies one id once. */
       settlementId: string
       recovered?: true
-      /** Paces the queue only; the mutations are the journal's to choose. */
+      /** Bounds the execution-time mutations chosen by the journal. */
       reservedBytes: number
       /** Read at execution; none writes nothing. */
       resolve: (
@@ -96,7 +107,7 @@ function transitionAppend(
       finalTail: transition.finalTail,
       run: async (bound) => {
         const { journal, fence } = bound
-        const wrote = await journal.appendSteps(
+        await journal.appendSteps(
           transition.steps.map((step): JournalStep =>
             step.kind === 'item'
               ? {
@@ -121,15 +132,35 @@ function transitionAppend(
                     fence,
                     ownerFence: fence,
                     recovered: step.recovered,
-                    resolve: () => step.resolve(journal)
+                    resolve: () => {
+                      const mutations = step.resolve(journal)
+                      if (
+                        Buffer.byteLength(JSON.stringify(mutations), 'utf8') +
+                          mutations.length * 512 >
+                        step.reservedBytes
+                      ) {
+                        throw new Error(STEP_OVERFLOW)
+                      }
+                      return mutations
+                    }
                   }
                 }
-          )
+          ),
+          (wrote) => {
+            if (transition.publish && wrote.includes(true)) {
+              bound.publish()
+            }
+            publishCommitted(transition.onPublished)
+          }
         )
-        if (transition.publish && wrote.includes(true)) {
-          bound.publish()
-        }
-        transition.onPublished?.()
       }
     })
+}
+
+export function publishCommitted(publish: (() => void) | undefined): void {
+  try {
+    publish?.()
+  } catch (error) {
+    console.warn('[agent-session] committed publication failed', error)
+  }
 }

@@ -234,7 +234,8 @@ export async function acquireClaudeSession({
       input.events,
       connection,
       translator,
-      deps.now ? { now: deps.now } : {}
+      deps.now ? { now: deps.now } : {},
+      () => liveSession?.retryChildWork?.() ?? { accepted: true }
     )
     acquisitions.assertCurrent(sessionId, attempt)
     if (connection.pid === undefined) {

@@ -1,3 +1,5 @@
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
+import type { StructuredAgentSessionSinkBarrier } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
 import type { CodexJournalTranslationAdmission } from './codex-structured-journal-translation'
 import type { CodexSession } from './codex-structured-session-state'
@@ -9,6 +11,7 @@ type PendingNotification = {
   method: string
   params: unknown
   bytes: number
+  retry?: () => CodexJournalTranslationAdmission
   observedAt?: number
   dispatchSequenceAtReceipt?: number
 }
@@ -36,7 +39,7 @@ export function createCodexStructuredNotificationRetry(deps: {
 
   const retry = (sessionId: string, connection: CodexAppServerConnection): void => {
     const state = states.get(sessionId)
-    if (!state || state.connection !== connection || state.running) {
+    if (!state || state.connection !== connection || state.running || state.failed) {
       return
     }
     if (state.timer) {
@@ -51,19 +54,24 @@ export function createCodexStructuredNotificationRetry(deps: {
           break
         }
         const session = deps.sessionFor(sessionId)
-        if (!session || session.connection !== connection || session.ended) {
+        if ((!session || session.connection !== connection || session.ended) && !pending.retry) {
           fail(sessionId, state, 'notification retry owner is no longer live')
           break
         }
-        const admission = deps.translate(
-          sessionId,
-          session,
-          pending.method,
-          pending.params,
-          pending.observedAt,
-          pending.dispatchSequenceAtReceipt
-        )
+        const admission: CodexJournalTranslationAdmission = pending.retry
+          ? pending.retry()
+          : session
+            ? deps.translate(
+                sessionId,
+                session,
+                pending.method,
+                pending.params,
+                pending.observedAt,
+                pending.dispatchSequenceAtReceipt
+              )
+            : { accepted: false as const, reason: 'closed' as const }
         if (!admission.accepted) {
+          pending.retry = admission.retry ?? pending.retry
           if (admission.reason === 'backpressure') {
             state.timer = setTimeout(() => {
               state.timer = null
@@ -80,7 +88,14 @@ export function createCodexStructuredNotificationRetry(deps: {
       }
       if (state.events.length === 0) {
         states.delete(sessionId)
+        connection.resumeReading?.()
       }
+    } catch (error) {
+      fail(
+        sessionId,
+        state,
+        error instanceof Error ? error.message : 'notification continuation failed'
+      )
     } finally {
       state.running = false
     }
@@ -100,7 +115,6 @@ export function createCodexStructuredNotificationRetry(deps: {
     state.events.length = 0
     state.bytes = 0
     state.connection.resumeReading?.()
-    states.delete(sessionId)
     const session = deps.sessionFor(sessionId)
     if (session?.connection === state.connection) {
       void session.forceCloseUnexpected?.(new Error(reason))
@@ -113,32 +127,76 @@ export function createCodexStructuredNotificationRetry(deps: {
     method: string,
     params: unknown,
     observedAt: number | undefined,
-    dispatchSequenceAtReceipt: number | undefined
-  ): void => {
+    dispatchSequenceAtReceipt: number | undefined,
+    continuation?: () => CodexJournalTranslationAdmission
+  ): boolean => {
     const bytes = Buffer.byteLength(JSON.stringify({ method, params }), 'utf8')
     let state = states.get(sessionId)
     if (!state || state.connection !== connection) {
       state = { connection, events: [], bytes: 0, timer: null, running: false, failed: false }
       states.set(sessionId, state)
     }
+    if (state.failed) {
+      return false
+    }
     if (state.events.length >= MAX_RETRY_EVENTS) {
       // A bounded queue cannot retain more traffic. Fail it truthfully so the
       // provider's generation enters host recovery instead of stranding a pause.
       fail(sessionId, state, 'notification retry queue overflow')
-      return
+      return false
     }
     state.events.push({
       method,
       params,
       bytes,
+      retry: continuation,
       ...(observedAt !== undefined ? { observedAt } : {}),
       ...(dispatchSequenceAtReceipt !== undefined ? { dispatchSequenceAtReceipt } : {})
     })
     state.bytes += bytes
     connection.pauseReading?.()
+    return true
   }
 
   return {
+    written: async (
+      sessionId: string,
+      written: (() => Promise<StructuredAgentSessionSinkBarrier>) | undefined
+    ): Promise<StructuredAgentSessionSinkBarrier> => {
+      const landed = await written?.()
+      if (landed && !landed.ok) {
+        return landed
+      }
+      const state = states.get(sessionId)
+      if (state) {
+        retry(sessionId, state.connection)
+      }
+      if (state?.failed) {
+        return { ok: false, error: new Error('Codex normalized suffix failed') }
+      }
+      if (states.get(sessionId)?.events.length) {
+        return {
+          ok: false,
+          error: new Error('Codex normalized suffix was not admitted after drain')
+        }
+      }
+      return (await written?.()) ?? { ok: true }
+    },
+    continueWork: (sessionId: string, append: () => ChildWorkAdmission): ChildWorkAdmission => {
+      const session = deps.sessionFor(sessionId)
+      if (!session || session.ended) {
+        return { accepted: false, reason: 'closed' }
+      }
+      if (
+        !enqueue(sessionId, session.connection, 'accepted-work', null, undefined, undefined, append)
+      ) {
+        return { accepted: false, reason: 'failed' }
+      }
+      retry(sessionId, session.connection)
+      return states.get(sessionId)?.failed
+        ? { accepted: false, reason: 'failed' }
+        : { accepted: true }
+    },
     handle: (
       sessionId: string,
       method: string,
@@ -151,6 +209,9 @@ export function createCodexStructuredNotificationRetry(deps: {
         return { accepted: true }
       }
       const state = states.get(sessionId)
+      if (state?.failed) {
+        return { accepted: false, reason: 'failed' }
+      }
       if (state && state.events.length > 0) {
         enqueue(sessionId, state.connection, method, params, observedAt, dispatchSequenceAtReceipt)
         retry(sessionId, state.connection)
@@ -164,14 +225,20 @@ export function createCodexStructuredNotificationRetry(deps: {
         observedAt,
         dispatchSequenceAtReceipt
       )
-      if (!admission.accepted) {
+      if (!admission.accepted && admission.reason !== 'backpressure') {
+        void session.forceCloseUnexpected?.(
+          new Error(`notification admission failed (${admission.reason})`)
+        )
+      }
+      if (!admission.accepted && admission.reason === 'backpressure') {
         enqueue(
           sessionId,
           session.connection,
           method,
           params,
           observedAt,
-          dispatchSequenceAtReceipt
+          dispatchSequenceAtReceipt,
+          admission.retry
         )
         retry(sessionId, session.connection)
       }

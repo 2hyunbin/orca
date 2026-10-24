@@ -90,7 +90,9 @@ export type CodexDispatchEchoes = {
   readonly size: number
 }
 
-export function createCodexDispatchEchoes(onHeldChange?: () => void): CodexDispatchEchoes {
+export function createCodexDispatchEchoes(
+  onHeldChange?: (changes: { clientMessageId: string; held: boolean }[]) => void
+): CodexDispatchEchoes {
   const armed = new Map<
     string,
     {
@@ -119,10 +121,19 @@ export function createCodexDispatchEchoes(onHeldChange?: () => void): CodexDispa
     if (!onHeldChange) {
       return change()
     }
-    const before = [...heldSends()].join('\n')
+    const before = heldSends()
     const result = change()
-    if ([...heldSends()].join('\n') !== before) {
-      onHeldChange()
+    const after = heldSends()
+    const changes = [
+      ...[...before]
+        .filter((id) => !after.has(id))
+        .map((clientMessageId) => ({ clientMessageId, held: false })),
+      ...[...after]
+        .filter((id) => !before.has(id))
+        .map((clientMessageId) => ({ clientMessageId, held: true }))
+    ]
+    if (changes.length) {
+      onHeldChange(changes)
     }
     return result
   }

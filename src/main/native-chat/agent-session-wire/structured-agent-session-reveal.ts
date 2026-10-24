@@ -11,6 +11,7 @@
 // Retry, so the tab is worth publishing either way.
 
 import type { AgentSessionWireRefusal } from '../../../shared/agent-session-wire'
+import { materializeJournalLegacyCut } from '../agent-session-journal/journal-row-table'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { journalOpenRefusal } from '../agent-session-journal/journal-open-failure'
 import {
@@ -90,6 +91,20 @@ export function createStructuredAgentSessionHostRestore(
     readWorkingAtTeardown: async () => {
       try {
         const markers = (await deps.recoveryCapsule?.list(deps.now?.() ?? Date.now())) ?? []
+        for (const marker of markers) {
+          try {
+            materializeJournalLegacyCut(
+              deps.journalDatabase.db,
+              marker.sessionId,
+              marker.recordedAt
+            )
+          } catch (error) {
+            deps.logger.warn('saving legacy restart fact failed', {
+              sessionId: marker.sessionId,
+              error
+            })
+          }
+        }
         return new Set(markers.map((marker) => marker.sessionId))
       } catch {
         // Advisory: a capsule that cannot be read leaves only the journals' own open turns.

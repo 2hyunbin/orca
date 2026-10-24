@@ -30,7 +30,7 @@ export async function restoreJournalStore(
   }
   return openJournalStoreState({
     sessionId: host.identity.sessionId,
-    replay: () => replayJournal(database.db, host.identity.sessionId),
+    replay: () => replayJournal(database.db, host.identity.sessionId, host.legacyCursor),
     start: () => collaborators.epochController.start('session_created', 0),
     adopt: host.adopt,
     // Journal-open revisions are host recovery, not new provider output.

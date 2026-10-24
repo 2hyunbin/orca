@@ -35,6 +35,7 @@ export type JournalStoreHost = {
    *  same way they learn of a row. */
   notifyCommitted: () => void
   identity: AgentSessionJournalIdentity
+  legacyCursor?: AgentJournalCursor
   now: () => number
   mintEpoch: () => string
   serialize: <T>(run: JournalWriteBody<T>) => Promise<T>
@@ -141,9 +142,9 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     // Behind the stored fact: settles drafts whose consumed submission the loaded journal shows
     // refused (a downgrade wrote no hook), then prunes. Bookkeeping, never failing the open.
     restore: () =>
-      restoreJournalStore(host, { epochController }).then(() =>
-        queuedMessages.repairAndPruneAtOpen()
-      ),
+      restoreJournalStore(host, { epochController })
+        .then(() => rowWriter.synchronizeRestFact())
+        .then(() => queuedMessages.repairAndPruneAtOpen()),
     rowWriter,
     submissionWriter: new JournalSubmissionWriter({
       state: host.state,

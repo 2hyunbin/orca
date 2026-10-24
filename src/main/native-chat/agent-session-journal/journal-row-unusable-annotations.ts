@@ -6,12 +6,14 @@ import { isAdmissibleAgentSessionContextUsage } from '../../../shared/agent-sess
 export function dropUnusableRowAnnotations(record: Record<string, unknown>): void {
   dropUnusableProducerLinkage(record)
   dropUnusableTurnScope(record)
+  dropUnusableRecoveryTime(record)
   dropUnusableOwnerFence(record)
   if (record.kind === 'lifecycle-batch' && Array.isArray(record.mutations)) {
     for (const mutation of record.mutations) {
       if (isPlainObject(mutation)) {
         dropUnusableProducerLinkage(mutation)
         dropUnusableTurnScope(mutation)
+        dropUnusableRecoveryTime(mutation)
         dropUnusableOwnerFence(mutation)
       }
     }
@@ -92,4 +94,13 @@ function dropUnusableContextUsage(record: Record<string, unknown>): void {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function dropUnusableRecoveryTime(record: Record<string, unknown>): void {
+  if (
+    record.recoveredAt !== undefined &&
+    (typeof record.recoveredAt !== 'number' || !Number.isFinite(record.recoveredAt))
+  ) {
+    delete record.recoveredAt
+  }
 }

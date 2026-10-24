@@ -1,3 +1,4 @@
+import { setStructuredJournalReadiness } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { publishWorkspaceViewChanges } from './runtime-workspace-view-change-events'
@@ -50,7 +51,6 @@ import { CollapseWriteOrder } from './workspace-view-collapse-writes'
 import { SidebarInputsFeed } from './sidebar-inputs/sidebar-inputs-feed'
 import { sidebarInputsFeedDomains } from './sidebar-inputs/sidebar-inputs-feed-domains'
 import { requireSwitchedOn } from './sidebar-inputs/require-switched-on'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
 import { installExternalConversations } from '../external-conversations/external-conversations-install'
 import type { ExternalConversationSeam } from '../external-conversations/external-conversation-seam'
@@ -169,6 +169,7 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
 
   constructor(...args: ConstructorParameters<typeof OrcaRuntimeWithAgentTransitions>) {
     super(...args)
+    setStructuredJournalReadiness(this.structuredJournalBackgroundReady)
     // Why: the runtime listing re-runs a scan the worktree-change generation overtook and re-lists
     // through this runtime's scan cache, so a worktree change must reach both. The desktop IPC
     // module registers the generation bump at load; a headless host never loads it.

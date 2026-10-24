@@ -43,7 +43,7 @@ import {
 import { createCodexStructuredNotificationRetry } from './codex-structured-notification-retry'
 import { acquireCodexStructuredSession } from './codex-structured-session-acquire'
 import { changeCodexThreadGoal } from './codex-structured-thread-goal'
-import { startCodexTerminalStopProbe } from './codex-background-terminals'
+import { publishCodexChildWork } from './codex-structured-child-work-delivery'
 import { codexBackgroundTaskStops, stopCodexBackgroundTasks } from './codex-background-task-stops'
 import {
   answerCodexStructuredPrompt,
@@ -160,8 +160,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       // only on the retry that also reaches the journal.
       session.backgroundTasks.observe(event, session.prompts.takeAbandonedCommands())
       // After the journal and the parent's republished row, never ahead of either.
-      session.backgroundTasks.publishChildWork()
-      startCodexTerminalStopProbe(this.sessions, event.sessionId, session, this.deps)
+      return publishCodexChildWork(this.sessions, event, session, this.deps)
     }
     this.deps.onEvent?.(event)
     return admission

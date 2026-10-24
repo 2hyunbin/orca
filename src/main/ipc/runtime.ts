@@ -50,6 +50,12 @@ export function registerRuntimeHandlers(runtime: OrcaRuntimeService): void {
       if (typeof graph.rendererGeneration !== 'string' || graph.rendererGeneration.length === 0) {
         throw new Error('Runtime graph sync requires a renderer generation')
       }
+      if (
+        graph.startupRestorationReady !== undefined &&
+        typeof graph.startupRestorationReady !== 'boolean'
+      ) {
+        throw new Error('Runtime graph startup readiness must be boolean')
+      }
       const result = runtime.syncWindowGraph(window.id, graph)
       // Why after the sync: only the authoritative window's graph is accepted, so only its catalog is.
       if (graph.projectSectionCatalog) {

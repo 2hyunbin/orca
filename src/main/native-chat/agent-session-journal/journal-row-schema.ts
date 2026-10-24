@@ -1,4 +1,5 @@
 import type { JournalItemEcho } from './journal-item-echo'
+import { semanticWorkKeyAgrees } from '../../../shared/agent-session-semantic-work'
 // Persisted journal row shapes plus read-time upcasting.
 //
 // The journal is append-only, so migration is upcasting on read and never an
@@ -22,11 +23,11 @@ import type { JournalItemEcho } from './journal-item-echo'
 // the journal from such a row, so the same reader-first-or-`v` rule applies to a new mutation or
 // sent-message kind.
 
-import type { AgentSessionFailureFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
   type AgentJournalDispatchState,
+  type AgentJournalSubmission,
   type AgentJournalItemBody,
   type AgentJournalMessageItem,
   type AgentJournalProducerLinkage,
@@ -59,6 +60,7 @@ type JournalRowBase = AgentJournalProducerLinkage & {
   ts: number
   /** Set when crash reconciliation appended the row after the fact. */
   recovered?: true
+  recoveredAt?: number
   /** Which turn the item this row creates belongs to. Rides the base, and is not a `v` bump,
    *  for the reason linkage does. Absent on rows from hosts that predate it: the reducer
    *  derives one for them on read. */
@@ -203,7 +205,7 @@ export type JournalDispatchRow = JournalRowBase & {
   carries?: string[]
   /** On `rejected`: why, typed. Older readers keep the key and ignore it; a malformed one is
    *  dropped when read, never the row. */
-  rejection?: AgentSessionFailureFact
+  rejection?: AgentJournalSubmission['rejection']
   /** On `rejected`: the card the host kept this send as (`AgentJournalSubmission`). Older readers
    *  keep the key and ignore it. */
   keptAsQueuedMessageId?: string
@@ -226,6 +228,8 @@ export type JournalLifecycleMutation =
         itemId: string
         revision: number
         body: AgentJournalItemBody
+        recovered?: true
+        recoveredAt?: number
         turnScope?: AgentJournalTurnScope
       })
   | { kind: 'tombstone'; itemId: string; revision: number }
@@ -343,17 +347,24 @@ function fieldsContent(hold: boolean): AgentJournalContentVerdict {
 
 /** Each kind's own fields, keyed by every kind the union holds: a kind without a check here fails
  *  to compile, never reads as a newer build's kind. */
+function journalItemContent(record: Record<string, unknown>): AgentJournalContentVerdict {
+  return combinedContent(
+    fieldsContent(
+      typeof record.itemId === 'string' &&
+        Number.isInteger(record.revision) &&
+        semanticWorkKeyAgrees(record.itemId, record.body)
+    ),
+    readAgentJournalItemBody(record.body)
+  )
+}
+
 const ROW_CONTENT_CHECK_BY_KIND: Record<
   JournalRow['kind'],
   (record: Record<string, unknown>) => AgentJournalContentVerdict
 > = {
   epoch: (record) =>
     fieldsContent(typeof record.reason === 'string' && isPlainObject(record.providerHandle)),
-  item: (record) =>
-    combinedContent(
-      fieldsContent(typeof record.itemId === 'string' && Number.isInteger(record.revision)),
-      readAgentJournalItemBody(record.body)
-    ),
+  item: journalItemContent,
   tombstone: (record) =>
     fieldsContent(typeof record.itemId === 'string' && Number.isInteger(record.revision)),
   submission: (record) =>
@@ -408,11 +419,7 @@ const MUTATION_CONTENT_CHECK_BY_KIND: Record<
   JournalLifecycleMutation['kind'],
   (mutation: Record<string, unknown>) => AgentJournalContentVerdict
 > = {
-  item: (mutation) =>
-    combinedContent(
-      fieldsContent(typeof mutation.itemId === 'string' && Number.isInteger(mutation.revision)),
-      readAgentJournalItemBody(mutation.body)
-    ),
+  item: journalItemContent,
   tombstone: (mutation) =>
     fieldsContent(typeof mutation.itemId === 'string' && Number.isInteger(mutation.revision))
 }

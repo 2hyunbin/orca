@@ -1,3 +1,4 @@
+import { rememberAppliedSettlementId } from './journal-settlement-id-retention'
 import { JournalRestProjection } from './journal-rest-projection'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
@@ -44,10 +45,19 @@ import {
   type JournalQueuePauseMarks
 } from './queued-message-pause'
 
-export const MAX_JOURNAL_APPLIED_SETTLEMENT_IDS = 4_096
+export {
+  MAX_JOURNAL_APPLIED_SETTLEMENT_IDS,
+  rememberAppliedSettlementId
+} from './journal-settlement-id-retention'
 
 export type JournalReducerState = {
+  echoCandidates?: (fingerprint: string) => Iterable<AgentJournalSubmission>
+  contextClearSequence?: () => number
+  submissionItemSource?: (itemId: string) => string | undefined
   rest: JournalRestProjection
+  /** Actual SQL pair read/committed in this epoch; undefined is not a persisted value. */
+  persistedRest?: readonly [string | null, number | null]
+  agent?: string
   sessionId: string
   epoch: string
   lastSequence: number
@@ -122,6 +132,7 @@ export function applyJournalRow(
   row: JournalRow,
   savedAt = row.ts
 ): void {
+  const revision = state.rest.revision
   applyJournalRowBody(state, row, savedAt)
   const ids =
     row.kind === 'item' || row.kind === 'tombstone'
@@ -134,12 +145,25 @@ export function applyJournalRow(
   for (const id of ids) {
     state.rest.observe(state, state.aliases.get(id) ?? id)
   }
+  // Open hygiene changes canonical truth; an actual Stop still has its original event edge.
+  const recovered =
+    row.recovered ||
+    (row.kind === 'lifecycle-batch' &&
+      row.mutations.every((mutation) => mutation.kind === 'item' && mutation.recovered))
+  if (recovered) {
+    state.rest.revision = revision
+  }
+  if (row.kind === 'tombstone' && row.stopEvent) {
+    state.rest.revision++
+  }
 }
 
 function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedAt: number): void {
   state.lastSequence = Math.max(state.lastSequence, row.seq)
   state.highestFence = Math.max(state.highestFence, row.fence)
   if (row.kind === 'epoch') {
+    state.agent =
+      row.providerHandle.kind === 'opaque' ? row.providerHandle.agent : row.providerHandle.kind
     state.historyOrigin = journalHistoryOrigin(row)
     return
   }
@@ -196,7 +220,20 @@ function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedA
         }
         const producer = journalBatchMutationProducer(row, mutation)
         const scope = statedOrDerivedTurnScope(state, mutation)
-        const item = journalRenderItem(itemId, revision, body, row, scope, producer, sequenceIndex)
+        const item = journalRenderItem(
+          itemId,
+          revision,
+          body,
+          {
+            ...row,
+            ...(mutation.recovered
+              ? { recovered: mutation.recovered, recoveredAt: mutation.recoveredAt }
+              : {})
+          },
+          scope,
+          producer,
+          sequenceIndex
+        )
         upsertJournalItem(state, itemId, revision, item, {
           fence: row.fence,
           ownerFence: mutation.ownerFence
@@ -215,20 +252,6 @@ function applyJournalRowBody(state: JournalReducerState, row: JournalRow, savedA
     return
   }
   applyJournalDispatchRow(state, row)
-}
-
-export function rememberAppliedSettlementId(
-  state: JournalReducerState,
-  settlementId: string
-): void {
-  state.appliedSettlementIds.add(settlementId)
-  while (state.appliedSettlementIds.size > MAX_JOURNAL_APPLIED_SETTLEMENT_IDS) {
-    const oldest = state.appliedSettlementIds.values().next().value
-    if (oldest === undefined) {
-      return
-    }
-    state.appliedSettlementIds.delete(oldest)
-  }
 }
 
 export function resolveJournalItemId(
@@ -277,23 +300,27 @@ export function journalEchoClaimant(
     return null
   }
   const fingerprint = agentSessionSendBodyFingerprint(state.sessionId, body)
-  const contextSequence = latestAgentSessionContextClearSequence(state.items.values())
+  const contextSequence =
+    state.contextClearSequence?.() ?? latestAgentSessionContextClearSequence(state.items.values())
   // Exact payload plus queue order preserves repeated identical sends one-for-one.
   // A submission an echo may not claim is one that says the message never reached
   // the provider, so an item resembling it is somebody else's. That is `rejected`
   // now — and, in journals written before this state moved, an `unknown` carrying
   // the transport marker. Replaying an older journal must not let such a row alias
   // the echo of a later, genuinely delivered resend of the same text.
-  const submission = [...state.submissions.values()]
-    .sort((left, right) => left.submittedAt - right.submittedAt)
-    .find(
-      (candidate) =>
-        (contextSequence === 0 || (candidate.acceptedSequence ?? 0) > contextSequence) &&
-        candidate.dispatchState !== 'rejected' &&
-        !isWriteFailureSubmission(candidate) &&
-        candidate.payloadFingerprint === fingerprint &&
-        state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0
-    )
+  let submission: AgentJournalSubmission | undefined
+  for (const candidate of state.echoCandidates?.(fingerprint) ?? state.submissions.values()) {
+    if (
+      (contextSequence === 0 || (candidate.acceptedSequence ?? 0) > contextSequence) &&
+      candidate.dispatchState !== 'rejected' &&
+      !isWriteFailureSubmission(candidate) &&
+      candidate.payloadFingerprint === fingerprint &&
+      state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0 &&
+      (!submission || candidate.submittedAt < submission.submittedAt)
+    ) {
+      submission = candidate
+    }
+  }
   return submission ? agentJournalSubmissionKey(submission.clientMessageId) : null
 }
 

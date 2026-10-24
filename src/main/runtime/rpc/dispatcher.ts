@@ -1,3 +1,4 @@
+import { beginStructuredJournalForeground } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   buildRegistry,
   isStreamingMethod,
@@ -81,7 +82,7 @@ export class RpcDispatcher {
       emulatorProbe(`rpc ${request.method}`, request.params)
     }
     try {
-      return successResponse(request.id, meta, await this.invokeUnary(admission, options))
+      return successResponse(request.id, meta, await this.invokeForegroundUnary(admission, options))
     } catch (error) {
       if (probeEmulator) {
         emulatorProbeError(`rpc ${request.method}`, error, {
@@ -115,7 +116,10 @@ export class RpcDispatcher {
 
     if (!isStreamingMethod(method)) {
       try {
-        const result = await this.invokeUnary({ method, request, params, caller }, options)
+        const result = await this.invokeForegroundUnary(
+          { method, request, params, caller },
+          options
+        )
         reply(JSON.stringify(successResponse(request.id, meta, result)))
       } catch (error) {
         reply(JSON.stringify(mapDispatcherError(request, meta, error)))
@@ -164,6 +168,18 @@ export class RpcDispatcher {
       options,
       isTransportSupported
     )
+  }
+
+  private async invokeForegroundUnary(
+    call: AdmittedUnaryCall,
+    options: RpcDispatchStreamingOptions | undefined
+  ): Promise<unknown> {
+    const finishForeground = beginStructuredJournalForeground()
+    try {
+      return await this.invokeUnary(call, options)
+    } finally {
+      finishForeground()
+    }
   }
 
   private async invokeUnary(

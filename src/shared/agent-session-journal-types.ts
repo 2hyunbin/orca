@@ -1,3 +1,4 @@
+import type { AgentSessionSemanticWork } from './agent-session-semantic-work'
 import type { AgentSessionProviderContextBoundary } from './agent-session-provider-context'
 // ─── Canonical agent-session journal: cross-process wire shapes ─────────────
 // The host-owned timeline for a structured agent session. Everything here must
@@ -370,6 +371,7 @@ export type AgentJournalStatusItem =
 export type AgentJournalTurnItem = { kind: 'turn' } & AgentJournalTurnLifecycle
 
 export type AgentJournalItemBody =
+  | AgentSessionSemanticWork
   | AgentJournalMessageItem
   | AgentJournalToolCallItem
   | AgentJournalDiffItem

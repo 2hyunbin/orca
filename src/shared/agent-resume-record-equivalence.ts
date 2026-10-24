@@ -40,6 +40,7 @@ export function sleepingRecordsEquivalentIgnoringCaptureTime(
     existing.terminalTitle === next.terminalTitle &&
     existing.lastAssistantMessage === next.lastAssistantMessage &&
     agentMainAgentVerdict(existing) === agentMainAgentVerdict(next) &&
+    existing.restoredInterruption === next.restoredInterruption &&
     existing.origin === next.origin &&
     launchConfigsEqual(existing.launchConfig, next.launchConfig)
   )
@@ -60,6 +61,7 @@ export function recoveryRecordMatches(
     existing.tabId === next.tabId &&
     existing.state === next.state &&
     agentMainAgentVerdict(existing) === agentMainAgentVerdict(next) &&
+    existing.restoredInterruption === next.restoredInterruption &&
     agentProviderSessionsEqual(existing.agent, existing.providerSession, next.providerSession) &&
     launchConfigsEqual(existing.launchConfig, next.launchConfig)
   )

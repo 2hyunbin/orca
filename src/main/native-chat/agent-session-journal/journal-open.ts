@@ -7,6 +7,7 @@
 // damage, and a row a newer Orca wrote is one this build cannot place: the load
 // names either and the open fails on it. Nothing is deleted.
 
+import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type Database from '../../sqlite/sync-database'
 import {
   applyJournalRow,
@@ -16,7 +17,7 @@ import {
 import {
   iterateJournalEpochRows,
   readJournalRowsAfter,
-  readJournalSessionEpoch
+  readJournalSessionProjection
 } from './journal-row-table'
 import { parseJournalRow, type JournalRow } from './journal-row-schema'
 
@@ -40,18 +41,34 @@ export type JournalLoad = {
 }
 
 /** Replays one chat from the host's database. Returns null when the chat has no journal yet. */
-export function replayJournal(db: Database.Database, sessionId: string): JournalLoad | null {
-  const epoch = readJournalSessionEpoch(db, sessionId)
-  if (epoch === null) {
+export function replayJournal(
+  db: Database.Database,
+  sessionId: string,
+  legacyCursor?: AgentJournalCursor
+): JournalLoad | null {
+  const projection = readJournalSessionProjection(db, sessionId)
+  if (projection === null) {
     return null
   }
+  const { epoch } = projection
   const fold = startJournalRowFold({ sessionId, epoch })
+  let frontier: string | null | undefined
   for (const entry of iterateJournalEpochRows(db, sessionId, epoch)) {
+    if (
+      legacyCursor?.epoch === epoch &&
+      entry.seq > legacyCursor.sequence &&
+      frontier === undefined
+    ) {
+      frontier = fold.finish().state.rest.frontier()
+    }
     if (!fold.add(entry)) {
       break
     }
   }
-  return fold.finish()
+  const loaded = fold.finish()
+  loaded.state.persistedRest = projection.pair
+  loaded.state.rest.seedLegacy(projection.pair, frontier)
+  return loaded
 }
 
 /** The same fold, fed a row at a time, for a caller that yields between batches of rows. */
