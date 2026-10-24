@@ -163,17 +163,17 @@ it.each([100, 1000])(
       submissionCopies: 1,
       submissionEntries: n + 1
     }
-    expect(failure.publication).toEqual(oneDisplay)
-    expect(failure.failure.displays).toBe(1)
-    for (const metric of [
-      'cardVisits',
-      'itemCopies',
-      'itemEntries',
-      'submissionCopies',
-      'submissionEntries'
-    ] as const) {
-      expect(failure.failure[metric], metric).toBeLessThanOrEqual(oneDisplay[metric])
-    }
+    expect(failure).toEqual({
+      publication: oneDisplay,
+      failure: {
+        displays: 1,
+        cardVisits: 0,
+        itemCopies: 0,
+        itemEntries: 0,
+        submissionCopies: 0,
+        submissionEntries: 0
+      }
+    })
     expect(r.mail()).toHaveLength(1)
     expect(r.mail()[0]?.body).toBe(
       [
