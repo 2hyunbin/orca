@@ -65,8 +65,9 @@ export function createClaudeStreamedThinking(deps: {
     if (!block.hasText) {
       return true
     }
+    const wholeText = !deps.sink.tryAppendTransition ? block.text : undefined
     const body = journalReasoningBody(
-      deps.sink.prepareText ? 'x' : (block.text ?? ''),
+      wholeText ?? (deps.sink.prepareText ? 'x' : (block.text ?? '')),
       ended ? endedJournalReasoning(ended.completedAt) : { state: 'running' }
     )
     const options = {
@@ -76,7 +77,7 @@ export function createClaudeStreamedThinking(deps: {
     }
     return (
       body !== null &&
-      (!deps.sink.tryAppendTransition && block.text !== undefined
+      (wholeText !== undefined
         ? appendClaudeStreamedWhole(deps.sink, block.identity, body, options)
         : appendClaudePreparedSteps(deps.sink, [block.step(body, options, ended !== undefined)]))
     )

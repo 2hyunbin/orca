@@ -4,7 +4,10 @@ import type {
   AgentJournalItemIdentity,
   AgentJournalProducerLinkage
 } from '../../shared/agent-session-journal-types'
-import type { StructuredAgentSessionAppendOptions } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type {
+  StructuredAgentSessionAppendOptions,
+  StructuredAgentSessionEventSink
+} from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { createClaudeStreamedTextCheckpoints } from './claude-streamed-text-checkpoints'
 import type {
   ClaudeSubagentLinkageSource,
@@ -184,53 +187,72 @@ describe('claude streamed text checkpoints', () => {
   })
 })
 
-it('preserves meaningful whitespace and omits blank thinking on fallback completion', async () => {
-  const { createClaudeStreamedThinking } = await import('./claude-streamed-thinking')
-  for (const chunks of [
-    ['    ', 'code'],
-    ['code', '   '],
-    ['  ', '  ']
-  ]) {
-    const expected = chunks.join('')
-    const rows: AgentJournalItemBody[] = []
-    const thinking = createClaudeStreamedThinking({
-      sink: {
+it.each([false, true])(
+  'preserves meaningful whitespace and omits blank thinking on fallback completion (prepareText=%s)',
+  async (withPrepareText) => {
+    const { createClaudeStreamedThinking } = await import('./claude-streamed-thinking')
+    for (const chunks of [
+      ['    ', 'analysis'],
+      ['analysis', '   '],
+      ['  ', '  ']
+    ]) {
+      const expected = chunks.join('')
+      const rows: AgentJournalItemBody[] = []
+      const sink: StructuredAgentSessionEventSink = {
         appendItem: (_, body) => rows.push(body),
         appendTombstone: () => undefined,
-        publish: () => undefined
-      },
-      producer: unconsultedProducer,
-      turnScope: () => ({ kind: 'thread' }),
-      schedule: () => () => undefined
-    })
-    const observe = (event: unknown) =>
-      thinking.observe({ type: 'stream_event', session_id: 's', uuid: 'frame', event }, 100)
-    observe({ type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } })
-    observe({
-      type: 'content_block_start',
-      index: 0,
-      content_block: { type: 'thinking', thinking: '' }
-    })
-    for (const delta of chunks) {
+        publish: () => undefined,
+        ...(withPrepareText
+          ? {
+              prepareText: () => {
+                throw new Error('Whole fallback must not prepare a transition')
+              }
+            }
+          : {})
+      }
+      const thinking = createClaudeStreamedThinking({
+        sink,
+        producer: unconsultedProducer,
+        turnScope: () => ({ kind: 'thread' }),
+        schedule: () => () => undefined
+      })
+      const observe = (event: unknown) =>
+        thinking.observe({ type: 'stream_event', session_id: 's', uuid: 'frame', event }, 100)
+      observe({ type: 'message_start', message: { id: 'm', role: 'assistant', content: [] } })
       observe({
-        type: 'content_block_delta',
+        type: 'content_block_start',
         index: 0,
-        delta: { type: 'thinking_delta', thinking: delta }
+        content_block: { type: 'thinking', thinking: '' }
       })
-      thinking.flush()
+      for (const delta of chunks) {
+        observe({
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: delta }
+        })
+        thinking.flush()
+      }
+      if (expected.trim()) {
+        expect(rows.at(-1)).toMatchObject({
+          role: 'reasoning',
+          state: 'running',
+          blocks: [{ type: 'text', text: expected }]
+        })
+        expect(thinking.pending).toBe(1)
+      }
+      expect(thinking.finishOpen(200)).toBe(true)
+      expect(thinking.pending).toBe(0)
+      if (expected.trim()) {
+        expect(rows.at(-1)).toMatchObject({
+          role: 'reasoning',
+          state: 'completed',
+          completedAt: 200,
+          blocks: [{ type: 'text', text: expected }]
+        })
+      } else {
+        expect(rows).toEqual([])
+      }
+      thinking.dispose()
     }
-    expect(thinking.finishOpen(200)).toBe(true)
-    expect(thinking.pending).toBe(0)
-    if (expected.trim()) {
-      expect(rows.at(-1)).toMatchObject({
-        role: 'reasoning',
-        state: 'completed',
-        completedAt: 200,
-        blocks: [{ type: 'text', text: expected }]
-      })
-    } else {
-      expect(rows).toEqual([])
-    }
-    thinking.dispose()
   }
-})
+)
