@@ -250,23 +250,22 @@ test('a pane move the server refuses goes back into its split, terminal intact',
     // The move is asynchronous, so only a tab that appeared and went proves the window moved it and
     // then put it back.
     await page.evaluate((id) => {
-      const counts: number[] = []
-      Reflect.set(window, '__paneMoveTabCounts', counts)
-      window.__store?.subscribe((state) => counts.push((state.tabsByWorktree[id] ?? []).length))
+      const count = (): number => (window.__store?.getState().tabsByWorktree[id] ?? []).length
+      const before = count()
+      let added = 0
+      window.__store?.subscribe(() => {
+        added = Math.max(added, count() - before)
+        // Tabs added at most, then now, relative to the drop.
+        document.body.dataset.paneMoveTabCounts = `${added}/${count() - before}`
+      })
     }, worktreeId)
     await dragPaneOutToTabStrip(page, worktreeId, movedLeafId)
     await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const counts: unknown = Reflect.get(window, '__paneMoveTabCounts')
-            return Array.isArray(counts) && counts.length > 0
-              ? { max: Math.max(...counts), now: counts.at(-1) }
-              : null
-          }),
-        { timeout: 15_000, message: 'the refused move was never drawn and put back' }
-      )
-      .toEqual({ max: tabCount + 1, now: tabCount })
+      .poll(() => page.evaluate(() => document.body.dataset.paneMoveTabCounts ?? null), {
+        timeout: 15_000,
+        message: 'the refused move was never drawn and put back'
+      })
+      .toBe('1/0')
     await expect(page.locator(TAB)).toHaveCount(tabCount)
     await expect(page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`)).toHaveCount(1, {
       timeout: 15_000
