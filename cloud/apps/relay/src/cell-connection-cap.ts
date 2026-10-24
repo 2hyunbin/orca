@@ -62,24 +62,54 @@ export function reportedHardCapWithinLimit(
   return report.connectionHardCap
 }
 
-// The caller holds the limits row locked (the heartbeat's own row read), so this cannot race a
-// configuration write. Written only on change: steady heartbeats leave the row untouched.
+// The heartbeat's row read, locked so the report it records cannot race a configuration write.
+export async function lockCellConnectionLimit(
+  transaction: RelayDatabase,
+  cellId: string
+): Promise<SqlRow | undefined> {
+  return (
+    await transaction.queryLocked(
+      `SELECT limits.hard_cap, limits.unobserved_bound, limits.reported_hard_cap
+       FROM relay_cell_connection_limits limits WHERE limits.cell_id = ?`,
+      [cellId]
+    )
+  )[0]
+}
+
+// Written only on change: steady heartbeats leave the row untouched.
 export async function recordReportedHardCap(
   transaction: RelayDatabase,
+  limit: SqlRow,
   cellId: string,
   reportedHardCap: number
 ): Promise<void> {
+  const stored = limit.reported_hard_cap
+  if (stored !== null && stored !== undefined) {
+    if (capInteger(limit, 'reported_hard_cap') === reportedHardCap) return
+  }
   await transaction.query(
-    `UPDATE relay_cell_connection_limits SET reported_hard_cap = ?
-     WHERE cell_id = ? AND (reported_hard_cap IS NULL OR reported_hard_cap <> ?)`,
-    [reportedHardCap, cellId, reportedHardCap]
+    `UPDATE relay_cell_connection_limits SET reported_hard_cap = ? WHERE cell_id = ?`,
+    [reportedHardCap, cellId]
   )
+  const configuredHardCap = capInteger(limit, 'hard_cap')
+  // A cell left below its configured cap (wrong image or env) is otherwise silent.
+  if (reportedHardCap < configuredHardCap) {
+    console.warn(
+      JSON.stringify({
+        event: 'orca_relay_cell_reported_cap_below_configured',
+        cellId,
+        reportedHardCap,
+        configuredHardCap
+      })
+    )
+  }
 }
 
-// A raise (same unobserved bound, higher cap) changes nothing placement reads: the cap the cell
-// last reported, or failing a report the cap it was configured with until now, is recorded as its
-// report, so the effective cap stays put until the cell itself reports the higher one. That is
-// also why its telemetry rows survive. Any other change keeps the old fail-closed reset.
+// A cap-only change (same unobserved bound, either direction) changes nothing placement reads
+// beyond min(): the stored report stands, or failing one (a row an older director wrote) the cap
+// the cell was configured with until now is recorded as its report, so a raise waits for the cell
+// to report it. Telemetry rows survive, so a deploy that interleaves revisions with different caps
+// cannot wipe the fleet's headroom. A bound change keeps the old fail-closed reset.
 export async function writeCellConnectionLimit(
   transaction: RelayDatabase,
   cell: Pick<RelayCellConfig, 'id' | 'connectionHardCap' | 'connectionUnobservedBound'>,
@@ -90,26 +120,20 @@ export async function writeCellConnectionLimit(
   if (connectionHardCap === undefined || connectionUnobservedBound === undefined) return
   const current = (
     await transaction.queryLocked(
-      `SELECT limits.hard_cap, limits.unobserved_bound,
-         ${EFFECTIVE_HARD_CAP_SQL} AS effective_hard_cap
-       FROM relay_cell_connection_limits limits WHERE limits.cell_id = ?`,
+      `SELECT hard_cap, unobserved_bound FROM relay_cell_connection_limits WHERE cell_id = ?`,
       [cell.id]
     )
   )[0]
-  const changed =
+  const capOnlyChange =
     current !== undefined &&
-    (capInteger(current, 'hard_cap') !== connectionHardCap ||
-      capInteger(current, 'unobserved_bound') !== connectionUnobservedBound)
-  const raised =
-    changed &&
     capInteger(current, 'unobserved_bound') === connectionUnobservedBound &&
-    connectionHardCap > capInteger(current, 'hard_cap')
-  if (raised) {
+    capInteger(current, 'hard_cap') !== connectionHardCap
+  if (capOnlyChange) {
     await transaction.query(
       `UPDATE relay_cell_connection_limits
-       SET hard_cap = ?, reported_hard_cap = ?, updated_at = ?
+       SET hard_cap = ?, reported_hard_cap = COALESCE(reported_hard_cap, hard_cap), updated_at = ?
        WHERE cell_id = ?`,
-      [connectionHardCap, capInteger(current, 'effective_hard_cap'), now, cell.id]
+      [connectionHardCap, now, cell.id]
     )
     return
   }
@@ -123,7 +147,9 @@ export async function writeCellConnectionLimit(
        updated_at = excluded.updated_at`,
     [cell.id, connectionHardCap, connectionUnobservedBound, now]
   )
-  if (changed) {
+  const boundChanged =
+    current !== undefined && capInteger(current, 'unobserved_bound') !== connectionUnobservedBound
+  if (boundChanged) {
     await transaction.query(`DELETE FROM relay_cell_connection_snapshots WHERE cell_id = ?`, [
       cell.id
     ])

@@ -61,6 +61,7 @@ import {
 import {
   CONNECTION_CAP_COLUMNS_SQL,
   EFFECTIVE_HARD_CAP_SQL,
+  lockCellConnectionLimit,
   readCellConnectionCap,
   recordReportedHardCap,
   reportedHardCapWithinLimit,
@@ -1938,12 +1939,7 @@ export class RelayAssignmentStore {
       ) {
         throw new Error('stale_cell_incarnation')
       }
-      const connectionLimit = (
-        await transaction.queryLocked(
-          `SELECT * FROM relay_cell_connection_limits WHERE cell_id = ?`,
-          [input.cellId]
-        )
-      )[0]
+      const connectionLimit = await lockCellConnectionLimit(transaction, input.cellId)
       if (connectionLimit) {
         const reportedHardCap = reportedHardCapWithinLimit(connectionLimit, input)
         if (
@@ -1959,7 +1955,7 @@ export class RelayAssignmentStore {
         ) {
           throw new Error('cell_connection_telemetry_mismatch')
         }
-        await recordReportedHardCap(transaction, input.cellId, reportedHardCap)
+        await recordReportedHardCap(transaction, connectionLimit, input.cellId, reportedHardCap)
       } else if (
         input.totalConnections !== undefined ||
         input.inFlightConnections !== undefined ||

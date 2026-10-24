@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RelayAssignmentStore } from './assignment-store.js'
 import { encodeMembership, type CellAdmissionMembership } from './cell-admission-selector.js'
 import type { RelayCellConfig } from './config.js'
@@ -29,6 +29,7 @@ function cell(index: number, connectionHardCap: 1_000 | 3_000): RelayCellConfig 
 const databases: RelayDatabase[] = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const database of databases.splice(0)) await database.close()
 })
 
@@ -182,32 +183,101 @@ describe('effective connection cap = min(configured, reported)', () => {
     }
   )
 
-  it('records the pre-raise effective cap, not a stale higher report', async () => {
+  it('keeps a stored report across a lower-then-raise', async () => {
     const before = cell(1, 3_000)
     const harness = await setup([before])
     await harness.heartbeat(before, { connectionHardCap: 3_000 })
     await harness.store.reconcileCells([cell(1, 1_000)], true)
-    expect(await harness.reportedHardCap(before.id)).toBe(3_000)
+    expect(await harness.capacity(before.id)).toMatchObject({
+      reportedHardCap: 3_000,
+      effectiveHardCap: 1_000
+    })
     await harness.store.reconcileCells([cell(1, 3_000)], true)
 
-    expect(await harness.reportedHardCap(before.id)).toBe(1_000)
-    expect(await harness.capacity(before.id)).toMatchObject({ effectiveHardCap: 1_000 })
+    expect(await harness.capacity(before.id)).toMatchObject({ effectiveHardCap: 3_000 })
   })
 
-  it.each([
-    { label: 'a lowering', next: { connectionHardCap: 1_000 as const } },
-    { label: 'a bound change', next: { connectionUnobservedBound: 50 } }
-  ])('still resets telemetry and fails placement closed on $label', async ({ next }) => {
+  it('keeps telemetry on a lowering, places against it and refuses the higher report', async () => {
+    const before = cell(1, 3_000)
+    const harness = await setup([before])
+    await harness.heartbeat(before, { connectionHardCap: 3_000, units: 839 })
+    await harness.store.reconcileCells([cell(1, 1_000)], true)
+
+    expect(await harness.telemetryRows(before.id)).toBe(2)
+    expect(await harness.capacity(before.id)).toMatchObject({
+      hardCap: 1_000,
+      effectiveHardCap: 1_000,
+      normalAdmissionPause: 840,
+      heartbeatFresh: true
+    })
+    await expect(
+      harness.store.assign({ userId: 'user-a', relayHostId: 'host000000000001' })
+    ).resolves.toMatchObject({ cellId: before.id })
+    await expect(
+      harness.store.assign({ userId: 'user-b', relayHostId: 'host000000000002' })
+    ).rejects.toThrow('relay_capacity_exhausted')
+    await expect(harness.heartbeat(before, { connectionHardCap: 3_000 })).rejects.toThrow(
+      'cell_connection_telemetry_mismatch'
+    )
+  })
+
+  it('still resets telemetry and fails placement closed on a bound change', async () => {
     const before = cell(1, 3_000)
     const harness = await setup([before])
     await harness.heartbeat(before, { connectionHardCap: 3_000, units: 10 })
-    await harness.store.reconcileCells([{ ...before, ...next }], true)
+    await harness.store.reconcileCells([{ ...before, connectionUnobservedBound: 50 }], true)
 
     expect(await harness.telemetryRows(before.id)).toBe(0)
     expect(await harness.capacity(before.id)).toMatchObject({ heartbeatFresh: false })
     await expect(
       harness.store.assign({ userId: 'user-a', relayHostId: 'host000000000001' })
     ).rejects.toThrow('relay_capacity_exhausted')
+  })
+
+  it('survives revisions with different caps reconciling in turn during a deploy', async () => {
+    // A new revision raises 16 cells; an outgoing instance of the same code, still configured at
+    // 1,000, then boots and reconciles them back down; the new revision boots again.
+    const lower = Array.from({ length: RELAY_CELL_COUNT }, (_, index) => cell(index + 1, 1_000))
+    const higher = lower.map((_, index) => cell(index + 1, 3_000))
+    const harness = await setup(lower)
+    for (const target of lower) await harness.heartbeat(target, { connectionHardCap: 1_000 })
+    let host = 0
+    for (const config of [higher, lower, higher]) {
+      await harness.store.reconcileCells(config, true)
+      for (const target of lower) {
+        expect(await harness.telemetryRows(target.id)).toBe(2)
+        expect(await harness.capacity(target.id)).toMatchObject({
+          reportedHardCap: 1_000,
+          effectiveHardCap: 1_000,
+          heartbeatFresh: true
+        })
+      }
+      await expect(
+        harness.store.assign({ userId: `user-${host}`, relayHostId: `interleave${host++}` })
+      ).resolves.toMatchObject({ placed: true })
+    }
+  })
+
+  it('logs once when a cell reports a cap below its configured one', async () => {
+    const configured = cell(1, 3_000)
+    const harness = await setup([configured])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    await harness.heartbeat(configured, { connectionHardCap: 1_000 })
+    await harness.heartbeat(configured, { connectionHardCap: 1_000 })
+    await harness.heartbeat(configured, { connectionHardCap: 3_000 })
+
+    const events = warn.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('orca_relay_cell_reported_cap_below_configured'))
+      .map((line) => JSON.parse(line) as unknown)
+    expect(events).toEqual([
+      {
+        event: 'orca_relay_cell_reported_cap_below_configured',
+        cellId: configured.id,
+        reportedHardCap: 1_000,
+        configuredHardCap: 3_000
+      }
+    ])
   })
 
   it('takes a raise only once the cell itself reports it', async () => {
@@ -340,21 +410,34 @@ describe('effective connection cap = min(configured, reported)', () => {
 })
 
 describe('connection cap readers', () => {
-  it('reads hard_cap only through cell-connection-cap.ts', () => {
-    // Placement, headroom and status must take the effective cap; a raw read would count seats a
-    // running cell does not have. Schema and new-cell registration (an exact config write) are
-    // the only other owners.
-    const source = fileURLToPath(new URL('.', import.meta.url))
-    const allowed = new Set([
-      'cell-connection-cap.ts',
-      'database.ts',
-      'cell-admission-migration-registration.ts'
-    ])
-    const readers = readdirSync(source, { recursive: true, encoding: 'utf8' })
-      .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
-      .filter((file) => !file.startsWith('test-fixtures'))
-      .filter((file) => /\bhard_cap\b/.test(readFileSync(join(source, file), 'utf8')))
-    expect(readers.filter((file) => !allowed.has(file))).toEqual([])
-    expect(readers).toContain('cell-connection-cap.ts')
+  const source = fileURLToPath(new URL('.', import.meta.url))
+  const allowed = new Set([
+    'cell-connection-cap.ts',
+    'database.ts',
+    'cell-admission-migration-registration.ts'
+  ])
+  const sources = readdirSync(source, { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => !file.startsWith('test-fixtures'))
+    .map((file) => ({ file, text: readFileSync(join(source, file), 'utf8') }))
+  const offenders = (pattern: RegExp): string[] =>
+    sources
+      .filter(({ file, text }) => !allowed.has(file) && pattern.test(text))
+      .map(({ file }) => file)
+
+  // Placement, headroom and status must take the effective cap; a raw read would count seats a
+  // running cell does not have. Schema and new-cell registration (an exact config write) are the
+  // only other owners.
+  it('reads the cap columns only through cell-connection-cap.ts', () => {
+    expect(offenders(/\bhard_cap\b/)).toEqual([])
+    expect(offenders(/\blimits\.\*/)).toEqual([])
+    expect(offenders(/SELECT\s+\*\s+FROM\s+relay_cell_connection_limits/)).toEqual([])
+    const owner = sources.find(({ file }) => file === 'cell-connection-cap.ts')
+    expect(owner?.text).toMatch(/\bhard_cap\b/)
+  })
+
+  it('has no in-process reader of the configured status cap', () => {
+    // connectionCapacity.hardCap stays configured for old ops scripts; nothing here may plan on it.
+    expect(offenders(/connectionCapacity\??\.hardCap/)).toEqual([])
   })
 })
