@@ -227,8 +227,14 @@ function expectCanaryUnchanged(): void {
   )
 }
 
-function orchestrationMethod(name: string) {
-  const method = ORCHESTRATION_METHODS.find((candidate) => candidate.name === name)
+type OrchestrationMethod = (typeof ORCHESTRATION_METHODS)[number]
+
+function orchestrationMethod<N extends OrchestrationMethod['name']>(
+  name: N
+): Extract<OrchestrationMethod, { name: N }> {
+  const method = ORCHESTRATION_METHODS.find(
+    (candidate): candidate is Extract<OrchestrationMethod, { name: N }> => candidate.name === name
+  )
   if (!method) {
     throw new Error(`Missing orchestration method: ${name}`)
   }
@@ -246,11 +252,6 @@ async function releaseCompletedWorker(terminalState: 'running' | 'exited'): Prom
     coordinatorPaneKey
   })
   const ctx: RpcContext = { runtime }
-  const call = async (name: string, params: Record<string, unknown>) => {
-    const method = orchestrationMethod(name)
-    const parsed = method.params ? method.params.parse(params) : undefined
-    return method.handler(parsed, ctx)
-  }
 
   vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
     handle === 'terminal-coordinator' ? coordinatorPaneKey : ORIGINAL_PANE_KEY
@@ -314,11 +315,11 @@ async function releaseCompletedWorker(terminalState: 'running' | 'exited'): Prom
 
   try {
     const task = db.createTask({ spec: 'release completed worker', runId: run.id })
-    const started = (await call('orchestration.workerStart', {
-      task: task.id,
-      from: 'terminal-coordinator',
-      agent: 'codex'
-    })) as { dispatchId: string; state: string }
+    const workerStart = orchestrationMethod('orchestration.workerStart')
+    const started = (await workerStart.handler(
+      workerStart.params.parse({ task: task.id, from: 'terminal-coordinator', agent: 'codex' }),
+      ctx
+    )) as { dispatchId: string; state: string }
     expect(started.state).toBe('ready')
     expect(db.getWorkerDispatch(started.dispatchId)?.state).toBe('ready')
     expect(
@@ -331,8 +332,9 @@ async function releaseCompletedWorker(terminalState: 'running' | 'exited'): Prom
     ).toBe('settled')
     expect(db.getWorkerDispatch(started.dispatchId)?.state).toBe('succeeded')
 
+    const workerRelease = orchestrationMethod('orchestration.workerRelease')
     await expect(
-      call('orchestration.workerRelease', { dispatch: started.dispatchId })
+      workerRelease.handler(workerRelease.params.parse({ dispatch: started.dispatchId }), ctx)
     ).resolves.toMatchObject({
       dispatchId: started.dispatchId,
       state: 'released',
