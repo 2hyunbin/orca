@@ -103,7 +103,10 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     if (!this.store) {
       return { worktrees: [], platformByRepoId: new Map() }
     }
-    const metaById = this.store.getWorktreeMeta ? {} : (this.store.getAllWorktreeMeta() ?? {})
+    const metaById =
+      typeof this.store.getWorktreeMeta === 'function'
+        ? {}
+        : (this.store.getAllWorktreeMeta() ?? {})
     const repos = this.store.getRepos()
     const repoOwnerCounts = new Map<string, number>()
     for (const repo of repos) {

@@ -240,11 +240,11 @@ export function canListRetiredNames<
 }
 
 export async function listRetiredWorktreeNamesForRepo(
-  store: RetirementReadStore &
-    RetirementBackfillStore & {
-      getRepos(): readonly Repo[]
-      getSettings(): RetirementPathSettings
-    },
+  store: Omit<RetirementReadStore & RetirementBackfillStore, 'getSettings'> & {
+    getRepos(): readonly Repo[]
+    getSettings(): RetirementPathSettings &
+      ReturnType<NonNullable<ProjectRuntimeResolutionStore['getSettings']>>
+  },
   repo: Repo
 ) {
   const settings = store.getSettings()
