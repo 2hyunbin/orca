@@ -206,8 +206,7 @@ export function useMobileSessionAccessorySelection(scope: MobileSessionTerminalI
     }
     const repoId = getRepoIdFromMobileWorktreeId(worktreeId)
     const repoResponse = await newTabRepoListRead.request(client)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Preserve the established response shape at this boundary.
-    const repos = (newTabRepoListRead.interpret(repoResponse) as MobileRuntimeRepoSummary[]) ?? []
+    const repos: MobileRuntimeRepoSummary[] = newTabRepoListRead.interpret(repoResponse)
     return repos.find((repo) => repo.id === repoId)?.connectionId?.trim() || null
   }, [client, isFloatingWorkspaceRoute, worktreeId])
 
