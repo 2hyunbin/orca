@@ -1,13 +1,14 @@
-import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import { createLaunchedAgentWriteGuard } from '../runtime/launched-agent-write-guard'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { interruptWorkingAgent } from '../runtime/terminal-agent-interrupt'
 import type { ConversationPrompts, PromptTerminal } from './external-conversation-prompts'
 import type { ConversationChain } from './external-conversation-chain'
+import type { ConversationEvents } from './external-conversation-events'
 import { findLink } from './external-conversation-links'
 import type { ExternalConversationSeamDeps } from './external-conversation-seam'
 import { bindPane } from './external-conversation-send'
+import type { ConversationTurns } from './external-conversation-turns'
 import {
   conversationId,
   refused,
@@ -17,23 +18,31 @@ import {
 
 export type CancelTerminal = PromptTerminal & Pick<OrcaRuntimeService, 'getPtyLivenessVerdict'>
 
+/** What a cancel reaches in its seam. */
+export type CancelSeam = Pick<ExternalConversationSeamDeps, 'store' | 'readHookRow'> & {
+  prompts: ConversationPrompts
+  chain: ConversationChain
+  turns: ConversationTurns
+  /** The watchers' events, while anyone watches. */
+  events: ConversationEvents | null
+}
+
 /**
  * Settles the conversation's queued and held work first, so a follow-up held behind an approval
  * is not pasted once the reject lands, then stops what its agent is doing now.
  */
 export async function cancelConversation(
   terminal: CancelTerminal,
-  { store, readHookRow }: Pick<ExternalConversationSeamDeps, 'store' | 'readHookRow'>,
-  prompts: ConversationPrompts,
-  chain: ConversationChain,
+  seam: CancelSeam,
   key: ConversationKey,
   signal: AbortSignal
 ): Promise<Delivery> {
   if (signal.aborted) {
     return refused('connectors_disabled')
   }
-  const settledWork = chain.cancel(conversationId(key), 'conversation_cancelled')
-  const linked = findLink(store, key)
+  const id = conversationId(key)
+  const settledWork = seam.chain.cancel(id, 'conversation_cancelled')
+  const linked = findLink(seam.store, key)
   if (!linked) {
     // A start not yet linked has reached no agent, so settling it stopped everything.
     if (settledWork) {
@@ -41,7 +50,7 @@ export async function cancelConversation(
     }
     throw new Error('external_conversation_not_found')
   }
-  return stopLinkedAgent(terminal, prompts, readHookRow, linked.link, signal)
+  return stopLinkedAgent(terminal, seam, id, linked.link, signal)
 }
 
 /**
@@ -52,8 +61,8 @@ export async function cancelConversation(
  */
 async function stopLinkedAgent(
   terminal: CancelTerminal,
-  prompts: ConversationPrompts,
-  readHookRow: (paneKey: string) => AgentStatusIpcPayload | null,
+  { prompts, readHookRow, turns, events }: CancelSeam,
+  id: string,
   link: ExternalConversationLink,
   signal: AbortSignal
 ): Promise<Delivery> {
@@ -65,11 +74,7 @@ async function stopLinkedAgent(
   const prompt = prompts.pending(terminal, link)
   if (prompt) {
     return prompt.kind === 'approval'
-      ? prompts.answer(terminal, link, {
-          promptId: prompt.promptId,
-          optionId: 'reject_once',
-          signal
-        })
+      ? reject(terminal, prompts, readHookRow, events, link, prompt.promptId, signal)
       : refused('prompt_unsupported')
   }
   // An Escape at a shell that replaced the agent would clear the user's command line.
@@ -83,6 +88,7 @@ async function stopLinkedAgent(
     })
     switch (interrupted.outcome) {
       case 'accepted':
+        turns.interrupted(id, pane.binding)
         return interrupted
       case 'unknown':
         return { outcome: 'unknown', reason: 'writer_failed' }
@@ -94,4 +100,27 @@ async function stopLinkedAgent(
   } finally {
     guard.dispose()
   }
+}
+
+/** Rejects through the prompt answer; an accepted reject tells the watchers which prompt it ended. */
+async function reject(
+  terminal: CancelTerminal,
+  prompts: ConversationPrompts,
+  readHookRow: CancelSeam['readHookRow'],
+  events: ConversationEvents | null,
+  link: ExternalConversationLink,
+  promptId: string,
+  signal: AbortSignal
+): Promise<Delivery> {
+  const row = readHookRow(link.paneKey)
+  const at = Date.now()
+  const delivery = await prompts.answer(terminal, link, {
+    promptId,
+    optionId: 'reject_once',
+    signal
+  })
+  if (delivery.outcome === 'accepted' && row) {
+    events?.rejectedByCancel(link.paneKey, row, at)
+  }
+  return delivery
 }

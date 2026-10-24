@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  composerDraftShowsText,
   detectTerminalComposerDraft,
   hasTerminalComposerPlaceholder
 } from './terminal-composer-draft'
@@ -396,5 +397,19 @@ describe('detectTerminalComposerDraft', () => {
         cursorViewportRow: 8
       })
     ).toMatchObject({ text: 'first line', endRow: 8 })
+  })
+})
+
+describe('composerDraftShowsText', () => {
+  it('matches across soft wraps, and nothing a person changed', () => {
+    expect(composerDraftShowsText('fix the\nbug now', 'fix the bug now')).toBe(true)
+    expect(composerDraftShowsText('fix the bug now please', 'fix the bug now')).toBe(false)
+    expect(composerDraftShowsText('', 'fix the bug now')).toBe(false)
+  })
+
+  it('matches Claude’s paste chip only for the same number of lines', () => {
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb\nc')).toBe(true)
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb')).toBe(false)
+    expect(composerDraftShowsText('[Pasted text #3 +2 lines] and more', 'a\nb\nc')).toBe(false)
   })
 })

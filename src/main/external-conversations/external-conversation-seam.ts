@@ -2,12 +2,15 @@ import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import type { PendingPrompt } from '../../shared/agent-pending-prompt'
 import type { AgentStatusHooksSettings } from '../../shared/agent-status-hooks-setting'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
-import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { admitConnectorAgent } from './connector-agents'
 import { cancelConversation, type CancelTerminal } from './external-conversation-cancel'
 import { ConversationChain } from './external-conversation-chain'
-import { ConversationEvents, type ConversationWatchListener } from './external-conversation-events'
+import {
+  ConversationEvents,
+  HOST_CLOCK,
+  type ConversationWatchListener
+} from './external-conversation-events'
 import { ConversationPrompts } from './external-conversation-prompts'
 import type { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import {
@@ -16,8 +19,9 @@ import {
   type ExternalConversationLinkStore,
   type LinkedConversation
 } from './external-conversation-links'
-import { bindPane, deliverFollowUp, type FollowUpTerminal } from './external-conversation-send'
+import { bindPane, sameBinding } from './external-conversation-send'
 import { reopenLinkedAgent, type ReopenTerminal } from './external-conversation-reopen'
+import { ConversationTurns, type TurnTerminal } from './external-conversation-turns'
 import { LinkedSessionCapture, type SessionRows } from './external-conversation-session-capture'
 import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
 import {
@@ -40,7 +44,7 @@ export type ExternalConversationHost = {
   terminal: ConversationTerminal
 }
 
-export type ConversationTerminal = FollowUpTerminal & ReopenTerminal & CancelTerminal
+export type ConversationTerminal = TurnTerminal & ReopenTerminal & CancelTerminal
 
 export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalConversationHost {
   return { launcher: runtimeConversationLauncher(runtime), terminal: runtime }
@@ -75,6 +79,7 @@ export class ExternalConversationSeam {
   private readonly admitted = new WeakMap<AbortSignal, AgentPromptExpectedBinding | null>()
   private readonly sessions: LinkedSessionCapture
   private readonly prompts: ConversationPrompts
+  private readonly turns = new ConversationTurns()
   /** Built by the first watcher, so an unwatched seam subscribes to nothing. */
   private events: ConversationEvents | null = null
   private readonly releaseRemovals: () => void
@@ -88,6 +93,7 @@ export class ExternalConversationSeam {
       for (const [id, { key, worktreeId: linkedTo }] of this.linked) {
         if (linkedTo === worktreeId && !findLink(this.deps.store, key)) {
           this.linked.delete(id)
+          this.turns.forget(id)
           this.chain.cancel(id, 'agent_not_reachable')
         }
       }
@@ -132,8 +138,10 @@ export class ExternalConversationSeam {
 
   /** Receipted like a send, so a retried delivery never cancels twice. */
   cancel(host: ExternalConversationHost, key: ConversationKey, id: string): Promise<Delivery> {
+    const { prompts, chain, turns, events } = this
+    const seam = { ...this.deps, prompts, chain, turns, events }
     return this.deps.receipts.run(key, id, 'connector.cancel', [], () =>
-      cancelConversation(host.terminal, this.deps, this.prompts, this.chain, key, this.abort.signal)
+      cancelConversation(host.terminal, seam, key, this.abort.signal)
     )
   }
 
@@ -147,12 +155,7 @@ export class ExternalConversationSeam {
       readHookRow: this.deps.readHookRow,
       onAgentPaneChange: this.deps.onAgentPaneChange,
       pendingPrompt: (link) => this.prompts.pending(host.terminal, link),
-      setTimer: (run, delayMs) => {
-        const timer = setTimeout(run, delayMs)
-        timer.unref?.()
-        return { cancel: () => clearTimeout(timer) }
-      },
-      now: Date.now
+      ...HOST_CLOCK
     })
     return this.events.watch(listener)
   }
@@ -202,10 +205,11 @@ export class ExternalConversationSeam {
             },
             // Capture publication before followers run so they cannot adopt a successor process.
             (paneKey) => {
-              this.admitted.set(
-                signal,
-                (paneKey && bindPane(host.terminal, paneKey)?.binding) || null
-              )
+              const binding = (paneKey && bindPane(host.terminal, paneKey)?.binding) || null
+              this.admitted.set(signal, binding)
+              if (binding) {
+                this.turns.wrote(conversationId(key), input.prompt, binding)
+              }
             }
           )
         })
@@ -252,7 +256,15 @@ export class ExternalConversationSeam {
     const admitted = laneAdmitted ? this.admitted.get(signal) : pane?.binding
     if (pane && admitted && sameBinding(pane.binding, admitted)) {
       this.admitted.set(signal, admitted)
-      const delivery = await this.write(terminal, key, linked.link, pane, deliveryId, text, signal)
+      const delivery = await this.turns.write(
+        terminal,
+        key,
+        linked.link,
+        pane,
+        deliveryId,
+        text,
+        signal
+      )
       if (delivery.outcome !== 'refused' || delivery.reason !== 'agent_not_reachable') {
         return delivery
       }
@@ -291,32 +303,13 @@ export class ExternalConversationSeam {
     }
     const { pane } = reopened
     this.admitted.set(signal, pane.binding)
-    const delivery = await this.write(terminal, key, relinked, pane, deliveryId, text, signal)
+    const delivery = await this.turns.write(terminal, key, relinked, pane, deliveryId, text, signal)
     if (delivery.outcome === 'accepted') {
       return { outcome: 'accepted', reopened: true }
     }
     return delivery.outcome === 'refused' && delivery.reason === 'agent_not_reachable'
       ? this.lost(id, signal)
       : delivery
-  }
-
-  private write(
-    terminal: ConversationTerminal,
-    key: ConversationKey,
-    link: ExternalConversationLink,
-    pane: { handle: string; binding: AgentPromptExpectedBinding },
-    deliveryId: string,
-    text: string,
-    signal: AbortSignal
-  ): Promise<Delivery> {
-    return deliverFollowUp(terminal, {
-      handle: pane.handle,
-      expectedBinding: pane.binding,
-      agent: link.agent,
-      text,
-      requestId: JSON.stringify([key.source, key.externalId, deliveryId]),
-      signal
-    })
   }
 
   /** Cancel the queue before advancing; later sends create a fresh lane. */
@@ -328,8 +321,4 @@ export class ExternalConversationSeam {
     this.chain.cancel(id, reason, laneSignal)
     return refused(reason)
   }
-}
-
-function sameBinding(a: AgentPromptExpectedBinding, b: AgentPromptExpectedBinding): boolean {
-  return a.ptyId === b.ptyId && a.processIncarnation === b.processIncarnation
 }

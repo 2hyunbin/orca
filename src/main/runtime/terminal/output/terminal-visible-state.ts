@@ -13,6 +13,7 @@ import {
   VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS
 } from '../../orca-runtime-postlude'
 import { projectTerminalVisibleLines } from '../../orca-runtime-terminal-projection'
+import { detectTerminalComposerDraft } from '../../../../shared/terminal-composer-draft'
 import { visibleNonBlankTerminalLines } from '../../terminal-tail-read'
 import type { RuledScreen } from '../../screen-input-veto'
 import { HeadlessEmulator } from '../../../daemon/headless-emulator'
@@ -172,6 +173,14 @@ export abstract class OrcaRuntimeWithVisibleSnapshotPreview extends OrcaRuntimeW
     const state = this.readWholeScreenModel(ptyId)
     // Why unawaited writeChain: callers are synchronous; a grid one chunk behind is re-read next poll.
     return state ? projectTerminalVisibleLines(state.emulator).lines : null
+  }
+
+  /** The agent's input box text on the live emulator: '' when empty, null without a whole screen. */
+  readTerminalComposerDraft(ptyId: string): string | null {
+    const state = this.readWholeScreenModel(ptyId)
+    return state
+      ? (detectTerminalComposerDraft(state.emulator.getCursorLineContext())?.text ?? '')
+      : null
   }
 
   /** The grid a screen-ruled agent's rule reads: as painted, and only on the PTY's own size. */

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
+import { buildAgentTuiClearInputForText } from '../../shared/agent-tui-input-clear'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
+import type { ConversationEvent } from './external-conversation-events'
 import type { ConversationKey } from './external-conversation-types'
 import {
   fakeLauncher,
@@ -182,3 +185,101 @@ describe('ExternalConversationSeam cancel', () => {
     expect(fake.keys).toEqual([])
   })
 })
+
+describe('ExternalConversationSeam cancel: what it leaves behind', () => {
+  const CLEAR = buildAgentTuiClearInputForText('first')
+
+  async function cancelledEarly() {
+    const h = await linked()
+    h.hookRows.set(PANE, hookRow())
+    await expect(h.seam.cancel(h.host, KEY, 'c1')).resolves.toEqual({ outcome: 'accepted' })
+    h.hookRows.set(PANE, hookRow({ state: 'done' }))
+    return h
+  }
+
+  it('clears the interrupted prompt Claude put back, once, before the next send', async () => {
+    const { seam, host, fake } = await cancelledEarly()
+    fake.state.draft = 'first'
+    await expect(seam.send(host, KEY, 's1', 'next')).resolves.toEqual({ outcome: 'accepted' })
+    expect(fake.keys).toEqual(['\x1b', CLEAR])
+    expect(fake.writes).toEqual(['next'])
+    await seam.send(host, KEY, 's2', 'again')
+    expect(fake.keys).toEqual(['\x1b', CLEAR])
+  })
+
+  it('touches nothing else in the box: a person’s text, an unread screen, a new process', async () => {
+    for (const change of [
+      (fake: ReturnType<typeof fakeTerminal>) => (fake.state.draft = 'HUMANTYPED'),
+      (fake: ReturnType<typeof fakeTerminal>) => (fake.state.draft = null),
+      (fake: ReturnType<typeof fakeTerminal>) => {
+        fake.state.draft = 'first'
+        fake.replace()
+      }
+    ]) {
+      const { seam, host, fake } = await cancelledEarly()
+      change(fake)
+      await seam.send(host, KEY, 's1', 'next')
+      expect(fake.keys).toEqual(['\x1b'])
+    }
+  })
+
+  it('never clears after a turn our cancel did not interrupt', async () => {
+    const { seam, host, hookRows, fake } = await linked()
+    hookRows.set(PANE, hookRow({ state: 'done' }))
+    await seam.cancel(host, KEY, 'c1')
+    fake.state.draft = 'first'
+    await seam.send(host, KEY, 's1', 'next')
+    expect(fake.keys).toEqual([])
+  })
+
+  it('tells watchers the rejected turn ended once Claude reports idle on that prompt', async () => {
+    const { seam, host, hookRows, paneChange } = await linked()
+    const events: ConversationEvent[] = []
+    seam.watch(host, (event) => {
+      if (event.kind !== 'snapshot') {
+        events.push(event)
+      }
+    })
+    hookRows.set(PANE, { ...APPROVAL, programStatus: { state: 'blocked', observedAt: 1 } })
+    await expect(seam.cancel(host, KEY, 'c1')).resolves.toEqual({ outcome: 'accepted' })
+    paneChange(observed())
+    expect(events).toEqual([])
+    hookRows.set(PANE, { ...APPROVAL, programStatus: { state: 'idle', observedAt: Date.now() } })
+    paneChange(observed())
+    paneChange(observed())
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'turn-ended', stopReason: 'cancellation', paneKey: PANE })
+    ])
+  })
+
+  it('leaves the turn to the host’s own news once its row moves past the rejected prompt', async () => {
+    const { seam, host, hookRows, paneChange } = await linked()
+    const ended: ConversationEvent[] = []
+    seam.watch(host, (event) => {
+      if (event.kind === 'turn-ended') {
+        ended.push(event)
+      }
+    })
+    hookRows.set(PANE, APPROVAL)
+    await seam.cancel(host, KEY, 'c1')
+    hookRows.set(PANE, hookRow({ state: 'working', stateStartedAt: 500 }))
+    paneChange(observed())
+    hookRows.set(PANE, {
+      ...APPROVAL,
+      stateStartedAt: 600,
+      programStatus: { state: 'idle', observedAt: Date.now() }
+    })
+    paneChange(observed())
+    expect(ended).toEqual([])
+  })
+})
+
+function observed(): AgentPaneChange {
+  return {
+    kind: 'observed',
+    paneKey: PANE,
+    workspace: { worktreeId: WORKTREE, sshHostId: null },
+    phase: 'needs-you',
+    at: Date.now()
+  }
+}
