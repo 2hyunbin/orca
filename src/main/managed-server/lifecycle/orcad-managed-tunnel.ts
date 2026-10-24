@@ -49,8 +49,8 @@ function pairingRecovery(userDataPath: string): ManagedOrcadPairingRecovery {
     resolve: (environmentId) => resolveEnvironment(userDataPath, environmentId),
     repairs,
     ensure: (environment) =>
-      buildOnBindableLocalPort(userDataPath, environment, (current) =>
-        managedTunnels.ensure(current, () => resolveEnvironmentOrNull(userDataPath, current.id))
+      managedTunnels.ensure(environment, () =>
+        resolveEnvironmentOrNull(userDataPath, environment.id)
       )
   }
 }
@@ -61,9 +61,9 @@ export async function ensureOrcadManagedTunnel(
   selector: string
 ): Promise<KnownRuntimeEnvironment> {
   const { id } = resolveEnvironment(userDataPath, selector)
-  await buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-    buildOnBindableLocalPort(userDataPath, environment, (current) =>
-      managedTunnels.ensure(current, () => resolveEnvironmentOrNull(userDataPath, id))
+  await buildOnBindableLocalPort(userDataPath, id, () =>
+    buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
+      managedTunnels.ensure(environment, () => resolveEnvironmentOrNull(userDataPath, id))
     )
   )
   return resolveEnvironment(userDataPath, id)
@@ -74,9 +74,9 @@ export async function rebuildOrcadManagedTunnel(
   selector: string
 ): Promise<'built' | 'repaired'> {
   const { id } = resolveEnvironment(userDataPath, selector)
-  return buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
-    buildOnBindableLocalPort(userDataPath, environment, (current) =>
-      managedTunnels.rebuild(current, () => resolveEnvironmentOrNull(userDataPath, id))
+  return buildOnBindableLocalPort(userDataPath, id, () =>
+    buildWithPairingRepair(pairingRecovery(userDataPath), id, (environment) =>
+      managedTunnels.rebuild(environment, () => resolveEnvironmentOrNull(userDataPath, id))
     )
   )
 }

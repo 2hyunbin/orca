@@ -15,6 +15,7 @@ import type { SshPortForwardManager } from '../../ssh/port-forwarding/ssh-port-f
 import { reserveLocalForwardPort } from '../../ssh/system-transport/system-ssh-forward-port-reservation'
 import { OrcadManagedTunnelManager } from './orcad-managed-tunnel-manager'
 import { buildOnBindableLocalPort } from './orcad-managed-tunnel-local-port'
+import { setManagedOrcadPairingRepairedListener } from './orcad-managed-pairing-repaired-listener'
 
 function listen(port = 0): Promise<Server> {
   return new Promise((resolve, reject) => {
@@ -63,6 +64,7 @@ describe('managed tunnel on an unbindable saved local port', () => {
   })
 
   afterEach(async () => {
+    setManagedOrcadPairingRepairedListener(() => {})
     await new Promise((resolve) => occupied.close(resolve))
     rmSync(userDataPath, { recursive: true, force: true })
   })
@@ -111,11 +113,13 @@ describe('managed tunnel on an unbindable saved local port', () => {
       ensureServing: vi.fn().mockResolvedValue({ state: 'serving' })
     })
     const resolve = () => resolveEnvironment(userDataPath, 'environment-1')
+    const retired = vi.fn()
+    setManagedOrcadPairingRepairedListener(retired)
     const ensure = () =>
-      buildOnBindableLocalPort(userDataPath, resolve(), (environment) =>
-        manager.ensure(environment, resolve)
+      buildOnBindableLocalPort(userDataPath, 'environment-1', () =>
+        manager.ensure(resolve(), resolve)
       )
-    return { addForward, ensure, resolve }
+    return { addForward, ensure, resolve, retired }
   }
 
   it.each([
@@ -125,7 +129,7 @@ describe('managed tunnel on an unbindable saved local port', () => {
       new Error('Local port is not available: listen EACCES', { cause: 'EACCES' })
     ]
   ])('moves to a free port and saves it with the same pairing when %s', async (_case, error) => {
-    const { addForward, ensure, resolve } = setup(error)
+    const { addForward, ensure, resolve, retired } = setup(error)
     const before = resolve()
 
     await ensure()
@@ -148,13 +152,16 @@ describe('managed tunnel on an unbindable saved local port', () => {
     expect(moved.runtimeId).toBe(before.runtimeId)
     expect(moved.pairingRevision).toBeGreaterThan(before.pairingRevision ?? 0)
     expect(getRuntimeSshAccess(moved)?.remotePort).toBe(6_768)
+    // Status owners and transports still dialing the old port are retired, as after a repair.
+    expect(retired).toHaveBeenCalledWith('environment-1')
   })
 
   it('keeps the saved port when the bind fails for another reason', async () => {
-    const { ensure, resolve } = setup(new Error('ssh exited', { cause: 'ECONNRESET' }))
+    const { ensure, resolve, retired } = setup(new Error('ssh exited', { cause: 'ECONNRESET' }))
 
     await expect(ensure()).rejects.toThrow('ssh exited')
 
     expect(getRuntimeSshAccess(resolve())?.localPort).toBe(savedPort)
+    expect(retired).not.toHaveBeenCalled()
   })
 })
