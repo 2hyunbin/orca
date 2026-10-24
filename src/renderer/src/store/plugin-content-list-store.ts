@@ -5,7 +5,8 @@ import type { PluginsApi } from '../../../preload/api/plugin-host-api'
 type PluginContentListState<Entry> = {
   entries: Entry[]
   loaded: boolean
-  fetchEntries: () => Promise<void>
+  /** Resolves to what this request read, even when a newer request owns the store. */
+  fetchEntries: () => Promise<Entry[]>
 }
 
 // Share startup discovery only within a bound; wedged requests must not pin ensureLoaded consumers to built-ins forever. Later consumers retry independently (main/git/coalesced-probe.ts).
@@ -35,7 +36,7 @@ export function createPluginContentListStore<Entry>(options: {
           latestRequestStartedAt = null
           set({ entries: [], loaded: true })
         }
-        return
+        return []
       }
       try {
         const response = await list()
@@ -51,10 +52,12 @@ export function createPluginContentListStore<Entry>(options: {
         if (generation === requestGeneration) {
           set({ entries, loaded: true })
         }
+        return entries
       } catch {
         if (generation === requestGeneration) {
           set({ entries: [], loaded: true })
         }
+        return []
       } finally {
         if (generation === requestGeneration) {
           latestRequestStartedAt = null
