@@ -177,6 +177,14 @@ export class DaemonPtyAdapter extends DaemonPtyDaemonRecovery implements IPtyPro
           kind: 'transientFact',
           fact: event.payload
         })
+      } else if (event.event === 'inputClosed') {
+        const currentIncarnationId = this.sessionIncarnations.get(event.sessionId)
+        if (
+          currentIncarnationId === undefined ||
+          event.payload.incarnationId === currentIncarnationId
+        ) {
+          this.inputClosedIncarnations.set(event.sessionId, event.payload.incarnationId)
+        }
       } else if (event.event === 'exit') {
         const currentIncarnationId = this.sessionIncarnations.get(event.sessionId)
         const pendingOperations = new Set([
