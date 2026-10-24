@@ -141,7 +141,7 @@ orca ports --worktree branch:feature/login --json
 orca ports --all
 ```
 
-`ports` lists the listening ports Orca tied to a workspace, from the host the workspace runs on. It defaults to the workspace that contains the current directory. Each row has `port`, `pid`, `processName`, `connectHost`, `protocol`, how Orca matched it (`owner.confidence`: `cwd` or `command`), and `advertisedUrl` when the dev server printed one in an Orca terminal. `--all` lists every listener on that host. Folder workspaces need `--all`, because Orca does not tie ports to them. If `unavailableReason` is set, the scan could not run on that host.
+`ports` lists the listening ports Orca tied to a workspace, from the host the workspace runs on. It defaults to the workspace that contains the current directory. Each row has `port`, `pid`, `processName`, `connectHost`, `protocol`, how Orca matched it (`owner.confidence`: `cwd` or `command`), and `advertisedUrl` when the dev server printed one in an Orca terminal. `--all` lists every listener on that host. Native folder workspaces need `--all`, because Orca does not tie ports to them. If `unavailableReason` is set, the scan could not run on that host; SSH workspaces opened directly from the desktop report this for now, while a workspace on a managed Orca server is scanned on that server.
 
 ## References
 

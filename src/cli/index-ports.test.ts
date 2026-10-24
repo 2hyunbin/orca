@@ -215,24 +215,56 @@ describe('orca ports', () => {
   it.each([
     ['a standalone native folder', '/tmp/folder', '/tmp/folder/src'],
     ['a native folder nested in a git worktree', '/tmp/repo/feature/docs', '/tmp/repo/feature/docs']
-  ])('refuses %s containing cwd unless --all asks for the host', async (_label, folderPath, cwd) => {
-    queueFixtures(callMock, ...folderCatalog(folderPath))
+  ])(
+    'refuses %s containing cwd unless --all asks for the host',
+    async (_label, folderPath, cwd) => {
+      queueFixtures(callMock, ...folderCatalog(folderPath))
+      const output = captureOutput()
+      const priorExitCode = process.exitCode
+
+      await main(['ports', '--json'], cwd)
+
+      expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
+      expect(output()).toContain('does not tie ports to native folder workspaces')
+      expect(process.exitCode).toBe(1)
+      process.exitCode = priorExitCode
+
+      queueFixtures(callMock, ...folderCatalog(folderPath), hostScan)
+      await main(['ports', '--all'], cwd)
+
+      expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
+      expect(callMock).not.toHaveBeenCalledWith('worktree.list', expect.anything())
+      expect(output()).toContain('5432  workspace=(none)  pid=77  postgres')
+    }
+  )
+
+  it('recognises a path selector naming a native folder', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_folders', {
+        folderWorkspaces: [{ id: 'f1', folderPath: '/tmp/folder', projectGroupId: 'local' }]
+      })
+    )
     const output = captureOutput()
     const priorExitCode = process.exitCode
 
-    await main(['ports', '--json'], cwd)
+    await main(['ports', '--worktree', 'path:/tmp/folder'], '/tmp')
 
-    expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
-    expect(output()).toContain('does not tie ports to folder workspaces')
+    expect(callMock).not.toHaveBeenCalledWith('worktree.show', expect.anything())
+    expect(output()).toContain('does not tie ports to native folder workspaces')
     expect(process.exitCode).toBe(1)
     process.exitCode = priorExitCode
 
-    queueFixtures(callMock, ...folderCatalog(folderPath), hostScan)
-    await main(['ports', '--all'], cwd)
+    queueFixtures(
+      callMock,
+      okFixture('req_folders', {
+        folderWorkspaces: [{ id: 'f1', folderPath: '/tmp/folder', projectGroupId: 'local' }]
+      }),
+      hostScan
+    )
+    await main(['ports', '--worktree', 'path:/tmp/folder', '--all'], '/tmp')
 
     expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
-    expect(callMock).not.toHaveBeenCalledWith('worktree.list', expect.anything())
-    expect(output()).toContain('5432  workspace=(none)  pid=77  postgres')
   })
 
   it('keeps the ports of a folder workspace instance that shares its path with the owner', async () => {

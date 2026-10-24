@@ -1,17 +1,49 @@
+import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
+import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import type { RuntimeWorktreeRecord } from '../../shared/runtime-types'
 import type { WorkspacePortHostScanResult } from '../../shared/workspace-ports'
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { resolveCurrentAgentWorkspaceSelector } from '../agent-workspace-selector'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import { getOptionalStringFlag } from '../flags'
 import { printResult } from '../format'
 import { formatPortsScan } from '../ports-format'
-import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
+import {
+  RuntimeClientError,
+  RuntimeRpcFailureError,
+  type RuntimeRpcSuccess
+} from '../runtime-client'
 import { normalizeWorktreeSelectorForCaller } from '../selectors'
 
 type PortsTarget = { selector: string; worktreePath: string | null }
 
 function isNativeFolderSelector(selector: string): boolean {
-  return (selector.startsWith('id:') ? selector.slice(3) : selector).startsWith('folder:')
+  return parseWorkspaceKey(selector.replace(/^id:/, ''))?.type === 'folder'
+}
+
+// Why: worktree selectors never match a native folder's path, so name the folder by its id.
+async function resolveNativeFolderPathSelector(
+  selector: string,
+  client: Pick<HandlerContext['client'], 'call'>
+): Promise<string> {
+  if (!selector.startsWith('path:')) {
+    return selector
+  }
+  const target = normalizeRuntimePathForComparison(selector.slice('path:'.length))
+  try {
+    const { result } = await client.call<{ folderWorkspaces: FolderWorkspace[] }>(
+      'folderWorkspace.list'
+    )
+    const folder = result.folderWorkspaces.find(
+      (row) => normalizeRuntimePathForComparison(row.folderPath) === target
+    )
+    return folder ? `id:folder:${folder.id}` : selector
+  } catch (error) {
+    if (error instanceof RuntimeRpcFailureError && error.code === 'method_not_found') {
+      return selector
+    }
+    throw error
+  }
 }
 
 async function resolvePortsTarget(
@@ -23,7 +55,10 @@ async function resolvePortsTarget(
   const selector =
     !explicit || explicit === 'active' || explicit === 'current'
       ? await resolveCurrentAgentWorkspaceSelector(cwd, client)
-      : await normalizeWorktreeSelectorForCaller(explicit, cwd, client)
+      : await resolveNativeFolderPathSelector(
+          await normalizeWorktreeSelectorForCaller(explicit, cwd, client),
+          client
+        )
   if (!options.needsWorktreePath) {
     return { selector, worktreePath: null }
   }
@@ -32,7 +67,7 @@ async function resolvePortsTarget(
   if (isNativeFolderSelector(selector)) {
     throw new RuntimeClientError(
       'invalid_argument',
-      'Orca does not tie ports to folder workspaces yet. Run `orca ports --all` to list every listener on the host.'
+      'Orca does not tie ports to native folder workspaces yet. Run `orca ports --all` to list every listener on the host.'
     )
   }
   const shown = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {

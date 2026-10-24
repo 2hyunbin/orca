@@ -10,7 +10,7 @@ export const PORTS_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Defaults to the Orca workspace that contains the current directory.',
       'Scans the host the workspace runs on and lists the ports Orca tied to it, by process working directory (match=cwd) or command line (match=command).',
-      '--all lists every listener found on that host, including other workspaces and processes Orca could not tie to one. A folder workspace needs --all, because Orca does not tie ports to folders.',
+      '--all lists every listener found on that host, including other workspaces and processes Orca could not tie to one. A native folder workspace needs --all, because Orca does not tie ports to folders.',
       'url is the address the dev server printed in an Orca terminal; it is missing when Orca did not see one.'
     ],
     examples: [
