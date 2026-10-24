@@ -1,20 +1,25 @@
-import { closeTestStores, createStore, testState, writeDataFile } from './persistence-test-harness'
+import {
+  closeTestStores,
+  createStore,
+  testState,
+  writeDataFile
+} from '../../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { Automation } from '../shared/automations-types'
-import type { Repo } from '../shared/repo-types'
-import { getDefaultPersistedState } from '../shared/constants'
-import { resolveAutomationRunTarget } from './automations/run-target-resolution'
-import { AutomationService } from './automations/service'
+import type { Automation } from '../../../shared/automations-types'
+import type { Repo } from '../../../shared/repo-types'
+import { getDefaultPersistedState } from '../../../shared/constants'
+import { resolveAutomationRunTarget } from '../../automations/run-target-resolution'
+import { AutomationService } from '../../automations/service'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const localRow: Repo = {
   id: 'twin',
