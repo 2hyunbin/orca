@@ -43,14 +43,17 @@ describe('findUncollectedTestFiles', () => {
           "export type { Shape } from './typed-export.spec'",
           'export type Alias = Record<string, number>',
           "export { run } from './after-alias.spec'",
-          "type Suite = typeof import('./type-query.spec')"
+          "type Suite = typeof import('./type-query.spec')",
+          "import { Shape as UsedAsType } from './type-use.spec'",
+          'export const shape: UsedAsType | null = null'
         ].join('\n')
       ],
       ['src/typed-import.spec.ts', SUITE],
       ['src/inline-type.spec.ts', SUITE],
       ['src/typed-export.spec.ts', SUITE],
       ['src/after-alias.spec.ts', SUITE],
-      ['src/type-query.spec.ts', SUITE]
+      ['src/type-query.spec.ts', SUITE],
+      ['src/type-use.spec.ts', SUITE]
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
       'src/twin.spec.tsx',
@@ -58,7 +61,8 @@ describe('findUncollectedTestFiles', () => {
       'src/typed-import.spec.ts',
       'src/inline-type.spec.ts',
       'src/typed-export.spec.ts',
-      'src/type-query.spec.ts'
+      'src/type-query.spec.ts',
+      'src/type-use.spec.ts'
     ])
   })
 })

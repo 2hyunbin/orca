@@ -116,8 +116,6 @@ const CODE_FILE = /\.[cm]?[jt]sx?$/
 const TEST_FRAMEWORK_IMPORT = /\bfrom\s+['"](?:vitest|node:test|@playwright\/test|bun:test)['"]/
 const TEST_REGISTRATION =
   /^\s*(?:describe|it|test|suite|bench)(?:\.\w+)*(?:\([^)]*\))?\s*\(\s*[`'"]/m
-// Cheap prefilter; the parser decides what is actually type-only.
-const MAY_HAVE_TYPE_ONLY_IMPORT = /\b(?:import|export)\s*(?:type\b|\{[^}]*\btype\s|\()/
 
 export function isTestLike(file, source) {
   return (
@@ -143,65 +141,6 @@ export function findRunnerDrift(runners, readSource) {
     }
   }
   return problems
-}
-
-function allTypeOnly(elements) {
-  return elements.length > 0 && elements.every((element) => element.isTypeOnly)
-}
-
-function isTypeOnlyModuleStatement(statement) {
-  if (ts.isImportDeclaration(statement)) {
-    const clause = statement.importClause
-    if (!clause) {
-      return false
-    }
-    const bindings = clause.namedBindings
-    return (
-      clause.isTypeOnly ||
-      (!clause.name &&
-        bindings !== undefined &&
-        ts.isNamedImports(bindings) &&
-        allTypeOnly(bindings.elements))
-    )
-  }
-  if (ts.isExportDeclaration(statement)) {
-    const clause = statement.exportClause
-    return (
-      statement.isTypeOnly ||
-      (clause !== undefined && ts.isNamedExports(clause) && allTypeOnly(clause.elements))
-    )
-  }
-  return false
-}
-
-function typeOnlyImportRanges(sourceFile) {
-  const ranges = sourceFile.statements
-    .filter(isTypeOnlyModuleStatement)
-    .map((statement) => [statement.getStart(sourceFile), statement.end])
-  const visit = (node) => {
-    if (ts.isImportTypeNode(node)) {
-      ranges.push([node.getStart(sourceFile), node.end])
-      return
-    }
-    ts.forEachChild(node, visit)
-  }
-  visit(sourceFile)
-  return ranges
-}
-
-// Why: type-only imports and `typeof import()` are erased, so they never run the module's suites.
-export function withoutTypeOnlyImports(file, source) {
-  if (!MAY_HAVE_TYPE_ONLY_IMPORT.test(source)) {
-    return source
-  }
-  const kind = /\.[jt]sx$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, kind)
-  let result = source
-  // Blank rather than cut, so ranges that nest or overlap stay valid.
-  for (const [start, end] of typeOnlyImportRanges(sourceFile)) {
-    result = result.slice(0, start) + ' '.repeat(end - start) + result.slice(end)
-  }
-  return result
 }
 
 function collects({ include, within = include, exclude = [] }, file) {
@@ -244,25 +183,65 @@ export function resolveRuntimeImport(importer, specifier, files) {
   return candidates.find((candidate) => files.has(candidate)) ?? null
 }
 
-function runtimeImports(file, source, files) {
+const TYPESCRIPT_FILE = /\.[cm]?tsx?$/
+const TRANSPILE_OPTIONS = {
+  module: ts.ModuleKind.ESNext,
+  target: ts.ScriptTarget.ESNext,
+  jsx: ts.JsxEmit.Preserve
+}
+
+function importsOf(file, source, files) {
   return ts
-    .preProcessFile(withoutTypeOnlyImports(file, source), true, true)
+    .preProcessFile(source, true, true)
     .importedFiles.map(({ fileName }) => resolveRuntimeImport(file, fileName, files))
     .filter((resolved) => resolved !== null)
+}
+
+// Why transpile: it erases exactly what Vitest's transform erases (type-only, unused, `typeof import()`).
+function runtimeImportsOf(file, source, files) {
+  if (!TYPESCRIPT_FILE.test(file)) {
+    return importsOf(file, source, files)
+  }
+  const { outputText } = ts.transpileModule(source, {
+    fileName: file,
+    compilerOptions: TRANSPILE_OPTIONS,
+    reportDiagnostics: false
+  })
+  return importsOf(file, outputText, files)
 }
 
 // A suite module (e.g. `Foo.case.spec.tsx`) is collected when a selected entry file imports it.
 export function findUncollectedTestFiles(sources, runners) {
   const files = new Set(sources.keys())
-  const collected = new Set(
+  const selected = new Set(
     [...files].filter((file) => runners.some((runner) => collects(runner, file)))
   )
-  for (const file of collected) {
-    for (const imported of runtimeImports(file, sources.get(file), files)) {
-      collected.add(imported)
+  const candidates = [...files].filter(
+    (file) => !selected.has(file) && isTestLike(file, sources.get(file))
+  )
+  // Source imports are a superset of runtime ones, so only files that reach a candidate through
+  // them need the slower transpile; every other edge can never collect a candidate.
+  const importers = new Map()
+  for (const file of files) {
+    for (const imported of importsOf(file, sources.get(file), files)) {
+      importers.set(imported, (importers.get(imported) ?? new Set()).add(file))
     }
   }
-  return [...files].filter((file) => !collected.has(file) && isTestLike(file, sources.get(file)))
+  const reachesCandidate = new Set(candidates)
+  for (const file of reachesCandidate) {
+    for (const importer of importers.get(file) ?? []) {
+      reachesCandidate.add(importer)
+    }
+  }
+  const collected = new Set([...selected].filter((file) => reachesCandidate.has(file)))
+  for (const file of collected) {
+    for (const imported of runtimeImportsOf(file, sources.get(file), files)) {
+      if (reachesCandidate.has(imported)) {
+        collected.add(imported)
+      }
+    }
+  }
+  return candidates.filter((file) => !collected.has(file))
 }
 
 function trackedCodeSources(root) {
