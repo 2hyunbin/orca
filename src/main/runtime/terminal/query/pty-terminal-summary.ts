@@ -20,6 +20,8 @@ import { structuredWorkerTerminalRefusal } from '../../structured-worker-termina
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { OrchestrationMailboxLeaf } from '../../orchestration/mailbox-owner'
+import { ptyMailboxLeaf } from '../../orchestration/pty-mailbox-leaf'
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 
 export type PtyLaneMailboxTarget = {
   leaf: OrchestrationMailboxLeaf
@@ -130,6 +132,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
 
   /** The mailbox pane a handle names: its graph leaf, else its pane-less PTY's (headless serve). */
   protected getOrchestrationMailboxLeafForHandle(handle: string): OrchestrationMailboxLeaf {
+    this.assertGraphReady()
     const live = this.getLivePtyForHandle(handle)
     const target = live && this.getPtyLaneMailboxTargetForPty(live.pty)
     return target?.handle === handle ? target.leaf : this.getLiveLeafForHandle(handle).leaf
@@ -138,7 +141,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   /** A pane no window publishes; the graph's leaf, when present, stays authoritative. */
   protected getPtyLaneMailboxTarget(leafKey: string): PtyLaneMailboxTarget | null {
     const split = leafKey.indexOf('::')
-    if (split === -1 || this.leaves.has(leafKey)) {
+    if (split === -1 || !this.servesHeadlessMailboxLane() || this.leaves.has(leafKey)) {
       return null
     }
     const paneKey = makePaneKey(leafKey.slice(0, split), leafKey.slice(split + 2))
@@ -151,24 +154,30 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   protected getPtyLaneMailboxTargetForPty(
     pty: RuntimePtyWorktreeRecord | null | undefined
   ): PtyLaneMailboxTarget | null {
+    if (!pty?.connected || !this.servesHeadlessMailboxLane()) {
+      return null
+    }
     const pane = parsePaneKey(this.paneOfPty(pty).paneKey ?? '')
-    if (!pty?.connected || !pane || this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId))) {
+    if (
+      !pane ||
+      this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId)) ||
+      this.getLeavesForPty(pty.ptyId).length > 0
+    ) {
       return null
     }
     const handle = this.handleByPtyId.get(pty.ptyId)
     if (!handle || this.getLivePtyForHandle(handle)?.pty !== pty) {
       return null
     }
-    const leaf: OrchestrationMailboxLeaf = {
-      tabId: pane.tabId,
-      leafId: pane.leafId,
-      ptyId: pty.ptyId,
-      writable: true,
-      lastAgentStatus: pty.lastAgentStatus,
-      lastAgentStatusObservedLive: pty.lastAgentStatusObservedLive,
-      lastOscTitle: pty.lastOscTitle
-    }
-    return { leaf, pty, handle }
+    return { leaf: ptyMailboxLeaf(pane, pty), pty, handle }
+  }
+
+  /**
+   * Only a ready headless graph lacks leaves by design. A window's empty or unavailable graph
+   * (reload, crash, unmounted pane) must keep failing closed rather than typing into its PTYs.
+   */
+  private servesHeadlessMailboxLane(): boolean {
+    return this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID && this.graphStatus === 'ready'
   }
 
   protected getLivePtyForHandle(handle: string): {

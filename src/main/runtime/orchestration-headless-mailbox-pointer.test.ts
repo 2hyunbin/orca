@@ -1,6 +1,7 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from './orchestration/db'
+import type { OrcaRuntimeService } from './orca-runtime'
 import {
   createRuntime,
   PANE_KEY,
@@ -8,17 +9,24 @@ import {
   PTY_ID
 } from './orchestration-mailbox-notification-test-harness'
 
-// A headless server publishes no renderer leaves, so its terminals live only in the PTY lane.
-async function headlessCoordinator() {
+type Host = 'headless' | 'window-empty-graph' | 'window-graph-unavailable'
+
+// A headless serve publishes no window leaves, so its terminals live only in the PTY lane.
+async function coordinator(host: Host = 'headless') {
   const db = new OrchestrationDb(':memory:')
-  const { runtime, write } = createRuntime(db)
-  runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+  const { runtime, write } = createRuntime(db, { headless: host === 'headless' })
+  if (host !== 'headless') {
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
+  }
   const [terminal] = (await runtime.listTerminals()).terminals
   const run = db.createRun({
     objective: 'Headless Run',
     coordinatorHandle: terminal.handle,
     coordinatorPaneKey: PANE_KEY
   })
+  if (host === 'window-graph-unavailable') {
+    runtime.markGraphUnavailable(1)
+  }
   const sendRunMail = () => {
     const message = db.insertMessage({
       from: 'term_worker',
@@ -33,6 +41,12 @@ async function headlessCoordinator() {
   return { db, runtime, write, sendRunMail }
 }
 
+async function goIdle(runtime: OrcaRuntimeService): Promise<void> {
+  runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 1)
+  runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 2)
+  await runtime.serializeMainTerminalBuffer(PTY_ID)
+}
+
 describe('headless orchestration mailbox pointer', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -42,10 +56,8 @@ describe('headless orchestration mailbox pointer', () => {
   })
 
   it('points an already idle coordinator at Run mail', async () => {
-    const { db, runtime, write, sendRunMail } = await headlessCoordinator()
-    runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 1)
-    runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 2)
-    await runtime.serializeMainTerminalBuffer(PTY_ID)
+    const { db, runtime, write, sendRunMail } = await coordinator()
+    await goIdle(runtime)
 
     const message = sendRunMail()
     await vi.advanceTimersByTimeAsync(0)
@@ -57,7 +69,7 @@ describe('headless orchestration mailbox pointer', () => {
   })
 
   it('points a coordinator at mail that arrived while it worked once it goes idle', async () => {
-    const { db, runtime, write, sendRunMail } = await headlessCoordinator()
+    const { db, runtime, write, sendRunMail } = await coordinator()
     runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 1)
     await runtime.serializeMainTerminalBuffer(PTY_ID)
     const message = sendRunMail()
@@ -74,7 +86,7 @@ describe('headless orchestration mailbox pointer', () => {
   })
 
   it('waits for a name-only idle pane to go quiet before typing the pointer', async () => {
-    const { db, runtime, write, sendRunMail } = await headlessCoordinator()
+    const { db, runtime, write, sendRunMail } = await coordinator()
     sendRunMail()
     runtime.onPtyData(PTY_ID, '\x1b]0;⠋ Codex\x07working\n', Date.now())
     runtime.onPtyData(PTY_ID, '\x1b]0;Codex\x07still working\n', Date.now())
@@ -85,4 +97,17 @@ describe('headless orchestration mailbox pointer', () => {
     expect(pointerCount(write)).toBe(1)
     db.close()
   })
+
+  // A window's missing leaf means reload, crash or an unmounted pane, not a headless terminal.
+  it.each(['window-empty-graph', 'window-graph-unavailable'] as const)(
+    'does not type into a leafless PTY on a %s host',
+    async (host) => {
+      const { db, runtime, write, sendRunMail } = await coordinator(host)
+      await goIdle(runtime)
+      sendRunMail()
+      await vi.advanceTimersByTimeAsync(3_500)
+      expect(pointerCount(write)).toBe(0)
+      db.close()
+    }
+  )
 })

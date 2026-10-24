@@ -17,6 +17,7 @@ import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import type { OrchestrationMailboxLeaf } from '../mailbox-owner'
 import type { OrchestrationMailboxPointerSubmitTarget } from '../mailbox-pointer-submit'
+import { ptyMailboxLeaf } from '../pty-mailbox-leaf'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../../terminal/surface/main-terminal-surfaces'
 import { mainPaneVerdict } from '../../terminal/surface/main-pane-verdict'
@@ -57,13 +58,7 @@ export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRu
         pane?.tabId === stagedLeaf.tabId &&
         isTerminalLeafId(stagedLeaf.leafId) &&
         pane.paneKey === makePaneKey(stagedLeaf.tabId, stagedLeaf.leafId)
-        ? {
-            ...stagedLeaf,
-            writable: true,
-            lastAgentStatus: pty.lastAgentStatus,
-            lastAgentStatusObservedLive: pty.lastAgentStatusObservedLive,
-            lastOscTitle: pty.lastOscTitle
-          }
+        ? { ...stagedLeaf, ...ptyMailboxLeaf(stagedLeaf, pty) }
         : null
       : currentLeaf.ptyId === ptyId
         ? currentLeaf
