@@ -66,7 +66,7 @@ describe('ACP structured session adapter: acquire', () => {
       provider: 'grok',
       accountHome: { variable: 'GROK_HOME', path: '/home/work/.grok' }
     })
-    // The launch its registration composes: the shared seal names the child, not this adapter.
+    // Use the registration's shared launch seal rather than an adapter-specific one.
     const rig = await openAcpAdapterRig({
       deps: {
         resolveLaunch: createAcpStructuredLaunchResolver(GROK, {
@@ -168,7 +168,7 @@ it('reads those last words when the agent ends its stdout before its exit is see
       agent.on('session/new', () => {
         const child = rig.child()
         child.stderr = 'grok: config.toml is invalid'
-        // On POSIX a dying process's stdout ends first; its exit is observed a moment later.
+        // Simulate stdout EOF preceding observed process exit.
         child.agent.stdout.end()
       })
   })
@@ -227,7 +227,7 @@ describe('ACP structured session adapter: turns', () => {
       rig.child().agent.reply(await rig.frame('session/prompt', index), { stopReason: 'end_turn' })
       await waitFor(() => expect(rig.adapter.holdsDispatch(SESSION)).toBe(false))
     }
-    // Back on the opening model, its opening effort is restored; elsewhere the agent keeps its own.
+    // Restore opening effort only when returning to the opening model.
     expect(rig.sent('session/set_config_option').map((frame) => frame.params)).toMatchObject([
       { configId: 'model', value: 'grok-4.6' },
       { configId: 'model', value: 'grok-4.7' },
@@ -445,10 +445,9 @@ describe('ACP structured session adapter: requests a Stop cancels', () => {
       kind: 'approval',
       response: { kind: 'option', optionId: 'allow-once' },
       fence: 1,
-      // The Stop lands while the person's answer is being saved.
       commit: () => rig.adapter.cancelTurn({ sessionId: SESSION, fence: 1 }).then(() => {})
     })
-    // The Stop withdraws only what no answer has claimed.
+    // Stop must not preempt an answer already claimed for commit.
     await expect(answering).resolves.toBeUndefined()
     expect(await permission).toMatchObject({
       result: { outcome: { outcome: 'selected', optionId: 'allow-once' } }

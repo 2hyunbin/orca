@@ -134,8 +134,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       }
     }
     if (args.agentSessionEnsure && !ctx.preAdoptedStablePane) {
-      // Why: daemon-backed claims can outlive this controller; import all
-      // proven owners before deciding that an identity is absent.
+      // Claims can outlive this controller; import authoritative owner listings before deciding absence.
       await reconcileAgentSessionOwnerListings()
       const recoveredOwner = agentSessionOwners.find(args.agentSessionEnsure.claim)
       if (recoveredOwner && ctx.pendingRegistrationPtyId !== recoveredOwner.ptyId) {
@@ -261,7 +260,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       ctx.pendingRegistrationPtyId = ctx.result.id
     }
     assertSpawnReplyWasLive(ctx.result)
-    // Why: admission precedes sequence/context state and every durable publication below.
+    // Admit registration before mutating sequence/context or publishing durable state.
     if (
       ctx.pendingRegistrationClaim &&
       !ctx.deps.runtime?.narrowPtyRegistration(
@@ -276,9 +275,7 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
     if (ctx.result.providerSequence) {
       const runtimeSequenceBeforeReconcile =
         ctx.deps.runtime?.getPtyOutputSequence?.(ctx.result.id) ?? 0
-      // Why kept: this is the reattach boundary in the RENDERER's sequence
-      // domain, and the daemon snapshot's kitty flags mean nothing without
-      // the boundary they were proven at.
+      // Preserve the renderer-domain boundary needed to reconcile daemon snapshot kitty flags.
       ctx.reconciledSnapshotSeq =
         ctx.deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
           ctx.result.id,

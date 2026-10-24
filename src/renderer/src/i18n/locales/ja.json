@@ -3511,7 +3511,10 @@
             "disconnectedTitle": "リモートランタイムが切断されました",
             "retryingBody": "Orca は自動的に再試行します。接続が復元されると、このターミナルが再開されます。",
             "disconnectedBody": "自動再試行が停止しました。このターミナルセッションを再開するには再接続してください。",
-            "reconnectButton": "再接続"
+            "reconnectButton": "再接続",
+            "signInTitle": "SSH のサインインを待っています",
+            "signInBody": "ホストにサインインすると、このターミナルは自動的に続行します。",
+            "signInButton": "サインイン"
           },
           "TerminalLinkActionPopover": {
             "openLink": "リンクを開く",
@@ -3532,7 +3535,11 @@
             "downloadOpenWithDefaultApp": "ダウンロードしてデフォルトのアプリで開く",
             "downloadOpenFailed": "「{{value0}}」のダウンロードに失敗しました。",
             "openInThisGroup": "このグループで開く",
-            "openInThisGroupRefused": "{{value0}} をこのグループで開けませんでした"
+            "openInThisGroupRefused": "{{value0}} をこのグループで開けませんでした",
+            "fileInOtherWorkspace": "このファイルは {{value0}} にあります",
+            "fileInAnotherWorkspace": "このファイルは別のワークスペースにあります",
+            "openInOwningWorkspace": "そこで開く",
+            "openedHereReadOnly": "ここでは読み取り専用で開いています"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "ホストが利用不可",
@@ -3542,12 +3549,15 @@
             "restoring": "ターミナルを復元中…"
           },
           "AgentLaunchPaneNotice": {
-            "commandNotFound": "このマシンでコマンドが見つかりませんでした。",
+            "agent": "Agent",
+            "commandNotFound": "このマシンでコマンドが見つからないため、{{agent}} を起動できませんでした。",
             "copyPrompt": "プロンプトをコピー",
-            "exitedDuringStart": "起動中に終了しました。",
-            "notStarted": "Agent を起動できませんでした。",
-            "unconfirmed": "Agent が起動したか確認できませんでした。",
-            "workspaceGone": "ワークスペースは利用できなくなりました。"
+            "exitedDuringStart": "{{agent}} は起動中に終了しました。",
+            "notStarted": "{{agent}} を起動できませんでした。",
+            "restoreWorkspace": "ワークスペースのフォルダーを復元するか、利用可能なワークスペースを開いてから、もう一度お試しください。",
+            "tryInTerminal": "このフォルダーのターミナルで実行して原因を確認し、再試行してください。",
+            "unconfirmed": "{{agent}} が起動したか確認できませんでした。再試行する前にターミナルを確認してください。",
+            "workspaceGone": "ワークスペースが利用できなくなったため、{{agent}} を起動できませんでした。"
           },
           "TerminalSleepingPaneOverlay": {
             "pausedDetail": "ホストが予期せず停止したため、自動復元は一時停止しています。セッションは保存されています。",
@@ -5821,9 +5831,7 @@
           "automationCreated": "オートメーションによって作成",
           "branchIdentity": "ブランチ",
           "branchFolderPathIdentity": "ブランチまたはフォルダーパス",
-          "ef18787206": "削除待ち",
-          "hideChildWorktrees": "子のワークツリーを非表示にする",
-          "showChildWorktrees": "子ワークツリーを表示"
+          "ef18787206": "削除待ち"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "Agent"
@@ -8089,6 +8097,11 @@
           "191ac34567": "Agent オーケストレーション",
           "nestedWorkerDepthTitle": "ネストされたワーカーの深さ",
           "nestedWorkerDepthDescription": "起動されたワーカーが、さらに自分のワーカーを起動できる世代数です。1 にすると Agent ツリーはフラットになります。コーディネーターがワーカーを起動し、そのワーカーはワーカーを起動しません。",
+          "chatErrorEscalationTitle": "チャットのエラーをコーディネーターに知らせる",
+          "chatErrorEscalationDescription": "割り当てられた Agent がターンを終了させるエラーに遭遇したとき、そのエラーをそのまま割り当て元のコーディネーターに送ります。タスクは Agent に割り当てられたままです。チャット UI で動作する Agent でのみ機能します。",
+          "chatErrorEscalationNeedsChat": "使用するには、試験的機能の設定でチャット UI をオンにしてください。",
+          "chatErrorEscalationKeywordError": "エラー",
+          "chatErrorEscalationKeywordChat": "チャット",
           "7bc082f4de": "インストールコマンドのコピー"
         },
         "OrchestrationSetupCard": {
@@ -9716,6 +9729,11 @@
               "modifier": "修飾キー",
               "invert": "反転",
               "opposite": "逆"
+            },
+            "linkRoutingBackground": {
+              "background": "バックグラウンド",
+              "focus": "フォーカス",
+              "tab": "タブ"
             },
             "72c58f7792": "ウェブビュー",
             "82ba1c80ea": "ローカルホスト",
@@ -11890,6 +11908,10 @@
           "titleOrca": "Shift を押しながらクリックすると Orca で開きます",
           "descriptionSystem": "リンクは Orca で開きます。{{chord}}+クリックすると、システムのブラウザで開きます。",
           "descriptionOrca": "リンクはシステムのブラウザで開きます。有効にすると、{{chord}}+クリックで Orca 内蔵のブラウザで開きます。"
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "リンクをバックグラウンドで開く",
+          "description": "ターミナル、チャット、Markdown のリンクを、クリックした場所からフォーカスを移さずにブラウザーで開きます。"
         },
         "PluginConsentDialog": {
           "workerTrust": "バックグラウンドワーカー — 自身のプロセスを実行",
@@ -15910,6 +15932,7 @@
           "6c4f1a8d2e": "チェック詳細を利用できません。"
         },
         "EditorPanelHeader": {
+          "readOnlyBadge": "読み取り専用",
           "fb8331694e": "プレビューを横に開く",
           "4157f3cbf3": "Markdown プレビューを開く",
           "269ce4842b": "相対パスをコピー",
@@ -18487,6 +18510,7 @@
       },
       "webRuntimeSession": {
         "remoteHostDisconnected": "このワークスペースは、リモートの Orca ホストに接続されていません。",
+        "splitSourceUnpublished": "ペインを分割できませんでした: ホスト上でターミナルがまだ起動していません。",
         "terminalCreateUnconfirmed": "Orca は、ホスト上で新規ターミナルが開いたことを確認できませんでした。"
       },
       "gitlabJobTraceClient": {
@@ -19707,7 +19731,8 @@
     "jiraUserPicker": {
       "select": "{{value0}} を選択してください",
       "search": "ユーザーを検索する",
-      "empty": "ユーザーが見つかりませんでした"
+      "empty": "ユーザーが見つかりませんでした",
+      "useKnownId": "既知のユーザー ID「{{value0}}」を使用"
     },
     "status": {
       "bar": {
@@ -19869,14 +19894,6 @@
       "stepDownload": "ダウンロード",
       "stepUnpack": "展開",
       "stepCheck": "確認"
-    },
-    "WorkspaceEmptyState": {
-      "title": "何をしたいですか?",
-      "startAgent": "Agent を開始する",
-      "terminal": "ターミナルを開く",
-      "description": "ここではタブが開いていません。Agent を起動するか、ツールを開いて作業を始めてください。",
-      "openFile": "ファイルを開く",
-      "browser": "ブラウザを開く"
     }
   },
   "dashboardPopout": {

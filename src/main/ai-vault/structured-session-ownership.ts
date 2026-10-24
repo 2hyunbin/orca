@@ -22,8 +22,7 @@ import { STRUCTURED_AGENT_RUNTIME_METADATA } from '../runtime/structured-agent-r
 import type { StructuredAgentRuntimeMetadata } from '../runtime/structured-agent-runtime-registration-types'
 import { commandName, commandProgramIndex, shellCommands } from './shell-command-words'
 
-/** Whether the client a projection answers opens a chat of this agent from its history row. A row
- *  owned by a chat it cannot open is hidden from it: resuming that row in a terminal is refused. */
+/** Hide chat-owned rows from clients unable to open that agent’s chat. */
 export type StructuredChatOpener = (agent: StructuredAgentId) => boolean
 
 export const OPENS_EVERY_STRUCTURED_CHAT: StructuredChatOpener = () => true
@@ -52,8 +51,7 @@ export function projectStructuredAiVaultSessions(
     : { ...result, sessions }
 }
 
-/** Indexed hits name and own a native chat exactly as list rows do; only this host's index can.
- *  An owned hit opens its chat, so it carries no terminal resume command. */
+/** Owned search hits open their chat and omit terminal resume commands, matching history rows. */
 export function projectStructuredAiVaultSearchResponse(
   response: AiVaultSearchResponse,
   opensChat: StructuredChatOpener
@@ -78,8 +76,7 @@ export function projectStructuredAiVaultSearchResponse(
   }
 }
 
-/** The hits once the chat host is installed; plain hits if it will not install, since owning and
- *  naming them must never cost the user the search. */
+/** Keep search available when the chat host cannot install; return hits without ownership metadata. */
 export async function searchWithStructuredOwners(
   search: Promise<AiVaultSearchResponse>,
   options: {
@@ -116,8 +113,7 @@ function ownedRow(rowAgent: string, ownership: StructuredProviderSessionOwnershi
     : { structuredSession }
 }
 
-/** One index per projection: a list holds hundreds of rows, each once searched every record. A row
- *  names the chat continuing its conversation now, else one whose chain held it earlier. */
+// Build one lookup per projection to avoid scanning all chat records for every row.
 function ownershipLookup():
   | ((row: { agent: string; sessionId: string }) => StructuredProviderSessionOwnership | null)
   | null {
@@ -140,7 +136,7 @@ function ownershipLookup():
   }
 }
 
-/** The agents whose chats own history rows listed under each row agent: one CLI can run as several. */
+/** One history row agent can correspond to several chat providers. */
 const HISTORY_ROW_OWNERS = new Map<string, StructuredAgentId[]>()
 for (const { definition, sessionHistory } of STRUCTURED_AGENT_RUNTIME_METADATA) {
   for (const rowAgent of sessionHistory.rowAgents) {
@@ -171,7 +167,6 @@ export async function assertLegacyAiVaultResumeCommandAllowed(
   if (invocations.length === 0) {
     return
   }
-  // A terminal command is not a chat: with chats refused here there is no ownership to check.
   await ensureStructuredAgentSessionHostUnlessRefused(ensureHost)
   for (const ownership of listOwnership()) {
     if (
@@ -183,7 +178,6 @@ export async function assertLegacyAiVaultResumeCommandAllowed(
   }
 }
 
-/** Any chat whose chain ever held the row a resume or fork names; null when none did. */
 export function findResumeOwnership(
   args: Pick<AiVaultPrepareSessionResumeArgs, 'agent' | 'sessionId' | 'filePath'>
 ): StructuredProviderSessionOwnership | null {
@@ -220,9 +214,7 @@ function resumesOwnedSession(
   if (invocation.provider !== ownership.provider) {
     return false
   }
-  // A target-less resume (--last, --continue, or a bare --resume/-r) may pick
-  // any provider session, so it cannot be admitted while one is structured.
-  // Only an explicit target that names a different session is safe.
+  // A targetless resume could open any owned session, so require a provably different target.
   if (invocation.target === null) {
     return true
   }
@@ -247,8 +239,7 @@ function parseResumeInvocations(command: string): ResumeInvocation[] {
       binaries.set(name, [...(binaries.get(name) ?? []), registration])
     }
   }
-  // Only a command's program can resume: a name elsewhere is an argument or prompt text
-  // ("Fix the Pi --resume flag", `claude --model pi -r x`).
+  // Match programs only; agent names in arguments and prompts cannot resume sessions.
   const invocations: ResumeInvocation[] = []
   for (const words of shellCommands(command)) {
     const program = commandProgramIndex(words)
