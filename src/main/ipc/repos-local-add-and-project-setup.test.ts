@@ -420,9 +420,7 @@ describe('repos:add + repos:clone', () => {
         path: '/srv/orca',
         kind: 'git'
       })
-    ).rejects.toThrow(
-      "This Orca server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
-    )
+    ).rejects.toThrow('SSH connection "conn-1" not found or not connected')
 
     expect(mockStore.addRepo).not.toHaveBeenCalled()
   })

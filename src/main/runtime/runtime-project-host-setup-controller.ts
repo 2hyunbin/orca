@@ -45,8 +45,6 @@ import {
   type ProjectHostSetupTarget
 } from '../../shared/project-host-setup-target'
 
-export { SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE } from '../../shared/project-host-setup-target'
-
 type RuntimeProjectHostSetupDependencies = {
   getStore: () => RuntimeStore | null
   listRepos: () => Repo[]

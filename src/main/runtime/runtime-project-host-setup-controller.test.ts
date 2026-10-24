@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  RuntimeProjectHostSetupController,
-  SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE
-} from './runtime-project-host-setup-controller'
+import { RuntimeProjectHostSetupController } from './runtime-project-host-setup-controller'
+import { SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE } from '../../shared/project-host-setup-target'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
 import { projectHostSetupProjectionFromRepos } from '../../shared/project-host-setup-projection'
 import type { Repo } from '../../shared/repo-types'
