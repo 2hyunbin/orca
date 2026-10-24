@@ -207,7 +207,9 @@ export function useGlobalKeybindings(args: {
         }
       }
 
-      // Reviewed plugin chords beat built-in defaults only in app focus; terminal/editor/browser retain their own authority.
+      // Plugin chords are user-reviewed declarative content. They win over
+      // built-in defaults only in app focus; terminal/editor/browser handlers
+      // retain their own shortcut authority.
       if (context === 'app') {
         const pluginCommand = findPluginCommandForKeybinding(
           pluginCommands,
