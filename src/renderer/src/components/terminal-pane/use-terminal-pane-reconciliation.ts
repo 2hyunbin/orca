@@ -18,7 +18,7 @@ import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 import { useTerminalPaneProcessExitActions } from './use-terminal-pane-process-exit-actions'
 import type { TerminalPaneCloseController } from './use-terminal-pane-close-actions'
 import { useAppStore } from '../../store'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
+import { detachExternallyMovedPane } from './terminal-pane-external-move-detach'
 
 export function useTerminalPaneReconciliation(controller: TerminalPaneCloseController) {
   const {
@@ -123,11 +123,13 @@ export function useTerminalPaneReconciliation(controller: TerminalPaneCloseContr
       executeClosePane(paneId)
     }
     for (const paneId of moved) {
-      const leafId = manager.getLeafId(paneId)
-      if (manager.detachPaneForExternalMove(paneId) && leafId) {
-        // Why: the host publishes the agent under its new tab; this tab's copy would be a stale badge.
-        useAppStore.getState().retireAgentPaneAuthority(makePaneKey(tabId, leafId))
-      }
+      detachExternallyMovedPane({
+        manager,
+        paneId,
+        tabId,
+        retireAgentPaneAuthority: (paneKey) =>
+          useAppStore.getState().retireAgentPaneAuthority(paneKey)
+      })
     }
     if (appliedInsertion) {
       persistLayoutSnapshot()
