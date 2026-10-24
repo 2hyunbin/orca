@@ -36,7 +36,8 @@ function workingHookOwnsIdleTitleInterval(
 // Why: Codex's title follows the thread it displays, so a /side chat goes idle while the main
 // turn runs; that turn's end always arrives by hook or rollout, never by title alone.
 function codexHookReportsRunningTurn(status: HookTurnFacts): boolean {
-  return status.agentType === 'codex' && status.mainAgent?.state === 'working'
+  const mainState = status.mainAgent?.state
+  return status.agentType === 'codex' && mainState !== undefined && mainState !== 'done'
 }
 
 // Why: only a completed turn's reply is final; mid-turn hook snapshots carry tool stdout.

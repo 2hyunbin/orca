@@ -55,6 +55,26 @@ describe('paired/mobile Codex status while a /side chat is shown', () => {
     expect(out).toMatchObject({ state: 'working', prompt: 'main task please' })
   })
 
+  it('keeps a main turn waiting on approval and its prompt once the side chat closes', () => {
+    const hookAt = Date.now() - 20_000
+    const out = renewRuntimeMobileAgentStatusFromPtyTitle(
+      {
+        ...runningExec(hookAt, 'codex'),
+        state: 'waiting',
+        mainAgent: { state: 'waiting', stateStartedAt: hookAt }
+      },
+      {
+        ...sideChatIdlePty(hookAt),
+        lastOscTitle: '✋ repo',
+        lastOscTitleEpochMs: hookAt + 15_000,
+        lastAgentStatus: 'permission',
+        lastAgentStatusStartedAtEpochMs: hookAt + 15_000,
+        lastAgentStatusRichInvalidatedAtEpochMs: hookAt + 15_000
+      }
+    )
+    expect(out).toMatchObject({ state: 'waiting', prompt: 'main task please' })
+  })
+
   it('still lets an idle title end the turn of an agent whose title follows that turn', () => {
     const hookAt = Date.now() - 10_000
     const out = renewRuntimeMobileAgentStatusFromPtyTitle(
