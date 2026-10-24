@@ -37,4 +37,4 @@ export type CodexAppServerConnection = {
   /** The root exited, but the forced kill of its process tree could not prove the tree gone. */
   readonly processTreeUnproven?: boolean
 }
-import type { ProviderProcessCloseResult } from '../provider-process/provider-process-close'
+import type { ProviderProcessCloseResult } from '../../provider-process/provider-process-close'
