@@ -13,7 +13,7 @@ test('a paired client refuses project setup on its server’s SSH host with a cl
   test.setTimeout(180_000)
   const host = await launchHeadlessPairedRuntimeHost()
   try {
-    const { target } = await host.client.call<{ target: { id: string } }>('ssh.addTarget', {
+    const sshTarget = await host.client.call<{ target: { id: string } }>('ssh.addTarget', {
       target: { label: 'Recipe VM', host: '127.0.0.1', port: 1, username: 'dev' }
     })
     const client = await launchPairedWebClient(host.app, host.offer, { waitForWorkspace: false })
@@ -46,7 +46,7 @@ test('a paired client refuses project setup on its server’s SSH host with a cl
         } finally {
           console.error = original
         }
-      }, `ssh:${target.id}`)
+      }, `ssh:${sshTarget.result.target.id}`)
 
       expect(errors.added).toBeNull()
       expect(errors.cloned).toBeNull()
