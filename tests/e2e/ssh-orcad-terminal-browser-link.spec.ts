@@ -32,20 +32,33 @@ async function terminalLinkPoint(
   tabId: string,
   link: string
 ): Promise<{ x: number; y: number }> {
+  await expect
+    .poll(() =>
+      page.evaluate((id) => {
+        const pane = window.__paneManagers?.get(id)?.getActivePane?.()
+        const screen = pane?.terminal.element?.querySelector<HTMLElement>('.xterm-screen')
+        const rect = screen?.getBoundingClientRect()
+        return Boolean(rect && rect.width > 0 && rect.height > 0)
+      }, tabId)
+    )
+    .toBe(true)
   return page.evaluate(
     ({ tabId, link }) => {
       const pane = window.__paneManagers?.get(tabId)?.getActivePane?.()
       const screen = pane?.terminal.element?.querySelector<HTMLElement>('.xterm-screen')
-      const cell = pane?.terminal.dimensions?.css.cell
-      if (!pane || !screen || !cell?.width || !cell.height) {
+      if (!pane || !screen) {
         throw new Error('terminal screen unavailable')
+      }
+      const rect = screen.getBoundingClientRect()
+      const cell = {
+        width: rect.width / pane.terminal.cols,
+        height: rect.height / pane.terminal.rows
       }
       const buffer = pane.terminal.buffer.active
       for (let row = pane.terminal.rows - 1; row >= 0; row -= 1) {
         const text = buffer.getLine(buffer.viewportY + row)?.translateToString(false) ?? ''
         const column = text.indexOf(link)
         if (column !== -1) {
-          const rect = screen.getBoundingClientRect()
           return {
             x: rect.left + (column + link.length / 2) * cell.width,
             y: rect.top + (row + 0.5) * cell.height
