@@ -70,7 +70,7 @@ export type OrcadLaunchDetach = 'nohup' | 'setsid'
 
 const ORCAD_SETSID_PID_WAIT_TRIES = 100
 
-/** Halves V8's 16 MB semi-spaces (~30 MB idle RSS); a CLI flag because the heap cannot be resized later. */
+/** Halving V8's 16 MB semi-spaces saves ~30 MB idle RSS; a CLI flag because the heap cannot be resized later. */
 export const ORCAD_RUNTIME_V8_FLAGS = '--max-semi-space-size=8'
 
 /** Pass bind explicitly so launch policy cannot change with installed-version defaults. */

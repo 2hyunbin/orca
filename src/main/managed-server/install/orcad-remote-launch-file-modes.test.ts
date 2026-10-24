@@ -39,7 +39,7 @@ function mode(path: string): number {
 async function launchUnderLoginUmask(): Promise<void> {
   const command = orcadLaunchCommand(posix, {
     remoteInstallDir: slotDir,
-    // No runtime marker selects the legacy host runtime, which must accept the launch's V8 flags.
+    // No runtime marker selects the legacy host runtime; /bin/sh rejects V8 flags, so a JS one stands in.
     nodePath: process.execPath,
     fullVersion: '0.2.0+bb01',
     userDataDir: join(home, '.orca'),
