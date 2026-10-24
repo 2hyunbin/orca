@@ -61,6 +61,14 @@ it.each([false, true])(
         ok: true,
         value: { cancelled: true }
       })
+      expect((await rig.host.journalSnapshot(SESSION)).submissions).toContainEqual(
+        expect.objectContaining({
+          clientMessageId: message.envelope.clientOperationId,
+          dispatchState: 'rejected',
+          rejection: { kind: 'cancelled', neverReachedAgent: true }
+        })
+      )
+      expect(rig.adapter.acquire).not.toHaveBeenCalled()
     }
     held = false
     setup.resolve()

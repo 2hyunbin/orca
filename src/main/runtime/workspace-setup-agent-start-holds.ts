@@ -1,3 +1,5 @@
+import { waitForInFlightWorktreeCreate } from '../worktree-create-in-flight'
+import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
 import type { prepareRuntimeLocalWorktreeSetup } from './runtime-local-worktree-setup'
 // A chat created with a workspace whose project waits for setup starts its agent once setup ends.
 //
@@ -66,4 +68,19 @@ export class WorkspaceSetupAgentStartHolds {
   pending(worktreeId: string): Promise<void> | null {
     return this.held.get(worktreeId)?.released ?? null
   }
+}
+
+export function pendingWorkspaceSetupAgentStart(
+  workspaceId: string,
+  readPending: () => Promise<void> | null
+): Promise<void> | null {
+  const parsed = splitWorktreeIdForFilesystem(workspaceId)
+  const preparation = parsed
+    ? waitForInFlightWorktreeCreate(parsed.worktreePath, parsed.repoId)
+    : null
+  return preparation
+    ? preparation.then(async () => {
+        await readPending()
+      })
+    : readPending()
 }
