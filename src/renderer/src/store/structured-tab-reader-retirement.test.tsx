@@ -7,6 +7,7 @@ import type { AgentSessionHistoryPage } from '../../../shared/agent-session-wire
 import type * as RuntimeRpcClient from '@/runtime/runtime-rpc-client'
 import { createAppState } from './index'
 import { getAgentStatusOwner } from './agent-status-commit'
+import { removedStructuredReaders } from './structured-tab-read-retirement'
 import { useStructuredAgentSessionRead } from '../components/native-chat/use-structured-agent-session-read'
 import { getStructuredAgentSessionReadOwner } from '../components/native-chat/structured-agent-session-read-owner'
 import {
@@ -107,6 +108,34 @@ afterEach(() => {
 })
 
 describe('reader lifetime follows committed structured tab removal', () => {
+  it('preserves duplicate host-qualified membership and resolves cached topology from each state', () => {
+    const initial = storeWithTab().getState()
+    const remote = { ...tab, executionHostId: 'runtime:env-1' } as const
+    const previous = { ...initial, unifiedTabsByWorktree: { wt: [tab, tab, remote] } }
+    const next = { ...initial, unifiedTabsByWorktree: { moved: [tab] } }
+    expect(removedStructuredReaders(previous, next)).toEqual([
+      { sessionId: tab.entityId, target: { kind: 'environment', environmentId: 'env-1' } }
+    ])
+    expect(
+      removedStructuredReaders(previous, {
+        ...next,
+        unifiedTabsByWorktree: { moved: [tab, remote] }
+      })
+    ).toEqual([])
+
+    const unstamped = { ...tab, executionHostId: undefined }
+    const topology = { wt: [unstamped] }
+    const empty = { ...initial, unifiedTabsByWorktree: {} }
+    const state = { ...initial, unifiedTabsByWorktree: topology }
+    expect(removedStructuredReaders(state, empty)[0]?.target).toEqual({ kind: 'local' })
+    expect(
+      removedStructuredReaders(
+        { ...state, activeWorkspaceExecutionHostId: 'runtime:env-1' },
+        empty
+      )[0]?.target
+    ).toEqual({ kind: 'environment', environmentId: 'env-1' })
+  })
+
   it('keeps the rendered reader working after a refused main close and hide/show', async () => {
     const store = storeWithTab()
     main = await drawTabsFromMain(store)
