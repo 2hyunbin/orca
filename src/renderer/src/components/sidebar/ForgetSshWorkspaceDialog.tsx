@@ -25,7 +25,6 @@ import {
   resolveWorktreeBatchDeleteTargets
 } from './worktree-delete-request'
 import { showWorkspaceListChangedToast } from './stale-workspace-list-toast'
-import { WORKTREE_REMOVAL_HOST_CHANGED_ERROR } from '@/store/slices/worktrees/listing/worktree-slice-constants'
 
 type ForgetSshWorkspaceModalData = {
   worktreeId: string
@@ -147,8 +146,18 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
       confirmedDiscards,
       assertBeforeDispatch: () => {
         if (!isSelectedWorkspaceCurrent()) {
-          throw new Error(WORKTREE_REMOVAL_HOST_CHANGED_ERROR)
+          throw new Error(
+            translate(
+              'auto.components.sidebar.delete.worktree.flow.workspaceListChanged',
+              'Workspace list changed'
+            )
+          )
         }
+      }
+    }).then((deleted) => {
+      // Why: the refusal's error state is keyed by id and host, which the replacement row shares.
+      if (!deleted && !isSelectedWorkspaceCurrent() && removalTarget.executionHostId) {
+        useAppStore.getState().clearWorktreeDeleteState(worktreeId, removalTarget.executionHostId)
       }
     })
     if (mountedRef.current) {

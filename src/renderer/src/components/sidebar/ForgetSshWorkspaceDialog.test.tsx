@@ -9,10 +9,12 @@ import type { RemoveWorktreeOptions } from '@/store/slices/worktree-removal-opti
 
 const mocks = vi.hoisted(() => {
   const allWorktrees: Worktree[] = []
+  const modalData: Record<string, unknown> = {}
   const state = {
-    modalData: {} as Record<string, unknown>,
+    modalData,
     closeModal: vi.fn(),
     removeWorktree: vi.fn(),
+    clearWorktreeDeleteState: vi.fn(),
     allWorktrees,
     sshTargetLabels: new Map<string, string>(),
     removedSshTargetLabels: new Map<string, string>(),
@@ -106,6 +108,7 @@ describe('ForgetSshWorkspaceDialog Reconnect & Delete (STA-11912)', () => {
     }
     mocks.state.removeWorktree.mockReset()
     mocks.state.closeModal.mockReset()
+    mocks.state.clearWorktreeDeleteState.mockReset()
     mocks.connect.mockReset()
     vi.stubGlobal('api', { ssh: { connect: mocks.connect } })
   })
@@ -144,7 +147,9 @@ describe('ForgetSshWorkspaceDialog Reconnect & Delete (STA-11912)', () => {
 
     fireEvent.click(screen.getByText('Reconnect & Delete'))
 
-    await waitFor(() => expect(mocks.state.removeWorktree).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(mocks.state.clearWorktreeDeleteState).toHaveBeenCalledWith('repo::/srv/wt', hostId)
+    )
     expect(dispatchError).toBeInstanceOf(Error)
   })
 })
