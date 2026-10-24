@@ -111,7 +111,7 @@ export function buildDefaultSettings(args: {
     terminalClipboardOnSelect: false,
     // Trim only the shared leading-space gutter, preserving relative indentation.
     terminalCopyTrimsGutter: true,
-    // Default OSC52 supports Zellij/tmux/nvim with queries disabled and capped writes; the stamp migrates persisted false once in both Electron and web stores.
+    // Default OSC52 supports Zellij/tmux/nvim with queries disabled and capped writes; the stamp migrates persisted false once in both Electron and web localStorage stores.
     terminalAllowOsc52Clipboard: true,
     terminalAllowOsc52ClipboardDefaultedOnForAllUsers: true,
     claudeAgentTeamsMode: 'off',
