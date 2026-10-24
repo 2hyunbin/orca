@@ -1,8 +1,3 @@
-// One subscriber's catch-up: page it forward to the journal head, or hand it
-// the empty caught-up frame its per-emit fields still owe it. Split from the
-// subscriber registry so the registry stays the bookkeeping and this stays the
-// paging policy.
-
 import {
   AGENT_SESSION_HISTORY_MAX_LIMIT,
   type AgentSessionSlashCommand,
@@ -31,7 +26,6 @@ import type { Subscriber } from './structured-agent-session-subscribers'
 export type SubscriberDeliveryPort = {
   hooks: SubscriberFieldHooks & {
     readCommands?: (sessionId: string) => AgentSessionSlashCommand[] | undefined
-    /** The host's projection of current work, which every frame's turn and prompt fields state. */
     readCurrentWork?: (
       sessionId: string,
       journal: AgentSessionJournal
@@ -152,7 +146,7 @@ export function deliverToSubscriber(
       })
       return
     }
-    // Replaying an unbounded gap blocks the host; older rows remain available on scroll.
+    // Bound synchronous catch-up; older history remains available through paging.
     if (page.hasNewer && subscriber.snapshotCatchUp !== false) {
       const tail = withPublishedWork(
         readAgentSessionHydrationPage(journal, subscriber.fence, reader),
@@ -194,8 +188,7 @@ export function deliverToSubscriber(
         ...(page.hasNewer ? { hasNewer: true as const } : {}),
         ...shared
       },
-      // On a multi-page catch-up the draft list rides only the final page, or a
-      // consumed card would vanish pages before its bubble arrives.
+      // Withhold queue lists until final catch-up so consumed cards do not vanish before their bubbles arrive.
       { withholdQueued: page.hasNewer }
     )
     subscriber.cursor = page.window.nextCursor
@@ -221,8 +214,7 @@ function emitCaughtUp(
 ): void {
   const commandsChanged = subscriberCommandsChanged(port.hooks, subscriber)
   const queuedChanged = subscriberQueuedMessagesChanged(port.hooks, subscriber)
-  // A generation that ended (or began) with no row, or an exit this host saw with no lease write,
-  // changes what is current: the caught-up frame restates the view.
+  // Ownership/exit changes without rows still require current-work restatement.
   const { work } = current
   const workChanged = work !== undefined && work.workViewKey() !== subscriber.workView
   if (workChanged) {
