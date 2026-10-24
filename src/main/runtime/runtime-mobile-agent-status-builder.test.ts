@@ -251,6 +251,7 @@ describe('hook evidence from before the PTY process started', () => {
       expect.objectContaining({
         restoredUnconfirmed: true,
         updatedAt: receivedAt + 60_000,
+        stateStartedAt: receivedAt,
         providerSession: SESSION
       })
     )

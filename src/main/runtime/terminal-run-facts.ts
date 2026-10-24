@@ -16,6 +16,8 @@ export type TerminalSpawnCommit = Parameters<typeof spawnCommitBindingOrigin>[0]
   id: string
   incarnationId?: string
   coldRestore?: object
+  /** Taken before the spawn, or a fast process's first report would read as older than it. */
+  spawnRequestedAt?: number
 }
 
 /** A cold restore starts a new process for a pane that had one, so it is never fresh. */
@@ -74,11 +76,7 @@ export class TerminalRunFactsRegister {
 
   /** Once per process: a re-registration of the same incarnation keeps its facts, and so does a
    *  reattach or adoption of the running process unless its incarnation shows another process. */
-  recordSpawnCommit(
-    commit: TerminalSpawnCommit,
-    expectedSourceBinding?: unknown,
-    now = Date.now()
-  ): void {
+  recordSpawnCommit(commit: TerminalSpawnCommit, expectedSourceBinding?: unknown): void {
     const incarnationId = commit.incarnationId ?? null
     const previous = this.runsByPtyId.get(commit.id)
     const pending = this.pendingByPtyId.get(commit.id)
@@ -98,7 +96,7 @@ export class TerminalRunFactsRegister {
       processStartedAt: sameProcess
         ? (previous?.processStartedAt ?? null)
         : startedNewProcess(commit)
-          ? now
+          ? (commit.spawnRequestedAt ?? Date.now())
           : null,
       firstUserInputAt: sameProcess
         ? (previous?.firstUserInputAt ?? null)

@@ -6,7 +6,8 @@ import { resolvePaneAgentOwnerRecord } from '../../shared/pane-agent-owner'
 import {
   pickHostTurnEnd,
   type AgentStatusEntry,
-  type AgentStatusIpcPayload
+  type AgentStatusIpcPayload,
+  type HostTurnEndFacts
 } from '../../shared/agent-status-types'
 import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
 import {
@@ -106,15 +107,21 @@ export function buildRuntimeMobileAgentStatus(
     ownerAgent,
     ownerOptions
   )
-  const identityOnly = (evidenceAt: number): { agentStatus: AgentStatusEntry } => {
+  // Why the superseded turn's segment: a client that saw it reads this as a replay, not a new
+  // completion to announce. Only updatedAt advances, so the client's copy cannot outrank it.
+  const identityOnly = (
+    updatedAt: number,
+    segment: { stateStartedAt: number } & HostTurnEndFacts
+  ): { agentStatus: AgentStatusEntry } => {
     const agentType = ownerAgent ?? hookRow.agentType ?? hookRow.providerSessionAgentType
     return {
       agentStatus: normalizeCompatibleAgentStatusEntryForOwner(
         {
           state: 'done',
           prompt: '',
-          updatedAt: evidenceAt,
-          stateStartedAt: evidenceAt,
+          updatedAt,
+          stateStartedAt: segment.stateStartedAt,
+          ...pickHostTurnEnd(segment),
           // Why: clients render an unverifiable row as no status yet keep its identity, so native
           // chat still finds the session; clients that cannot read it get the legacy `done`.
           restoredUnconfirmed: true,
@@ -135,21 +142,25 @@ export function buildRuntimeMobileAgentStatus(
     }
   }
   // Why: evidence from before main started this process describes an earlier one, so a fresh
-  // shell after a restore must not wear that turn's state. An attached process has no start here.
+  // shell after a restore must not wear that turn's state. An attached process has no start here,
+  // and a relay replay that restamps receivedAt later only keeps the status as it was.
   const processPtyId = pty?.ptyId ?? leaf?.ptyId
   const processStartedAt = processPtyId ? host.getPtyProcessStartedAtEpochMs?.(processPtyId) : null
-  const newestEvidenceAt = Math.max(
-    retained?.updatedAt ?? -Infinity,
-    ...hookRows.map((row) => row.receivedAt)
-  )
+  let newest: { at: number; segment: { stateStartedAt: number } & HostTurnEndFacts } | null =
+    retained ? { at: retained.updatedAt, segment: retained } : null
+  for (const row of hookRows) {
+    if (!newest || row.receivedAt > newest.at) {
+      newest = { at: row.receivedAt, segment: row }
+    }
+  }
   if (
     processStartedAt != null &&
-    newestEvidenceAt < processStartedAt &&
+    newest &&
+    newest.at < processStartedAt &&
     !pty?.lastAgentStatus &&
     !leaf?.lastAgentStatus
   ) {
-    // Dated by the start, the newest fact here, so a client's copy of the old turn cannot outrank it.
-    return identityOnly(processStartedAt)
+    return identityOnly(processStartedAt, newest.segment)
   }
   // Why: OSC 9999 hook payload carries real state/prompt/agent; without preferring it, hook-only transitions never surfaced (#7970).
   const liveRow = retained ?? resolveRuntimeHookLiveAgentRow(hookRow.live, pty, nonAgentTitle)
@@ -195,8 +206,8 @@ export function buildRuntimeMobileAgentStatus(
     hookRow.restored !== null &&
     terminalTitleBlocksExplicitAgentStatus(ptyTitle) &&
     titleObservedAt >= hookRow.restored.updatedAt
-  if (shellTitleRetiredRestored && !pty?.lastAgentStatus) {
-    return identityOnly(titleObservedAt)
+  if (shellTitleRetiredRestored && hookRow.restored && !pty?.lastAgentStatus) {
+    return identityOnly(titleObservedAt, hookRow.restored)
   }
   const restored = !pty?.lastAgentStatus && !shellTitleRetiredRestored ? hookRow.restored : null
   if (restored) {

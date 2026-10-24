@@ -48,21 +48,24 @@ describe('terminal run facts', () => {
 
   it('dates only the processes main started, across a re-registration of the same one', () => {
     const facts = new TerminalRunFactsRegister()
-    facts.recordSpawnCommit(
-      { id: 'pty-1', incarnationId: 'inc-1', coldRestore: {} },
-      undefined,
-      100
-    )
-    facts.recordSpawnCommit(
-      { id: 'pty-1', incarnationId: 'inc-1', isReattach: true },
-      undefined,
-      200
-    )
-    facts.recordSpawnCommit(
-      { id: 'pty-2', incarnationId: 'inc-9', isReattach: true },
-      undefined,
-      300
-    )
+    facts.recordSpawnCommit({
+      id: 'pty-1',
+      incarnationId: 'inc-1',
+      coldRestore: {},
+      spawnRequestedAt: 100
+    })
+    facts.recordSpawnCommit({
+      id: 'pty-1',
+      incarnationId: 'inc-1',
+      isReattach: true,
+      spawnRequestedAt: 200
+    })
+    facts.recordSpawnCommit({
+      id: 'pty-2',
+      incarnationId: 'inc-9',
+      isReattach: true,
+      spawnRequestedAt: 300
+    })
 
     expect(facts.readProcessStartedAt('pty-1', 'inc-1')).toBe(100)
     expect(facts.readProcessStartedAt('pty-1', 'inc-0')).toBeNull()
