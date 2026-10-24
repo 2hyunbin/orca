@@ -4,7 +4,6 @@ import { requestTerminalPaneRecovery } from '../terminal-pane-recovery'
 import type { IpcPtyTransportOptions } from '../pty-transport-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
-/** The spawn/attach options a pane hands its PTY transport. */
 export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPtyTransportOptions {
   return {
     terminalKittyKeyboardProtocol:
@@ -29,9 +28,7 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
       : session.paneStartup?.startupCommandDelivery,
     executionHostId: session.executionHostId,
     worktreeId: session.deps.worktreeId,
-    // Why: closes the SIGKILL race documented in INVESTIGATION.md by letting
-    // main sync-flush the (worktreeId, tabId, leafId → ptyId) binding before
-    // pty:spawn returns.
+    // Flush pane↔PTY binding before spawn reply so a SIGKILL cannot lose it.
     tabId: session.deps.tabId,
     leafId: session.pane.leafId,
     ...(session.deps.placement ? { placement: session.deps.placement } : {}),
@@ -99,10 +96,7 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
           onAgentBecameWorking: session.onAgentBecameWorking,
           onAgentExited: session.onAgentExited
         }),
-    // Why: local IPC terminals are now model-owned in main: OrcaRuntimeService
-    // parses OSC 9999 before renderer delivery and forwards through the hook
-    // server with local/SSH identity. Remote-runtime streams do not pass through
-    // local main, so the renderer remains their status owner for now.
+    // Local main owns OSC 9999 and forwards hook identity; remote-runtime streams bypass main and retain renderer ownership.
     ...(session.shouldOwnAgentStatusInRenderer
       ? { onAgentStatus: session.handleRendererOwnedAgentStatus }
       : {})
