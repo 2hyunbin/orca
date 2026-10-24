@@ -148,8 +148,9 @@ describe('liveness', () => {
         await withSlot(async (slot, probe) => {
           const own = probeIn(`echo $$ > '${slot}/.orcad-pid'; ${probe}`)
           expect(parseOrcadLiveness(own)).toBe('DEAD')
+          // The trailing `:` stops dash and bash from exec'ing the inner shell into the outer's PID.
           const wrapped = probeIn(
-            `echo $$ > '${slot}/.orcad-pid'; sh -c ${JSON.stringify(probe).replace(/\$/g, '\\$')}`
+            `echo $$ > '${slot}/.orcad-pid'; sh -c ${JSON.stringify(probe).replace(/\$/g, '\\$')}; :`
           )
           expect(parseOrcadLiveness(wrapped)).toBe('DEAD')
         })
