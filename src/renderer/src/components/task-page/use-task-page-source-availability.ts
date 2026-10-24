@@ -1,20 +1,20 @@
-import type { TaskPageRuntimeHostsModel } from './use-task-page-runtime-hosts'
+import type { TaskPageRuntimeHostsModel } from '../use-task-page-runtime-hosts'
 import { useCallback, useMemo } from 'react'
 import { getJiraAccountLabel } from '@/lib/jira-account-label'
-import type { Repo } from '../../../shared/repo-types'
+import type { Repo } from '../../../../shared/repo-types'
 import {
   getTaskPageRepoSourceContext,
   getTaskSourceHostAvailabilityForHost
-} from './task-page-source-context'
-import type { TaskSourceHostAvailability } from './task-source-context-summary'
+} from '../task-page-source-context'
+import type { TaskSourceHostAvailability } from '../task-source-context-summary'
 import { getRepoBackedProviderAvailability } from '@/components/task-source-provider-availability'
-import { getSettingsFocusedExecutionHostId } from '../../../shared/execution-host'
+import { getSettingsFocusedExecutionHostId } from '../../../../shared/execution-host'
 import {
   type TaskSourceContext,
   normalizeTaskSourceContext,
   getTaskSourceCacheScope
-} from '../../../shared/task-source-context'
-import { useTaskPageSourceSummary } from './task-page/use-task-page-source-summary'
+} from '../../../../shared/task-source-context'
+import { useTaskPageSourceSummary } from './use-task-page-source-summary'
 export type TaskPageSourceAvailabilityPreludeModel = ReturnType<
   typeof useTaskPageSourceAvailabilityPrelude
 >

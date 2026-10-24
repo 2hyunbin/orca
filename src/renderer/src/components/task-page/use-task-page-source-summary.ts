@@ -1,4 +1,4 @@
-import type { TaskPageSourceAvailabilityPreludeModel } from '../use-task-page-source-availability'
+import type { TaskPageSourceAvailabilityPreludeModel } from './use-task-page-source-availability'
 import { useMemo } from 'react'
 import type { TaskProvider } from '../../../../shared/task-providers'
 import type {
