@@ -33,7 +33,8 @@ async function managedTunnel(page: Page, environmentId: string) {
 
 function occupy(port: number): Promise<Server> {
   return new Promise((resolve, reject) => {
-    const server = createServer()
+    // Holds the port only; open connections would keep close() waiting through teardown.
+    const server = createServer((socket) => socket.destroy())
     server.once('error', reject)
     server.listen(port, '127.0.0.1', () => resolve(server))
   })
