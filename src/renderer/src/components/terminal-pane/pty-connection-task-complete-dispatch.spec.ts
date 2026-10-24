@@ -197,6 +197,8 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        identity: {},
+        registeredAt: Date.now(),
         launchConfig: {
           agentArgs: '',
           agentEnv: {}

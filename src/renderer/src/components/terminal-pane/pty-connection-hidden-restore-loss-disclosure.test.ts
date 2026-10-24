@@ -297,7 +297,7 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
     }
 
     async function driveToSeventhAnswer(
-      serializeBufferOutcome: ReturnType<typeof vi.fn>
+      serializeBufferOutcome: NonNullable<MockTransport['serializeBufferOutcome']>
     ): Promise<PaneDrive> {
       const drive = await connectHiddenPane(REMOTE_PTY_ID, (transport) => {
         transport.serializeBuffer = vi.fn()
@@ -366,7 +366,7 @@ describe('hidden-output restore loss disclosure (STA-4869)', () => {
     })
 
     async function exhaustBudgetWhileHidden(
-      serializeBufferOutcome: ReturnType<typeof vi.fn>
+      serializeBufferOutcome: NonNullable<MockTransport['serializeBufferOutcome']>
     ): Promise<PaneDrive> {
       const seventhAnswer = createDeferred<unknown>()
       const drive = await driveToSeventhAnswer(serializeBufferOutcome)

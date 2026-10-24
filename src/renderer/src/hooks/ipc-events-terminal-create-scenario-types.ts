@@ -79,7 +79,7 @@ export type TerminalCreateSurfacingStore = {
   registerAgentLaunchConfig: SpyMock
   clearAgentLaunchConfig: SpyMock
   updateTabPtyId: Mock<(tabId: string, ptyId: string) => void>
-  setTabLayout: Mock<(tabId: string, layout: unknown) => void>
+  setTabLayout: Mock<AppState['setTabLayout']>
   tabsByWorktree: Record<
     string,
     { id: string; ptyId?: string | null; title?: string; agentLaunchPane?: { leafId: string } }[]

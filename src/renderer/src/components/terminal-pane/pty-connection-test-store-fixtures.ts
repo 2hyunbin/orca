@@ -18,7 +18,7 @@ type SeedRows = {
     string,
     RowInput<AppState['worktreesByRepo'][string][number], 'id' | 'repoId'>[]
   >
-  repos?: RowInput<AppState['repos'][number], 'id'>[]
+  repos?: readonly RowInput<AppState['repos'][number], 'id'>[]
   settings?: SettingsInput | null
   agentStatusByPaneKey?: Record<string, StatusInput>
   agentLaunchConfigByPaneKey?: Record<
@@ -169,7 +169,8 @@ export async function createInitialStoreState() {
       if (agentLaunchConfigByPaneKey) {
         prepared.agentLaunchConfigByPaneKey = mapRecord(agentLaunchConfigByPaneKey, (entry) => ({
           ...entry,
-          identity: entry.identity ?? {}
+          identity: entry.identity ?? {},
+          registeredAt: entry.registeredAt ?? Date.now()
         }))
       }
       applyAgentStatusPatch(store, prepared)

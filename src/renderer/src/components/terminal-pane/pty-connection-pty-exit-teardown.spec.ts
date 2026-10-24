@@ -1,3 +1,4 @@
+import { makeTab } from '@/store/slices/store-session-test-harness'
 import { bindPtyConnectionTestMocks } from './pty-connection-mocks.spec'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -46,7 +47,6 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       agentEnv: { CODEX_PROFILE: 'captured' }
     }
     storeFixture.patch({
-      ...storeFixture.read(),
       tabsByWorktree: {
         'wt-1': [{ id: 'tab-1', ...(restoredPtyId ? { ptyId: restoredPtyId } : {}) }]
       },
@@ -216,7 +216,6 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
         paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) },
         clearExitedPanePtyLayoutBinding: vi.fn(() => {
           storeFixture.patch({
-            ...storeFixture.read(),
             terminalLayoutsByTabId: {
               ...storeFixture.read().terminalLayoutsByTabId,
               'tab-1': {
@@ -739,7 +738,9 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
       const pane = createPane(1)
-      storeFixture.read().tabsByWorktree['wt-1'] = [{ id: 'tab-1', ptyId: 'terminal-old' }]
+      storeFixture.read().tabsByWorktree['wt-1'] = [
+        makeTab({ id: 'tab-1', worktreeId: 'wt-1', ptyId: 'terminal-old' })
+      ]
       const terminalLayoutsByTabId =
         storeFixture.read().terminalLayoutsByTabId ??
         storeFixture.patch({ terminalLayoutsByTabId: {} })

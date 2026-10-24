@@ -41,7 +41,7 @@ export type MockTransport = {
   claimViewport: Mock
   setOutputPaused?: Mock
   resize: Mock
-  isConnected?: Mock
+  isConnected: Mock
   getPtyId: Mock
   getConnectionId: Mock
   serializeBuffer?: Mock

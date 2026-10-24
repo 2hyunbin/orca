@@ -98,6 +98,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
           }
         } else {
           storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+            registeredAt: Date.now(),
             launchConfig: { agentArgs: '', agentEnv: {} },
             identity: { agentType: 'antigravity' }
           }
@@ -180,6 +181,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -233,6 +235,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -285,6 +288,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'codex' }
       }
@@ -347,6 +351,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'codex' }
       }
@@ -451,6 +456,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -498,6 +504,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -553,6 +560,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -605,6 +613,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -646,6 +655,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -690,6 +700,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+        registeredAt: Date.now(),
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
@@ -736,7 +747,6 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         vi.setSystemTime(1_100)
         const paneKey = makePaneKey('tab-1', LEAF_1)
         storeFixture.patch({
-          ...storeFixture.read(),
           agentStatusByPaneKey: {
             [paneKey]: {
               paneKey,
@@ -832,7 +842,6 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       vi.setSystemTime(1_100)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
-        ...storeFixture.read(),
         agentStatusByPaneKey: {
           [paneKey]: {
             paneKey,

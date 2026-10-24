@@ -1,3 +1,4 @@
+import { makeWorktree, TEST_REPO } from '@/store/slices/store-test-helpers'
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RESET_TERMINAL_CURSOR_STYLE } from '../../../../shared/terminal-mode-reset-profiles'
@@ -184,9 +185,13 @@ describe('connectPanePty', () => {
       interrupted: false
     })
     storeFixture.read().worktreesByRepo.repo2 = [
-      { id: 'wt-2', repoId: 'repo2', path: '/tmp/wt-2', displayName: 'feat/other' }
+      makeWorktree({ id: 'wt-2', repoId: 'repo2', path: '/tmp/wt-2', displayName: 'feat/other' })
     ]
-    storeFixture.read().repos.push({ id: 'repo2', connectionId: null, displayName: 'docs' })
+    storeFixture.patch({
+      repos: storeFixture
+        .read()
+        .repos.concat({ ...TEST_REPO, id: 'repo2', connectionId: null, displayName: 'docs' })
+    })
     storeFixture.patch({ activeWorktreeId: 'wt-2' })
 
     const pane = createPane(1)

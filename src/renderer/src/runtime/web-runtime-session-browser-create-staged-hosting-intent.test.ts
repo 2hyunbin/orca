@@ -1,3 +1,4 @@
+import type { RuntimeStatus } from '../../../shared/runtime-types'
 import { makeUnifiedTab } from '../store/slices/store-session-test-harness'
 import type { AppState } from '../store/types'
 import { getDefaultSettings } from '../../../shared/constants'
@@ -102,7 +103,7 @@ type HarnessState = AppState
 
 /** The runtime status the create reads its capabilities and device scope from. */
 function statusMap(options: {
-  capabilities: string[]
+  capabilities: RuntimeStatus['capabilities']
   deviceScope?: string
 }): AppState['runtimeStatusByEnvironmentId'] {
   return new Map([

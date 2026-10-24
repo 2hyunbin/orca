@@ -40,7 +40,7 @@ let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
 let transportFactoryQueue: MockTransport[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
 
-function setStore(patch: Partial<StoreState>): void {
+function setStore(patch: Parameters<typeof storeFixture.patch>[0]): void {
   storeFixture.patch({ ...storeFixture.read(), ...patch })
   for (const listener of storeSubscribers) {
     listener(storeFixture.read())

@@ -127,7 +127,11 @@ export async function setupTerminalCreateSurfacing(
     }
   })
   setTabLayout.mockImplementation((tabId, layout) => {
-    store.getState().terminalLayoutsByTabId[tabId] = layout
+    if (layout) {
+      store.getState().terminalLayoutsByTabId[tabId] = layout
+    } else {
+      delete store.getState().terminalLayoutsByTabId[tabId]
+    }
   })
   const createTerminalListenerRef: ListenerRef<(data: TerminalCreateListenerPayload) => void> = {
     current: null

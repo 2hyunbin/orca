@@ -190,6 +190,7 @@ describe('shell showing through a hibernation kill', () => {
     await vi.advanceTimersByTimeAsync(20)
     await flushAsyncTicks()
     storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+      registeredAt: Date.now(),
       launchConfig: { agentArgs: '', agentEnv: {} },
       identity: { agentType: 'claude' }
     }

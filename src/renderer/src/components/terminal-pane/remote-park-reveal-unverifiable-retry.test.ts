@@ -163,7 +163,7 @@ type ConnectMockPane = (
 ) => { dispose: () => void }
 
 async function revealParkedRemotePane(
-  serializeBufferOutcome: ReturnType<typeof vi.fn>
+  serializeBufferOutcome: NonNullable<MockTransport['serializeBufferOutcome']>
 ): Promise<{ transport: MockTransport; writes: string[]; dispose: () => void }> {
   const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared mock pane, manager, and deps stand in for the real xterm-backed objects, exactly as every other connectPanePty suite drives them.
@@ -178,7 +178,6 @@ async function revealParkedRemotePane(
   transport.serializeBufferOutcome = serializeBufferOutcome
   transportFactoryQueue.push(transport)
   storeFixture.patch({
-    ...storeFixture.read(),
     tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: REMOTE_PTY_ID }] },
     ptyIdsByTabId: { 'tab-1': [REMOTE_PTY_ID] },
     terminalLayoutsByTabId: {

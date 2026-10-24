@@ -146,7 +146,6 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
         const ptyId = 'pty-fresh-visible-no-sample'
         transportFactoryQueue.push(createMockTransport(ptyId))
         storeFixture.patch({
-          ...storeFixture.read(),
           tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
           ptyIdsByTabId: { 'tab-1': [] },
           terminalLayoutsByTabId: {
@@ -568,13 +567,15 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
         const ptyId = 'pty-unknown-persisted-launch'
         const tabId = `tab-${ptyId}`
         storeFixture.patch({ tabsByWorktree: { 'wt-1': [{ id: tabId, ptyId }] } })
-        storeFixture
-          .read()
-          .registerAgentLaunchConfig.mockImplementation(
-            (key: string, launchConfig: unknown, identity: { agentType?: string }): void => {
-              storeFixture.read().agentLaunchConfigByPaneKey[key] = { launchConfig, identity }
+        storeFixture.actions.registerAgentLaunchConfig.mockImplementation(
+          (key, launchConfig, identity = {}): void => {
+            storeFixture.read().agentLaunchConfigByPaneKey[key] = {
+              launchConfig,
+              identity,
+              registeredAt: Date.now()
             }
-          )
+          }
+        )
 
         const { cacheKey } = await connectRestoredPaneForForegroundSampling({
           ptyId,
@@ -609,13 +610,15 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
             'wt-1': [{ id: tabId, ptyId, launchAgent: 'droid' }]
           }
         })
-        storeFixture
-          .read()
-          .registerAgentLaunchConfig.mockImplementation(
-            (key: string, launchConfig: unknown, identity: { agentType?: string }): void => {
-              storeFixture.read().agentLaunchConfigByPaneKey[key] = { launchConfig, identity }
+        storeFixture.actions.registerAgentLaunchConfig.mockImplementation(
+          (key, launchConfig, identity = {}): void => {
+            storeFixture.read().agentLaunchConfigByPaneKey[key] = {
+              launchConfig,
+              identity,
+              registeredAt: Date.now()
             }
-          )
+          }
+        )
         vi.mocked(storeFixture.read().clearAgentLaunchConfig).mockImplementation((key: string) => {
           delete storeFixture.read().agentLaunchConfigByPaneKey[key]
         })
@@ -812,6 +815,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
           shellForeground: false
         }
         storeFixture.read().agentLaunchConfigByPaneKey[cacheKey] = {
+          registeredAt: Date.now(),
           launchConfig: { agentArgs: '', agentEnv: {} },
           identity: { agentType: 'droid' }
         }

@@ -18,6 +18,8 @@ import {
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
 
+const deleteDefaults = { error: null, canForceDelete: false, forceDeleteReason: null }
+
 export function registerPtyConnectionFreshSpawnGuardsTests(): void {
   let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
   let transportFactoryQueue: MockTransport[] = []
@@ -96,8 +98,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
-        ...storeFixture.read(),
-        deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'deleting' } }
+        deleteStateByWorktreeId: {
+          'wt-1': { ...deleteDefaults, isDeleting: true, phase: 'deleting' }
+        }
       })
       // Why: a unique tab id keeps this pane's key clear of other tests' pendingSpawnByPaneKey entries so the connect deterministically fresh-spawns.
       const deps = createDeps({ tabId: 'tab-removal-skip-spawn' })
@@ -115,8 +118,9 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
-        ...storeFixture.read(),
-        deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'queued' } }
+        deleteStateByWorktreeId: {
+          'wt-1': { ...deleteDefaults, isDeleting: true, phase: 'queued' }
+        }
       })
       const deps = createDeps({ tabId: 'tab-queued-delete-spawn' })
 
@@ -134,7 +138,6 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       transportFactoryQueue.push(transport)
       const deps = createDeps({ tabId: 'tab-retain-disposed-spawn' })
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-retain-disposed-spawn', ptyId: null }] }
       })
 
@@ -147,17 +150,18 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       }
       expect(retain()).toBe(true)
       storeFixture.patch({
-        ...storeFixture.read(),
-        deleteStateByWorktreeId: { 'wt-1': { isDeleting: true, phase: 'deleting' } }
+        deleteStateByWorktreeId: {
+          'wt-1': { ...deleteDefaults, isDeleting: true, phase: 'deleting' }
+        }
       })
       expect(retain()).toBe(false)
       storeFixture.patch({
-        ...storeFixture.read(),
-        deleteStateByWorktreeId: { 'local|wt-1': { isDeleting: true, phase: 'deleting' } }
+        deleteStateByWorktreeId: {
+          'local|wt-1': { ...deleteDefaults, isDeleting: true, phase: 'deleting' }
+        }
       })
       expect(retain()).toBe(false)
       storeFixture.patch({
-        ...storeFixture.read(),
         deleteStateByWorktreeId: {},
         tabsByWorktree: { 'wt-1': [] }
       })
@@ -248,14 +252,23 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
-        ...storeFixture.read(),
         settings: {
           ...storeFixture.read().settings,
           terminalWindowsShell: 'wsl.exe',
           terminalWindowsWslDistro: 'Debian',
           localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Debian' }
         },
-        projects: [{ id: 'repo1', localWindowsRuntimePreference: { kind: 'windows-host' } }]
+        projects: [
+          {
+            id: 'repo1',
+            displayName: 'repo1',
+            badgeColor: null,
+            sourceRepoIds: ['repo1'],
+            createdAt: 1,
+            updatedAt: 1,
+            localWindowsRuntimePreference: { kind: 'windows-host' }
+          }
+        ]
       })
 
       connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
@@ -278,7 +291,6 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: null, forceHostRuntime: true }]
         },
@@ -301,7 +313,6 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
-        ...storeFixture.read(),
         activeWorktreeId: 'wt-1',
         tabsByWorktree: {
           ...storeFixture.read().tabsByWorktree,
@@ -310,7 +321,15 @@ export function registerPtyConnectionFreshSpawnGuardsTests(): void {
           ]
         },
         projects: [
-          { id: 'repo1', localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' } }
+          {
+            id: 'repo1',
+            displayName: 'repo1',
+            badgeColor: null,
+            sourceRepoIds: ['repo1'],
+            createdAt: 1,
+            updatedAt: 1,
+            localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
+          }
         ],
         settings: {
           ...storeFixture.read().settings,

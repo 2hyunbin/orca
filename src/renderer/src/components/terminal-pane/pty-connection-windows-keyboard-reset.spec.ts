@@ -221,11 +221,11 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         expect(pane.terminal.write).not.toHaveBeenCalled()
 
         const doneStatus = {
-          state: 'done',
+          state: 'done' as const,
           prompt: 'ship it',
           updatedAt: Date.now(),
           stateStartedAt: Date.now(),
-          agentType: 'codex',
+          agentType: 'codex' as const,
           paneKey,
           stateHistory: []
         }
@@ -257,7 +257,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
           prompt: 'first turn',
           updatedAt: firstDoneAt,
           stateStartedAt: firstDoneAt,
-          agentType: 'codex',
+          agentType: 'codex' as const,
           paneKey,
           stateHistory: [{ state: 'working', prompt: 'first turn', startedAt: firstDoneAt - 5_000 }]
         })
@@ -520,11 +520,11 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const pane = createPane(1)
         pane.terminal.modes.sendFocusMode = true
         const doneStatus = {
-          state: 'done',
+          state: 'done' as const,
           prompt: 'ship it',
           updatedAt: Date.now(),
           stateStartedAt: Date.now(),
-          agentType: 'codex',
+          agentType: 'codex' as const,
           paneKey,
           stateHistory: []
         }

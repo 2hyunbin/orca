@@ -76,7 +76,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },
@@ -164,7 +163,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },
@@ -176,6 +174,11 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
         projects: [
           {
             id: 'repo1',
+            displayName: 'repo1',
+            badgeColor: null,
+            sourceRepoIds: ['repo1'],
+            createdAt: 1,
+            updatedAt: 1,
             localWindowsRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
           }
         ],
@@ -259,7 +262,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
         '\\\\?\\C:\\Users\\Example\\.codex\\sessions\\2026\\07\\20\\rollout-codex-session-1.jsonl'
       // Why: after restart agentStatusByPaneKey is empty — the persisted sleeping record is the only provider session id source (#5232).
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },
@@ -358,7 +360,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },
@@ -420,7 +421,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       const legacyPaneKey = 'tab-1:2'
       const duplicateLegacyPaneKey = 'tab-1:3'
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },
@@ -511,7 +511,6 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       const firstLegacyPaneKey = 'tab-1:2'
       const secondLegacyPaneKey = 'tab-1:3'
       storeFixture.patch({
-        ...storeFixture.read(),
         tabsByWorktree: {
           'wt-1': [{ id: 'tab-1', ptyId: 'lost-pty' }]
         },

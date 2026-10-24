@@ -78,7 +78,6 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
         )
         transportFactoryQueue.push(transport)
         storeFixture.patch({
-          ...storeFixture.read(),
           agentStatusByPaneKey: {
             [paneKey]: {
               paneKey,
@@ -101,6 +100,7 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
         storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {
+          registeredAt: Date.now(),
           launchConfig: { agentArgs: '', agentEnv: {} },
           identity: { agentType: 'codex' }
         }

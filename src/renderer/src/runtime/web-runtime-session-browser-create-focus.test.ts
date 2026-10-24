@@ -239,16 +239,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...state.unifiedTabsByWorktree[WORKTREE_ID],
-          {
-            ...makeUnifiedTab({
-              id: 'other-editor-tab',
-              worktreeId: WORKTREE_ID,
-              groupId: 'group-1'
-            }),
+          makeUnifiedTab({
             id: 'other-editor-tab',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
             entityId: '/worktree/other.html',
             contentType: 'editor'
-          }
+          })
         ]
       }
     }
@@ -300,16 +297,13 @@ describe('createWebRuntimeSessionBrowserTab', () => {
       unifiedTabsByWorktree: {
         [WORKTREE_ID]: [
           ...state.unifiedTabsByWorktree[WORKTREE_ID],
-          {
-            ...makeUnifiedTab({
-              id: 'other-editor-tab',
-              worktreeId: WORKTREE_ID,
-              groupId: 'group-1'
-            }),
+          makeUnifiedTab({
             id: 'other-editor-tab',
+            worktreeId: WORKTREE_ID,
+            groupId: 'group-1',
             entityId: '/worktree/other.html',
             contentType: 'editor'
-          }
+          })
         ]
       }
     }
