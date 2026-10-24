@@ -383,8 +383,8 @@ test('moves projects through preview, blockers, progress and result', async ({},
     await expect(dialog).toBeVisible()
     await proof(page, testInfo, 'success')
     expect(await app.evaluate(() => globalThis.__wslMoveFake?.starts)).toEqual([
-      { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] },
-      { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] }
+      { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [], sleptPanes: [] },
+      { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [], sleptPanes: [] }
     ])
 
     // Reload goes through restart preparation and lands a fresh page.
