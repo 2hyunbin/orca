@@ -113,7 +113,7 @@ function answered(saved: Record<string, string>, marksDefaults: boolean) {
     applyStructuredAgentSessionModelCatalog(
       createStructuredAgentSessionOptionState('codex', CODEX_SESSION_OPTION_CATALOG),
       CODEX_SESSION_OPTION_CATALOG,
-      { origin: 'probe', models: MODELS },
+      { origin: 'probe', models: MODELS, fetchedAt: 1 },
       { newLaunch: false, coherentCatalog: true }
     ),
     CODEX_SESSION_OPTION_CATALOG,
