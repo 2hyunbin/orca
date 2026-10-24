@@ -21,11 +21,11 @@
       "type": "string",
       "enum": [
         "data",
-        "instructional",
+        "declarative",
         "sandboxed-ui",
         "trusted-worker"
       ],
-      "description": "Most authority the plugin needs, least first: `data` (themes, syntaxes, translations), `instructional` (commands, shortcuts, recipes, agents), `sandboxed-ui` (panels), `trusted-worker` (`main` and events). Contributions beyond it fail validation.",
+      "description": "Most authority the plugin needs, least first: `data` (themes, syntaxes, translations), `declarative` (commands, shortcuts, recipes, agents), `sandboxed-ui` (panels), `trusted-worker` (`main` and events). Contributions beyond it fail validation.",
       "x-orca-since": "1.4.241",
       "examples": [
         "data"
@@ -385,7 +385,7 @@
       }
     },
     "pluginApi": {
-      "description": "Major version of the plugin host API this plugin targets. Optional (defaults to 1), and refused on `data` and `instructional` plugins, which never call it.",
+      "description": "Major version of the plugin host API this plugin targets. Optional (defaults to 1), and refused on `data` and `declarative` plugins, which never call it.",
       "x-orca-since": "1.4.160",
       "type": "number",
       "const": 1
@@ -484,7 +484,7 @@
           "x-orca-since": "1.4.160",
           "x-orca-enum-since": {
             "global": "1.4.160",
-            "workspace": "1.4.233"
+            "workspace": "1.4.241"
           },
           "type": "string",
           "enum": [
@@ -543,7 +543,7 @@
         "title"
       ],
       "additionalProperties": false,
-      "description": "A command palette entry. Requires the `instructional` execution profile or higher."
+      "description": "A command palette entry. Requires the `declarative` execution profile or higher."
     },
     "EventContribution": {
       "type": "object",
@@ -558,8 +558,8 @@
           "description": "Event delivered to the plugin worker.",
           "x-orca-since": "1.4.160",
           "x-orca-enum-since": {
-            "workspace.created": "1.4.233",
-            "workspace.removed": "1.4.233",
+            "workspace.created": "1.4.241",
+            "workspace.removed": "1.4.241",
             "agent.status.changed": "1.4.160"
           }
         }
@@ -632,7 +632,7 @@
           "x-orca-since": "1.4.160",
           "x-orca-enum-since": {
             "global": "1.4.160",
-            "workspace": "1.4.233"
+            "workspace": "1.4.241"
           },
           "type": "string",
           "enum": [
@@ -850,11 +850,11 @@
           "x-orca-since": "1.4.160",
           "x-orca-enum-since": {
             "workspace:read": "1.4.160",
-            "agents:read": "1.4.233",
+            "agents:read": "1.4.241",
             "terminal:send": "1.4.160",
             "notifications:show": "1.4.160",
-            "storage:own": "1.4.233",
-            "secrets:own": "1.4.233",
+            "storage:own": "1.4.241",
+            "secrets:own": "1.4.241",
             "settings:own": "1.4.160"
           }
         }
