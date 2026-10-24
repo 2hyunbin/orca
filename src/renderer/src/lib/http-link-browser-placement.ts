@@ -99,7 +99,7 @@ export function prepareRemoteHttpLinkTab(
 }
 
 /** A link clicked in Agents View lands in the workspace's tab layout, so bring that layout on screen. */
-function showWorkspaceTabs(
+export function showWorkspaceTabs(
   state: Pick<HttpLinkBrowserTabState, 'activeView' | 'setActiveView'>,
   worktreeId: string
 ): void {

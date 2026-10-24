@@ -227,7 +227,11 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
             ? { expectedSshConnectionId: effectiveSourceOwner.connectionId }
             : {})
       }).then(
-        (pageId) => focusHttpLinkPage(fields.focusOnCreate === false ? null : (pageId ?? null)),
+        (pageId) => {
+          if (!opts.linkContext && fields.focusOnCreate !== false) {
+            focusHttpLinkPage(pageId ?? null)
+          }
+        },
         (error) => {
           toast.error(
             error instanceof Error

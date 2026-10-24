@@ -1,5 +1,7 @@
 import type * as BrowserFocusModule from '@/components/browser-pane/host-guest/browser-focus'
+import { requestBrowserFocus } from '@/components/browser-pane/host-guest/browser-focus'
 import type { BrowserSessionProfile } from '../../../shared/browser-workspace-types'
+import { getDefaultSettings } from '../../../shared/constants'
 import { SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import {
   BROWSER_SCREENCAST_RUNTIME_CAPABILITY,
@@ -11,6 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as SnapshotModule from './web-runtime-session-snapshot'
 import { useAppStore } from '../store'
 import { openWorkspaceBrowserTabForLink } from '../lib/workspace-browser-tab-open'
+import * as workspaceBrowserTabOpen from '../lib/workspace-browser-tab-open'
+import { openHttpLink } from '../lib/http-link-routing'
 import { captureLinkOpenIntent } from '../lib/link-open-intent'
 import { beginLinkOpenRequest } from '../lib/link-open-request'
 import { makeWorktree, TEST_REPO } from '../store/slices/worktrees-slice-test-fixtures'
@@ -61,8 +65,10 @@ beforeEach(() => {
     }
   })
   installRuntimeTransport()
+  vi.mocked(requestBrowserFocus).mockClear()
 })
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -84,6 +90,40 @@ function open(explicit = false) {
 }
 
 describe('runtime link opens through staging and materialization', () => {
+  it('does not request browser focus after a routed link completes with another pane focused', async () => {
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/home/test'), openLinksInApp: true }
+    })
+    const opening = vi.spyOn(workspaceBrowserTabOpen, 'openWorkspaceBrowserTabForLink')
+    openHttpLink('https://example.com/link', {
+      worktreeId: WT,
+      allowRemoteInApp: true,
+      sourceOwner: { kind: 'runtime', runtimeEnvironmentId: ENV },
+      linkContext: {
+        linkIntent: captureLinkOpenIntent(useAppStore.getState(), WT, SOURCE.unifiedTabId),
+        isCurrentRequest: beginLinkOpenRequest()
+      }
+    })
+    await vi.waitFor(() => expect(pendingCreates).toHaveLength(1))
+    const owner = captureWebSessionIntentOwner(ENV)
+    expect(peekWebSessionFocusIntent(owner, WT)).not.toBeNull()
+    useAppStore.getState().focusGroup(WT, G1)
+    expect(peekWebSessionFocusIntent(owner, WT)).toBeNull()
+    vi.mocked(requestBrowserFocus).mockClear()
+
+    pendingCreates[0]!.resolve('routed-host-page')
+    expect(await opening.mock.results[0]!.value).toMatchObject({ status: 'opened' })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const browser = wrapperForRemotePage('routed-host-page')!
+    expect(useAppStore.getState().activeGroupIdByWorktree[WT]).toBe(G1)
+    expect(
+      useAppStore.getState().groupsByWorktree[WT]?.find((group) => group.id === G2)?.activeTabId
+    ).toBe(browser.id)
+    expect(requestBrowserFocus).not.toHaveBeenCalled()
+  })
+
   it('stages in the adjacent group and returns the reconciled host page identity', async () => {
     const creating = open()
     expect(pendingCreates).toHaveLength(1)

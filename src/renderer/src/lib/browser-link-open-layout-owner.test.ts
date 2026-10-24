@@ -1,5 +1,6 @@
 import type * as BrowserFocusModule from '@/components/browser-pane/host-guest/browser-focus'
 import { requestBrowserFocus } from '@/components/browser-pane/host-guest/browser-focus'
+import { isBrowserPageMountAdmitted } from '@/components/browser-pane/host-guest/browser-page-mount-admission'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createStoreCascadesMockApi } from '@/store/slices/store-cascades-test-harness'
 import {
@@ -66,7 +67,7 @@ beforeEach(async () => {
 })
 afterEach(() => main.close())
 
-function open(surface: 'http' | 'html', explicit = true) {
+function open(surface: 'http' | 'html', explicit = true, background = false) {
   const linkContext = {
     linkIntent: captureLinkOpenIntent(store.getState(), WORKSPACE, 'source', {
       explicitSourceGroup: explicit
@@ -78,6 +79,7 @@ function open(surface: 'http' | 'html', explicit = true) {
       workspaceId: WORKSPACE,
       url: URL_TO_OPEN,
       intent: { kind: 'url' },
+      ...(background ? { focusOnCreate: false, selectWorktree: false } : {}),
       linkContext
     })
   }
@@ -89,6 +91,14 @@ function open(surface: 'http' | 'html', explicit = true) {
       onLinkOutcome: resolve
     })
   )
+}
+
+function pendingBrowserPageId(): string {
+  const pageId = layoutApplyTestTransport.sentOfType('openBrowserTab')[0]?.pageId
+  if (!pageId) {
+    throw new Error('Expected a pending browser page')
+  }
+  return pageId
 }
 
 it.each([
@@ -140,8 +150,24 @@ it.each([
   }
 )
 
+it('admits a background HTTP page only after main materializes it without activating it', async () => {
+  const opening = open('http', false, true)
+  const pageId = pendingBrowserPageId()
+  expect(isBrowserPageMountAdmitted(pageId)).toBe(false)
+
+  layoutApplyTestTransport.answerWith('apply')
+  layoutApplyTestTransport.answerPending()
+  await main.settle()
+
+  expect(await opening).toMatchObject({ status: 'opened' })
+  expect(isBrowserPageMountAdmitted(pageId)).toBe(true)
+  expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
+  expect(requestBrowserFocus).not.toHaveBeenCalled()
+})
+
 it('does not activate a link superseded while main was opening its tab', async () => {
   const opening = open('http')
+  const pageId = pendingBrowserPageId()
   beginLinkOpenRequest()
   layoutApplyTestTransport.answerWith('apply')
   layoutApplyTestTransport.answerPending()
@@ -156,11 +182,13 @@ it('does not activate a link superseded while main was opening its tab', async (
   ).toBe(false)
   expect(store.getState().recentlyClosedBrowserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
   expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
+  expect(isBrowserPageMountAdmitted(pageId)).toBe(false)
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })
 
 it('does not activate a link whose owner changed while main was opening its tab', async () => {
   const opening = open('http')
+  const pageId = pendingBrowserPageId()
   store.setState((state) => ({
     worktreesByRepo: {
       repo1: state.worktreesByRepo.repo1!.map((worktree) => ({
@@ -182,16 +210,19 @@ it('does not activate a link whose owner changed while main was opening its tab'
   ).toBe(false)
   expect(store.getState().recentlyClosedBrowserTabsByWorktree[WORKSPACE] ?? []).toEqual([])
   expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
+  expect(isBrowserPageMountAdmitted(pageId)).toBe(false)
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })
 
 it('reports failure when main refuses the browser creation', async () => {
   const opening = open('http')
+  const pageId = pendingBrowserPageId()
   layoutApplyTestTransport.answerWith({ refuse: 'workspace_not_found' })
   layoutApplyTestTransport.answerPending()
   await main.settle()
 
   expect(await opening).toEqual({ status: 'failed' })
   expect(store.getState().browserPagesByWorkspace).toEqual({})
+  expect(isBrowserPageMountAdmitted(pageId)).toBe(false)
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })

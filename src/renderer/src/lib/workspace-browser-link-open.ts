@@ -20,6 +20,7 @@ import {
 } from './worktree-operation-route'
 import { getClientCreationActionPolicy } from './client-creation-action-policy'
 import { selectWorkspaceSurface } from './workspace-surface-reveal'
+import { showWorkspaceTabs } from './http-link-browser-placement'
 
 function ownsBrowserRoute(
   state: AppState,
@@ -69,7 +70,11 @@ export async function openClientWorkspaceBrowserLink(
     url: request.url,
     options: { title, activate: request.focusOnCreate !== false },
     ownsRoute: (state) => ownsBrowserRoute(state, request, destination),
-    reveal: () => selectWorkspaceSurface(useAppStore.getState(), request.workspaceId)
+    reveal: () => {
+      const state = useAppStore.getState()
+      selectWorkspaceSurface(state, request.workspaceId)
+      showWorkspaceTabs(state, request.workspaceId)
+    }
   })
 }
 
@@ -102,6 +107,7 @@ export function prepareRuntimeBrowserLink(
       return { status: 'opened', result }
     }
     selectWorkspaceSurface(state, request.workspaceId)
+    showWorkspaceTabs(state, request.workspaceId)
     if (!currentBrowserLinkMatch(useAppStore.getState(), destination, result)) {
       return { status: 'refused' }
     }

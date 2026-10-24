@@ -1,4 +1,5 @@
 import { focusOpenedBrowserLink } from './browser-link-focus'
+import { releaseBrowserPageMount } from '@/components/browser-pane/host-guest/browser-page-mount-admission'
 import { createBrowserLinkHostMatcher } from './browser-link-owner'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -78,6 +79,7 @@ export async function openLocalBrowserLink(params: {
     }
   }
   let createdTabId: string | undefined
+  let createdPageId: string | undefined
   let retainCreatedTab = false
   try {
     validate(state)
@@ -106,6 +108,7 @@ export async function openLocalBrowserLink(params: {
         validateLinkPlacement: validate
       })
       createdTabId = created.id
+      createdPageId = created.activePageId ?? undefined
       if (hasPendingEntityTab(destination.worktreeId, created.id)) {
         await new Promise<void>((resolve) =>
           afterPendingEntityTabs(destination.worktreeId, created.id, resolve)
@@ -169,6 +172,9 @@ export async function openLocalBrowserLink(params: {
     return { status: 'failed' }
   } finally {
     if (createdTabId && !retainCreatedTab) {
+      if (createdPageId) {
+        releaseBrowserPageMount(createdPageId)
+      }
       useAppStore.getState().closeBrowserTab(createdTabId, { reason: 'cleanup' })
     }
   }

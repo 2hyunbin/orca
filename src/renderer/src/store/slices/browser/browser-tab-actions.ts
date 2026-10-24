@@ -84,6 +84,16 @@ export function createBrowserTabActions(
         sessionPartition
       )
 
+      const admitLinkPageMount = (): void => {
+        if (
+          options?.validateLinkPlacement &&
+          !options.browserRuntimeEnvironmentId &&
+          !options.docLocation
+        ) {
+          admitBrowserPageMount(page.id)
+        }
+      }
+
       const drawHere = (): void => {
         set((s) => {
           options?.validateLinkPlacement?.(s)
@@ -132,13 +142,7 @@ export function createBrowserTabActions(
             get().focusGroup(worktreeId, created.groupId)
           }
         }
-        if (
-          options?.validateLinkPlacement &&
-          !options.browserRuntimeEnvironmentId &&
-          !options.docLocation
-        ) {
-          admitBrowserPageMount(page.id)
-        }
+        admitLinkPageMount()
       }
       // Switch point: main opens the tab under these ids and its frame draws it.
       if (
@@ -148,7 +152,10 @@ export function createBrowserTabActions(
           browserTab,
           page,
           options,
-          showView: () => set((s) => browserTabOpenView(s, worktreeId, browserTab, page, options)),
+          showView: () => {
+            set((s) => browserTabOpenView(s, worktreeId, browserTab, page, options))
+            admitLinkPageMount()
+          },
           drawHere
         })
       ) {
