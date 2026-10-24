@@ -2,9 +2,9 @@ import type { ComponentType } from 'react'
 import { ArrowLeft, Download, FolderOpen, Plus } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
-import { Button } from '../ui/button'
-import { Input } from '../ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
+import { Button } from '../../../ui/button'
+import { Input } from '../../../ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select'
 
 export function HostSetupStartActions({
   pathActionsDisabled,

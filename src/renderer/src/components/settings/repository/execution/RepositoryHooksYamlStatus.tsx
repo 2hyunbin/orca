@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react'
-import type { OrcaHooks } from '../../../../shared/orca-yaml-hook-types'
-import { Button } from '../ui/button'
+import type { OrcaHooks } from '../../../../../../shared/orca-yaml-hook-types'
+import { Button } from '../../../ui/button'
 import { translate } from '@/i18n/i18n'
 import { renderYamlScriptPreview } from './repository-hook-settings-draft'
 

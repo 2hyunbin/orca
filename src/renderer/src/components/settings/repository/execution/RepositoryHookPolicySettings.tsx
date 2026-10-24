@@ -4,11 +4,11 @@ import type {
   OrcaHooks,
   SetupAgentStartupPolicy,
   SetupRunPolicy
-} from '../../../../shared/orca-yaml-hook-types'
+} from '../../../../../../shared/orca-yaml-hook-types'
 import { Trans } from 'react-i18next'
 import { i18n, translate } from '@/i18n/i18n'
-import { matchesSettingsSearch } from './settings-search'
-import { SettingsSwitch } from './SettingsFormControls'
+import { matchesSettingsSearch } from '../../settings-search'
+import { SettingsSwitch } from '../../SettingsFormControls'
 import { RepositoryHooksYamlStatus } from './RepositoryHooksYamlStatus'
 
 type PolicyOption<Policy> = { policy: Policy; label: string; description: string }

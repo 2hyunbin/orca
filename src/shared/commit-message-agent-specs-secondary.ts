@@ -83,16 +83,11 @@ export function buildSecondaryCommitMessageAgentSpecs({
       binary: 'kimi',
       // kimi-code requires --prompt/-p text on argv; Claude-style --print is rejected (#11669).
       promptDelivery: 'argv',
-      buildArgs: ({ prompt, model, thinkingLevel }) => [
+      // Why: Kimi Code has no --quiet/--thinking/--no-thinking; -p alone is headless (#14771).
+      buildArgs: ({ prompt, model }) => [
         '--prompt',
         prompt,
-        '--quiet',
-        ...(model && model !== 'default' ? ['--model', model] : []),
-        ...(thinkingLevel === 'on'
-          ? ['--thinking']
-          : thinkingLevel === 'off'
-            ? ['--no-thinking']
-            : [])
+        ...(model && model !== 'default' ? ['--model', model] : [])
       ],
       modelSource: 'static',
       models: [
@@ -100,12 +95,7 @@ export function buildSecondaryCommitMessageAgentSpecs({
         {
           // Kimi requires provider/model IDs; bare names fail with LLM not set.
           id: 'kimi-code/kimi-for-coding',
-          label: 'Kimi K2.6',
-          thinkingLevels: [
-            { id: 'on', label: 'On' },
-            { id: 'off', label: 'Off' }
-          ],
-          defaultThinkingLevel: 'on'
+          label: 'Kimi K2.6'
         }
       ],
       defaultModelId: 'default'

@@ -3,10 +3,10 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { toSshExecutionHostId } from '../../../../shared/execution-host'
-import type { ProjectHostSetup } from '../../../../shared/project-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { useAppStore } from '../../store'
+import { toSshExecutionHostId } from '../../../../../../shared/execution-host'
+import type { ProjectHostSetup } from '../../../../../../shared/project-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { useAppStore } from '../../../../store/index'
 import { RepositoryHostSetupsSection } from './RepositoryHostSetupsSection'
 
 let container: HTMLDivElement
