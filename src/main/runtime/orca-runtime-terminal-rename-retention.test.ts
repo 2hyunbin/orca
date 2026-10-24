@@ -375,6 +375,7 @@ describe('replayed recorded PTY titles', () => {
             agentType: 'codex',
             connectionId: null,
             receivedAt: hookTime,
+            stateStartedAt: hookTime,
             evidenceObservedAt: hookTime,
             providerSession
           }
@@ -451,6 +452,7 @@ describe('title evidence received before terminal spawn resolves', () => {
               agentType: 'codex',
               connectionId: null,
               receivedAt: hookTime,
+              stateStartedAt: hookTime,
               evidenceObservedAt: hookTime,
               providerSession
             }

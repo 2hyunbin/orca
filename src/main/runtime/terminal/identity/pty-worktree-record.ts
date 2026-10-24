@@ -254,24 +254,6 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
     return pty
   }
 
-  /** Spawn completion must not give a launch label newer authority than titles received in flight. */
-  protected seedPtyLaunchTitle(
-    pty: RuntimePtyWorktreeRecord,
-    title: string | null | undefined,
-    observedAt: number,
-    observedAtEpochMs: number
-  ): void {
-    if (Math.max(pty.titleUpdatedAt ?? 0, pty.lastOscTitleAt ?? 0) > observedAt) {
-      return
-    }
-    pty.title = title || null
-    pty.titleUpdatedAt = title ? observedAt : null
-    pty.titleObservedAtEpochMs = title ? observedAtEpochMs : null
-    if (title) {
-      this.setPtyManagementTitleFromObservedTitle(pty, title, observedAt)
-    }
-  }
-
   protected makeRuntimePaneKey(
     leaf: Pick<RuntimeSyncedLeaf, 'tabId' | 'leafId' | 'paneRuntimeId'>
   ): string {
