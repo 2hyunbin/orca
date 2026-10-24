@@ -39,10 +39,11 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
     if (!isValidHostTerminalTabId(move.targetTabId) || !isTerminalLeafMoveRequest(move)) {
       return { status: 'refused', reason: 'invalid_request' }
     }
-    // The order the user sees; a rebuild after the commit puts terminals ahead of editors and pages.
-    const groupsBefore = this.mobileSessionTabsByWorktree.get(worktreeId)?.tabGroups ?? []
     const result = await commit(move)
     if (result.status === 'moved') {
+      // The order the user sees now, with any reorder made meanwhile; the rebuild below puts
+      // terminals ahead of editors and pages.
+      const groupsBefore = this.mobileSessionTabsByWorktree.get(worktreeId)?.tabGroups ?? []
       // The live PTY follows its pane, or tab-scoped reads and actions still find it in the source.
       const pty = result.ptyId ? this.ptysById.get(result.ptyId) : undefined
       if (pty) {

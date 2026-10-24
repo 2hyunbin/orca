@@ -176,6 +176,28 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
       'late-tab'
     ])
   })
+  it('keeps a reorder another client made while the move committed', async () => {
+    let reorder: () => Promise<unknown> = async () => {}
+    const { runtime, move } = await setup(undefined, (session) => {
+      void reorder()
+      return session
+    })
+    const worktree = `id:${TEST_WORKTREE_ID}`
+    const listed = async () => (await runtime.listMobileSessionTabs(worktree)).tabGroups?.[0]
+    const group = (await listed())!
+    expect(group.tabOrder).toEqual(['host-tab', 'other-tab'])
+    reorder = async () => {
+      reorder = async () => {}
+      await runtime.moveMobileSessionTab(worktree, {
+        kind: 'reorder',
+        tabId: 'other-tab',
+        targetGroupId: group.id,
+        tabOrder: ['other-tab', 'host-tab']
+      })
+    }
+    await move('host-new-tab', { targetGroupId: group.id, index: 0 })
+    expect((await listed())?.tabOrder).toEqual(['host-new-tab', 'other-tab', 'host-tab'])
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()
