@@ -1,4 +1,4 @@
-import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime-tailscale-hint'
+import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime/remote-runtime-tailscale-hint'
 import { classifyRuntimeEnvironmentHost } from '../../../shared/runtime-environment-host-kind'
 import type { KnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 
