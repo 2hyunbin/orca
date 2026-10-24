@@ -89,7 +89,7 @@ describe('shutdownWorktreeTerminals (sleep) — agent status hygiene', () => {
       lastTerminalInputAtByPaneKey: { [targetPaneKey]: 1000, [siblingPaneKey]: 1100 },
       pendingIssueCommandSplitByTabId: { 'tab-1': { command: 'issue' } }
     })
-    applyAgentStatusPatch(store, { dropAgentStatusByWorktree: dropByWorktree as never })
+    applyAgentStatusPatch(store, { dropAgentStatusByWorktree: dropByWorktree })
     store.getState().setAgentStatus(
       targetPaneKey,
       {

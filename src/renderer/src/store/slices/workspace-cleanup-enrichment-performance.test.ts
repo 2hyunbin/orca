@@ -1,5 +1,4 @@
 import type { AppState } from '@/store/types'
-import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type {
@@ -173,7 +172,7 @@ describe('workspace cleanup enrichment performance', () => {
       {
         [alphaWorking.paneKey]: alphaWorking,
         [betaDone.paneKey]: betaDone
-      } as AgentStatusReadState['agentStatusByPaneKey'],
+      },
       () => {
         counts.agentStatuses += 1
       }

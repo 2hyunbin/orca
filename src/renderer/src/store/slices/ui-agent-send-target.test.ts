@@ -1,3 +1,6 @@
+import type { AppState } from '@/store/types'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { StoreApi } from 'zustand/vanilla'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -108,11 +111,8 @@ function makeTerminalTab(id: string, worktreeId: string): TerminalTab {
   }
 }
 
-// Why: send targets list structured chats from the tabs slice, which the UI harness omits.
-function createAgentSendStore(): StoreApi<AgentStatusReadState> {
-  const store = createUIStore()
-  store.setState({ unifiedTabsByWorktree: {} })
-  return store
+function createAgentSendStore(): StoreApi<AppState> {
+  return createUIStore()
 }
 
 function deferred<T>() {
@@ -131,9 +131,9 @@ describe('createUISlice agent send target mode', () => {
   const readyPaneKey = makePaneKey(tabId, readyLeafId)
   const workingPaneKey = makePaneKey(tabId, workingLeafId)
 
-  function seedAgentSendState(store: StoreApi<AgentStatusReadState>): void {
+  function seedAgentSendState(store: StoreApi<AppState>): void {
     const now = Date.now()
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: {
         [worktreeId]: [
           {
@@ -237,8 +237,8 @@ describe('createUISlice agent send target mode', () => {
   it('disables sidebar target rows that need permission', async () => {
     const store = createAgentSendStore()
     seedAgentSendState(store)
-    const agentStatusByPaneKey = store.getState().agentStatusByPaneKey
-    store.setState({
+    const agentStatusByPaneKey = getAgentStatusOwner(store).getSnapshot()
+    applyAgentStatusPatch(store, {
       agentStatusByPaneKey: {
         ...agentStatusByPaneKey,
         [workingPaneKey]: {
@@ -274,7 +274,7 @@ describe('createUISlice agent send target mode', () => {
   it('does not reveal the sidebar when the current workspace has no eligible targets', () => {
     const store = createAgentSendStore()
     seedAgentSendState(store)
-    store.setState({
+    applyAgentStatusPatch(store, {
       terminalLayoutsByTabId: {
         [tabId]: {
           root: {
@@ -357,10 +357,10 @@ describe('createUISlice agent send target mode', () => {
   const chatPaneKey = structuredAgentSessionPaneKey(chatTabId, 'claude_1')
 
   function seedChatState(
-    store: StoreApi<AgentStatusReadState>,
+    store: StoreApi<AppState>,
     agentStatusByPaneKey: AgentStatusReadState['agentStatusByPaneKey']
   ): void {
-    store.setState({
+    applyAgentStatusPatch(store, {
       agentStatusByPaneKey,
       tabsByWorktree: {},
       terminalLayoutsByTabId: {},
@@ -695,7 +695,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
     const dismiss = vi.fn().mockResolvedValue({ dismissed: 0 })
     vi.stubGlobal('window', { api: { notifications: { dismiss } } })
     const store = createAgentSendStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: {
         'wt-live': [makeTerminalTab(tabId, 'wt-live')]
       },
@@ -748,7 +748,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
     vi.stubGlobal('window', { api: { notifications: { dismiss } } })
     const store = createAgentSendStore()
     const fallbackPaneKey = makePaneKey('tab-fallback', '44444444-4444-4444-8444-444444444444')
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: {},
       agentStatusByPaneKey: {
         [fallbackPaneKey]: {
@@ -778,7 +778,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
     const dismiss = vi.fn().mockResolvedValue({ dismissed: 0 })
     vi.stubGlobal('window', { api: { notifications: { dismiss } } })
     const store = createAgentSendStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: {
         'wt-live': [makeTerminalTab(tabId, 'wt-live')]
       },
@@ -815,15 +815,25 @@ describe('openDiffNotesSendMenuForActiveWorktree', () => {
   function stubDiffNotesStore(
     comments: { sentAt?: number }[],
     activeWorktreeId: string | null = 'wt-1'
-  ): { store: StoreApi<AgentStatusReadState>; setRightSidebarTab: ReturnType<typeof vi.fn> } {
+  ): { store: StoreApi<AppState>; setRightSidebarTab: ReturnType<typeof vi.fn> } {
     const store = createAgentSendStore()
     const setRightSidebarTab = vi.fn()
-    store.setState({
+    applyAgentStatusPatch(store, {
       activeWorktreeId,
-      getDiffComments: () => comments,
+      getDiffComments: () =>
+        comments.map((comment, index) => ({
+          id: `comment-${index}`,
+          worktreeId: activeWorktreeId ?? 'wt-1',
+          filePath: '/repo/file.ts',
+          lineNumber: 1,
+          body: 'review note',
+          createdAt: 1,
+          side: 'modified',
+          ...comment
+        })),
       setRightSidebarTab,
       setRightSidebarOpen: vi.fn()
-    } as unknown)
+    })
     return { store, setRightSidebarTab }
   }
 

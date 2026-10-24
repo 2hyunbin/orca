@@ -34,10 +34,11 @@ function seedWorkspace(store: ReturnType<typeof createTestStore>): void {
     },
     ptyIdsByTabId: { 'tab-1': ['pty-1'] },
     settings: {
+      ...store.getState().settings,
       experimentalAgentHibernation: true,
       agentHibernationIdleMs: DEFAULT_AGENT_HIBERNATION_IDLE_MS
     }
-  } as unknown)
+  })
 }
 
 function planFrom(state: AgentStatusReadState, ptyBindingFirstSeenAt: number): string[] {

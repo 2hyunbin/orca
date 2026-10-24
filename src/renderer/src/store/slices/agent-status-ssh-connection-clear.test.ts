@@ -2,7 +2,7 @@ import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createTestStore } from './store-test-helpers'
+import { createTestStore, makeWorktree } from './store-test-helpers'
 
 describe('agent status cleanup for a lost SSH connection', () => {
   afterEach(() => {
@@ -111,10 +111,10 @@ describe('agent status cleanup for a lost SSH connection', () => {
         }
       ],
       worktreesByRepo: {
-        'repo-a': [{ id: 'wt-a', repoId: 'repo-a' }],
-        'repo-b': [{ id: 'wt-b', repoId: 'repo-b' }]
+        'repo-a': [makeWorktree({ id: 'wt-a', repoId: 'repo-a' })],
+        'repo-b': [makeWorktree({ id: 'wt-b', repoId: 'repo-b' })]
       }
-    } as unknown)
+    })
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const freshOrphanA = 'tab-a2:22222222-2222-4222-8222-222222222222'
@@ -183,11 +183,11 @@ describe('agent status cleanup for a lost SSH connection', () => {
       ],
       worktreesByRepo: {
         shared: [
-          { id: 'wt-a', repoId: 'shared', hostId: 'ssh:ssh-a' },
-          { id: 'wt-b', repoId: 'shared', hostId: 'ssh:ssh-b' }
+          makeWorktree({ id: 'wt-a', repoId: 'shared', hostId: 'ssh:ssh-a' }),
+          makeWorktree({ id: 'wt-b', repoId: 'shared', hostId: 'ssh:ssh-b' })
         ]
       }
-    } as unknown)
+    })
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const liveB = 'tab-b:22222222-2222-4222-8222-222222222222'
@@ -243,11 +243,11 @@ describe('agent status cleanup for a lost SSH connection', () => {
       ],
       worktreesByRepo: {
         shared: [
-          { id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-a' },
-          { id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-b' }
+          makeWorktree({ id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-a' }),
+          makeWorktree({ id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-b' })
         ]
       }
-    } as unknown)
+    })
 
     const liveOnB = 'tab-b:11111111-1111-4111-8111-111111111111'
     const collidedOrphan = 'tab-x:22222222-2222-4222-8222-222222222222'

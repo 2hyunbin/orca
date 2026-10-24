@@ -473,7 +473,7 @@ describe('sync key transitions', () => {
     const workspaces = [makeBrowserWorkspace(0)] as never
     const status = {
       'tab-0:leaf-0': makeAgentStatusEntry({ paneKey: 'tab-0:leaf-0' })
-    } as AgentStatusReadState['agentStatusByPaneKey']
+    }
 
     const base = makeState({
       editorDrafts: drafts,

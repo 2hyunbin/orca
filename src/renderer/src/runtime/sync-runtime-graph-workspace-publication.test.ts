@@ -1,3 +1,4 @@
+import { makeWorktree } from '@/store/slices/store-test-helpers'
 import type { AppState } from '@/store/types'
 
 import { describe, expect, it } from 'vitest'
@@ -54,15 +55,15 @@ describe('buildMobileSessionTabSnapshots', () => {
   })
 
   it('publishes a new instance identity when unchanged content is recreated', () => {
-    const worktree = {
+    const worktree = makeWorktree({
       id: 'wt-1',
       instanceId: 'old-instance',
       repoId: 'repo-1'
-    }
+    })
     const base = makeState({
       worktreesByRepo: {
         'repo-1': [worktree]
-      } as unknown as AppState['worktreesByRepo'],
+      },
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1' }]
       } as unknown as AppState['tabsByWorktree']
@@ -72,7 +73,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       ...base,
       worktreesByRepo: {
         'repo-1': [{ ...worktree, instanceId: 'new-instance' }]
-      } as unknown as AppState['worktreesByRepo']
+      }
     }
 
     const next = buildMobileSessionTabSnapshots(recreated)[0]!
@@ -94,7 +95,7 @@ describe('buildMobileSessionTabSnapshots', () => {
             instanceId: 'ssh-instance'
           }
         ]
-      } as unknown as AppState['worktreesByRepo'],
+      },
       tabsByWorktree: {
         'wt-duplicate': [{ id: 'term-1', title: 'Terminal 1' }]
       } as unknown as AppState['tabsByWorktree']
