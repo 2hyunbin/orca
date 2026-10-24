@@ -20,14 +20,19 @@ describe('findUncollectedTestFiles', () => {
     ])
   })
 
-  it('counts a suite module as collected only while a collected entry imports it', () => {
+  it('counts a suite module as collected only while a collected entry runtime-imports it', () => {
     const sources = new Map([
       ['src/page.test.ts', "import './page.case.spec'\n"],
       ['src/page.case.spec.ts', `import './page-harness.spec'\n${SUITE}`],
       ['src/page-harness.spec.ts', 'export const harness = {}\n'],
-      ['src/page.dropped.spec.ts', `import './page-harness.spec'\n${SUITE}`]
+      ['src/page.dropped.spec.ts', `import './page-harness.spec'\n${SUITE}`],
+      ['src/types.test.ts', "import type {\n  Shape\n} from './page.typed.spec'\n"],
+      ['src/page.typed.spec.ts', `export type Shape = 1\n${SUITE}`]
     ])
-    expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual(['src/page.dropped.spec.ts'])
+    expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
+      'src/page.dropped.spec.ts',
+      'src/page.typed.spec.ts'
+    ])
   })
 })
 

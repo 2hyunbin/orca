@@ -94,6 +94,7 @@ export const TEST_RUNNERS = [
 const CODE_FILE = /\.[cm]?[jt]sx?$/
 const TEST_NAME = /\.(?:test|spec|e2e|bench)\.[cm]?[jt]sx?$/
 const TEST_FRAMEWORK_IMPORT = /\bfrom\s+['"](?:vitest|node:test|@playwright\/test|bun:test)['"]/
+const TYPE_ONLY_IMPORT = /^\s*(?:import|export)\s+type\s[^'"]*?\sfrom\s*['"][^'"]+['"]/gm
 const TEST_REGISTRATION =
   /^\s*(?:describe|it|test|suite|bench)(?:\.\w+)*(?:\([^)]*\))?\s*\(\s*[`'"]/m
 
@@ -133,7 +134,11 @@ export function findUncollectedTestFiles(sources, runners) {
   if (candidates.length === 0) {
     return []
   }
-  const { reverse } = buildUnitDependencyGraph(sources)
+  // Why strip: type-only imports are erased, so they never run the imported module's suites.
+  const runtimeSources = new Map(
+    [...sources].map(([file, source]) => [file, source.replace(TYPE_ONLY_IMPORT, '')])
+  )
+  const { reverse } = buildUnitDependencyGraph(runtimeSources)
   return candidates.filter(
     (file) => ![...unitConsumers([file], reverse)].some((consumer) => selected.has(consumer))
   )
