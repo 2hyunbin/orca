@@ -8,7 +8,6 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import ts from 'typescript-api'
 import { defaultExclude } from 'vitest/config'
-import { buildUnitDependencyGraph, unitConsumers } from './ci-unit-dependency-graph.mjs'
 import { UNIT_EXCLUDE, UNIT_INCLUDE } from './ci-unit-files.mjs'
 
 const VITEST_DEFAULT_INCLUDE = '**/*.{test,spec}.?(c|m)[jt]s?(x)'
@@ -210,23 +209,60 @@ function collects({ include, within = include, exclude = [] }, file) {
   return include.some(matches) && within.some(matches) && !exclude.some(matches)
 }
 
+// Vite's default resolve.extensions, in its order; the unit config's aliases.
+const RESOLVE_EXTENSIONS = ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json']
+const TS_SOURCE_TWINS = {
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts']
+}
+const IMPORT_ALIASES = [
+  ['@renderer/', 'src/renderer/src/'],
+  ['@/', 'src/renderer/src/']
+]
+
+// Why not ci-unit-dependency-graph: it keeps every plausible candidate, which cannot prove a run.
+export function resolveRuntimeImport(importer, specifier, files) {
+  const alias = IMPORT_ALIASES.find(([prefix]) => specifier.startsWith(prefix))
+  const base = alias
+    ? alias[1] + specifier.slice(alias[0].length)
+    : specifier.startsWith('.')
+      ? path.posix.join(path.posix.dirname(importer), specifier)
+      : null
+  if (base === null) {
+    return null
+  }
+  const extension = path.posix.extname(base)
+  const stem = base.slice(0, base.length - extension.length)
+  const candidates = [
+    base,
+    ...(TS_SOURCE_TWINS[extension] ?? []).map((twin) => stem + twin),
+    ...RESOLVE_EXTENSIONS.map((suffix) => base + suffix),
+    ...RESOLVE_EXTENSIONS.map((suffix) => `${base}/index${suffix}`)
+  ]
+  return candidates.find((candidate) => files.has(candidate)) ?? null
+}
+
+function runtimeImports(file, source, files) {
+  return ts
+    .preProcessFile(withoutTypeOnlyImports(file, source), true, true)
+    .importedFiles.map(({ fileName }) => resolveRuntimeImport(file, fileName, files))
+    .filter((resolved) => resolved !== null)
+}
+
 // A suite module (e.g. `Foo.case.spec.tsx`) is collected when a selected entry file imports it.
 export function findUncollectedTestFiles(sources, runners) {
-  const files = [...sources.keys()]
-  const selected = new Set(files.filter((file) => runners.some((runner) => collects(runner, file))))
-  const candidates = files.filter(
-    (file) => !selected.has(file) && isTestLike(file, sources.get(file))
+  const files = new Set(sources.keys())
+  const collected = new Set(
+    [...files].filter((file) => runners.some((runner) => collects(runner, file)))
   )
-  if (candidates.length === 0) {
-    return []
+  for (const file of collected) {
+    for (const imported of runtimeImports(file, sources.get(file), files)) {
+      collected.add(imported)
+    }
   }
-  const runtimeSources = new Map(
-    [...sources].map(([file, source]) => [file, withoutTypeOnlyImports(file, source)])
-  )
-  const { reverse } = buildUnitDependencyGraph(runtimeSources)
-  return candidates.filter(
-    (file) => ![...unitConsumers([file], reverse)].some((consumer) => selected.has(consumer))
-  )
+  return [...files].filter((file) => !collected.has(file) && isTestLike(file, sources.get(file)))
 }
 
 function trackedCodeSources(root) {

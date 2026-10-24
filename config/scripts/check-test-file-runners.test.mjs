@@ -29,7 +29,9 @@ describe('findUncollectedTestFiles', () => {
 
   it('counts a suite module as collected only while a collected entry runtime-imports it', () => {
     const sources = new Map([
-      ['src/page.test.ts', "import './page.case.spec'\n"],
+      ['src/page.test.ts', "import './page.case.spec'\nimport './twin.spec'\n"],
+      ['src/twin.spec.ts', SUITE],
+      ['src/twin.spec.tsx', SUITE],
       ['src/page.case.spec.ts', `import './page-harness.spec'\n${SUITE}`],
       ['src/page-harness.spec.ts', 'export const harness = {}\n'],
       ['src/page.dropped.spec.ts', `import './page-harness.spec'\n${SUITE}`],
@@ -51,6 +53,7 @@ describe('findUncollectedTestFiles', () => {
       ['src/type-query.spec.ts', SUITE]
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
+      'src/twin.spec.tsx',
       'src/page.dropped.spec.ts',
       'src/typed-import.spec.ts',
       'src/inline-type.spec.ts',
