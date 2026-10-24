@@ -7,9 +7,9 @@ import {
   dataFile,
   makeRepo,
   testState
-} from './persistence-test-harness'
+} from '../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { createProfileStateStore } from './persistence/profile-state/profile-state-store-factory'
+import { createProfileStateStore } from './profile-state/profile-state-store-factory'
 import type * as FsModule from 'node:fs'
 import {
   existsSync,
@@ -22,9 +22,9 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../shared/constants'
-import type { PersistedState } from '../shared/persisted-state-types'
-import type { Store as PersistenceStore } from './persistence/loading-store/store'
+import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
+import type { PersistedState } from '../../shared/persisted-state-types'
+import type { Store as PersistenceStore } from './loading-store/store'
 
 const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
   trackMock: vi.fn(),
@@ -46,9 +46,9 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: trackMock }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../telemetry/client', () => ({ track: trackMock }))
+vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(() => ({ hosts: [] })),
   sshConfigHostsToTargets: vi.fn(() => [])
 }))
@@ -231,9 +231,9 @@ describe('loading Store extraction seams', () => {
 
   it('keeps the last constructed Store as the global pane-migration listener owner', async () => {
     const first = await createStore()
-    const { Store } = await import('./persistence/loading-store/store')
+    const { Store } = await import('./loading-store/store')
     const { setMigrationUnsupportedPty } =
-      await import('./agent-hooks/migration-unsupported-pty-state')
+      await import('../agent-hooks/migration-unsupported-pty-state')
     const secondDataFile = join(testState.dir, 'second-profile', 'orca-data.json')
     const second = createSqliteTestStore(Store, { dataFile: secondDataFile })
 
@@ -291,7 +291,7 @@ describe('loading Store extraction seams', () => {
 
   it('keeps delegated operations on the Store prototype with native receiver and override semantics', async () => {
     const store = await createStore()
-    const { Store } = await import('./persistence/loading-store/store')
+    const { Store } = await import('./loading-store/store')
     const descriptor = Object.getOwnPropertyDescriptor(Store.prototype, 'getRepoCount')
 
     expect(descriptor).toMatchObject({

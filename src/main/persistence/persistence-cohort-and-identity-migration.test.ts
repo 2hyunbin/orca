@@ -5,26 +5,26 @@ import {
   dataFile,
   writeDataFile,
   makeRepo,
-  makeTerminalTab,
   makeWorktreeLineage,
   makeWorkspaceLineage
-} from './persistence-test-harness'
+} from '../persistence-test-harness'
+import { makeTerminalTab } from '../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { createProfileStateStore } from './persistence/profile-state/profile-state-store-factory'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../shared/workspace-scope'
+import { createProfileStateStore } from './profile-state/profile-state-store-factory'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -50,11 +50,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

@@ -1,13 +1,13 @@
-import { closeTestStores, createStore, makeRepo, testState } from './persistence-test-harness'
+import { closeTestStores, createStore, makeRepo, testState } from '../persistence-test-harness'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import type { BrowserPage, BrowserWorkspace } from '../shared/browser-workspace-types'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import type { BrowserPage, BrowserWorkspace } from '../../shared/browser-workspace-types'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -15,8 +15,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: { isEncryptionAvailable: () => false }
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
+vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn().mockReturnValue({}) }))
 
 const HOST = 'runtime:paired-host'
 const REPO = 'remote-repo'

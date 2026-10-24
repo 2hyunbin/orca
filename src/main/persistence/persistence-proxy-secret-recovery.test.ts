@@ -2,18 +2,18 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from './persistence-test-harness'
+} from '../persistence-test-harness'
 // Keep undecryptable proxy secrets sealed and unapplied; preserve plaintext upgrades and unrelated saves (STA-3442).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { existsSync, mkdirSync, rmSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
-import { installFakeAppEnvironment } from '../../config/scripts/vitest-host-ports-setup'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 
 const testState = { dir: '' }
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
@@ -31,16 +31,16 @@ vi.mock('electron', () => ({
   session: { defaultSession: undefined }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../telemetry/client', () => ({
   track: vi.fn()
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: vi.fn().mockReturnValue({ nth_repo_added: 2 })
 }))
 
 async function createStore() {
-  const { setSecretStore } = await import('../shared/secret-store')
+  const { setSecretStore } = await import('../../shared/secret-store')
   setSecretStore({
     isEncryptionAvailable: () => {
       if (cipherState.availabilityThrows) {
@@ -61,7 +61,8 @@ async function createStore() {
     },
     describeProtectionGap: () => null
   })
-  const { Store, initDataPath } = await import('./persistence')
+  const { Store } = await import('./loading-store/store')
+  const { initDataPath } = await import('./loading-store/user-data-path')
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
@@ -115,7 +116,7 @@ describe('httpProxyUrl secret recovery (STA-3442)', () => {
     expect(reloaded.getSettings().httpProxyBypassRules).toBe(BYPASS_RULES)
 
     const { applyElectronProxySettings, resetProxyApplicationForTests } =
-      await import('./network/proxy-settings')
+      await import('../network/proxy-settings')
     resetProxyApplicationForTests()
     const setProxy = vi.fn(async () => {})
     const result = await applyElectronProxySettings(reloaded.getSettings(), {

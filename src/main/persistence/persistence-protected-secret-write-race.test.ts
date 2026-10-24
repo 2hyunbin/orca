@@ -1,17 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getSecretStore, setSecretStore } from '../shared/secret-store'
+import { getSecretStore, setSecretStore } from '../../shared/secret-store'
 import {
   createWorkerMaintenanceFixture,
   maintenanceBarrier
-} from './persistence/loading-store/profile-state-maintenance-fixture'
-import { Store } from './persistence/loading-store/store'
+} from './loading-store/profile-state-maintenance-fixture'
+import { Store } from './loading-store/store'
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(),
   sshConfigHostsToTargets: vi.fn()
 }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: () => ({ nth_repo_added: 2 })
 }))
 

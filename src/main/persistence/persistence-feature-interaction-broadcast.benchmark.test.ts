@@ -2,14 +2,14 @@ import {
   closeTestStores,
   createSqliteTestStore,
   readPersistedStateJson
-} from './persistence-test-harness'
+} from '../persistence-test-harness'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { normalizeFeatureInteractions } from '../shared/feature-interactions'
-import type { PersistedState } from '../shared/persisted-state-types'
+import { normalizeFeatureInteractions } from '../../shared/feature-interactions'
+import type { PersistedState } from '../../shared/persisted-state-types'
 
 vi.mock('electron', () => ({
   app: { getPath: () => tmpdir() },
@@ -20,10 +20,10 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
+vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 
-import { Store } from './persistence'
+import { Store } from './loading-store/store'
 
 const INTERACTIONS = 200
 const tempDirs: string[] = []

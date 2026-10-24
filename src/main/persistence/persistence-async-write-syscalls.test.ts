@@ -6,10 +6,10 @@ import {
   createWorkerMaintenanceFixture,
   createSqliteMaintenanceFixture,
   maintenanceBarrier
-} from './persistence/loading-store/profile-state-maintenance-fixture'
-import { profileStateDatabaseBackups } from './persistence/profile-state/profile-state-backup-path'
-import { ProfileStateSqliteAuthority } from './persistence/profile-state/profile-state-sqlite-authority'
-import type { ProfileStateWorkerAuthority } from './persistence/profile-state/profile-state-worker-authority'
+} from './loading-store/profile-state-maintenance-fixture'
+import { profileStateDatabaseBackups } from './profile-state/profile-state-backup-path'
+import { ProfileStateSqliteAuthority } from './profile-state/profile-state-sqlite-authority'
+import type { ProfileStateWorkerAuthority } from './profile-state/profile-state-worker-authority'
 
 type FilesystemCalls = {
   directory: string
@@ -62,9 +62,11 @@ vi.mock('node:fs/promises', async (importOriginal) => {
     }
   }
 })
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({ nth_repo_added: 2 }) }))
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: () => ({ nth_repo_added: 2 })
+}))
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
 }))

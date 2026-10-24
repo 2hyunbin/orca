@@ -1,5 +1,5 @@
-import { toSshExecutionHostId } from '../shared/execution-host'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import { toSshExecutionHostId } from '../../shared/execution-host'
+import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import {
   closeTestStores,
   testState,
@@ -8,27 +8,27 @@ import {
   writeDataFile,
   readDataFile,
   makeRepo,
-  makeTerminalTab,
   makeWorktreeLineage,
   makeWorkspaceLineage
-} from './persistence-test-harness'
+} from '../persistence-test-harness'
+import { makeTerminalTab } from '../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { readFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
-import { isTerminalLeafId } from '../shared/stable-pane-id'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import { isTerminalLeafId } from '../../shared/stable-pane-id'
 
-import { worktreeWorkspaceKey } from '../shared/workspace-scope'
-import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+import { worktreeWorkspaceKey } from '../../shared/workspace-scope'
+import { removeWorktreeMetaRow } from './host-qualified-worktree-meta'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -54,11 +54,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

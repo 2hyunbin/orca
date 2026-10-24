@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { rmSync, mkdtempSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { PersistedState } from '../shared/persisted-state-types'
-import type { Repo } from '../shared/repo-types'
+import type { PersistedState } from '../../shared/persisted-state-types'
+import type { Repo } from '../../shared/repo-types'
 import {
   closeTestStores,
   createSqliteTestStore,
@@ -14,21 +14,21 @@ import {
   dataFile,
   writeDataFile,
   readDataFile,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
-import { TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
-import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../shared/constants'
-import type { WorkspaceSessionState } from '../shared/workspace-session-state-types'
-import { _resetTracerForTests, setActiveSink } from './observability/tracer'
-import { _resetPtyBindingSpanSamplingForTests } from './persistence/loading-store/pty-binding-span'
+  makeRepo
+} from '../persistence-test-harness'
+import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from '../persistence-session-fixtures'
+
+import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { _resetTracerForTests, setActiveSink } from '../observability/tracer'
+import { _resetPtyBindingSpanSamplingForTests } from './loading-store/pty-binding-span'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -54,11 +54,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 
@@ -367,7 +367,8 @@ describe('Store', () => {
     mkdirSync(profileBDir, { recursive: true })
 
     vi.resetModules()
-    const { Store, initDataPath } = await import('./persistence')
+    const { Store } = await import('./loading-store/store')
+    const { initDataPath } = await import('./loading-store/user-data-path')
     initDataPath()
     const profileAStore = createSqliteTestStore(Store, { dataFile: profileADataFile })
     profileAStore.setGitHubCache({ pr: { 'o/r#a': { fetchedAt: 10 } as never }, issue: {} })
