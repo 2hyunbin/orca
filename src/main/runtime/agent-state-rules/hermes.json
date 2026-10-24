@@ -6,13 +6,13 @@
   "rules": [
     {
       "id": "composer_ready",
-      "why": "Hermes 0.21.x paints a ready status row above the input composer after startup, session slash acknowledgements and completed turns. The elapsed-time row keeps repainting at rest, so quiet is not required. Startup and running turns replace ready; unsubmitted slash commands occupy the composer.",
+      "why": "Hermes 0.21 and 0.22 paint a ready status row above the input composer after startup, session slash acknowledgements and completed turns. The elapsed-time row keeps repainting at rest, so quiet is not required. Startup and running turns replace ready; unsubmitted slash commands occupy the composer. A fresh launch shows one placeholder from Hermes' fixed set.",
       "priority": 500,
       "when": {
         "region": "screen",
         "rows": [
           { "regex": "^─ ready [│|]", "ignoreCase": true },
-          { "regex": "^❯(?: Try \"[^\"]+\"(?: for commands)?)?$" }
+          { "regex": "^❯(?: Try \"[^\"]+\"(?: for commands)?| Ask me anything…)?$" }
         ]
       },
       "answer": { "state": "idle", "strength": "strong", "requiresQuiet": false }

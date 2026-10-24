@@ -7,6 +7,7 @@ import {
   waitForTranscriptIdle
 } from './agent-transcript-pane-test-harness'
 import metadata from './__fixtures__/hermes-slash-setup.meta.json'
+import metadata022 from './__fixtures__/hermes-0-22-slash-setup.meta.json'
 import type { TerminalHandleRecord } from './runtime-terminal-contracts'
 
 vi.mock('electron', () => ({
@@ -17,6 +18,7 @@ vi.mock('electron', () => ({
 }))
 
 const captured = readFileSync(join(__dirname, '__fixtures__', 'hermes-slash-setup.txt'))
+const captured022 = readFileSync(join(__dirname, '__fixtures__', 'hermes-0-22-slash-setup.txt'))
 
 async function paneAt(
   stage: keyof typeof metadata.stages,
@@ -209,4 +211,35 @@ describe('Hermes slash readiness from captured raw PTY bytes', () => {
       await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
     }
   })
+})
+
+describe('Hermes 0.22 readiness from captured raw PTY bytes', () => {
+  async function paneAt022(stage: keyof typeof metadata022.stages) {
+    const pane = await createTranscriptPane({
+      paneTitle: 'Hermes Agent',
+      foregroundProcess: 'hermes',
+      launchAgent: 'hermes',
+      size: { cols: metadata022.cols, rows: metadata022.rows },
+      data: captured022.subarray(0, metadata022.stages[stage]).toString('utf8')
+    })
+    await pane.runtime.readTerminal(pane.handle, { screen: true })
+    return pane
+  }
+
+  // `initial` is a fresh launch on the "Ask me anything…" composer placeholder.
+  it.each(['initial', 'reasoning', 'completed'] as const)(
+    'settles at %s without waiting for the repainting stream to go quiet',
+    async (stage) => {
+      const pane = await paneAt022(stage)
+      await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
+    }
+  )
+
+  it.each(['starting', 'reasoningDraft', 'promptDraft', 'busy', 'streaming'] as const)(
+    'does not settle at %s even after the quiet window',
+    async (stage) => {
+      const pane = await paneAt022(stage)
+      await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
+    }
+  )
 })
