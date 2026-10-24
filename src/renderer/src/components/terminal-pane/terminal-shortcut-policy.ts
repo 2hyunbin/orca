@@ -271,13 +271,13 @@ export function resolveTerminalShortcutAction(
     event.altKey &&
     !event.shiftKey &&
     (event.key === 'Backspace' ||
-      (event.key === 'Delete' && event.code?.startsWith('Numpad') !== true))
+      (isMac && event.key === 'Delete' && event.code?.startsWith('Numpad') !== true))
   ) {
-    // Why: a kitty-protocol TUI binds native escapes; legacy fallbacks would bypass them.
+    // Why: a kitty-protocol TUI binds xterm's native CSI 127;3u / CSI 3;3~; legacy fallbacks would bypass them.
     if ((getKittyKeyboardFlagsActivePane?.() ?? 0) > 0) {
       return null
     }
-    // Why: translate Alt+⌫ to backward-kill-word (\x1b\x7f) and ⌥⌦/Alt+Delete to forward-kill-word (\x1bd, #21491).
+    // Why: ⌥⌦ mirrors iTerm2's Natural Text Editing ESC d (#21491); Linux/Windows keep xterm's native CSI 3;3~.
     return { type: 'sendInput', data: event.key === 'Backspace' ? '\x1b\x7f' : '\x1bd' }
   }
 

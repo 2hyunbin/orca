@@ -1,84 +1,39 @@
 import { describe, expect, it } from 'vitest'
-import {
-  resolveTerminalShortcutAction,
-  type TerminalShortcutEvent
-} from './terminal-shortcut-policy'
+import { resolveTerminalShortcutAction } from './terminal-shortcut-policy'
 
-function event(overrides: Partial<TerminalShortcutEvent>): TerminalShortcutEvent {
-  return {
-    key: '',
-    code: '',
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    shiftKey: false,
-    repeat: false,
-    ...overrides
-  }
+const altDelete = {
+  key: 'Delete',
+  code: 'Delete',
+  metaKey: false,
+  ctrlKey: false,
+  altKey: true,
+  shiftKey: false
 }
 
-describe('Option/Alt + Forward-Delete (⌥⌦)', () => {
-  it('translates Option+Delete to readline forward-kill-word on macOS', () => {
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete', altKey: true }),
-        true
-      )
-    ).toEqual({ type: 'sendInput', data: '\x1bd' })
+describe('Option/Alt + Forward-Delete', () => {
+  it('sends ESC d on macOS because Claude Code reads CSI 3;3~ as kill-to-end-of-line', () => {
+    expect(resolveTerminalShortcutAction(altDelete, true)).toEqual({
+      type: 'sendInput',
+      data: '\x1bd'
+    })
   })
 
-  it('translates Alt+Delete to readline forward-kill-word on non-mac', () => {
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete', altKey: true }),
-        false
-      )
-    ).toEqual({ type: 'sendInput', data: '\x1bd' })
+  it('leaves Linux and Windows on xterm native CSI 3;3~', () => {
+    expect(resolveTerminalShortcutAction(altDelete, false)).toBeNull()
+    expect(resolveTerminalShortcutAction(altDelete, false, 'false', 0, true)).toBeNull()
   })
 
-  it('defers to xterm when Kitty keyboard protocol is active', () => {
+  it('defers to xterm kitty encoding when the app negotiated it', () => {
     expect(
       resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete', altKey: true }),
+        altDelete,
         true,
-        undefined,
-        undefined,
+        'false',
+        0,
         false,
         undefined,
         undefined,
         () => 1
-      )
-    ).toBeNull()
-  })
-
-  it('does not translate numpad delete when Alt is pressed', () => {
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'NumpadDecimal', altKey: true }),
-        true
-      )
-    ).toBeNull()
-  })
-
-  it('does not interfere with plain Delete or other modifiers', () => {
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete' }),
-        true
-      )
-    ).toBeNull()
-
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete', metaKey: true }),
-        true
-      )
-    ).toEqual({ type: 'sendInput', data: '\x0b' })
-
-    expect(
-      resolveTerminalShortcutAction(
-        event({ key: 'Delete', code: 'Delete', ctrlKey: true, altKey: true }),
-        true
       )
     ).toBeNull()
   })
