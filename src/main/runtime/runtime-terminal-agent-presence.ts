@@ -89,7 +89,8 @@ export class RuntimeTerminalAgentPresence {
             : 'absent'
         case 'unreadable':
           return pane.reportsStatus ? 'present' : 'unknown'
-        default:
+        case 'shell':
+        case 'other':
           // Why: an agent under OSC 7501 paints no title glyph, so its own status is the evidence
           // wherever the process read cannot name what runs.
           return pane.reportsStatus && !contradictsReportedStatus(read) ? 'present' : 'absent'
