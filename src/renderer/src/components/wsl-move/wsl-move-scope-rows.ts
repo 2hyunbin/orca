@@ -24,8 +24,8 @@ import type {
 
 export type WslMoveCatalog = {
   repos: readonly Repo[]
-  folderWorkspaces: readonly FolderWorkspace[]
-  worktreesByRepo: Record<string, readonly Worktree[]>
+  folders: readonly FolderWorkspace[]
+  repoWorktrees: Record<string, readonly Worktree[]>
   unifiedTabsByWorktree: Record<string, readonly Pick<Tab, 'id' | 'entityId' | 'contentType'>[]>
   /** Panes, not tabs, are what the terminal blockers count; absent: one pane per tab. */
   terminalLayoutsByTabId?: Record<string, Pick<TerminalLayoutSnapshot, 'root'> | undefined>
@@ -98,7 +98,7 @@ export function wslMoveProjectRows(
     ...folderWorkspaceIds.map((id) => ({
       kind: 'folder' as const,
       id,
-      name: catalog.folderWorkspaces.find((folder) => folder.id === id)?.name ?? id
+      name: catalog.folders.find((folder) => folder.id === id)?.name ?? id
     }))
   ]
 }
@@ -107,7 +107,7 @@ function localWorkspaceKeys(catalog: WslMoveCatalog, ref: WslMoveRowRef): string
   if (ref.kind === 'folder') {
     return [folderWorkspaceKey(ref.id)]
   }
-  return (catalog.worktreesByRepo[ref.id] ?? [])
+  return (catalog.repoWorktrees[ref.id] ?? [])
     .filter((worktree) => (worktree.hostId ?? LOCAL_EXECUTION_HOST_ID) === LOCAL_EXECUTION_HOST_ID)
     .map((worktree) => worktree.id)
 }
@@ -182,7 +182,7 @@ export function wslMoveBlockerProjects(
  * checkboxes when main refused the whole-distro preview for a reason a smaller selection may fix.
  */
 export function wslMoveCatalogCandidates(
-  catalog: Pick<WslMoveCatalog, 'repos' | 'folderWorkspaces'>,
+  catalog: Pick<WslMoveCatalog, 'repos' | 'folders'>,
   distro: string
 ): { repoIds: string[]; folderWorkspaceIds: string[] } {
   const inDistro = (path: string): boolean =>
@@ -193,7 +193,7 @@ export function wslMoveCatalogCandidates(
         (repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID && inDistro(repo.path)
       )
       .map((repo) => repo.id),
-    folderWorkspaceIds: catalog.folderWorkspaces
+    folderWorkspaceIds: catalog.folders
       .filter(
         (folder) =>
           (folder.executionHostId ?? LOCAL_EXECUTION_HOST_ID) === LOCAL_EXECUTION_HOST_ID &&

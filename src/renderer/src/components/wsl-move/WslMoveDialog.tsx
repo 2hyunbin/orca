@@ -31,6 +31,7 @@ import {
   type WslMoveCatalog
 } from './wsl-move-scope-rows'
 import type { WslMoveBlockerView } from './WslMoveBlockerList'
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { adoptWslMoveProgress } from './wsl-move-run-adoption'
 import { closeWslMoveDialog, reloadAfterWslMove } from './wsl-move-dialog-close'
 import { RecoverableRenderErrorBoundary } from '../error-boundaries/RecoverableRenderErrorBoundary'
@@ -43,8 +44,8 @@ function useMoveCatalog(): WslMoveCatalog {
   return useAppStore(
     useShallow((state) => ({
       repos: state.repos,
-      folderWorkspaces: state.folderWorkspaces,
-      worktreesByRepo: state.worktreesByRepo,
+      folders: selectFolderWorkspaces(state),
+      repoWorktrees: selectWorktreesByRepo(state),
       unifiedTabsByWorktree: state.unifiedTabsByWorktree,
       terminalLayoutsByTabId: state.terminalLayoutsByTabId
     }))

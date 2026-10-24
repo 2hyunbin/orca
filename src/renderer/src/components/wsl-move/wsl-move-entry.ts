@@ -8,13 +8,20 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { WslMoveRowRef } from '../../../../shared/wsl-move/wsl-move-driver-types'
 import { useWslHostsEnabled, useWslHostServerFilesMissing } from '../sidebar/use-wsl-hosts-enabled'
 import { openWslMoveDialog } from './wsl-move-dialog-store'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 import { wslMoveCatalogCandidates, wslMoveTargetForRepo } from './wsl-move-scope-rows'
 
 export function openWslMoveDialogFor(distro: string, only?: WslMoveRowRef): void {
   void openWslMoveDialog({
     distro,
     only,
-    catalogCandidates: () => wslMoveCatalogCandidates(useAppStore.getState(), distro)
+    catalogCandidates: () => {
+      const state = useAppStore.getState()
+      return wslMoveCatalogCandidates(
+        { repos: state.repos, folders: selectFolderWorkspaces(state) },
+        distro
+      )
+    }
   })
 }
 

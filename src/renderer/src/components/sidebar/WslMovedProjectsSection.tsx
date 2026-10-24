@@ -11,6 +11,7 @@ import { useConfirmationDialog } from '@/components/confirmation-dialog-context'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { Tab } from '../../../../shared/tab-types'
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 function chatLabel(tab: Tab): string {
   return tab.customLabel?.trim() || tab.generatedLabel?.trim() || tab.label
@@ -32,8 +33,8 @@ const WslMovedProjectsSection = React.memo(function WslMovedProjectsSection() {
         ? null
         : {
             wslMovedProjects: state.wslMovedProjects,
-            worktreesByRepo: state.worktreesByRepo,
-            folderWorkspaces: state.folderWorkspaces,
+            worktreesByRepo: selectWorktreesByRepo(state),
+            folderWorkspaces: selectFolderWorkspaces(state),
             unifiedTabsByWorktree: state.unifiedTabsByWorktree
           }
     )

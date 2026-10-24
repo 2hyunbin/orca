@@ -93,8 +93,8 @@ describe('rows, counts and blockers', () => {
         executionHostId: 'runtime:wsl:Ubuntu'
       })
     ],
-    folderWorkspaces: [folder('notes', '\\\\wsl.localhost\\Ubuntu\\home\\dev\\notes')],
-    worktreesByRepo: {
+    folders: [folder('notes', '\\\\wsl.localhost\\Ubuntu\\home\\dev\\notes')],
+    repoWorktrees: {
       api: [
         worktree(api, 'local'),
         worktree(`api::${UNC}\\feature`),
@@ -181,8 +181,8 @@ describe('rows, counts and blockers', () => {
       wslMoveCatalogCandidates(
         {
           repos: [...catalog.repos, repo('win', 'C:\\src\\win'), repo('deb', '//wsl$/Debian/x')],
-          folderWorkspaces: [
-            ...catalog.folderWorkspaces,
+          folders: [
+            ...catalog.folders,
             folder('remote', '\\\\wsl.localhost\\Ubuntu\\r', { connectionId: 'ssh-1' })
           ]
         },
