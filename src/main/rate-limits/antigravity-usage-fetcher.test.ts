@@ -224,6 +224,20 @@ describe('fetchAntigravityRateLimits', () => {
     expect(result.error).toContain('did not answer in time')
   })
 
+  it('reports a timeout spent waiting on browser sign-in as signed out', async () => {
+    // Why pinned: agy 1.4.2 prints this and waits 60 s for OAuth, so Orca's kill lands first (#26484).
+    const result = await harness({
+      result: processResult({
+        timedOut: true,
+        stderr:
+          'Authentication required. Please visit the URL to log in:\n  https://accounts.google.com/o/oauth2/auth?...\n\nWaiting for authentication (timeout 60s)...\n'
+      })
+    }).fetch()
+
+    expect(result.status).toBe('unavailable')
+    expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
+  })
+
   it('reports an unreadable payload as a parse failure carrying the exit code', async () => {
     const result = await harness({
       result: processResult({ code: 2, stdout: 'unknown command /usage' })

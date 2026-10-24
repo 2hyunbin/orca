@@ -26,6 +26,10 @@ const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
     'Antigravity usage is not available right now. The Antigravity API returned a server error.'
 }
 
+// Why "then refresh": automated polls stop while signed out, so only a manual refresh rechecks.
+const SIGNED_OUT_REASON =
+  'Antigravity usage is not available. Sign in with `agy`, then refresh to report this account’s quota.'
+
 const UNSUPPORTED_USAGE_COMMAND_REASON =
   'Antigravity usage is not available. This version of the Antigravity CLI answers `/usage` as a prompt instead of a command, so Orca stopped asking rather than spend quota on it. Update `agy` and restart Orca.'
 
@@ -174,6 +178,10 @@ export async function fetchAntigravityRateLimits(
     return failed(spawnFailureMessage(error), 'cli-unavailable', now())
   }
 
+  // Why: signed out, agy starts browser OAuth and waits on it until killed — a sign-in, not a slow CLI.
+  if (result.timedOut && classifyAntigravityUsageFailure(result.stderr)?.signedOut) {
+    return unavailable(SIGNED_OUT_REASON, 'missing-credentials', now())
+  }
   if (result.timedOut) {
     return failed(
       'Antigravity usage is not available. The Antigravity CLI did not answer in time.',
@@ -192,11 +200,7 @@ export async function fetchAntigravityRateLimits(
   if (!reading) {
     const failure = classifyAntigravityUsageFailure(`${result.stdout}\n${result.stderr}`)
     if (failure?.signedOut) {
-      return unavailable(
-        'Antigravity usage is not available. Sign in with `agy` to report this account’s quota.',
-        failure.failureKind,
-        now()
-      )
+      return unavailable(SIGNED_OUT_REASON, failure.failureKind, now())
     }
     if (failure) {
       return failed(

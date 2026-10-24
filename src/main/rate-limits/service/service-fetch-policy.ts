@@ -4,6 +4,7 @@ import {
   MIN_REFETCH_MS,
   normalizeClaudeConfigDir,
   type ClaudeRuntimeAuthPreparation,
+  type ActiveRateLimitProvider,
   type ClaudeStatusLineRateLimits,
   type NormalizedClaudeAccountSelectionTarget,
   type ProviderRateLimits
@@ -58,8 +59,19 @@ export abstract class RateLimitServiceFetchPolicy extends RateLimitServiceFetchT
     )
   }
 
-  protected shouldSkipAutomatedClaudeFetch(limits: ProviderRateLimits | null): boolean {
-    return this.isRetryAfterActive(limits)
+  // Why only user-directed refreshes may pass: Claude's Retry-After is binding, and a signed-out agy
+  // read starts interactive OAuth that opens a browser sign-in page on every poll (#26484).
+  protected shouldSkipAutomatedFetch(
+    provider: ActiveRateLimitProvider,
+    limits: ProviderRateLimits | null
+  ): boolean {
+    if (provider === 'antigravity') {
+      return (
+        limits?.status === 'unavailable' &&
+        limits.usageMetadata?.failureKind === 'missing-credentials'
+      )
+    }
+    return provider === 'claude' && this.isRetryAfterActive(limits)
   }
 
   protected resolveClaudeFetchApply(
