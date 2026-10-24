@@ -94,7 +94,6 @@ src/transport/mobile-relay-background-lifecycle.test.ts
 src/transport/mobile-relay-direct-upgrade.test.ts
 src/transport/mobile-relay-e2ee-link.test.ts
 src/transport/mobile-relay-pairing-recovery.test.ts
-src/transport/mobile-relay-pairing-reply.test.ts
 src/transport/mobile-relay-physical-client.test.ts
 src/transport/mobile-relay-reconnect-controller.test.ts
 src/transport/mobile-relay-resume-director.test.ts
