@@ -46,7 +46,7 @@ export type JournalRowWriterDeps = {
   readOnly: () => boolean
   highestFence: () => number
   nextSequence: () => number
-  commit: (rows: readonly JournalRow[], savedAt: number) => void
+  commit: (rows: readonly JournalRow[], savedAt: number, adopt?: () => void) => void
   afterCommit?: (rows: readonly JournalRow[]) => void
   /** Rows an OS crash may lose without losing anything but streamed text; they commit without
    *  the per-commit fsync (`isJournalStreamedTextRevision`). */
@@ -58,7 +58,8 @@ export class JournalRowWriter {
 
   enqueue(
     build: (seq: number, ts: number) => JournalRow,
-    receipt?: JournalOperationReceipt
+    receipt?: JournalOperationReceipt,
+    adopt?: (row: JournalRow) => void
   ): Promise<JournalRow> {
     return this.deps.serialize(() => {
       assertJournalWritable(this.deps.readOnly(), this.deps.sessionId)
@@ -77,7 +78,7 @@ export class JournalRowWriter {
       // fail. Rejecting here instead would leave the next append reusing a
       // sequence the table already holds. The ledger first: it cannot throw, the fold can.
       receipt?.committed()
-      this.deps.commit([row], savedAt)
+      this.deps.commit([row], savedAt, () => adopt?.(row))
       this.deps.afterCommit?.([row])
       return row
     })
@@ -98,7 +99,8 @@ export class JournalRowWriter {
   writeRows(
     plan: () => readonly ((seq: number, ts: number) => JournalRow)[],
     receipt?: JournalOperationReceipt,
-    receiptRow?: (rows: readonly JournalRow[]) => JournalRow | undefined
+    receiptRow?: (rows: readonly JournalRow[]) => JournalRow | undefined,
+    adopt?: (rows: readonly JournalRow[]) => void
   ): JournalRow[] {
     assertJournalWritable(this.deps.readOnly(), this.deps.sessionId)
     const first = this.deps.nextSequence()
@@ -120,7 +122,7 @@ export class JournalRowWriter {
       !receipt && this.streamed(rows)
     )
     receipt?.committed()
-    this.deps.commit(rows, ts)
+    this.deps.commit(rows, ts, () => adopt?.(rows))
     this.deps.afterCommit?.(rows)
     return rows
   }

@@ -1,3 +1,20 @@
+import type {
+  AgentSessionDeltaStream,
+  AgentSessionDeltaWindow,
+  AgentSessionDeltaCoalescerDeps,
+  AgentSessionDeltaCoalescer
+} from './agent-session-delta-coalescer-contracts'
+export type {
+  AgentSessionDeltaSnapshot,
+  AgentSessionDeltaSource,
+  AgentSessionDeltaWindow,
+  AgentSessionDeltaCoalescerDeps,
+  AgentSessionDeltaCoalescer
+} from './agent-session-delta-coalescer-contracts'
+import {
+  appendAgentSessionTextCut,
+  agentSessionTextPairBoundary
+} from './agent-session-text-encoding'
 import { appendWithinUtf8ByteLimit } from './agent-session-streamed-text-bounds'
 // Server-side coalescing for streamed assistant text.
 //
@@ -23,58 +40,6 @@ export const AGENT_SESSION_STREAMED_TEXT_TOTAL_MAX_BYTES = 32 * 1024 * 1024
 export { AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER } from './agent-session-streamed-text-bounds'
 export const AGENT_SESSION_MAX_STREAMS = 256
 
-export type AgentSessionDeltaSnapshot = {
-  text: string
-  observedBytes: number
-  truncated: boolean
-}
-
-export type AgentSessionDeltaWindow = {
-  hasText: boolean
-  baseLength: number
-  suffix: string
-  text: () => string
-  replace?: true
-  observedBytes: number
-  truncated: boolean
-}
-
-export type AgentSessionDeltaCoalescerDeps = {
-  /** Called with the FULL text accumulated for the key, not the increment. */
-  emit: (key: string, text: string, snapshot: AgentSessionDeltaSnapshot) => unknown
-  emitDelta?: (key: string, window: AgentSessionDeltaWindow) => unknown
-  windowMs?: number
-  maxRetainedBytes?: number
-  maxTotalRetainedBytes?: number
-  /** Maximum distinct item streams retained at once. */
-  maxStreams?: number
-  /** The caller byte-bounds protected metadata; only ordinary streams use the count cap. */
-  isProtected?: (key: string) => boolean
-  /** Injected by tests so a window can be driven without real time. */
-  schedule?: (run: () => void, ms: number) => () => void
-}
-
-export type AgentSessionDeltaCoalescer = {
-  /** Returns false when a full stream cannot be flushed to admit this new key. */
-  append: (key: string, delta: string) => boolean
-  /** Emit one stream now, if it has unflushed text. */
-  flush: (key: string) => boolean
-  /** Emit every stream now. The lifecycle bypass. */
-  flushAll: () => boolean
-  /** Drop a stream without emitting — its authoritative body arrived, so the
-   *  accumulated text is now the stale copy. */
-  forget: (key: string) => void
-  dispose: () => void
-  /** Bounded last-known state for terminalizing a rejected completion. */
-  snapshot: (key: string) => AgentSessionDeltaSnapshot | null
-  /** Streams with text not yet emitted, in arrival order, for a caller that writes them itself. */
-  dirty: () => { key: string; snapshot: AgentSessionDeltaSnapshot }[]
-  /** The caller wrote this stream's current text itself; nothing is owed until it grows. */
-  markFlushed: (key: string) => void
-  window: (key: string) => AgentSessionDeltaWindow | null
-  dirtyWindows: () => { key: string; window: AgentSessionDeltaWindow }[]
-}
-
 function defaultSchedule(run: () => void, ms: number): () => void {
   const timer = setTimeout(run, ms)
   const unrefable: unknown = timer
@@ -98,20 +63,7 @@ export function createAgentSessionDeltaCoalescer(
   const maxTotalRetainedBytes =
     deps.maxTotalRetainedBytes ?? AGENT_SESSION_STREAMED_TEXT_TOTAL_MAX_BYTES
   const maxStreams = Math.max(1, deps.maxStreams ?? AGENT_SESSION_MAX_STREAMS)
-  const streams = new Map<
-    string,
-    {
-      chunks: string[]
-      retainedBytes: number
-      textLength: number
-      observedBytes: number
-      truncated: boolean
-      dirty: boolean
-      admittedLength: number
-      pending: string[]
-      hasText: boolean
-    }
-  >()
+  const streams = new Map<string, AgentSessionDeltaStream>()
   let totalRetainedBytes = 0
   let cancelTimer: (() => void) | null = null
   const evictable = new Set<string>()
@@ -123,10 +75,33 @@ export function createAgentSessionDeltaCoalescer(
     }
     const chunks = stream.chunks
     const length = stream.textLength
+    const retained = stream.retainedBytes
+    const beforeHandover = stream.source
     let whole: string | undefined
     return {
+      applied: (source) => {
+        if (streams.get(key) === stream) {
+          const current = deps.source?.(key) ?? source
+          const credited = Math.max(
+            0,
+            current.bytes +
+              stream.retainedBytes -
+              (stream.source === beforeHandover ? retained : 0) -
+              stream.uncreditedBytes
+          )
+          totalRetainedBytes += credited - stream.residentBytes
+          stream.residentBytes = credited
+          stream.source = current
+        }
+      },
+      source: stream.source,
+      cuts: { blocks: stream.cuts.blocks, count: stream.cuts.count },
+      limit: stream.limit,
+      length: (stream.source?.length ?? 0) + stream.textLength,
+      bytes: (stream.source?.bytes ?? 0) + stream.retainedBytes,
+      encodedBytes: (stream.source?.encodedBytes ?? 0) + stream.encodedBytes,
       hasText: stream.hasText,
-      baseLength: stream.admittedLength,
+      baseLength: (stream.source?.length ?? 0) + stream.admittedLength,
       suffix: stream.truncated ? '' : stream.pending.join(''),
       text: () => (whole ??= chunks.join('').slice(0, length)),
       ...(stream.truncated ? { replace: true as const } : {}),
@@ -141,6 +116,17 @@ export function createAgentSessionDeltaCoalescer(
       stream.dirty = false
       stream.admittedLength = stream.textLength
       stream.pending = []
+      const source = deps.source?.(key)
+      if (source) {
+        stream.source = source
+        stream.chunks = []
+        stream.retainedBytes = 0
+        stream.textLength = 0
+        stream.encodedBytes = 0
+        stream.admittedLength = 0
+        stream.cuts = { blocks: [], count: 0 }
+        stream.lastCodeUnit = Number.NaN
+      }
     }
   }
 
@@ -208,7 +194,7 @@ export function createAgentSessionDeltaCoalescer(
             }
             const evicted = streams.get(oldest)
             if (evicted) {
-              totalRetainedBytes -= evicted.retainedBytes
+              totalRetainedBytes -= evicted.residentBytes
             }
             streams.delete(oldest)
             evictable.delete(oldest)
@@ -216,15 +202,21 @@ export function createAgentSessionDeltaCoalescer(
           break
         }
         stream = {
+          source: deps.source?.(key),
+          encodedBytes: 0,
           chunks: [],
           retainedBytes: 0,
+          residentBytes: 0,
+          uncreditedBytes: deps.source?.(key)?.bytes ?? 0,
+          cuts: { blocks: [], count: 0 },
+          lastCodeUnit: Number.NaN,
           textLength: 0,
-          observedBytes: 0,
-          truncated: false,
+          observedBytes: deps.source?.(key)?.observedBytes ?? 0,
+          truncated: deps.source?.(key)?.truncated ?? false,
           dirty: false,
           admittedLength: 0,
           pending: [],
-          hasText: false
+          hasText: (deps.source?.(key)?.length ?? 0) > 0
         }
         if (!deps.isProtected?.(key)) {
           evictable.add(key)
@@ -236,19 +228,41 @@ export function createAgentSessionDeltaCoalescer(
       stream.observedBytes += deltaBytes
       if (!stream.truncated) {
         const availableTotal = Math.max(0, maxTotalRetainedBytes - totalRetainedBytes)
-        const streamLimit = Math.min(maxRetainedBytes, stream.retainedBytes + availableTotal)
+        const streamLimit = Math.min(
+          maxRetainedBytes,
+          (stream.source?.bytes ?? 0) + stream.retainedBytes + availableTotal
+        )
+        if (agentSessionTextPairBoundary(stream.lastCodeUnit, delta.charCodeAt(0))) {
+          appendAgentSessionTextCut(stream.cuts, stream.textLength)
+        }
         const next = appendWithinUtf8ByteLimit(
           stream.chunks,
           stream.retainedBytes,
           delta,
           deltaBytes,
-          streamLimit
+          stream.source ? Math.max(0, streamLimit - stream.source.bytes) : streamLimit
         )
-        totalRetainedBytes += next.retainedBytes - stream.retainedBytes
+        if (stream.source && next.truncated) {
+          stream.limit = streamLimit
+        }
+        stream.encodedBytes = next.truncated
+          ? Buffer.byteLength(JSON.stringify(next.chunks.join('')), 'utf8') - 2
+          : stream.encodedBytes + Buffer.byteLength(JSON.stringify(delta), 'utf8') - 2
+        const credited = next.retainedBytes - stream.retainedBytes
+        stream.residentBytes += credited
+        totalRetainedBytes += credited
         stream.textLength = next.truncated
           ? (next.chunks[0]?.length ?? 0)
           : stream.textLength + delta.length
         stream.chunks = next.chunks
+        if (next.truncated) {
+          stream.cuts = { blocks: [], count: 0 }
+        }
+        if (delta.length) {
+          stream.lastCodeUnit = next.truncated
+            ? (next.chunks[0]?.charCodeAt((next.chunks[0]?.length ?? 0) - 1) ?? Number.NaN)
+            : delta.charCodeAt(delta.length - 1)
+        }
         stream.hasText ||= next.truncated ? !!next.chunks[0]?.trim() : delta.trim().length > 0
         if (!next.truncated) {
           stream.pending.push(delta)
@@ -268,7 +282,7 @@ export function createAgentSessionDeltaCoalescer(
     forget: (key) => {
       const stream = streams.get(key)
       if (stream) {
-        totalRetainedBytes -= stream.retainedBytes
+        totalRetainedBytes -= stream.residentBytes
         streams.delete(key)
         evictable.delete(key)
       }

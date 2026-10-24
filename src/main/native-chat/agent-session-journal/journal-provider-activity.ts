@@ -29,8 +29,8 @@ export function observeJournalProviderActivity(
   }
   if (savedAt >= (state.providerActivityAt.get(fence) ?? 0)) {
     state.providerActivityAt.set(fence, savedAt)
+    state.textIndex.protectionMoved(state.providerActivityWitness.get(fence), row.seq)
     state.providerActivityWitness.set(fence, row.seq)
-    state.textIndex.reconsiderProtected(new Set(state.providerActivityWitness.values()))
   }
 }
 

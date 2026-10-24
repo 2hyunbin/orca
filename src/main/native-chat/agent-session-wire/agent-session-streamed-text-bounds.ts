@@ -23,7 +23,7 @@ export function appendWithinUtf8ByteLimit(
   return truncateStreamPrefix(current, delta, maxBytes)
 }
 
-function truncateStreamPrefix(
+export function truncateStreamPrefix(
   current: string[],
   delta: string,
   maxBytes: number

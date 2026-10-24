@@ -46,6 +46,22 @@ export function readCodexThreadItem(value: unknown): CodexThreadItem | null {
  * that a recovered journal simply will not contain — which is correct: Codex
  * itself does not persist them either.
  */
+export function codexLiveTextKey(
+  threadId: string,
+  turnId: string | null,
+  item: Pick<CodexThreadItem, 'id' | 'type'>,
+  historyImport?: true
+): string {
+  return JSON.stringify([
+    'codex',
+    historyImport ? 'history' : 'live',
+    threadId,
+    turnId,
+    item.type,
+    item.id
+  ])
+}
+
 export function codexItemIdentity(input: {
   threadId: string
   turnId: string | null

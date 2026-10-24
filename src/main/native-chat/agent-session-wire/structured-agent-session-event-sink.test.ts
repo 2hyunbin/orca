@@ -493,7 +493,6 @@ describe('deferred structured agent-session event sink', () => {
 
   it('keeps a rewritten streamed row in its place ahead of what was issued after it', async () => {
     // A Codex reply checkpointed, then another row, then the reply's next checkpoint.
-    const log: Recorded[] = []
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
     const window: (() => void)[] = []
     const translator = createCodexJournalTranslator({
@@ -525,22 +524,27 @@ describe('deferred structured agent-session event sink', () => {
     notify('item/completed', { item: { type: 'agentMessage', id: 'aside', text: 'An aside.' } })
     checkpoint('Then the build. '.repeat(40))
 
-    const bound = target(6, log)
-    deferred.bind(bound)
-    await deferred.drained()
-    const written = vi
-      .mocked(bound.journal.appendItem)
-      .mock.calls.flatMap(([id, body, options]) => {
-        const block = body.kind === 'message' ? body.blocks[0] : undefined
-        const text = options.streamText?.text() ?? (block?.type === 'text' ? block.text : '')
-        return text.startsWith('Looking') || text === 'An aside.'
-          ? [`${text.startsWith('Looking') ? 'reply' : 'aside'} ${agentJournalItemKey(id)}`]
-          : []
-      })
-    const [reply, aside] = written
-    // The reply's row is created before the aside and rewritten after it; never moved behind it.
-    expect(reply?.startsWith('reply')).toBe(true)
-    expect(written).toEqual([reply, aside, reply])
+    const root = await mkdtemp(join(tmpdir(), 'orca-stream-placement-'))
+    const journal = await openAgentSessionJournal({
+      database: openTestJournalHostDatabase(root),
+      identity: JOURNAL_IDENTITY
+    })
+    deferred.bind({ journal, fence: 6, publish: () => undefined })
+    await expect(deferred.drained()).resolves.toEqual({ ok: true })
+    const messages = journal.snapshot().items.filter((item) => item.body.kind === 'message')
+    expect(
+      messages.map((item) => (item.body.kind === 'message' ? item.body.blocks[0] : null))
+    ).toEqual([
+      {
+        type: 'text',
+        text: 'Looking at the tests first. '.repeat(4) + 'Then the build. '.repeat(40)
+      },
+      { type: 'text', text: 'An aside.' }
+    ])
+    expect(messages[0]?.sequence).toBeLessThan(messages[1]!.sequence)
+    await journal.close()
+    closeTestJournalHostDatabase(root)
+    await rm(root, { recursive: true, force: true })
   })
 
   it('coalesces provider activity as a publication without a journal write', async () => {
@@ -583,7 +587,13 @@ describe('producer linkage reaches the journal through every append path', () =>
       await deferred.drained()
 
       expect(journalAppendOptions).toEqual([
-        { fence: 5, ownerFence: 5, turnScope: AGENT_JOURNAL_THREAD_SCOPE, ...LINKAGE }
+        {
+          fence: 5,
+          ownerFence: 5,
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          ...LINKAGE,
+          reservedBytes: expect.any(Number)
+        }
       ])
       deferred.close()
     }
@@ -607,7 +617,13 @@ describe('producer linkage reaches the journal through every append path', () =>
       await deferred.drained()
 
       expect(journalAppendOptions).toEqual([
-        { fence: 5, ownerFence: 5, turnScope: AGENT_JOURNAL_THREAD_SCOPE, ...LINKAGE }
+        {
+          fence: 5,
+          ownerFence: 5,
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          ...LINKAGE,
+          reservedBytes: expect.any(Number)
+        }
       ])
       deferred.close()
     }
@@ -645,7 +661,12 @@ describe('producer linkage reaches the journal through every append path', () =>
     // would read `agentId: undefined` as a key that exists.
     // A provider observation names the generation that produced it: the bound fence.
     expect(journalAppendOptions).toEqual([
-      { fence: 5, ownerFence: 5, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+      {
+        fence: 5,
+        ownerFence: 5,
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+        reservedBytes: expect.any(Number)
+      }
     ])
     deferred.close()
   })

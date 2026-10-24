@@ -5,6 +5,7 @@ import type { codexJournalItem, CodexThreadItem } from './codex-structured-item-
 import type { CodexRowAttribution } from './codex-subagent-linkage'
 
 export type CodexItemStreamDeps = {
+  historyImport?: true
   sink: StructuredAgentSessionEventSink
   /** The turn a delta-only item belongs to, read the way its first delta names it. */
   turnIdFor: (threadId: string, params: unknown) => string | null
@@ -56,6 +57,12 @@ export type CodexStructuredItemStreams = {
     params: unknown
   ) => CodexStructuredItemStreamHandleResult
   forget: (threadId: string, itemId: string) => void
+  finish: (
+    threadId?: string,
+    turnId?: string | null,
+    at?: number,
+    itemId?: string
+  ) => CodexStructuredItemStreamAdmission
   flush: () => boolean
   dispose: () => void
   snapshot: (

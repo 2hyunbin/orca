@@ -1,3 +1,5 @@
+import type { CodexItemStreamDeps } from './codex-structured-item-stream-contracts'
+import { appendCodexLifecycleItem, publishCodexLifecycle } from './codex-structured-journal-sink'
 import {
   endedRunningAgentJournalToolCall,
   type AgentJournalRunningCallEnd
@@ -6,6 +8,7 @@ import type { AgentJournalItemBody } from '../../shared/agent-session-journal-ty
 import { cancelledJournalPromptBody } from '../native-chat/agent-session-journal/journal-prompt-body-bounds'
 import {
   endedJournalReasoning,
+  type JournalReasoningLifecycle,
   withJournalReasoningLifecycle
 } from '../native-chat/agent-session-journal/journal-reasoning-row'
 import type { CodexStructuredItemStreams } from './codex-structured-item-stream-contracts'
@@ -69,4 +72,31 @@ export function interruptedCodexItemBody(
     body.resolution.state === 'pending'
     ? (cancelledJournalPromptBody(body) ?? body)
     : body
+}
+
+export function withCodexItemLifecycle(
+  translated: ReturnType<typeof codexJournalItem>,
+  lifecycle: JournalReasoningLifecycle
+): ReturnType<typeof codexJournalItem> {
+  return translated.body
+    ? { ...translated, body: withJournalReasoningLifecycle(translated.body, lifecycle) }
+    : translated
+}
+
+export function settleEvictedCodexItem(
+  deps: Pick<CodexItemStreamDeps, 'sink' | 'attributionFor'>,
+  active: CodexActiveJournalItem,
+  streams: Pick<CodexStructuredItemStreams, 'snapshot'>
+) {
+  const body = deps.sink.textSource?.(active.identity)
+    ? null
+    : interruptedCodexItemBody(codexActiveItemBody(active, streams))
+  if (!body) {
+    return { accepted: true as const }
+  }
+  const admission = appendCodexLifecycleItem(deps.sink, active.identity, body, {
+    ...deps.attributionFor(active.threadId, active.turnId),
+    ...(active.startedAt === undefined ? {} : { observedAt: active.startedAt })
+  })
+  return admission.accepted ? publishCodexLifecycle(deps.sink) : admission
 }

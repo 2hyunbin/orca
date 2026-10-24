@@ -45,7 +45,7 @@ export function insertJournalRow(
   const rowJson = serializeJournalRow(row)
   // A row the reader rejects would fail the chat's next load, so it is never written: the throw
   // rolls back the caller's transaction.
-  const readBack = parseJournalRow(rowJson)
+  const readBack = parseJournalRow(rowJson, true)
   if (!readBack.ok || readBack.row.seq !== row.seq) {
     throw new AgentSessionJournalError(
       'journal_row_rejected',
@@ -105,4 +105,16 @@ export function deleteJournalEpochRows(
   epoch: string
 ): void {
   db.prepare(DELETE_EPOCH).run(sessionId, epoch)
+}
+
+export function deleteJournalTextRange(
+  db: Database.Database,
+  sessionId: string,
+  epoch: string,
+  first: number,
+  last: number
+): void {
+  db.prepare(
+    'DELETE FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq BETWEEN ? AND ?'
+  ).run(sessionId, epoch, first, last)
 }

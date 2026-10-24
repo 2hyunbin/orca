@@ -1,4 +1,9 @@
-import type { JournalRowBase, JournalItemRow, JournalLifecycleBatchRow } from './journal-row-schema'
+import type { JournalReducerState } from './journal-reducer'
+import type { JournalRow } from './journal-row-schema'
+import type { JournalItemAppendOptions } from './journal-store-contracts'
+import type { AgentSessionTextCuts } from '../agent-session-wire/agent-session-text-encoding'
+import type { AgentSessionDeltaSource } from '../agent-session-wire/agent-session-delta-coalescer'
+import type { JournalItemRow, JournalLifecycleBatchRow } from './journal-row-schema'
 
 export type JournalTextDeltaRow = Omit<JournalItemRow, 'kind' | 'body'> & {
   kind: 'text-delta'
@@ -8,24 +13,40 @@ export type JournalTextDeltaRow = Omit<JournalItemRow, 'kind' | 'body'> & {
   suffix: string
 }
 
-export type JournalSequenceRange = readonly [number, number]
-
-export type JournalTextPrunedRow = JournalRowBase & {
-  kind: 'text-pruned'
-  itemId: string
-  field: number
-  marker: number
-  witness: number
-  revision: number
-  ranges: JournalSequenceRange[]
+export class JournalTextPolicies extends Map<string, AgentSessionDeltaSource> {
+  readonly raw = new Map<string, AgentSessionDeltaSource>()
+  override set(key: string, source: AgentSessionDeltaSource): this {
+    this.delete(key)
+    super.set(key, source)
+    if (source.live) {
+      this.raw.set(source.live.key, source)
+    }
+    return this
+  }
+  override delete(key: string): boolean {
+    const source = this.get(key)
+    if (source?.live && this.raw.get(source.live.key) === source) {
+      this.raw.delete(source.live.key)
+    }
+    return super.delete(key)
+  }
 }
+
+export type JournalSequenceRange = readonly [number, number]
 
 /** Host-only admission: the whole value is materialized only for an anchor or replacement. */
 export type JournalTextAdmission = {
+  applied?: (source: AgentSessionDeltaSource) => void
+  operation: 'start' | 'append' | 'replace' | 'finish'
+  cuts?: AgentSessionTextCuts
+  source?: AgentSessionDeltaSource
+  observedBytes?: number
+  truncated?: boolean
+  encodedBytes?: number
+  limit?: number
   field: number
   baseLength: number
   suffix: string
-  text: () => string
   replace?: true
 }
 
@@ -81,31 +102,33 @@ export function journalTextRowContent(record: Record<string, unknown>): boolean 
     Number(record.field) >= 0 &&
     Number.isSafeInteger(record.revision) &&
     Number(record.revision) > 0 &&
-    (record.kind === 'text-delta'
-      ? Number.isSafeInteger(record.predecessor) &&
-        Number(record.predecessor) > 0 &&
-        Number(record.predecessor) < Number(record.revision) &&
-        Number.isSafeInteger(record.baseLength) &&
-        Number(record.baseLength) >= 0 &&
-        typeof record.suffix === 'string' &&
-        record.suffix.length > 0
-      : Number.isSafeInteger(record.marker) &&
-        Number(record.marker) > 0 &&
-        Number.isSafeInteger(record.witness) &&
-        Number(record.witness) > Number(record.marker) &&
-        Number(record.witness) < Number(record.seq) &&
-        Array.isArray(record.ranges) &&
-        record.ranges.length > 0 &&
-        record.ranges.length <= 128 &&
-        record.ranges.every(
-          (range) =>
-            Array.isArray(range) &&
-            range.length === 2 &&
-            Number.isSafeInteger(range[0]) &&
-            Number.isSafeInteger(range[1]) &&
-            range[0] > Number(record.marker) &&
-            range[0] <= range[1] &&
-            range[1] < Number(record.witness)
-        ))
+    record.kind === 'text-delta' &&
+    Number.isSafeInteger(record.predecessor) &&
+    Number(record.predecessor) > 0 &&
+    Number(record.predecessor) < Number(record.revision) &&
+    Number.isSafeInteger(record.baseLength) &&
+    Number(record.baseLength) >= 0 &&
+    typeof record.suffix === 'string' &&
+    record.suffix.length > 0
   )
+}
+
+export function adoptJournalTextOperation(
+  state: JournalReducerState,
+  row: JournalRow,
+  options: JournalItemAppendOptions
+): void {
+  if (row.kind !== 'item' && row.kind !== 'text-delta') {
+    return
+  }
+  const item = state.items.get(row.itemId)
+  if (item?.revision !== row.revision) {
+    return
+  }
+  if (options.retireText || options.streamText?.operation === 'finish') {
+    state.textPolicy.delete(row.itemId)
+  } else if (options.streamText?.source) {
+    state.textPolicy.set(row.itemId, options.streamText.source)
+  }
+  options.applied?.(row)
 }

@@ -6,6 +6,7 @@
 // read off an explicit context, so the open turn and the collaborators it
 // writes through stay owned by the translator.
 
+import { appendClaudeStreamedWhole } from './claude-streamed-text-checkpoints'
 import { writeClaudeTerminalFailure } from './claude-terminal-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
@@ -136,7 +137,6 @@ export function journalClaudeMessage(
     (body && envelope.role === 'assistant'
       ? ctx.streamedBlocks.reconcile(envelope)?.identity
       : null) ?? claudeMessageIdentity(envelope)
-  ctx.streamedText.forget(agentJournalItemKey(identity))
   const thinking = ctx.streamedThinking.finalize(outputEnvelope, observedAt)
   if (body) {
     // Opening before the append is what brackets a turn around its own first
@@ -146,7 +146,13 @@ export function journalClaudeMessage(
     if (terminalIdentity) {
       writeClaudeTerminalFailure(ctx.sink, terminalIdentity, body)
     } else {
-      ctx.sink.appendItem(identity, body, stamp(identity, body))
+      if (envelope.role === 'assistant') {
+        if (appendClaudeStreamedWhole(ctx.sink, identity, body, stamp(identity, body))) {
+          ctx.streamedText.forget(agentJournalItemKey(identity))
+        }
+      } else {
+        ctx.sink.appendItem(identity, body, stamp(identity, body))
+      }
     }
     changed = true
   }
@@ -190,11 +196,14 @@ export function journalClaudeMessage(
   if (thinking) {
     ctx.turn.ensureOpen(message, source, observedAt)
     // The write that ends the row: shed under pressure, the row would read open for good.
-    ctx.sink.appendItem(thinking.identity, thinking.body, {
+    const accepted = appendClaudeStreamedWhole(ctx.sink, thinking.identity, thinking.body, {
       ...stamp(thinking.identity, thinking.body),
       ...(thinking.startedAt === undefined ? {} : { observedAt: thinking.startedAt }),
       lifecycle: true
     })
+    if (accepted) {
+      ctx.streamedThinking.forget(thinking.identity)
+    }
     changed = true
   }
   changed =

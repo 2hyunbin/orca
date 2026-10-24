@@ -11,6 +11,7 @@ import type {
 import type { JournalResolvedItem } from './journal-item-appender'
 import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
 import type { JournalReducerState } from './journal-reducer'
+import { adoptJournalTextOperation } from './journal-text-rows'
 import { journalStreamedItemBuilder } from './journal-text-writer'
 import type { JournalRow } from './journal-row-schema'
 import type { JournalRowWriter } from './journal-row-writer'
@@ -40,7 +41,19 @@ export class JournalStepWriter {
     return this.deps.serialize(() => {
       const wrote: boolean[] = []
       for (const step of steps) {
-        wrote.push(this.deps.writeRows(() => this.plan(step)).length > 0)
+        wrote.push(
+          this.deps.writeRows(
+            () => this.plan(step),
+            undefined,
+            undefined,
+            (rows) => {
+              const row = rows.at(-1)
+              if (step.kind === 'item' && row) {
+                adoptJournalTextOperation(this.deps.state(), row, step.options)
+              }
+            }
+          ).length > 0
+        )
       }
       return wrote
     })

@@ -1,3 +1,4 @@
+import { restoreCodexTextState, finishCodexStreams } from './codex-stream-finishes'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalRowAttribution
@@ -7,10 +8,7 @@ import {
   type AgentSessionDeltaWindow
 } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import { CodexItemStreamRetention } from './codex-item-stream-retention'
-import {
-  appendCodexItemAndPublish,
-  appendCodexRunningStream
-} from './codex-structured-journal-sink'
+import { appendCodexItemAndPublish, appendCodexStreamWindow } from './codex-structured-journal-sink'
 import { codexJournalItem } from './codex-structured-item-translation'
 import {
   codexStructuredItemKey,
@@ -91,8 +89,7 @@ export function createCodexStructuredItemStreams(
       if (typeof oldest !== 'string') {
         break
       }
-      const pending = coalescer.snapshot(oldest)
-      if (pending && pending.text.length > 0 && !persist(oldest, pending.text)) {
+      if (!coalescer.flush(oldest)) {
         // Keep the state (and its buffered text) until the sink recovers. A
         // bounded map is preferable to silently losing streamed output.
         break
@@ -107,11 +104,7 @@ export function createCodexStructuredItemStreams(
     text: string,
     window?: AgentSessionDeltaWindow
   ): boolean =>
-    appendCodexRunningStream(deps.sink, state, text, {
-      ...attributionOf(key),
-      ...(window ? { streamText: { ...window, field: 0 } } : {}),
-      ...(state.startedAt === undefined ? {} : { observedAt: state.startedAt })
-    })
+    appendCodexStreamWindow(deps, producers.get(key)!, state, text, attributionOf(key), window)
 
   const persist = (key: string, text: string): boolean => {
     const state = states.get(key)
@@ -124,6 +117,12 @@ export function createCodexStructuredItemStreams(
   }
 
   const coalescer = createAgentSessionDeltaCoalescer({
+    source: deps.sink.textSource
+      ? (key) => {
+          const state = states.get(key)
+          return state ? deps.sink.textSource?.(state.identity) : undefined
+        }
+      : undefined,
     windowMs: deps.coalesceMs,
     maxRetainedBytes: deps.maxRetainedBytes,
     maxTotalRetainedBytes: deps.maxTotalRetainedBytes,
@@ -143,13 +142,10 @@ export function createCodexStructuredItemStreams(
       if (state.item.type === 'reasoning' && !window.hasText) {
         return true
       }
-      if (!append(key, state, 'x', window)) {
+      if (!append(key, state, deps.sink.prepareText ? 'x' : window.text(), window)) {
         return false
       }
-      checkpointLengths.set(
-        key,
-        window.replace ? window.text().length : window.baseLength + window.suffix.length
-      )
+      checkpointLengths.set(key, window.length)
       pendingCheckpoints.delete(key)
       return true
     },
@@ -167,9 +163,8 @@ export function createCodexStructuredItemStreams(
     if (existing) {
       return existing
     }
-    const item = { type, id: itemId }
     const turnId = deps.turnIdFor(threadId, params)
-    const state = { item, identity: deps.identityFor(threadId, turnId, item) }
+    const state = restoreCodexTextState(deps, threadId, turnId, itemId, type)
     states.retain(key, state)
     producers.set(key, { threadId, turnId })
     trimStates()
@@ -180,7 +175,11 @@ export function createCodexStructuredItemStreams(
     let flushed = coalescer.flushAll()
     for (const key of pendingCheckpoints) {
       const snapshot = coalescer.snapshot(key)
-      if (snapshot && checkpointLengths.get(key) !== snapshot.text.length) {
+      if (
+        snapshot &&
+        !deps.sink.textSource?.(states.get(key)!.identity) &&
+        checkpointLengths.get(key) !== snapshot.text.length
+      ) {
         flushed = persist(key, snapshot.text) && flushed
       } else {
         pendingCheckpoints.delete(key)
@@ -293,6 +292,13 @@ export function createCodexStructuredItemStreams(
       const key = codexStructuredItemKey(threadId, itemId)
       forgetState(key)
     },
+    finish: (threadId, turnId, at, itemId) =>
+      finishCodexStreams(deps, states, producers, coalescer, forgetState, {
+        threadId,
+        turnId,
+        at,
+        itemId
+      }),
     flush,
     dispose: () => {
       coalescer.dispose()

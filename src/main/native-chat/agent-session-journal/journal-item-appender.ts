@@ -3,6 +3,7 @@ import type {
   AgentJournalItemBody,
   AgentJournalItemIdentity
 } from '../../../shared/agent-session-journal-types'
+import { adoptJournalTextOperation } from './journal-text-rows'
 import { journalStreamedItemBuilder } from './journal-text-writer'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalAppendResult, JournalItemAppendOptions } from './journal-store-contracts'
@@ -20,7 +21,8 @@ export class JournalItemAppender {
       state: () => JournalReducerState
       enqueue: (
         build: (seq: number, ts: number) => JournalRow,
-        receipt?: JournalOperationReceipt
+        receipt?: JournalOperationReceipt,
+        adopt?: (row: JournalRow) => void
       ) => Promise<JournalRow>
     }
   ) {}
@@ -33,7 +35,11 @@ export class JournalItemAppender {
   ): Promise<JournalAppendResult> {
     const itemId = agentJournalItemKey(identity)
     return this.deps
-      .enqueue(journalStreamedItemBuilder(this.deps.state, identity, body, options), receipt)
+      .enqueue(
+        journalStreamedItemBuilder(this.deps.state, identity, body, options),
+        receipt,
+        (row) => adoptJournalTextOperation(this.deps.state(), row, options)
+      )
       .then((row) => appendResult(row, itemId))
   }
 
@@ -44,19 +50,23 @@ export class JournalItemAppender {
   ): Promise<JournalAppendResult | null> {
     let itemId = ''
     return this.deps
-      .enqueue((seq, ts) => {
-        const resolved = resolve()
-        if (resolved === null) {
-          throw new NothingResolvedError('journal_item_resolved_to_nothing')
-        }
-        itemId = agentJournalItemKey(resolved.identity)
-        return journalStreamedItemBuilder(
-          this.deps.state,
-          resolved.identity,
-          resolved.body,
-          options
-        )(seq, ts)
-      })
+      .enqueue(
+        (seq, ts) => {
+          const resolved = resolve()
+          if (resolved === null) {
+            throw new NothingResolvedError('journal_item_resolved_to_nothing')
+          }
+          itemId = agentJournalItemKey(resolved.identity)
+          return journalStreamedItemBuilder(
+            this.deps.state,
+            resolved.identity,
+            resolved.body,
+            options
+          )(seq, ts)
+        },
+        undefined,
+        (row) => adoptJournalTextOperation(this.deps.state(), row, options)
+      )
       .then(
         (row) => appendResult(row, itemId),
         (error: unknown) => {

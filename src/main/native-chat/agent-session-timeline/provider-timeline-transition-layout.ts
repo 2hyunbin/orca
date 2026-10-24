@@ -88,7 +88,7 @@ export function planProviderTimelineWrites(
       {
         reservedBytes: write.reservedBytes,
         resolve: write.resolve,
-        options: write.options
+        options: { ...write.options, ...(decision.closes ? { retireText: true as const } : {}) }
       },
       write.lifecycle
     )

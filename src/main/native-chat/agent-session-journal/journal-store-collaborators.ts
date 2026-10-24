@@ -44,11 +44,12 @@ export type JournalStoreHost = {
   readOnly: () => boolean
   cursor: () => AgentJournalCursor
   adopt: (loaded: JournalLoad) => void
-  commit: (rows: readonly JournalRow[], savedAt: number) => void
+  commit: (rows: readonly JournalRow[], savedAt: number, adopt?: () => void) => void
   journal: () => AgentSessionJournal
   enqueue: (
     build: (seq: number, ts: number) => JournalRow,
-    receipt?: JournalOperationReceipt
+    receipt?: JournalOperationReceipt,
+    adopt?: (row: JournalRow) => void
   ) => Promise<JournalRow>
 }
 
@@ -112,7 +113,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     afterCommit: (rows) => textPruner?.committed(rows),
     streamedTextRevision: (row) => isJournalStreamedTextRevision(host.state(), row)
   })
-  textPruner = new JournalTextPruner(host, rowWriter)
+  textPruner = new JournalTextPruner(host)
   const queuedMessages = new JournalQueuedMessages({
     sessionId: host.identity.sessionId,
     serialize: host.serialize,
@@ -159,7 +160,8 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     stepWriter: new JournalStepWriter({
       serialize: host.serialize,
       state: host.state,
-      writeRows: (plan) => rowWriter.writeRows(plan),
+      writeRows: (plan, receipt, receiptRow, adopt) =>
+        rowWriter.writeRows(plan, receipt, receiptRow, adopt),
       planSettlement: (batch) => lifecycleBatchAppender.planResolved(batch)
     })
   }

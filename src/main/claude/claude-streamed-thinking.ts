@@ -1,3 +1,5 @@
+import { appendClaudePreparedSteps } from './claude-streamed-terminal'
+import type { ClaudeStreamedTextDelta } from './claude-streamed-block-identity'
 import { appendStructuredAgentSessionTextWindow } from '../native-chat/agent-session-wire/structured-agent-session-text-append'
 import type {
   AgentJournalItemIdentity,
@@ -13,8 +15,10 @@ import type { AgentSessionDeltaCoalescerDeps } from '../native-chat/agent-sessio
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { createClaudeStreamedBlockRegistry } from './claude-streamed-block-identity'
 import {
+  appendClaudeStreamedWhole,
   createClaudeStreamedTextCheckpoints,
-  type ClaudeStreamedBlockEnd
+  type ClaudeStreamedBlockEnd,
+  type ClaudePreparedTextEnd
 } from './claude-streamed-text-checkpoints'
 import {
   claudeRecord,
@@ -52,14 +56,38 @@ export function createClaudeStreamedThinking(deps: {
   turnScope: () => AgentJournalTurnScope
   coalesceMs?: number
   schedule?: AgentSessionDeltaCoalescerDeps['schedule']
+  holdStream?: (delta: ClaudeStreamedTextDelta, retry: () => boolean) => void
 }) {
   const blocks = createClaudeStreamedBlockRegistry('thinking')
   /** Each open block's stream, and when it began. */
-  const open = new Map<string, { scope: string; startedAt: number }>()
+
+  const persistPrepared = (
+    block: ClaudePreparedTextEnd,
+    ended?: ClaudeStreamedBlockEnd
+  ): boolean => {
+    const body = journalReasoningBody(
+      block.text ?? 'x',
+      ended ? endedJournalReasoning(ended.completedAt) : { state: 'running' }
+    )
+    const options = {
+      ...block.options,
+      turnScope: deps.turnScope(),
+      ...(block.startedAt === undefined ? {} : { observedAt: block.startedAt })
+    }
+    return (
+      body !== null &&
+      (block.text !== undefined && !deps.sink.tryAppendTransition
+        ? appendClaudeStreamedWhole(deps.sink, block.identity, body, options)
+        : appendClaudePreparedSteps(deps.sink, [block.step(body, options, ended !== undefined)]))
+    )
+  }
+
   const checkpoints = createClaudeStreamedTextCheckpoints({
     ...(deps.coalesceMs === undefined ? {} : { coalesceMs: deps.coalesceMs }),
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
     producer: deps.producer,
+    source: deps.sink.textSource,
+    prepareText: deps.sink.prepareText,
     persistDelta: (identity, window, options) => {
       if (!window.hasText) {
         return true
@@ -68,43 +96,45 @@ export function createClaudeStreamedThinking(deps: {
       if (!body) {
         return true
       }
-      const startedAt = open.get(agentJournalItemKey(identity))?.startedAt
+      const startedAt = checkpoints.startedAt(agentJournalItemKey(identity))
       return appendStructuredAgentSessionTextWindow(deps.sink, identity, body, window, {
         ...options,
         turnScope: deps.turnScope(),
         ...(startedAt === undefined ? {} : { observedAt: startedAt })
       })
     },
+    persistPrepared,
     persist: (identity, text, options, ended) => {
       const body = journalReasoningBody(
         text,
         ended ? endedJournalReasoning(ended.completedAt) : { state: 'running' }
       )
       if (body) {
-        const startedAt = open.get(agentJournalItemKey(identity))?.startedAt
-        deps.sink.appendItem(identity, body, {
+        const startedAt = checkpoints.startedAt(agentJournalItemKey(identity))
+        const appendOptions = {
           ...options,
           turnScope: deps.turnScope(),
           // The row starts with its block, not with its first text or a queued write.
           ...(startedAt === undefined ? {} : { observedAt: startedAt }),
           // An end the sink sheds under pressure would leave the row open with nothing to close it.
           ...(ended ? { lifecycle: true } : {})
-        })
+        }
+        if (ended) {
+          return appendClaudeStreamedWhole(deps.sink, identity, body, appendOptions)
+        }
+        deps.sink.appendItem(identity, body, appendOptions)
         deps.sink.publish()
       }
     }
   })
-  const finish = (ended: ClaudeStreamedBlockEnd, scope?: string): void => {
+  const finish = (ended: ClaudeStreamedBlockEnd, scope?: string): boolean =>
     checkpoints.finish(
       ended,
-      scope === undefined ? undefined : (key) => open.get(key)?.scope === scope
+      (_, block) =>
+        scope === undefined ||
+        `${block.identity.provider === 'claude' ? block.identity.sessionId : ''}/${block.scope ?? ''}` ===
+          scope
     )
-    for (const [key, block] of open) {
-      if (scope === undefined || block.scope === scope) {
-        open.delete(key)
-      }
-    }
-  }
 
   return {
     /** True when the frame carried thinking text. */
@@ -119,13 +149,11 @@ export function createClaudeStreamedThinking(deps: {
         return false
       }
       const identity = delta.identity
-      if (identity.provider === 'claude') {
-        open.set(agentJournalItemKey(identity), {
-          scope: `${identity.sessionId}/${delta.parentToolUseId ?? ''}`,
-          startedAt: delta.startedAt
-        })
+      const retry = () =>
+        checkpoints.append(identity, delta.text, delta.parentToolUseId, delta.startedAt)
+      if (!retry()) {
+        deps.holdStream?.(delta, retry)
       }
-      checkpoints.append(identity, delta.text, delta.parentToolUseId)
       return true
     },
     /** The row a final frame's thinking lands on — its streamed block's, else its own — closed.
@@ -142,27 +170,62 @@ export function createClaudeStreamedThinking(deps: {
         streamed?.identity ?? claudeThinkingIdentity(envelope.sessionId, envelope.uuid)
       const key = agentJournalItemKey(identity)
       // A final frame with no text of its own still ends the row its stream wrote.
-      const text = claudeThinkingText(envelope) ?? checkpoints.latest(key) ?? ''
-      checkpoints.forget(key)
-      open.delete(key)
+      const supplied = claudeThinkingText(envelope)
+      if (supplied === null && deps.sink.prepareText) {
+        checkpoints.finish({ completedAt: observedAt }, (candidate) => candidate === key)
+        return null
+      }
+      const text = supplied ?? checkpoints.latest(key) ?? ''
+
       const body = journalReasoningBody(
         text,
         endedJournalReasoning(streamed ? observedAt : undefined)
       )
-      return body
-        ? { identity, body, ...(streamed ? { startedAt: streamed.startedAt } : {}) }
-        : null
+      if (!body) {
+        checkpoints.finish({ completedAt: observedAt }, (candidate) => candidate === key)
+        return null
+      }
+      return { identity, body, ...(streamed ? { startedAt: streamed.startedAt } : {}) }
+    },
+    prepareFinishOpen: (completedAt: number, extra?: ClaudeStreamedTextDelta) => {
+      const pending = checkpoints.prepareFinish(undefined, extra)
+      return {
+        steps: pending.flatMap((block) => {
+          const body = journalReasoningBody('x', endedJournalReasoning(completedAt))
+          return body
+            ? [
+                block.step(body, {
+                  ...block.options,
+                  turnScope: deps.turnScope(),
+                  ...(block.startedAt === undefined ? {} : { observedAt: block.startedAt })
+                })
+              ]
+            : []
+        }),
+        accept: () => {
+          for (const block of pending) {
+            block.forget()
+          }
+          blocks.clear()
+        }
+      }
     },
     /** End every block still open, for a turn that is ending. */
-    finishOpen: (completedAt: number): void => {
-      finish({ completedAt })
-      blocks.clear()
+    finishOpen: (completedAt: number): boolean => {
+      const accepted = finish({ completedAt })
+      if (accepted) {
+        blocks.clear()
+      }
+      return accepted
+    },
+    forget: (identity: AgentJournalItemIdentity): void => {
+      const key = agentJournalItemKey(identity)
+      checkpoints.forget(key)
     },
     flush: checkpoints.flush,
     reattribute: checkpoints.reattribute,
     dispose: (): void => {
       blocks.clear()
-      open.clear()
       checkpoints.dispose()
     },
     get pending() {

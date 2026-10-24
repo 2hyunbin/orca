@@ -56,10 +56,12 @@ export function settleCodexJournalSession(input: {
   const turnOrdinalsToForget: { threadId: string; turnId: string }[] = []
   for (const active of input.activeItems.values()) {
     // The host saw the child go, so its work was cut short.
-    const body = interruptedCodexItemBody(codexActiveItemBody(active, input.streams), {
-      at: input.event.observedAt ?? input.now?.() ?? Date.now(),
-      call: 'interrupted'
-    })
+    const body = input.sink.textSource?.(active.identity)
+      ? null
+      : interruptedCodexItemBody(codexActiveItemBody(active, input.streams), {
+          at: input.event.observedAt ?? input.now?.() ?? Date.now(),
+          call: 'interrupted'
+        })
     if (body) {
       mutations.push(settledRow(input.attributionFor, active, body))
     }
@@ -86,6 +88,14 @@ export function settleCodexJournalSession(input: {
       }
       turnOrdinalsToForget.push({ threadId, turnId })
     }
+  }
+  const finished = input.streams.finish(
+    undefined,
+    undefined,
+    input.event.observedAt ?? input.now?.() ?? Date.now()
+  )
+  if (!finished.accepted) {
+    return finished
   }
   const admission = appendCodexLifecycleMutations(
     input.sink,
@@ -131,10 +141,12 @@ export function settleCodexJournalTurn(input: {
     if (codexCommandOutlivesTurn(active.item)) {
       continue
     }
-    const body = interruptedCodexItemBody(codexActiveItemBody(active, input.streams), {
-      at: input.completedAt,
-      call: input.turnEnd
-    })
+    const body = input.sink.textSource?.(active.identity)
+      ? null
+      : interruptedCodexItemBody(codexActiveItemBody(active, input.streams), {
+          at: input.completedAt,
+          call: input.turnEnd
+        })
     if (body) {
       mutations.push(settledRow(input.attributionFor, active, body))
     }
@@ -160,6 +172,10 @@ export function settleCodexJournalTurn(input: {
     })
   }
   mutations.push(...(input.commandEnd ?? []))
+  const finished = input.streams.finish(input.threadId, input.turnId, input.completedAt)
+  if (!finished.accepted) {
+    return finished
+  }
   const admission = appendCodexLifecycleMutations(
     input.sink,
     `turn-completed:${input.sessionId}:${input.threadId}:${input.turnId}`,

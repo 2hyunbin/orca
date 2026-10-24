@@ -1,3 +1,7 @@
+import type { AgentSessionDeltaCoalescerDeps } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
+import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { ClaudeGoalBackgroundWork } from './claude-background-task-tracker'
+import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 // What the rest of a Claude session asks of its journal translator.
 
 import type { AgentSessionContextReport } from '../../shared/agent-session-context-usage'
@@ -32,6 +36,7 @@ export type ClaudeJournalTranslator = {
   flush: () => void
   childToolOwner?: ClaudeChildToolQueries['childToolOwner']
   childActivity?: ClaudeChildToolQueries['childActivity']
+  retryPendingStream?: () => StructuredAgentSessionSinkAdmission
   retryPendingTaskRows?: () => StructuredAgentSessionSinkAdmission
   retryPendingCancellations?: () => StructuredAgentSessionSinkAdmission
   /** Streamed blocks still awaiting a final frame. A settled turn leaves none. */
@@ -55,4 +60,15 @@ export type ClaudeJournalTranslator = {
   /** After a model write the child applied; its name sizes estimates until a window is measured. */
   modelWritten: (model: string) => void
   dispose: () => void
+}
+
+export type ClaudeJournalTranslatorDeps = {
+  sink: StructuredAgentSessionEventSink
+  bindPromptItemId?: (journalItemId: string, promptKey: string) => void
+  coalesceMs?: number
+  schedule?: AgentSessionDeltaCoalescerDeps['schedule']
+  fallbackIdPrefix?: string
+  onBackgroundTaskJournalFailure?: (error: Error) => void
+  account?: () => AgentSessionAccountKind | undefined
+  goalBackgroundWork?: () => ClaudeGoalBackgroundWork
 }

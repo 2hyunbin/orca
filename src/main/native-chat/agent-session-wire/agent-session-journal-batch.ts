@@ -60,12 +60,7 @@ export function projectJournalBatch(input: {
       // Host-only: no item; the queue pause it feeds is published beside the list.
       continue
     }
-    if (
-      row.kind === 'item' ||
-      row.kind === 'tombstone' ||
-      row.kind === 'text-delta' ||
-      row.kind === 'text-pruned'
-    ) {
+    if (row.kind === 'item' || row.kind === 'tombstone' || row.kind === 'text-delta') {
       touchedItemIds.add(
         input.canonicalItemId?.(row.itemId) ?? aliases.get(row.itemId) ?? row.itemId
       )

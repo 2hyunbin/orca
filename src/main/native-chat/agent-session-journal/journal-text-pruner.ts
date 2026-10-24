@@ -1,30 +1,32 @@
 import type { JournalStoreHost } from './journal-store-collaborators'
-import type { JournalRowWriter } from './journal-row-writer'
-import type { JournalRow } from './journal-row-schema'
-import { readJournalTextRow, validateJournalTextProof } from './journal-text-index'
-import type { JournalSequenceRange, JournalTextPrunedRow } from './journal-text-rows'
+import { parseJournalRow, type JournalRow } from './journal-row-schema'
+import { deleteJournalTextRange } from './journal-row-table'
+import { journalTextFields, journalWholeItem } from './journal-text-rows'
 
 /** One bounded unit per queue turn; failure retains the pieces and stops this drain. */
 export class JournalTextPruner {
   private scheduled: ReturnType<typeof setImmediate> | null = null
-  private closed = false
+  private drain: 'open' | 'failed' | 'closed' = 'open'
 
-  constructor(
-    private readonly host: JournalStoreHost,
-    private readonly writer: JournalRowWriter
-  ) {}
+  constructor(private readonly host: JournalStoreHost) {}
 
   committed(rows: readonly JournalRow[]): void {
+    if (this.drain === 'closed') {
+      return
+    }
     if (rows.some((row) => row.kind === 'item' || row.kind === 'lifecycle-batch')) {
+      this.drain = 'open'
       if (this.attempt()) {
         this.schedule()
       }
+    } else {
+      this.schedule()
     }
   }
 
   schedule(): void {
     if (
-      this.closed ||
+      this.drain !== 'open' ||
       this.scheduled ||
       this.host.readOnly() ||
       !this.host.state().textIndex.ready.size
@@ -34,7 +36,7 @@ export class JournalTextPruner {
     const epoch = this.host.state().epoch
     this.scheduled = setImmediate(() => {
       this.scheduled = null
-      if (this.closed || this.host.state().epoch !== epoch) {
+      if (this.drain !== 'open' || this.host.state().epoch !== epoch) {
         return
       }
       void this.host
@@ -60,7 +62,7 @@ export class JournalTextPruner {
   }
 
   close(): void {
-    this.closed = true
+    this.drain = 'closed'
     if (this.scheduled) {
       clearImmediate(this.scheduled)
     }
@@ -68,7 +70,7 @@ export class JournalTextPruner {
   }
 
   private attempt(): boolean {
-    if (this.closed || this.host.readOnly()) {
+    if (this.drain !== 'open' || this.host.readOnly()) {
       return false
     }
     try {
@@ -85,6 +87,9 @@ export class JournalTextPruner {
   }
 
   private failed(error: unknown): void {
+    if (this.drain !== 'closed') {
+      this.drain = 'failed'
+    }
     console.warn('[journal-text-prune] keeping saved text pieces:', {
       sessionId: this.host.identity.sessionId,
       error
@@ -101,86 +106,79 @@ export class JournalTextPruner {
     if (!piece) {
       return
     }
-    const protectedRows = new Set(state.providerActivityWitness.values())
-    const sequences: number[] = []
-    const ranges: JournalSequenceRange[] = []
-    for (const [first, last] of piece.ranges) {
-      for (let seq = first; seq <= Math.min(last, piece.witness - 1); seq++) {
-        if (protectedRows.has(seq)) {
-          continue
+    let commit: (() => void) | undefined
+    this.host.database().transaction((db) => {
+      let remaining = 256
+      const decoded = new Map<number, JournalRow>()
+      const read = (seq: number): JournalRow => {
+        const cached = decoded.get(seq)
+        if (cached) {
+          return cached
         }
-        const previous = ranges.at(-1)
-        if (previous && previous[1] + 1 === seq) {
-          ranges[ranges.length - 1] = [previous[0], seq]
-        } else {
-          if (ranges.length >= 128) {
-            break
-          }
-          ranges.push([seq, seq])
+        if (--remaining < 0) {
+          throw new Error('journal_text_prune_budget_exceeded')
         }
-        sequences.push(seq)
-        if (sequences.length >= 256) {
-          break
-        }
-      }
-      if (sequences.length >= 256 || ranges.length >= 128) {
-        break
-      }
-    }
-    if (!sequences.length) {
-      state.textIndex.reconsider(key, protectedRows)
-      return
-    }
-    const sessionId = this.host.identity.sessionId
-    this.writer.writeRows(
-      () => [
-        (seq, ts): JournalTextPrunedRow => ({
-          kind: 'text-pruned',
-          v: 5,
-          epoch: state.epoch,
-          seq,
-          ts,
-          fence: state.highestFence,
-          itemId: piece.itemId,
-          field: piece.field,
-          marker: piece.marker,
-          witness: piece.witness,
-          revision: piece.revision,
-          ranges
-        })
-      ],
-      {
-        write: (db, row) => {
-          if (
-            !row ||
-            row.kind !== 'text-pruned' ||
-            !validateJournalTextProof(db, sessionId, row, false)
-          ) {
-            throw new Error('journal_text_prune_witness_invalid')
-          }
-          for (const seq of sequences) {
-            const target = readJournalTextRow(db, sessionId, state.epoch, seq)
-            if (
-              !target ||
-              target.kind !== 'text-delta' ||
-              target.itemId !== piece.itemId ||
-              target.field !== piece.field ||
-              target.revision >= piece.revision ||
-              protectedRows.has(seq)
-            ) {
-              throw new Error('journal_text_prune_target_invalid')
-            }
-          }
-          const remove = db.prepare(
-            'DELETE FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq BETWEEN ? AND ?'
+        const stored = db
+          .prepare(
+            'SELECT row_json FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq = ?'
           )
-          for (const [first, last] of ranges) {
-            remove.run(sessionId, state.epoch, first, last)
-          }
-        },
-        committed: () => undefined
-      },
-      (rows) => rows[0]
-    )
+          .get(this.host.identity.sessionId, state.epoch, seq)
+        const parsed =
+          typeof stored?.row_json === 'string' ? parseJournalRow(stored.row_json, true) : null
+        if (!parsed?.ok || parsed.row.seq !== seq || parsed.row.epoch !== state.epoch) {
+          throw new Error('journal_text_prune_row_invalid')
+        }
+        decoded.set(seq, parsed.row)
+        return parsed.row
+      }
+      const boundary = read(state.textIndex.sparseAfter ?? 0)
+      const marker = read(piece.marker?.seq ?? 0)
+      const witness = read(piece.witness?.seq ?? 0)
+      const anchor = marker.kind === 'item' ? journalWholeItem(marker, piece.itemId) : undefined
+      const whole =
+        witness.kind === 'item' || witness.kind === 'lifecycle-batch'
+          ? journalWholeItem(witness, piece.itemId, piece.revision)
+          : undefined
+      if (
+        boundary.kind !== 'item' ||
+        boundary.v < 5 ||
+        !journalTextFields(boundary.body).length ||
+        marker.kind !== 'item' ||
+        marker.v < 5 ||
+        !anchor ||
+        !whole ||
+        anchor.revision !== piece.marker?.revision ||
+        anchor.revision >= whole.revision ||
+        marker.seq >= witness.seq ||
+        (witness.kind === 'lifecycle-batch' &&
+          witness.settlementId !== piece.witness?.settlementId) ||
+        !journalTextFields(anchor.body).includes(piece.field) ||
+        !journalTextFields(whole.body).includes(piece.field) ||
+        state.replayTextDebt?.size
+      ) {
+        throw new Error('journal_text_prune_witness_invalid')
+      }
+      const selection = state.textIndex.select(key, piece, remaining)
+      for (const seq of selection.sequences) {
+        const target = read(seq)
+        if (
+          target.kind !== 'text-delta' ||
+          target.itemId !== piece.itemId ||
+          target.field !== piece.field ||
+          target.revision >= whole.revision ||
+          target.seq <= marker.seq ||
+          target.seq >= witness.seq ||
+          target.seq >= state.lastSequence ||
+          state.textIndex.isProtected(seq)
+        ) {
+          throw new Error('journal_text_prune_target_invalid')
+        }
+      }
+      for (const [first, last] of selection.ranges) {
+        deleteJournalTextRange(db, this.host.identity.sessionId, state.epoch, first, last)
+      }
+      commit = selection.commit
+    })
+    commit?.()
   }
 }

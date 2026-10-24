@@ -1,9 +1,11 @@
+import { codexLiveTextKey } from './codex-thread-item-identity'
+import type { CodexItemStreamDeps } from './codex-structured-item-stream-contracts'
+import type { AgentSessionDeltaWindow } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import type {
   AgentJournalItemBody,
   AgentJournalItemIdentity,
   AgentJournalRowAttribution
 } from '../../shared/agent-session-journal-types'
-import { withJournalText } from '../native-chat/agent-session-journal/journal-text-rows'
 import { withJournalReasoningLifecycle } from '../native-chat/agent-session-journal/journal-reasoning-row'
 import { codexStreamingJournalItem } from './codex-structured-item-translation'
 import type { CodexItemStreamState } from './codex-structured-item-stream-contracts'
@@ -120,9 +122,6 @@ export function appendCodexItemAndPublish(
   if (options.streamText && sink.tryAppendStreamedItem) {
     return sink.tryAppendStreamedItem(identity, body, options)
   }
-  if (options.streamText) {
-    body = withJournalText(body, options.streamText.field, options.streamText.text())
-  }
   const admission = sink.tryAppendItem
     ? sink.tryAppendItem(identity, body, options)
     : (sink.appendItem(identity, body, options), ADMITTED)
@@ -145,7 +144,7 @@ export function appendCodexLifecycleItem(
   /** With the host time a row first written here should carry instead of its append time. */
   attribution: AgentJournalRowAttribution & { observedAt?: number }
 ): CodexJournalTranslationAdmission {
-  const options = { lifecycle: true, ...attribution }
+  const options = { lifecycle: true, retireText: true as const, ...attribution }
   if (sink.tryAppendItem) {
     return criticalAdmission(sink.tryAppendItem(identity, body, options))
   }
@@ -206,4 +205,33 @@ export function admitCodexLifecycleItems(
     }
   }
   return publishCodexLifecycle(sink)
+}
+
+export function appendCodexStreamWindow(
+  deps: Pick<CodexItemStreamDeps, 'sink' | 'historyImport'>,
+  producer: { threadId: string; turnId: string | null },
+  state: CodexItemStreamState,
+  text: string,
+  attribution: AgentJournalRowAttribution,
+  window?: AgentSessionDeltaWindow
+): boolean {
+  return appendCodexRunningStream(deps.sink, state, text, {
+    ...attribution,
+    ...(window
+      ? {
+          rawTextKey: codexLiveTextKey(
+            producer.threadId,
+            producer.turnId,
+            state.item,
+            deps.historyImport
+          ),
+          streamText: {
+            ...window,
+            operation: window.replace ? ('replace' as const) : ('append' as const),
+            field: 0
+          }
+        }
+      : {}),
+    ...(state.startedAt === undefined ? {} : { observedAt: state.startedAt })
+  })
 }

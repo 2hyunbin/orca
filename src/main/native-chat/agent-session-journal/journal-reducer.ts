@@ -1,3 +1,4 @@
+import { JournalTextPolicies } from './journal-text-rows'
 import { applyJournalTextDelta } from './journal-text-fold'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 import { JournalTextIndex } from './journal-text-index'
@@ -69,6 +70,9 @@ export type JournalReducerState = {
   /** Latest saved output per owner, rebuilt during the existing row fold. */
   providerActivityAt: Map<number, number>
   providerActivityWitness: Map<number, number>
+  /** Present only while the streamed replay is private and unfinished. */
+  replayTextDebt: Map<string, number> | null
+  textPolicy: JournalTextPolicies
   textIndex: JournalTextIndex
   /** Revision of a removed item, so a late lower revision cannot resurrect it. */
   tombstones: Map<string, number>
@@ -114,6 +118,8 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     itemExecutionOwners: new Map(),
     providerActivityAt: new Map(),
     providerActivityWitness: new Map(),
+    replayTextDebt: null,
+    textPolicy: new JournalTextPolicies(),
     textIndex: new JournalTextIndex(),
     tombstones: new Map(),
     removedTurnIds: new Set(),
@@ -139,7 +145,6 @@ export function applyJournalRow(
 ): void {
   applyJournalRowFacts(state, row, savedAt)
   foldJournalQueueRow(state, row)
-  state.textIndex.changed(row, new Set(state.providerActivityWitness.values()))
 }
 
 function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, savedAt: number): void {
@@ -151,9 +156,6 @@ function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, saved
   }
   // A queued card is never activity: it feeds no working status and no idle sweep.
   if (row.kind === 'queue') {
-    return
-  }
-  if (row.kind === 'text-pruned') {
     return
   }
   state.lastActivityAt = Math.max(state.lastActivityAt, row.ts)
@@ -172,13 +174,20 @@ function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, saved
     if (!state.itemEchoes.has(row.itemId)) {
       acceptSubmissionFromProviderItem(state, row.itemId, itemId, row)
     }
-    upsertJournalItem(
+    const applied = upsertJournalItem(
       state,
       itemId,
       row.revision,
       journalRenderItem(itemId, row.revision, row.body, row, statedOrDerivedTurnScope(state, row)),
       { fence: row.fence, ownerFence: row.ownerFence, executionOwner: row.executionOwner }
     )
+    if (applied) {
+      state.replayTextDebt?.delete(itemId)
+      state.textIndex.whole(row, itemId, row.revision, row.body)
+      if (row.recovered) {
+        state.textPolicy.delete(itemId)
+      }
+    }
     const fence = journalItemExecutionFence(state, itemId) ?? row.fence
     observeJournalProviderActivity(state, row, row.itemId, row.body, savedAt, fence)
     return
@@ -214,10 +223,17 @@ function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, saved
         const producer = journalBatchMutationProducer(row, mutation)
         const scope = statedOrDerivedTurnScope(state, mutation)
         const item = journalRenderItem(itemId, revision, body, row, scope, producer, sequenceIndex)
-        upsertJournalItem(state, itemId, revision, item, {
+        const applied = upsertJournalItem(state, itemId, revision, item, {
           fence: row.fence,
           ownerFence: mutation.ownerFence
         })
+        if (applied) {
+          state.replayTextDebt?.delete(itemId)
+          state.textIndex.whole(row, itemId, revision, body)
+          if (row.recovered) {
+            state.textPolicy.delete(itemId)
+          }
+        }
         const fence = journalItemExecutionFence(state, itemId) ?? row.fence
         observeJournalProviderActivity(state, row, mutation.itemId, body, savedAt, fence)
       } else {

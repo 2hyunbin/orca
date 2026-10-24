@@ -72,7 +72,10 @@ export type JournalAppendResult = {
 }
 
 export type JournalItemAppendOptions = AgentJournalRowAttribution & {
+  retireText?: true
   streamText?: JournalTextAdmission
+  reservedBytes?: number
+  applied?: (row: JournalRow) => void
   echoOf?: JournalItemEcho['echoOf']
   fence: number
   /** The generation whose execution produced the item: set by a provider's observation, and by

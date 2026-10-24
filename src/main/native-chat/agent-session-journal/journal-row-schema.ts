@@ -1,9 +1,5 @@
 import type { JournalItemEcho } from './journal-item-echo'
-import {
-  journalTextRowContent,
-  type JournalTextDeltaRow,
-  type JournalTextPrunedRow
-} from './journal-text-rows'
+import { journalTextRowContent, type JournalTextDeltaRow } from './journal-text-rows'
 // Persisted journal row shapes plus read-time upcasting.
 //
 // The journal is append-only, so migration is upcasting on read and never an
@@ -248,7 +244,6 @@ export const MAX_JOURNAL_LIFECYCLE_BATCH_MUTATIONS = 200
 
 export type JournalRow =
   | JournalTextDeltaRow
-  | JournalTextPrunedRow
   | JournalEpochRow
   | JournalItemRow
   | JournalTombstoneRow
@@ -395,8 +390,7 @@ const ROW_CONTENT_CHECK_BY_KIND: Record<
     )
   },
   queue: journalQueueRowContent,
-  'text-delta': (record) => fieldsContent(journalTextRowContent(record)),
-  'text-pruned': (record) => fieldsContent(journalTextRowContent(record))
+  'text-delta': (record) => fieldsContent(journalTextRowContent(record))
 }
 export const KNOWN_ROW_KINDS = new Map(Object.entries(ROW_CONTENT_CHECK_BY_KIND))
 

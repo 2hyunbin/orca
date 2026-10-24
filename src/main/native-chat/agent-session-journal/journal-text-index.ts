@@ -1,287 +1,188 @@
-import type Database from '../../sqlite/sync-database'
-import { iterateJournalEpochRows } from './journal-row-table'
-import { parseJournalRow, type JournalRow } from './journal-row-schema'
-import {
-  journalTextField,
-  journalTextFields,
-  journalWholeItem,
-  type JournalSequenceRange,
-  type JournalTextPrunedRow
-} from './journal-text-rows'
+import type { JournalRow } from './journal-row-schema'
+import { journalTextFields, type JournalSequenceRange } from './journal-text-rows'
 
+type Range = { first: number; last: number; next: Range | null }
 export type JournalTextPieces = {
   itemId: string
   field: number
-  marker: number
-  witness: number
+  marker: { seq: number; revision: number } | null
+  witness: { seq: number; revision: number; settlementId?: string } | null
   revision: number
-  ranges: JournalSequenceRange[]
+  head: Range | null
+  tail: Range | null
+  released: Set<number>
 }
+export const journalTextKey = (itemId: string, field: number): string =>
+  JSON.stringify([itemId, field])
 
-export function journalTextKey(itemId: string, field: number): string {
-  return JSON.stringify([itemId, field])
-}
-
-/** Derived positions only: neither reply strings nor a durable cleanup obligation. */
+/** Derived positions only; unexamined ranges advance once, protected exceptions wake by key. */
 export class JournalTextIndex {
   readonly pieces = new Map<string, JournalTextPieces>()
   readonly ready = new Set<string>()
-  private readonly protectedOnly = new Set<string>()
-  private readonly covered: JournalSequenceRange[] = []
-  private readonly superseded = new Map<string, number>()
-
-  covers = (first: number, last: number): boolean => {
-    if (last < first) {
-      return true
-    }
-    let low = 0
-    let high = this.covered.length
-    while (low < high) {
-      const mid = (low + high) >>> 1
-      if (this.covered[mid][1] < first) {
-        low = mid + 1
-      } else {
-        high = mid
-      }
-    }
-    return (
-      low < this.covered.length && this.covered[low][0] <= first && this.covered[low][1] >= last
-    )
-  }
-
-  supersedes(itemId: string, field: number, revision: number): boolean {
-    return revision <= (this.superseded.get(journalTextKey(itemId, field)) ?? 0)
-  }
-
-  overlaps(first: number, last: number): boolean {
-    return this.covered.some(([start, end]) => first <= end && last >= start)
-  }
-
-  certify(row: JournalTextPrunedRow): void {
-    const key = journalTextKey(row.itemId, row.field)
-    this.superseded.set(key, Math.max(this.superseded.get(key) ?? 0, row.revision))
-    this.covered.push(...row.ranges)
-    this.covered.sort((a, b) => a[0] - b[0])
-    for (let i = this.covered.length - 1; i > 0; i--) {
-      const previous = this.covered[i - 1]
-      const current = this.covered[i]
-      if (previous[1] + 1 >= current[0]) {
-        this.covered.splice(i - 1, 2, [previous[0], Math.max(previous[1], current[1])])
-      }
-    }
-  }
-
-  observe(row: JournalRow): void {
-    if (row.kind === 'text-pruned') {
-      this.certify(row)
-      const piece = this.pieces.get(journalTextKey(row.itemId, row.field))
-      if (piece) {
-        piece.ranges = subtractJournalTextRanges(piece.ranges, row.ranges)
-      }
-    } else if (row.kind === 'text-delta') {
-      const piece = this.pieces.get(journalTextKey(row.itemId, row.field))
-      if (!piece?.marker) {
-        throw new Error('journal_text_anchor_missing')
-      }
-      const last = piece.ranges.at(-1)
-      if (last && last[1] + 1 === row.seq) {
-        piece.ranges[piece.ranges.length - 1] = [last[0], row.seq]
-      } else {
-        piece.ranges.push([row.seq, row.seq])
-      }
-    } else if (row.kind === 'item' || row.kind === 'lifecycle-batch') {
-      const items = row.kind === 'item' ? [row] : row.mutations
-      for (const item of items) {
-        if (item.kind !== 'item') {
-          continue
-        }
-        for (const field of journalTextFields(item.body)) {
-          const key = journalTextKey(item.itemId, field)
-          const piece = this.pieces.get(key) ?? {
-            itemId: item.itemId,
-            field,
-            marker: 0,
-            witness: 0,
-            revision: 0,
-            ranges: []
-          }
-          if (row.v >= 5 && !piece.marker) {
-            piece.marker = row.seq
-          }
-          if (item.revision > piece.revision) {
-            piece.witness = row.seq
-            piece.revision = item.revision
-          }
-          this.pieces.set(key, piece)
-        }
-      }
-    }
-  }
-
-  reconsider(key: string, protectedRows: ReadonlySet<number>): void {
-    const piece = this.pieces.get(key)
-    if (!piece) {
+  private readonly protectedRows = new Map<number, number>()
+  private readonly parked = new Map<number, string>()
+  /** Physical format boundary; the prefix through this retained whole stays strict. */
+  sparseAfter: number | null = null
+  protectionMoved(previous: number | undefined, next: number): void {
+    if (previous === next) {
       return
     }
-    const eligible = piece.ranges.some(
-      ([first, last]) =>
-        first < piece.witness &&
-        (Math.min(last, piece.witness - 1) - first + 1 > protectedRows.size ||
-          Array.from(
-            { length: Math.min(last, piece.witness - 1) - first + 1 },
-            (_, n) => first + n
-          ).some((seq) => !protectedRows.has(seq)))
-    )
-    if (eligible) {
-      this.ready.add(key)
-      this.protectedOnly.delete(key)
-    } else {
-      this.ready.delete(key)
-      if (piece.ranges.some(([first]) => first < piece.witness)) {
-        this.protectedOnly.add(key)
+    if (previous !== undefined) {
+      const count = (this.protectedRows.get(previous) ?? 1) - 1
+      if (count) {
+        this.protectedRows.set(previous, count)
       } else {
-        this.protectedOnly.delete(key)
-      }
-    }
-  }
-
-  reconsiderProtected(protectedRows: ReadonlySet<number>): void {
-    for (const key of this.protectedOnly) {
-      this.reconsider(key, protectedRows)
-    }
-  }
-
-  changed(row: JournalRow, protectedRows: ReadonlySet<number>): void {
-    this.observe(row)
-    if (row.kind === 'item') {
-      for (const field of journalTextFields(row.body)) {
-        this.reconsider(journalTextKey(row.itemId, field), protectedRows)
-      }
-    } else if (row.kind === 'lifecycle-batch') {
-      for (const item of row.mutations) {
-        if (item.kind === 'item') {
-          for (const field of journalTextFields(item.body)) {
-            this.reconsider(journalTextKey(item.itemId, field), protectedRows)
-          }
+        this.protectedRows.delete(previous)
+        const key = this.parked.get(previous)
+        if (key !== undefined) {
+          this.parked.delete(previous)
+          this.pieces.get(key)?.released.add(previous)
+          this.ready.add(key)
         }
       }
-    } else if (row.kind === 'text-pruned' || row.kind === 'text-delta') {
-      this.reconsider(journalTextKey(row.itemId, row.field), protectedRows)
     }
+    this.protectedRows.set(next, (this.protectedRows.get(next) ?? 0) + 1)
   }
-}
-
-export function subtractJournalTextRanges(
-  ranges: readonly JournalSequenceRange[],
-  removed: readonly JournalSequenceRange[]
-): JournalSequenceRange[] {
-  return ranges.flatMap(([first, last]) => {
-    const kept: JournalSequenceRange[] = []
-    let start = first
-    for (const [cutFirst, cutLast] of removed) {
-      if (cutLast < start || cutFirst > last) {
-        continue
-      }
-      if (cutFirst > start) {
-        kept.push([start, cutFirst - 1])
-      }
-      start = Math.max(start, cutLast + 1)
-    }
-    if (start <= last) {
-      kept.push([start, last])
-    }
-    return kept
-  })
-}
-
-export function readJournalTextRow(
-  db: Database.Database,
-  sessionId: string,
-  epoch: string,
-  seq: number
-): JournalRow | null {
-  const stored = db
-    .prepare('SELECT row_json FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq = ?')
-    .get(sessionId, epoch, seq)
-  const parsed =
-    typeof stored?.row_json === 'string' ? parseJournalRow(stored.row_json, true) : null
-  return parsed?.ok && parsed.row.seq === seq && parsed.row.epoch === epoch ? parsed.row : null
-}
-
-export function validateJournalTextProof(
-  db: Database.Database,
-  sessionId: string,
-  row: JournalTextPrunedRow,
-  deleted = true
-): boolean {
-  const marker = readJournalTextRow(db, sessionId, row.epoch, row.marker)
-  const witness = readJournalTextRow(db, sessionId, row.epoch, row.witness)
-  if (
-    !marker ||
-    marker.v < 5 ||
-    marker.kind !== 'item' ||
-    !witness ||
-    (witness.kind !== 'item' && witness.kind !== 'lifecycle-batch')
-  ) {
-    return false
+  isProtected(seq: number): boolean {
+    return this.protectedRows.has(seq)
   }
-  const whole = journalWholeItem(witness, row.itemId, row.revision)
-  if (
-    marker.itemId !== row.itemId ||
-    journalTextField(marker.body, row.field) === null ||
-    !whole ||
-    journalTextField(whole.body, row.field) === null ||
-    marker.revision >= whole.revision
-  ) {
-    return false
-  }
-  let previous = row.marker
-  for (const [first, last] of row.ranges) {
-    if (first <= previous || last < first || last >= row.witness) {
-      return false
-    }
-    if (
-      deleted &&
-      db
-        .prepare(
-          'SELECT seq FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq BETWEEN ? AND ? LIMIT 1'
-        )
-        .get(sessionId, row.epoch, first, last)
-    ) {
-      return false
-    }
-    previous = last
-  }
-  return true
-}
-
-/** First paged pass retains certificates only; whole witnesses are fetched by their keys. */
-export function loadJournalTextIndex(db: Database.Database, sessionId: string, epoch: string) {
-  const index = new JournalTextIndex()
-  let invalidAt: number | null = null
-  let newer: number | null = null
-  for (const entry of iterateJournalEpochRows(db, sessionId, epoch)) {
-    const parsed = parseJournalRow(entry.rowJson, true)
-    if (!parsed.ok) {
-      if (parsed.unreadable) {
-        newer ??= entry.seq
-      }
-      continue
-    }
-    const row = parsed.row
-    if (row.kind !== 'text-pruned') {
-      continue
-    }
-    if (
-      row.seq !== entry.seq ||
-      row.epoch !== epoch ||
-      !validateJournalTextProof(db, sessionId, row) ||
-      row.ranges.some(([first, last]) => index.overlaps(first, last))
-    ) {
-      invalidAt ??= entry.seq
+  private reconsider(key: string, piece: JournalTextPieces): void {
+    if (piece.released.size || (piece.head && piece.head.first < (piece.witness?.seq ?? 0))) {
+      this.ready.add(key)
     } else {
-      index.certify(row)
+      this.ready.delete(key)
     }
   }
-  return { index, invalidAt, newer }
+  unwitnessed(itemId: string, field: number): boolean {
+    const piece = this.pieces.get(journalTextKey(itemId, field))
+    return (
+      piece?.tail !== null &&
+      piece?.tail !== undefined &&
+      piece.tail.last > (piece.witness?.seq ?? 0)
+    )
+  }
+  delta(row: Extract<JournalRow, { kind: 'text-delta' }>): void {
+    const key = journalTextKey(row.itemId, row.field)
+    const piece = this.pieces.get(key)
+    if (!piece?.marker) {
+      throw new Error('journal_text_anchor_missing')
+    }
+    if (piece.tail && piece.tail.last + 1 === row.seq) {
+      piece.tail.last = row.seq
+    } else {
+      const range: Range = { first: row.seq, last: row.seq, next: null }
+      if (piece.tail) {
+        piece.tail.next = range
+      } else {
+        piece.head = range
+      }
+      piece.tail = range
+    }
+    this.reconsider(key, piece)
+  }
+  /** Called only after the ordinary item fold actually accepts this whole. */
+  whole(
+    row: JournalRow,
+    itemId: string,
+    revision: number,
+    body: Extract<JournalRow, { kind: 'item' }>['body']
+  ): void {
+    const fields = journalTextFields(body)
+    if (row.kind === 'item' && row.v >= 5 && fields.length) {
+      this.sparseAfter ??= row.seq
+    }
+    for (const field of fields) {
+      const key = journalTextKey(itemId, field)
+      const piece = this.pieces.get(key) ?? {
+        itemId,
+        field,
+        marker: null,
+        witness: null,
+        revision: 0,
+        head: null,
+        tail: null,
+        released: new Set<number>()
+      }
+      if (row.v >= 5 && row.kind === 'item') {
+        piece.marker ??= { seq: row.seq, revision }
+      }
+      piece.witness = {
+        seq: row.seq,
+        revision,
+        ...(row.kind === 'lifecycle-batch' ? { settlementId: row.settlementId } : {})
+      }
+      piece.revision = revision
+      this.pieces.set(key, piece)
+      this.reconsider(key, piece)
+    }
+  }
+  select(key: string, piece: JournalTextPieces, budget: number) {
+    let head = piece.head
+    let position = head?.first ?? 0
+    let examined = 0
+    let runs = 0
+    let lastSelected = 0
+    const parked: number[] = []
+    const released: number[] = []
+    const sequences: number[] = []
+    const release = piece.released.values()
+    while (examined < budget && runs < 128) {
+      const old = release.next().value
+      const seq = old ?? (head && position < (piece.witness?.seq ?? 0) ? position : undefined)
+      if (seq === undefined) {
+        break
+      }
+      examined++
+      if (old !== undefined) {
+        released.push(seq)
+      } else if (head) {
+        if (position === head.last) {
+          head = head.next
+          position = head?.first ?? 0
+        } else {
+          position++
+        }
+      }
+      if (this.isProtected(seq)) {
+        parked.push(seq)
+      } else {
+        sequences.push(seq)
+        if (lastSelected + 1 !== seq) {
+          runs++
+        }
+        lastSelected = seq
+      }
+    }
+    // Released exceptions can precede or follow unexamined work; only the bounded selection sorts.
+    sequences.sort((a, b) => a - b)
+    const ordered: JournalSequenceRange[] = []
+    for (const seq of sequences) {
+      const last = ordered.at(-1)
+      if (last && last[1] + 1 === seq) {
+        ordered[ordered.length - 1] = [last[0], seq]
+      } else {
+        ordered.push([seq, seq])
+      }
+    }
+    return {
+      sequences,
+      ranges: ordered,
+      examined,
+      commit: () => {
+        piece.head = head
+        if (head) {
+          head.first = position
+        } else {
+          piece.tail = null
+        }
+        for (const seq of released) {
+          piece.released.delete(seq)
+        }
+        for (const seq of parked) {
+          this.parked.set(seq, key)
+        }
+        this.reconsider(key, piece)
+      }
+    }
+  }
 }

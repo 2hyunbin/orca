@@ -77,6 +77,7 @@ export function findSequenceGap(
 export function readJournalSince(
   source: {
     state: { epoch: string; lastSequence: number; oldestSequence: number }
+    sparseAfter?: number | null
     rowsAfter: (afterSequence: number) => JournalRow[]
   },
   cursor: AgentJournalCursor,
@@ -89,6 +90,7 @@ export function readJournalSince(
   return {
     ok: true,
     rows: source.rowsAfter(resume.afterSequence),
-    cursor: currentCursor()
+    cursor: currentCursor(),
+    coversGap: (first) => source.sparseAfter != null && first > source.sparseAfter
   }
 }
