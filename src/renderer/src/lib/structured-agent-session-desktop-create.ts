@@ -39,9 +39,7 @@ import { notifyStructuredLaunchListeners } from './structured-agent-session-laun
 import {
   currentDesktopCreate,
   presentDesktopCreateWorkspace,
-  removeDesktopCreateProvisional
-} from './structured-agent-session-desktop-create-presentation'
-import {
+  removeDesktopCreateProvisional,
   acceptDesktopCreateCatalog as acceptCatalog,
   acceptDesktopCreateTopology as acceptTopology
 } from './structured-agent-session-desktop-create-presentation'
