@@ -73,7 +73,12 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
     placement: MovedPanePlacement | undefined
   ): void {
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
-    const rebuilt = snapshot?.tabGroups ?? []
+    // Why: a rebuild names a lone group with the default id; it is still the group the user had.
+    const keepsLoneGroup = snapshot?.tabGroups?.length === 1 && groupsBefore.length === 1
+    const rebuilt =
+      keepsLoneGroup && snapshot?.tabGroups?.[0]
+        ? [{ ...snapshot.tabGroups[0], id: groupsBefore[0]!.id }]
+        : (snapshot?.tabGroups ?? [])
     const tabId = move.targetTabId
     const target =
       rebuilt.find((group) => group.id === placement?.targetGroupId) ??
@@ -106,7 +111,10 @@ export abstract class OrcaRuntimeWithHeadlessPaneMoveToNewTab extends OrcaRuntim
       }),
       tabId
     )
-    const layout = snapshot.tabGroupLayout ?? { type: 'leaf' as const, groupId: target.id }
+    const layout =
+      keepsLoneGroup || !snapshot.tabGroupLayout
+        ? { type: 'leaf' as const, groupId: target.id }
+        : snapshot.tabGroupLayout
     const surface = snapshot.tabs.find(
       (tab) => tab.type === 'terminal' && tab.parentTabId === tabId
     )

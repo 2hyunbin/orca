@@ -198,6 +198,33 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     await move('host-new-tab', { targetGroupId: group.id, index: 0 })
     expect((await listed())?.tabOrder).toEqual(['host-new-tab', 'other-tab', 'host-tab'])
   })
+  it('keeps the group the user merged into, and the drop position in it', async () => {
+    const { runtime, move } = await setup()
+    const worktree = `id:${TEST_WORKTREE_ID}`
+    const groups = async () => (await runtime.listMobileSessionTabs(worktree)).tabGroups ?? []
+    const [first] = await groups()
+    await runtime.moveMobileSessionTab(worktree, {
+      kind: 'split',
+      tabId: 'other-tab',
+      targetGroupId: first!.id,
+      splitDirection: 'right'
+    })
+    const newer = (await groups()).find((group) => group.id !== first!.id)!
+    // Merging the first group's tab into the newer one leaves only the newer, user-made group.
+    await runtime.moveMobileSessionTab(worktree, {
+      kind: 'move-to-group',
+      tabId: 'host-tab',
+      targetGroupId: newer.id,
+      index: 1
+    })
+    expect((await groups()).map((group) => [group.id, group.tabOrder])).toEqual([
+      [newer.id, ['other-tab', 'host-tab']]
+    ])
+    await move('host-new-tab', { targetGroupId: newer.id, index: 0 })
+    expect((await groups()).map((group) => [group.id, group.tabOrder])).toEqual([
+      [newer.id, ['host-new-tab', 'other-tab', 'host-tab']]
+    ])
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()
