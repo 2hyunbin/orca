@@ -105,6 +105,8 @@ export const TEST_RUNNERS = [
     // Why mirrors: an UNIT_EXCLUDE entry no workflow names would otherwise leave CI silently.
     name: 'dedicated unit jobs (UNIT_EXCLUDE)',
     include: DEDICATED_UNIT_FILES,
+    // Those jobs run config/vitest.config.ts, so a file there still needs a UNIT_INCLUDE name.
+    within: UNIT_INCLUDE,
     sources: ['.github/workflows/pr.yml', '.github/workflows/unit-tests.yml'],
     mirrors: DEDICATED_UNIT_FILES.map((glob) => glob.replace(/\*\*$/, ''))
   },
@@ -116,7 +118,7 @@ const TEST_FRAMEWORK_IMPORT = /\bfrom\s+['"](?:vitest|node:test|@playwright\/tes
 const TEST_REGISTRATION =
   /^\s*(?:describe|it|test|suite|bench)(?:\.\w+)*(?:\([^)]*\))?\s*\(\s*[`'"]/m
 // Cheap prefilter; the parser decides what is actually type-only.
-const MAY_HAVE_TYPE_ONLY_IMPORT = /\b(?:import|export)\s*(?:type\b|\{[^}]*\btype\s)/
+const MAY_HAVE_TYPE_ONLY_IMPORT = /\b(?:import|export)\s*(?:type\b|\{[^}]*\btype\s|\()/
 
 export function isTestLike(file, source) {
   return (
@@ -137,7 +139,7 @@ export function findRunnerDrift(runners, readSource) {
     const combined = texts.map(([, text]) => text ?? '').join('\n')
     for (const literal of mirrors) {
       if (!combined.includes(literal)) {
-        problems.push(`${name}: ${sources.join(', ')} no longer contain ${JSON.stringify(literal)}`)
+        problems.push(`${name}: ${sources.join(', ')} do not contain ${JSON.stringify(literal)}`)
       }
     }
   }
@@ -173,7 +175,22 @@ function isTypeOnlyModuleStatement(statement) {
   return false
 }
 
-// Why: type-only imports are erased, so they never run the imported module's suites.
+function typeOnlyImportRanges(sourceFile) {
+  const ranges = sourceFile.statements
+    .filter(isTypeOnlyModuleStatement)
+    .map((statement) => [statement.getStart(sourceFile), statement.end])
+  const visit = (node) => {
+    if (ts.isImportTypeNode(node)) {
+      ranges.push([node.getStart(sourceFile), node.end])
+      return
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sourceFile)
+  return ranges
+}
+
+// Why: type-only imports and `typeof import()` are erased, so they never run the module's suites.
 export function withoutTypeOnlyImports(file, source) {
   if (!MAY_HAVE_TYPE_ONLY_IMPORT.test(source)) {
     return source
@@ -181,17 +198,16 @@ export function withoutTypeOnlyImports(file, source) {
   const kind = /\.[jt]sx$/.test(file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, kind)
   let result = source
-  for (const statement of sourceFile.statements.toReversed()) {
-    if (isTypeOnlyModuleStatement(statement)) {
-      result = result.slice(0, statement.getStart(sourceFile)) + result.slice(statement.end)
-    }
+  // Blank rather than cut, so ranges that nest or overlap stay valid.
+  for (const [start, end] of typeOnlyImportRanges(sourceFile)) {
+    result = result.slice(0, start) + ' '.repeat(end - start) + result.slice(end)
   }
   return result
 }
 
-function collects({ include, exclude = [] }, file) {
+function collects({ include, within = include, exclude = [] }, file) {
   const matches = (glob) => path.matchesGlob(file, glob)
-  return include.some(matches) && !exclude.some(matches)
+  return include.some(matches) && within.some(matches) && !exclude.some(matches)
 }
 
 // A suite module (e.g. `Foo.case.spec.tsx`) is collected when a selected entry file imports it.

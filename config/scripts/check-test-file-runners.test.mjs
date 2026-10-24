@@ -2,21 +2,25 @@ import { describe, expect, it } from 'vitest'
 import { findRunnerDrift, findUncollectedTestFiles } from './check-test-file-runners.mjs'
 import { classifyPrJobs } from './pr-code-change-scope.mjs'
 
-const RUNNERS = [{ name: 'unit', include: ['src/**/*.test.ts'], exclude: ['src/live.test.ts'] }]
+const RUNNERS = [
+  { name: 'unit', include: ['src/**/*.test.ts'], exclude: ['src/live/**'] },
+  { name: 'live', include: ['src/live/**'], within: ['src/**/*.test.ts'] }
+]
 const SUITE = "import { it } from 'vitest'\nit('works', () => {})\n"
 
 describe('findUncollectedTestFiles', () => {
   it('reports test files no runner collects, whatever their naming', () => {
     const sources = new Map([
       ['src/a.test.ts', SUITE],
-      ['src/live.test.ts', SUITE],
+      ['src/live/shell.test.ts', SUITE],
+      ['src/live/shell-case.spec.ts', SUITE],
       ['src/orphan.spec.tsx', SUITE],
       ['src/budget.bench.ts', SUITE],
       ['tools/lease-check.mjs', "import { test } from 'node:test'\ntest('holds', () => {})\n"],
       ['src/not-a-test.ts', 'export const value = 1\n']
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
-      'src/live.test.ts',
+      'src/live/shell-case.spec.ts',
       'src/orphan.spec.tsx',
       'src/budget.bench.ts',
       'tools/lease-check.mjs'
@@ -36,19 +40,22 @@ describe('findUncollectedTestFiles', () => {
           "import { type Inline } from './inline-type.spec'",
           "export type { Shape } from './typed-export.spec'",
           'export type Alias = Record<string, number>',
-          "export { run } from './after-alias.spec'"
+          "export { run } from './after-alias.spec'",
+          "type Suite = typeof import('./type-query.spec')"
         ].join('\n')
       ],
       ['src/typed-import.spec.ts', SUITE],
       ['src/inline-type.spec.ts', SUITE],
       ['src/typed-export.spec.ts', SUITE],
-      ['src/after-alias.spec.ts', SUITE]
+      ['src/after-alias.spec.ts', SUITE],
+      ['src/type-query.spec.ts', SUITE]
     ])
     expect(findUncollectedTestFiles(sources, RUNNERS)).toEqual([
       'src/page.dropped.spec.ts',
       'src/typed-import.spec.ts',
       'src/inline-type.spec.ts',
-      'src/typed-export.spec.ts'
+      'src/typed-export.spec.ts',
+      'src/type-query.spec.ts'
     ])
   })
 })
@@ -66,7 +73,7 @@ describe('findRunnerDrift', () => {
       'b.config.ts': "include: ['src/**/*.spec.ts']"
     }
     expect(findRunnerDrift(runners, (file) => files[file] ?? null)).toEqual([
-      `changed: b.config.ts no longer contain "'src/**/*.test.ts'"`,
+      `changed: b.config.ts do not contain "'src/**/*.test.ts'"`,
       'deleted: c.config.ts is missing'
     ])
   })
