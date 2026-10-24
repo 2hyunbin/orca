@@ -1,4 +1,4 @@
-import { composeAgentLaunchProfile } from '../shared/tui-agent-launch-defaults'
+import { composeAgentLaunchProfile } from '../../../shared/tui-agent-launch-defaults'
 import {
   closeTestStores,
   testState,
@@ -6,28 +6,28 @@ import {
   writeDataFile,
   readDataFile,
   collectPropertyPaths,
-  makeRepo,
-  makeTerminalTab
-} from './persistence-test-harness'
+  makeRepo
+} from '../../persistence-test-harness'
+import { makeTerminalTab } from '../../persistence-session-fixtures'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { GlobalSettings } from '../shared/global-settings-types'
-import type { PersistedState } from '../shared/persisted-state-types'
-import { getDefaultWorkspaceSession } from '../shared/constants'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
+import type { PersistedState } from '../../../shared/persisted-state-types'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
 
 import {
   getLocalWorktreeScanGeneration,
   isLocalWorktreeScanGenerationCurrent
-} from './local-worktree-scan-generation'
+} from '../../local-worktree-scan-generation'
 
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
 }))
 
-vi.mock('./ssh/config/ssh-config-parser', () => ({
+vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
@@ -53,11 +53,11 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
+vi.mock('../../telemetry/client', () => ({
   track: trackMock
 }))
 
-vi.mock('./telemetry/cohort-classifier', () => ({
+vi.mock('../../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
 

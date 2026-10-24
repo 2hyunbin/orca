@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { normalizeRightSidebarTab } from './persistence'
+import { normalizeRightSidebarTab } from './ui-selection-normalization'
 
 describe('normalizeRightSidebarTab', () => {
   it.each(['explorer', 'search', 'vault', 'workspaces', 'source-control', 'checks', 'ports'])(

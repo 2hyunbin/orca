@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { encodeOrcadMigrationShellHistoryHeader } from './persistence/migrating-orcad-catalog/orcad-migration-shell-history-format'
-import { getOrcadMigrationCatalogState } from './runtime/orcad-migration-catalog-import'
-import { injectHistoryEnv, readHistoryMeta } from './terminal-history'
-import { getHistoryRoot } from './terminal-history-paths'
-import { hashWorktreeId } from './terminal-history-id'
+import { encodeOrcadMigrationShellHistoryHeader } from './orcad-migration-shell-history-format'
+import { getOrcadMigrationCatalogState } from '../../runtime/orcad-migration-catalog-import'
+import { injectHistoryEnv, readHistoryMeta } from '../../terminal-history'
+import { getHistoryRoot } from '../../terminal-history-paths'
+import { hashWorktreeId } from '../../terminal-history-id'
 import { DORMANT_WORKTREE_ID, manifest } from './persistence-orcad-migration-catalog-fixture'
 import {
   BASH,
@@ -22,7 +22,7 @@ import {
   stage,
   type EncodedBlob
 } from './persistence-orcad-migration-shell-history-fixture'
-import { createStore, testState } from './persistence-test-harness'
+import { createStore, testState } from '../../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -33,7 +33,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 let desktopHistory: string
 
