@@ -349,7 +349,7 @@ it.each([
       chatBox('a').click()
       chatBox('b').click()
     })
-    const parentName = local === 'missing' ? p.id : 'parent'
+    const parentName = 'parent'
     await act(async () => namedBox(`Select all chats in ${parentName}`).click())
     if (local !== 'missing') {
       await act(async () => button('Collapse parent').click())
