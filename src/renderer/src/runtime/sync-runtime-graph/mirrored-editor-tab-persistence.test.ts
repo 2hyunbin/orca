@@ -1,6 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { parseWorkspaceSessionSalvaging } from '../../../../shared/workspace-session-salvage'
+import { UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH } from '../../../../shared/runtime-types'
 import { buildEditorSessionData } from '../../lib/workspace-session'
+import { buildHydratedEditorSessionState } from '../../store/slices/editor/actions/hydrated-editor-session-state'
 import { createTestStore, makeWorktree } from '../../store/slices/store-test-helpers'
 import { createStoreSessionMockApi } from '../../store/slices/store-session-test-harness'
 import { applyWebSessionTabsSnapshot } from '../web-session-tabs-sync/snapshot-api'
@@ -85,4 +87,54 @@ it('does not republish a mirrored editor after persistence and hydration', () =>
     )
     expect(local.openFilesByWorktree?.[WT]?.[0]).not.toHaveProperty('mirroredFromRuntimeSession')
   }
+})
+
+it('keeps a restored dirty mirror until the host publishes the worktree', () => {
+  const persisted = buildEditorSessionData(
+    [
+      {
+        id: 'host-file',
+        filePath: '/repo/app.ts',
+        relativePath: 'app.ts',
+        worktreeId: WT,
+        language: 'typescript',
+        mode: 'edit',
+        isDirty: true,
+        runtimeEnvironmentId: ENV,
+        mirroredFromRuntimeSession: true
+      }
+    ],
+    { 'host-file': 'unsaved client edits' },
+    {},
+    {},
+    {}
+  )
+  const restored = buildHydratedEditorSessionState(
+    {
+      activeRepoId: 'repo',
+      activeWorktreeId: WT,
+      activeTabId: null,
+      tabsByWorktree: {},
+      terminalLayoutsByTabId: {},
+      ...persisted
+    },
+    new Set([WT]),
+    WT
+  ).state
+  const state = makeState(restored)
+  const unpublished = makeSnapshot([], {
+    publicationEpoch: UNPUBLISHED_WORKTREE_PUBLICATION_EPOCH,
+    snapshotVersion: 0
+  })
+  const held = { ...state, ...applyWebSessionTabsSnapshot(state, unpublished, ENV, NOW) }
+  expect(
+    buildEditorSessionData(held.openFiles, held.editorDrafts ?? {}, {}, {}, {})
+      .openFilesByWorktree?.[WT]?.[0]?.dirtyDraftContent
+  ).toBe('unsaved client edits')
+
+  const closed = {
+    ...held,
+    ...applyWebSessionTabsSnapshot(held, makeSnapshot([]), ENV, NOW + 1)
+  }
+  expect(closed.openFiles).toEqual([])
 })
