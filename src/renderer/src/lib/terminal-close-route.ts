@@ -12,11 +12,7 @@ function routeForHost(hostId: string | null | undefined): TerminalWorktreeRoute 
   return host ? { runtimeEnvironmentId: null } : null
 }
 
-/**
- * Which host a terminal tab's close goes to: the worktree catalog's route, else the one host the
- * tab's own PTY ids name, else the host recorded on its unified tab. Null when nothing names one,
- * e.g. before the catalog hydrates (#11308); per-PTY teardown still fails closed then.
- */
+/** Route close through workspace owner, unique PTY host, then unified-tab host. Unknown catalog ownership returns null (#11308); per-PTY teardown still fails closed. */
 export function resolveTerminalCloseRoute(
   state: AppState,
   worktreeId: string,
