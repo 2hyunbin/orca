@@ -369,7 +369,11 @@ it.each([
     })
   }
   const find = Array.prototype.find
-  vi.spyOn(Array.prototype, 'find').mockImplementation(function (this: object, predicate, thisArg) {
+  vi.spyOn(Array.prototype, 'find').mockImplementation(function (
+    this: ArrayLike<unknown>,
+    predicate,
+    thisArg
+  ) {
     return find.call(this, (value, index, array) => {
       visits.findVisits += 1
       return predicate.call(thisArg, value, index, array)
