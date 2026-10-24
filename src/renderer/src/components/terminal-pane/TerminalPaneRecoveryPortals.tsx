@@ -67,11 +67,16 @@ export function TerminalPaneRecoveryPortals({
   const ownerEnvironmentId = useWorkspaceRuntimeEnvironmentId(controller.worktreeId)
   const retryingOutageEnvironmentId = useRetryingOutageEnvironmentId(controller.worktreeId)
   const isolated = controller.isolatedPaneKey !== null
+  // Why: a pane waiting for SSH sign-in says so itself; "reconnecting" over it would be false.
+  const awaitingSignInHere = managedPanes.some(
+    (pane) => ptyRecoveryStatesByPaneId[pane.id]?.reason === 'ssh-sign-in'
+  )
   // Why not isolated panes: an Activity thread shows one pane away from this tab's surface.
   const canSpeak =
     controller.isVisible &&
     !isolated &&
     !showSshReconnectOverlay &&
+    !awaitingSignInHere &&
     !wslHostUnavailable &&
     pairingRefusedEnvironmentId === null
   const serverDown = retryingOutageEnvironmentId !== null
