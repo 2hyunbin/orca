@@ -27,7 +27,15 @@ export async function moveWebRuntimeSessionTab(
     args.environmentId?.trim() ??
     useAppStore.getState().settings?.activeRuntimeEnvironmentId?.trim() ??
     null
-  if (!environmentId || !isWebRuntimeSessionActive(environmentId)) {
+  return environmentId ? moveWebRuntimeSessionTabOnHost(environmentId, args) : false
+}
+
+/** The move on the runtime that owns the worktree, named by the caller. */
+export async function moveWebRuntimeSessionTabOnHost(
+  environmentId: string,
+  args: RuntimeMobileSessionTabMove & { worktreeId: string }
+): Promise<boolean> {
+  if (!isWebRuntimeSessionActive(environmentId)) {
     return false
   }
   const intentOwner = captureWebSessionIntentOwner(environmentId)

@@ -30,7 +30,9 @@ vi.mock('./web-session-reorder-intent', () => ({
 vi.mock('./web-runtime-session-snapshot', () => ({
   refreshWebRuntimeSessionTabsSnapshot: followUps.refresh
 }))
-vi.mock('./web-runtime-session-tab-move', () => ({ moveWebRuntimeSessionTab: followUps.reorder }))
+vi.mock('./web-runtime-session-tab-move', () => ({
+  moveWebRuntimeSessionTabOnHost: followUps.reorder
+}))
 vi.mock('./web-runtime-session-tab-lifecycle', () => ({
   activateWebRuntimeSessionTab: followUps.activate
 }))
@@ -151,9 +153,9 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     })
     expect(followUps.refresh).not.toHaveBeenCalled()
     expect(followUps.reorder).toHaveBeenCalledWith(
+      ENVIRONMENT_ID,
       expect.objectContaining({
         kind: 'reorder',
-        environmentId: ENVIRONMENT_ID,
         tabId: REQUEST.targetTabId,
         targetGroupId: 'group-1',
         tabOrder

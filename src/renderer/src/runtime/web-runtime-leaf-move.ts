@@ -16,7 +16,7 @@ import {
   recordWebSessionReorderIntent
 } from './web-session-reorder-intent'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
-import { moveWebRuntimeSessionTab } from './web-runtime-session-tab-move'
+import { moveWebRuntimeSessionTabOnHost } from './web-runtime-session-tab-move'
 import { activateWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
 
 /** The runtime that commits this worktree's pane moves itself; null keeps the move in this window. */
@@ -136,10 +136,9 @@ export async function settleHostPaneMove(args: {
     return
   }
   if (placement.order) {
-    await moveWebRuntimeSessionTab({
+    await moveWebRuntimeSessionTabOnHost(environmentId, {
       kind: 'reorder',
       worktreeId,
-      environmentId,
       tabId: targetTabId,
       targetGroupId: placement.order.groupId,
       tabOrder: placement.order.tabOrder

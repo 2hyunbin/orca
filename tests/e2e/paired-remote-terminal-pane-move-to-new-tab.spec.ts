@@ -63,7 +63,9 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
       const readHostPlacement = async (): Promise<[string[], string | null]> => {
         const listed = await listHost()
         const parentOf = (id: string | null): string | null =>
-          listed.tabs.find((tab) => tab.id === id || tab.parentTabId === id)?.parentTabId ?? null
+          listed.tabs
+            .flatMap((tab) => (tab.type === 'terminal' ? [tab] : []))
+            .find((tab) => tab.id === id || tab.parentTabId === id)?.parentTabId ?? null
         return [
           (listed.tabGroups?.[0]?.tabOrder ?? []).map((id) => parentOf(id) ?? id),
           parentOf(listed.activeTabId)
