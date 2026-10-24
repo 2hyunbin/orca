@@ -1,5 +1,5 @@
 import { resolveRuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
-import { rekeyMovedPaneOwners } from '../../moved-pane-owner-rekey'
+import { commitLeafMoveAndRekey } from '../../../ipc/pty/ipc/leaf-move'
 import type { OrcaRuntimeService } from '../../orca-runtime'
 import { defineMethod } from '../core'
 import {
@@ -127,7 +127,7 @@ export const SESSION_TAB_MUTATION_METHODS = [
           targetTabId: params.targetTabId,
           leafId: params.leafId
         },
-        (move) => rekeyMovedPaneOwners(runtime, move)
+        (move) => commitLeafMoveAndRekey({ store: runtime.requireStore(), runtime }, move)
       )
     }
   }),

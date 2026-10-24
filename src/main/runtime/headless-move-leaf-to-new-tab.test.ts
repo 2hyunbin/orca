@@ -30,7 +30,7 @@ async function setup() {
     }
   })
   // The host's real planner over the shared session, as Store.moveTerminalLeafToNewTab runs it.
-  const moveTerminalLeafToNewTab = vi.fn(async (request: TerminalLeafMoveRequest) => {
+  const commit = vi.fn(async (request: TerminalLeafMoveRequest) => {
     const plan = planTerminalLeafMove([{ hostId: 'local', session: getSession() }], request)
     if (plan.sessions[0]) {
       setSession(plan.sessions[0].session)
@@ -38,31 +38,27 @@ async function setup() {
     return plan.result
   })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture implements RuntimeStore for this runtime.
-  const runtime = new OrcaRuntimeService({
-    ...runtimeStore,
-    moveTerminalLeafToNewTab
-  } as RuntimeStore)
+  const runtime = new OrcaRuntimeService(runtimeStore as RuntimeStore)
   await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
   const published: unknown[] = []
   runtime.onMobileSessionTabsChanged((snapshot) => published.push(snapshot))
-  const onMoved = vi.fn()
   const move = (targetTabId = 'host-new-tab') =>
     runtime.moveMobileSessionLeafToNewTab(
       `id:${TEST_WORKTREE_ID}`,
       { sourceTabId: 'host-tab', targetTabId, leafId: SIBLING_LEAF_ID },
-      onMoved
+      commit
     )
-  return { runtime, getSession, published, onMoved, move }
+  return { runtime, getSession, published, commit, move }
 }
 describe('moveMobileSessionLeafToNewTab on a headless host', () => {
-  it('moves the leaf into the new tab, rekeys owners, and republishes the tabs', async () => {
-    const { runtime, getSession, published, onMoved, move } = await setup()
+  it('commits the move, and republishes the tabs with the leaf in its new tab', async () => {
+    const { runtime, getSession, published, commit, move } = await setup()
     await expect(move()).resolves.toEqual({ status: 'moved', ptyId: 'sibling-pty' })
     const layouts = getSession().terminalLayoutsByTabId
     expect(layouts['host-new-tab']?.root).toEqual({ type: 'leaf', leafId: SIBLING_LEAF_ID })
     expect(layouts['host-tab']?.root).toEqual({ type: 'leaf', leafId: HEADLESS_LEAF_ID })
-    expect(onMoved).toHaveBeenCalledWith(
-      expect.objectContaining({ targetTabId: 'host-new-tab', ptyId: 'sibling-pty' })
+    expect(commit).toHaveBeenCalledWith(
+      expect.objectContaining({ targetTabId: 'host-new-tab', ptyId: null })
     )
     expect(published).toHaveLength(1)
     const { tabs } = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
@@ -74,11 +70,11 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     expect(parentOf(HEADLESS_LEAF_ID)).toEqual(['host-tab'])
   })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
-    const { getSession, published, onMoved, move } = await setup()
+    const { getSession, published, commit, move } = await setup()
     const before = getSession()
     await expect(move('bad:tab')).resolves.toEqual({ status: 'refused', reason: 'invalid_request' })
     expect(getSession()).toBe(before)
-    expect(onMoved).not.toHaveBeenCalled()
+    expect(commit).not.toHaveBeenCalled()
     expect(published).toHaveLength(0)
   })
 })

@@ -278,7 +278,7 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
   async moveMobileSessionLeafToNewTab(
     worktreeSelector: string,
     args: { sourceTabId: string; targetTabId: string; leafId: string },
-    onMoved: (move: TerminalLeafMoveRequest) => void
+    commit: (move: TerminalLeafMoveRequest) => Promise<TerminalLeafMoveResult>
   ): Promise<TerminalLeafMoveResult> {
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     const worktreeId =
@@ -292,9 +292,8 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     if (!isTerminalLeafMoveRequest(move)) {
       return { status: 'refused', reason: 'invalid_request' }
     }
-    const result = (await this.store?.moveTerminalLeafToNewTab?.(move)) ?? { status: 'not_held' }
+    const result = await commit(move)
     if (result.status === 'moved') {
-      onMoved({ ...move, ptyId: result.ptyId })
       this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktreeId, { force: true })
       this.notifyMobileSessionTabsChanged(worktreeId)
     }
