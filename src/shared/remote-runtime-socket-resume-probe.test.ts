@@ -5,8 +5,7 @@ import {
 } from './remote-runtime-socket-liveness'
 import { SharedControlReconnectScheduler } from './remote-runtime/control/remote-runtime-shared-control-reconnect'
 
-// Regression for #9092: after sleep a socket can still read OPEN while its path is gone, and the
-// normal cadence took ~30-40 s to notice; resume now probes every socket with a short deadline.
+// Resume probes bound OPEN-but-dead paths after sleep instead of waiting the normal ~30–40s cadence (#9092).
 describe('remote runtime resume probe', () => {
   const monitors: { stop: () => void }[] = []
 
