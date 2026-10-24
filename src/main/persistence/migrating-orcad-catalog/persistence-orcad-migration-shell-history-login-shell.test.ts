@@ -3,8 +3,8 @@ import type * as NodeFs from 'node:fs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { injectHistoryEnv } from './terminal-history'
-import { getHistoryRoot } from './terminal-history-paths'
+import { injectHistoryEnv } from '../../terminal-history'
+import { getHistoryRoot } from '../../terminal-history-paths'
 import { DORMANT_WORKTREE_ID, manifest } from './persistence-orcad-migration-catalog-fixture'
 import {
   BASH,
@@ -15,7 +15,7 @@ import {
   hostHistoryDirectory,
   stage
 } from './persistence-orcad-migration-shell-history-fixture'
-import { createStore, testState } from './persistence-test-harness'
+import { createStore, testState } from '../../persistence-test-harness'
 
 const { missingShells, presentShells } = vi.hoisted(() => ({
   missingShells: new Set<string>(),
@@ -47,7 +47,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 let desktopHistory: string
 
