@@ -26,7 +26,9 @@ const state = vi.hoisted(() => ({
   startCodexHooks: vi.fn(),
   installManagedAgentHooks: vi.fn(async () => []),
   refreshOpenCodePlugins: vi.fn(),
-  adoptLoginShellAgentHomes: vi.fn(async () => {})
+  adoptLoginShellAgentHomes: vi.fn(async () => {}),
+  loginEnvironment: Promise.resolve() as Promise<void>,
+  profileOpened: Promise.resolve() as Promise<void>
 }))
 const profile = vi.hoisted(() => {
   const value: { settings: Partial<GlobalSettings> } = { settings: {} }
@@ -91,8 +93,15 @@ vi.mock('../ipc/pty/register-headless-runtime', () => ({
   registerHeadlessPtyRuntime: async () => {}
 }))
 vi.mock('../ipc/pty/provider/registry', () => ({ getLocalPtyProvider: () => null }))
+vi.mock('./orcad-wsl-host-login-environment', () => ({
+  adoptWslHostLoginEnvironment: async () => {
+    await state.loginEnvironment
+    return []
+  }
+}))
 vi.mock('./orcad-profile-state-startup', () => ({
   createOrcadProfileStateStartup: async () => {
+    await state.profileOpened
     const error = state.profileStartupErrors.shift()
     if (error) {
       throw error
@@ -343,5 +352,29 @@ it('leaves agent configs alone when status hooks are off', async () => {
     expect(state.startCodexHooks.mock.calls[0]![0].isEnabled()).toBe(false)
   } finally {
     await host.stop()
+  }
+})
+
+it('forks the terminal daemon once the login-shell env is in, without waiting for the profile store', async () => {
+  state.root = mkdtempSync(join(tmpdir(), 'orca-headless-daemon-early-'))
+  const login = Promise.withResolvers<void>()
+  const profileOpen = Promise.withResolvers<void>()
+  state.loginEnvironment = login.promise
+  state.profileOpened = profileOpen.promise
+  try {
+    const { startOrcad } = await import('./orcad-entry')
+    const starting = startOrcad({ noPairing: true, json: true })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The fork copies process.env, so it must not run before the login-shell variables land.
+    expect(state.startDaemon).not.toHaveBeenCalled()
+    login.resolve()
+    await vi.waitFor(() => expect(state.startDaemon).toHaveBeenCalledOnce())
+    // The profile store is still opening: the daemon start overlaps it.
+    profileOpen.resolve()
+    const host = await starting
+    await host.stop()
+  } finally {
+    state.loginEnvironment = Promise.resolve()
+    state.profileOpened = Promise.resolve()
   }
 })

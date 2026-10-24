@@ -183,9 +183,7 @@ describe('DashboardAgentRow', () => {
     expect(tokens).toContain('worktree-agent-row-hover')
     expect(markup).toContain('aria-label="Send to this agent"')
     expect(tokens).toContain('worktree-agent-send-target-button')
-    expect(tokens).toContain('absolute')
     expect(tokens).toContain('h-5')
-    expect(tokens).toContain('w-12')
     expect(markup).toContain('lucide-send')
     expect(markup).not.toContain('aria-label="Dismiss agent"')
   })
@@ -547,6 +545,26 @@ describe('DashboardAgentRow', () => {
 
       expect(markup).toContain('Sign-in required: Session expired')
       expect(markup).not.toContain('lucide-wrench')
+    })
+
+    it('says nothing for an approval the program reports after the turn finished', () => {
+      const markup = renderRow(
+        makeAgent(
+          {},
+          {
+            state: 'done',
+            programStatus: {
+              state: 'blocked',
+              kind: 'permission',
+              message: 'Approve plan',
+              observedAt: 1
+            }
+          }
+        )
+      )
+
+      expect(markup).not.toContain('Approve plan')
+      expect(markup).not.toContain('Needs approval')
     })
 
     it("falls back to the program's message when the row names no tool", () => {

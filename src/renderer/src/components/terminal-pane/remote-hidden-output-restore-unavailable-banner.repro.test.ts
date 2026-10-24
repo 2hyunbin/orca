@@ -233,7 +233,7 @@ function createPane(paneId: number) {
     },
     write: vi.fn<(data: string, callback?: () => void) => void>(function write(...args): void {
       const [data, callback] = args
-      if (data === '' || callback?.name === 'runParsedSteps') {
+      if (data.length === 0 || callback?.name === 'runParsedSteps') {
         callback?.()
       }
     }),
@@ -484,6 +484,7 @@ describe('remote hidden-output restore abandonment (issue2-hidden-output-skip)',
         'tab-1': ['tab-pty']
       },
       terminalPaneStartsByPaneKey: {},
+      terminalPaneResumeOutcomesByPaneKey: {},
       terminalLayoutsByTabId: {
         'tab-1': {
           root: { type: 'leaf', leafId: LEAF_1 },
