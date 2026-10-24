@@ -49,6 +49,36 @@ export type AutomationHostFilterResolutionInput = {
   referencedStableKeys?: ReadonlySet<string>
 }
 
+/**
+ * A selection saved under a desktop authority that is really a saved runtime names that
+ * runtime's host: same machine, same targets, so it moves rather than being dropped.
+ */
+export function foldDesktopHostFilter(
+  filter: AutomationHostFilter,
+  desktopAliasEnvironmentId: string | null | undefined
+): AutomationHostFilter {
+  if (
+    filter.kind !== 'host' ||
+    filter.host.authority.kind !== 'desktop' ||
+    !desktopAliasEnvironmentId
+  ) {
+    return filter
+  }
+  const authority = { kind: 'runtime', environmentId: desktopAliasEnvironmentId } as const
+  // Rebuilt per variant: a spread selector widens `kind` and no longer discriminates.
+  switch (filter.host.selector.kind) {
+    case 'ssh':
+      return {
+        kind: 'host',
+        host: { authority, selector: { kind: 'ssh', targetId: filter.host.selector.targetId } }
+      }
+    case 'orphan':
+      return { kind: 'host', host: { authority, selector: { kind: 'orphan' } } }
+    case 'self':
+      return { kind: 'host', host: { authority, selector: { kind: 'self' } } }
+  }
+}
+
 const ALL_RESOLUTION: AutomationHostFilterResolution = {
   effective: ALL_AUTOMATION_HOSTS_FILTER,
   entry: null,
@@ -97,10 +127,6 @@ function resolveAbsentEntry(
   host: StableAutomationCatalogRef,
   hydration: AutomationCatalogHydrationEvidence
 ): AutomationHostFilterResolution {
-  if (host.authority.kind === 'desktop' && hydration.desktopAliasEnvironmentId !== undefined) {
-    // The desktop authority is the same runtime as a saved one, so none of its keys is a host.
-    return fallBackToAllHosts()
-  }
   const authorityKey = automationAuthorityCatalogKey(host.authority)
   if (hydration.unavailableAuthorityKeys.has(authorityKey)) {
     return retain(filter, null, 'unavailable')

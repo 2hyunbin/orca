@@ -204,7 +204,7 @@ describe('useAutomationHostCatalog on a paired web client', () => {
     expect(desktopListScoped).not.toHaveBeenCalled()
   })
 
-  it('drops a saved Desktop filter instead of waiting forever for Desktop to load', async () => {
+  it('moves a saved Desktop filter to the server instead of waiting forever for Desktop', async () => {
     mocks.state = {
       ...storeState([]),
       automationHostFilter: {
@@ -215,7 +215,11 @@ describe('useAutomationHostCatalog on a paired web client', () => {
 
     await renderCatalogWithState()
 
-    expect(view?.resolution).toMatchObject({ status: 'removed', effective: { kind: 'all' } })
+    expect(view?.resolution).toMatchObject({
+      status: 'ready',
+      announceFallback: false,
+      effective: { kind: 'host', host: runtimeSelf }
+    })
   })
 })
 

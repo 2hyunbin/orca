@@ -122,8 +122,6 @@ export type AutomationHostCatalogInput = {
 /** Positive-evidence gates for absence. Missing data is never removal (invariant 4). */
 export type AutomationCatalogHydrationEvidence = {
   runtimeCatalogSettled: boolean
-  /** Set while the desktop authority is folded into this runtime; its keys then name no host. */
-  desktopAliasEnvironmentId?: string
   desktopSshHydrated: boolean
   runtimeSshHydratedByEnvironmentId: ReadonlyMap<string, boolean>
   savedRuntimeEnvironmentIds: ReadonlySet<string>

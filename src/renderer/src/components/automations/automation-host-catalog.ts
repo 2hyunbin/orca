@@ -288,7 +288,6 @@ export function buildAutomationHostCatalog(
     byStableKey,
     hydration: {
       runtimeCatalogSettled: input.runtimeCatalogSettled,
-      ...(desktopAliasEnvironmentId === undefined ? {} : { desktopAliasEnvironmentId }),
       // An unprojected desktop has no SSH targets left to load.
       desktopSshHydrated:
         desktopAliasEnvironmentId !== undefined || input.desktop.ssh.targetsHydrated,
