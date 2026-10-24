@@ -192,12 +192,7 @@ function harness(
     publish,
     runtime,
     topology: () => {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: observe the real publisher's stored topology without invoking unrelated workspace authorization/seeding.
-      const snapshots = Reflect.get(runtime, 'mobileSessionTabsByWorktree') as Map<
-        string,
-        { tabs: unknown[]; activeTabId: string | null }
-      >
-      const snapshot = snapshots.get('workspace-1')
+      const snapshot = runtime.mobileSessionTabsByWorktree.get('workspace-1')
       if (!snapshot) {
         throw new Error('ordinary topology missing')
       }
