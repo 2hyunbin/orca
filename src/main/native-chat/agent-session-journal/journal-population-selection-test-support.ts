@@ -1,6 +1,15 @@
-import { serialize } from 'node:v8'
+import { exerciseRetainedPopulation } from './journal-population-retained-test-support'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalMessageItem
+} from '../../../shared/agent-session-journal-types'
+import type { AgentSessionJournal } from './journal-store'
+import { deserialize, serialize } from 'node:v8'
 import { expect } from 'vitest'
-import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import {
+  agentJournalItemKey,
+  agentJournalSubmissionKey
+} from '../../../shared/agent-session-journal-item-key'
 import type { JournalReducerState } from './journal-reducer'
 import { stageJournalMutation } from './journal-mutation-stage'
 
@@ -90,4 +99,109 @@ export function exercisePopulationSelection(state: JournalReducerState): void {
   expect(fork.selection.order.maximum('attempt:tied-attempts', true)?.key).toBe('echo-1')
   expect(serialize(Array.from(state.selection.storage.map('treeRoots')))).toEqual(roots)
   expect(state.submissions.get('echo-0')).toBe(a)
+}
+
+export async function exercisePopulationEchoContext(input: {
+  current: AgentSessionJournal
+  state: JournalReducerState
+  count: number
+  fingerprint: string
+  text: AgentJournalMessageItem
+  turnIdentity: typeof turnIdentity
+  measure: <T>(name: string, run: () => T | Promise<T>) => Promise<T>
+}): Promise<void> {
+  const { current, state, count, fingerprint, text, turnIdentity, measure } = input
+  const rawBefore = state.selection.echo(fingerprint)
+  expect(rawBefore).toBe(`echo-${count - 1}`)
+  const sources = state.selection.storage.map<string, { ordinal: number; signature: string }>(
+    'submissionSources'
+  )
+  const sourceBefore = sources.get(rawBefore!)!
+  expect(sourceBefore).toHaveProperty('time', 101)
+  const capturedSource = deserialize(serialize(sourceBefore))
+  await current.resolveDispatch({
+    clientMessageId: rawBefore!,
+    fence: 1,
+    state: 'pending',
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE
+  })
+  expect(state.selection.echo(fingerprint)).toBe(rawBefore)
+  expect(sources.get(rawBefore!)?.ordinal).toBe(sourceBefore.ordinal)
+  expect(sources.get(rawBefore!)).not.toBe(sourceBefore)
+  // Serialization can change numeric wire tags without changing an immutable source fact.
+  expect(sourceBefore).toStrictEqual(capturedSource)
+  expect(Reflect.ownKeys(sourceBefore)).toEqual(Reflect.ownKeys(capturedSource))
+
+  await measure('context-and-echo', async () => {
+    const noOutput = state.selection.tree.candidate(`echo:${fingerprint}`, rawBefore!)
+    for (let index = 0; index < count; index++) {
+      const clear = turnIdentity(`clear-${index}`)
+      await current.appendItem(
+        clear,
+        {
+          kind: 'status',
+          text: 'clear',
+          contextClear: { operationId: `clear-${index}`, afterFence: 1, clearedAt: 500 + index }
+        },
+        { fence: 1 }
+      )
+      expect(state.selection.echo(fingerprint)).toBeUndefined()
+      await current.appendTombstone(clear, { fence: 1 })
+      expect(state.selection.echo(fingerprint)).toBe(rawBefore)
+      expect(state.selection.tree.candidate(`echo:${fingerprint}`, rawBefore!)).toEqual(noOutput)
+    }
+  })
+  // Falling floors expose dormant echo choices, but do not resurrect removed work.
+  expect(current.restFact()).toBeNull()
+  await exerciseRetainedPopulation(current, count, measure)
+  const blockedEcho = { ...turnIdentity('compound-blocked-echo'), ordinal: 1 }
+  const liveClear = turnIdentity('compound-live-clear')
+  await current.appendLifecycleBatch({
+    settlementId: 'clear-before-echo',
+    fence: 1,
+    mutations: [
+      {
+        kind: 'item',
+        identity: liveClear,
+        body: {
+          kind: 'status',
+          text: 'clear',
+          contextClear: { operationId: 'live-clear', afterFence: 1, clearedAt: 599 }
+        }
+      },
+      { kind: 'item', identity: blockedEcho, body: text }
+    ]
+  })
+  expect(state.aliases.has(agentJournalItemKey(blockedEcho))).toBe(false)
+  expect(state.selection.contextFloor()).toBe(state.rest.checkpoint().floor)
+  await current.appendTombstone(liveClear, { fence: 1 })
+  const compoundEcho = { ...turnIdentity('compound-context-echo'), ordinal: 1 }
+  const compoundClear = turnIdentity('compound-current-context')
+  await current.appendLifecycleBatch({
+    settlementId: 'two-context-source-positions',
+    fence: 1,
+    mutations: [
+      {
+        kind: 'item',
+        identity: compoundClear,
+        body: {
+          kind: 'status',
+          text: 'clear',
+          contextClear: { operationId: 'compound-clear', afterFence: 1, clearedAt: 600 }
+        }
+      },
+      { kind: 'tombstone', identity: compoundClear },
+      { kind: 'item', identity: compoundEcho, body: text }
+    ]
+  })
+  expect(state.aliases.get(agentJournalItemKey(compoundEcho))).toBe(
+    agentJournalSubmissionKey(rawBefore!)
+  )
+  const nextRaw = state.selection.echo(fingerprint)!
+  const echoIdentity = { ...turnIdentity('actual-echo'), ordinal: 1 }
+  await current.appendItem(echoIdentity, text, { fence: 1 })
+  expect(current.submission(nextRaw)?.providerItemId).toBe(agentJournalItemKey(echoIdentity))
+  const explicitNull = { ...turnIdentity('explicit-null'), ordinal: 1 }
+  await current.appendItem(explicitNull, text, { fence: 1, echoOf: null })
+  expect(state.aliases.has(agentJournalItemKey(explicitNull))).toBe(false)
 }

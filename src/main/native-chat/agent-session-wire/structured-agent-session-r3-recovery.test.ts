@@ -357,6 +357,18 @@ it('publishes committed legacy initialization after ordinary open at its origina
     }
   })
   const current = await create(records)
+  current.deps.probeOwner = async (r) =>
+    r.sessionId === negatives[0]
+      ? { outcome: 'identity-matched', matchedOn: ['process-start-time'] }
+      : { outcome: 'indeterminate', reason: 'unproved' }
+  const transition = current.deps.store.transitionHandoff.bind(current.deps.store)
+  const release = vi
+    .spyOn(current.deps.store, 'transitionHandoff')
+    .mockImplementation((id, apply) =>
+      id === negatives[2]
+        ? Promise.reject(new Error('agent_session_ownership_unknown'))
+        : transition(id, apply)
+    )
   const { db } = current.deps.journalDatabase
   for (const id of ids) {
     await seed(id, id === unfinished)
@@ -387,11 +399,23 @@ it('publishes committed legacy initialization after ordinary open at its origina
   expect(opened).not.toHaveBeenCalled()
   for (const events of [trusted, broadcast]) {
     for (const id of ids) {
-      expect(latest(events, id)?.status).toBeNull()
+      expect(latest(events, id)?.status, id).toBeNull()
       expect(latest(events, id)?.turnOutcome).toBeUndefined()
       expect(latest(events, id)?.statusStartedAt).toBeUndefined()
       expect(latest(events, id)?.restoredInterruption).toBeUndefined()
     }
+  }
+  expect(release).toHaveBeenCalledOnce()
+  expect(release).toHaveBeenCalledWith(negatives[2], expect.any(Function))
+  for (const id of negatives) {
+    expect(current.deps.store.replacedRuntime(id), id).toBeUndefined()
+    expect(current.deps.store.getRecord(id)?.lease, id).toMatchObject({
+      runtimeFence: 7,
+      handoffStage: 'recovering',
+      claimStatus: records.find((r) => r.sessionId === id)!.lease.claimStatus,
+      ownerProcess: records.find((r) => r.sessionId === id)!.lease.ownerProcess,
+      deathEvidence: null
+    })
   }
   expect(readJournalRestFacts(db, completed)?.known).toBe(false)
   await current.journalSnapshot(completed)
@@ -421,7 +445,7 @@ it('publishes committed legacy initialization after ordinary open at its origina
       statusStartedAt: savedAt
     })
     for (const id of negatives) {
-      expect(latest(events, id)?.status).toBeNull()
+      expect(latest(events, id)?.status, id).toBeNull()
       expect(latest(events, id)?.turnOutcome).toBeUndefined()
       expect(latest(events, id)?.restoredInterruption).toBeUndefined()
       expect(readJournalRestFacts(db, id)?.known).toBe(false)

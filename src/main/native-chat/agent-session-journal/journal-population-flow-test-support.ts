@@ -1,8 +1,6 @@
 import { exerciseSharedLegacyPopulation } from './journal-population-shared-legacy-test-support'
 import { exercisePopulationQueue } from './journal-population-queue-test-support'
-import { exerciseRetainedPopulation } from './journal-population-retained-test-support'
 import { assertJournalPopulationBounds } from './journal-population-bounds-test-support'
-import { serialize } from 'node:v8'
 import { populationState, populationWriter } from './journal-population-owner-test-support'
 import { expect } from 'vitest'
 import {
@@ -11,7 +9,6 @@ import {
 } from '../../../shared/agent-session-journal-item-key'
 import {
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
-  AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
@@ -22,7 +19,10 @@ import type { AgentSessionJournal } from './journal-store'
 import type { JournalSubmissionRow } from './journal-row-schema'
 import { buildJournalQueueRow } from './journal-queue-events'
 import { JournalMutationMap } from './journal-mutation-map'
-import { exercisePopulationSelection } from './journal-population-selection-test-support'
+import {
+  exercisePopulationSelection,
+  exercisePopulationEchoContext
+} from './journal-population-selection-test-support'
 import { exercisePopulationRetirement } from './journal-population-retirement-test-support'
 import { exercisePopulationWork } from './journal-population-work-test-support'
 import { runLegacyPopulation } from './journal-population-legacy-test-support'
@@ -226,96 +226,15 @@ export async function runJournalPopulationContract(
     expect([...detached]).toEqual([...native])
     await measure('staged-selection-boundaries', () => exercisePopulationSelection(state))
     await measure('work-dependencies', () => exercisePopulationWork(current, count))
-    const rawBefore = state.selection.echo(fingerprint)
-    expect(rawBefore).toBe(`echo-${count - 1}`)
-    const sources = state.selection.storage.map<string, { ordinal: number; signature: string }>(
-      'submissionSources'
-    )
-    const sourceBefore = sources.get(rawBefore!)!
-    const capturedSource = serialize(sourceBefore)
-    await current.resolveDispatch({
-      clientMessageId: rawBefore!,
-      fence: 1,
-      state: 'pending',
-      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    await exercisePopulationEchoContext({
+      current,
+      state,
+      count,
+      fingerprint,
+      text,
+      turnIdentity,
+      measure
     })
-    expect(state.selection.echo(fingerprint)).toBe(rawBefore)
-    expect(sources.get(rawBefore!)?.ordinal).toBe(sourceBefore.ordinal)
-    expect(sources.get(rawBefore!)).not.toBe(sourceBefore)
-    expect(serialize(sourceBefore)).toEqual(capturedSource)
-
-    await measure('context-and-echo', async () => {
-      const noOutput = state.selection.tree.candidate(`echo:${fingerprint}`, rawBefore!)
-      for (let index = 0; index < count; index++) {
-        const clear = turnIdentity(`clear-${index}`)
-        await current.appendItem(
-          clear,
-          {
-            kind: 'status',
-            text: 'clear',
-            contextClear: { operationId: `clear-${index}`, afterFence: 1, clearedAt: 500 + index }
-          },
-          { fence: 1 }
-        )
-        expect(state.selection.echo(fingerprint)).toBeUndefined()
-        await current.appendTombstone(clear, { fence: 1 })
-        expect(state.selection.echo(fingerprint)).toBe(rawBefore)
-        expect(state.selection.tree.candidate(`echo:${fingerprint}`, rawBefore!)).toEqual(noOutput)
-      }
-    })
-    // Falling floors expose dormant echo choices, but do not resurrect removed work.
-    expect(current.restFact()).toBeNull()
-    await exerciseRetainedPopulation(current, count, measure)
-    const blockedEcho = { ...turnIdentity('compound-blocked-echo'), ordinal: 1 }
-    const liveClear = turnIdentity('compound-live-clear')
-    await current.appendLifecycleBatch({
-      settlementId: 'clear-before-echo',
-      fence: 1,
-      mutations: [
-        {
-          kind: 'item',
-          identity: liveClear,
-          body: {
-            kind: 'status',
-            text: 'clear',
-            contextClear: { operationId: 'live-clear', afterFence: 1, clearedAt: 599 }
-          }
-        },
-        { kind: 'item', identity: blockedEcho, body: text }
-      ]
-    })
-    expect(state.aliases.has(agentJournalItemKey(blockedEcho))).toBe(false)
-    expect(state.selection.contextFloor()).toBe(state.rest.checkpoint().floor)
-    await current.appendTombstone(liveClear, { fence: 1 })
-    const compoundEcho = { ...turnIdentity('compound-context-echo'), ordinal: 1 }
-    const compoundClear = turnIdentity('compound-current-context')
-    await current.appendLifecycleBatch({
-      settlementId: 'two-context-source-positions',
-      fence: 1,
-      mutations: [
-        {
-          kind: 'item',
-          identity: compoundClear,
-          body: {
-            kind: 'status',
-            text: 'clear',
-            contextClear: { operationId: 'compound-clear', afterFence: 1, clearedAt: 600 }
-          }
-        },
-        { kind: 'tombstone', identity: compoundClear },
-        { kind: 'item', identity: compoundEcho, body: text }
-      ]
-    })
-    expect(state.aliases.get(agentJournalItemKey(compoundEcho))).toBe(
-      agentJournalSubmissionKey(rawBefore!)
-    )
-    const nextRaw = state.selection.echo(fingerprint)!
-    const echoIdentity = { ...turnIdentity('actual-echo'), ordinal: 1 }
-    await current.appendItem(echoIdentity, text, { fence: 1 })
-    expect(current.submission(nextRaw)?.providerItemId).toBe(agentJournalItemKey(echoIdentity))
-    const explicitNull = { ...turnIdentity('explicit-null'), ordinal: 1 }
-    await current.appendItem(explicitNull, text, { fence: 1, echoOf: null })
-    expect(state.aliases.has(agentJournalItemKey(explicitNull))).toBe(false)
 
     await exercisePopulationQueue({
       current,
