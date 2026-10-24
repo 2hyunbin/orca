@@ -260,6 +260,32 @@ describe('hook evidence from before the PTY process started', () => {
     }
   })
 
+  it('keeps the shown turn, not a later resume-identity row, as the segment', () => {
+    const receivedAt = Date.now() - 120_000
+    const identityRow: AgentStatusIpcPayload = {
+      ...completedRow('codex', receivedAt + 30_000),
+      stateStartedAt: receivedAt + 30_000,
+      providerSessionOnly: true
+    }
+    const result = buildRuntimeMobileAgentStatus(
+      null,
+      LEAF_TAB,
+      'term-1',
+      null,
+      () => [completedRow('codex', receivedAt), identityRow],
+      {
+        getPaneKey: () => PANE_KEY,
+        getLeaf: () => leafWithTitle(null),
+        getTrackedTitle: () => null,
+        getPtyProcessStartedAtEpochMs: () => receivedAt + 60_000
+      }
+    )
+
+    expect(result.agentStatus).toEqual(
+      expect.objectContaining({ restoredUnconfirmed: true, stateStartedAt: receivedAt })
+    )
+  })
+
   it('keeps the completed turn of a process main attached to', () => {
     const receivedAt = Date.now() - 120_000
     const result = projectAfterStart(completedRow('codex', receivedAt), null, null)

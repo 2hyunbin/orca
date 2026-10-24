@@ -146,21 +146,25 @@ export function buildRuntimeMobileAgentStatus(
   // and a relay replay that restamps receivedAt later only keeps the status as it was.
   const processPtyId = pty?.ptyId ?? leaf?.ptyId
   const processStartedAt = processPtyId ? host.getPtyProcessStartedAtEpochMs?.(processPtyId) : null
-  let newest: { at: number; segment: { stateStartedAt: number } & HostTurnEndFacts } | null =
-    retained ? { at: retained.updatedAt, segment: retained } : null
-  for (const row of hookRows) {
-    if (!newest || row.receivedAt > newest.at) {
-      newest = { at: row.receivedAt, segment: row }
-    }
-  }
+  const newestEvidenceAt = Math.max(
+    retained?.updatedAt ?? -Infinity,
+    ...hookRows.map((row) => row.receivedAt)
+  )
+  // The segment is the turn a client was shown; a later resume-identity row is not a turn.
+  const shownSegment =
+    retained ??
+    hookRow.live ??
+    hookRow.restored ??
+    newestHookRow(hookRows.filter((row) => row.providerSessionOnly !== true)) ??
+    newestHookRow(hookRows)
   if (
     processStartedAt != null &&
-    newest &&
-    newest.at < processStartedAt &&
+    shownSegment &&
+    newestEvidenceAt < processStartedAt &&
     !pty?.lastAgentStatus &&
     !leaf?.lastAgentStatus
   ) {
-    return identityOnly(processStartedAt, newest.segment)
+    return identityOnly(processStartedAt, shownSegment)
   }
   // Why: OSC 9999 hook payload carries real state/prompt/agent; without preferring it, hook-only transitions never surfaced (#7970).
   const liveRow = retained ?? resolveRuntimeHookLiveAgentRow(hookRow.live, pty, nonAgentTitle)
@@ -265,4 +269,11 @@ export function buildRuntimeMobileAgentStatus(
       ...providerSession
     }
   }
+}
+
+function newestHookRow(rows: readonly AgentStatusIpcPayload[]): AgentStatusIpcPayload | null {
+  return rows.reduce<AgentStatusIpcPayload | null>(
+    (newest, row) => (!newest || row.receivedAt > newest.receivedAt ? row : newest),
+    null
+  )
 }
