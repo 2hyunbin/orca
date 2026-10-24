@@ -1,4 +1,5 @@
 import type {
+  TerminalLayoutSnapshot,
   TerminalPaneLayoutNode,
   TerminalPaneSplitDirection
 } from '../../../../shared/terminal-tab-types'
@@ -181,30 +182,56 @@ export function planTerminalLiveLayoutInsertions(
   return insertions
 }
 
-/** Panes to close for leaves the host retired. Only a pane whose transport has
- *  no PTY any more is a ghost; a pane with no transport yet, or still bound to
- *  a PTY, may simply not be named by a stale snapshot. The last pane on the tab
- *  is never removed. */
+/** Whether another tab of the worktree binds this PTY: the host moved its pane there. */
+export function isPtyBoundInAnotherTab(
+  state: {
+    tabsByWorktree: Readonly<Record<string, readonly { id: string }[] | undefined>>
+    terminalLayoutsByTabId: Readonly<Record<string, TerminalLayoutSnapshot | undefined>>
+  },
+  worktreeId: string,
+  tabId: string,
+  ptyId: string
+): boolean {
+  return (state.tabsByWorktree[worktreeId] ?? []).some(
+    (tab) =>
+      tab.id !== tabId &&
+      Object.values(state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {}).includes(ptyId)
+  )
+}
+
+export type RetiredPaneRemovals = { closed: number[]; moved: number[] }
+
+/** Panes to remove for leaves the host retired. A pane whose transport has no
+ *  PTY any more is a ghost to close. A pane still bound to a PTY another tab now
+ *  draws was moved there by the host, so it is detached with its PTY left
+ *  running. Any other pane, with no transport yet or still bound to a PTY, may
+ *  simply not be named by a stale snapshot. The last pane is never removed. */
 export function selectRetiredPaneIds(
   retiredLeafIds: readonly string[],
   view: {
     paneCount: number
     paneIdForLeaf: (leafId: string) => number | null
     ptyIdForPane: (paneId: number) => string | null | undefined
+    isPtyDrawnByAnotherTab: (ptyId: string) => boolean
   }
-): number[] {
-  const paneIds: number[] = []
+): RetiredPaneRemovals {
+  const removals: RetiredPaneRemovals = { closed: [], moved: [] }
   for (const leafId of retiredLeafIds) {
-    if (view.paneCount - paneIds.length <= 1) {
+    if (view.paneCount - removals.closed.length - removals.moved.length <= 1) {
       break
     }
     const paneId = view.paneIdForLeaf(leafId)
-    if (paneId === null || view.ptyIdForPane(paneId) !== null) {
+    if (paneId === null) {
       continue
     }
-    paneIds.push(paneId)
+    const ptyId = view.ptyIdForPane(paneId)
+    if (ptyId === null) {
+      removals.closed.push(paneId)
+    } else if (ptyId && view.isPtyDrawnByAnotherTab(ptyId)) {
+      removals.moved.push(paneId)
+    }
   }
-  return paneIds
+  return removals
 }
 
 /**

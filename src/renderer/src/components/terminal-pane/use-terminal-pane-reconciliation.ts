@@ -10,12 +10,14 @@ import {
   isHostAuthoritativeLayout,
   planTerminalLiveLayoutInsertions,
   planTerminalLiveLayoutRemovals,
+  isPtyBoundInAnotherTab,
   selectRetiredPaneIds,
   trackRetiredLeafIds
 } from './terminal-live-layout-reconciliation'
 import { collectLeafIds } from '../../../../shared/terminal-pane-layout-tree'
 import { useTerminalPaneProcessExitActions } from './use-terminal-pane-process-exit-actions'
 import type { TerminalPaneCloseController } from './use-terminal-pane-close-actions'
+import { useAppStore } from '../../store'
 
 export function useTerminalPaneReconciliation(controller: TerminalPaneCloseController) {
   const {
@@ -34,7 +36,8 @@ export function useTerminalPaneReconciliation(controller: TerminalPaneCloseContr
     persistLayoutSnapshot,
     ptyRecoveryStatesByPaneId,
     restoredLayout,
-    tabId
+    tabId,
+    worktreeId
   } = controller
   // Leaves the last host-authoritative layout named, and the ones it has since
   // dropped whose panes are still mounted; a removal needs the host to have
@@ -106,20 +109,24 @@ export function useTerminalPaneReconciliation(controller: TerminalPaneCloseContr
         appliedInsertion = true
       }
     }
-    // Why: the host retired these leaves (its PTY for them ended), so their panes
-    // would otherwise outlive the layout as blank ghosts and take the tab's next
-    // close for themselves. selectRetiredPaneIds closes only a pane whose PTY has
-    // already cleared, so this never kills a still-live remote terminal; a leaf
-    // whose PTY is still ending is kept retired and removed on the re-run the
-    // transport's recovery-state change (ptyRecoveryStatesByPaneId) triggers.
-    // executeClosePane runs the same cleanup a user close does.
-    const retiredPaneIds = selectRetiredPaneIds(removals, {
+    // Why: the host retired these leaves, so their panes would otherwise outlive the layout:
+    // a pane whose PTY ended stays a blank ghost that takes the tab's next close, and a pane
+    // another client moved to a new tab draws the same live terminal in both tabs. A ghost is
+    // closed the way a user close is; a moved pane is detached and its PTY left to its new tab.
+    // A pane whose PTY is still ending is kept retired and removed on the re-run the transport's
+    // recovery-state change (ptyRecoveryStatesByPaneId) triggers.
+    const { closed, moved } = selectRetiredPaneIds(removals, {
       paneCount: manager.getPanes().length,
       paneIdForLeaf: (leafId) => manager.getNumericIdForLeaf(leafId),
-      ptyIdForPane: (paneId) => paneTransportsRef.current.get(paneId)?.getPtyId()
+      ptyIdForPane: (paneId) => paneTransportsRef.current.get(paneId)?.getPtyId(),
+      isPtyDrawnByAnotherTab: (ptyId) =>
+        isPtyBoundInAnotherTab(useAppStore.getState(), worktreeId, tabId, ptyId)
     })
-    for (const paneId of retiredPaneIds) {
+    for (const paneId of closed) {
       executeClosePane(paneId)
+    }
+    for (const paneId of moved) {
+      manager.detachPaneForExternalMove(paneId)
     }
     if (appliedInsertion) {
       persistLayoutSnapshot()

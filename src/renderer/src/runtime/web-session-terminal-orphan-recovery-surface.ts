@@ -103,6 +103,14 @@ export function prepareTerminalOrphanRecovery(
     return { candidates: [], unresolved: [], observed: [], retained: [] }
   }
   const rowsBySurface = terminalRowsBySurface(snapshot)
+  const readyTabIdsByHandle = new Map<string, Set<string>>()
+  for (const row of snapshot.tabs) {
+    if (row.type === 'terminal' && isValidReadySurface(row) && row.terminal) {
+      const tabIds = readyTabIdsByHandle.get(row.terminal) ?? new Set<string>()
+      tabIds.add(row.parentTabId)
+      readyTabIdsByHandle.set(row.terminal, tabIds)
+    }
+  }
   const candidates: RecoverySurface[] = []
   const unresolved: UnresolvedRecoverySurface[] = []
   const observed: RecoverySurface[] = []
@@ -152,6 +160,12 @@ export function prepareTerminalOrphanRecovery(
         continue
       }
       if (remote?.environmentId === environmentId) {
+        // Why: the host publishes this terminal live in another tab, so another client moved its
+        // pane there; this binding is stale, not an orphan to keep in its old tab.
+        const movedTo = incoming ? undefined : readyTabIdsByHandle.get(remote.handle)
+        if (movedTo && !movedTo.has(tabId)) {
+          continue
+        }
         candidates.push({ ...coordinates, handle: remote.handle })
       } else if (!remotePtyId) {
         unresolved.push({ ...coordinates, handle: null })
