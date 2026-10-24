@@ -33,6 +33,11 @@ vi.mock('../config/ssh-g-config-resolution', async (importOriginal) =>
     await importOriginal()
   )
 )
+// Why: the route's security-key check would otherwise read this machine's real identity files.
+vi.mock('../ssh-transport-selection', async (importOriginal) => ({
+  ...(await importOriginal()),
+  requiresSystemSshForSecurityKey: async () => false
+}))
 vi.mock('../system-transport/system-ssh-loopback-route', async (importOriginal) => ({
   ...(await importOriginal()),
   shouldUseSystemSshLoopbackRoute: () => true

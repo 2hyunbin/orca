@@ -3,6 +3,7 @@ import { resetSshConnectionMocks } from './ssh-connection-test-harness'
 import { createCallbacks, createTarget } from './ssh-connection-test-fixtures'
 import { SshConnection } from './ssh-connection'
 import type { SystemSshLoopbackRoute } from '../system-transport/system-ssh-loopback-route'
+import { uploadFileViaSystemSsh } from '../system-transport/system-ssh-file-binary-transfer'
 
 const { startRouteMock } = vi.hoisted(() => ({ startRouteMock: vi.fn() }))
 
@@ -20,6 +21,11 @@ vi.mock('../system-transport/system-ssh-command', async (importOriginal) =>
 )
 vi.mock('../ssh-control-socket', async () =>
   (await import('./ssh-connection-test-harness')).createControlSocketModule()
+)
+vi.mock('../system-transport/system-ssh-file-binary-transfer', async (importOriginal) =>
+  (await import('./ssh-connection-test-harness')).withSystemSshFileBinaryTransferMocks(
+    await importOriginal()
+  )
 )
 vi.mock('../config/ssh-config-parser', async () =>
   (await import('./ssh-connection-test-harness')).createSshConfigParserModule()
@@ -118,6 +124,24 @@ describe('SshConnection loopback route', () => {
     onExit?.()
 
     expect(conn.getSystemSshBuildArgsOptions().loopbackRoute).toBeUndefined()
+  })
+
+  it('stops an open upload session from dialling a route that has since exited', async () => {
+    const finishStart = deferRouteStart()
+    const conn = new SshConnection(
+      createTarget({ proxyCommand: 'ssh -W %h:%p bastion.example.com' }),
+      createCallbacks()
+    )
+    await conn.connect()
+    const route = createRoute(50001)
+    finishStart(route)
+    await vi.waitFor(() => expect(route.onExit).toHaveBeenCalled())
+    const uploadSession = await conn.openFileUploadSession()
+
+    vi.mocked(route.onExit).mock.calls[0]?.[0]?.()
+    await uploadSession.uploadFile('/tmp/a.txt', '/remote/a.txt')
+
+    expect(vi.mocked(uploadFileViaSystemSsh).mock.calls.at(-1)?.[3]?.loopbackRoute).toBeUndefined()
   })
 
   it('disposes the route on disconnect', async () => {

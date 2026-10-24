@@ -2,15 +2,19 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { existsSyncMock, spawnMock, connectMock, createServerMock, treeKillMock } = vi.hoisted(
-  () => ({
+const { existsSyncMock, spawnMock, connectMock, createServerMock, treeKillMock, securityKeyMock } =
+  vi.hoisted(() => ({
     existsSyncMock: vi.fn(),
     spawnMock: vi.fn(),
     connectMock: vi.fn(),
     createServerMock: vi.fn(),
-    treeKillMock: vi.fn()
-  })
-)
+    treeKillMock: vi.fn(),
+    securityKeyMock: vi.fn()
+  }))
+
+vi.mock('../ssh-transport-selection', () => ({
+  requiresSystemSshForSecurityKey: securityKeyMock
+}))
 
 vi.mock('@orca/process-host/process-tree-termination', async (importOriginal) => {
   const actual: Record<string, unknown> = await importOriginal()
@@ -33,8 +37,10 @@ vi.mock('net', () => ({ connect: connectMock, createServer: createServerMock }))
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
 import { buildSshArgs, getSystemSshBuildArgsFromOperationOptions } from './system-ssh-args'
+import { buildSystemSshPortForwardArgs } from './system-ssh-forward-process'
 import {
   getLoopbackRouteHostKeyAlias,
+  getLoopbackRouteSshdPort,
   shouldUseSystemSshLoopbackRoute,
   startSystemSshLoopbackRoute
 } from './system-ssh-loopback-route'
@@ -179,6 +185,15 @@ describe('buildSshArgs with a loopback route', () => {
     expect(args.slice(-2)).toEqual(['--', 'dev@devbox.internal'])
   })
 
+  it('never routes a forward, whose argv must stay stable for orphan recovery', () => {
+    const args = buildSystemSshPortForwardArgs(createTarget(), 8080, 'localhost', 3000, {
+      loopbackRoute: ROUTE
+    })
+
+    expect(args).not.toContain('HostName=127.0.0.1')
+    expect(args).not.toContain(`Port=${FREE_PORT}`)
+  })
+
   it('carries the route into file-transfer operations', () => {
     expect(getSystemSshBuildArgsFromOperationOptions({ loopbackRoute: ROUTE })).toEqual({
       loopbackRoute: ROUTE
@@ -249,6 +264,22 @@ describe('getLoopbackRouteHostKeyAlias', () => {
     ).toBe('[i-0abc]:2222')
   })
 
+  // Why: `ssh -G` ran on a manual target's label, so its port and hostname name some other host.
+  it("uses a manual target's stored endpoint, not the label's ssh_config", () => {
+    const manual = createTarget({
+      source: 'manual',
+      configHost: undefined,
+      host: 'box',
+      port: 2222,
+      jumpHost: 'bastion'
+    })
+    const labelConfig = createResolved({ hostname: 'dev box', port: 22, proxyCommand: undefined })
+
+    expect(getLoopbackRouteHostKeyAlias(manual, labelConfig)).toBe('[box]:2222')
+    expect(getLoopbackRouteSshdPort(manual, labelConfig)).toBe(2222)
+    expect(shouldUseSystemSshLoopbackRoute(manual, labelConfig, {}, 'win32')).toBe(true)
+  })
+
   it("prefers the user's own HostKeyAlias", () => {
     expect(
       getLoopbackRouteHostKeyAlias(createTarget(), createResolved({ hostKeyAlias: 'pinned' }))
@@ -263,6 +294,7 @@ describe('startSystemSshLoopbackRoute', () => {
     connectMock.mockReset().mockImplementation(createListeningSocket)
     createServerMock.mockReset().mockImplementation(createFakeServer)
     treeKillMock.mockReset().mockResolvedValue(true)
+    securityKeyMock.mockReset().mockResolvedValue(false)
   })
 
   it('opens the forward over the real proxy, then proves a login over the route', async () => {
@@ -287,6 +319,30 @@ describe('startSystemSshLoopbackRoute', () => {
     expect(spawnedArgs(1)).toContain('ProxyCommand=none')
     expect(spawnedArgs(1)).toContain('BatchMode=yes')
     expect(forward.kill).not.toHaveBeenCalled()
+  })
+
+  // Why: no ControlMaster watches the held forward, so a silently dead proxy must end it.
+  it('holds the forward with server-alive probes', async () => {
+    const forward = createFakeProcess()
+    const probe = createFakeProcess()
+    spawnMock.mockReturnValueOnce(forward).mockImplementationOnce(() => {
+      answerProbe(probe, 0)
+      return probe
+    })
+
+    await startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'linux')
+
+    expect(spawnedArgs(0)).toContain('ServerAliveInterval=15')
+    expect(spawnedArgs(0)).toContain('ServerAliveCountMax=3')
+  })
+
+  it('skips the route for a security-key identity, whose every login asks for a touch', async () => {
+    securityKeyMock.mockResolvedValueOnce(true)
+
+    await expect(
+      startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
+    ).rejects.toThrow('security-key')
+    expect(spawnMock).not.toHaveBeenCalled()
   })
 
   it('stops the forward when sshd refuses logins over it', async () => {

@@ -20,6 +20,8 @@ export type SystemSshBuildArgsOptions = {
   aliasClaimedByConfig?: boolean
   /** Dial Orca's held `ssh -L` forward instead of the target's proxy. See `system-ssh-loopback-route`. */
   loopbackRoute?: SystemSshLoopbackRouteArgs
+  /** Server-alive probes for a long-lived unmultiplexed process, which no ControlMaster watches. */
+  keepAlive?: boolean
 }
 
 export type SystemSshLoopbackRouteArgs = {
@@ -66,6 +68,8 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
     // Why: keep master alive 300s after last command so rapid reconnects
     // (e.g. on tab focus) skip re-handshake without holding a process open.
     args.push('-o', 'ControlPersist=300')
+  }
+  if (options?.keepAlive || (!forceDisableControlMaster && controlPath)) {
     args.push('-o', 'ServerAliveInterval=15')
     args.push('-o', 'ServerAliveCountMax=3')
   }
@@ -154,8 +158,10 @@ export function buildForwardProcessSshArgs(
   target: SshTarget,
   options?: SystemSshBuildArgsOptions
 ): string[] {
+  // Why no loopbackRoute: forwards outlive commands, and the route's own forward must take the real proxy.
   return buildSshArgs(target, {
     ...options,
+    loopbackRoute: undefined,
     suppressOrcaControlMaster: true,
     disableControlMaster: true
   })

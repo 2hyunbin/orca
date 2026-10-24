@@ -11,7 +11,12 @@ import {
 import { createSshOperationAbortError } from '../connection/ssh-exec-options'
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
-import type { SystemSshBuildArgsOptions, SystemSshLoopbackRouteArgs } from './system-ssh-args'
+import { requiresSystemSshForSecurityKey } from '../ssh-transport-selection'
+import {
+  isOpenSshConfigBackedTarget,
+  type SystemSshBuildArgsOptions,
+  type SystemSshLoopbackRouteArgs
+} from './system-ssh-args'
 import { spawnSystemSshCommand } from './system-ssh-command'
 import {
   startSystemSshPortForwardProcess,
@@ -46,9 +51,10 @@ export function shouldUseSystemSshLoopbackRoute(
   if (options.aliasClaimedByConfig === false) {
     return false
   }
-  return Boolean(
-    resolved?.proxyCommand || resolved?.proxyJump || target.proxyCommand || target.jumpHost
-  )
+  const configResolved = configBackedResolution(target, resolved)
+  return configResolved
+    ? Boolean(configResolved.proxyCommand || configResolved.proxyJump)
+    : Boolean(target.proxyCommand || target.jumpHost)
 }
 
 /** Known-hosts name OpenSSH would have used for the proxied route, so trust carries over. */
@@ -56,12 +62,29 @@ export function getLoopbackRouteHostKeyAlias(
   target: SshTarget,
   resolved: SshResolvedConfig | null
 ): string {
-  if (resolved?.hostKeyAlias) {
-    return resolved.hostKeyAlias
+  const configResolved = configBackedResolution(target, resolved)
+  if (configResolved?.hostKeyAlias) {
+    return configResolved.hostKeyAlias
   }
-  const host = resolved?.hostname || target.host
-  const port = resolved?.port || target.port || 22
+  const host = configResolved?.hostname || target.host
+  const port = getLoopbackRouteSshdPort(target, resolved)
   return port === 22 ? host : `[${host}]:${port}`
+}
+
+/** The sshd port the proxied route reaches, which the forward must target on the remote side. */
+export function getLoopbackRouteSshdPort(
+  target: SshTarget,
+  resolved: SshResolvedConfig | null
+): number {
+  return configBackedResolution(target, resolved)?.port || target.port || 22
+}
+
+// Why: Orca dials manual targets by their stored endpoint; `ssh -G` ran on the label, not that host.
+function configBackedResolution(
+  target: SshTarget,
+  resolved: SshResolvedConfig | null
+): SshResolvedConfig | null {
+  return resolved && isOpenSshConfigBackedTarget(target) ? resolved : null
 }
 
 export async function startSystemSshLoopbackRoute(
@@ -72,14 +95,17 @@ export async function startSystemSshLoopbackRoute(
   signal?: AbortSignal
 ): Promise<SystemSshLoopbackRoute> {
   signal?.throwIfAborted()
-  const remotePort = resolved?.port || target.port || 22
-  // Why: the forward itself must take the real proxy route, never an existing loopback one.
+  // Why: every security-key login asks for a touch, so the forward and probe would add unprompted ones.
+  if (await requiresSystemSshForSecurityKey(target, resolved)) {
+    throw new Error('System SSH loopback route skipped for a security-key identity')
+  }
+  signal?.throwIfAborted()
   const forward = await startSystemSshPortForwardProcess(
     target,
     0,
     'localhost',
-    remotePort,
-    { ...options, loopbackRoute: undefined },
+    getLoopbackRouteSshdPort(target, resolved),
+    { ...options, keepAlive: true },
     signal
   )
   let disposed = false
