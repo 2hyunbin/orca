@@ -43,3 +43,43 @@ export function annotateWslHostFailure(error: unknown, command: ResolvedCommand)
   error.message = `wsl.exe host failure (distro "${distro}"): ${diagnostic}\n${error.message}`
   return Object.assign(error, { wslHostFailure: true, wslDistro: distro })
 }
+
+// Measured on a cold systemd distro: concurrent first launches intermittently fail before the
+// guest command starts; a retry a moment later succeeds once the distro is up.
+const TRANSIENT_WSL_SERVICE_ERROR = /Wsl\/Service\/E_UNEXPECTED\b/
+const TRANSIENT_WSL_SERVICE_RETRY_DELAYS_MS = [250, 750, 1500] as const
+
+/** wsl.exe failed before the guest ran, with an error the WSL service recovers from by itself. */
+export function isTransientWslServiceFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('wslHostFailure' in error)) {
+    return false
+  }
+  return error instanceof Error && TRANSIENT_WSL_SERVICE_ERROR.test(error.message)
+}
+
+/**
+ * Re-runs a read whose wsl.exe launch hit a transient service error. Reads only: the guest never
+ * started, but a write must not risk running twice on a host that reports failure late.
+ */
+export async function retryTransientWslServiceFailure<T>(
+  run: () => Promise<T>,
+  options: { retryable: boolean; signal?: AbortSignal; delaysMs?: readonly number[] }
+): Promise<T> {
+  const delays = options.delaysMs ?? TRANSIENT_WSL_SERVICE_RETRY_DELAYS_MS
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await run()
+    } catch (error) {
+      const delay = delays[attempt]
+      if (
+        !options.retryable ||
+        delay === undefined ||
+        options.signal?.aborted ||
+        !isTransientWslServiceFailure(error)
+      ) {
+        throw error
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+}
