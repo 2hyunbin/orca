@@ -243,7 +243,7 @@ export async function getIssueComments(
       LinearRawVariables
     >(ISSUE_COMMENTS_QUERY, { id: issueId })
     const nodes = result.data?.issue?.comments?.nodes ?? []
-    return nodes.map((node) => ({
+    const comments = nodes.map((node) => ({
       id: node.id,
       body: node.body ?? '',
       createdAt: node.createdAt ?? '',
@@ -254,6 +254,8 @@ export async function getIssueComments(
           }
         : undefined
     }))
+    // Why: Linear sends newest first; oldest-first matches linear.app and where new comments land.
+    return comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   } catch (error) {
     if (isAuthError(error)) {
       clearToken(entry.workspace.id)
