@@ -224,9 +224,6 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     return { cancelled: true }
   }
 
-  // End the child so background work cannot reopen a turn after Stop; the next send reloads.
-  stopEndsSession = (): boolean => true
-
   awaitStoppedRequestEnd = async (sessionId: string, stoppedAt: number): Promise<void> => {
     const session = this.children.sessions.get(sessionId)
     if (session && isAcpReadySession(session)) {

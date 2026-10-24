@@ -8,10 +8,6 @@ import type {
 // The host owns journal/lease authority; adapters report delivery uncertainty without guessing.
 
 import type {
-  AgentChildWorkStopAcknowledgement,
-  AgentSessionBackgroundTaskStops
-} from '../../../shared/agent-child-work-stop-targets'
-import type {
   AgentJournalAnsweredTurnIdentity,
   AgentJournalItemIdentity,
   AgentJournalMessageItem,
@@ -179,6 +175,11 @@ export type StructuredAgentSessionEndedEvent = {
   /** Absent means provider exit without extra detail; host faults retain their own classification. */
   failure?: SubmissionRejectionFact
   cause: 'unexpected-exit' | 'requested-close'
+  /** Execution-host observations from a requested provider close, when available. */
+  processExit?: {
+    root: 'live' | 'unverifiable' | 'exited'
+    workload: 'live' | 'unverifiable' | 'exited'
+  }
   fence: number
   acquisitionGeneration: string
   /** Observed child exit supplies interrupted-turn end time. */
@@ -285,6 +286,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     turnId?: string
     fence: number
     prompt?: { itemId: string }
+    /** Original host Stop time; in-process only, for a Stop that ends the session. */
+    stoppedAt?: number
     dispatchStatus?: { state: AgentJournalDispatchState; recovered: boolean } | null
     /** Re-read journal turn immediately before interrupt; direct callers may omit this guard. */
     resolveLiveTurnId?: () => string | null
@@ -298,15 +301,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     replacesGoal: boolean
     signal?: AbortSignal
   }): Promise<{ ok: true } | { ok: false; rejected: string }>
-  /** Stop named tasks only; acknowledge each accepted stop immediately so later batch failures cannot erase it. */
-  stopBackgroundTasks?(input: {
-    sessionId: string
-    fence: number
-    taskIds: readonly string[]
-    acknowledge?: (acknowledgement: AgentChildWorkStopAcknowledgement) => void
-  }): Promise<{ cancelled: boolean; stillRunning?: true }>
-  /** Undefined when no live session exposes stop support. */
-  backgroundTaskStops?(sessionId: string): AgentSessionBackgroundTaskStops | undefined
   /** Derive unanswered retained work from the live child; false without one. */
   holdsDispatch?(sessionId: string): boolean
   /** Captures only this input's pending answer/output in the supplied live acquisition. */

@@ -268,9 +268,8 @@ async function subscribe(
 }
 
 /** Flush provider writes; real clients wait for their subscription frames. */
-function drainStreamedEvents(): Promise<void> {
-  return getStructuredAgentSessionHost()?.flushStreamedEvents(SESSION) ?? Promise.resolve()
-}
+const drainStreamedEvents = (): Promise<void> =>
+  getStructuredAgentSessionHost()?.flushStreamedEvents(SESSION) ?? Promise.resolve()
 
 function textOf(item: AgentJournalRenderItem): string {
   const body = item.body
@@ -648,14 +647,16 @@ describe('a structured codex session over agentSession.*', () => {
     ).toBe(true)
     expect(itemsOf(missed).map(textOf).filter(Boolean)).toEqual(['Stopped.'])
 
-    // Takeover advances the fence, reaps the old child and resumes the proven thread.
+    // Stop closes the old child; takeover advances the fence and resumes the proven thread.
     const reaped = codex.live()
+    await vi.waitFor(() => expect(reaped.closed).toBe(true))
+    const stoppedFence =
+      getStructuredAgentSessionHost()?.deps.store.getRecord(SESSION)?.lease.runtimeFence ?? fence
     const resumed = await ok<{ fence: number; page: { items: AgentJournalRenderItem[] } }>(
       'agentSession.ensure',
-      attachParams(fence)
+      attachParams(stoppedFence)
     )
-    expect(resumed.fence).toBe(fence + 1)
-    expect(reaped.closed).toBe(true)
+    expect(resumed.fence).toBe(stoppedFence + 1)
     expect(codex.live().resumedThreadId).toBe(THREAD)
     expect(await readKnownOptions()).toMatchObject({
       ok: true,

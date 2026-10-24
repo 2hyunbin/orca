@@ -1,5 +1,9 @@
-// Default Stop keeps successfully interrupted children; default prompt Cancel interrupts their turn.
+// Chat Stop ends the captured child for every provider; default prompt Cancel interrupts its turn.
 
+import type {
+  AgentChildWorkStopAcknowledgement,
+  AgentSessionBackgroundTaskStops
+} from '../../../shared/agent-child-work-stop-targets'
 import type {
   AgentJournalApprovalItem,
   AgentJournalQuestionItem
@@ -16,8 +20,15 @@ export type AgentSessionCancelOutcome = {
 export type AgentSessionPromptCancelRoute = { kind: 'dismiss' } | { kind: 'stop' }
 
 export type StructuredAgentSessionAdapterStop = {
-  /** Opt into child termination after Stop; stale-target refusals keep it, failed interrupts of live targets end it. */
-  stopEndsSession?(sessionId: string): boolean
+  /** Stop named tasks only; acknowledge each accepted stop immediately so later batch failures cannot erase it. */
+  stopBackgroundTasks?(input: {
+    sessionId: string
+    fence: number
+    taskIds: readonly string[]
+    acknowledge?: (acknowledgement: AgentChildWorkStopAcknowledgement) => void
+  }): Promise<{ cancelled: boolean; stillRunning?: true }>
+  /** Undefined when no live session exposes stop support. */
+  backgroundTaskStops?(sessionId: string): AgentSessionBackgroundTaskStops | undefined
   /** Wait for in-flight work or grace expiry measured from interrupt issuance. */
   awaitStoppedRequestEnd?(sessionId: string, stoppedAt: number): Promise<void>
   /** Undefined routes through cancelTurn with the prompt. */
