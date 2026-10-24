@@ -1,7 +1,7 @@
 const FRONTMATTER_RE = /^(---|\+\+\+)\r?\n(?:[\s\S]*?\r?\n)?\1(?:\r?\n|$)/
 
 export type FrontMatter = {
-  /** The full raw front-matter block including delimiters and trailing newline. */
+  /** Raw front matter including delimiters and any trailing newline. */
   raw: string
   body: string
 }
