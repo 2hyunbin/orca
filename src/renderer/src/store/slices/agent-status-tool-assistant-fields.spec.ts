@@ -105,13 +105,13 @@ export function registerAgentStatusToolAssistantFieldsTests(): void {
     it('ignores nested done while the parent pane agent is still active', () => {
       vi.useFakeTimers()
       const store = createTestStore()
-      const setGeneratedTabTitleFromAgentPrompt = vi.fn()
+      const setGeneratedTabTitlesFromAgentPrompts = vi.fn()
       applyAgentStatusPatch(store, {
         settings: {
           ...(store.getState().settings ?? getDefaultSettings('/tmp')),
           tabAutoGenerateTitle: true
         },
-        setGeneratedTabTitleFromAgentPrompt
+        setGeneratedTabTitlesFromAgentPrompts
       })
       store
         .getState()
@@ -149,11 +149,10 @@ export function registerAgentStatusToolAssistantFieldsTests(): void {
       expect(entry.toolInput).toBeUndefined()
       expect(entry.lastAssistantMessage).toBeUndefined()
       expect(store.getState().agentStatusEpoch).toBe(firstEpoch)
-      expect(setGeneratedTabTitleFromAgentPrompt).toHaveBeenCalledTimes(1)
-      expect(setGeneratedTabTitleFromAgentPrompt).toHaveBeenLastCalledWith(
-        'tab-1:1',
-        'parent codex'
-      )
+      expect(setGeneratedTabTitlesFromAgentPrompts).toHaveBeenCalledTimes(1)
+      expect(setGeneratedTabTitlesFromAgentPrompts).toHaveBeenLastCalledWith([
+        { paneKey: 'tab-1:1', prompt: 'parent codex' }
+      ])
     })
 
     it('does not let restored-unconfirmed identity suppress a live terminal status', () => {
