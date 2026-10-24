@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const lockedDuringPrune = vi.hoisted(() => ({ value: [] as string[] }))
+const lockedDuringPrune = vi.hoisted(() => {
+  const value: string[] = []
+  return { value }
+})
 const repoRef = vi.hoisted(() => ({ value: '' }))
 const gitExecFileAsyncMock = vi.hoisted(() =>
   vi.fn(async (args: string[]) => {
