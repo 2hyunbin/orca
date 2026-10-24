@@ -110,7 +110,7 @@ async function mayAskForSecurityKey(
   config: Map<string, string[]>
 ): Promise<boolean> {
   const identityValues = IDENTITY_SSH_G_KEYS.flatMap((key) => config.get(key) ?? [])
-  if (identityValues.some(hasPercentToken)) {
+  if (identityValues.some(hasUnexpandedToken)) {
     return true
   }
   const resolved = parseSshGOutput(serializeSshGLines(config))
@@ -138,8 +138,7 @@ async function checkJumpHops(
 ): Promise<string | null> {
   const pending = listJumpHosts(direct)
   const seen = new Set<string>()
-  while (pending.length > 0) {
-    const jump = pending.shift()!
+  for (let jump = pending.shift(); jump !== undefined; jump = pending.shift()) {
     if (seen.has(jump)) {
       continue
     }
@@ -221,13 +220,14 @@ export function findConfigDrift(
     .filter((key) => {
       const directValue = (direct.get(key) ?? []).join('\n')
       const routedValue = (routed.get(key) ?? []).join('\n')
-      return directValue !== routedValue || hasPercentToken(directValue)
+      return directValue !== routedValue || hasUnexpandedToken(directValue)
     })
     .sort()
 }
 
-function hasPercentToken(value: string): boolean {
-  return value.replaceAll('%%', '').includes('%')
+/** `%h`-style tokens and `${VAR}` references that `ssh -G` may print unexpanded. */
+function hasUnexpandedToken(value: string): boolean {
+  return value.replaceAll('%%', '').includes('%') || value.includes('${')
 }
 
 /**

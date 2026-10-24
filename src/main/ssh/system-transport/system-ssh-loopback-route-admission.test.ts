@@ -49,15 +49,18 @@ describe.skipIf(findSystemSsh() === null)('admitSystemSshLoopbackRoute with real
     })
   })
 
-  it('refuses a route under which a %h token would expand to 127.0.0.1', async () => {
+  it.each([
+    ['a %h token, which a routed login expands to 127.0.0.1', '~/.ssh/id_%h'],
+    ['an environment reference ssh -G leaves unexpanded', '${ORCA_TEST_KEY_DIR}/id_sk']
+  ])('refuses a route with %s', async (_name, identityFile) => {
     const configFile = writeConfig(
-      'percent-token',
+      `token-${identityFile.length}`,
       [
         'Host devbox',
         '  HostName devbox.internal',
         '  ProxyJump bastion',
         '  IdentityAgent none',
-        '  IdentityFile ~/.ssh/id_%h',
+        `  IdentityFile ${identityFile}`,
         ''
       ].join('\n')
     )

@@ -155,7 +155,6 @@ export function hasAdvancedConnectionValues(form: EditingTarget): boolean {
     form.proxyCommand.trim().length > 0 ||
     form.jumpHost.trim().length > 0 ||
     !form.systemSshConnectionReuse ||
-    form.systemSshProxyConnectionReuse ||
     !form.allowRemoteCliControl
   )
 }
