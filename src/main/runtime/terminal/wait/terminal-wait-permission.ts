@@ -189,8 +189,9 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     }
     const handles = this.getExistingTerminalHandlesForPtyId(ptyId)
     const paneKeys = this.collectPaneKeysForPty(ptyId)
-    if (pty.paneKey) {
-      paneKeys.add(pty.paneKey)
+    const ptyPaneKey = this.paneOfPty(pty).paneKey
+    if (ptyPaneKey) {
+      paneKeys.add(ptyPaneKey)
     }
     const readPane = this.getAgentStatusSnapshotForPaneFn
     const hookRows = readPane

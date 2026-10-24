@@ -312,7 +312,7 @@ it.each([
         })
       const m = db.insertMessage({ from: 'a', to: 'run:run-1', subject: 'old' })
       select()
-      db.markAsDelivered([m.id])
+      db.markAsDelivered([m.id], 'run:run-1')
       const n = survivor ? db.insertMessage({ from: 'a', to: 'run:run-1', subject: 'new' }) : null
       const messages = select()
       const writes: string[] = []

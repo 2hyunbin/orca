@@ -41,7 +41,7 @@ it('terminal failure recovery is reserved once, revalidated before Enter, and ca
       reservedTypes: undefined
     })
   expect(select().map((row) => row.id)).toEqual([message.id])
-  db.markAsDelivered([message.id])
+  db.markAsDelivered([message.id], 'consumer')
   expect(select()).toEqual([])
   abandoned = true
   const recovery = select()
@@ -53,7 +53,7 @@ it('terminal failure recovery is reserved once, revalidated before Enter, and ca
   abandoned = true
   db.recordUnknownMailRead(recovery)
   expect(canSubmit()).toBe(false)
-  db.markAsDelivered([message.id])
+  db.markAsDelivered([message.id], 'consumer')
   expect(select()).toEqual([])
   const fresh = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'new result' })
   expect(select().map((row) => row.id)).toEqual([fresh.id])
