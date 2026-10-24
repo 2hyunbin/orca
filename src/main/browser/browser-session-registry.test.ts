@@ -317,7 +317,7 @@ describe('BrowserSessionRegistry', () => {
     expect(removeCertificateRequestGuardMock).not.toHaveBeenCalled()
   })
 
-  // Why: the Electron Session outlives its partition, so a deleted profile must not keep a header hook.
+  // Electron Sessions outlive deleted profiles; their header hooks must be retired.
   it('retires the user agent policy when deleting a profile', async () => {
     const profile = await browserSessionRegistry.createProfile('isolated', 'UA Delete Test')
     const mockSession = sessionFromPartitionMock.mock.results[0]?.value
@@ -469,8 +469,6 @@ describe('BrowserSessionRegistry', () => {
   })
 
   it('auto-grants storage-access for isolated partitions', async () => {
-    // Why: mirrors the pointerLock precedent directly above — the default-partition suite does not
-    // reach this install path.
     await browserSessionRegistry.createProfile('isolated', 'Storage Access Test')
     const mockSession = sessionFromPartitionMock.mock.results[0]?.value
     const requestHandler = mockSession.setPermissionRequestHandler.mock.calls[0][0]
@@ -486,8 +484,6 @@ describe('BrowserSessionRegistry', () => {
   })
 
   it('asks macOS for the camera only after the user allowed the site', async () => {
-    // Why: isolated/imported profiles must also defer to macOS, otherwise pages inside them still
-    // hit NotAllowedError after the user grants Camera to Orca.
     configureBrowserSitePermissionStore(mkdtempSync(join(tmpdir(), 'orca-site-permissions-')))
     const profile = await browserSessionRegistry.createProfile('isolated', 'Media Test')
     if (!profile) {
@@ -505,7 +501,6 @@ describe('BrowserSessionRegistry', () => {
     requestHandler(allowedGuest, 'media', allowedSite, { mediaTypes: ['video'] })
     requestHandler(otherGuest, 'media', otherSite, { mediaTypes: ['video'] })
     await vi.waitFor(() => expect(allowedSite).toHaveBeenCalledWith(true))
-    // No window to ask in, so a site nobody answered gets nothing.
     await vi.waitFor(() => expect(otherSite).toHaveBeenCalledWith(false))
 
     expect(checkHandler(allowedGuest, 'media', '', { mediaType: 'video' })).toBe(true)
@@ -695,7 +690,6 @@ describe('BrowserSessionRegistry', () => {
         callback
       )
       const modified = callback.mock.calls[0][0].requestHeaders
-      // UA stays Firefox and every client hint is dropped — one consistent identity.
       expect(modified['User-Agent']).toBe(googleAuthUserAgent())
       expect(modified['sec-ch-ua']).toBeUndefined()
       expect(modified['sec-ch-ua-full-version-list']).toBeUndefined()

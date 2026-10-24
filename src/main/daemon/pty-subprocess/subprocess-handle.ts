@@ -56,7 +56,7 @@ export function createDaemonPtySubprocessHandle(args: {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true
     foreground.markDead()
-    // Why: neutralize kill synchronously so a later async socket-close SIGHUP cannot hit a recycled pid.
+    // Neutralize kill before an async socket-close SIGHUP can target a recycled PID.
     if (process.platform !== 'win32') {
       nativeProc.kill = () => {}
     }
@@ -115,9 +115,7 @@ export function createDaemonPtySubprocessHandle(args: {
       }
       try {
         proc.pause()
-      } catch {
-        // Native handle already torn down; flow control is best-effort.
-      }
+      } catch {}
     },
     resume: () => {
       if (dead) {
@@ -125,9 +123,7 @@ export function createDaemonPtySubprocessHandle(args: {
       }
       try {
         proc.resume()
-      } catch {
-        // Native handle already torn down; flow control is best-effort.
-      }
+      } catch {}
     },
     clear: () => {
       if (dead || ioFailed) {
@@ -135,9 +131,7 @@ export function createDaemonPtySubprocessHandle(args: {
       }
       try {
         proc.clear()
-      } catch {
-        // A clear on a just-exited PTY is best-effort.
-      }
+      } catch {}
     },
     kill: () => {
       if (dead) {
@@ -183,17 +177,13 @@ export function createDaemonPtySubprocessHandle(args: {
       if (nativeProc.signalProcess) {
         try {
           nativeProc.signalProcess(sig)
-        } catch {
-          /* The process may have exited. */
-        }
+        } catch {}
         return
       }
       const signalRootPid = (): void => {
         try {
           process.kill(proc.pid, sig)
-        } catch {
-          // Process may already be dead.
-        }
+        } catch {}
       }
       // SIGWINCH belongs to the tty foreground group; destructive signals keep the root-pid target.
       if (sig === 'SIGWINCH') {
@@ -219,9 +209,7 @@ export function createDaemonPtySubprocessHandle(args: {
       }
       try {
         nativeProc.destroy?.()
-      } catch {
-        // Native handle was already torn down.
-      }
+      } catch {}
     }
   }
 }
