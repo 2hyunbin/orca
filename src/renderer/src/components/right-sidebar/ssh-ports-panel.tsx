@@ -13,8 +13,7 @@ import { SshForwardedPortRow } from './ssh-forwarded-port-row'
 import { SshDetectedPortRow } from './ssh-detected-port-row'
 import { SshPortForwardDialog, type PortForwardDialogState } from './ssh-port-forward-dialog'
 
-// Why: forwarded SSH ports and detected remote ports may report the same loopback
-// endpoint using different textual hosts. Normalize for deduping only.
+// Normalize loopback aliases only for deduplication across detected and forwarded ports.
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0', '::'])
 function normalizeHost(host: string | undefined): string {
   if (!host || LOOPBACK_HOSTS.has(host)) {
@@ -130,7 +129,6 @@ export function SshPortsPanel({
 
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-sleek">
-      {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {translate('auto.components.right.sidebar.PortsPanel.6bc058dbe1', 'Ports')}
@@ -147,7 +145,6 @@ export function SshPortsPanel({
         </button>
       </div>
 
-      {/* Forwarded ports */}
       {allForwards.length > 0 && (
         <div className="px-3 pt-2">
           <button
@@ -179,7 +176,6 @@ export function SshPortsPanel({
         </div>
       )}
 
-      {/* Detected ports */}
       {allDetected.length > 0 && (
         <div className="px-3 pt-2">
           <button
@@ -210,7 +206,6 @@ export function SshPortsPanel({
         </div>
       )}
 
-      {/* Empty state */}
       {allForwards.length === 0 && allDetected.length === 0 && (
         <div className="flex flex-col items-center justify-center flex-1 px-4 text-center text-muted-foreground">
           <p className="text-sm">
