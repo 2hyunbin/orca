@@ -93,7 +93,7 @@ describe('structured mailbox pointer host', () => {
         operationId: 'op1',
         expectedRuntimeFence: 1,
         body: { kind: 'message', role: 'user', blocks: [] }
-      } as never)
+      })
     ).resolves.toEqual({ kind: 'unattached' })
   })
 
@@ -120,7 +120,7 @@ describe('structured mailbox pointer host', () => {
         operationId: 'op1',
         expectedRuntimeFence: 1,
         body: { kind: 'message', role: 'user', blocks: [] }
-      } as never)
+      })
     ).resolves.toEqual({ kind: 'sent', state: expected })
     // Per-dispatch caller key: names the dispatch the nudge is for.
     expect(send.mock.calls[0]![0]).toEqual({ callerKey: structuredPointerCallerKey('d1') })
@@ -167,7 +167,7 @@ describe('structured mailbox pointer host', () => {
         operationId: 'op1',
         expectedRuntimeFence: 1,
         body: { kind: 'message', role: 'user', blocks: [] }
-      } as never)
+      })
     ).resolves.toMatchObject({ kind: 'sent', state: 'accepted' })
   })
 
@@ -189,7 +189,7 @@ describe('structured mailbox pointer host', () => {
         operationId: 'op1',
         expectedRuntimeFence: 1,
         body: { kind: 'message', role: 'user', blocks: [] }
-      } as never)
+      })
     ).resolves.toMatchObject({ kind: 'sent', state: 'accepted' })
     expect(send.mock.calls[0]![0]).toEqual({
       callerKey: structuredSessionPointerCallerKey('s1')
@@ -219,7 +219,7 @@ describe('structured mailbox pointer host', () => {
           operationId: 'op1',
           expectedRuntimeFence: 1,
           body: { kind: 'message', role: 'user', blocks: [] }
-        } as never)
+        })
       ).resolves.toEqual(expected)
     }
   })
