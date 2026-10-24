@@ -1,5 +1,4 @@
-import { EventEmitter } from 'node:events'
-import { PassThrough } from 'node:stream'
+import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '@orca/process-host'
 import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
@@ -36,15 +35,7 @@ afterEach(() => {
 })
 
 function stubChild() {
-  const child = registerScriptedProviderChild(
-    Object.assign(new EventEmitter(), {
-      pid: 9_999_999,
-      stdin: new PassThrough(),
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      kill: vi.fn(() => true)
-    })
-  )
+  const child = registerScriptedProviderChild(createFakePipedChild(9_999_999))
   child.stdin.once('data', () => {
     child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`)
   })

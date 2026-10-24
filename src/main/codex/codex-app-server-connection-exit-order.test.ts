@@ -1,5 +1,4 @@
-import { EventEmitter } from 'node:events'
-import { PassThrough } from 'node:stream'
+import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { describe, expect, it, vi } from 'vitest'
 import type { spawnProcess } from '@orca/process-host'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
@@ -7,16 +6,8 @@ import { registerScriptedProviderChild } from '../provider-process/mock-provider
 import { openCodexAppServerConnection } from './codex-app-server-connection'
 
 function stubChild() {
-  const child = registerScriptedProviderChild(
-    Object.assign(new EventEmitter(), {
-      // Outside any real process table so teardown never mistakes an unrelated process for it.
-      pid: 9_999_999,
-      stdin: new PassThrough(),
-      stdout: new PassThrough(),
-      stderr: new PassThrough(),
-      kill: vi.fn(() => true)
-    })
-  )
+  // Outside any real process table so teardown never mistakes an unrelated process for it.
+  const child = registerScriptedProviderChild(createFakePipedChild(9_999_999))
   child.stdin.once('data', () => {
     child.stdout.write(`${JSON.stringify({ id: 1, result: {} })}\n`)
   })
