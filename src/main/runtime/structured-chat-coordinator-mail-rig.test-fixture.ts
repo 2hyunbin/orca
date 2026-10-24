@@ -1,10 +1,4 @@
-// The coordinator-mail rig, shared by every suite that drives a worker's result into a structured
-// chat end to end in one process.
-//
-// Real: the structured agent-session host, its record store, journal, lease and Codex adapter; the
-// orchestration database, RPC dispatcher and methods; the runtime's pointer lanes. Fake: only the
-// Codex app-server child, which answers the JSON-RPC calls the real one does. Importing it
-// registers the rig's own beforeEach/afterEach for the importing file.
+// Coordinator mail uses the shipped host, stores, journal, adapter, orchestration RPC and pointer lanes; only the Codex child is fake. Import registers beforeEach/afterEach.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -259,7 +253,6 @@ beforeEach(async () => {
     resolveClaudeAuthPolicy: () => ({ account: 'managed' }),
     resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
     ...scriptedCodexTransport(codex.openConnection),
-    // The same calls the runtime's own host install makes.
     onSessionStatusChanged: (summary) => runtime.onStructuredSessionStatusForMail(summary),
     onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId)
   })
@@ -312,7 +305,6 @@ export function turnText(turn: { text: string }): string {
     : ''
 }
 
-/** What an Orca restart leaves behind: a new runtime over the same database and host. */
 export function restartRuntime(): void {
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
