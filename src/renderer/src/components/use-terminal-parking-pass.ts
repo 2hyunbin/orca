@@ -121,9 +121,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
         const evictableTabIds = selectForceParkEvictableTabIds(forceParkedTabs, (tab) =>
           exemptTabIds.has(tab.id)
         )
-        // Why routed + breadcrumbed: only per-route counts in a field bundle
-        // can say whether fail-open ids or unresolved snapshot capability
-        // dominates the degenerate all-exempt force-park (which frees no heap).
+        // Per-route exemption counts distinguish unresolved capabilities from fail-open IDs when force-park frees no heap.
         if (evictableTabIds.length === 0 && forceParkedTabs.length > 0) {
           const exemptRouteCounts = countEvictionExemptTabRoutes(forceParkedTabs, worktreeId)
           warnTerminalLifecycleAnomaly('retention force-park freed no panes', {
@@ -135,7 +133,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
             ...exemptRouteCounts
           })
         }
-        // Why shared: a force-park is rare, and its copy is what a second desktop cold-restores from.
+        // Rare force-parks share captures so another desktop can cold-restore them.
         if (
           captureParkedTerminalBuffers({
             worktreeId,
@@ -149,9 +147,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
       }
       pass.nextParkedTerminalWorktreeIds.add(worktreeId)
     }
-    // Why: a functional updater that returns `current` still queues a render. This pass runs in the
-    // synchronously flushed effects of every pty-exit commit, so those no-op renders chained a
-    // worktree removal's pane-close burst past React's nested-update limit (#185).
+    // No-op functional updaters still queue renders in PTY-exit commit cascades and can exceed React’s nested-update limit (#185).
     const dispatched = (dispatchedIdSetsRef.current ??= {
       parked: new Set(),
       forceParked: new Set(),
