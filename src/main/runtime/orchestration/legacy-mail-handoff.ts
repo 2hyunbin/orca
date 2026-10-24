@@ -10,8 +10,8 @@ export function drainLegacyMailHandoff(
   operation: StructuredPointerOperationRow,
   evidence: StructuredMailEvidence
 ): void {
-  const notice = evidence.legacyNotice
-  if (!notice || notice.mailbox !== operation.mailbox_handle || !evidence.submission) {
+  const { legacyNotice: notice, submission } = evidence
+  if (!notice || notice.mailbox !== operation.mailbox_handle || !submission) {
     return
   }
   runLifecycleWriteTransaction(db.db, 'legacy_mail_handoff', () => {
@@ -34,7 +34,7 @@ export function drainLegacyMailHandoff(
       frontier: 'legacy',
       operationId: operation.operation_id,
       authorizationId: operation.operation_id,
-      clientMessageId: evidence.submission.clientMessageId,
+      clientMessageId: submission.clientMessageId,
       phase: 'reserved',
       nonAdmission: 'refused',
       authority: db.mailboxHandoffAuthority(operation.mailbox_handle)

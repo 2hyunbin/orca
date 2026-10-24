@@ -401,7 +401,7 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
     let request = 0
     const call = async (method: string, params: Record<string, unknown> = {}) => {
       const response = await rpc.dispatch({
-        id: ++request,
+        id: String(++request),
         method,
         params,
         authToken: 'test',

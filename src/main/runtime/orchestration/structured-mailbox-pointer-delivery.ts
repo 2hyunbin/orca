@@ -32,8 +32,11 @@ export type StructuredPointerSendOutcome =
       clientMessageId?: string
       nonAdmission?: 'refused' | 'expired'
     }
-  | { kind: 'held' | 'superseded' | 'unattached'; noEffect?: boolean }
+  | { kind: 'held' }
+  | { kind: 'superseded'; noEffect?: boolean }
+  /** The chat's queue took it, as it takes a person's message. */
   | { kind: 'queued'; clientMessageId?: string }
+  | { kind: 'unattached' }
 
 export type StructuredPointerSessionFacts = Pick<StructuredMailEvidence, 'epoch' | 'frontier'>
 type MailEvidenceSource = Pick<StructuredMailHandoff, 'sessionId' | 'clientMessageId'>

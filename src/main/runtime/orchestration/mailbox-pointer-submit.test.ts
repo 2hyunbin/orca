@@ -30,6 +30,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-1',
       leafId: 'leaf-1',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
@@ -131,6 +132,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-1',
       leafId: 'leaf-1',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
@@ -201,6 +203,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-1',
       leafId: 'leaf-1',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
@@ -296,6 +299,7 @@ describe('orchestration mailbox pointer submit', () => {
       const leaf: OrchestrationMailboxLeaf = {
         tabId: 'tab',
         leafId: 'leaf',
+        paneRuntimeId: 1,
         ptyId: 'pty-current',
         writable: true,
         lastAgentStatus: 'idle',
@@ -384,6 +388,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-1',
       leafId: 'leaf-1',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
@@ -440,6 +445,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-teardown',
       leafId: 'leaf-teardown',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
@@ -499,6 +505,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-surviving',
       leafId: 'leaf-surviving',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,

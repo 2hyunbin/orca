@@ -141,14 +141,19 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       if (!this.hasLiveClaimsForPaneKey(resolvedPaneKey)) {
         continue
       }
-      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey)
+      type MainCleanupRow = EnrichedAgentHookEventPayload | undefined
       const resumeRow = options?.preserveResumeIdentity
-        ? this.toRetainedProviderSessionRow(previous)
+        ? this.toRetainedProviderSessionRow(
+            // SAFETY: Main writers attach or preserve both status clocks before admitting this row.
+            this.state.lastStatusByPaneKey.get(resolvedPaneKey) as MainCleanupRow
+          )
         : null
       const retained =
         resumeRow && options?.endedPresence
           ? { ...resumeRow, agentPresence: options.endedPresence }
           : resumeRow
+      // SAFETY: This same main-only raw map admits rows with both status clocks preserved.
+      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as MainCleanupRow
       this.clearPaneState(resolvedPaneKey, { emitStatusRowMutation: false })
       if (retained) {
         admitLegacyAgentStatus(

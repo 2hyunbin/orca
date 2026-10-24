@@ -15,6 +15,7 @@ function leafFor(tabId: string, leafId: string): OrchestrationMailboxLeaf {
   return {
     tabId,
     leafId,
+    paneRuntimeId: 1,
     ptyId: `pty_${leafId}`,
     writable: true,
     lastAgentStatus: 'idle',

@@ -3,7 +3,14 @@ import { selectTerminalMailHandoff } from './terminal-mail-settlement'
 import type { TerminalMailTarget } from '../../agent-hooks/server/terminal-mail-target'
 import { OrchestrationDb } from './db'
 import { OrchestrationMailboxPointerDelivery } from './mailbox-pointer-delivery'
-import { OrchestrationMailboxPointerState } from './mailbox-pointer-state'
+import {
+  OrchestrationMailboxPointerState,
+  type OrchestrationMailboxDeliveryFlight
+} from './mailbox-pointer-state'
+import { OrchestrationMailboxOwner } from './mailbox-owner'
+import { OrchestrationMailboxDeliveryTarget } from './mailbox-delivery-target'
+import type { PointerDeliveryDependencies } from './mailbox-pointer-delivery-contract'
+import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import { stageOrchestrationMailboxPointer } from './mailbox-pointer-stage'
 import {
   WRITE_ACCEPTED,
@@ -14,6 +21,7 @@ import {
 const LEAF = {
   tabId: 'tab-1',
   leafId: 'leaf-1',
+  paneRuntimeId: 1,
   ptyId: 'pty-1',
   writable: true,
   lastAgentStatus: 'idle' as const,
@@ -27,9 +35,29 @@ function pointerDeps(db: OrchestrationDb, writePty: () => WriteSettlement) {
       "INSERT OR IGNORE INTO runs (id, objective, coordinator_handle, consumer_generation, legacy) VALUES ('run-1', 'mail transport', 'consumer', 1, 0)"
     )
     .run()
+  const mailboxOwner = new OrchestrationMailboxOwner({
+    getDb: () => db,
+    getLeaf: () => LEAF,
+    getLeafKey: (tabId, leafId) => `${tabId}:${leafId}`,
+    getTerminalHandleForLeafKey: () => 'term-1',
+    getTerminalProcessIncarnation: () => 'inc-1',
+    onRoutedMessageTypes: () => {},
+    onForeignMailboxRouted: () => {}
+  })
+  vi.spyOn(mailboxOwner, 'resolve').mockReturnValue('run:run-1')
+  const deliveryTarget = new OrchestrationMailboxDeliveryTarget({
+    getDb: () => db,
+    getTerminalHandleForPaneKey: () => 'term-1',
+    hasTerminalHandle: (handle) => handle === 'term-1',
+    isStructuredSessionOwner: () => false,
+    canProbePtyLiveness: () => false,
+    controllerKnowsPtyIsLive: () => true,
+    isLeafPtyProvenAbsent: async () => false
+  })
+  vi.spyOn(deliveryTarget, 'resolveTerminalHandle').mockReturnValue('term-1')
   return {
-    mailboxOwner: { resolve: () => 'run:run-1' },
-    deliveryTarget: { resolveTerminalHandle: () => 'term-1', deferForAbsenceProbe: () => false },
+    mailboxOwner,
+    deliveryTarget,
     getDb: () => db,
     getLeaf: () => LEAF,
     getLeafKey: () => 'tab-1:leaf-1',
@@ -48,7 +76,7 @@ function pointerDeps(db: OrchestrationDb, writePty: () => WriteSettlement) {
     isLeafPtyProvenAbsent: async () => false,
     redriveMailbox: vi.fn(),
     writePty
-  }
+  } satisfies PointerDeliveryDependencies<OrchestrationMessageWaiter>
 }
 
 function stageArgs(db: OrchestrationDb, state: OrchestrationMailboxPointerState) {
@@ -60,7 +88,8 @@ function stageArgs(db: OrchestrationDb, state: OrchestrationMailboxPointerState)
     newestSequence: 1,
     enterDelayMs: 5,
     leafKey: 'tab-1:leaf-1',
-    settle: (ptyId: string, flight: never) => state.settleFlight(ptyId, flight),
+    settle: (ptyId: string, flight: OrchestrationMailboxDeliveryFlight) =>
+      state.settleFlight(ptyId, flight),
     redrive: vi.fn()
   }
 }

@@ -396,7 +396,11 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     }))
     refused.mockImplementationOnce(async () => ({
       ok: false as const,
-      refusal: refuse('agent_session_operation_expired', {}, 'This operation is too old to admit.')
+      refusal: refuse(
+        'agent_session_operation_expired',
+        { reason: 'operationExpired' },
+        'This operation is too old to admit.'
+      )
     }))
     refused.mockImplementation((caller, params) => realSend(caller, params))
     await finishWorker(taskId)
