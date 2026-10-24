@@ -1,6 +1,7 @@
 // A paired client's sleep stops the host's PTYs; the host must keep the session to resume on open.
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
@@ -45,8 +46,7 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
     connectionId: null
   } as AgentStatusIpcPayload
   let rows: AgentStatusIpcPayload[] = []
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+  const runtime = new OrcaRuntimeService(partialRuntimeStore(runtimeStore), undefined, {
     getAgentProviderSessionSnapshot: () => rows,
     checkHookAgentPresence: async (paneKey: string) =>
       paneKey === HOLDER_PANE_KEY ? holderVerdict : verdict

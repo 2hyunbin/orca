@@ -77,8 +77,7 @@ function openPane(
     if (opts.withWindow) {
       runtime.attachWindow(TEST_WINDOW_ID)
       runtime.markGraphReady(TEST_WINDOW_ID)
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only isDestroyed from the window mock.
-      electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
+      electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false })
       // A paired desktop client opening the worktree hydrates the host's tabs without a wake.
       await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
         notifyClients: false,

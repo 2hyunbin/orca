@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest'
+import { z } from 'zod'
 import { ORCHESTRATION_METHODS } from './orchestration'
 import { eraseRpcMethods, type RpcContext } from '../core'
 import { OrchestrationDb } from '../../orchestration/db'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { completeWorkerTerminalRelease } from './orchestration/worker/worker-release-completion'
+import type { RuntimeTerminalShow } from '../../../../shared/runtime-terminal-contracts'
+import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
+
+const workerStartResult = z.object({ dispatchId: z.string(), state: z.string() })
 
 describe('orchestration worker release incarnation fallback', () => {
   let db: OrchestrationDb
@@ -17,6 +22,38 @@ describe('orchestration worker release incarnation fallback', () => {
 
   const coordinatorPaneKey = 'tab_coord:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
   const workerPaneKey = 'tab_worker:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+  function workerTerminal(handle: string): RuntimeTerminalShow {
+    return {
+      handle,
+      ptyId: 'pty_worker',
+      paneRuntimeId: 1,
+      rendererGraphEpoch: 1,
+      worktreeId: 'repo::worktree',
+      worktreePath: '/repo/worktree',
+      branch: 'worktree',
+      tabId: 'tab-worker',
+      leafId: 'leaf-worker',
+      title: 'worker',
+      connected: true,
+      writable: true,
+      lastOutputAt: null,
+      preview: ''
+    }
+  }
+
+  function workerAuthority(handle: string): OrchestrationCompatibilityTerminalAuthority {
+    return {
+      runtimeId: 'runtime_test',
+      terminalHandle: handle,
+      ptyId: 'pty_worker',
+      worktreeId: 'repo::worktree',
+      paneKey: workerPaneKey,
+      processIncarnation: 'runtime_test:term_worker:1',
+      launchTokenHash: null,
+      hostScope: { kind: 'local', hostId: 'local' }
+    }
+  }
 
   /** Fresh in-memory db and a fully-stubbed runtime for one worker-release scenario. */
   function setup(): void {
@@ -38,22 +75,11 @@ describe('orchestration worker release incarnation fallback', () => {
       handle === 'term_worker' || handle === 'term_reminted' ? 'runtime_test:term_worker:1' : null
     )
     vi.spyOn(runtime, 'getOrchestrationDispatchAuthority').mockImplementation((handle) =>
-      handle === 'term_worker' || handle === 'term_reminted'
-        ? // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test fixture is deliberately shaped to exercise the private/runtime boundary.
-          ({
-            terminalHandle: handle,
-            paneKey: workerPaneKey,
-            processIncarnation: 'runtime_test:term_worker:1',
-            hostScope: { kind: 'local', hostId: 'local' }
-          } as never)
-        : null
+      handle === 'term_worker' || handle === 'term_reminted' ? workerAuthority(handle) : null
     )
     vi.spyOn(runtime, 'validateOrchestrationAgentLauncher').mockImplementation(() => {})
-    vi.spyOn(runtime, 'showTerminal').mockImplementation(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-      async (handle) => ({ handle, worktreeId: 'repo::worktree', status: 'running' }) as never
-    )
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
+    vi.spyOn(runtime, 'showTerminal').mockImplementation(async (handle) => workerTerminal(handle))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worker start reads only the managed worktree's id.
     vi.spyOn(runtime, 'showManagedTerminalWorkspace').mockResolvedValue({
       id: 'repo::worktree'
     } as never)
@@ -84,12 +110,11 @@ describe('orchestration worker release incarnation fallback', () => {
       truncated: false,
       nextCursor: '2'
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     vi.spyOn(runtime, 'closeTerminal').mockResolvedValue({
       handle: 'term_worker',
       tabId: 'tab-worker',
       ptyKilled: true
-    } as never)
+    })
     vi.spyOn(runtime, 'notifyMessageArrived').mockImplementation(() => {})
     activeRunId = db.createRun({
       objective: 'Release test Run',
@@ -129,12 +154,13 @@ describe('orchestration worker release incarnation fallback', () => {
     dispatchId: string
   }> {
     const task = db.createTask({ spec: 'release fixture task', runId: activeRunId })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const result = (await call('orchestration.workerStart', {
-      task: task.id,
-      from: 'term_coord',
-      ...(options.terminal ? { terminal: options.terminal } : { agent: 'codex' })
-    })) as { dispatchId: string; state: string }
+    const result = workerStartResult.parse(
+      await call('orchestration.workerStart', {
+        task: task.id,
+        from: 'term_coord',
+        ...(options.terminal ? { terminal: options.terminal } : { agent: 'codex' })
+      })
+    )
     expect(result.state).toBe('ready')
     return { taskId: task.id, dispatchId: result.dispatchId }
   }
@@ -167,9 +193,7 @@ describe('orchestration worker release incarnation fallback', () => {
     vi.mocked(runtime.showTerminal).mockImplementation(async (handle) =>
       handle === 'term_worker'
         ? Promise.reject(new Error('terminal_handle_stale'))
-        : // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test fixture is deliberately shaped to exercise the private/runtime boundary.
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-          ({ handle, worktreeId: 'repo::worktree', status: 'running' } as never)
+        : workerTerminal(handle)
     )
     // ...but the recorded process incarnation still names a live PTY, re-minted to a fresh handle.
     const resolveByIncarnation = vi.fn().mockReturnValue('term_reminted')
@@ -177,11 +201,7 @@ describe('orchestration worker release incarnation fallback', () => {
       resolveByIncarnation
     )
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerRelease', { dispatch: dispatchId })) as {
-      state: string
-      processAction: string
-    }
+    const receipt = await call('orchestration.workerRelease', { dispatch: dispatchId })
 
     expect(receipt).toMatchObject({ state: 'released', processAction: 'closed_agent_terminal' })
     expect(resolveByIncarnation).toHaveBeenCalledWith(
@@ -207,12 +227,9 @@ describe('orchestration worker release incarnation fallback', () => {
       resolveByIncarnation
     )
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerRelease', { dispatch: dispatchId })) as {
-      state: string
-    }
+    const receipt = await call('orchestration.workerRelease', { dispatch: dispatchId })
 
-    expect(receipt.state).toBe('release_unknown')
+    expect(receipt).toMatchObject({ state: 'release_unknown' })
     expect(resolveByIncarnation).toHaveBeenCalledWith(
       'runtime_test:term_worker:1',
       JSON.stringify({ kind: 'local', hostId: 'local' })
@@ -231,11 +248,7 @@ describe('orchestration worker release incarnation fallback', () => {
     )
     inspectProcessLiveness.mockResolvedValue('exited')
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerRelease', { dispatch: dispatchId })) as {
-      state: string
-      processAction: string
-    }
+    const receipt = await call('orchestration.workerRelease', { dispatch: dispatchId })
 
     expect(receipt).toMatchObject({ state: 'release_unknown', processAction: 'none' })
     expect(inspectProcessLiveness).toHaveBeenCalled()
@@ -297,14 +310,10 @@ describe('orchestration worker release incarnation fallback', () => {
     vi.mocked(runtime.getOrchestrationDispatchAuthority).mockReturnValue(null)
     inspectProcessLiveness.mockResolvedValue('exited')
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerRelease', { dispatch: dispatchId })) as {
-      state: string
-      processAction: string
-    }
+    const receipt = await call('orchestration.workerRelease', { dispatch: dispatchId })
 
     expect(receipt).toMatchObject({ state: 'release_unknown', processAction: 'none' })
-    expect(receipt.state).not.toBe('retained')
+    expect(receipt).not.toMatchObject({ state: 'retained' })
     expect(inspectProcessLiveness).toHaveBeenCalled()
     expect(runtime.closeTerminal).not.toHaveBeenCalled()
   })
@@ -322,13 +331,10 @@ describe('orchestration worker release incarnation fallback', () => {
     // than retain or guess at a live process.
     inspectProcessLiveness.mockResolvedValue('live')
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerRelease', { dispatch: dispatchId })) as {
-      state: string
-    }
+    const receipt = await call('orchestration.workerRelease', { dispatch: dispatchId })
 
-    expect(receipt.state).toBe('release_unknown')
-    expect(receipt.state).not.toBe('retained')
+    expect(receipt).toMatchObject({ state: 'release_unknown' })
+    expect(receipt).not.toMatchObject({ state: 'retained' })
     expect(runtime.closeTerminal).not.toHaveBeenCalled()
     expect(db.getWorkerTerminalResourceByOwner(dispatchId)?.release_state).toBe('unknown')
   })
@@ -340,21 +346,16 @@ describe('orchestration worker release incarnation fallback', () => {
     vi.mocked(runtime.showTerminal).mockImplementation(async (handle) =>
       handle === 'term_worker'
         ? Promise.reject(new Error('terminal_handle_stale'))
-        : // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test fixture is deliberately shaped to exercise the private/runtime boundary.
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-          ({ handle, worktreeId: 'repo::worktree', status: 'running' } as never)
+        : workerTerminal(handle)
     )
     const resolveByIncarnation = vi.fn().mockReturnValue('term_reminted')
     vi.spyOn(runtime, 'resolveTerminalHandleByProcessIncarnation').mockImplementation(
       resolveByIncarnation
     )
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const receipt = (await call('orchestration.workerStop', { dispatch: dispatchId })) as {
-      processAction: string
-    }
+    const receipt = await call('orchestration.workerStop', { dispatch: dispatchId })
 
-    expect(receipt.processAction).toBe('closed_agent_terminal')
+    expect(receipt).toMatchObject({ processAction: 'closed_agent_terminal' })
     // The kill targeted exactly the reminted live handle, never the stale durable one — closing
     // the stale handle would throw terminal_handle_stale and leak the PTY.
     expect(runtime.closeTerminal).toHaveBeenCalledTimes(1)
@@ -367,19 +368,14 @@ describe('orchestration worker release incarnation fallback', () => {
     vi.mocked(runtime.showTerminal).mockImplementation(async (handle) =>
       handle === 'term_worker'
         ? Promise.reject(new Error('terminal_handle_stale'))
-        : // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This test fixture is deliberately shaped to exercise the private/runtime boundary.
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-          ({ handle, worktreeId: 'repo::worktree', status: 'running' } as never)
+        : workerTerminal(handle)
     )
     const resolveByIncarnation = vi.fn().mockReturnValue('term_reminted')
     vi.spyOn(runtime, 'resolveTerminalHandleByProcessIncarnation').mockImplementation(
       resolveByIncarnation
     )
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    const output = (await call('orchestration.workerRead', { dispatch: dispatchId })) as {
-      terminal?: { tail: string[] }
-    }
+    const output = await call('orchestration.workerRead', { dispatch: dispatchId })
 
     // Both the exact-session probe and the terminal read addressed the reminted handle.
     expect(runtime.getExactWorkerProviderSession).toHaveBeenCalledWith(
@@ -387,7 +383,9 @@ describe('orchestration worker release incarnation fallback', () => {
       expect.any(Number)
     )
     expect(runtime.readTerminal).toHaveBeenCalledWith('term_reminted', expect.anything())
-    expect(output.terminal?.tail).toEqual(['worker output line 1', 'worker output line 2'])
+    expect(output).toMatchObject({
+      terminal: { tail: ['worker output line 1', 'worker output line 2'] }
+    })
   })
 
   it('recovery-mode: defers when exited missing has no archive rather than plain-settling', async () => {
@@ -483,7 +481,7 @@ describe('orchestration worker release incarnation fallback', () => {
       mode: 'recovery'
     })
 
-    expect(receipt.state).toBe('release_pending')
+    expect(receipt).toMatchObject({ state: 'release_pending' })
     expect(runtime.closeTerminal).not.toHaveBeenCalled()
     expect(db.getWorkerTerminalResourceByOwner(dispatchId)?.release_state).not.toBe('released')
   })

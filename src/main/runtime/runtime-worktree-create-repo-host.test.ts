@@ -2,7 +2,7 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import { RpcDispatcher } from './rpc/dispatcher'
-import type { RpcContext, RpcRequest } from './rpc/core'
+import type { RpcRequest } from './rpc/core'
 import { REPO_METHODS } from './rpc/methods/repo'
 import { WORKTREE_METHODS } from './rpc/methods/worktree'
 import { agentLaunchWorkspaceFactory } from './rpc/methods/agent-launch-worktree-creation'
@@ -96,8 +96,7 @@ describe('a repo id set up on two hosts, named with repoHostId', () => {
   it('agent.launch create-worktree keeps the host', async () => {
     const reached = stopAtResolvedProject()
     const runtime = createRuntime()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the create reads only `runtime` and the creator-provenance fields, which default when absent.
-    const factory = agentLaunchWorkspaceFactory({ runtime } as unknown as RpcContext, 'claude')
+    const factory = agentLaunchWorkspaceFactory({ runtime }, 'claude')
 
     await expect(
       factory.createWorktree({
