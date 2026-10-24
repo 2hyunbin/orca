@@ -5,9 +5,7 @@ import { getPiOmpRuntimeDetectionSourceLines } from './agent-status-runtime-dete
 export const ORCA_PI_EXTENSION_FILE = 'orca-titlebar-spinner.ts'
 
 export function getPiTitlebarExtensionSource(kind: PiAgentKind = 'pi'): string {
-  // Why: OMP reports input waits through its own approval events, which the status
-  // extension already maps, and it writes this same marker natively. The runtime check
-  // matters as well as the kind: a bare-shell OMP launch runs inside a pi-kind pane.
+  // OMP paints this marker natively; detect bare-shell OMP too, which can run inside a Pi-kind pane.
   const uiPromptHandlers =
     kind === 'pi'
       ? [
