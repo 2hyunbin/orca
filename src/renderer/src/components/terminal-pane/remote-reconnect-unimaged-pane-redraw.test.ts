@@ -16,11 +16,7 @@ import {
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
 
-// #26887: after an SSH reconnect the subscribe replays no screen image, so the pane asks the host
-// for one (onStreamRecovered). When the host cannot give one, an idle TUI that only writes diffs
-// stays on its pre-disconnect frame. Whatever the reason the image is missing, the pane must ask
-// the program to repaint — a real one-row size change, because Node's tty ignores a same-size
-// SIGWINCH — and put the size back.
+// Without a recovered host image, idle differential TUIs need a real one-row resize then restoration; same-size SIGWINCH does not force Node repaint (#26887).
 
 const scheduleRuntimeGraphSync = vi.fn()
 let mockStoreState: StoreState
