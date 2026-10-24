@@ -16,6 +16,7 @@ import {
   createTestStoreDrawnFromMain,
   type BrowserTestStore
 } from './browser-slice-drawn-from-main.test-fixture'
+import { getDefaultSettings } from '../../../../shared/constants'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())
 const runtimeEnvironmentTransportCall = vi.fn()
@@ -294,8 +295,7 @@ describe('createBrowserSlice annotations', () => {
     Object.assign(mockApi.browser, { sessionEnsureManagedProfile: ensureMock })
     const { store, main } = await createTestStoreDrawnFromMain({
       repos: [],
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the browser keys are read.
-      settings: { browserProfileScope: 'repo' } as AppState['settings'],
+      settings: { ...getDefaultSettings('/tmp'), browserProfileScope: 'repo' },
       defaultBrowserSessionProfileId: 'user-default'
     })
 
