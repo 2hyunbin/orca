@@ -32,7 +32,7 @@ import {
 import {
   WS_HANDSHAKE_TIMEOUT_MESSAGE,
   remoteRuntimeConnectFailureMessage
-} from './remote-runtime-connect-bound'
+} from './remote-runtime/remote-runtime-connect-bound'
 import {
   invalidRemoteRuntimeResponseError,
   parseRemoteRuntimeRpcFrame,
