@@ -309,6 +309,13 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   backgroundTaskStops?(sessionId: string): AgentSessionBackgroundTaskStops | undefined
   /** Derive unanswered retained work from the live child; false without one. */
   holdsDispatch?(sessionId: string): boolean
+  /** Captures only this input's pending answer/output in the supplied live acquisition. */
+  capturePendingOutput?(input: {
+    sessionId: string
+    clientMessageId: string
+    fence: number
+    generation: string
+  }): (() => boolean) | undefined
   /** Undefined without a live child; then the host conservatively treats unanswered sends as held. */
   heldSends?(sessionId: string): ReadonlySet<string> | undefined
   /** Prove this acquisition’s root alive for lease renewal; absent/false falls back to PID probing. */

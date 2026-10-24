@@ -267,6 +267,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     return session && isAcpReadySession(session) ? session.options.readCommands() : undefined
   }
 
+  capturePendingOutput: StructuredAgentSessionAdapter['capturePendingOutput'] = (input) =>
+    this.children.capturePendingOutput?.(input)
+
   holdsDispatch = (sessionId: string): boolean => {
     const session = this.children.sessions.get(sessionId)
     return session ? isAcpReadySession(session) && session.turns.running : false
