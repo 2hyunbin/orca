@@ -313,6 +313,7 @@ describe('WSL home cache', () => {
 describe('WSL home probe on a booting distro', () => {
   afterEach(() => {
     runProcessMock.mockReset()
+    runProcessSyncMock.mockReset()
     _resetWslCachesForTests()
   })
 
@@ -322,6 +323,18 @@ describe('WSL home probe on a booting distro', () => {
     await withPlatformAsync('win32', () => getWslHomeAsync('Ubuntu'))
     expect(runProcessMock.mock.calls[0]?.[0]).toMatchObject({ program: 'wsl.exe' })
     expect(runProcessMock.mock.calls[0]?.[0]?.timeoutMs).toBeGreaterThanOrEqual(30_000)
+  })
+
+  it('never starts a 5 s synchronous probe while the async one waits out a boot', async () => {
+    let finish!: (result: ProcessResult) => void
+    runProcessMock.mockReturnValueOnce(new Promise<ProcessResult>((resolve) => (finish = resolve)))
+    await withPlatformAsync('win32', async () => {
+      const pending = getWslHomeAsync('Ubuntu')
+      expect(getWslHome('Ubuntu')).toBeNull()
+      expect(runProcessSyncMock).not.toHaveBeenCalled()
+      finish(exited('/home/alice\n'))
+      expect(await pending).toContain('alice')
+    })
   })
 })
 

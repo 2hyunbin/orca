@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from 'node:path'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
-import { computeWorkspaceRootAsync, getWorktreePathSettings } from './worktree-logic'
+import { computeWorkspaceRootWithin, getWorktreePathSettings } from './worktree-logic'
 import {
   getWorktreeMirrorDistroForRuntime,
   resolveLocalProjectRuntimesForRepos
@@ -116,6 +116,9 @@ export function resolveUnanchoredWorkspaceRoot(
   return hostPath.isAbsolute(workspaceDir) ? hostPath.resolve(workspaceDir) : null
 }
 
+// A broken distro must not hold every file check; the probe keeps running past this and caches.
+const ALLOWED_ROOT_WSL_HOME_DEADLINE_MS = 5_000
+
 /** Async because a root mirrored into WSL needs the distro's home, and a synchronous probe blocks main. */
 export async function getAllowedRoots(store: RuntimeStore): Promise<string[]> {
   // Rehydrate repos only once per authorization snapshot.
@@ -136,14 +139,15 @@ export async function getAllowedRoots(store: RuntimeStore): Promise<string[]> {
       const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(store, localRepos)
       const workspaceRoots = await Promise.all(
         localRepos.map((repo) =>
-          computeWorkspaceRootAsync(
+          computeWorkspaceRootWithin(
             repo.path,
             // Match creation placement, including WSL, so newly created worktrees remain authorized.
             getWorktreePathSettings(
               repo,
               settings,
               getWorktreeMirrorDistroForRuntime(projectRuntimeByRepoId.get(repo.id))
-            )
+            ),
+            ALLOWED_ROOT_WSL_HOME_DEADLINE_MS
           )
         )
       )

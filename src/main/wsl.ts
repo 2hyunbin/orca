@@ -218,6 +218,10 @@ export function getWslHome(distro: string): string | null {
   if (cachedHome !== undefined) {
     return cachedHome
   }
+  // A second, 5 s-bounded probe would kill a boot the in-flight one is waiting out.
+  if (wslHomeProbeCache.has(distro)) {
+    return null
+  }
 
   try {
     const home = wslExeStdout(

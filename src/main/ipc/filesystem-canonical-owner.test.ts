@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('node:fs/promises', () => ({ stat: mocks.stat, realpath: mocks.realpath }))
 vi.mock('../repo-worktrees', () => ({ listRepoWorktreeGraph: mocks.graph, isRepoRoot: vi.fn() }))
 vi.mock('./worktree-logic', () => ({
-  computeWorkspaceRootAsync: async (...args: unknown[]) => mocks.workspaceRoot(...args),
+  computeWorkspaceRootWithin: async (...args: unknown[]) => mocks.workspaceRoot(...args),
   getWorktreePathSettings: mocks.pathSettings
 }))
 vi.mock('../project-runtime-git-options', () => ({
