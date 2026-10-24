@@ -9,40 +9,47 @@ import {
 import type { RuntimeStore } from './runtime-store-contract'
 import { planTerminalLeafMove } from '../persistence/terminal-topology/terminal-leaf-move'
 import type { TerminalLeafMoveRequest } from '../../shared/terminal-leaf-move'
+import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import type { Tab } from '../../shared/tab-types'
+import { ownedEditorFileId } from '../../shared/workspace-session-pane-ownership'
 
 const SIBLING_LEAF_ID = '33333333-3333-4333-8333-333333333333'
 const OTHER_LEAF_ID = '44444444-4444-4444-8444-444444444444'
-async function setup() {
+async function setup(
+  withSession: (session: WorkspaceSessionState) => WorkspaceSessionState = (session) => session
+) {
   const base = makeWorkspaceSessionWithHeadlessTerminal()
   const hostTab = base.tabsByWorktree[TEST_WORKTREE_ID]![0]!
-  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession({
-    ...base,
-    tabsByWorktree: {
-      [TEST_WORKTREE_ID]: [
-        hostTab,
-        { ...hostTab, id: 'other-tab', ptyId: 'other-pty', title: 'Other', sortOrder: 1 }
-      ]
-    },
-    terminalLayoutsByTabId: {
-      'other-tab': {
-        root: { type: 'leaf', leafId: OTHER_LEAF_ID },
-        activeLeafId: OTHER_LEAF_ID,
-        expandedLeafId: null,
-        ptyIdsByLeafId: { [OTHER_LEAF_ID]: 'other-pty' }
+  const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
+    withSession({
+      ...base,
+      tabsByWorktree: {
+        [TEST_WORKTREE_ID]: [
+          hostTab,
+          { ...hostTab, id: 'other-tab', ptyId: 'other-pty', title: 'Other', sortOrder: 1 }
+        ]
       },
-      'host-tab': {
-        root: {
-          type: 'split',
-          direction: 'vertical',
-          first: { type: 'leaf', leafId: HEADLESS_LEAF_ID },
-          second: { type: 'leaf', leafId: SIBLING_LEAF_ID }
+      terminalLayoutsByTabId: {
+        'other-tab': {
+          root: { type: 'leaf', leafId: OTHER_LEAF_ID },
+          activeLeafId: OTHER_LEAF_ID,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [OTHER_LEAF_ID]: 'other-pty' }
         },
-        activeLeafId: HEADLESS_LEAF_ID,
-        expandedLeafId: null,
-        ptyIdsByLeafId: { [HEADLESS_LEAF_ID]: 'persisted-pty', [SIBLING_LEAF_ID]: 'sibling-pty' }
+        'host-tab': {
+          root: {
+            type: 'split',
+            direction: 'vertical',
+            first: { type: 'leaf', leafId: HEADLESS_LEAF_ID },
+            second: { type: 'leaf', leafId: SIBLING_LEAF_ID }
+          },
+          activeLeafId: HEADLESS_LEAF_ID,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [HEADLESS_LEAF_ID]: 'persisted-pty', [SIBLING_LEAF_ID]: 'sibling-pty' }
+        }
       }
-    }
-  })
+    })
+  )
   // The host's real planner over the shared session, as Store.moveTerminalLeafToNewTab runs it.
   const commit = vi.fn(async (request: TerminalLeafMoveRequest) => {
     const plan = planTerminalLeafMove([{ hostId: 'local', session: getSession() }], request)
@@ -128,6 +135,23 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     ])
     expect(groups.find((candidate) => candidate.id === group!.id)?.tabOrder).toEqual(['host-tab'])
   })
+  it('keeps the places of the editors around the dropped tab', async () => {
+    const { runtime, move } = await setup(withFileBetweenTerminals)
+    const worktree = `id:${TEST_WORKTREE_ID}`
+    const listed = async () => (await runtime.listMobileSessionTabs(worktree)).tabGroups?.[0]
+    const group = (await listed())!
+    const file = group.tabOrder.find((id) => id !== 'host-tab' && id !== 'other-tab')!
+    // The user put the editor between the two terminals.
+    await runtime.moveMobileSessionTab(worktree, {
+      kind: 'reorder',
+      tabId: file,
+      targetGroupId: group.id,
+      tabOrder: ['host-tab', file, 'other-tab']
+    })
+    expect((await listed())?.tabOrder).toEqual(['host-tab', file, 'other-tab'])
+    await move('host-new-tab', { targetGroupId: group.id, index: 2 })
+    expect((await listed())?.tabOrder).toEqual(['host-tab', file, 'host-new-tab', 'other-tab'])
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()
@@ -137,3 +161,50 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     expect(published).toHaveLength(0)
   })
 })
+
+/** A session whose worktree also has an editor open beside its two terminal tabs. */
+function withFileBetweenTerminals(session: WorkspaceSessionState): WorkspaceSessionState {
+  const filePath = '/repo/notes.ts'
+  const entry = (
+    id: string,
+    entityId: string,
+    contentType: Tab['contentType'],
+    sortOrder: number
+  ) => ({
+    id,
+    entityId,
+    groupId: 'group-1',
+    worktreeId: TEST_WORKTREE_ID,
+    contentType,
+    label: id,
+    customLabel: null,
+    color: null,
+    sortOrder,
+    createdAt: 1
+  })
+  return {
+    ...session,
+    openFilesByWorktree: {
+      [TEST_WORKTREE_ID]: [
+        { filePath, relativePath: 'notes.ts', worktreeId: TEST_WORKTREE_ID, language: 'typescript' }
+      ]
+    },
+    unifiedTabs: {
+      [TEST_WORKTREE_ID]: [
+        entry('host-tab', 'host-tab', 'terminal', 0),
+        entry('file-tab', ownedEditorFileId(filePath, TEST_WORKTREE_ID, undefined), 'editor', 1),
+        entry('other-tab', 'other-tab', 'terminal', 2)
+      ]
+    },
+    tabGroups: {
+      [TEST_WORKTREE_ID]: [
+        {
+          id: 'group-1',
+          worktreeId: TEST_WORKTREE_ID,
+          activeTabId: 'host-tab',
+          tabOrder: ['host-tab', 'file-tab', 'other-tab']
+        }
+      ]
+    }
+  }
+}
