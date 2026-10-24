@@ -21,7 +21,44 @@ function isNativeFolderSelector(selector: string): boolean {
   return parseWorkspaceKey(selector.replace(/^id:/, ''))?.type === 'folder'
 }
 
-// Why: worktree selectors never match a native folder's path, so name the folder by its id.
+async function listFoldersAtPath(
+  client: Pick<HandlerContext['client'], 'call'>,
+  folderPath: string
+): Promise<FolderWorkspace[]> {
+  try {
+    const { result } = await client.call<{ folderWorkspaces: FolderWorkspace[] }>(
+      'folderWorkspace.list'
+    )
+    const target = normalizeRuntimePathForComparison(folderPath)
+    return result.folderWorkspaces.filter(
+      (row) => normalizeRuntimePathForComparison(row.folderPath) === target
+    )
+  } catch (error) {
+    if (error instanceof RuntimeRpcFailureError && error.code === 'method_not_found') {
+      return []
+    }
+    throw error
+  }
+}
+
+async function worktreeIdAtSelector(
+  client: Pick<HandlerContext['client'], 'call'>,
+  selector: string
+): Promise<string | null> {
+  try {
+    const shown = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
+      worktree: selector
+    })
+    return shown.result.worktree.id
+  } catch (error) {
+    if (error instanceof RuntimeRpcFailureError && error.code === 'selector_not_found') {
+      return null
+    }
+    throw error
+  }
+}
+
+// Why: worktree path selectors never match a native folder, so a folder's path is named by its id.
 async function resolveNativeFolderPathSelector(
   selector: string,
   client: Pick<HandlerContext['client'], 'call'>
@@ -29,30 +66,23 @@ async function resolveNativeFolderPathSelector(
   if (!selector.startsWith('path:')) {
     return selector
   }
-  const target = normalizeRuntimePathForComparison(selector.slice('path:'.length))
-  let folders: FolderWorkspace[]
-  try {
-    const { result } = await client.call<{ folderWorkspaces: FolderWorkspace[] }>(
-      'folderWorkspace.list'
-    )
-    folders = result.folderWorkspaces
-  } catch (error) {
-    if (error instanceof RuntimeRpcFailureError && error.code === 'method_not_found') {
-      return selector
-    }
-    throw error
+  const folders = await listFoldersAtPath(client, selector.slice('path:'.length))
+  if (folders.length === 0) {
+    return selector
   }
-  const matches = folders.filter(
-    (row) => normalizeRuntimePathForComparison(row.folderPath) === target
-  )
-  // Why refuse: folders on different hosts can share a path, and guessing would scan the wrong host.
-  if (matches.length > 1) {
+  const worktreeId = await worktreeIdAtSelector(client, selector)
+  const candidates = [
+    ...(worktreeId ? [`id:${worktreeId}`] : []),
+    ...folders.map((row) => `folder:${row.id}`)
+  ]
+  // Why refuse: workspaces on different hosts can share a path, and guessing would scan the wrong host.
+  if (candidates.length > 1) {
     throw new RuntimeClientError(
       'selector_ambiguous',
-      `More than one folder workspace has this path. Pass one of: ${matches.map((row) => `folder:${row.id}`).join(', ')}.`
+      `More than one workspace has this path. Pass one of: ${candidates.join(', ')}.`
     )
   }
-  return matches[0] ? `id:folder:${matches[0].id}` : selector
+  return `id:${candidates[0]}`
 }
 
 async function resolvePortsTarget(

@@ -42,7 +42,7 @@ vi.mock('child_process', async () => {
 })
 
 import { main } from './index'
-import { RuntimeClientError } from './runtime-client'
+import { RuntimeClientError, RuntimeRpcFailureError } from './runtime-client'
 import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './test-fixtures'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
@@ -106,6 +106,15 @@ function folderCatalog(folderPath: string): ReturnType<typeof okFixture>[] {
     okFixture('req_groups', { groups: [{ id: 'local' }] }),
     okFixture('req_repos', { repos: [] })
   ]
+}
+
+function selectorNotFound(): RuntimeRpcFailureError {
+  return new RuntimeRpcFailureError({
+    id: 'req_show',
+    ok: false,
+    error: { code: 'selector_not_found', message: 'selector_not_found' },
+    _meta: { runtimeId: 'test-runtime' }
+  })
 }
 
 function captureOutput(): () => string {
@@ -245,12 +254,13 @@ describe('orca ports', () => {
         folderWorkspaces: [{ id: 'f1', folderPath: '/tmp/folder', projectGroupId: 'local' }]
       })
     )
+    callMock.mockRejectedValueOnce(selectorNotFound())
     const output = captureOutput()
     const priorExitCode = process.exitCode
 
     await main(['ports', '--worktree', 'path:/tmp/folder'], '/tmp')
 
-    expect(callMock).not.toHaveBeenCalledWith('worktree.show', expect.anything())
+    expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
     expect(output()).toContain('does not tie ports to native folder workspaces')
     expect(process.exitCode).toBe(1)
     process.exitCode = priorExitCode
@@ -259,23 +269,22 @@ describe('orca ports', () => {
       callMock,
       okFixture('req_folders', {
         folderWorkspaces: [{ id: 'f1', folderPath: '/tmp/folder', projectGroupId: 'local' }]
-      }),
-      hostScan
+      })
     )
+    callMock.mockRejectedValueOnce(selectorNotFound())
+    queueFixtures(callMock, hostScan)
     await main(['ports', '--worktree', 'path:/tmp/folder', '--all'], '/tmp')
 
     expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
   })
 
-  it('refuses a folder path that two folder workspaces share', async () => {
+  it('refuses a path that a worktree and a folder workspace share', async () => {
     queueFixtures(
       callMock,
       okFixture('req_folders', {
-        folderWorkspaces: [
-          { id: 'f1', folderPath: '/srv/app', projectGroupId: 'local' },
-          { id: 'f2', folderPath: '/srv/app', projectGroupId: 'ssh' }
-        ]
-      })
+        folderWorkspaces: [{ id: 'f1', folderPath: '/srv/app', projectGroupId: 'ssh' }]
+      }),
+      okFixture('req_show', { worktree: buildWorktree('/srv/app', 'main') })
     )
     const output = captureOutput()
     const priorExitCode = process.exitCode
@@ -283,7 +292,7 @@ describe('orca ports', () => {
     await main(['ports', '--worktree', 'path:/srv/app', '--all'], '/tmp')
 
     expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
-    expect(output()).toContain('folder:f1, folder:f2')
+    expect(output()).toContain('id:repo::/srv/app, folder:f1')
     expect(process.exitCode).toBe(1)
     process.exitCode = priorExitCode
   })
