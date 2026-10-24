@@ -1,4 +1,5 @@
 import type { AgentModelCatalogSource } from '../agent-model-catalog/agent-model-catalog-service-contract'
+import type { StructuredAgentSessionRequestFailure } from './structured-agent-session-request-failures'
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
@@ -147,6 +148,7 @@ export type StructuredAgentSessionHostDeps = {
   onSessionTabHidden?: (sessionId: string) => void
   /** Required to report failures that never reach the UI. */
   logger: StructuredAgentSessionLogger
+  onRequestFailure?: (failure: StructuredAgentSessionRequestFailure) => void
   /** replay distinguishes restored/projected state from fresh journal events. */
   onSessionStatusChanged?: (
     summary: AgentSessionStatusSummary,
