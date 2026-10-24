@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import { GRAB_BUDGET, type BrowserPageAnnotation } from '../../../../shared/browser-grab-types'
 import { makeAnnotation } from './browser-annotation-test-fixture'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../../shared/constants'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { BrowserSessionProfile } from '../../../../shared/browser-workspace-types'
 import type { ManagedBrowserProfileOwner } from '../../../../shared/browser-profile-scope'
@@ -16,7 +16,6 @@ import {
   createTestStoreDrawnFromMain,
   type BrowserTestStore
 } from './browser-slice-drawn-from-main.test-fixture'
-import { getDefaultSettings } from '../../../../shared/constants'
 
 const createWebRuntimeSessionBrowserTabMock = vi.hoisted(() => vi.fn())
 const runtimeEnvironmentTransportCall = vi.fn()
