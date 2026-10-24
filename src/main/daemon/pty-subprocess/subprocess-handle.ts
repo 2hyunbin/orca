@@ -17,6 +17,8 @@ type DisposableNativePty = pty.IPty & {
   signalProcess?: (signal: string) => void
   // node-pty emits these when its master stream retires; writes then become silent no-ops.
   on?: (event: 'close' | 'error', listener: (error?: unknown) => void) => void
+  // False once node-pty's _close() retired the master; Windows never emits 'close' for that.
+  _writable?: boolean
 }
 
 // Normal exit also retires the master first; let the exit report win before calling input closed.
@@ -79,11 +81,7 @@ export function createDaemonPtySubprocessHandle(args: {
     foreground.recordOutput(data)
     events.acceptData(data)
   })
-  nativeProc.on?.('error', (error) => {
-    // A listener keeps node-pty from rethrowing; the error has already retired its master.
-    masterError = error instanceof Error ? error.message : String(error)
-  })
-  nativeProc.on?.('close', () => {
+  const retireMaster = (): void => {
     masterRetired = true
     if (dead || masterRetiredTimer) {
       return
@@ -93,7 +91,15 @@ export function createDaemonPtySubprocessHandle(args: {
       notifyInputClosed(masterError ? `master_closed: ${masterError}` : 'master_closed')
     }, MASTER_CLOSE_EXIT_GRACE_MS)
     masterRetiredTimer.unref?.()
+  }
+  nativeProc.on?.('error', (error) => {
+    // node-pty's own handler ran first; only errors that retired the master are input loss.
+    if (nativeProc._writable === false) {
+      masterError = error instanceof Error ? error.message : String(error)
+      retireMaster()
+    }
   })
+  nativeProc.on?.('close', retireMaster)
   proc.onExit(({ exitCode, signal }) => {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true

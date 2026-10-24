@@ -173,7 +173,7 @@ export abstract class DaemonPtyRuntimeState {
       this.inputClosedIncarnations.set(sessionId, result.incarnationId)
     } else if (
       reported !== undefined &&
-      (result.isNew || (result.incarnationId !== undefined && result.incarnationId !== reported))
+      (result.incarnationId === undefined ? result.isNew : result.incarnationId !== reported)
     ) {
       this.inputClosedIncarnations.delete(sessionId)
     }

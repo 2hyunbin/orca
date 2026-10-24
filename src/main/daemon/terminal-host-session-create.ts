@@ -270,6 +270,7 @@ async function spawnAndPublishSession(
     shellState: session.shellState,
     incarnationId: session.incarnationId,
     ...getDaemonSessionResultMetadata(session),
+    ...(isSessionInputClosed(session) ? { inputClosed: true as const } : {}),
     ...(cwdReadableByDaemon !== null ? { cwdReadableByDaemon } : {}),
     attachToken: token
   }
