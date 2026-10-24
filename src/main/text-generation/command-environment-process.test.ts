@@ -62,7 +62,7 @@ describe('environment-prefixed commands with real child processes', () => {
             release = resolve
           })
       )
-      await Promise.resolve()
+      await vi.waitFor(() => expect(release).toBeTypeOf('function'))
       const spawnAgent = vi.fn(spawnSourceControlAgent)
       const command = `CODEX_HOME="${home}" ${override}`
       const pending =
