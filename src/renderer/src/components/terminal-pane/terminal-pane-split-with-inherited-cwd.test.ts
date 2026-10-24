@@ -12,7 +12,27 @@ const mocks = vi.hoisted(() => ({
   resolveSplitCwd: vi.fn(),
   splitPaneInMain: vi.fn<typeof splitPaneInMain>(),
   splitServerPane: vi.fn<typeof splitServerPane>(),
-  splitWebRuntimeTerminal: vi.fn()
+  splitWebRuntimeTerminal: vi.fn(),
+  runtimeEnvironmentId: null as string | null,
+  storeState: {
+    tabsByWorktree: {} as Record<string, { id: string }[]>,
+    terminalLayoutsByTabId: {} as Record<string, { ptyIdsByLeafId?: Record<string, string> }>
+  },
+  storeListeners: new Set<() => void>()
+}))
+
+vi.mock('@/store', () => ({
+  useAppStore: {
+    getState: () => mocks.storeState,
+    subscribe: (listener: () => void) => {
+      mocks.storeListeners.add(listener)
+      return () => mocks.storeListeners.delete(listener)
+    }
+  }
+}))
+
+vi.mock('@/lib/resolve-owner', () => ({
+  runtimeEnvironmentIdUnlessTwin: () => mocks.runtimeEnvironmentId
 }))
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
@@ -67,6 +87,80 @@ describe('splitTerminalPaneWithInheritedCwd', () => {
     mocks.resolveSplitCwd.mockReset()
     mocks.splitWebRuntimeTerminal.mockReset()
     mocks.splitWebRuntimeTerminal.mockReturnValue(false)
+    mocks.runtimeEnvironmentId = null
+    mocks.storeState.tabsByWorktree = {}
+    mocks.storeState.terminalLayoutsByTabId = {}
+    mocks.storeListeners.clear()
+  })
+
+  describe('a pane of a paired server tab whose own attach has not landed', () => {
+    const HOST_TAB = 'web-terminal-host-tab-1'
+    const HOST_PTY = 'remote:env-1@@terminal-1'
+
+    function splitHostTabPane(splitPane: ReturnType<typeof vi.fn>): void {
+      mocks.runtimeEnvironmentId = 'env-1'
+      mocks.storeState.tabsByWorktree = { 'worktree-1': [{ id: HOST_TAB }] }
+      mocks.splitWebRuntimeTerminal.mockImplementation((ptyId: string | null) => Boolean(ptyId))
+      splitTerminalPaneWithInheritedCwd({
+        worktreeId: 'worktree-1',
+        tabId: HOST_TAB,
+        manager: makeManager(splitPane),
+        paneTransports: new Map([[1, { getPtyId: () => null } as unknown as PtyTransport]]),
+        paneCwdMap: new Map(),
+        fallbackCwd: '/fallback',
+        pane: { id: 1, leafId: 'leaf-1' } as ManagedPane,
+        direction: 'vertical',
+        source: 'keyboard'
+      })
+    }
+
+    it('splits on the server from the terminal the server published for it', () => {
+      mocks.storeState.terminalLayoutsByTabId = {
+        [HOST_TAB]: { ptyIdsByLeafId: { 'leaf-1': HOST_PTY } }
+      }
+      const splitPane = vi.fn()
+
+      splitHostTabPane(splitPane)
+
+      expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(HOST_PTY, 'vertical', 'keyboard', {
+        worktreeId: 'worktree-1',
+        tabId: HOST_TAB,
+        leafId: 'leaf-1'
+      })
+      expect(splitPane).not.toHaveBeenCalled()
+    })
+
+    // A pane split here has no server terminal, and nothing would ever start one.
+    it('holds the split until the server publishes the source terminal, never splitting here', async () => {
+      const splitPane = vi.fn(() => ({ id: 2 }))
+
+      splitHostTabPane(splitPane)
+      await Promise.resolve()
+      expect(splitPane).not.toHaveBeenCalled()
+      expect(mocks.splitWebRuntimeTerminal).not.toHaveBeenCalledWith(
+        HOST_PTY,
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      )
+
+      mocks.storeState.terminalLayoutsByTabId = {
+        [HOST_TAB]: { ptyIdsByLeafId: { 'leaf-1': HOST_PTY } }
+      }
+      for (const listener of mocks.storeListeners) {
+        listener()
+      }
+      await vi.waitFor(() =>
+        expect(mocks.splitWebRuntimeTerminal).toHaveBeenCalledWith(
+          HOST_PTY,
+          'vertical',
+          'keyboard',
+          { worktreeId: 'worktree-1', tabId: HOST_TAB, leafId: 'leaf-1' }
+        )
+      )
+      expect(splitPane).not.toHaveBeenCalled()
+      expect(mocks.storeListeners.size).toBe(0)
+    })
   })
 
   it.each(['keyboard', 'context_menu'] as const)(

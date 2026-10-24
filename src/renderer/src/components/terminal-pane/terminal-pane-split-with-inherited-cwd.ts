@@ -1,6 +1,13 @@
 import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
+import {
+  readHostPublishedSplitSourcePtyId,
+  waitForHostPublishedSplitSourcePtyId
+} from '@/runtime/web-runtime-split-source-pty'
+import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
+import { isWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
+import { useAppStore } from '@/store'
 import type { PtyTransport } from './pty-transport-types'
 import { resolveSplitCwd, type PaneCwdMap } from './resolve-split-cwd'
 import { recordCreatedTerminalPaneSplit } from './terminal-pane-split-completion'
@@ -26,14 +33,12 @@ type SplitArgs = {
 }
 
 export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
-  const ptyId = args.paneTransports.get(args.pane.id)?.getPtyId() ?? null
-  if (
-    splitWebRuntimeTerminal(ptyId, args.direction, args.source, {
-      worktreeId: args.worktreeId,
-      tabId: args.tabId,
-      leafId: args.pane.leafId
-    })
-  ) {
+  const sourcePane = { worktreeId: args.worktreeId, tabId: args.tabId, leafId: args.pane.leafId }
+  // Why the host's binding: a pane whose attach is still in flight has no transport id yet.
+  const ptyId =
+    args.paneTransports.get(args.pane.id)?.getPtyId() ??
+    readHostPublishedSplitSourcePtyId(sourcePane)
+  if (splitWebRuntimeTerminal(ptyId, args.direction, args.source, sourcePane)) {
     return
   }
   // Switch point: main writes the split and starts its terminal; main's frame draws the pane. A
@@ -54,7 +59,23 @@ export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
       return
     }
   }
+  if (!ptyId && isHostTabPane(args.worktreeId, args.tabId)) {
+    // Only the host starts a terminal in its tab, so a split made here would stay blank.
+    void waitForHostPublishedSplitSourcePtyId(sourcePane).then((publishedPtyId) => {
+      if (!splitWebRuntimeTerminal(publishedPtyId, args.direction, args.source, sourcePane)) {
+        console.warn('[terminal-pane] split dropped: the host never published the source pane')
+      }
+    })
+    return
+  }
   splitLocally(args, () => splitCwd(args, ptyId))
+}
+
+function isHostTabPane(worktreeId: string, tabId: string): boolean {
+  return (
+    isWebTerminalSurfaceTabId(tabId) &&
+    runtimeEnvironmentIdUnlessTwin(useAppStore.getState(), worktreeId) !== null
+  )
 }
 
 /** The new pane's cwd: the source pane's when known, else resolved from its terminal. */
