@@ -46,6 +46,7 @@ export type PushSendNotification = {
   title: string
   body: string
   worktreeId?: string
+  paneKey?: string
   executionHost?: `runtime:${string}`
 }
 
