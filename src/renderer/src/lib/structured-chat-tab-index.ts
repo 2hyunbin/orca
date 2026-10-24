@@ -1,7 +1,7 @@
 import type { Tab } from '../../../shared/tab-types'
 
 const sourceKeys = new WeakMap<object, readonly string[]>()
-export function ownSourceKeys(source: object): readonly string[] {
+export function ownSourceKeys<T>(source: WorkspaceTabMap<T>): readonly string[] {
   let keys = sourceKeys.get(source)
   if (!keys) {
     keys = Object.keys(source)
@@ -65,7 +65,7 @@ export function structuredChatTabBySessionId(
 }
 
 type WorkspaceTab = Pick<Tab, 'id'> & Partial<Pick<Tab, 'contentType' | 'entityId'>>
-type WorkspaceTabMap = Readonly<Record<string, readonly WorkspaceTab[] | undefined>>
+type WorkspaceTabMap<T = readonly WorkspaceTab[] | undefined> = Readonly<Record<string, T>>
 const workspaceIndexes = new WeakMap<
   WorkspaceTabMap,
   {

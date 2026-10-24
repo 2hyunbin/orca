@@ -88,7 +88,7 @@ it('keeps own-key order, prototype-named ids, and separate session and tab keys 
 it('shares lazy own-enumerable keys without reading workspace rows', () => {
   let walks = 0,
     buckets = 0
-  const source = Object.create({ inherited: [] })
+  const source: Record<PropertyKey, readonly Tab[]> = Object.create({ inherited: [] })
   Object.defineProperty(source, '__proto__', { enumerable: true, value: [tab('chat')] })
   Object.defineProperty(source, 'hidden', { enumerable: false, value: [] })
   const tracked = new Proxy(source, {
@@ -98,7 +98,7 @@ it('shares lazy own-enumerable keys without reading workspace rows', () => {
     },
     get(target, key) {
       buckets++
-      return Reflect.get(target, key)
+      return target[key]
     }
   })
   expect(ownSourceKeys(tracked)).toEqual(['__proto__'])
