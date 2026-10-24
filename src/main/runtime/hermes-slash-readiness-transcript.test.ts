@@ -8,6 +8,8 @@ import {
 } from './agent-transcript-pane-test-harness'
 import metadata from './__fixtures__/hermes-slash-setup.meta.json'
 import metadata022 from './__fixtures__/hermes-0-22-slash-setup.meta.json'
+import profileMetadata from './__fixtures__/hermes-0-22-profile-prompt.meta.json'
+import bottomMetadata from './__fixtures__/hermes-0-22-statusbar-bottom.meta.json'
 import type { TerminalHandleRecord } from './runtime-terminal-contracts'
 
 vi.mock('electron', () => ({
@@ -31,6 +33,19 @@ async function paneAt(
     connectionId: options.connectionId,
     size: { cols: metadata.cols, rows: metadata.rows },
     data: captured.subarray(0, metadata.stages[stage]).toString('utf8')
+  })
+  await pane.runtime.readTerminal(pane.handle, { screen: true })
+  return pane
+}
+
+// Rows as Hermes paints them, for presentations no recording covers.
+async function paneShowing(rows: string[], options: { paneTitle?: string } = {}) {
+  const pane = await createTranscriptPane({
+    paneTitle: options.paneTitle ?? 'Hermes Agent',
+    foregroundProcess: 'hermes',
+    launchAgent: 'hermes',
+    size: { cols: 120, rows: 31 },
+    data: rows.join('\r\n')
   })
   await pane.runtime.readTerminal(pane.handle, { screen: true })
   return pane
@@ -155,6 +170,17 @@ describe('Hermes slash readiness from captured raw PTY bytes', () => {
         useHandleRoute(pane, route)
         await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
       })
+
+      it('holds on an unsubmitted draft shaped like a placeholder', async () => {
+        const pane = await paneShowing(
+          ['─ ready │ example-model │ 1s', '❯ Try "run the migration"'],
+          {
+            paneTitle: 'Hermes ready'
+          }
+        )
+        useHandleRoute(pane, route)
+        await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
+      })
     }
   )
 
@@ -242,4 +268,55 @@ describe('Hermes 0.22 readiness from captured raw PTY bytes', () => {
       await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
     }
   )
+})
+
+describe.each([
+  ['a named profile prompt', 'hermes-0-22-profile-prompt.txt', profileMetadata],
+  ['the bottom statusbar', 'hermes-0-22-statusbar-bottom.txt', bottomMetadata]
+] as const)('Hermes 0.22 readiness with %s', (_presentation, fixture, meta) => {
+  const recording = readFileSync(join(__dirname, '__fixtures__', fixture))
+
+  async function paneAtStage(stage: keyof typeof meta.stages) {
+    const pane = await createTranscriptPane({
+      paneTitle: 'Hermes Agent',
+      foregroundProcess: 'hermes',
+      launchAgent: 'hermes',
+      size: { cols: meta.cols, rows: meta.rows },
+      data: recording.subarray(0, meta.stages[stage]).toString('utf8')
+    })
+    await pane.runtime.readTerminal(pane.handle, { screen: true })
+    return pane
+  }
+
+  it.each(['initial', 'completed'] as const)('settles at %s', async (stage) => {
+    const pane = await paneAtStage(stage)
+    await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
+  })
+
+  it.each(['starting', 'forging', 'promptDraft', 'busy', 'streaming', 'tryDraft'] as const)(
+    'does not settle at %s even after the quiet window',
+    async (stage) => {
+      const pane = await paneAtStage(stage)
+      await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
+    }
+  )
+})
+
+describe('Hermes readiness with the battery read-out', () => {
+  it.each(['🔋 80%', '⚡ 100%'])('settles on a ready row led by %s', async (battery) => {
+    const pane = await paneShowing([
+      `─ ${battery} │ ready │ example-model │ 1s`,
+      '❯ Ask me anything…'
+    ])
+    await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
+  })
+
+  it.each([
+    ['starting', '─ 🔋 80% │ summoning hermes… │  │ voice off', '❯ Ask me anything…'],
+    ['busy', '─ 🔋 80% │ (｡•́︿•̀｡) analyzing… · 1s │ example-model', '❯ Ctrl+C to interrupt…'],
+    ['a draft', '─ 🔋 80% │ ready │ example-model │ 1s', '❯ hello']
+  ])('does not settle on %s', async (_stage, statusRow, composerRow) => {
+    const pane = await paneShowing([statusRow, composerRow])
+    await expect(waitForTranscriptIdle(pane, 8_000)).rejects.toThrow('timeout')
+  })
 })
