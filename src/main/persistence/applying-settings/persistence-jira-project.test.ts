@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { closeTestStores, testState, createStore, makeRepo } from './persistence-test-harness'
+import { closeTestStores, testState, createStore, makeRepo } from '../../persistence-test-harness'
 vi.mock('electron', () => ({ app: { getPath: () => testState.dir } }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({ nth_repo_added: 2 }) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: () => ({ nth_repo_added: 2 })
+}))
 const project = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }
 describe('persisted repository Jira defaults', () => {
   beforeEach(() => {
