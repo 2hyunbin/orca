@@ -1,6 +1,7 @@
 import { getDefaultSettings } from '../../src/shared/constants'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import type { SleepingAgentSessionRecord } from '../../src/shared/agent-session-resume'
 import { makePaneKey } from '../../src/shared/stable-pane-id'
 import { parseWorkspaceSession } from '../../src/shared/workspace-session-schema'
@@ -229,6 +230,8 @@ function expectCanaryUnchanged(): void {
 
 type OrchestrationMethod = (typeof ORCHESTRATION_METHODS)[number]
 
+const workerStartResult = z.object({ dispatchId: z.string(), state: z.string() })
+
 function orchestrationMethod<N extends OrchestrationMethod['name']>(
   name: N
 ): Extract<OrchestrationMethod, { name: N }> {
@@ -316,10 +319,12 @@ async function releaseCompletedWorker(terminalState: 'running' | 'exited'): Prom
   try {
     const task = db.createTask({ spec: 'release completed worker', runId: run.id })
     const workerStart = orchestrationMethod('orchestration.workerStart')
-    const started = (await workerStart.handler(
-      workerStart.params.parse({ task: task.id, from: 'terminal-coordinator', agent: 'codex' }),
-      ctx
-    )) as { dispatchId: string; state: string }
+    const started = workerStartResult.parse(
+      await workerStart.handler(
+        workerStart.params.parse({ task: task.id, from: 'terminal-coordinator', agent: 'codex' }),
+        ctx
+      )
+    )
     expect(started.state).toBe('ready')
     expect(db.getWorkerDispatch(started.dispatchId)?.state).toBe('ready')
     expect(
