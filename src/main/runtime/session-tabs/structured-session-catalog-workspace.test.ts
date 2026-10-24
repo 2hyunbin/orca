@@ -556,20 +556,22 @@ it('catalog-scale corpus measures held RPC qualification without optional work o
     let repoVisits = 0
     let metadataVisits = 0
     let metadataKeys = 0
-    const repos = new Proxy(h.repos, {
-      get(target, key, receiver) {
-        if (typeof key === 'string' && /^\d+$/.test(key)) {
+    const repos = h.repos.slice()
+    repos.forEach((repo, index) => {
+      Object.defineProperty(repos, index, {
+        get() {
           repoVisits++
+          return repo
         }
-        return Reflect.get(target, key, receiver)
-      }
+      })
     })
     const metadata = new Proxy(h.metadata, {
-      get(target, key, receiver) {
+      get(target, key) {
         if (typeof key === 'string') {
           metadataVisits++
+          return target[key]
         }
-        return Reflect.get(target, key, receiver)
+        return undefined
       },
       ownKeys(target) {
         const keys = Reflect.ownKeys(target)
