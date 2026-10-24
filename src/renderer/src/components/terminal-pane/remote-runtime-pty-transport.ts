@@ -2296,7 +2296,7 @@ export function createRemoteRuntimePtyTransport(
 
   // Why: a restart's new process can land just after the probe read the old one's exit (#31968).
   function watchForHostRebind(exitedHandle: string, exitedIncarnationId: string | null): void {
-    if (destroyed || !onHostReboundExitedPty || !worktreeId || !tabId) {
+    if (destroyed || !onHostReboundExitedPty || !worktreeId || !tabId || !leafId) {
       return
     }
     if (!isWebTerminalSurfaceTabId(tabId)) {
@@ -2309,7 +2309,7 @@ export function createRemoteRuntimePtyTransport(
         environmentId,
         worktreeId,
         hostTabId: toHostSessionTabId(tabId),
-        leafId: leafId ?? null,
+        leafId,
         exitedHandle,
         exitedIncarnationId
       },
