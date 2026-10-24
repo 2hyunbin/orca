@@ -124,7 +124,7 @@ export function assertJournalPopulationBounds(
     )
     expect(cost.rawRowParseBytes).toBeLessThanOrEqual(cost.rawRowParses * maximumRowBytes)
     expect(cost.rawRowParses).toBeLessThanOrEqual(32 * (cost.structuralRowSteps + phase.rows + 1))
-    expect(cost.populationDeletes).toBe(0)
+    expect(cost.populationDeletes, `${name} N=${n}: population DELETE`).toBe(0)
     for (const [space, cardinality] of Object.entries(cost.countNamespaces)) {
       if (space.startsWith('selection:') || /^(requests|clears|work:)/.test(space)) {
         expect(cardinality).toBe(0)

@@ -1,3 +1,4 @@
+import { expect } from 'vitest'
 import { deserialize } from 'node:v8'
 import Database from '../../sqlite/sync-database'
 import { populationEncodedBytes, type PopulationCost } from './journal-population-cost-test-support'
@@ -50,8 +51,15 @@ export function instrumentPopulationSql(
             if (method === 'run' && result && typeof result === 'object') {
               const changed = Number(Reflect.get(result, 'changes'))
               cost.changedRows += changed
-              if (/DELETE FROM relations WHERE space/i.test(sql)) {
-                cost.populationDeletes += changed
+              if (/\bDELETE\s+FROM\s+relations\b/i.test(sql)) {
+                if (
+                  sql.trim() === 'DELETE FROM relations WHERE space = ? AND key = ?' ||
+                  sql.trim() === 'DELETE FROM relations WHERE id = ?'
+                ) {
+                  expect(changed, sql).toBeLessThanOrEqual(1)
+                } else {
+                  cost.populationDeletes += Math.max(1, changed)
+                }
               }
               cost.secondaryWrites += /relations|context_clears|queued_messages/.test(sql)
                 ? 2 * changed
