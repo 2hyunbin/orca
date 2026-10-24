@@ -81,7 +81,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
     }
     this.assertAgentPromptPermissionSafe(permissionBaseline, permissionBaseline)
     const writeHostPlatform = this.getPtyWriteHostPlatform(ptyId)
-    const agent = await this.resolveTerminalPromptAgent(ptyId)
+    const agent = await this.resolveTerminalPromptAgent(ptyId, options.signal)
     // OMP needs paste and submit in one write; the foreground consumer wins, with launchAgent only a startup fallback.
     const submitWithPaste = agentPromptSubmitJoinsPasteFrame(agent)
     const pasteByteLength = Buffer.byteLength(pastePayload, 'utf8')

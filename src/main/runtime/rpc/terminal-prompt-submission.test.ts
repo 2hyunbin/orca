@@ -68,6 +68,90 @@ async function createHarness(agent: TuiAgent = 'claude') {
 }
 
 describe('host-owned terminal prompt submissions', () => {
+  it('settles pasted and queued notes immediately when their owning process exits', async () => {
+    vi.useFakeTimers()
+    const { runtime, submit, wait, writes } = await createHarness('antigravity')
+    const prompt = 'feedback\n'.repeat(10_000)
+    await submit('pasted', prompt)
+    await vi.advanceTimersByTimeAsync(100)
+    await submit('queued', 'follow-up')
+    const observations = [wait('pasted', 10_000), wait('queued', 10_000)]
+    expect(writes).toEqual([`\x1b[200~${prompt}\x1b[201~`])
+
+    await runtime.onPtyExit('pty-prompt', 0, undefined, { providerExitObserved: true })
+    await vi.advanceTimersByTimeAsync(0)
+    for (const [index, observation] of observations.entries()) {
+      await expect(observation).resolves.toMatchObject({
+        ok: true,
+        result: {
+          submission: { status: 'failed', reason: 'not-writable', inputWritten: index === 0 }
+        }
+      })
+    }
+    expect(runtime['terminalPromptSubmissions']['pendingBytes']).toBe(0)
+    expect(runtime['agentPromptSubmissionTailByPtyId'].size).toBe(0)
+    expect(runtime['ptyExitListenersByPtyId'].size).toBe(0)
+    await vi.runAllTimersAsync()
+    expect(writes).toHaveLength(1)
+  })
+
+  it.each([true, false])(
+    'uses known agent metadata without process discovery (composer ready: %s)',
+    async (composerReady) => {
+      vi.useFakeTimers()
+      const { runtime, handle, writes } = await createHarness('claude')
+      const discovery = vi
+        .spyOn(runtime['ptyForegroundAgent'], 'read')
+        .mockReturnValue(new Promise(() => {}))
+      const sent = runtime.sendTerminalAgentPrompt(handle, 'launch prompt', {
+        inputKind: composerReady ? 'launch' : 'driving',
+        composerReady,
+        waitForRender: false,
+        acceptQueued: true,
+        observationTimeoutMs: 0,
+        requestId: 'known'
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(writes).toEqual(['\x1b[200~launch prompt\x1b[201~'])
+      expect(discovery).not.toHaveBeenCalled()
+      await vi.runAllTimersAsync()
+      await expect(sent).resolves.toMatchObject({ accepted: true })
+    }
+  )
+
+  it('cancels an unknown-agent discovery before it returns, without pasting', async () => {
+    vi.useFakeTimers()
+    const { runtime, handle, writes } = await createHarness()
+    const pty = runtime['ptysById'].get('pty-prompt')
+    if (!pty) {
+      throw new Error('fixture PTY missing')
+    }
+    pty.launchAgent = null
+    pty.foregroundAgent = null
+    const held =
+      Promise.withResolvers<
+        NonNullable<Awaited<ReturnType<(typeof runtime)['ptyForegroundAgent']['read']>>>
+      >()
+    vi.spyOn(runtime['ptyForegroundAgent'], 'read').mockReturnValue(held.promise)
+    const controller = new AbortController()
+    const sent = runtime.sendTerminalAgentPrompt(handle, 'cancelled', {
+      inputKind: 'driving',
+      signal: controller.signal
+    })
+    const rejected = expect(sent).rejects.toThrow('request_aborted')
+    await vi.advanceTimersByTimeAsync(0)
+    controller.abort()
+    await rejected
+    expect(writes).toEqual([])
+    const ptyController = runtime['ptyController']
+    if (!ptyController) {
+      throw new Error('fixture controller missing')
+    }
+    held.resolve({ controller: ptyController, process: 'claude', available: true })
+    await vi.runAllTimersAsync()
+    expect(writes).toEqual([])
+  })
+
   it('serializes whole submissions from different clients when the second note is shorter', async () => {
     vi.useFakeTimers()
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
@@ -101,7 +185,7 @@ describe('host-owned terminal prompt submissions', () => {
     'submits a small %s note without waiting for a render marker',
     async (agent) => {
       vi.useFakeTimers()
-      const { submit, wait, writes } = await createHarness(agent)
+      const { runtime, submit, wait, writes } = await createHarness(agent)
       const prompt = 'browser feedback'
       const delay = resolveAgentPromptSubmitDelayForAgent(process.platform, prompt, agent)
 
@@ -114,6 +198,7 @@ describe('host-owned terminal prompt submissions', () => {
         ok: true,
         result: { submission: { status: 'submitted' } }
       })
+      expect(runtime['ptyExitListenersByPtyId'].size).toBe(0)
       await vi.runAllTimersAsync()
       expect(writes.filter((text) => text === '\r')).toHaveLength(1)
     }

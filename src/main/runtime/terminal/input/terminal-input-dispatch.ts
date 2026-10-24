@@ -24,17 +24,29 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import { TerminalPromptSubmissions } from '../../terminal-prompt-submissions'
 import { recognizeAgentProcess } from '../../../../shared/agent-process-recognition'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
+import { waitForAgentPromptPromise } from '../../orca-runtime-core'
+import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 
 export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntimeWithTerminalPtyLiveness {
   private readonly terminalPromptSubmissions = new TerminalPromptSubmissions()
 
-  protected async resolveTerminalPromptAgent(ptyId: string): Promise<TerminalAgent | null> {
-    const foreground = await this.ptyForegroundAgent.read(ptyId)
+  protected async resolveTerminalPromptAgent(
+    ptyId: string,
+    signal?: AbortSignal
+  ): Promise<TerminalAgent | null> {
+    const pty = this.ptysById.get(ptyId)
+    const knownAgent = pty?.foregroundAgent ?? pty?.launchAgent
+    if (knownAgent) {
+      return knownAgent
+    }
+    const foreground = await waitForAgentPromptPromise(
+      Promise.resolve(this.ptyForegroundAgent.read(ptyId)),
+      signal
+    )
     const recognized =
       foreground?.controller === this.ptyController && foreground.available
         ? recognizeAgentProcess(foreground.process)?.agent
         : undefined
-    const pty = this.ptysById.get(ptyId)
     return recognized ?? pty?.foregroundAgent ?? pty?.launchAgent ?? null
   }
 
@@ -51,27 +63,51 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
       throw new Error('terminal_not_writable')
     }
     const generation = this.getPtyLifecycleGeneration(ptyId)
-    return this.terminalPromptSubmissions.enqueue(handle, requestId, prompt, (inputWritten) =>
-      this.sendTerminalAgentPrompt(handle, prompt, {
-        ...options,
-        acceptQueued: true,
-        observationTimeoutMs: 0,
-        waitForRender: false,
-        requestId,
-        beforeWrite: async (id) => {
-          this.assertAgentPromptGeneration(ptyId, generation)
-          this.assertLiveTerminalHandleTargetsPty(handle, ptyId)
-          await options.beforeWrite?.(id)
-        },
-        afterWrite: async (id) => {
-          inputWritten()
-          await options.afterWrite?.(id)
+    return this.terminalPromptSubmissions.enqueue(
+      handle,
+      requestId,
+      prompt,
+      async (inputWritten) => {
+        const owner = new AbortController()
+        const unsubscribe = this.subscribeToPtyExit(ptyId, () =>
+          owner.abort(new Error('terminal_not_writable'))
+        )
+        const signal = options.signal
+          ? AbortSignal.any([owner.signal, options.signal])
+          : owner.signal
+        try {
+          return await waitForPromiseWithSignal(
+            this.sendTerminalAgentPrompt(handle, prompt, {
+              ...options,
+              signal,
+              acceptQueued: true,
+              observationTimeoutMs: 0,
+              waitForRender: false,
+              requestId,
+              beforeWrite: async (id) => {
+                this.assertAgentPromptGeneration(ptyId, generation)
+                this.assertLiveTerminalHandleTargetsPty(handle, ptyId)
+                await options.beforeWrite?.(id)
+              },
+              afterWrite: async (id) => {
+                inputWritten()
+                await options.afterWrite?.(id)
+              }
+            }),
+            signal
+          )
+        } catch (error) {
+          if (owner.signal.aborted) {
+            throw new Error('terminal_not_writable')
+          }
+          throw error
+        } finally {
+          unsubscribe()
+          // Submission receipts track Enter delivery; no later turn observer owns this registration.
+          this.forgetAgentPromptRequest(ptyId, generation, requestId)
+          options.onSettled?.()
         }
-      }).finally(() => {
-        // Submission receipts track Enter delivery; no later turn observer owns this registration.
-        this.forgetAgentPromptRequest(ptyId, generation, requestId)
-        options.onSettled?.()
-      })
+      }
     )
   }
 
@@ -179,7 +215,7 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
             submitDelayMs: this.terminalWriter.getSubmitDelayMs(
               ptyId,
               submitText,
-              await this.resolveTerminalPromptAgent(ptyId)
+              await this.resolveTerminalPromptAgent(ptyId, options.signal)
             )
           }
         : {})
