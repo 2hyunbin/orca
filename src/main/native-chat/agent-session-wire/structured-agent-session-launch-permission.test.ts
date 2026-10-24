@@ -62,6 +62,22 @@ describe('the permission mode a chat starts with', () => {
     }
   )
 
+  // Captured saved choices with an alias-only host catalog.
+  it('keeps saved Haiku full-ID Auto with the captured alias-only catalog', async () => {
+    const launch = launchPermission(
+      'claude',
+      { model: 'claude-haiku-4-5-20251001', permissionMode: 'auto' },
+      listing([
+        { id: 'opus', isDefault: true, supportsAutoMode: true },
+        { id: 'fable', isDefault: false, supportsAutoMode: true },
+        { id: 'sonnet', isDefault: false, supportsAutoMode: true },
+        { id: 'haiku', isDefault: false, supportsAutoMode: true }
+      ])
+    )
+    await expect(launch.result).resolves.toBe('auto')
+    expect(launch.read).not.toHaveBeenCalled()
+  })
+
   // #30032: a catalog saved under another account home read as none, and the chat relaunched asking.
   it('keeps saved auto with no selected model, unlisted models, or an unavailable catalog', async () => {
     const savedOptions: Record<string, string>[] = [{}, { model: 'claude-opus-5-5[1m]' }]
