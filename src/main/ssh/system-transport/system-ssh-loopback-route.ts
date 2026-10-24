@@ -11,7 +11,7 @@ import {
 import { createSshOperationAbortError } from '../connection/ssh-exec-options'
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { SshResolvedConfig } from '../config/ssh-g-config-resolution'
-import { requiresSystemSshForSecurityKey } from '../ssh-transport-selection'
+import { admitSystemSshLoopbackRoute } from './system-ssh-loopback-route-admission'
 import {
   isOpenSshConfigBackedTarget,
   type SystemSshBuildArgsOptions,
@@ -95,9 +95,14 @@ export async function startSystemSshLoopbackRoute(
   signal?: AbortSignal
 ): Promise<SystemSshLoopbackRoute> {
   signal?.throwIfAborted()
-  // Why: every security-key login asks for a touch, so the forward and probe would add unprompted ones.
-  if (await requiresSystemSshForSecurityKey(target, resolved)) {
-    throw new Error('System SSH loopback route skipped for a security-key identity')
+  const hostKeyAlias = getLoopbackRouteHostKeyAlias(target, resolved)
+  // Why port 1: admission ignores the port the route rewrites; the real one is not bound yet.
+  const admission = await admitSystemSshLoopbackRoute(target, resolved, options, {
+    localPort: 1,
+    hostKeyAlias
+  })
+  if (!admission.admitted) {
+    throw new Error(`System SSH loopback route skipped: ${admission.reason}`)
   }
   signal?.throwIfAborted()
   const forward = await startSystemSshPortForwardProcess(
@@ -126,10 +131,7 @@ export async function startSystemSshLoopbackRoute(
       SYSTEM_SSH_LOOPBACK_ROUTE_LISTEN_TIMEOUT_MS,
       signal
     )
-    const args = {
-      localPort: forward.localPort,
-      hostKeyAlias: getLoopbackRouteHostKeyAlias(target, resolved)
-    }
+    const args = { localPort: forward.localPort, hostKeyAlias }
     // Why: a listening forward does not prove sshd allows it (AllowTcpForwarding) or that auth works over it.
     await probeLoopbackRoute(target, { ...options, loopbackRoute: args }, signal)
     signal?.throwIfAborted()

@@ -2,18 +2,18 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { existsSyncMock, spawnMock, connectMock, createServerMock, treeKillMock, securityKeyMock } =
+const { existsSyncMock, spawnMock, connectMock, createServerMock, treeKillMock, admissionMock } =
   vi.hoisted(() => ({
     existsSyncMock: vi.fn(),
     spawnMock: vi.fn(),
     connectMock: vi.fn(),
     createServerMock: vi.fn(),
     treeKillMock: vi.fn(),
-    securityKeyMock: vi.fn()
+    admissionMock: vi.fn()
   }))
 
-vi.mock('../ssh-transport-selection', () => ({
-  requiresSystemSshForSecurityKey: securityKeyMock
+vi.mock('./system-ssh-loopback-route-admission', () => ({
+  admitSystemSshLoopbackRoute: admissionMock
 }))
 
 vi.mock('@orca/process-host/process-tree-termination', async (importOriginal) => {
@@ -302,7 +302,7 @@ describe('startSystemSshLoopbackRoute', () => {
     connectMock.mockReset().mockImplementation(createListeningSocket)
     createServerMock.mockReset().mockImplementation(createFakeServer)
     treeKillMock.mockReset().mockResolvedValue(true)
-    securityKeyMock.mockReset().mockResolvedValue(false)
+    admissionMock.mockReset().mockResolvedValue({ admitted: true })
   })
 
   it('opens the forward over the real proxy, then proves a login over the route', async () => {
@@ -361,12 +361,12 @@ describe('startSystemSshLoopbackRoute', () => {
     }
   })
 
-  it('skips the route for a security-key identity, whose every login asks for a touch', async () => {
-    securityKeyMock.mockResolvedValueOnce(true)
+  it('starts no forward when admission refuses the route', async () => {
+    admissionMock.mockResolvedValueOnce({ admitted: false, reason: 'route changes user' })
 
     await expect(
       startSystemSshLoopbackRoute(createTarget(), createResolved(), {}, 'win32')
-    ).rejects.toThrow('security-key')
+    ).rejects.toThrow('route changes user')
     expect(spawnMock).not.toHaveBeenCalled()
   })
 
