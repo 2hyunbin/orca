@@ -3,10 +3,12 @@ import type { AutomationRun } from '../../shared/automations-types'
 import type { HeadlessAutomationDispatcher } from './headless-dispatch'
 import type { AutomationRunTerminalObserver } from './run-completion-watcher'
 
-const captured = vi.hoisted((): { dispatcher: unknown; observer: unknown } => ({
-  dispatcher: null,
-  observer: null
-}))
+type CapturedServiceOptions = {
+  headlessDispatcher?: HeadlessAutomationDispatcher
+  terminalObserver?: AutomationRunTerminalObserver
+}
+
+const captured = vi.hoisted((): { options: CapturedServiceOptions } => ({ options: {} }))
 
 const { deliverTerminalAgentLaunchPrompt } = vi.hoisted(() => ({
   deliverTerminalAgentLaunchPrompt: vi.fn(async () => true)
@@ -19,17 +21,23 @@ vi.mock('./service', () => ({
   AutomationService: class {
     start(): void {}
     stop(): void {}
-    constructor(
-      _store: unknown,
-      opts: { headlessDispatcher?: unknown; terminalObserver?: unknown }
-    ) {
-      captured.dispatcher = opts.headlessDispatcher
-      captured.observer = opts.terminalObserver
+    constructor(_store: unknown, opts: CapturedServiceOptions) {
+      captured.options = opts
     }
   }
 }))
 
 import { createRuntimeAutomationService } from './runtime-automation-service'
+
+function capturedOption<K extends keyof CapturedServiceOptions>(
+  key: K
+): NonNullable<CapturedServiceOptions[K]> {
+  const value = captured.options[key]
+  if (value === undefined) {
+    throw new Error(`the service was constructed without ${key}`)
+  }
+  return value
+}
 
 describe('headless automation dispatch', () => {
   it('hands the launched run to its watcher instead of awaiting one tui-idle wait itself', async () => {
@@ -55,8 +63,7 @@ describe('headless automation dispatch', () => {
       runtime: runtime as never,
       headless: true
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: captured from the mocked constructor above.
-    const dispatcher = captured.dispatcher as HeadlessAutomationDispatcher
+    const dispatcher = capturedOption('headlessDispatcher')
     const launch = await dispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a reuse-workspace automation; only these fields are read.
       automation: {
@@ -78,8 +85,7 @@ describe('headless automation dispatch', () => {
       title: 'Nightly'
     })
     expect(runtime.waitForTerminal).not.toHaveBeenCalled()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: captured from the mocked constructor above.
-    const observer = captured.observer as AutomationRunTerminalObserver
+    const observer = capturedOption('terminalObserver')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolution reads only the pane key.
     expect(observer.resolveRunTerminal({ terminalPaneKey: 'tab-1:pane-1' } as never)).toBe(
       'terminal-1'
@@ -110,8 +116,7 @@ describe('headless automation dispatch with extra agent args', () => {
       runtime: runtime as never,
       headless: true
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: captured from the mocked constructor above.
-    const dispatcher = captured.dispatcher as HeadlessAutomationDispatcher
+    const dispatcher = capturedOption('headlessDispatcher')
     const automation = {
       workspaceMode: 'existing',
       workspaceId: 'wt-1',
@@ -164,8 +169,7 @@ describe('headless reuse-session dispatch', () => {
       runtime: runtime as never,
       headless: true
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: captured from the mocked constructor above.
-    const dispatcher = captured.dispatcher as HeadlessAutomationDispatcher
+    const dispatcher = capturedOption('headlessDispatcher')
     const dispatch = (id: string) =>
       dispatcher({
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only these fields are read.
