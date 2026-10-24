@@ -178,7 +178,13 @@ export async function fetchAntigravityRateLimits(
     return failed(spawnFailureMessage(error), 'cli-unavailable', now())
   }
 
-  if (stderrShowsInteractiveSignIn(result.stderr)) {
+  const reading = parseAntigravityUsageStdout(result.stdout)
+  // Why: a completed browser sign-in still yields a reading; only a failed read cools down.
+  if (
+    !reading &&
+    (result.timedOut || result.code !== 0) &&
+    stderrShowsInteractiveSignIn(result.stderr)
+  ) {
     const at = now()
     return {
       ...unavailable(
@@ -202,7 +208,6 @@ export async function fetchAntigravityRateLimits(
     )
   }
 
-  const reading = parseAntigravityUsageStdout(result.stdout)
   // Why the successful read is checked first: a real reading can never be evidence of a prompt, so
   // ordering it ahead of the turn check makes a false latch impossible.
   if (!reading && stdoutShowsModelTurn(result.stdout)) {

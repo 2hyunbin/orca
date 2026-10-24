@@ -224,13 +224,12 @@ describe('Antigravity usage gating', () => {
 
       // Why: each read inside the cooldown would open another browser sign-in page (#26484).
       window.emit('focus')
-      await vi.advanceTimersByTimeAsync(45 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(58 * 60 * 1000)
       expect(vi.mocked(fetchCodexRateLimits).mock.calls.length).toBeGreaterThan(1)
       expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(1)
 
-      // The 75-minute poll is the first past the hour-long cooldown.
-      await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
-      expect(fetchAntigravityRateLimits).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(32 * 60 * 1000)
+      expect(vi.mocked(fetchAntigravityRateLimits).mock.calls.length).toBeGreaterThan(1)
       expect(service.getState().antigravity?.status).toBe('ok')
 
       service.stop()

@@ -239,6 +239,18 @@ describe('fetchAntigravityRateLimits', () => {
     expect(result.usageMetadata?.retryAtMs).toBe(1_700_000_000_000 + 60 * 60 * 1000)
   })
 
+  it('keeps the reading when the browser sign-in completes within the read', async () => {
+    const result = await harness({
+      result: processResult({
+        stdout: USAGE_ENVELOPE,
+        stderr: 'Authentication required. Please visit the URL to log in:\n'
+      })
+    }).fetch()
+
+    expect(result.status).toBe('ok')
+    expect(result.usageMetadata?.retryAtMs).toBeUndefined()
+  })
+
   it('does not cool down a signed-out read that fails fast without a browser', async () => {
     const result = await harness({
       result: processResult({
