@@ -158,7 +158,6 @@ describe('createOptionAsAltProbe', () => {
 
     active = TURKISH_MAP
     win.fireFocus()
-    // Let the focus-triggered probe resolve.
     await Promise.resolve()
     await Promise.resolve()
     expect(probe.getCurrent()).toBe('non-us')
@@ -284,7 +283,6 @@ describe('createOptionAsAltProbe', () => {
       })
     }
     await probe.refresh()
-    // Still 'us'; we refuse to flip back to 'unknown' on transient failure.
     expect(probe.getCurrent()).toBe('us')
     probe.dispose()
   })
@@ -297,7 +295,6 @@ describe('createOptionAsAltProbe', () => {
     probe.subscribe(listener)
     probe.dispose()
     win.fireFocus()
-    // No further calls after dispose.
     expect(listener).not.toHaveBeenCalled()
   })
 
@@ -434,7 +431,6 @@ describe('createOptionAsAltProbe', () => {
 
     activeInputSourceId = 'com.apple.keylayout.USInternational-PC'
     win.fireFocus()
-    // Let the focus-triggered probe resolve.
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()
