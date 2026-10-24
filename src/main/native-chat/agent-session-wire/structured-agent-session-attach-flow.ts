@@ -21,7 +21,6 @@ import {
   admitAttachOrRefuse,
   attachJournal,
   classifyStoreFailure,
-  journalIdentityFor,
   reserveRequestFor,
   type AgentSessionAttachAuthority,
   type AgentSessionAttachParams,
@@ -47,8 +46,6 @@ import {
   withAgentSessionCreatePhase,
   type AgentSessionCreatePhaseRecorder
 } from '../../observability/agent-session-instrumentation'
-import type { ProviderHistoryWindow } from '../agent-session-journal/journal-submission-reconciler'
-import { readProviderHistoryWindow } from './structured-agent-session-provider-history-window'
 import type { StructuredAgentSessionStartupAttempt } from './structured-agent-session-startup-attempt-contract'
 import type { StructuredAgentSessionStartupProgress } from './structured-agent-session-startup-attempt'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -143,7 +140,6 @@ export async function performAttach(
   let reservedRecord: AgentSessionRecord | null = null
   let unsupportedReservationSettlementAttempted = false
   let replayed = false
-  let providerHistoryWindow: ProviderHistoryWindow | null = null
   const lock = input.lock ?? heldStructuredAgentSessionAttachLock(input.acquireSignal)
   const preparedTranscript = store.getRecord(sessionId)
     ? { ok: true as const, items: null }
@@ -206,17 +202,6 @@ export async function performAttach(
       )
       await input.onReserved?.()
     })
-    // Sample provider history before a new child is acquired. Once acquireOwner
-    // starts the child, the adapter's liveness signal intentionally becomes
-    // conservative and an absent prompt can no longer prove non-delivery.
-    providerHistoryWindow = await lock.wait(
-      readProviderHistoryWindow({
-        adapter: input.adapter,
-        identity: journalIdentityFor(record, params),
-        accountHome: record.accountHome,
-        ownerAlreadyAdmitted: agentSessionLeaseAdmitsWriter(record.lease)
-      })
-    )
     if (agentSessionLeaseAdmitsWriter(record.lease)) {
       // Keep the existing live owner.
     } else if (replayed && reserved.operationRow.outcome.status === 'succeeded') {
@@ -283,10 +268,7 @@ export async function performAttach(
       await input.beforeJournalOpen?.()
       const journal = await attachJournal({
         record: acquired,
-        params,
-        adapter: input.adapter,
-        openConversation: input.openConversation,
-        providerHistoryWindow
+        openConversation: input.openConversation
       })
       await input.onAttached(journal, acquisitionGeneration, owner)
       return journal
