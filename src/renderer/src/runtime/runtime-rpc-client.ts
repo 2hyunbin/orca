@@ -26,6 +26,15 @@ type RuntimeCompatibilityCacheEntry = {
 
 const runtimeCompatibilityChecks = new Map<string, RuntimeCompatibilityCacheEntry>()
 
+/** A pending probe by default; an observed status is proof of itself. */
+function compatibilityEntry(
+  status: RuntimeStatus | null = null,
+  provenCompatible = status !== null
+): RuntimeCompatibilityCacheEntry {
+  const statusCheckedAt = status ? Date.now() : null
+  return { check: Promise.resolve(), failedAt: null, provenCompatible, status, statusCheckedAt }
+}
+
 export async function callRuntimeRpc<TResult>(
   target: RuntimeClientTarget,
   method: string,
@@ -98,13 +107,7 @@ export async function ensureRuntimeEnvironmentCompatible(
   if (cached) {
     return cached.check
   }
-  const entry: RuntimeCompatibilityCacheEntry = {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: false,
-    status: null,
-    statusCheckedAt: null
-  }
+  const entry = compatibilityEntry()
   const check = (async () => {
     const response = await callRuntimeEnvironmentWithRevision({
       environmentId,
@@ -202,7 +205,7 @@ export function clearRecentRuntimeCompatibilityFailure(
     // probe never records it; the published answer is the proof synchronous readers need.
     const answersPendingProbe = cached.failedAt === null && !cached.provenCompatible
     if (observedStatus && answersPendingProbe && isRuntimeStatusCompatible(observedStatus)) {
-      markRuntimeEnvironmentCompatible(trimmed, observedStatus)
+      rememberRuntimeEnvironmentCompatibility(trimmed, compatibilityEntry(observedStatus))
     }
   }
 }
@@ -216,21 +219,12 @@ export function clearRuntimeCompatibilityCache(environmentId?: string | null): v
   runtimeCompatibilityChecks.clear()
 }
 
-export function markRuntimeEnvironmentCompatible(
-  environmentId: string,
-  status: RuntimeStatus | null = null
-): void {
+export function markRuntimeEnvironmentCompatible(environmentId: string): void {
   const trimmed = environmentId.trim()
   if (!trimmed) {
     return
   }
-  rememberRuntimeEnvironmentCompatibility(trimmed, {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: true,
-    status,
-    statusCheckedAt: status ? Date.now() : null
-  })
+  rememberRuntimeEnvironmentCompatibility(trimmed, compatibilityEntry(null, true))
 }
 
 export async function getRuntimeEnvironmentStatus(
@@ -238,13 +232,7 @@ export async function getRuntimeEnvironmentStatus(
   timeoutMs?: number
 ): Promise<RuntimeStatus> {
   const trimmed = environmentId.trim()
-  const entry: RuntimeCompatibilityCacheEntry = {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: false,
-    status: null,
-    statusCheckedAt: null
-  }
+  const entry = compatibilityEntry()
   // Why: publish the in-flight probe before awaiting so concurrent cold-cache
   // capability lookups coalesce onto this one status.get (via the cache-hit path
   // in runtimeEnvironmentSupportsCapability) instead of each firing their own.
