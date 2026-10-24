@@ -32,7 +32,7 @@ afterEach(async () => {
 
 describe('reimporting a repository after the destination resolves its Git identity', () => {
   it.each([null, remoteIdentity])(
-    'keeps the destination cache after restart (%j)',
+    'keeps the destination cache after reopening the store (%j)',
     async (identity) => {
       const store = createStore()
       commit(store, manifest())

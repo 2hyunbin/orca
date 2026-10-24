@@ -122,6 +122,7 @@ function populate(loaded: LoadedWorkspaceLayout): LoadedWorkspaceLayout {
   fill(loaded, 'tab.terminal.forceHostRuntime', true)
   fill(loaded, 'file.externalSshTargetId', 'box')
   fill(loaded, 'file.runtimeEnvironmentId', 'env')
+  fill(loaded, 'file.mirroredFromRuntimeSession', true)
   fill(loaded, 'file.readOnly', true)
   fill(loaded, 'file.liveTail', true)
   // Use nonfirst focus/expanded panes so fallback mistakes become visible.

@@ -78,6 +78,8 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
     // Metadata-only forgetting cannot fail on registered lineage children, so skip their removal warning.
     state.openModal('forget-ssh-workspace', {
       worktreeId,
+      // Why (STA-11912): the reconnect awaits a connection, so the removal must stay pinned to this incarnation.
+      worktreeDeleteIdentities: toWorktreeDeleteIdentities([target]),
       displayName: target.displayName,
       resolution: sshResolution
     })

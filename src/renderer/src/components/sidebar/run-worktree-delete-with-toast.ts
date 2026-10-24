@@ -37,7 +37,8 @@ export function runWorktreeDeleteWithToast(
   const removeOptions = {
     ...(options.suppressPreservedBranchToast ? { suppressPreservedBranchToast: true } : {}),
     ...(options.snapshotPruneBatchId ? { snapshotPruneBatchId: options.snapshotPruneBatchId } : {}),
-    ...(options.confirmedDiscards ? { confirmedDiscards: options.confirmedDiscards } : {})
+    ...(options.confirmedDiscards ? { confirmedDiscards: options.confirmedDiscards } : {}),
+    ...(options.assertBeforeDispatch ? { assertBeforeDispatch: options.assertBeforeDispatch } : {})
   }
   const showFailureToast = (
     error: string,
@@ -130,7 +131,10 @@ export function runWorktreeDeleteWithToast(
       .getState()
       .removeWorktree(target, retry.force, {
         ...(retry.allowUnverifiedPtyStop ? { allowUnverifiedPtyStop: true } : {}),
-        ...(retry.allowFailedArchiveHook ? { allowFailedArchiveHook: true } : {})
+        ...(retry.allowFailedArchiveHook ? { allowFailedArchiveHook: true } : {}),
+        ...(options.assertBeforeDispatch
+          ? { assertBeforeDispatch: options.assertBeforeDispatch }
+          : {})
       })
       .then((result) => {
         if (!result.ok) {
