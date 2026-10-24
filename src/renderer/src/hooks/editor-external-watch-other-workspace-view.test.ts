@@ -7,7 +7,6 @@ import { indexEditorExternalWatchBatchPaths } from '@/components/editor/editor-e
 
 vi.mock('@/store', () => ({ useAppStore: { getState: vi.fn() } }))
 
-// Why: the catalog says workspace wt-b (root /b) holds /b/report.md.
 vi.mock('@/lib/runtime-workspace-file-route', () => ({
   findWorkspaceFileRoute: (_state: unknown, _hostId: string, absolutePath: string) =>
     absolutePath === '/b/report.md'

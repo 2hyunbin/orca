@@ -151,8 +151,7 @@ export function selectEditorExternalWatchTargets(
 ): WatchedTargetsSnapshot {
   const runtimeEnvironmentId = state.settings?.activeRuntimeEnvironmentId?.trim() || undefined
   const activeWorkspaceExecutionHostId = state.activeWorkspaceExecutionHostId ?? null
-  // Why the store: this selector's narrowed state lacks the catalog the owner lookup reads, and
-  // the owners join the cache key because catalog fields outside it can move them.
+  // Resolve owner catalogs from store and include their results in the cache key; narrowed selector inputs alone miss route changes.
   const catalog = useAppStore.getState()
   const watchWorktreeIds = new Map<string, string>()
   for (const file of state.openFiles) {
@@ -191,7 +190,7 @@ export function selectEditorExternalWatchTargets(
     openFiles: state.openFiles,
     exists: (id) => resolveEditorExternalWatchTargetRows(state, id, null) !== null
   })
-  // Why: watcher ownership is scoped by worktree + execution host — the same workspace id can be open locally, over SSH and in a runtime, and reads/saves already route per host.
+  // Scope watches by workspace and execution host, matching per-host read/save routing for colliding IDs.
   for (const file of state.openFiles) {
     // Why: a virtual tab (CI details, chat visual) has no file in the workspace to watch.
     if (isVirtualEditorFile(file)) {

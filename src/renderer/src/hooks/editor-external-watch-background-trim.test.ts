@@ -15,7 +15,6 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 
-// Why: the catalog says wt1 holds /r/wt1/a.ts once it knows the owner.
 const catalog = vi.hoisted(() => ({ knowsOwner: true }))
 // Why `repos` tracks the catalog: owner lookups are cached until a route input changes.
 vi.mock('@/store', () => ({
@@ -108,7 +107,6 @@ describe('background workspace watch trim', () => {
       worktrees,
       openFiles: ids.map((id) => tab(id)),
       activeWorktreeId: 'wt0',
-      // Why: mixes host-qualified and legacy bare keys, as persisted sessions do.
       visits: {
         wt0: 50,
         [getWorktreeVisitKey('wt1', 'local')]: 1,
@@ -163,7 +161,7 @@ describe('background workspace watch trim', () => {
   })
 
   it('releases a background workspace even with unsaved, combined diff or rich edit tabs', () => {
-    // Why: every editor save is disk-checked by the host now, so no edit surface needs a live watch.
+    // Guarded host disk checks on every save remove the need for live edit-surface watches.
     const state = makeState({
       worktrees,
       openFiles: [
@@ -205,7 +203,6 @@ describe('background workspace watch trim', () => {
       visits: { wt1: 100, wt2: 99, wt3: 98, p1: 1, p2: 2, p3: 3, p4: 4 }
     })
     expect(watchedIds(state)).toEqual(['p2', 'p3', 'p4', 'wt0', 'wt1', 'wt2', 'wt3'])
-    // Why: an evicted pin is released like any other workspace, so switching back still catches it up.
     expect([...selectEditorExternalWatchTargets(state).unwatchedTargetKeys].sort()).toEqual([
       'p1::/r/p1::local::client::literal',
       'p5::/r/p5::local::client::literal'
