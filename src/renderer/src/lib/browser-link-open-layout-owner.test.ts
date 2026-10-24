@@ -21,8 +21,10 @@ import { openFileInBrowserTab } from './file-preview'
 import type { BrowserOpenOutcome } from './browser-link-destination'
 
 vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-const mocks = vi.hoisted(() => ({ getState: vi.fn() }))
-vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.getState() } }))
+const mocks = vi.hoisted(() => ({ getState: vi.fn(), subscribe: vi.fn() }))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => mocks.getState(), subscribe: mocks.subscribe }
+}))
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
@@ -61,6 +63,7 @@ beforeEach(async () => {
     }
   })
   mocks.getState.mockImplementation(() => store.getState())
+  mocks.subscribe.mockImplementation(store.subscribe)
   vi.mocked(requestBrowserFocus).mockClear()
   main = await drawTabsFromMain(store)
   layoutApplyTestTransport.answerWith('pending')
@@ -185,6 +188,39 @@ it('does not activate a link superseded while main was opening its tab', async (
   expect(isBrowserPageMountAdmitted(pageId)).toBe(false)
   expect(requestBrowserFocus).not.toHaveBeenCalled()
 })
+
+it.each(['workspace', 'view', 'view-return'] as const)(
+  'retains a tab without revealing or focusing it after navigation during layout acknowledgement: %s',
+  async (navigation) => {
+    const opening = open('http', false)
+    const pageId = pendingBrowserPageId()
+    if (navigation === 'workspace') {
+      store.getState().setActiveWorktree(null)
+    } else {
+      const previousView = store.getState().activeView
+      store.getState().setActiveView('skills')
+      if (navigation === 'view-return') {
+        store.getState().setActiveView(previousView)
+      }
+    }
+    const selected = store.getState()
+    layoutApplyTestTransport.answerWith('apply')
+    layoutApplyTestTransport.answerPending()
+    await main.settle()
+
+    expect(await opening).toMatchObject({ status: 'opened' })
+    const state = store.getState()
+    expect(state.browserTabsByWorktree[WORKSPACE]).toHaveLength(1)
+    expect(state.activeWorktreeId).toBe(selected.activeWorktreeId)
+    expect(state.activeView).toBe(selected.activeView)
+    expect(state.activeGroupIdByWorktree[WORKSPACE]).toBe('c')
+    expect(state.groupsByWorktree[WORKSPACE]?.find((group) => group.id === 'b')?.activeTabId).toBe(
+      'terminal-b'
+    )
+    expect(isBrowserPageMountAdmitted(pageId)).toBe(true)
+    expect(requestBrowserFocus).not.toHaveBeenCalled()
+  }
+)
 
 it('does not activate a link whose owner changed while main was opening its tab', async () => {
   const opening = open('http')

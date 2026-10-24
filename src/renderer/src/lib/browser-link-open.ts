@@ -16,6 +16,7 @@ import {
 } from './browser-link-destination'
 import { isLiveLinkOpenGroup } from './link-open-intent'
 import { afterPendingEntityTabs, hasPendingEntityTab } from '@/runtime/layout-owner-pending-tabs'
+import { captureBrowserLinkReveal } from './browser-link-reveal'
 
 export class BrowserLinkPlacementRefused extends Error {}
 
@@ -71,6 +72,11 @@ export async function openLocalBrowserLink(params: {
   if (selection.status === 'refused') {
     return selection
   }
+  const reveal = captureBrowserLinkReveal(
+    useAppStore.getState,
+    useAppStore.subscribe,
+    context.canReveal
+  )
   const validate = (current: AppState): void => {
     if (
       !browserLinkCommitIsValid(current, destination, context, selection.groupId, params.ownsRoute)
@@ -127,7 +133,7 @@ export async function openLocalBrowserLink(params: {
       return { status: 'refused' }
     }
     validate(useAppStore.getState())
-    if (params.options?.activate === false) {
+    if (params.options?.activate === false || !reveal.canReveal()) {
       retainCreatedTab = true
       return { status: 'opened', result }
     }
@@ -171,6 +177,7 @@ export async function openLocalBrowserLink(params: {
     }
     return { status: 'failed' }
   } finally {
+    reveal.dispose()
     if (createdTabId && !retainCreatedTab) {
       if (createdPageId) {
         releaseBrowserPageMount(createdPageId)

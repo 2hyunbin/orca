@@ -9,6 +9,7 @@ import {
 import { withOpenedServeBrowserTab } from './serve-browser-tab-layout'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { BLANK_BROWSER_TAB_STATE } from '../../shared/workspace-layout/workspace-layout-beside'
+import { browserManager } from '../browser/browser-manager'
 
 const BROWSER_ONLY_WORKTREE_ID = 'repo-1::/tmp/browser-only'
 
@@ -135,6 +136,38 @@ describe('a saved browser tab on a host with no window', () => {
       title: 'Example'
     })
     expect(createTab).not.toHaveBeenCalled()
+    const browserTab = listed.tabs.find((tab) => tab.type === 'browser')
+    expect(browserTab?.type === 'browser' && browserTab.browserProfileId).toBeUndefined()
+  })
+
+  it('publishes the registered page profile and refreshes when only that identity changes', async () => {
+    const { runtime } = restartedServe()
+    await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'page-1')
+    let registeredProfileId: string | null = null
+    const guest = vi
+      .spyOn(browserManager, 'getGuestWebContentsId')
+      .mockImplementation((id) => (id === 'page-1' ? 101 : null))
+    const profile = vi
+      .spyOn(browserManager, 'getSessionProfileIdForTab')
+      .mockImplementation(() => registeredProfileId)
+    try {
+      const initial = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      expect(initial.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
+        browserProfileId: 'default'
+      })
+
+      registeredProfileId = 'registered-login'
+      const changed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      expect(changed.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
+        browserProfileId: 'registered-login'
+      })
+      expect(changed.snapshotVersion).toBeGreaterThan(initial.snapshotVersion)
+      const dormant = changed.tabs.find((tab) => tab.id === 'page-2')
+      expect(dormant?.type === 'browser' && dormant.browserProfileId).toBeUndefined()
+    } finally {
+      guest.mockRestore()
+      profile.mockRestore()
+    }
   })
 
   it('starts its page once, at its saved address, when a client opens it', async () => {

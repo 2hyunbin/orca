@@ -68,11 +68,11 @@ export function openLocalHttpLinkTab(
   state: HttpLinkBrowserTabState,
   worktreeId: string,
   url: string,
-  placement = resolveHttpLinkBrowserPlacement(state, worktreeId)
+  placement = resolveHttpLinkBrowserPlacement(state, worktreeId),
+  activate = !isHttpLinkBackgroundOpen(state)
 ): void {
-  const background = isHttpLinkBackgroundOpen(state)
-  const tab = state.createBrowserTab(worktreeId, url, { activate: !background, ...placement })
-  if (background) {
+  const tab = state.createBrowserTab(worktreeId, url, { activate, ...placement })
+  if (!activate) {
     return
   }
   showWorkspaceTabs(state, worktreeId)

@@ -43,6 +43,7 @@ export type BrowserOpenOutcome =
 export type BrowserLinkOpenContext = {
   linkIntent: LinkOpenIntent | null
   isCurrentRequest?: () => boolean
+  canReveal?: () => boolean
 }
 
 /** Credential-bearing requests cannot use their redacted stored URL as an identity. */
