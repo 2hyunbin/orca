@@ -95,7 +95,11 @@ export class StructuredAgentSessionDeliveryLoop {
           const completed = await prepared.start.outcome.then(
             () => true,
             (error: unknown) => {
-              this.deps.logger.warn('waiting for an agent start failed', { sessionId, error })
+              this.deps.logger.warn('waiting for an agent start failed', {
+                scope: 'delivery-loop-start',
+                sessionId,
+                error
+              })
               return false
             }
           )
@@ -104,6 +108,7 @@ export class StructuredAgentSessionDeliveryLoop {
               .serialize(sessionId, async () => this.stop(sessionId))
               .catch((error: unknown) =>
                 this.deps.logger.warn('parking delivery after a failed start failed', {
+                  scope: 'delivery-loop-start',
                   sessionId,
                   error
                 })

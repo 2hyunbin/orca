@@ -120,7 +120,11 @@ export function registerStructuredAgentSessionStart(
       })
       .catch((error: unknown): StructuredAgentSessionResumeOutcome => {
         if (!acquire.signal.aborted) {
-          context.deps.logger.warn('starting the agent failed', { sessionId, error })
+          context.deps.logger.warn('starting the agent failed', {
+            scope: 'agent-start',
+            sessionId,
+            error
+          })
           return {
             ...failedStructuredAgentSessionStart(),
             failure: agentSessionFailureFact('hostFault')

@@ -537,11 +537,14 @@ describe('one logical start across physical attempts', () => {
   async function endAttempt() {
     const session = host.collaboratorsForTests().sessions.get(SESSION)!
     const child = session.child!
+    if (child.generation === null) {
+      throw new Error('expected a published child generation')
+    }
     const event = {
       type: 'ended' as const,
       sessionId: SESSION,
       fence: child.fence,
-      acquisitionGeneration: child.generation ?? undefined,
+      acquisitionGeneration: child.generation,
       reason: 'exited while starting',
       cause: 'unexpected-exit' as const
     }
