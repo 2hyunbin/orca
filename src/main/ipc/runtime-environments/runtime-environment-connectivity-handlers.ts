@@ -24,8 +24,7 @@ import { verifyAndAddRuntimeEnvironmentFromPairingCode } from './runtime-environ
 import { publishVerifiedPairing } from './runtime-environment-verified-pairing-publish'
 import {
   closeRemoteRuntimeRequestConnection,
-  getRuntimeEnvironmentStatusSnapshots,
-  retryRemoteRuntimeSharedControlConnectionNow
+  getRuntimeEnvironmentStatusSnapshots
 } from './runtime-environment-request-connections'
 import {
   clearRuntimeEnvironmentManualDisconnect,
@@ -172,15 +171,6 @@ export function registerRuntimeEnvironmentConnectivityHandlers({
       return getRuntimeEnvironmentStatus(getUserDataPath(), environment.id, args.timeoutMs, {
         reconnect: true
       })
-    }
-  )
-  ipcMain.handle(
-    'runtimeEnvironments:retryControlConnection',
-    (_event, args: { selector: string }): void => {
-      const environment = resolveEnvironment(getUserDataPath(), args.selector)
-      if (!isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
-        retryRemoteRuntimeSharedControlConnectionNow(environment.id)
-      }
     }
   )
 }

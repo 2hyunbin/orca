@@ -18,7 +18,10 @@ function isRestoredPane(value: unknown): value is RestoredPane {
 
 export function registerWorktreeSleepHandlers(context: WorktreeIpcContext): void {
   ipcMain.handle('worktrees:sleep', (_event, request: WorkspaceSleepRequest) =>
-    context.runtime.sleepWorkspaces(request)
+    context.runtime.sleepWorkspaces({
+      targets: request.targets,
+      markChatsAsleep: request.markChatsAsleep
+    })
   )
   // Reopening during sleep must preserve the running VM.
   ipcMain.handle('worktrees:sleepReopened', (_event, worktreeId: string) =>

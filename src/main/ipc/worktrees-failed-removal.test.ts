@@ -9,7 +9,7 @@ import {
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
 import { makeWorktreeMeta, mockKnownFeatureWorktree } from './worktrees-test-fixtures'
 import type { RemoveWorktreeResult } from '../../shared/worktree/create-types'
-import type { Worktree } from '../../shared/worktree/types'
+import type { DetectedWorktree, DetectedWorktreeListResult } from '../../shared/worktree/types'
 import { finishUnregisteredWorktreeRemoval } from '../git/worktree-removal'
 import { worktreeCheckoutExists } from '../worktree-removal-table'
 import type * as WorktreeRemovalModule from '../git/worktree-removal'
@@ -104,7 +104,6 @@ vi.mock('../git/worktree-removal', async (importOriginal) => ({
   ...(await importOriginal<typeof WorktreeRemovalModule>()),
   finishUnregisteredWorktreeRemoval: vi.fn(async () => ({}))
 }))
-// The leftover exists without a .git entry, proving it is no longer a registered checkout.
 vi.mock('../worktree-removal-table', async (importOriginal) => ({
   ...(await importOriginal<typeof WorktreeRemovalTable>()),
   worktreeCheckoutExists: vi.fn(async () => true)
@@ -122,10 +121,12 @@ function remove(args: Record<string, unknown>): Promise<RemoveWorktreeResult> {
   return handlers['worktrees:remove'](null, args) as Promise<RemoveWorktreeResult>
 }
 
-async function listFeature(): Promise<Worktree | undefined> {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worktrees:list resolves the repo's Worktree rows.
-  const rows = (await handlers['worktrees:list'](null, { repoId: 'repo-1' })) as Worktree[]
-  return rows.find((row) => row.id === featureId)
+async function listFeature(): Promise<DetectedWorktree | undefined> {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a repo-scoped worktrees:listDetected resolves a DetectedWorktreeListResult.
+  const result = (await handlers['worktrees:listDetected'](null, {
+    repoId: 'repo-1'
+  })) as DetectedWorktreeListResult
+  return result.worktrees.find((row) => row.id === featureId)
 }
 
 /** Model Git deregistering a checkout before filesystem removal fails. */
@@ -250,7 +251,7 @@ describe('a failed delete Git no longer registers, over desktop IPC', () => {
     listWorktreesMock.mockResolvedValue([main])
     const otherClientsRetry = vi.fn(async () => ({}))
     listWorktreesMock.mockImplementationOnce(async () => {
-      // Another client acquires the failed removal during this request's listing.
+      // Another client claims the failed-removal record while this Delete lists Git worktrees.
       void retryFailedWorktreeRemoval(featureId, 'local', () => ({
         run: otherClientsRetry,
         publish: () => {}
@@ -268,7 +269,6 @@ describe('a failed delete Git no longer registers, over desktop IPC', () => {
 
   it('Delete takes the normal delete once Git registers a checkout at the path again', async () => {
     await failAfterGitDroppedIt()
-    // A new registered checkout invalidates approval for the old leftover.
     mockKnownFeatureWorktree()
     removeWorktreeMock.mockResolvedValue({})
 

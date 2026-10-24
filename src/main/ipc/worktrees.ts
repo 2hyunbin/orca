@@ -9,7 +9,6 @@ import { registerReviewBaseHandlers } from './worktrees/create/register-review-b
 import { registerWorktreeHookCheckHandler } from './hooks/register-worktree-hook-check-handler'
 import { registerWorktreeHookFileHandlers } from './hooks/register-worktree-hook-file-handlers'
 import { registerWorktreeHookInspectionHandler } from './hooks/register-worktree-hook-inspection-handler'
-import { registerWorktreeHookRunnerHandler } from './hooks/register-worktree-hook-runner-handler'
 import { registerDetectedWorktreeHandlers } from './worktrees/listing/register-detected-worktree-handlers'
 import { registerHostCatalogHandlers } from './worktrees/listing/register-host-catalog-handlers'
 import { registerWorktreeCatalogHandlers } from './worktrees/listing/register-worktree-catalog-handlers'
@@ -29,8 +28,6 @@ registerDetectedWorktreeScanInvalidation()
 let disposeSparseCheckoutCacheInvalidation: (() => void) | undefined
 
 const WORKTREE_HANDLER_CHANNELS = [
-  'worktrees:listAll',
-  'worktrees:list',
   'worktrees:listRetiredNames',
   'worktrees:listDetected',
   'worktrees:listKnownForExecutionHost',
@@ -55,7 +52,6 @@ const WORKTREE_HANDLER_CHANNELS = [
   'worktrees:getBranchRenameFailureOutput',
   'hooks:check',
   'hooks:inspectSetupScriptImports',
-  'hooks:createIssueCommandRunner',
   'hooks:readIssueCommand',
   'hooks:writeIssueCommand'
 ] as const
@@ -96,7 +92,6 @@ export function registerWorktreeHandlers(
   registerWorktreeForgetHandlers(context)
   registerWorktreeMetadataHandlers(context)
   registerWorktreeHookCheckHandler(context)
-  registerWorktreeHookRunnerHandler(context)
   registerWorktreeHookInspectionHandler(context)
   registerWorktreeHookFileHandlers(context)
 }

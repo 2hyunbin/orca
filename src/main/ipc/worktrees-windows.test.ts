@@ -18,7 +18,6 @@ const {
   getEffectiveHooksMock,
   getEffectiveHooksFromConfigMock,
   getDefaultTabsLaunchMock,
-  createIssueCommandRunnerScriptMock,
   createSetupRunnerScriptMock,
   resolveSetupRunnerShellMock,
   shouldRunSetupForCreateMock,
@@ -48,7 +47,6 @@ const {
   getEffectiveHooksMock: vi.fn(),
   getEffectiveHooksFromConfigMock: vi.fn(),
   getDefaultTabsLaunchMock: vi.fn(),
-  createIssueCommandRunnerScriptMock: vi.fn(),
   createSetupRunnerScriptMock: vi.fn(),
   resolveSetupRunnerShellMock: vi.fn(),
   shouldRunSetupForCreateMock: vi.fn(),
@@ -82,7 +80,6 @@ vi.mock('../git/worktree', () => ({
 }))
 
 vi.mock('../git/runner', () => ({
-  // Background fetch attaches catch, so its mock must return a promise.
   gitExecFileAsync: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
   gitExecFileSync: vi.fn()
 }))
@@ -112,7 +109,6 @@ vi.mock('../hooks', () => ({
 }))
 
 vi.mock('../worktree-runner-script', () => ({
-  createIssueCommandRunnerScript: createIssueCommandRunnerScriptMock,
   createSetupRunnerScript: createSetupRunnerScriptMock,
   resolveSetupRunnerShell: resolveSetupRunnerShellMock
 }))
@@ -193,7 +189,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     getEffectiveHooksMock.mockReset()
     getEffectiveHooksFromConfigMock.mockReset()
     getDefaultTabsLaunchMock.mockReset()
-    createIssueCommandRunnerScriptMock.mockReset()
     createSetupRunnerScriptMock.mockReset()
     resolveSetupRunnerShellMock.mockReset()
     shouldRunSetupForCreateMock.mockReset()
@@ -383,7 +378,6 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
   })
 
   it('leaves a user-typed name reusable even when the same name is retired', async () => {
-    // Creature names are ordinary words; explicit user choices must remain reusable.
     store.getRetiredWorktreeNameRegistry.mockReturnValue({ exhaustedTiers: 0, names: ['nautilus'] })
     computeWorktreePathMock.mockReturnValue('C:\\workspaces\\nautilus')
     ensurePathWithinWorkspaceMock.mockReturnValue('C:\\workspaces\\nautilus')
@@ -542,18 +536,18 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
       linkedIssue: 123,
       linkedPR: 456
     })
-    const listed = await handlers['worktrees:list'](null, {
+    const listed = await handlers['worktrees:listDetected'](null, {
       repoId: 'repo-1'
     })
 
-    expect(listed).toMatchObject([
-      {
+    expect(listed).toHaveProperty('worktrees', [
+      expect.objectContaining({
         id: 'repo-1::C:/workspaces/improve-dashboard',
         displayName: 'Improve Dashboard',
         linkedIssue: 123,
         linkedPR: 456,
         lastActivityAt: 123
-      }
+      })
     ])
   })
 
@@ -593,36 +587,12 @@ describe('registerWorktreeHandlers – Windows path handling', () => {
     expect(store.removeWorktreeMeta).toHaveBeenCalledWith(
       hostWorktreeTarget({ id: 'repo-1::C:/workspaces/improve-dashboard', hostId: 'local' })
     )
-    // Exercise Windows path hashing in history-cleanup scheduling.
+    // Windows history uses a path-derived hash; cleanup must schedule the same identity.
     expect(deleteWorktreeHistoryDirMock).toHaveBeenCalledWith(
       'repo-1::C:/workspaces/improve-dashboard'
     )
     expect(mainWindow.webContents.send).toHaveBeenCalledWith('worktrees:changed', {
       repoId: 'repo-1'
     })
-  })
-  it('gives the issue-command runner the same setup shell as the setup runner', () => {
-    // Issue runners must inherit Git Bash when setup selects it, rather than defaulting to cmd.
-    resolveSetupRunnerShellMock.mockReturnValue({ family: 'posix' })
-    createIssueCommandRunnerScriptMock.mockReturnValue({
-      runnerScriptPath: 'C:\\repo\\.git\\orca\\issue-command-runner.sh',
-      envVars: {},
-      shell: { family: 'posix' }
-    })
-
-    handlers['hooks:createIssueCommandRunner'](null, {
-      repoId: 'repo-1',
-      worktreePath: 'C:\\workspaces\\improve-dashboard',
-      command: 'gh issue view 42'
-    })
-
-    expect(resolveSetupRunnerShellMock).toHaveBeenCalledWith(store.getSettings())
-    expect(createIssueCommandRunnerScriptMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'repo-1' }),
-      'C:\\workspaces\\improve-dashboard',
-      'gh issue view 42',
-      expect.anything(),
-      { family: 'posix' }
-    )
   })
 })
