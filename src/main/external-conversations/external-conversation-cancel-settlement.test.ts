@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { ConversationEvent } from './external-conversation-events'
-import { deferred, harness } from './external-conversation-seam.test-fixture'
+import { harness } from './external-conversation-seam.test-fixture'
 import {
   fakeLauncher,
   fakeTerminal,
@@ -121,61 +121,5 @@ describe('cancel rejection settlement evidence', () => {
     })
     h.idle()
     expect(h.ended).toEqual([])
-  })
-})
-
-describe('cancel write ownership', () => {
-  it('never clears Codex input after an accepted interrupt', async () => {
-    for (const draft of ['', 'first']) {
-      const h = await watching('codex')
-      h.hookRows.set(PANE, {
-        ...APPROVAL,
-        agentType: 'codex',
-        state: 'working',
-        interactivePrompt: undefined
-      })
-      await h.seam.cancel(h.host, KEY, 'cancel')
-      h.fake.state.draft = draft
-      await h.seam.send(h.host, KEY, 'next', 'next turn')
-      expect(h.fake.keys).toEqual(['\x1b'])
-    }
-  })
-
-  it('reads human edits at the fence after the asynchronous foreground check', async () => {
-    const h = await watching()
-    h.hookRows.set(PANE, { ...APPROVAL, state: 'working', interactivePrompt: undefined })
-    await h.seam.cancel(h.host, KEY, 'cancel')
-    h.fake.state.draft = 'first'
-    h.fake.terminal.readLaunchedAgentForeground.mockImplementationOnce(async () => {
-      h.fake.state.draft = 'first edited'
-      return 'agent'
-    })
-    await h.seam.send(h.host, KEY, 'next', 'next turn')
-    expect(h.fake.keys).toEqual(['\x1b'])
-  })
-
-  it('cannot mark a newer send when the interrupt acknowledgment is delayed', async () => {
-    const h = await watching()
-    h.hookRows.set(PANE, { ...APPROVAL, state: 'working', interactivePrompt: undefined })
-    const handedOff = deferred<void>()
-    const acknowledgment = deferred<void>()
-    const send = h.fake.terminal.sendTerminal.getMockImplementation()
-    if (!send) {
-      throw new Error('missing test transport')
-    }
-    h.fake.terminal.sendTerminal.mockImplementationOnce(async (...args) => {
-      const result = await send(...args)
-      handedOff.resolve()
-      await acknowledgment.promise
-      return result
-    })
-    const cancelled = h.seam.cancel(h.host, KEY, 'cancel')
-    await handedOff.promise
-    await h.seam.send(h.host, KEY, 'new', 'new turn')
-    acknowledgment.resolve()
-    await cancelled
-    h.fake.state.draft = 'new turn'
-    await h.seam.send(h.host, KEY, 'next', 'next turn')
-    expect(h.fake.keys).toEqual(['\x1b'])
   })
 })

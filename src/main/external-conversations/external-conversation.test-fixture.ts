@@ -153,16 +153,13 @@ export function fakeTerminal() {
     blocked: boolean
     rows: AgentStatusIpcPayload[] | null
     liveness: PtyLivenessVerdict | null
-    /** The agent's input box as the host reads it; null without a modelled screen. */
-    draft: string | null
   } = {
     ptyId: 'pty-1',
     paneKey: PANE,
     incarnation: 1,
     blocked: false,
     rows: null,
-    liveness: null,
-    draft: ''
+    liveness: null
   }
   const current = (): string =>
     `inc-${state.ptyId}${state.incarnation > 1 ? `-${state.incarnation}` : ''}`
@@ -252,7 +249,6 @@ export function fakeTerminal() {
     sendTerminalAgentPrompt,
     sendTerminal,
     getPtyLivenessVerdict: (_ptyId: string) => state.liveness,
-    readTerminalComposerDraft: (_ptyId: string) => state.draft,
     readLaunchedAgentForeground: vi.fn(
       async (_ptyId: string): Promise<LaunchedAgentForeground> => 'agent'
     ),

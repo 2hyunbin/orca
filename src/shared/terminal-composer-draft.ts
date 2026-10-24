@@ -203,8 +203,3 @@ export function hasTerminalComposerPlaceholder(
 ): boolean {
   return detectTerminalComposer(context)?.placeholder === true
 }
-
-// A paste chip reveals no content; whitespace changes can be human edits.
-export function composerDraftShowsText(draft: string, text: string): boolean {
-  return text.length > 0 && draft === text && !/\[Pasted text #\d+/.test(draft)
-}

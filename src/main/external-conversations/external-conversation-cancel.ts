@@ -9,7 +9,6 @@ import type { ConversationEvents } from './external-conversation-events'
 import { findLink } from './external-conversation-links'
 import type { ExternalConversationSeamDeps } from './external-conversation-seam'
 import { bindPane } from './external-conversation-send'
-import type { ConversationTurns } from './external-conversation-turns'
 import {
   conversationId,
   refused,
@@ -26,7 +25,6 @@ export type CancelTerminal = PromptTerminal & Pick<OrcaRuntimeService, 'getPtyLi
 export type CancelSeam = Pick<ExternalConversationSeamDeps, 'store' | 'readHookRow'> & {
   prompts: ConversationPrompts
   chain: ConversationChain
-  turns: ConversationTurns
   /** The watchers' events, while anyone watches. */
   events: ConversationEvents | null
 }
@@ -67,7 +65,7 @@ export async function cancelConversation(
     }
     throw new Error('external_conversation_not_found')
   }
-  return stopLinkedAgent(terminal, seam, id, linked.link, signal)
+  return stopLinkedAgent(terminal, seam, linked.link, signal)
 }
 
 /**
@@ -78,8 +76,7 @@ export async function cancelConversation(
  */
 async function stopLinkedAgent(
   terminal: CancelTerminal,
-  { prompts, readHookRow, turns, events }: CancelSeam,
-  id: string,
+  { prompts, readHookRow, events }: CancelSeam,
   link: ExternalConversationLink,
   signal: AbortSignal
 ): Promise<Delivery> {
@@ -99,14 +96,12 @@ async function stopLinkedAgent(
     unprovableHost: 'write-unless-shell'
   })
   try {
-    const turn = turns.current(id)
     const interrupted = await interruptWorkingAgent(terminal, readHookRow, link.paneKey, {
       beforeWrite: (ptyId) => guard.beforeWrite(ptyId),
       signal
     })
     switch (interrupted.outcome) {
       case 'accepted':
-        turns.interrupted(id, pane.binding, turn)
         return interrupted
       case 'unknown':
         return { outcome: 'unknown', reason: 'writer_failed' }

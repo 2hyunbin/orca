@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  composerDraftShowsText,
   detectTerminalComposerDraft,
   hasTerminalComposerPlaceholder
 } from './terminal-composer-draft'
@@ -397,23 +396,5 @@ describe('detectTerminalComposerDraft', () => {
         cursorViewportRow: 8
       })
     ).toMatchObject({ text: 'first line', endRow: 8 })
-  })
-})
-
-describe('composerDraftShowsText', () => {
-  it('requires visible text equality without erasing whitespace edits', () => {
-    expect(composerDraftShowsText('fix the bug', 'fix the bug')).toBe(true)
-    for (const draft of ['fix the\nbug', 'fix  the bug', ' fix the bug', 'fix the bug ', '']) {
-      expect(composerDraftShowsText(draft, 'fix the bug')).toBe(false)
-    }
-    expect(composerDraftShowsText('', '')).toBe(false)
-  })
-
-  it('cannot identify the content of a paste chip by its line count', () => {
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'a\nb\nc')).toBe(false)
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', 'x\ny\nz')).toBe(false)
-    expect(composerDraftShowsText('[Pasted text #3 +2 lines]', '[Pasted text #3 +2 lines]')).toBe(
-      false
-    )
   })
 })

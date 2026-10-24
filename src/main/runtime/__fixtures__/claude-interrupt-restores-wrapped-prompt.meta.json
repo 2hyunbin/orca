@@ -1,9 +1,0 @@
-{
-  "capturedAt": "2026-10-24T00:40:06.135Z",
-  "platform": "darwin",
-  "command": ["claude", "--dangerously-skip-permissions"],
-  "cols": 120,
-  "rows": 40,
-  "note": "Claude Code 2.1.310: Escape ~2 s after submitting, before any reply; the prompt (one line that wraps) is put back in the input box.",
-  "exitCode": 129
-}

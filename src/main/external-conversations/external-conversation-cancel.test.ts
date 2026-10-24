@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildAgentTuiClearInputForText } from '../../shared/agent-tui-input-clear'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import type { ConversationEvent } from './external-conversation-events'
@@ -206,69 +205,7 @@ describe('ExternalConversationSeam cancel', () => {
   })
 })
 
-describe('ExternalConversationSeam cancel: what it leaves behind', () => {
-  const CLEAR = buildAgentTuiClearInputForText('first')
-
-  async function cancelledEarly() {
-    const h = await linked()
-    h.hookRows.set(PANE, hookRow())
-    await expect(h.seam.cancel(h.host, KEY, 'c1')).resolves.toEqual({ outcome: 'accepted' })
-    h.hookRows.set(PANE, hookRow({ state: 'done' }))
-    return h
-  }
-
-  it('clears the interrupted prompt Claude put back, once, before the next send', async () => {
-    const { seam, host, fake } = await cancelledEarly()
-    fake.state.draft = 'first'
-    await expect(seam.send(host, KEY, 's1', 'next')).resolves.toEqual({ outcome: 'accepted' })
-    expect(fake.keys).toEqual(['\x1b', CLEAR])
-    expect(fake.writes).toEqual(['next'])
-    await seam.send(host, KEY, 's2', 'again')
-    expect(fake.keys).toEqual(['\x1b', CLEAR])
-  })
-
-  it('pastes nothing after a clear that may have half-landed, and keeps the mark for the next send', async () => {
-    const { seam, host, fake } = await cancelledEarly()
-    fake.state.draft = 'first'
-    fake.sendTerminal.mockImplementationOnce(async (_handle, _action, options) => {
-      options.reserveWrite?.('pty-1')
-      throw new Error('connection_lost')
-    })
-    await expect(seam.send(host, KEY, 's1', 'next')).resolves.toEqual({
-      outcome: 'unknown',
-      reason: 'writer_failed'
-    })
-    expect(fake.writes).toEqual([])
-    await expect(seam.send(host, KEY, 's2', 'next')).resolves.toEqual({ outcome: 'accepted' })
-    expect(fake.keys).toEqual(['\x1b', CLEAR])
-    expect(fake.writes).toEqual(['next'])
-  })
-
-  it('touches nothing else in the box: a person’s text, an unread screen, a new process', async () => {
-    for (const change of [
-      (fake: ReturnType<typeof fakeTerminal>) => (fake.state.draft = 'HUMANTYPED'),
-      (fake: ReturnType<typeof fakeTerminal>) => (fake.state.draft = null),
-      (fake: ReturnType<typeof fakeTerminal>) => {
-        fake.state.draft = 'first'
-        fake.replace()
-      }
-    ]) {
-      const { seam, host, fake } = await cancelledEarly()
-      change(fake)
-      await seam.send(host, KEY, 's1', 'next')
-      expect(fake.keys).toEqual(['\x1b'])
-    }
-  })
-
-  it('never clears after a turn our cancel did not interrupt', async () => {
-    const { seam, host, hookRows, fake } = await linked()
-    hookRows.set(PANE, hookRow({ state: 'done' }))
-    await seam.cancel(host, KEY, 'c1')
-    fake.state.draft = 'first'
-    await seam.send(host, KEY, 's1', 'next')
-    expect(fake.keys).toEqual([])
-  })
-
+describe('ExternalConversationSeam cancel: what watchers hear', () => {
   it('tells watchers the rejected turn ended once Claude reports idle on that prompt', async () => {
     const { seam, host, hookRows, paneChange } = await linked()
     const events: ConversationEvent[] = []
