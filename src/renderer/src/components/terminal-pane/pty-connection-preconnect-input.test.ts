@@ -36,6 +36,14 @@ let transportFactoryQueue: MockTransport[] = []
 let createdTransportOptions: Record<string, unknown>[] = []
 let storeSubscribers: ((state: StoreState) => void)[] = []
 
+const layoutOwner = vi.hoisted(() => ({ isMain: false }))
+
+vi.mock('../../../../shared/layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return layoutOwner.isMain
+  }
+}))
+
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync }))
 
 vi.mock('@/store', () => ({
@@ -103,6 +111,7 @@ describe('connectPanePty pre-connect input', () => {
   })
 
   afterEach(async () => {
+    layoutOwner.isMain = false
     clearWorktreeSleepIntent('wt-1')
     await restoreTerminalTestGlobals()
   })
@@ -136,6 +145,36 @@ describe('connectPanePty pre-connect input', () => {
       tabId: 'tab-1',
       worktreeId: 'wt-1'
     }
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane()
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBeUndefined()
+    binding.dispose()
+  })
+
+  it('keeps today’s drop for a pane that resumes its live agent status entry', async () => {
+    const paneKey = makePaneKey('tab-1', leafIdForPane(1))
+    mockStoreState.agentStatusByPaneKey[paneKey] = {
+      state: 'working',
+      prompt: '',
+      agentType: 'claude',
+      paneKey,
+      updatedAt: 1_000,
+      stateStartedAt: 1_000,
+      stateHistory: [],
+      providerSession: { key: 'session_id', id: 'session-1' }
+    }
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane()
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBeUndefined()
+    binding.dispose()
+  })
+
+  it('keeps today’s drop for a pane main starts, whose launch this window cannot see', async () => {
+    layoutOwner.isMain = true
     transportFactoryQueue.push(createMockTransport())
 
     const binding = connectPlainPane()

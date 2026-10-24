@@ -1,5 +1,7 @@
 import { useAppStore } from '@/store'
 import { shouldRetainDisposedPaneSpawn } from './disposed-spawn-retention'
+import { findColdRestoreResumeSource } from './cold-restore-resume-startup'
+import { mainStartsPane } from './main-starts-pane'
 import { requestTerminalPaneRecovery } from '../terminal-pane-recovery'
 import type { IpcPtyTransportOptions } from '../pty-transport-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -7,13 +9,17 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 /**
  * Plain shells hold keys typed before their PTY binds (a first spawn can wait seconds on the host).
  * Why not panes with startup work: held keys would flush ahead of the startup command or an agent
- * resume, so a typed prompt would run as a shell command or corrupt the launch line.
+ * resume (sleeping record or live status entry), so a typed prompt would run as a shell command or
+ * corrupt the launch line. A pane main starts is excluded too: main picks its launch, unseen here.
  */
 function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
-  if (session.deps.cwdPromise || session.deps.preconnectInput?.length) {
-    return true
-  }
-  return !session.paneStartup && !session.getSleepingRecordForPane(useAppStore.getState())
+  const state = useAppStore.getState()
+  return (
+    !session.paneStartup &&
+    !session.getSleepingRecordForPane(state) &&
+    !findColdRestoreResumeSource(session, state) &&
+    !mainStartsPane(session)
+  )
 }
 
 /** The spawn/attach options a pane hands its PTY transport. */
