@@ -25,8 +25,8 @@ beforeEach(async () => {
 afterEach(() => rig.dispose())
 
 /** Codex goal turns have no ordinary Orca submission as their opener. */
-async function startGoalTurn(): Promise<void> {
-  const first = await rig.workingSend()
+async function startGoalTurn(firstChoices?: Readonly<Record<string, string>>): Promise<void> {
+  const first = await rig.workingSend(firstChoices)
   await rig.settleAccepted(first, 'first')
   rig.host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
   const change = { kind: 'set' as const, objective: 'Keep improving the project' }
@@ -73,7 +73,7 @@ it.each([
   await startGoalTurn()
   const steering = rig.send('Use different choices', undefined, { carried: choices })
   expect(await steering.result).toMatchObject({ ok: true })
-  await rig.host.collaboratorsForTests().serialize(SESSION, async () => {})
+  await rig.host.collaboratorsForTests().conversationDelivery.loop.wake(SESSION)
   expect(rig.dispatch).toHaveBeenCalledOnce()
   expect((await rig.submission(steering.id))?.handedOverAt).toBeUndefined()
   rig
@@ -107,7 +107,21 @@ it('does not assume an explicit choice matches when the child has not reported i
     carried: { model: 'gpt-ran' }
   })
   expect(await steering.result).toMatchObject({ ok: true })
-  await rig.host.collaboratorsForTests().serialize(SESSION, async () => {})
+  await rig.host.collaboratorsForTests().conversationDelivery.loop.wake(SESSION)
   expect(rig.dispatch).toHaveBeenCalledOnce()
   expect((await rig.submission(steering.id))?.handedOverAt).toBeUndefined()
 })
+
+it.each([
+  { label: 'steers the overriding choices', choices: { model: 'other-model' }, dispatches: 2 },
+  { label: 'holds the reported model', choices: { model: 'gpt-ran' }, dispatches: 1 }
+])(
+  'compares with the last turn/start override the goal inherits: $label',
+  async ({ choices, dispatches }) => {
+    await startGoalTurn({ model: 'other-model', effort: 'high' })
+    const steering = rig.send('Follow up', undefined, { carried: { ...choices, effort: 'high' } })
+    expect(await steering.result).toMatchObject({ ok: true })
+    await rig.host.collaboratorsForTests().conversationDelivery.loop.wake(SESSION)
+    expect(rig.dispatch).toHaveBeenCalledTimes(dispatches)
+  }
+)

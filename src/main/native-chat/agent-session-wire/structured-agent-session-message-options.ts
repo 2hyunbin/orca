@@ -38,17 +38,19 @@ export function waitsForCodexTurnOptions(
   if (turn?.state !== 'running') {
     return false
   }
-  const active = journal.submissions().find((submission) => {
-    if (submission.handedOverAt === undefined) {
-      return false
-    }
-    return agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
-  })
+  const handed = journal.submissions().filter((submission) => submission.handedOverAt !== undefined)
+  const active =
+    handed.find(
+      (submission) => agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
+    ) ??
+    // Goal continuations have no opener and run on this child's last turn/start choices.
+    handed.findLast(
+      (submission) => submission.fence === child.fence && submission.dispatchState !== 'rejected'
+    )
   const ran = structuredAgentSessionChildRan(child)
   if (active) {
     return !sameOptions(active.options, next.options, ran)
   }
-  // Goal continuations have no submission opener; unchanged choices can still steer them.
   return OPTION_ORDER.some(
     (key) => next.options?.[key] !== undefined && next.options[key] !== ran?.[key]
   )
