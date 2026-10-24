@@ -338,6 +338,14 @@ export function createRemoteRuntimePtyTransport(
   let unregisterControlReadyReviver: (() => void) | null = null
   // Why: the pane's retry is waiting on the user's SSH sign-in, not on a lost link.
   let awaitingSshSignIn = false
+  // Why: the caller's spawn finalization (launch config, startup delivery) must see the create
+  // the post-sign-in replay makes, so its connect stays pending instead of resolving as failed.
+  let signInConnectWait: PromiseWithResolvers<PtyConnectResult | undefined> | null = null
+  function settleSignInConnectWait(result?: PtyConnectResult): void {
+    const wait = signInConnectWait
+    signInConnectWait = null
+    wait?.resolve(result)
+  }
   function setAwaitingSshSignIn(next: boolean): void {
     if (awaitingSshSignIn !== next) {
       awaitingSshSignIn = next
@@ -1062,7 +1070,7 @@ export function createRemoteRuntimePtyTransport(
       return true
     }
     if (lastConnectOptions) {
-      void connectHoldingRestoredInput(lastConnectOptions)
+      void connectHoldingRestoredInput(lastConnectOptions, true)
       return true
     }
     return false
@@ -3285,17 +3293,36 @@ export function createRemoteRuntimePtyTransport(
 
   // Why: typing on a restored screen reaches its original terminal only, never a fresh create.
   async function connectHoldingRestoredInput(
-    options: Parameters<PtyTransport['connect']>[0]
+    options: Parameters<PtyTransport['connect']>[0],
+    replay = false
   ): Promise<PtyConnectResult | undefined> {
+    if (!replay) {
+      settleSignInConnectWait()
+    }
     const expected = recoveryInputHold.expect(restoredInputEndpoint(options.sessionId))
+    let result: PtyConnectResult | undefined
     try {
-      return await connectPane(options)
+      result = await connectPane(options)
     } finally {
       recoveryInputHold.settleExpectation(expected, handle !== null && !destroyed)
       if (handle && recoveryInputHold.isHolding()) {
         releaseHeldInput()
       }
     }
+    const retryOwned = !destroyed && (recovery.isActive || recovery.currentPhase === 'disconnected')
+    if (result === undefined && retryOwned && lastConnectOptions === options) {
+      if (replay) {
+        return undefined
+      }
+      if (awaitingSshSignIn) {
+        signInConnectWait ??= Promise.withResolvers()
+        return signInConnectWait.promise
+      }
+    }
+    if (replay) {
+      settleSignInConnectWait(result)
+    }
+    return result
   }
 
   async function connectPane(
@@ -3583,11 +3610,13 @@ export function createRemoteRuntimePtyTransport(
     connect: connectHoldingRestoredInput,
 
     attach(options) {
+      settleSignInConnectWait()
       recoveryInputHold.expect(null)
       attachPane(options, false)
     },
 
     disconnect() {
+      settleSignInConnectWait()
       lifecycleEpoch += 1
       attachGeneration += 1
       discardPendingInput()
@@ -3626,6 +3655,7 @@ export function createRemoteRuntimePtyTransport(
       // Why first: the successor transport owns the PTY after detach, and the batcher flushes
       // below can throw past the census drop — a stranded gauge outlives the transport.
       outputProcessor.disposePendingSideEffectGauge()
+      settleSignInConnectWait()
       lifecycleEpoch += 1
       attachGeneration += 1
       discardPendingInput()
@@ -3789,7 +3819,7 @@ export function createRemoteRuntimePtyTransport(
         recovery.currentPhase === 'disconnected'
       ) {
         recovery.begin()
-        void connectHoldingRestoredInput(lastConnectOptions)
+        void connectHoldingRestoredInput(lastConnectOptions, true)
         return true
       }
       // Why: online/resume fires a parked retry; the button must not be weaker than an event (#12684).

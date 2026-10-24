@@ -207,13 +207,21 @@ async function mountNewPaneAwaitingSignIn(failure: { message: string }, afterSig
     onPtySpawn
   })
   transport = pane
-  await pane.connect({
-    url: '',
-    cols: 80,
-    rows: 24,
-    callbacks: { onError, onRecoveryStateChange: (state) => publishedStates.push(state) }
-  })
+  let connectSettled = false
+  const connected = pane
+    .connect({
+      url: '',
+      cols: 80,
+      rows: 24,
+      callbacks: { onError, onRecoveryStateChange: (state) => publishedStates.push(state) }
+    })
+    .finally(() => {
+      connectSettled = true
+    })
+  await vi.advanceTimersByTimeAsync(0)
   return {
+    connected,
+    connectSettled: () => connectSettled,
     pane,
     lastPublishedState: () => publishedStates.at(-1),
     onError,
@@ -237,12 +245,14 @@ describe('SSH sign-in for a terminal created while the host waits for sign-in', 
       }))
     )
   )('waits for sign-in and then starts for $name $timing', async (failure) => {
-    const { pane, onError, onPtySpawn, signIn } = await mountNewPaneAwaitingSignIn(failure)
+    const { pane, onError, onPtySpawn, signIn, connected, connectSettled } =
+      await mountNewPaneAwaitingSignIn(failure)
     expect(pane.getRecoveryState?.()).toMatchObject({
       phase: 'backoff',
       reason: 'ssh-sign-in'
     })
     expect(onError).not.toHaveBeenCalled()
+    expect(connectSettled()).toBe(false)
 
     if (failure.late) {
       await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
@@ -263,6 +273,8 @@ describe('SSH sign-in for a terminal created while the host waits for sign-in', 
 
     expect(onPtySpawn).toHaveBeenCalledTimes(1)
     expect(onPtySpawn).toHaveBeenCalledWith('remote:env-1@@terminal-1')
+    // The original spawn settles with the post-sign-in create, so its finalization still runs.
+    await expect(connected).resolves.toMatchObject({ id: 'remote:env-1@@terminal-1' })
     expect(pane.isConnected()).toBe(true)
     expect(pane.getRecoveryState?.().reason).toBeUndefined()
     expect(onError).not.toHaveBeenCalled()
@@ -304,11 +316,12 @@ describe('SSH sign-in for a terminal created while the host waits for sign-in', 
   it.each(['destroy', 'disconnect'] as const)(
     'spawns nothing after sign-in once the pending terminal is closed (%s)',
     async (teardown) => {
-      const { pane, onPtySpawn, signIn, createCalls } = await mountNewPaneAwaitingSignIn(
+      const { pane, onPtySpawn, signIn, createCalls, connected } = await mountNewPaneAwaitingSignIn(
         pendingErrors[0]
       )
       const createsBeforeClose = createCalls().length
       pane[teardown]?.()
+      await expect(connected).resolves.toBeUndefined()
 
       expect(signIn()).toBe(0)
       await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
