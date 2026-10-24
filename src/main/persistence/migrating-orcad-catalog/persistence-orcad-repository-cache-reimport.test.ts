@@ -2,12 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { githubAvatarIcon } from '../shared/repo-icon'
+import { githubAvatarIcon } from '../../../shared/repo-icon'
 import { manifest, REPOSITORY } from './persistence-orcad-migration-catalog-fixture'
-import { closeTestStores, createStore, testState } from './persistence-test-harness'
+import { closeTestStores, createStore, testState } from '../../persistence-test-harness'
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({ nth_repo_added: 1 }) }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/cohort-classifier', () => ({
+  getCohortAtEmit: () => ({ nth_repo_added: 1 })
+}))
 
 const remoteIdentity = {
   canonicalKey: 'github.com/example/project',

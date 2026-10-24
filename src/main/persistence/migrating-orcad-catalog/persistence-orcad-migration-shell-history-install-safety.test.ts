@@ -11,9 +11,9 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { commitStagedOrcadMigrationCatalogDurably } from './runtime/orcad-migration-catalog-import'
-import { readHistoryMeta } from './terminal-history'
-import { getHistoryRoot } from './terminal-history-paths'
+import { commitStagedOrcadMigrationCatalogDurably } from '../../runtime/orcad-migration-catalog-import'
+import { readHistoryMeta } from '../../terminal-history'
+import { getHistoryRoot } from '../../terminal-history-paths'
 import { DORMANT_WORKTREE_ID, manifest } from './persistence-orcad-migration-catalog-fixture'
 import {
   ZSH,
@@ -24,7 +24,7 @@ import {
   receivedPath,
   stage
 } from './persistence-orcad-migration-shell-history-fixture'
-import { createStore, testState } from './persistence-test-harness'
+import { createStore, testState } from '../../persistence-test-harness'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -35,7 +35,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
+vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 
 let desktopHistory: string
 
