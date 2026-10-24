@@ -4,6 +4,7 @@ import { createAppState, useAppStore } from './index'
 import { getAgentStatusOwner } from './agent-status-commit'
 import { applyAgentStatusPatch } from './agent-status-patch'
 import { applyWebSessionTabsStorePatch } from '@/runtime/web-session-tabs-sync/store-patch'
+import type { Tab } from '../../../shared/tab-types'
 
 const pane = 'source:11111111-1111-4111-8111-111111111111'
 const destination = 'destination:22222222-2222-4222-8222-222222222222'
@@ -135,7 +136,7 @@ describe('review acceptance and root observer integration', () => {
               color: null,
               sortOrder: 0,
               createdAt: 1
-            }
+            } satisfies Tab
           ]
         ])
       )

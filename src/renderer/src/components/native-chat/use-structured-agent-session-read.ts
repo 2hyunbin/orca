@@ -85,7 +85,7 @@ export function useStructuredAgentSessionRead(args: {
     }
     if (
       !observedCursor ||
-      (lastView.current?.owner === owner && lastView.current.observationKey === observationKey)
+      (lastView.current?.owner === owner && lastView.current?.observationKey === observationKey)
     ) {
       return
     }

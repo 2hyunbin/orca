@@ -5,6 +5,7 @@ import { createAppState } from '@/store'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { makeTab, makeUnifiedTab, makeWorktree } from '@/store/slices/store-test-helpers'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { getTabAgentExitOwner } from './tab-agent-exit-owner'
 import * as signals from './tab-agent-exit-signals'
@@ -383,7 +384,13 @@ it.each(['__proto__', 'constructor'])('round2 prototype raw addition %s is lossl
   const next = status.getState()
   let affected: ReadonlySet<string> = new Set()
   expect(() => {
-    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+    affected = round2Affected({
+      previous,
+      next,
+      changedKeys: new Set(),
+      sequence: 0,
+      terminalFacts: {}
+    })
   }).not.toThrow()
   expect([...affected]).toContain('prototype-tab')
 })
@@ -393,13 +400,29 @@ it.each(['__proto__', 'constructor'])('round2 prototype unified addition %s is l
   const previous = status.getState()
   store.setState({
     unifiedTabsByWorktree: Object.fromEntries([
-      [id, [makeUnifiedTab({ id: 'prototype-item', entityId: 'prototype-tab', worktreeId: id })]]
+      [
+        id,
+        [
+          makeUnifiedTab({
+            id: 'prototype-item',
+            entityId: 'prototype-tab',
+            worktreeId: id,
+            groupId: 'g'
+          })
+        ]
+      ]
     ])
   })
   const next = status.getState()
   let affected: ReadonlySet<string> = new Set()
   expect(() => {
-    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+    affected = round2Affected({
+      previous,
+      next,
+      changedKeys: new Set(),
+      sequence: 0,
+      terminalFacts: {}
+    })
   }).not.toThrow()
   expect([...affected]).toContain('prototype-tab')
 })
@@ -414,7 +437,13 @@ it.each(['__proto__', 'constructor'])('round2 prototype raw removal %s is lossle
   const next = status.getState()
   let affected: ReadonlySet<string> = new Set()
   expect(() => {
-    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+    affected = round2Affected({
+      previous,
+      next,
+      changedKeys: new Set(),
+      sequence: 0,
+      terminalFacts: {}
+    })
   }).not.toThrow()
   expect([...affected]).toContain('prototype-tab')
 })
@@ -423,7 +452,17 @@ it.each(['__proto__', 'constructor'])('round2 prototype unified removal %s is lo
   const status = getAgentStatusOwner(store)
   store.setState({
     unifiedTabsByWorktree: Object.fromEntries([
-      [id, [makeUnifiedTab({ id: 'prototype-item', entityId: 'prototype-tab', worktreeId: id })]]
+      [
+        id,
+        [
+          makeUnifiedTab({
+            id: 'prototype-item',
+            entityId: 'prototype-tab',
+            worktreeId: id,
+            groupId: 'g'
+          })
+        ]
+      ]
     ])
   })
   const previous = status.getState()
@@ -431,7 +470,13 @@ it.each(['__proto__', 'constructor'])('round2 prototype unified removal %s is lo
   const next = status.getState()
   let affected: ReadonlySet<string> = new Set()
   expect(() => {
-    affected = round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+    affected = round2Affected({
+      previous,
+      next,
+      changedKeys: new Set(),
+      sequence: 0,
+      terminalFacts: {}
+    })
   }).not.toThrow()
   expect([...affected]).toContain('prototype-tab')
 })
@@ -444,7 +489,7 @@ it('round2 prototype actual root service records a newly published agent signal'
   const store = createStore(createAppState)
   const status = getAgentStatusOwner(store)
   store.setState({
-    layoutByWorktree: { [id]: null },
+    layoutByWorktree: { [id]: { type: 'leaf', groupId: 'g' } },
     groupsByWorktree: { [id]: [] },
     activeGroupIdByWorktree: { [id]: 'g' }
   })
@@ -466,14 +511,14 @@ it.each(['__proto__', 'constructor'])(
     const store = createStore(createAppState)
     const status = getAgentStatusOwner(store)
     const previous = status.getState()
-    const next = {
+    const next: AgentStatusReadState = {
       ...previous,
-      layoutByWorktree: { [id]: null },
+      layoutByWorktree: { [id]: { type: 'leaf', groupId: 'group' } },
       groupsByWorktree: { [id]: [] },
       activeGroupIdByWorktree: { [id]: 'group' }
     }
     expect(() =>
-      round2Affected({ previous, next, changedKeys: [], terminalFacts: {} })
+      round2Affected({ previous, next, changedKeys: new Set(), sequence: 0, terminalFacts: {} })
     ).not.toThrow()
     const terminal = makeTab({
       id: 'prototype-tab',
@@ -489,7 +534,13 @@ it.each(['__proto__', 'constructor'])(
     const before = status.getState()
     const after = { ...before, groupsByWorktree: { [id]: [] } }
     expect([
-      ...round2Affected({ previous: before, next: after, changedKeys: [], terminalFacts: {} })
+      ...round2Affected({
+        previous: before,
+        next: after,
+        changedKeys: new Set(),
+        sequence: 0,
+        terminalFacts: {}
+      })
     ]).toContain(terminal.id)
     expect(warn).not.toHaveBeenCalled()
   }
@@ -498,7 +549,7 @@ it.each(['__proto__', 'constructor'])(
 it('round2 prototype cached unified candidates reject inherited array aliases', async () => {
   const { getCachedUnifiedTerminalTabCandidates } =
     await import('@/components/terminal-pane/terminal-unified-tab-lookup')
-  const item = makeUnifiedTab({ id: 'own', entityId: 'terminal', worktreeId: 'own' })
+  const item = makeUnifiedTab({ id: 'own', entityId: 'terminal', worktreeId: 'own', groupId: 'g' })
   const source = { own: [item] }
   expect(getCachedUnifiedTerminalTabCandidates(source, 'own', 'terminal')).toEqual([item])
   const inherited: typeof source = Object.create(source)

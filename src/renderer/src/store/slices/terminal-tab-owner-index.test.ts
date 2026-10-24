@@ -162,7 +162,7 @@ it('keeps immutable answers through A/B/A/C/A without rewinding the builder', ()
   let copies = 0
   vi.stubGlobal(
     'Map',
-    class extends NativeMap {
+    class extends NativeMap<unknown, unknown> {
       constructor(entries?: Iterable<readonly [unknown, unknown]>) {
         super(entries)
         if (entries instanceof NativeMap) {
