@@ -5,6 +5,8 @@ import { makeRepo, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { agentSessionTabFixture } from './native-chat-workspace-test-fixtures'
 import * as cliSwitch from '../tab-bar/native-chat-cli-switch-run'
 import { useAppStore } from '@/store'
+import { makeTabGroup } from '@/store/slices/store-test-helpers'
+import * as cliFork from '../tab-bar/native-chat-cli-fork-run'
 // @vitest-environment happy-dom
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -21,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   readLocalRuntimeCapabilitiesOrUnknown,
+  refreshLocalRuntimeCapabilities,
   setLocalRuntimeCapabilitiesForTests
 } from '@/runtime/local-runtime-capabilities'
 import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
@@ -315,7 +318,18 @@ it('gates eligible native header hover and menu switches through capability hydr
     settings: createGlobalSettingsFixture({ experimentalNativeChat: false }),
     repos: [makeRepo()],
     worktreesByRepo: { 'repo-1': [makeWorktree('wt-1', 'native', { path: '/repo' })] },
-    unifiedTabsByWorktree: { 'wt-1': [tab] }
+    unifiedTabsByWorktree: { 'wt-1': [tab] },
+    groupsByWorktree: {
+      'wt-1': [
+        makeTabGroup({
+          id: tab.groupId,
+          worktreeId: 'wt-1',
+          tabOrder: [tab.id],
+          activeTabId: tab.id
+        })
+      ]
+    },
+    activeGroupIdByWorktree: { 'wt-1': tab.groupId }
   })
   mocks.status = 'ready'
   setLocalRuntimeCapabilitiesForTests(null)
@@ -328,11 +342,13 @@ it('gates eligible native header hover and menu switches through capability hydr
   const getStatus = vi.fn(() => status)
   Object.assign(window, { api: { ...window.api, runtime: { getStatus } } })
   const switchToCli = vi.spyOn(cliSwitch, 'runNativeChatCliSwitch')
+  const forkToCli = vi.spyOn(cliFork, 'runNativeChatCliFork')
   render(
     <TooltipProvider>
       <NativeChatStructuredSession
         isVisible
         isFocusedGroup
+        groupId={tab.groupId}
         tabId={tab.id}
         sessionId={tab.entityId}
         target={{ kind: 'local' }}
@@ -347,15 +363,33 @@ it('gates eligible native header hover and menu switches through capability hydr
       </DropdownMenu>
     </TooltipProvider>
   )
+  expect(screen.getByRole('button', { name: 'Split Chat Right', hidden: true })).toBeTruthy()
+  const transcript = screen.getByTestId('message-list')
+  const legacyName = 'Show as terminal'
   const expectHidden = () => {
     expect(screen.queryAllByRole('button', { name: 'Switch to CLI', hidden: true })).toHaveLength(0)
     expect(screen.queryByRole('menuitem', { name: 'Switch to CLI' })).toBeNull()
     expect(screen.queryByRole('separator')).toBeNull()
     expect(screen.queryByText('Resume in New Terminal')).toBeNull()
-    expect(screen.getByTestId('message-list')).toBeTruthy()
+    expect(screen.getByTestId('message-list')).toBe(transcript)
+    expect(screen.getAllByRole('button', { name: legacyName, hidden: true })).toHaveLength(1)
   }
   expect(readLocalRuntimeCapabilitiesOrUnknown()).toBeNull()
   expectHidden()
+  act(() => {
+    useAppStore.setState({
+      settings: createGlobalSettingsFixture({ experimentalNativeChat: true })
+    })
+  })
+  const loadingButtons = screen.getAllByRole('button', { name: 'Switch to CLI', hidden: true })
+  expect(loadingButtons).toHaveLength(2)
+  for (const button of loadingButtons) {
+    expect(button.hasAttribute('disabled')).toBe(true)
+  }
+  expect(screen.queryByRole('button', { name: legacyName, hidden: true })).toBeNull()
+  expect(
+    screen.getByRole('menuitem', { name: 'Switch to CLI' }).hasAttribute('data-disabled')
+  ).toBe(true)
   const response = createCompatibleRuntimeStatusResponse('local')
   if (!response.ok) {
     throw new Error('Expected status fixture')
@@ -367,14 +401,9 @@ it('gates eligible native header hover and menu switches through capability hydr
   expect(readLocalRuntimeCapabilitiesOrUnknown()).toContain(
     'agent-session.structured.switch.v1:codex'
   )
-  expectHidden()
-  act(() => {
-    useAppStore.setState({
-      settings: createGlobalSettingsFixture({ experimentalNativeChat: true })
-    })
-  })
   const buttons = screen.getAllByRole('button', { name: 'Switch to CLI', hidden: true })
   expect(buttons).toHaveLength(2)
+  expect(screen.queryByRole('button', { name: legacyName, hidden: true })).toBeNull()
   for (const button of buttons) {
     expect(button.hasAttribute('disabled')).toBe(false)
   }
@@ -387,6 +416,23 @@ it('gates eligible native header hover and menu switches through capability hydr
     })
   })
   expectHidden()
-  expect(getStatus).toHaveBeenCalledOnce()
+  act(() => {
+    useAppStore.setState({
+      settings: createGlobalSettingsFixture({ experimentalNativeChat: true })
+    })
+  })
+  getStatus.mockResolvedValue({ ...response.result, capabilities: [] })
+  await act(async () => {
+    await refreshLocalRuntimeCapabilities()
+  })
+  expect(screen.queryAllByRole('button', { name: 'Switch to CLI', hidden: true })).toHaveLength(0)
+  expect(screen.queryByRole('menuitem', { name: 'Switch to CLI' })).toBeNull()
+  expect(screen.getAllByRole('button', { name: legacyName, hidden: true })).toHaveLength(1)
+  expect(screen.getByRole('menuitem', { name: 'Resume in New Terminal' })).toBeTruthy()
+  expect(screen.getByRole('separator')).toBeTruthy()
+  expect(screen.getByTestId('message-list')).toBe(transcript)
+  expect(readLocalRuntimeCapabilitiesOrUnknown()).toEqual([])
+  expect(getStatus).toHaveBeenCalledTimes(2)
+  expect(forkToCli).not.toHaveBeenCalled()
   expect(switchToCli).not.toHaveBeenCalled()
 })
