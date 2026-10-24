@@ -13,7 +13,11 @@ import {
   isWebTerminalSurfaceTabId,
   toWebTerminalSurfaceTabId
 } from '../../../../shared/terminal-surface-id'
-import { moveWebRuntimeLeafToNewTab, resolvePaneMoveHost } from '@/runtime/web-runtime-leaf-move'
+import {
+  moveWebRuntimeLeafToNewTab,
+  resolvePaneMoveHost,
+  settleHostPaneMove
+} from '@/runtime/web-runtime-leaf-move'
 export {
   isTerminalTabStripDropTarget,
   resolveTerminalTabStripDropTarget
@@ -163,8 +167,21 @@ async function moveLeafToNewTab(
     // Why: the host's snapshot push can land before its reply and would leave nothing to detach, so
     // the window moves first. The call is dispatched before the move's layout pushes, so the host
     // sees the move first; a refusal is undone by the next snapshot.
-    void moveWebRuntimeLeafToNewTab(paneMoveHost, request)
-    return applyMove(args, request, false, request.ptyId)
+    const hostMove = moveWebRuntimeLeafToNewTab(paneMoveHost, request)
+    const applied = applyMove(args, request, false, request.ptyId)
+    void hostMove
+      .then((moved) =>
+        settleHostPaneMove({
+          environmentId: paneMoveHost,
+          request,
+          moved,
+          placedInGroupId: args.targetIndex === undefined ? null : args.targetGroupId
+        })
+      )
+      .catch((error: unknown) =>
+        console.warn('[terminal-pane-detach] host move not settled', error)
+      )
+    return applied
   }
   // Switch point: main moves the pane and names the new tab.
   const answer = await (

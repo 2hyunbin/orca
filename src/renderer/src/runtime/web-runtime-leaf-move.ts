@@ -10,6 +10,9 @@ import {
   captureRuntimeEnvironmentCall,
   isWebRuntimeSessionActive
 } from './web-runtime-session-environment'
+import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
+import { moveWebRuntimeSessionTab } from './web-runtime-session-tab-move'
+import { activateWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
 
 /** The runtime that commits this worktree's pane moves itself; null keeps the move in this window. */
 export async function resolvePaneMoveHost(worktreeId: string): Promise<string | null> {
@@ -61,5 +64,47 @@ export async function moveWebRuntimeLeafToNewTab(
       error instanceof Error ? error.message : String(error)
     )
     return false
+  }
+}
+
+/**
+ * After the host answered: a refusal redraws the host's tabs so the pane goes back at once; a
+ * committed move gives the host the drop position and the focus this window already shows.
+ */
+export async function settleHostPaneMove(args: {
+  environmentId: string
+  request: TerminalLeafMoveRequest
+  moved: boolean
+  /** The group the pane was dropped into at a chosen position, or null when appended. */
+  placedInGroupId: string | null
+}): Promise<void> {
+  const { environmentId, request, moved, placedInGroupId } = args
+  const { worktreeId, targetTabId } = request
+  if (!moved) {
+    await refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId)
+    return
+  }
+  const tabOrder = placedInGroupId
+    ? useAppStore
+        .getState()
+        .groupsByWorktree[worktreeId]?.find((group) => group.id === placedInGroupId)?.tabOrder
+    : undefined
+  if (placedInGroupId && tabOrder?.includes(targetTabId)) {
+    await moveWebRuntimeSessionTab({
+      kind: 'reorder',
+      worktreeId,
+      environmentId,
+      tabId: targetTabId,
+      targetGroupId: placedInGroupId,
+      tabOrder
+    })
+  }
+  if (useAppStore.getState().activeTabIdByWorktree[worktreeId] === targetTabId) {
+    await activateWebRuntimeSessionTab({
+      worktreeId,
+      tabId: targetTabId,
+      environmentId,
+      expectedCurrentLocalTabId: targetTabId
+    })
   }
 }

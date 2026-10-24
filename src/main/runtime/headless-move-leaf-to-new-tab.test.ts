@@ -69,6 +69,18 @@ describe('moveMobileSessionLeafToNewTab on a headless host', () => {
     expect(parentOf(SIBLING_LEAF_ID)).toEqual(['host-new-tab'])
     expect(parentOf(HEADLESS_LEAF_ID)).toEqual(['host-tab'])
   })
+  it('moves the live terminal with its pane, so tab-scoped reads find it in the new tab', async () => {
+    const { runtime, move } = await setup()
+    runtime.registerPty('sibling-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: SIBLING_LEAF_ID
+    })
+    await expect(move()).resolves.toEqual({ status: 'moved', ptyId: 'sibling-pty' })
+    const { terminals } = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
+    expect(terminals.find((terminal) => terminal.leafId === SIBLING_LEAF_ID)?.tabId).toBe(
+      'host-new-tab'
+    )
+  })
   it('refuses a target tab id a pane key cannot carry, leaving the session alone', async () => {
     const { getSession, published, commit, move } = await setup()
     const before = getSession()

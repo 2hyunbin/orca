@@ -52,14 +52,27 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
         )
         .not.toBe('')
       const worktree = `id:${worktreeId}`
-      const readHost = async (): Promise<HostLeaves> =>
-        hostLeavesByTab(
-          (
-            await host.client.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
-              worktree
-            })
-          ).result
-        )
+      const listHost = async (): Promise<RuntimeMobileSessionTabsResult> =>
+        (
+          await host.client.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
+            worktree
+          })
+        ).result
+      const readHost = async (): Promise<HostLeaves> => hostLeavesByTab(await listHost())
+      /** The server's tab order, then the tab it has selected, both as tab ids. */
+      const readHostPlacement = async (): Promise<[string[], string | null]> => {
+        const listed = await listHost()
+        const parentOf = (id: string | null): string | null =>
+          listed.tabs.find((tab) => tab.id === id || tab.parentTabId === id)?.parentTabId ?? null
+        return [
+          (listed.tabGroups?.[0]?.tabOrder ?? []).map((id) => parentOf(id) ?? id),
+          parentOf(listed.activeTabId)
+        ]
+      }
+      const readClientTabOrder = (): Promise<string[]> =>
+        page
+          .locator(TAB)
+          .evaluateAll((tabs) => tabs.map((tab) => tab.getAttribute('data-tab-id') ?? ''))
 
       await page.evaluate((id) => window.__store?.getState().setActiveWorktree(id), worktreeId)
       await expect(page.locator(PANE)).toHaveCount(1, { timeout: 60_000 })
@@ -78,8 +91,11 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
         })
         .toEqual([2])
 
-      await dragPaneOutToTabStrip(page, worktreeId, movedLeafId)
+      // Dropped before the first tab, so the new tab's place differs from the server's append.
+      await dragPaneOutToTabStrip(page, worktreeId, movedLeafId, 'start')
       await expect(page.locator(TAB)).toHaveCount(2, { timeout: 15_000 })
+      const [movedTabId] = await readClientTabOrder()
+      expect(movedTabId).not.toBe(sourceTabId)
 
       // The server holds the moved leaf alone in another tab.
       await expect
@@ -100,6 +116,16 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
       expect(terminals.find((terminal) => terminal.leafId === movedLeafId)?.tabId).toBe(
         hostTabOfMovedLeaf
       )
+      // The server keeps the tab where it was dropped, selected as the window shows it.
+      await expect
+        .poll(readHostPlacement, { timeout: 15_000, message: 'the server misplaced the tab' })
+        .toEqual([
+          [
+            hostTabOfMovedLeaf,
+            Object.keys(await readHost()).find((id) => id !== hostTabOfMovedLeaf)
+          ],
+          hostTabOfMovedLeaf
+        ])
 
       // Switching back to the source tab must not pull the pane back into its split.
       await page.locator(`${TAB}[data-tab-id="${sourceTabId}"]`).click()
@@ -107,6 +133,7 @@ test('a pane moved to a new tab on a paired server workspace stays in its new ta
       await expect(page.locator(TAB)).toHaveCount(2)
       await expect(page.locator(PANE)).toHaveCount(1)
       await expect(page.locator(`${PANE}[data-leaf-id="${movedLeafId}"]`)).toHaveCount(0)
+      expect(await readClientTabOrder()).toEqual([movedTabId, sourceTabId])
     } finally {
       await desktop.dispose()
     }

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { moveWebRuntimeLeafToNewTab, resolvePaneMoveHost } from './web-runtime-leaf-move'
+import {
+  moveWebRuntimeLeafToNewTab,
+  resolvePaneMoveHost,
+  settleHostPaneMove
+} from './web-runtime-leaf-move'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 const ENVIRONMENT_ID = 'web-env-1'
@@ -11,6 +15,14 @@ const store = vi.hoisted(() => {
 const supports = vi.hoisted(() => vi.fn())
 vi.mock('../store', () => ({ useAppStore: { getState: () => store.state } }))
 vi.mock('./runtime-rpc-client', () => ({ runtimeEnvironmentSupportsCapability: supports }))
+const followUps = vi.hoisted(() => ({ refresh: vi.fn(), reorder: vi.fn(), activate: vi.fn() }))
+vi.mock('./web-runtime-session-snapshot', () => ({
+  refreshWebRuntimeSessionTabsSnapshot: followUps.refresh
+}))
+vi.mock('./web-runtime-session-tab-move', () => ({ moveWebRuntimeSessionTab: followUps.reorder }))
+vi.mock('./web-runtime-session-tab-lifecycle', () => ({
+  activateWebRuntimeSessionTab: followUps.activate
+}))
 const REQUEST = {
   worktreeId: WORKTREE_ID,
   sourceTabId: toWebTerminalSurfaceTabId('host-source'),
@@ -21,6 +33,7 @@ const REQUEST = {
 describe('moveWebRuntimeLeafToNewTab', () => {
   beforeEach(() => {
     supports.mockReset()
+    Object.values(followUps).forEach((mock) => mock.mockReset())
     store.state = {
       repos: [{ id: 'repo', executionHostId: `runtime:${ENVIRONMENT_ID}` }],
       worktreesByRepo: {
@@ -77,5 +90,43 @@ describe('moveWebRuntimeLeafToNewTab', () => {
     stubRuntimeEnvironmentBridge({ call: vi.fn() })
     await expect(resolvePaneMoveHost(WORKTREE_ID)).resolves.toBeNull()
     expect(supports).not.toHaveBeenCalled()
+  })
+  it('redraws the host tabs when the host did not move the pane', async () => {
+    await settleHostPaneMove({
+      environmentId: ENVIRONMENT_ID,
+      request: REQUEST,
+      moved: false,
+      placedInGroupId: 'group-1'
+    })
+    expect(followUps.refresh).toHaveBeenCalledWith(ENVIRONMENT_ID, WORKTREE_ID)
+    expect(followUps.reorder).not.toHaveBeenCalled()
+    expect(followUps.activate).not.toHaveBeenCalled()
+  })
+  it('gives the host the drop position and focus of a committed move', async () => {
+    const tabOrder = [REQUEST.targetTabId, REQUEST.sourceTabId]
+    store.state = {
+      ...store.state,
+      groupsByWorktree: { [WORKTREE_ID]: [{ id: 'group-1', tabOrder }] },
+      activeTabIdByWorktree: { [WORKTREE_ID]: REQUEST.targetTabId }
+    }
+    await settleHostPaneMove({
+      environmentId: ENVIRONMENT_ID,
+      request: REQUEST,
+      moved: true,
+      placedInGroupId: 'group-1'
+    })
+    expect(followUps.refresh).not.toHaveBeenCalled()
+    expect(followUps.reorder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'reorder',
+        environmentId: ENVIRONMENT_ID,
+        tabId: REQUEST.targetTabId,
+        targetGroupId: 'group-1',
+        tabOrder
+      })
+    )
+    expect(followUps.activate).toHaveBeenCalledWith(
+      expect.objectContaining({ tabId: REQUEST.targetTabId, environmentId: ENVIRONMENT_ID })
+    )
   })
 })
