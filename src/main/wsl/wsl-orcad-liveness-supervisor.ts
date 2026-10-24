@@ -147,6 +147,8 @@ export class WslOrcadLivenessSupervisor {
       }
       return
     }
+    // A holder that took the previous orcad's idle release just before this launch is gone now.
+    await ensureHolderQuietly(this.deps.ensureHolder, entry.distro)
     // Do not overwrite the timer owned by a superseding connect.
     if (entry.generation === generation) {
       this.scheduleHeartbeat(entry)
