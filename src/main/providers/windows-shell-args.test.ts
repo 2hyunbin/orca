@@ -117,7 +117,9 @@ describe('resolveWindowsShellLaunchArgs', () => {
     expect(observed.startupCommandDeliveredInShellArgs).toBeUndefined()
     const full = setupCompletionSignal.appendNativeSetupCompletion(command, 'native:unit', 'cmd')
     expect(full.startsWith(command)).toBe(true)
-    expect(full).toContain('call "%ComSpec%"')
+    expect(full).toBe(
+      `${command} & call "%ComSpec%" /d /c ^"echo __ORCA_SETUP_COMPLETE__:native:unit:%^errorlevel%^&exit /b %^errorlevel%^"`
+    )
   })
 
   it('applies the cmd argv size boundary to the composed command', () => {

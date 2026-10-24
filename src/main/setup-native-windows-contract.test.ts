@@ -146,6 +146,7 @@ it.skipIf(process.platform !== 'win32')(
             let sent = delivered
             let checked = false
             let code: number | undefined
+            let parentCode: number | undefined
             const scanner = token
               ? createSetupCompletionScanner(token, (value) => {
                   code = value
@@ -173,17 +174,20 @@ it.skipIf(process.platform !== 'win32')(
                   checked = true
                   proc.write('echo __ORCA_PARENT_STATUS__:%errorlevel% & echo parent-alive\r')
                 }
-                if (control) {
+                if (winningShell === cmd) {
                   const match = output.match(/(?:^|\r?\n)__ORCA_PARENT_STATUS__:(-?\d+)\r?\n/)
                   if (match) {
-                    code = Number(match[1])
+                    parentCode = Number(match[1])
+                    if (control) {
+                      code = parentCode
+                    }
                   }
                 }
                 if (code !== undefined && !checked) {
                   checked = true
                   proc.write(
                     winningShell === cmd
-                      ? 'echo parent-alive\r'
+                      ? 'echo __ORCA_PARENT_STATUS__:%errorlevel% & echo parent-alive\r'
                       : "[Console]::WriteLine('parent-alive')\r"
                   )
                 }
@@ -204,6 +208,7 @@ it.skipIf(process.platform !== 'win32')(
               expect(delivered, label).toBe(resolved.startupCommandDeliveredInShellArgs === true)
               if (shell === cmd) {
                 expect(delivered, label).toBe(control)
+                expect(parentCode, output).toBe(status)
               }
               expect(code, output).toBe(status)
               expect(output).toContain('parent-alive')
@@ -258,7 +263,9 @@ it.skipIf(process.platform !== 'win32')(
           'native:fallback',
           nativeSetupCompletionShell(attempts[1].shellPath)
         )
-      ).toContain('%%errorlevel%%')
+      ).toBe(
+        'cmd.exe /c plain.cmd & call "%ComSpec%" /d /c ^"echo __ORCA_SETUP_COMPLETE__:native:fallback:%^errorlevel%^&exit /b %^errorlevel%^"'
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

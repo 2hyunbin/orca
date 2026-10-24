@@ -88,7 +88,8 @@ export function appendNativeSetupCompletion(
   }
   const prefix = completionPrefix(token)
   if (shell === 'cmd') {
-    return `${command} & call "%ComSpec%" /d /c "echo ${prefix}%%errorlevel%%&exit /b %%errorlevel%%"`
+    // Defer status to CALL after setup; the child-body quotes protect its separator on reparse.
+    return `${command} & call "%ComSpec%" /d /c ^"echo ${prefix}%^errorlevel%^&exit /b %^errorlevel%^"`
   }
   if (shell === 'powershell') {
     return `${command}; $__orca_success=$?; $__orca_status=$LASTEXITCODE; if ($__orca_success) { $__orca_status=0 } elseif (!$__orca_status) { $__orca_status=1 }; [Console]::WriteLine('${prefix}' + $__orca_status); if ($__orca_status -ne 0) { Write-Error 'setup failed' -ErrorAction Ignore }`
