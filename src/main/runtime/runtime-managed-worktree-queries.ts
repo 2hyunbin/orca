@@ -159,7 +159,7 @@ export class RuntimeManagedWorktreeQueries {
     const scan = await scanRuntimeWorktreesUntilNotOvertaken(store, repo, (target) =>
       this.deps.scanRepo(target)
     )
-    let workspaceLineage: ReturnType<RuntimeStore['getAllWorkspaceLineage']> | undefined
+    let workspaceLineage: ReturnType<Store['getAllWorkspaceLineage']> | undefined
     // Why a still-overtaken scan is published non-authoritative rather than rejected: this method
     // has no stale reply, and a thrown error makes the client drop the repo's rows. Non-authoritative
     // rows purge nothing and light no indicator; the overtaking mutation's own change event, sent
