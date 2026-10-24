@@ -6,13 +6,22 @@ import { requestTerminalPaneRecovery } from '../terminal-pane-recovery'
 import type { IpcPtyTransportOptions } from '../pty-transport-types'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
+/** A split waiting on its inherited cwd, or remounted with handed-off keys; it holds keys as before. */
+export function isDeferredSplitInputHold(session: ConnectPanePtySession): boolean {
+  return Boolean(session.deps.cwdPromise || session.deps.preconnectInput?.length)
+}
+
 /**
- * Plain shells hold keys typed before their PTY binds (a first spawn can wait seconds on the host).
+ * Deferred splits and plain shells hold keys typed before their PTY binds (a first spawn can wait
+ * seconds on the host).
  * Why not panes with startup work: held keys would flush ahead of the startup command or an agent
  * resume (sleeping record or live status entry), so a typed prompt would run as a shell command or
  * corrupt the launch line. A pane main starts is excluded too: main picks its launch, unseen here.
  */
 function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
+  if (isDeferredSplitInputHold(session)) {
+    return true
+  }
   const state = useAppStore.getState()
   return (
     !session.paneStartup &&

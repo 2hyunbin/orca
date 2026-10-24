@@ -36,7 +36,6 @@ function session(): ConnectPanePtySession {
     disposed: false,
     waitTeardowns: [],
     pane: { id: 1, leafId: 'leaf-1' },
-    transport: { abandonPreconnectInput: vi.fn() },
     deps: { tabId: 'tab-1', onPtyErrorRef: { current: vi.fn() } }
   } as unknown as ConnectPanePtySession
 }
@@ -74,8 +73,6 @@ describe('waitsForMainPaneStart', () => {
 
     expect(failedFirst).toHaveBeenCalledOnce()
     expect(failedLater).toHaveBeenCalledOnce()
-    // Keys typed while main was starting it have no terminal to reach.
-    expect(pane.transport.abandonPreconnectInput).toHaveBeenCalled()
     expect(pane.deps.onPtyErrorRef?.current).toHaveBeenCalledWith(
       1,
       'The terminal could not start: spawn exploded'

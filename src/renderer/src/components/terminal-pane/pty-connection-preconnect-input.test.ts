@@ -138,6 +138,18 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
+  it('keeps holding a deferred split’s keys even when it has startup work, as before', async () => {
+    transportFactoryQueue.push(createMockTransport('pty-1'))
+
+    const binding = connectPlainPane({
+      startup: { command: 'claude' },
+      cwdPromise: new Promise<string>(() => {})
+    })
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBe(true)
+    binding.dispose()
+  })
+
   it('keeps today’s drop for a pane that resumes a sleeping agent', async () => {
     const paneKey = makePaneKey('tab-1', leafIdForPane(1))
     mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] = {
@@ -193,6 +205,18 @@ describe('connectPanePty pre-connect input', () => {
 
     expect(transport.connect).not.toHaveBeenCalled()
     expect(transport.abandonPreconnectInput).toHaveBeenCalledOnce()
+    binding.dispose()
+  })
+
+  it('keeps a deferred split’s held keys through a deliberate sleep, as before', async () => {
+    markWorktreeSleepIntent('wt-1')
+    const transport = Object.assign(createMockTransport(), { abandonPreconnectInput: vi.fn() })
+    transportFactoryQueue.push(transport)
+
+    const binding = connectPlainPane({ cwdPromise: Promise.resolve('/split') })
+    await flushAsyncTicks(20)
+
+    expect(transport.abandonPreconnectInput).not.toHaveBeenCalled()
     binding.dispose()
   })
 })
