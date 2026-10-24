@@ -267,6 +267,27 @@ describe('orca ports', () => {
     expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
   })
 
+  it('refuses a folder path that two folder workspaces share', async () => {
+    queueFixtures(
+      callMock,
+      okFixture('req_folders', {
+        folderWorkspaces: [
+          { id: 'f1', folderPath: '/srv/app', projectGroupId: 'local' },
+          { id: 'f2', folderPath: '/srv/app', projectGroupId: 'ssh' }
+        ]
+      })
+    )
+    const output = captureOutput()
+    const priorExitCode = process.exitCode
+
+    await main(['ports', '--worktree', 'path:/srv/app', '--all'], '/tmp')
+
+    expect(callMock).not.toHaveBeenCalledWith('workspacePorts.scanHost', expect.anything())
+    expect(output()).toContain('folder:f1, folder:f2')
+    expect(process.exitCode).toBe(1)
+    process.exitCode = priorExitCode
+  })
+
   it('keeps the ports of a folder workspace instance that shares its path with the owner', async () => {
     const instance = {
       ...buildWorktree('/tmp/repo/feature', 'feature/foo'),

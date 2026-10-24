@@ -30,20 +30,29 @@ async function resolveNativeFolderPathSelector(
     return selector
   }
   const target = normalizeRuntimePathForComparison(selector.slice('path:'.length))
+  let folders: FolderWorkspace[]
   try {
     const { result } = await client.call<{ folderWorkspaces: FolderWorkspace[] }>(
       'folderWorkspace.list'
     )
-    const folder = result.folderWorkspaces.find(
-      (row) => normalizeRuntimePathForComparison(row.folderPath) === target
-    )
-    return folder ? `id:folder:${folder.id}` : selector
+    folders = result.folderWorkspaces
   } catch (error) {
     if (error instanceof RuntimeRpcFailureError && error.code === 'method_not_found') {
       return selector
     }
     throw error
   }
+  const matches = folders.filter(
+    (row) => normalizeRuntimePathForComparison(row.folderPath) === target
+  )
+  // Why refuse: folders on different hosts can share a path, and guessing would scan the wrong host.
+  if (matches.length > 1) {
+    throw new RuntimeClientError(
+      'selector_ambiguous',
+      `More than one folder workspace has this path. Pass one of: ${matches.map((row) => `folder:${row.id}`).join(', ')}.`
+    )
+  }
+  return matches[0] ? `id:folder:${matches[0].id}` : selector
 }
 
 async function resolvePortsTarget(
