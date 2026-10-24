@@ -91,7 +91,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('retries a fresh-spawn native follow reset when renderer dimensions return', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { getTerminalScrollIntentKind } =
         await import('@/lib/pane-manager/terminal-scroll-intent')
       const transport = createMockTransport('fresh-pty')
@@ -117,9 +117,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           pane.terminal.buffer.active.viewportY = pane.terminal.buffer.active.baseY
         })
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks()
       expect(pane.terminal.buffer.active.viewportY).toBe(40)
       expect(renderListener.current).not.toBeNull()
@@ -133,7 +131,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
     it('writes the daemon pendingEscapeTailAnsi after the reset on local reattach (#7329)', async () => {
       // Why: re-arm the mid-escape tail LAST, after the reattach reset whose ESC would abort it, so a live continuation completes it.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -160,7 +158,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       const tailWriteCall = pane.terminal.write.mock.invocationCallOrder.find(
@@ -176,7 +174,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('answers cursor queries while an account notice blocks user input', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -189,7 +187,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const args = [pane, createManager(1), createDeps()] as unknown as Parameters<
         typeof connectPanePty
       >
-      const binding = storeFixture.track(connectPanePty(...args))
+      const binding = connectPanePty(...args)
       transport.getPtyId.mockReturnValue('pty-live')
       storeFixture.patch({
         codexRestartNoticeByPtyId: {
@@ -205,7 +203,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
     it('routes native onData query replies through sendInputImmediate, typed input through sendInput (#7329)', async () => {
       // Why this test: the mock aliases sendInputImmediate to sendInput, so other tests can't tell them apart; this pins the routing decision.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const pane = createPane(1)
       const transport = createMockTransport('remote:web-env-1@@pty-7329')
@@ -213,7 +211,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
 
       // xterm answers CSI 6n natively with a CPR via onData; it must take the immediate path (skips the remote 8ms debounce that corrupted it).
@@ -247,7 +245,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
     it('writes the onReplayData pendingEscapeTailAnsi meta last, after the replayed bytes (#7329)', async () => {
       // Why this test: the onReplayData meta pass-through had no failing test — severing it kept the suite green.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const pane = createPane(1)
       const writes: string[] = []
@@ -274,7 +272,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
       expect(replayCallback.current).toBeTypeOf('function')
 
@@ -294,7 +292,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('preserves live modes and injects focus-in after focused agent reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -316,7 +314,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput).toHaveBeenCalledWith('\x1b[I', 'query-reply')
@@ -333,7 +331,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('lets fresh host shell proof outrank stale live-agent metadata on reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -351,15 +349,13 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            restoredLeafId: LEAF_1,
-            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-          }) as never
-        )
+      connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          restoredLeafId: LEAF_1,
+          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+        }) as never
       )
       await flushAsyncTicks(20)
 
@@ -378,7 +374,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       // describe the process that died and make the pane look agent-owned. Preserving
       // "its" modes arms mouse/focus/paste reporting against the replacement shell,
       // which then prints the reports as junk at the prompt (#12101).
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -404,7 +400,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         const writes = (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls.map(
@@ -430,7 +426,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       // Why: main can answer a *spawn* with an adopted session, so the reattach handler
       // is reachable by a second door that skips the restored-session path entirely. The
       // cold-restore signal has to survive that door too, or #12101 returns on it.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       let activePtyId = 'tab-pty'
       transport.getPtyId.mockImplementation(() => activePtyId)
@@ -470,7 +466,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           })
         }
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(30)
 
         expect(transport.connect).toHaveBeenCalledTimes(2)
@@ -499,7 +495,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('keeps ?25h in the live agent reattach reset when the snapshot leaves the cursor visible', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -524,7 +520,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -535,7 +531,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('does not inject focus-in after reattach when the terminal does not own DOM focus', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -557,7 +553,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -569,7 +565,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('resets stale focus and cursor modes for a focused non-agent shell reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -593,7 +589,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -611,7 +607,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     // Why: issue #8291 — the reattach reset wiped the mouse modes the daemon snapshot had just
     // rehydrated, so xterm re-enabled its row-wise selection over a still-running TUI.
     const reattachSnapshotResetFor = async (snapshot: string): Promise<string | undefined> => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
         sessionId ? { id: sessionId, snapshot } : null
@@ -628,7 +624,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredLeafId: LEAF_1,
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
         return (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls
           .map((call) => String(call[0]))
@@ -648,7 +644,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('does not treat persisted tab launchAgent metadata as a live agent reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -678,7 +674,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -694,7 +690,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('does not treat an agent-name token in a shell title as a live agent reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -716,7 +712,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -732,7 +728,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('does not treat ordinary shell scrollback mentioning Cursor Agent as a live agent reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -757,7 +753,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -773,7 +769,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
     })
 
     it('resets an already-idle agent cursor again after reattach SIGWINCH repaint', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.useFakeTimers({
         toFake: [
           'setTimeout',
@@ -814,7 +810,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures implement the connection's pane, manager and dependency contract.
       const args = [pane, manager, deps] as unknown as Parameters<typeof connectPanePty>
-      const binding = storeFixture.track(connectPanePty(...args))
+      const binding = connectPanePty(...args)
       await flushAsyncTicks(20)
 
       expect(window.api.pty.signal).toHaveBeenCalledWith('tab-pty', 'SIGWINCH')

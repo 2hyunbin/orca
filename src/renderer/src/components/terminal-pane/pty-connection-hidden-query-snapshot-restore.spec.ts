@@ -53,7 +53,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('keeps all visible bytes after a pending hidden ESC becomes non-query output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -75,15 +75,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef,
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef,
+          startup: { command: 'codex' }
+        }) as never
       )
       try {
         await flushAsyncTicks(6)
@@ -101,7 +99,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('repaints from the main-owned snapshot when main drops pending output at the cap', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { droppedOutput?: boolean }) => void) | null
@@ -124,12 +122,10 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({ isVisibleRef: { current: true } }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({ isVisibleRef: { current: true } }) as never
       )
       try {
         await flushAsyncTicks(6)
@@ -151,7 +147,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('keeps split stateful Codex queries live after becoming visible', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -173,15 +169,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef,
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef,
+          startup: { command: 'codex' }
+        }) as never
       )
       try {
         await flushAsyncTicks(6)
@@ -199,7 +193,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('drops pending hidden Codex query prefixes when the PTY changes', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -213,15 +207,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
       const isVisibleRef = { current: false }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef,
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef,
+          startup: { command: 'codex' }
+        }) as never
       )
       try {
         await flushAsyncTicks(6)
@@ -241,7 +233,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('does not live-render split hidden Codex non-query CSI output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -254,15 +246,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -280,7 +270,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('answers split hidden Codex OSC color queries directly', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -293,15 +283,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -319,7 +307,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('answers hidden Codex OSC color queries split before the prefix directly', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -332,15 +320,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -358,7 +344,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('keeps later hidden Codex stateless terminal queries on the live xterm path', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -371,15 +357,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -398,7 +382,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('keeps clean hidden Codex stateful cursor-position queries on the live xterm path', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -411,15 +395,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -432,7 +414,7 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
     })
 
     it('does not answer dirty hidden Codex stateful queries from stale xterm state', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -445,15 +427,13 @@ export function registerPtyConnectionHiddenQuerySnapshotRestoreTests(): void {
 
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 

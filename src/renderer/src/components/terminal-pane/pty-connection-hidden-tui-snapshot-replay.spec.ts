@@ -53,7 +53,7 @@ export function registerPtyConnectionHiddenTuiSnapshotReplayTests(): void {
     })
 
     it('replays rich headless snapshots as the future hidden TUI view source', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -101,9 +101,7 @@ export function registerPtyConnectionHiddenTuiSnapshotReplayTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -124,7 +122,7 @@ export function registerPtyConnectionHiddenTuiSnapshotReplayTests(): void {
     })
 
     it('refreshes visible rows after replaying a hidden TUI snapshot', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -161,9 +159,7 @@ export function registerPtyConnectionHiddenTuiSnapshotReplayTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })

@@ -61,7 +61,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('abandons a stalled hidden restore with reset, warning, then pending foreground', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -88,9 +88,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -155,7 +153,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     // drained and subsequent cell inherits bold — the "regular text renders bold"
     // field report.
     it('clears the SGR pen before draining abandoned foreground chunks', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -182,9 +180,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       vi.useFakeTimers()
@@ -211,7 +207,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('grounds byte-gap state before a remote restore re-arms', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const remotePtyId = 'remote:env-1@@terminal-rearm'
       const transport = createMockTransport(remotePtyId)
       const capturedDataCallback: {
@@ -231,9 +227,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
 
       const pane = createPane(1)
       const deps = createDeps({ isVisibleRef: { current: false } })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(6)
 
       vi.useFakeTimers()
@@ -262,7 +256,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('falls back after repeated null hidden restore retries and drains blocked foreground', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -287,9 +281,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -325,7 +317,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('drops pending foreground overflow when a stalled hidden restore falls back', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -352,9 +344,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -379,7 +369,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('coalesces tiny pending foreground chunks when stalled hidden restore falls back', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -407,9 +397,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -487,7 +475,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
 
       let disposable: { dispose: () => void } | null = null
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport('pty-id')
         const capturedDataCallback: {
           current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -511,9 +499,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         const deps = createDeps({
           isVisibleRef: { current: false }
         })
-        disposable = storeFixture.track(
-          connectPanePty(pane as never, manager as never, deps as never)
-        )
+        disposable = connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -554,7 +540,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('keeps a newer same-PTY hidden restore after a timed-out snapshot resolves late', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -595,9 +581,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -658,7 +642,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('ignores an async hidden-backlog snapshot if the pane changes PTYs first', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('old-pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -683,9 +667,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -714,7 +696,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
     })
 
     it('does not recover stale hidden backlog state after the pane switches PTYs', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('old-pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -737,9 +719,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -764,7 +744,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
         clearBufferCallback.current = callback as (request: { ptyId: string }) => void
         return vi.fn()
       })
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -789,9 +769,7 @@ export function registerPtyConnectionStalledHiddenRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })

@@ -67,7 +67,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
     })
 
     it('resets renderer cursor style when an agent becomes idle', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -75,7 +75,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -96,7 +96,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -105,7 +105,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
 
         const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
           | ((title: string) => void)
@@ -162,16 +162,14 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const restoreUserAgent = temporarilySetNavigatorUserAgent(
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
         )
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
         try {
           configure()
           const pane = createPane(1)
-          storeFixture.track(
-            connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-          )
+          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
 
           const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
             | ((title: string) => void)
@@ -198,7 +196,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -208,7 +206,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
 
         storeFixture.setStatus(paneKey, {
           state: 'working',
@@ -247,7 +245,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -267,7 +265,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         expect(pane.terminal.write).not.toHaveBeenCalled()
 
         // The burst's intermediate `working` never publishes, so the entry stays `done` end-to-end;
@@ -301,7 +299,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -321,7 +319,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         notifyStoreSubscribers()
         expect(pane.terminal.write).not.toHaveBeenCalled()
 
@@ -352,7 +350,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -363,7 +361,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
 
         storeFixture.setStatus(paneKey, {
           state: 'done',
@@ -404,7 +402,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -413,22 +411,20 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const pane = createPane(1)
         pane.terminal.modes.sendFocusMode = true
 
-        storeFixture.track(
-          connectPanePty(
-            pane as never,
-            createManager(1) as never,
-            createDeps({
-              startup: {
-                command: "codex 'resume' 'codex-session-1'",
-                launchAgent: 'codex',
-                telemetry: {
-                  agent_kind: 'codex',
-                  launch_source: 'sidebar',
-                  request_kind: 'resume'
-                }
+        connectPanePty(
+          pane as never,
+          createManager(1) as never,
+          createDeps({
+            startup: {
+              command: "codex 'resume' 'codex-session-1'",
+              launchAgent: 'codex',
+              telemetry: {
+                agent_kind: 'codex',
+                launch_source: 'sidebar',
+                request_kind: 'resume'
               }
-            }) as never
-          )
+            }
+          }) as never
         )
 
         expect(storeFixture.read().agentStatusByPaneKey[paneKey]).toBeUndefined()
@@ -475,7 +471,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const restoreUserAgent = temporarilySetNavigatorUserAgent(
           'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
         )
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
@@ -483,22 +479,20 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
           const pane = createPane(1)
           pane.terminal.modes.sendFocusMode = true
 
-          storeFixture.track(
-            connectPanePty(
-              pane as never,
-              createManager(1) as never,
-              createDeps({
-                startup: {
-                  command: `${launchAgent} session-command`,
-                  launchAgent,
-                  telemetry: {
-                    agent_kind: agentKind,
-                    launch_source: 'sidebar',
-                    request_kind: requestKind
-                  }
+          connectPanePty(
+            pane as never,
+            createManager(1) as never,
+            createDeps({
+              startup: {
+                command: `${launchAgent} session-command`,
+                launchAgent,
+                telemetry: {
+                  agent_kind: agentKind,
+                  launch_source: 'sidebar',
+                  request_kind: requestKind
                 }
-              }) as never
-            )
+              }
+            }) as never
           )
 
           transport.sendInput.mockClear()
@@ -517,7 +511,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -535,9 +529,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
           stateHistory: []
         }
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
 
         storeFixture.setStatus(paneKey, doneStatus)
         notifyStoreSubscribers()
@@ -585,7 +577,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -594,9 +586,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const pane = createPane(1)
         pane.terminal.modes.sendFocusMode = true
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
 
         storeFixture.setStatus(paneKey, {
           state: 'done',
@@ -625,7 +615,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
       const restoreUserAgent = temporarilySetNavigatorUserAgent(
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -635,9 +625,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        const binding = storeFixture.track(
-          connectPanePty(pane as never, manager as never, deps as never)
-        )
+        const binding = connectPanePty(pane as never, manager as never, deps as never)
         binding.dispose()
         pane.terminal.write.mockClear()
 

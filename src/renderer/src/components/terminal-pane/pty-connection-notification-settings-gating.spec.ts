@@ -62,7 +62,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('lets concurrent agent-complete notifications win over terminal bell notifications', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { useNotificationDispatch } = await vi.importActual<
         typeof UseNotificationDispatchModule
       >('./use-notification-dispatch')
@@ -88,7 +88,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
@@ -115,7 +115,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('does not suppress terminal bell notifications when agent-complete notifications are disabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -136,7 +136,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
@@ -162,7 +162,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('raises terminal attention for agent completion when OS completion notifications are disabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -184,7 +184,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -205,15 +205,19 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('shares one raw store subscriber for agent-complete notification settings across panes', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       transportFactoryQueue.push(createMockTransport('pty-1'), createMockTransport('pty-2'))
 
       vi.useFakeTimers()
-      const firstBinding = storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      const firstBinding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps() as never
       )
-      const secondBinding = storeFixture.track(
-        connectPanePty(createPane(2) as never, createManager(1) as never, createDeps() as never)
+      const secondBinding = connectPanePty(
+        createPane(2) as never,
+        createManager(1) as never,
+        createDeps() as never
       )
       await flushAsyncTicks()
 
@@ -226,7 +230,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('offers generic title completions while desktop completion banners are disabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -253,7 +257,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -281,7 +285,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('keeps an in-flight generic completion when desktop completion banners are enabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -309,7 +313,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -350,7 +354,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('keeps raw title completion continuity across desktop banner changes', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -371,7 +375,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -418,7 +422,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('keeps a scheduled agent completion across desktop banner changes', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -439,7 +443,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -486,7 +490,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('restores a suppressed terminal bell when disabling pending agent completion', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -507,7 +511,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
@@ -542,7 +546,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('delivers completion after working and desktop banner changes', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -563,7 +567,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const workingHandler = createdTransportOptions[0]?.onAgentBecameWorking as
         | (() => void)
@@ -612,7 +616,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
     })
 
     it('delivers completion after working starts with desktop banners disabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -633,7 +637,7 @@ export function registerPtyConnectionNotificationSettingsGatingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const workingHandler = createdTransportOptions[0]?.onAgentBecameWorking as
         | (() => void)

@@ -65,7 +65,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('clears the captured pen for a normal-buffer fallback reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       const snapshot = 'ORCA-SGR-REPRO \x1b[1mBOLD-RUN-LEFT-OPEN\x1b[1;34H'
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
@@ -92,7 +92,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -134,7 +134,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('returns a shell-owned daemon snapshot to the normal buffer on reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
         sessionId
@@ -153,15 +153,13 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       } as StoreState)
 
       const pane = createPane(1)
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({
-            restoredLeafId: LEAF_1,
-            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-          }) as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        createDeps({
+          restoredLeafId: LEAF_1,
+          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+        }) as never
       )
       await flushAsyncTicks(20)
 
@@ -173,7 +171,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
 
     it('drops a too-wide daemon alt frame and keeps the scrollback prefix', async () => {
       // Why: fixed-grid alt rows clip at a narrower viewport until the owner repaints.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -204,7 +202,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       const writes = (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
@@ -214,7 +212,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('keeps a daemon alt frame at its capture grid while the target grid is unknown', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
         sessionId
@@ -239,15 +237,13 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       const pane = createPane(1)
       pane.container.getBoundingClientRect = vi.fn(() => createRect(0, 0))
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 1, rows: 1 }))
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({
-            restoredLeafId: LEAF_1,
-            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-          }) as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        createDeps({
+          restoredLeafId: LEAF_1,
+          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+        }) as never
       )
       await flushAsyncTicks(20)
 
@@ -258,7 +254,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('falls back to the merged daemon snapshot when split metadata is incomplete', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
         sessionId
@@ -281,15 +277,13 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
 
       const pane = createPane(1)
       pane.fitAddon.proposeDimensions = vi.fn(() => ({ cols: 120, rows: 40 }))
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({
-            restoredLeafId: LEAF_1,
-            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-          }) as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        createDeps({
+          restoredLeafId: LEAF_1,
+          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+        }) as never
       )
       await flushAsyncTicks(20)
 
@@ -299,7 +293,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('keeps a daemon alt frame when the pane is not narrower than the capture', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -330,7 +324,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(
@@ -339,7 +333,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('drops a too-wide daemon alt frame on cold restore and keeps its history', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -371,7 +365,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       const writes = (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])
@@ -384,7 +378,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
 
     it('resizes the pane to the snapshot grid before replaying daemon snapshot bytes (bug #7279)', async () => {
       // Why: the daemon serializes soft-wrapped lines flat, so reattach must resize xterm to the snapshot grid before writing, or rows rewrap wrong.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -413,7 +407,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       // Pane was resized to the snapshot grid before the snapshot bytes landed.
@@ -435,7 +429,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('waits for a recovered destination fit before forwarding its grid or live output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { safeFit } = await import('@/lib/pane-manager/pane-tree-ops')
       const transport = createMockTransport('tab-pty')
       let deliverLiveData = (_data: string): void => {}
@@ -468,7 +462,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(20)
       transport.resize.mockClear()
       signalPty.mockClear()
@@ -499,7 +493,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       // pane is display:none for the whole replay. The snapshot pins xterm to the PTY's grid, and the
       // reattach fit is the only step that pushes the client grid back and signals SIGWINCH — losing
       // it strands the PTY at the snapshot grid and the first reveal reflows the replay under a live TUI.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { safeFit } = await import('@/lib/pane-manager/pane-tree-ops')
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
@@ -533,7 +527,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(20)
       transport.resize.mockClear()
       signalPty.mockClear()
@@ -553,7 +547,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
       // Why: the pre-check at reattach time cannot see a takeover that happens while the pane
       // waits for a box, and this path calls transport.resize directly, bypassing
       // forwardPtyResize's own suppression.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { safeFit } = await import('@/lib/pane-manager/pane-tree-ops')
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
       const transport = createMockTransport('tab-pty')
@@ -588,7 +582,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(20)
       transport.resize.mockClear()
       signalPty.mockClear()
@@ -611,7 +605,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('restores a pinned viewport only after a same-size reattach snapshot finishes parsing', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { markTerminalFollowOutput, markTerminalPinnedViewport } =
         await import('@/lib/pane-manager/terminal-scroll-intent')
       const transport = createMockTransport('tab-pty')
@@ -640,7 +634,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(20)
       expect(pane.terminal.scrollToLine).not.toHaveBeenCalled()
 
@@ -658,7 +652,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('does not apply a queued reattach snapshot after the PTY is replaced', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       const reattachResult = createDeferred<{
         id: string
@@ -682,7 +676,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(8)
       replayCallback.current?.('blocking replay')
       await flushAsyncTicks(12)
@@ -703,7 +697,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('does not apply a queued reattach snapshot after its PTY exits', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       const reattachResult = createDeferred<{ id: string; snapshot: string }>()
       const replayCallback: { current: ((data: string) => void) | null } = { current: null }
@@ -721,7 +715,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(8)
       replayCallback.current?.('blocking replay')
       await flushAsyncTicks(12)
@@ -742,7 +736,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
     })
 
     it('drops stale callbacks but delivers fresh replacement output after an old replay clear', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { getTerminalScrollIntentKind, markTerminalPinnedViewport } =
         await import('@/lib/pane-manager/terminal-scroll-intent')
       const transport = createMockTransport('tab-pty')
@@ -773,7 +767,7 @@ export function registerPtyConnectionDaemonSnapshotReplayTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(8)
       oldCallbacks.current?.onReplayData?.('old replay')
       await flushAsyncTicks(8)

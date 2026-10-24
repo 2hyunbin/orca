@@ -72,7 +72,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('dispatches agent-task-complete for generic Codex spinner titles after process identity is confirmed', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
 
@@ -87,7 +87,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -112,7 +112,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('does not dispatch generic spinner completions when process inspection finds no agent', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-shell')
       transportFactoryQueue.push(transport)
 
@@ -127,7 +127,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -148,7 +148,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('dispatches agent-task-complete from recognized hook completion events', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
@@ -160,7 +160,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const statusHandler = createdTransportOptions[0]?.onAgentStatus as
         | ((payload: {
@@ -192,7 +192,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('preserves synthetic Codex permission titles', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-hook')
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
@@ -219,7 +219,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -235,7 +235,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('normalizes Pi-compatible remote titles to authoritative OMP launch identity', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-omp')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
@@ -251,7 +251,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -318,7 +318,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('keeps GPU rendering enabled for OMP titles whose cwd is Gemini', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-omp-gemini-cwd')
       transportFactoryQueue.push(transport)
       enableActiveRuntimeEnvironment()
@@ -333,7 +333,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       manager.getActivePane.mockReturnValue({ id: 1 })
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -353,7 +353,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('leaves local IPC OSC 9999 status ownership in the main runtime', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-local')
       transportFactoryQueue.push(transport)
 
@@ -361,13 +361,13 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       expect(createdTransportOptions[0]?.onAgentStatus).toBeUndefined()
     })
 
     it('queues the idle cursor reset behind hidden agent output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -384,7 +384,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
       vi.useFakeTimers()
 
@@ -404,7 +404,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('waits briefly for delayed agent status before dispatching task-complete', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { useNotificationDispatch } = await vi.importActual<
         typeof UseNotificationDispatchModule
       >('./use-notification-dispatch')
@@ -418,7 +418,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -458,7 +458,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('waits past the grace delay when the assistant message arrives shortly after it', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { useNotificationDispatch } = await vi.importActual<
         typeof UseNotificationDispatchModule
       >('./use-notification-dispatch')
@@ -472,7 +472,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -516,7 +516,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('does not use stale agent status from an earlier turn in task-complete notifications', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { useNotificationDispatch } = await vi.importActual<
         typeof UseNotificationDispatchModule
       >('./use-notification-dispatch')
@@ -543,7 +543,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
         | ((title: string) => void)
@@ -572,7 +572,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
     })
 
     it('does not attach agent fields to terminal-bell notifications', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { useNotificationDispatch } = await vi.importActual<
         typeof UseNotificationDispatchModule
       >('./use-notification-dispatch')
@@ -595,7 +595,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps({ dispatchNotification })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {
@@ -623,7 +623,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
 
     // Why: agent-row removal belongs to process/PTY lifecycle, not title reversion, so interrupts can't disappear the activity row.
     it('clears the cache timer without removing agent status when the title tracker sees exit', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -631,7 +631,7 @@ export function registerPtyConnectionTaskCompleteDispatchTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Captured transport options expose onAgentExited as an optional zero-argument callback.
       const agentExitedHandler = createdTransportOptions[0]?.onAgentExited as

@@ -61,7 +61,7 @@ export function registerPtyConnectionRestartReplacementTests(): void {
     })
     /** A pane running an agent, with the live recovery record the app keeps for every agent turn. */
     async function connectWithAgent(opts: { visible: boolean; turnDone?: boolean }) {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { deliverPtyExitToHandlers } = await import('./pty-exit-delivery')
       const transport = createMockTransport('pty-pane-2')
       transportFactoryQueue.push(transport)
@@ -90,7 +90,7 @@ export function registerPtyConnectionRestartReplacementTests(): void {
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
       const args = [pane, createManager(1), deps] as unknown as Parameters<typeof connectPanePty>
-      const binding = storeFixture.track(connectPanePty(...args))
+      const binding = connectPanePty(...args)
       await flushAsyncTicks()
       const onPtyExit = createdTransportOptions[0]?.onPtyExit
       if (typeof onPtyExit !== 'function') {

@@ -58,7 +58,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
 
     it.each([10_000, 20_000])('keeps Codex draft delivery bounded after %d ms', async (waitMs) => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { beginAgentStartupDeliveryAttempt: claimStartupDelivery } =
         await import('@/lib/agent-startup-delayed-delivery')
 
@@ -92,9 +92,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
       vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('codex')
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const binding = connectPanePty(pane as never, manager as never, deps as never)
       await vi.advanceTimersByTimeAsync(VISIBLE_PTY_SETTLE_MS)
       await flushAsyncTicks()
       expect(capturedDataCallback.current).not.toBeNull()
@@ -150,7 +148,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
     })
 
     it('keeps startup draft ownership while deferred connect waits through setup', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { beginAgentStartupDeliveryAttempt: claimStartupDelivery } =
         await import('@/lib/agent-startup-delayed-delivery')
 
@@ -187,7 +185,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
         }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const sidecarClaimed = claimStartupDelivery({
         worktreeId: 'wt-1',
@@ -220,7 +218,7 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
     })
 
     it('releases startup draft delivery when disposed before deferred connect starts', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       globalThis.requestAnimationFrame = vi.fn(() => 1)
       const transport = createMockTransport('pty-codex')
       transportFactoryQueue.push(transport)
@@ -231,20 +229,18 @@ export function registerPtyConnectionStartupDraftDeliveryTests(): void {
         repos: [{ id: 'repo1', connectionId: null }]
       })
 
-      const binding = storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({
-            startup: {
-              command: 'codex',
-              launchAgent: 'codex',
-              launchConfig: { agentArgs: '', agentEnv: {} },
-              launchToken: 'launch-token-1',
-              draftPrompt: 'https://github.com/stablyai/orca/issues/42'
-            }
-          }) as never
-        )
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({
+          startup: {
+            command: 'codex',
+            launchAgent: 'codex',
+            launchConfig: { agentArgs: '', agentEnv: {} },
+            launchToken: 'launch-token-1',
+            draftPrompt: 'https://github.com/stablyai/orca/issues/42'
+          }
+        }) as never
       )
 
       binding.dispose()

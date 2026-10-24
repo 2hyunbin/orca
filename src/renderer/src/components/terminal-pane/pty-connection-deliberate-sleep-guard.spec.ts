@@ -57,7 +57,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     // Why: manual sleep keeps tab.ptyId as a wake hint, so a remount would take the
     // REATTACH arm and the daemon would respawn a shell for the dead id (#10205).
     it('does not reattach a slept pane through its retained session id', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { markWorktreeSleepIntent } = await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
@@ -74,16 +74,14 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       expect(transport.connect).not.toHaveBeenCalled()
     })
 
     it('does not fresh-spawn a slept pane that has no session id', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { markWorktreeSleepIntent } = await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
@@ -91,16 +89,14 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
       markWorktreeSleepIntent('wt-1')
       const deps = createDeps({ tabId: 'tab-slept-bare', isVisibleRef: { current: false } })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       expect(transport.connect).not.toHaveBeenCalled()
     })
 
     it('connects a waiting pane once the workspace is woken', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { clearWorktreeSleepIntent, markWorktreeSleepIntent } =
         await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
@@ -118,9 +114,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
       expect(transport.connect).not.toHaveBeenCalled()
 
@@ -131,7 +125,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     })
 
     it('does not connect a waiting pane whose tab was remounted by the wake', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { clearWorktreeSleepIntent, markWorktreeSleepIntent } =
         await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
@@ -148,9 +142,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'wt-1@@dead' },
         isVisibleRef: { current: false }
       })
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       // Why: activation bumps generation in the same set() that precedes the clear.
@@ -165,7 +157,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     })
 
     it('resumes a waiting pane mounted under a unified tab id', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { clearWorktreeSleepIntent, markWorktreeSleepIntent } =
         await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
@@ -180,9 +172,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
       markWorktreeSleepIntent('wt-1')
       const deps = createDeps({ tabId: 'unified-1', isVisibleRef: { current: false } })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
       expect(transport.connect).not.toHaveBeenCalled()
 
@@ -193,7 +183,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     })
 
     it('re-arms after a wake so a second sleep can hold the pane again', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { clearWorktreeSleepIntent, markWorktreeSleepIntent } =
         await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
@@ -209,9 +199,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         cwdPromise
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
       // Wake: the pane leaves the sleep gate and parks on the cwd gate.
       clearWorktreeSleepIntent('wt-1')
@@ -228,7 +216,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     })
 
     it('drops the wake listener when a waiting pane is disposed', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { clearWorktreeSleepIntent, markWorktreeSleepIntent } =
         await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
@@ -236,8 +224,10 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
       markWorktreeSleepIntent('wt-1')
       const deps = createDeps({ tabId: 'tab-disposed', isVisibleRef: { current: false } })
 
-      const binding = storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        deps as never
       )
       await flushAsyncTicks()
       binding.dispose()
@@ -254,7 +244,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
     })
 
     it('still connects a slept pane that carries a queued startup', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { markWorktreeSleepIntent } = await import('@/lib/worktree-sleep-intent')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
@@ -265,16 +255,14 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         startup: { command: 'printf wake', launchAgent: undefined }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
     })
 
     it('connects normally once the marker is released', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const deps = createDeps({
@@ -284,9 +272,7 @@ export function registerPtyConnectionDeliberateSleepGuardTests(): void {
         isVisibleRef: { current: false }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)

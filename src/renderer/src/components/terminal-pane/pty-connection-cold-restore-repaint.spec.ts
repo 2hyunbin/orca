@@ -65,7 +65,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
       await restoreTerminalTestGlobals()
     })
     it('paints only the daemon snapshot when reattach result includes both snapshot and replay', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -92,7 +92,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -103,7 +103,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
     })
 
     it('paints only relay replay when reattach result has replay and coldRestore but no snapshot', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -130,7 +130,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -149,7 +149,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
     })
 
     it('blanks restored scrollback before fresh shell output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('fresh-pty')
       const written: string[] = []
       transport.connect.mockImplementation(
@@ -185,7 +185,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         restoredViewportBlankingPanesRef: { current: new Set([1]) }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       const blankViewport = buildFreshShellViewportBlankingSequence(4)
@@ -203,7 +203,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
     })
 
     it('cold-restores at the recovered grid and clears only the dirty viewport before blanking', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('fresh-pty')
       const written: string[] = []
       const operations: (
@@ -273,7 +273,7 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
       expect(preResizeBarrier.release).not.toBeNull()
       expect(pane.terminal.resize).not.toHaveBeenCalledWith(recoveredCols, recoveredRows)

@@ -1,6 +1,7 @@
 import { vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
+import type * as PtyConnection from './pty-connection'
 import type { AgentStatusPatch } from '@/store/agent-status-patch'
 import { LEAF_1 } from './pty-connection-test-pane-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
@@ -70,9 +71,15 @@ export async function createInitialStoreState() {
   const owner = getAgentStatusOwner(store)
   return {
     store,
-    track<T extends { dispose: () => void }>(binding: T): T {
-      bindings.add(binding)
-      return binding
+    own(module: typeof PtyConnection) {
+      return {
+        ...module,
+        connectPanePty: (...args: Parameters<typeof module.connectPanePty>) => {
+          const binding = module.connectPanePty(...args)
+          bindings.add(binding)
+          return binding
+        }
+      }
     },
     dispose: () => {
       for (const binding of bindings) {

@@ -89,13 +89,11 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('omits byte-parser callbacks from the local transport options', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
 
         expect(createdTransportOptions[0]).toBeDefined()
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
@@ -109,14 +107,12 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
       it('keeps byte-parser callbacks on remote-runtime transports', async () => {
         enableMainAuthority()
         enableActiveRuntimeEnvironment()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
 
         expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith('env-1', expect.any(Object))
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
@@ -126,7 +122,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('consumes pty:sideEffect facts with the live-path policy after spawn', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
@@ -135,7 +131,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         const pane = createPane(1)
         const manager = createManager(1)
         const deps = createDeps()
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
 
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-1')
@@ -168,14 +164,16 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('stops consuming facts after the pane binding is disposed', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
         const deps = createDeps()
-        const binding = storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        const binding = connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          deps as never
         )
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-2')
@@ -192,16 +190,14 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('schedules the completion notification for genuine working→idle facts', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
         vi.useFakeTimers()
 
         const deps = createDeps()
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-genuine')
 
@@ -230,16 +226,14 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('clears state without completion attention for stale-derived facts', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
         vi.useFakeTimers()
 
         const deps = createDeps()
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-stale')
 
@@ -280,7 +274,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('drops the agent status from a command-finished fact like the byte path did', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
@@ -299,9 +293,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           }
         })
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-133')
 
@@ -317,14 +309,12 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('routes pr-link facts to the worktree PR observer', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-pr')
 
@@ -348,7 +338,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('does not byte-scan PR links or OSC 133 — facts are the only consumer', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -373,9 +363,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           }
         })
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
 
@@ -388,16 +376,14 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('seeds and settles Command Code status from command-code facts', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
         vi.useFakeTimers()
         const paneKey = makePaneKey('tab-1', LEAF_1)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-cc')
 
@@ -432,7 +418,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('rejects Command Code facts when Claude owns the pane', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
@@ -458,9 +444,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
           shellForeground: false
         }
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-false-cc')
         storeFixture.read().setAgentStatus.mockClear()
@@ -481,7 +465,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('rejects Command Code facts when retained Claude identity owns the pane', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
@@ -499,9 +483,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         storeFixture.read().retainedAgentsByPaneKey[paneKey] = { agentType: 'claude' }
         storeFixture.setStatus(paneKey, unknownStatus)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-retained-false-cc')
         storeFixture.read().setAgentStatus.mockClear()
@@ -522,16 +504,14 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('keeps Command Code working when a working fact lands before the done settles', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
         vi.useFakeTimers()
         const paneKey = makePaneKey('tab-1', LEAF_1)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as (ptyId: string) => void
         onPtySpawn('pty-fact-cc-repaint')
 
@@ -563,7 +543,7 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
 
       it('does not byte-scan Command Code output — facts are the only consumer', async () => {
         enableMainAuthority()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -574,12 +554,10 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         )
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(
-            createPane(1) as never,
-            createManager(1) as never,
-            createDeps({ startup: { command: 'command-code --trust' } }) as never
-          )
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ startup: { command: 'command-code --trust' } }) as never
         )
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
@@ -596,15 +574,13 @@ export function registerPtyConnectionMainSideEffectAuthorityTests(): void {
         ;(window.api as unknown as Record<string, unknown>).settings = {
           getSync: vi.fn(() => ({ terminalMainSideEffectAuthority: false }))
         }
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const handler = await import('./terminal-side-effect-facts-handler')
         const transport = createMockTransport()
         transportFactoryQueue.push(transport)
 
         const deps = createDeps()
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
 
         for (const callback of SIDE_EFFECT_PARSER_CALLBACKS) {
           expect(createdTransportOptions[0]?.[callback]).toBeTypeOf('function')

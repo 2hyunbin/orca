@@ -104,12 +104,10 @@ describe('connectPanePty split cwd resolution', () => {
     const transport = createMockTransport('pty-1')
     transportFactoryQueue.push(transport)
 
-    const binding = storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
-      )
+    const binding = connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
     )
     await flushAsyncTicks(20)
 
@@ -129,12 +127,10 @@ describe('connectPanePty split cwd resolution', () => {
     const transport = createMockTransport('pty-1')
     transportFactoryQueue.push(transport)
 
-    const binding = storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
-      )
+    const binding = connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      buildPaneConnectionDeps(storeFixture, { cwdPromise: cwd.promise }) as never
     )
     await flushAsyncTicks(20)
     binding.dispose()

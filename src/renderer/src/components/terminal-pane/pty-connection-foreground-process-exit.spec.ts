@@ -57,7 +57,7 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
       ptyId: string,
       visible: boolean
     ): Promise<{ cacheKey: string; binding: { sampleForegroundAgentOnFocus: () => void } }> {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const tabId = `tab-${ptyId}`
       const transport = createMockTransport(ptyId)
       transport.getPtyId.mockImplementation(() => ptyId)
@@ -70,8 +70,10 @@ export function registerPtyConnectionForegroundProcessExitTests(): void {
         isVisibleRef: { current: visible }
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: connectPanePty returns the pane binding, which exposes sampleForegroundAgentOnFocus.
-      const binding = storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        deps as never
       ) as unknown as { sampleForegroundAgentOnFocus: () => void }
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks(20)

@@ -167,7 +167,7 @@ function stubMainBufferSnapshot(
 }
 
 async function connectHiddenDirectSshPane(): Promise<SshPaneDrive> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const transport = createMockTransport(SSH_PTY_ID)
   const capturedDataCallback: {
     current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -182,9 +182,7 @@ async function connectHiddenDirectSshPane(): Promise<SshPaneDrive> {
   const deps = buildPaneConnectionDeps(storeFixture, {
     isVisibleRef: { current: false }
   })
-  const disposable = storeFixture.track(
-    connectPanePty(pane as never, manager as never, deps as never)
-  )
+  const disposable = connectPanePty(pane as never, manager as never, deps as never)
   await flushAsyncTicks(6)
   expect(capturedDataCallback.current).not.toBeNull()
   return {

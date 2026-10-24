@@ -85,7 +85,7 @@ describe('wake through main in a layout-owner build', () => {
 
   // Main's start of the revealed pane is its wake: the window records none of its own.
   it('asks main to start the revealed pane alone, and records no wake itself', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-pane-2')
     transportFactoryQueue.push(transport)
     const deps = buildPaneConnectionDeps(storeFixture, {
@@ -116,7 +116,7 @@ describe('wake through main in a layout-owner build', () => {
       ptyId: 'pty-main',
       bind: bindsPaneInStore(storeFixture.store, 'tab-1', leafIdForPane(2))
     })
-    const binding = storeFixture.track(connectPanePty(...args))
+    const binding = connectPanePty(...args)
     await flushAsyncTicks()
     const onPtyExit = createdTransportOptions[0]?.onPtyExit
     if (typeof onPtyExit === 'function') {

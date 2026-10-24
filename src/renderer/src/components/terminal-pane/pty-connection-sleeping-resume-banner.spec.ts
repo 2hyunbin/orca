@@ -64,7 +64,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
     })
 
     it('resumes a local sleeping pane in place when the restored PTY hint is missing', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const spawn = createDeferred<string>()
       const transport = createMockTransport()
       transport.connect.mockImplementation(() => spawn.promise)
@@ -120,7 +120,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
         })
       }
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(4)
 
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
@@ -190,7 +190,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
     it('says the fresh-spawn resume started fresh when main declined it', async () => {
       // Why: the primary #10757 path — the sidebar resumes a sleeping agent into a new tab,
       // so there is no restored PTY and the spawn is fresh, not a cold restore.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const spawn = createDeferred<{ id: string; agentResumeUnavailable: true }>()
       const transport = createMockTransport()
       transport.connect.mockImplementation(() => spawn.promise)
@@ -249,7 +249,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
         })
       }
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(4)
 
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
@@ -274,7 +274,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
     it('lets a declined resume replace an already-shown restored banner', async () => {
       // Why: the banner latch is one-shot per pane. A pane that showed "session restored"
       // and then respawned into a session main declined must stop claiming the restore.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       let connectCount = 0
       transport.connect.mockImplementation(async () => {
@@ -340,9 +340,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
           transport
         })
       }
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      ) as unknown as {
+      const binding = connectPanePty(pane as never, manager as never, deps as never) as unknown as {
         noteVisibilityResume: () => void
       }
       await flushAsyncTicks(10)
@@ -374,7 +372,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
     })
 
     it('keeps sleeping resume record when fresh cold-restore spawn fails', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const staleSessionId = 'wt-1@@stale-session'
       const transport = createMockTransport()
       transport.connect.mockResolvedValue(undefined)
@@ -417,9 +415,7 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: staleSessionId }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
-      )
+      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(2)
@@ -429,24 +425,22 @@ export function registerPtyConnectionSleepingResumeBannerTests(): void {
     })
 
     it('forwards one sidebar resume spawn without writing the restored banner through xterm', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-1')
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
       const providerSession = { key: 'session_id', id: 'codex-session-1' } as const
 
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({
-            startup: {
-              command: "codex 'resume' 'codex-session-1'",
-              resumeProviderSession: providerSession,
-              showSessionRestoredBanner: true
-            }
-          }) as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        createDeps({
+          startup: {
+            command: "codex 'resume' 'codex-session-1'",
+            resumeProviderSession: providerSession,
+            showSessionRestoredBanner: true
+          }
+        }) as never
       )
       await flushAsyncTicks(10)
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as

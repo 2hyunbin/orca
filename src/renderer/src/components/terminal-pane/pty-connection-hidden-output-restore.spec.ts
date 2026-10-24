@@ -74,7 +74,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         removeEventListener: vi.fn()
       } as unknown as Document
 
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current:
@@ -121,9 +121,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         isVisibleRef: { current: false },
         startup: { command: 'codex' }
       })
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const binding = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hiddenFrame, {
@@ -166,7 +164,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
     })
 
     it('restores hidden Codex output after a suppressed exit revives the same ptyId with a restarted seq counter', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current:
@@ -214,9 +212,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         startup: { command: 'codex' },
         consumeSuppressedPtyExit: vi.fn(() => true)
       })
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const binding = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hiddenFrame, { seq: hiddenSeq, rawLength: hiddenFrame.length })
@@ -263,7 +259,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
     })
 
     it('restores hidden Codex output when the pty seq counter restarts without an observed exit', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current:
@@ -297,9 +293,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         isVisibleRef: { current: true },
         startup: { command: 'codex' }
       })
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const binding = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       const establishedFrame = '\r\x1b[2KWorking established'
@@ -337,7 +331,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
     })
 
     it('writes ordinary hidden output live instead of proactively restoring a snapshot', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: {
         current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -366,9 +360,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
       const deps = createDeps({
         isVisibleRef: { current: false }
       })
-      const disposable = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      )
+      const disposable = connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(hidden, { seq: hidden.length, rawLength: hidden.length })
@@ -387,7 +379,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
     })
 
     it('pauses capable paired output while hidden and restores exactly on reveal', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const remotePtyId = 'remote:env-1@@terminal-1'
       const transport = createMockTransport(remotePtyId)
       let callbacks: ConnectCallbacks = {}
@@ -424,9 +416,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
         isVisibleRef: { current: false },
         recordPaneMode2031Subscription
       })
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, manager as never, deps as never)
-      ) as {
+      const binding = connectPanePty(pane as never, manager as never, deps as never) as {
         syncProcessTracking: () => void
         dispose: () => void
       }
@@ -532,7 +522,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
     })
 
     it('locally gates hidden paired output when a legacy host cannot pause it', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const remotePtyId = 'remote:legacy-env@@terminal-1'
       const transport = createMockTransport(remotePtyId)
       let callbacks: ConnectCallbacks = {}
@@ -569,9 +559,7 @@ export function registerPtyConnectionHiddenOutputRestoreTests(): void {
 
       const pane = createPane(1)
       const deps = createDeps({ isVisibleRef: { current: false } })
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, deps as never)
-      ) as {
+      const binding = connectPanePty(pane as never, createManager(1) as never, deps as never) as {
         syncProcessTracking: () => void
         dispose: () => void
       }

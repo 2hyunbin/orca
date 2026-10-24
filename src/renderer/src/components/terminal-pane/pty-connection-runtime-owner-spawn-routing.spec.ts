@@ -56,7 +56,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('fails closed when the same SSH worktree id is projected by two HUBs', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
       storeFixture.patch({
@@ -86,12 +86,10 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         }
       } as StoreState)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
       )
       await flushAsyncTicks()
 
@@ -102,7 +100,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('fails a missing paired-client owner closed instead of creating a local PTY', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
       storeFixture.patch({
@@ -116,12 +114,10 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         settings: { ...storeFixture.read().settings, activeRuntimeEnvironmentId: 'hub-a' }
       } as StoreState)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ restoredPtyIdByLeafId: { [LEAF_1]: null } }) as never
       )
       await flushAsyncTicks()
 
@@ -131,7 +127,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('spawns fresh PTYs through the worktree owner runtime when focus differs', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const transport = createMockTransport('remote:owner-runtime@@terminal-1')
       transportFactoryQueue.push(transport)
@@ -166,7 +162,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       expect(createRemoteRuntimePtyTransport).toHaveBeenCalledWith(
         'owner-runtime',
@@ -178,7 +174,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('spawns fresh PTYs locally for explicitly local worktrees while a runtime is focused', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
       const { createIpcPtyTransport } = await import('./pty-transport')
       const transport = createMockTransport('pty-local-1')
@@ -207,7 +203,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const manager = createManager(2)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       expect(createRemoteRuntimePtyTransport).not.toHaveBeenCalled()
       expect(createIpcPtyTransport).toHaveBeenCalled()
@@ -216,7 +212,9 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('prints a terminal notice when the startup cwd fell back to the workspace root', async () => {
-      const { connectPanePty, STARTUP_CWD_FALLBACK_NOTICE } = await import('./pty-connection')
+      const { connectPanePty, STARTUP_CWD_FALLBACK_NOTICE } = storeFixture.own(
+        await import('./pty-connection')
+      )
       const transport = createMockTransport('pty-fallback')
       transport.connect.mockResolvedValueOnce({
         id: 'pty-fallback',
@@ -234,16 +232,14 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const pane = createPane(2)
       const { writes } = captureCallbackTerminalWrites(pane)
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(2) as never, createDeps() as never)
       await flushAsyncTicks()
 
       expect(writes).toContain(STARTUP_CWD_FALLBACK_NOTICE)
     })
 
     it('attaches restored remote PTYs for later split panes instead of spawning host tabs', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const existingTransport = createMockTransport('remote:env-1@@terminal-1')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
@@ -270,7 +266,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         paneTransportsRef: { current: paneTransports }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       expect(transport.connect).not.toHaveBeenCalled()
       expect(transport.attach).toHaveBeenCalledWith(
@@ -280,7 +276,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('persists a restarted pane PTY id and uses it on the next remount', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
       const restartedTransport = createMockTransport()
       let spawnedPtyId: string | null = null
@@ -298,9 +294,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         paneTransportsRef: { current: new Map([[99, createMockTransport('another-pane-pty')]]) }
       })
 
-      storeFixture.track(
-        connectPanePty(restartPane as never, restartManager as never, restartDeps as never)
-      )
+      connectPanePty(restartPane as never, restartManager as never, restartDeps as never)
       await flushAsyncTicks()
 
       expect(spawnedPtyId).toBe('pty-restarted')
@@ -325,9 +319,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'pty-restarted' }
       })
 
-      storeFixture.track(
-        connectPanePty(remountPane as never, remountManager as never, remountDeps as never)
-      )
+      connectPanePty(remountPane as never, remountManager as never, remountDeps as never)
 
       expect(remountTransport.connect).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: 'pty-restarted' })
@@ -339,7 +331,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
 
     // Why: BEL (0x07) is the attention signal — onBell raises the bell event + an OS notification.
     it('wires onBell to the bell attention event and OS notification', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
 
@@ -348,7 +340,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {
@@ -374,7 +366,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
     })
 
     it('hands the bell to the attention module with its pane even when pane attention is off', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -388,7 +380,7 @@ export function registerPtyConnectionRuntimeOwnerSpawnRoutingTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       const bellHandler = createdTransportOptions[0]?.onBell as (() => void) | undefined
       if (!bellHandler) {

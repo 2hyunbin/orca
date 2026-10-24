@@ -167,12 +167,10 @@ describe('a pane on an unconverted SSH row', () => {
       sshConnectionStates: new Map([['conn-1', { status: 'disconnected' }]])
     })
     await installTerminalTestGlobals()
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     connectPane = (paneId, deps) =>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-      storeFixture.track(
-        connectPanePty(createPane(paneId) as never, createManager(paneId) as never, deps as never)
-      )
+      connectPanePty(createPane(paneId) as never, createManager(paneId) as never, deps as never)
   })
 
   afterEach(async () => {
@@ -254,11 +252,9 @@ describe('a pane on an unconverted SSH row', () => {
 
   it('leaves recovery to the overlay when typed input cannot be delivered', async () => {
     const pane = createPane(1)
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the connection fields exercised here without a real terminal or DOM.
-    storeFixture.track(
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-    )
+    connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
     await flushAsyncTicks(10)
 
     vi.mocked(pane.terminal.onData).mock.calls[0]?.[0]('ls\r')

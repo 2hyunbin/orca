@@ -93,7 +93,7 @@ async function connectVisibleRemotePane(
   outcome: (() => Promise<Outcome>) | Outcome,
   opts: { visible?: boolean } = {}
 ): Promise<ReconnectedPane> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const transport = createMockTransport(REMOTE_PTY_ID)
   transport.serializeBuffer = vi.fn()
   transport.serializeBufferOutcome = vi.fn(
@@ -112,9 +112,7 @@ async function connectVisibleRemotePane(
     isVisibleRef: { current: opts.visible ?? true }
   })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocks stub only the members connectPanePty reaches; a missing one fails the test.
-  const disposable = storeFixture.track(
-    connectPanePty(pane as never, createManager(1) as never, deps as never)
-  )
+  const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
   await flushAsyncTicks(6)
   expect(onStreamRecovered).not.toBeNull()
   transport.resize.mockClear()

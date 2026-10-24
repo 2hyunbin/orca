@@ -56,7 +56,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
     })
 
     it('does not retain PTY connect diagnostics unless e2e debug state is enabled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
@@ -66,9 +66,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
         ptyIdsByTabId: { 'tab-1': [] }
       })
 
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks()
 
       expect((globalThis as Record<string, unknown>).__ptyConnectDiag).toBeUndefined()
@@ -77,7 +75,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
     }, 30_000)
 
     it('does not hold a successor behind a canceled spawn serializer declaration', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { pendingSpawnByPaneKey } = await import('./pty-connection/pty-connect-limits')
       const declaration = createDeferred<number>()
       const spawn = createDeferred<null>()
@@ -93,8 +91,10 @@ export function registerPtyConnectionPendingSpawnTests(): void {
         declaration.promise
       )
 
-      const binding = storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps() as never
       )
       await flushAsyncTicks(12)
       expect(pendingSpawnByPaneKey.size).toBe(1)
@@ -115,7 +115,7 @@ export function registerPtyConnectionPendingSpawnTests(): void {
     })
 
     it('joins a successful pending spawn across a StrictMode remount', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const pendingSpawn = createDeferred<string>()
       const firstTransport = createMockTransport()
       firstTransport.connect.mockReturnValueOnce(pendingSpawn.promise)
@@ -128,14 +128,14 @@ export function registerPtyConnectionPendingSpawnTests(): void {
       })
       const remountDeps = createDeps()
 
-      const firstBinding = storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      const firstBinding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps() as never
       )
       await flushAsyncTicks()
       firstBinding.dispose()
-      storeFixture.track(
-        connectPanePty(createPane(1) as never, createManager(1) as never, remountDeps as never)
-      )
+      connectPanePty(createPane(1) as never, createManager(1) as never, remountDeps as never)
       await flushAsyncTicks()
 
       expect(firstTransport.connect).toHaveBeenCalledOnce()

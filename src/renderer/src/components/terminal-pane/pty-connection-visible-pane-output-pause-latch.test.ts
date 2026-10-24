@@ -131,7 +131,7 @@ async function connectVisibleRemotePane(): Promise<{
   callbacks: () => ConnectCallbacks
   pauseCalls: () => boolean[]
 }> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const transport = createMockTransport(REMOTE_PTY_ID)
   transport.setOutputPaused = vi.fn(() => true)
   transport.serializeBuffer = vi.fn()
@@ -142,8 +142,10 @@ async function connectVisibleRemotePane(): Promise<{
   })
   transportFactoryQueue.push(transport)
   const deps = createDeps({ isVisibleRef: { current: true } })
-  const binding = storeFixture.track(
-    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+  const binding = connectPanePty(
+    createPane(1) as never,
+    createManager(1) as never,
+    deps as never
   ) as Binding
   await flushAsyncTicks(6)
   expect(captured.callbacks).not.toBeNull()

@@ -86,7 +86,7 @@ export function registerPtyConnectionForegroundRoutingConfirmationTests(): void 
         transport: MockTransport
         cacheKey: string
       }> {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const ptyId = args.ptyId ?? 'tab-pty'
         const tabId = args.tabId ?? `tab-${ptyId}`
         const hasReattachMetadata =
@@ -111,8 +111,10 @@ export function registerPtyConnectionForegroundRoutingConfirmationTests(): void 
           restoredPtyIdByLeafId: { [LEAF_1]: ptyId },
           ...(args.isVisibleRef ? { isVisibleRef: args.isVisibleRef } : {})
         })
-        const binding = storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        const binding = connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          deps as never
         ) as unknown as {
           noteVisibilityResume: () => void
           sampleForegroundAgentOnFocus: () => void

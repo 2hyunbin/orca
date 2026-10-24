@@ -157,7 +157,7 @@ describe('connectPanePty', () => {
   })
 
   it('dispatches agent-task-complete on working→idle and raises tab/worktree unread', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const { useNotificationDispatch } = await vi.importActual<typeof UseNotificationDispatchModule>(
       './use-notification-dispatch'
     )
@@ -193,7 +193,7 @@ describe('connectPanePty', () => {
     const manager = createManager(1)
     const deps = createDeps({ dispatchNotification })
 
-    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+    connectPanePty(pane as never, manager as never, deps as never)
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -242,7 +242,7 @@ describe('connectPanePty', () => {
   })
 
   it('ignores title-only idle while fresh hook status is still working', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
@@ -260,7 +260,7 @@ describe('connectPanePty', () => {
     const manager = createManager(1)
     const deps = createDeps()
 
-    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+    connectPanePty(pane as never, manager as never, deps as never)
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -280,7 +280,7 @@ describe('connectPanePty', () => {
   })
 
   it('allows an explicit idle title from a different agent than fresh hook status', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     vi.useFakeTimers()
@@ -299,7 +299,7 @@ describe('connectPanePty', () => {
     const manager = createManager(1)
     const deps = createDeps()
 
-    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+    connectPanePty(pane as never, manager as never, deps as never)
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -324,7 +324,7 @@ describe('connectPanePty', () => {
   })
 
   it('ignores an explicit idle title while fresh hook identity is unknown', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
@@ -342,7 +342,7 @@ describe('connectPanePty', () => {
     const manager = createManager(1)
     const deps = createDeps()
 
-    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+    connectPanePty(pane as never, manager as never, deps as never)
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)
@@ -362,7 +362,7 @@ describe('connectPanePty', () => {
   })
 
   it('ignores a Pi idle title while compatible OMP hook status is active', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
@@ -380,7 +380,7 @@ describe('connectPanePty', () => {
     const manager = createManager(1)
     const deps = createDeps()
 
-    storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+    connectPanePty(pane as never, manager as never, deps as never)
 
     const idleHandler = createdTransportOptions[0]?.onAgentBecameIdle as
       | ((title: string) => void)

@@ -61,7 +61,7 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
       '%s %s when an SSH pane finishes and the shell check cannot answer',
       async (_verb, _label, verifiable) => {
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue(null)
         const hasVerifiableAgentProcess = vi.fn(async () => verifiable)
         Object.assign(window.api.agentStatus, { hasVerifiableAgentProcess })
@@ -93,12 +93,10 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
           }
         })
 
-        storeFixture.track(
-          connectPanePty(
-            createPane(1) as never,
-            createManager(1) as never,
-            createDeps({ tabId, isVisibleRef: { current: false } }) as never
-          )
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({ tabId, isVisibleRef: { current: false } }) as never
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()

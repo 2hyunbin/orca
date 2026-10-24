@@ -97,7 +97,7 @@ describe('connectPanePty', () => {
   // that consumed ~4GB in ~12s. It only stayed invisible because the pre-split
   // 25k-line suite happened to run a later test that tore the loop down.
   it('stops re-arming the hidden output restore once the pane binding is disposed', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-id')
     const capturedDataCallback: {
       current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -139,9 +139,7 @@ describe('connectPanePty', () => {
     }
     const deps = buildPaneConnectionDeps(storeFixture, { isVisibleRef })
 
-    const disposable = storeFixture.track(
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
-    )
+    const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(6)
 
     // Arm the restore: hidden bytes land while the pane is hidden, then it is revealed.

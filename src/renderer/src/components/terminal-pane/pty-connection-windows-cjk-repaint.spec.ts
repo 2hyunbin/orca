@@ -68,7 +68,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     it('does not schedule WebGL atlas recovery for ordinary foreground shell rewrites', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -90,9 +90,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\r\x1b[Korca % npm test')
@@ -108,7 +106,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     it('does not schedule WebGL atlas recovery for plain synchronized foreground frames', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -125,9 +123,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?2026hplain claude frame\x1b[?2026l')
@@ -139,7 +135,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     })
 
     it('forces a viewport refresh when foreground background SGR is split across PTY chunks', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -161,7 +157,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
+      connectPanePty(pane as never, manager as never, createDeps() as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b[48')
@@ -175,7 +171,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     })
 
     it('forces a viewport refresh when the foreground CSI introducer is split across PTY chunks', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -197,7 +193,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
+      connectPanePty(pane as never, manager as never, createDeps() as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b')
@@ -210,7 +206,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     })
 
     it('does not keep forcing viewport refresh after completed background redraws', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -232,7 +228,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         callback?.()
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
+      connectPanePty(pane as never, manager as never, createDeps() as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.(
@@ -252,7 +248,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -273,9 +269,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
         sendTerminalInputThroughPane(pane, '已经安装完成，软件已更新后重启。')
 
@@ -292,7 +286,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -313,9 +307,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('已经安装完成，软件已更新后重启。')
@@ -331,7 +323,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -352,9 +344,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
         sendTerminalInputThroughPane(pane, 'abc 123 ✓')
 
@@ -369,7 +359,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     it('does not repaint ordinary non-ASCII output on non-Windows clients', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -390,9 +380,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('abc 123 ✓')
@@ -409,7 +397,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
       )
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -430,9 +418,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         // User typed into the prompt; Claude redraws the input line in place.
@@ -450,7 +436,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     it('does not schedule a follow-up repaint for the Claude redraw pattern on non-Windows clients', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -471,9 +457,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
           callback?.()
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         // CR redraw still forces one synchronous refresh, but no native-Windows follow-up repaint is scheduled.
@@ -489,7 +473,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
     it('coalesces forced foreground refreshes when WebGL is live', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -513,7 +497,7 @@ export function registerPtyConnectionWindowsCjkRepaintTests(): void {
         const manager = createManager(1)
         manager.hasWebglRenderer.mockReturnValue(true)
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, createDeps() as never))
+        connectPanePty(pane as never, manager as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\r\x1b[3Gzzzx\x1b[K')

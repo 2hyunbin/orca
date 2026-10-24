@@ -60,7 +60,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
     })
 
     async function reattachWithSnapshotFlags(kittyKeyboard: boolean) {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
         sessionId
@@ -80,7 +80,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pane-connection mocks cover the members connectPanePty reads.
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(20)
       return { pane, mirror: deps.paneKittyKeyboardModesRef.current.get(pane.id) }
     }
@@ -107,7 +107,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
     })
 
     it('grounds xterm and the mirror with one scanned write before a restart-in-place spawns', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       transportFactoryQueue.push(createMockTransport())
       const pane = createPane(91)
       // Why: a unique tab id keeps this pane's key clear of other tests' pendingSpawnByPaneKey entries so the connect deterministically fresh-spawns.
@@ -118,7 +118,7 @@ export function registerPtyConnectionKittyKeyboardRestoreTests(): void {
       deps.paneKittyKeyboardModesRef.current.set(pane.id, mirror)
 
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: pane-connection mocks cover the members connectPanePty reads.
-      storeFixture.track(connectPanePty(pane as never, createManager(91) as never, deps as never))
+      connectPanePty(pane as never, createManager(91) as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(pane.terminal.write).toHaveBeenCalledWith(

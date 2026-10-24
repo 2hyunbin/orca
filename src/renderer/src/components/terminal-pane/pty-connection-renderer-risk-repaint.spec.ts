@@ -63,7 +63,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     })
 
     it('does not switch renderers for Arabic output', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -78,7 +78,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('Arabic: السلام عليكم\r\n')
@@ -91,7 +91,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     })
 
     it('does not switch renderers across split background SGR PTY chunks', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -106,7 +106,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('\x1b[4')
@@ -119,7 +119,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     })
 
     it('forces a viewport refresh for foreground CJK output without CSI', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -140,9 +140,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         callback?.()
       })
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('没改什么(护城河)\r\n')
@@ -151,7 +149,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     })
 
     it('refreshes renderer-risk output without clearing the shared glyph atlas', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -173,9 +171,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
         parseCallback = callback
       })
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       await flushAsyncTicks(6)
 
       capturedDataCallback.current?.('没改什么(护城河)\r\n')
@@ -188,7 +184,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('refreshes alternate-screen redraws without clearing the shared glyph atlas', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -211,9 +207,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.(
@@ -230,7 +224,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('refreshes a foreground rewrite entering alternate screen without an atlas clear', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -252,9 +246,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?1049h\x1b[2J\x1b[HVim package.json')
@@ -271,7 +263,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('avoids atlas clears when alternate-screen entry splits across chunks', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -293,9 +285,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         // Why: PTY reads split CSI sequences at arbitrary byte boundaries, so the enter sequence can straddle two onData chunks.
@@ -315,7 +305,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('avoids atlas clears when a foreground rewrite leaves alternate screen', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -338,9 +328,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[34;1H\x1b[K\x1b[34;1H\x1b[?1049l\x1b[?25h')
@@ -356,7 +344,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('avoids atlas clears when one chunk enters and exits alternate screen', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -378,9 +366,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         capturedDataCallback.current?.('\x1b[?1049h\x1b[2J\x1b[Hpager frame\x1b[K\x1b[?1049l')
@@ -395,7 +381,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
     it('avoids atlas clears for captured redraw chunks split mid-sequence', async () => {
       const restoreNavigator = temporarilySetNavigatorUserAgent('Mozilla/5.0 (Macintosh)')
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport()
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         transport.connect.mockImplementation(
@@ -418,9 +404,7 @@ export function registerPtyConnectionRendererRiskRepaintTests(): void {
           parseCallback = callback
         })
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         await flushAsyncTicks(6)
 
         // Captured from a real vim session: a 1024-byte PTY read boundary cuts the cursor move \x1b[30;5H into "\x1b[30" + ";5H".

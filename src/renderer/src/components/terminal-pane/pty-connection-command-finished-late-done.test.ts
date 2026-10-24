@@ -164,7 +164,7 @@ describe('command-finished drop and a Done that lands after it', () => {
     paneKey: string
   }> {
     vi.useFakeTimers()
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const { createTestStore } = await import('@/store/slices/store-test-helpers')
     const { getAgentStatusOwner } = await import('@/store/agent-status-commit')
     vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
@@ -183,7 +183,7 @@ describe('command-finished drop and a Done that lands after it', () => {
       createManager(1),
       createDeps({ isVisibleRef: { current: false } })
     ] as unknown as Parameters<typeof connectPanePty>
-    storeFixture.track(connectPanePty(...args))
+    connectPanePty(...args)
     await vi.advanceTimersByTimeAsync(20)
     await flushAsyncTicks()
     const realStore = createTestStore()

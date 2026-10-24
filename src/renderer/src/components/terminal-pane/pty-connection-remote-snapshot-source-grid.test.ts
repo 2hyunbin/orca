@@ -147,7 +147,7 @@ async function connectRemotePane(): Promise<{
   replay: (data: string, meta?: Record<string, unknown>) => void
   dispose: () => void
 }> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   storeFixture.patch(buildActiveRuntimeEnvironmentState(storeFixture.read(), 'env-1'))
   const transport = createMockTransport('remote:env-1@@terminal-1')
   const captured: { current: ConnectCallbacks['onReplayData'] | null } = { current: null }
@@ -176,9 +176,7 @@ async function connectRemotePane(): Promise<{
   })
 
   const manager = createManager(1)
-  const disposable = storeFixture.track(
-    connectPanePty(pane as never, manager as never, createDeps() as never)
-  )
+  const disposable = connectPanePty(pane as never, manager as never, createDeps() as never)
   await flushAsyncTicks(6)
   transport.resize.mockClear()
 

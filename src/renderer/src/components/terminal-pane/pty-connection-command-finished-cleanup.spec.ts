@@ -69,7 +69,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       'does not let typed Droid input replace another live TUI %s identity',
       async (identitySource) => {
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
         const pane = createPane(1)
         const ptyId = `pty-antigravity-${identitySource}-typed-droid`
@@ -84,12 +84,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         )
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(
-            pane as never,
-            createManager(1) as never,
-            createDeps({ tabId, isVisibleRef: { current: false } }) as never
-          )
+        connectPanePty(
+          pane as never,
+          createManager(1) as never,
+          createDeps({ tabId, isVisibleRef: { current: false } }) as never
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
@@ -125,7 +123,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       'does not persist typed command process evidence for %s panes',
       async (_label, ptyId, tabId) => {
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
         const pane = createPane(1)
         const paneKey = makePaneKey(tabId, LEAF_1)
@@ -138,12 +136,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         )
         transportFactoryQueue.push(transport)
 
-        storeFixture.track(
-          connectPanePty(
-            pane as never,
-            createManager(1) as never,
-            createDeps({ tabId, isVisibleRef: { current: false } }) as never
-          )
+        connectPanePty(
+          pane as never,
+          createManager(1) as never,
+          createDeps({ tabId, isVisibleRef: { current: false } }) as never
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
@@ -161,7 +157,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('keeps Droid routing visible through command-finished foreground confirmation', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const getForegroundProcess = vi.mocked(window.api.pty.confirmForegroundProcess)
       getForegroundProcess.mockResolvedValue('droid')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -176,12 +172,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -217,7 +211,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('retires pane launch routing after one fresh scan confirms shell', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('powershell.exe')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
       const ptyId = 'pty-droid-confirmed-shell'
@@ -231,12 +225,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -271,7 +263,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       ['keeps sleeping identity when the shell surfaces during an intentional stop', true]
     ])('%s', async (_label, stoppingOnPurpose) => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
       const ptyId = 'pty-sleeping-confirmed-shell'
@@ -285,12 +277,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -332,7 +322,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('keeps sleeping identity when the foreground check still sees the agent', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       // Why both: the pane's process monitor reads the same foreground the confirm read sees.
       vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('codex')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -347,12 +337,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -385,7 +373,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       // production case. A pane worth reconciling always HAS a row — and settling runs the drop
       // BEFORE the reconcile, so the reconcile must survive its own drop having already fired.
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       // Both imported after vi.resetModules() so they share pty-connection's module registry; a
       // static top-level import here is a DIFFERENT instance and the assertion goes vacuous.
       const { createCommandFinishedStatusStore } =
@@ -404,12 +392,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -438,7 +424,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('does NOT reconcile when the process check could not confirm a shell', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue(null)
       vi.mocked(window.api.agentStatus.reconcileEndedProcess).mockClear()
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -453,12 +439,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -484,7 +468,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('disarms stale TUI modes in the emulator after a confirmed return to shell', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('bash')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
       const ptyId = 'pty-stale-mode-disarm'
@@ -501,13 +485,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-          deps as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
+        deps as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -540,7 +522,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('grounds xterm and the input mirror in stream order when output is still queued', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const confirmRead = createDeferred<string>()
       vi.mocked(window.api.pty.confirmForegroundProcess).mockReturnValue(confirmRead.promise)
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -558,13 +540,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-          deps as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
+        deps as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -594,7 +574,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('keeps armed modes while the agent still owns the foreground after a leaked 133;D', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       // Why both: the pane's process monitor reads the same foreground the confirm read sees.
       vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('droid')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -612,13 +592,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      storeFixture.track(
-        connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-          deps as never
-        )
+      connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
+        deps as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -641,7 +619,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('retires stale routing after unavailable command-finish reads without asserting shell', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue(null)
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
       const ptyId = 'pty-droid-unavailable-finish'
@@ -656,12 +634,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey(tabId, LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ tabId, isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ tabId, isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -689,7 +665,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
 
     it('cancels deferred cleanup on a new command and retires identity at its later shell', async () => {
       vi.useFakeTimers()
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('powershell.exe')
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
       const ptyId = 'pty-droid-superseded-confirmation'
@@ -702,12 +678,10 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       )
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ isVisibleRef: { current: false } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ isVisibleRef: { current: false } }) as never
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -738,7 +712,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
     it.each(['gemini', 'codex'] as const)(
       'pins %s interrupt policy before acknowledged input and command exit cleanup',
       async (agentType) => {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
         const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
         const transport = createMockTransport()
@@ -801,9 +775,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         vi.advanceTimersByTime(1_000)
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
@@ -840,7 +812,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
     )
 
     it('drops the command-finished status when pending interrupt inference is rejected', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
       vi.mocked(window.api.agentStatus.inferInterrupt).mockResolvedValue(false)
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
@@ -879,9 +851,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       vi.advanceTimersByTime(1_000)
       await flushAsyncTicks()
       if (!onDataHandler) {

@@ -81,7 +81,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         ) => void
         binding: { syncProcessTracking: () => void; dispose: () => void }
       }> {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport('pty-id')
         const capturedDataCallback: {
           current:
@@ -100,9 +100,7 @@ export function registerPtyConnectionHiddenDeliveryGateTests(): void {
         transportFactoryQueue.push(transport)
         const pane = createPane(1)
         const manager = createManager(1)
-        const binding = storeFixture.track(
-          connectPanePty(pane as never, manager as never, deps as never)
-        ) as {
+        const binding = connectPanePty(pane as never, manager as never, deps as never) as {
           syncProcessTracking: () => void
           dispose: () => void
         }

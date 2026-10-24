@@ -59,7 +59,7 @@ function startLeaf1(ptyId: string): void {
 }
 
 async function connectWithStart(start: TerminalPaneStart | undefined) {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const transport = createMockTransport()
   transportFactoryQueue.push(transport)
   setStore({
@@ -71,7 +71,7 @@ async function connectWithStart(start: TerminalPaneStart | undefined) {
   const args = [createPane(1), createManager(1), deps] as unknown as Parameters<
     typeof connectPanePty
   >
-  storeFixture.track(connectPanePty(...args))
+  connectPanePty(...args)
   await flushAsyncTicks()
   return { transport, deps }
 }
@@ -131,7 +131,7 @@ describe('a pane main is starting a terminal for', () => {
   })
 
   it('attaches a split pane to the terminal main bound it to, not its tab’s', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     transportFactoryQueue.push(transport)
     const newLeaf = leafIdForPane(2)
@@ -149,7 +149,7 @@ describe('a pane main is starting a terminal for', () => {
     const args = [createPane(2), createManager(2), deps] as unknown as Parameters<
       typeof connectPanePty
     >
-    storeFixture.track(connectPanePty(...args))
+    connectPanePty(...args)
     await flushAsyncTicks()
     expect(transport.connect).not.toHaveBeenCalled()
 

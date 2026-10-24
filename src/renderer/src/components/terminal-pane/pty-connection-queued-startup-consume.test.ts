@@ -129,7 +129,7 @@ describe('connectPanePty queued startup consume', () => {
   })
 
   it('spends the queued startup only after the pty is bound to the tab', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     spawnOnConnect(transport, 'fresh-pty')
     transportFactoryQueue.push(transport)
@@ -145,9 +145,7 @@ describe('connectPanePty queued startup consume', () => {
       })
     })
 
-    storeFixture.track(
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-    )
+    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(20)
 
     expect(callOrder).toContain('onQueuedStartupSpawned')
@@ -158,7 +156,7 @@ describe('connectPanePty queued startup consume', () => {
   })
 
   it('leaves the queued startup unspent when the spawn never reaches onPtySpawn', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     // A retired/reattached spawn resolves without ever announcing a fresh pty.
     transport.connect.mockImplementation(async () => undefined)
@@ -170,9 +168,7 @@ describe('connectPanePty queued startup consume', () => {
       onQueuedStartupSpawned
     })
 
-    storeFixture.track(
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-    )
+    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(20)
 
     // The next mount must still find the command queued, or it is lost for good.
@@ -180,7 +176,7 @@ describe('connectPanePty queued startup consume', () => {
   })
 
   it('keeps a throwing consume from escaping into the spawn', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     // Mirror the transport contract: onPtySpawn is invoked from inside the connect promise, so
     // anything it throws rejects that promise, strands the pane with no pty, and is far worse
@@ -209,9 +205,7 @@ describe('connectPanePty queued startup consume', () => {
       })
     })
 
-    storeFixture.track(
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-    )
+    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(20)
 
     expect(escapedIntoSpawn).toBe(false)

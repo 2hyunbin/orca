@@ -64,7 +64,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('normalizes Pi-compatible remote runtime status to OMP after typed omp command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -73,7 +73,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -103,14 +103,14 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('drives runtime title, tab title, and renderer policy from one title decision', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const pane = createPane(1)
       const transport = createMockTransport('pty-gemini')
       transportFactoryQueue.push(transport)
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -128,7 +128,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('keeps GPU enabled when a pane-scoped OMP owner emits a Gemini-looking title', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
         ...storeFixture.read(),
@@ -150,7 +150,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -166,7 +166,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('does not let one split pane title change another pane GPU state', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const pane1 = createPane(1)
       const pane2 = createPane(2)
       const transport1 = createMockTransport('pty-split-1')
@@ -174,8 +174,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       transportFactoryQueue.push(transport1, transport2)
       const manager = createManager(2, 1)
 
-      storeFixture.track(connectPanePty(pane1 as never, manager as never, createDeps() as never))
-      storeFixture.track(connectPanePty(pane2 as never, manager as never, createDeps() as never))
+      connectPanePty(pane1 as never, manager as never, createDeps() as never)
+      connectPanePty(pane2 as never, manager as never, createDeps() as never)
       await flushAsyncTicks()
       const onTitleChange1 = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -191,7 +191,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('DOM-gates a genuine Gemini split pane even when the tab launched a non-Gemini agent', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       // The shared tab.launchAgent must not veto the renderer for a sibling pane.
       storeFixture.patch({
         ...storeFixture.read(),
@@ -206,8 +206,8 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       transportFactoryQueue.push(transport1, transport2)
       const manager = createManager(2, 2)
 
-      storeFixture.track(connectPanePty(pane1 as never, manager as never, createDeps() as never))
-      storeFixture.track(connectPanePty(pane2 as never, manager as never, createDeps() as never))
+      connectPanePty(pane1 as never, manager as never, createDeps() as never)
+      connectPanePty(pane2 as never, manager as never, createDeps() as never)
       await flushAsyncTicks()
       const onTitleChange2 = createdTransportOptions[1]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -221,7 +221,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('DOM-gates a genuine Gemini title in a pane whose launch agent was non-Gemini', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const pane = createPane(1)
       const transport = createMockTransport('pty-reused-gemini')
       transportFactoryQueue.push(transport)
@@ -229,7 +229,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       // Stale, never-cleared launch identity must not veto the renderer.
       const deps = createDeps({ startup: { command: 'claude', launchAgent: 'claude' } })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -243,7 +243,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('DOM-gates a genuine Gemini title when the only pane row is a done non-Gemini agent', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({
         ...storeFixture.read(),
@@ -265,7 +265,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -280,7 +280,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('DOM-gates a genuine Gemini title when the only pane row is a stale non-Gemini agent', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const staleAt = Date.now() - 60 * 60 * 1000
       storeFixture.patch({
@@ -303,7 +303,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)
@@ -318,7 +318,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('normalizes after shell word deletion edits a typed command to omp', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -327,7 +327,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'pi \x17omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -356,7 +356,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('keeps Pi-compatible remote runtime status as Pi after typed pi command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -365,7 +365,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'pi\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -395,7 +395,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('does not infer shell ownership from prompts typed inside an existing Pi session', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
@@ -416,7 +416,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -445,7 +445,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('does not infer shell ownership from prompts typed in a title-only Pi session', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       storeFixture.patch({ runtimePaneTitlesByTabId: { 'tab-1': { 1: 'Pi ready' } } })
@@ -455,7 +455,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -484,7 +484,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('lets a new typed omp command override a stale retained done status', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const now = Date.now()
@@ -504,7 +504,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -532,7 +532,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('tracks cursor edits when inferring a typed omp command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -541,7 +541,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'op\x1b[Dm\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -569,7 +569,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('tracks delete-key cursor edits when inferring a typed omp command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -578,7 +578,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'ommp\x1b[D\x1b[D\x1b[3~\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -605,7 +605,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('skips manual agent inference for large paste chunks', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -614,7 +614,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, `${'x'.repeat(4097)}omp\r`)
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as
@@ -641,7 +641,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('resumes manual agent inference when large paste input is cancelled', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const pane = createPane(1)
@@ -650,7 +650,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'x'.repeat(4097))
       sendTerminalInputThroughPane(pane, '\x03')
       sendTerminalInputThroughPane(pane, 'omp\r')
@@ -679,7 +679,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
     })
 
     it('preserves typed shell ownership through same-chunk command-finished side effects', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       enableActiveRuntimeEnvironment()
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -695,7 +695,7 @@ export function registerPtyConnectionTypedAgentIdentityTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       sendTerminalInputThroughPane(pane, 'omp\r')
       await flushAsyncTicks()
       const onTitleChange = createdTransportOptions[0]?.onTitleChange as

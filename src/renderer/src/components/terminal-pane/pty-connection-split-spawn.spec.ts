@@ -61,15 +61,17 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     it('clears the mobile-fit pane binding when the pane connection is disposed', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { getFitOverrideForPane, setFitOverride } =
         await import('@/lib/pane-manager/mobile-fit-overrides')
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
 
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      const binding = connectPanePty(
+        pane as never,
+        createManager(1) as never,
+        createDeps() as never
       )
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
@@ -89,7 +91,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
 
     it('refits immediately when binding to a PTY with an active mobile-fit override', async () => {
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const pane = createPane(1)
@@ -114,9 +116,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       })
       setFitOverride('pty-fit', 'mobile-fit', 49, 20)
 
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
         | ((ptyId: string) => void)
         | undefined
@@ -142,7 +142,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         callback(0)
       }
 
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { setDriverForPty } = await import('@/lib/pane-manager/mobile-driver-state')
 
       const ptyId = 'pty-post-spawn-transient-lock'
@@ -159,9 +159,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         pane.terminal.cols = 80
         pane.terminal.rows = 24
 
-        storeFixture.track(
-          connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
         runNextFrame()
         await flushAsyncTicks()
 
@@ -211,7 +209,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       vi.stubGlobal('document', doc)
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const { applyOrDeferPaneMetricOptions } =
         await import('@/lib/pane-manager/pane-metric-options-deferral')
       const transport = createMockTransport()
@@ -246,7 +244,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       if (scenario === 'metrics') {
         applyOrDeferPaneMetricOptions(args[0], { fontSize: 24 }, false)
       }
-      const binding = storeFixture.track(connectPanePty(...args))
+      const binding = connectPanePty(...args)
 
       if (visibility === 'visible' && scenario !== 'starved') {
         frameCallbacks.shift()?.(0)
@@ -309,7 +307,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     it('spawns the delayed primary pane of an issue-command split when its sibling owns the tab PTY fallback', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       let mainPtyId: string | null = null
       const mainTransport = createMockTransport()
       mainTransport.getPtyId.mockImplementation(() => mainPtyId)
@@ -368,7 +366,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
           updateTabPtyId: updateStoreTabPtyId
         })
       ] as unknown as Parameters<typeof connectPanePty>
-      storeFixture.track(connectPanePty(...mainArgs))
+      connectPanePty(...mainArgs)
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the sibling uses the same checked fixture shape with its own command and transport.
       const issueArgs = [
         issuePane,
@@ -380,7 +378,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
           updateTabPtyId: updateStoreTabPtyId
         })
       ] as unknown as Parameters<typeof connectPanePty>
-      storeFixture.track(connectPanePty(...issueArgs))
+      connectPanePty(...issueArgs)
 
       await flushAsyncTicks(20)
       expect(issueTransport.connect).toHaveBeenCalledTimes(1)
@@ -401,7 +399,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     it('does not reuse a sibling split pane pending spawn after remount', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
       const mainSpawn = createDeferred<string>()
       const setupSpawn = createDeferred<string>()
@@ -420,29 +418,23 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       })
 
       const sharedTransportsRef = { current: new Map() }
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(2) as never,
-          createDeps({ paneTransportsRef: sharedTransportsRef }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(2) as never,
+        createDeps({ paneTransportsRef: sharedTransportsRef }) as never
       )
-      storeFixture.track(
-        connectPanePty(
-          createPane(2) as never,
-          createManager(2) as never,
-          createDeps({
-            startup: { command: 'bash setup-runner.sh' },
-            paneTransportsRef: sharedTransportsRef
-          }) as never
-        )
+      connectPanePty(
+        createPane(2) as never,
+        createManager(2) as never,
+        createDeps({
+          startup: { command: 'bash setup-runner.sh' },
+          paneTransportsRef: sharedTransportsRef
+        }) as never
       )
 
       const remountDeps = createDeps()
       const remountPane = createPane(1)
-      storeFixture.track(
-        connectPanePty(remountPane as never, createManager(2) as never, remountDeps as never)
-      )
+      connectPanePty(remountPane as never, createManager(2) as never, remountDeps as never)
 
       setupSpawn.resolve('pty-setup')
       mainSpawn.resolve('pty-main')
@@ -459,7 +451,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     it('binds a fresh spawn that resolves as a daemon reattach', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       let currentPtyId: string | null = null
       const transport = createMockTransport()
       transport.getPtyId.mockImplementation(() => currentPtyId)
@@ -477,7 +469,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       const pane = createPane(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks()
 
       expect(pane.container.dataset.ptyId).toBe('pty-daemon-reattach')
@@ -489,7 +481,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     })
 
     it('replays a stable-pane adoption without submitting the resume command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const stablePtyId = 'stable-pane-session'
       const transport = createMockTransport()
       transport.connect.mockImplementation(async ({ callbacks }) => {
@@ -519,7 +511,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         startup: { command: 'codex resume provider-session' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(4)
       if (!onDataHandler || parseCallbacks.length === 0) {
         throw new Error('expected replay and terminal input handlers')
@@ -544,7 +536,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
 
     it('drops xterm onData while pane is replaying restored bytes', async () => {
       // Regression: during replay, xterm auto-replies to embedded queries (DA1/DECRQM/OSC/CPR) via onData must not reach transport.sendInput or they land as stray chars on the prompt. See replay-guard.ts.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
 
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
@@ -564,7 +556,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
       const deps = createDeps({ replayingPanesRef })
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
 
       expect(onDataHandler).toBeDefined()
       if (!onDataHandler) {
@@ -591,7 +583,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
     it('forwards focus and hover reports without claiming a parked mirror (#26469)', async () => {
       // Regression: a TUI re-arms DECSET 1004 after every SIGWINCH and xterm answers with a focus
       // report. Claiming on it made two mirrors of different grids take the PTY from each other.
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-live')
       transportFactoryQueue.push(transport)
       storeFixture.patch({
@@ -607,9 +599,7 @@ export function registerPtyConnectionSplitSpawnTests(): void {
         return { dispose: vi.fn() }
       })
       const { setFitOverride } = await import('@/lib/pane-manager/mobile-fit-overrides')
-      storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
-      )
+      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       const send = registered.onData
       if (!send) {
         throw new Error('expected onData handler to be registered')

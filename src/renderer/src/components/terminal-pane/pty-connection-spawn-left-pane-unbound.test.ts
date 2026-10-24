@@ -147,18 +147,16 @@ describe('fresh spawn leaves a local pane unbound', () => {
   }
 
   it('remounts the pane when the spawn resolves without a PTY id', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport()
     // A spawn that produced nothing: no id returned and nothing bound after it.
     transport.connect.mockImplementation(async () => null)
     transportFactoryQueue.push(transport)
 
-    storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ tabId: 'tab-unbound-spawn' }) as never
-      )
+    connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      createDeps({ tabId: 'tab-unbound-spawn' }) as never
     )
     await flushAsyncTicks(40)
 
@@ -174,16 +172,14 @@ describe('fresh spawn leaves a local pane unbound', () => {
 
   // #21195: connect() resolves empty while the remote transport still holds an armed retry.
   it('leaves recovery to a transport that owns its own retry', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = Object.assign(createMockTransport(), { ownsRecovery: vi.fn(() => true) })
     transport.connect.mockImplementation(async () => undefined)
     transportFactoryQueue.push(transport)
 
     const deps = createDeps({ tabId: 'tab-transport-retry' })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocks cover every pane, manager, and deps member the connect path reads.
-    storeFixture.track(
-      connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-    )
+    connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(40)
 
     expect(transport.connect).toHaveBeenCalled()
@@ -194,16 +190,14 @@ describe('fresh spawn leaves a local pane unbound', () => {
   })
 
   it('does not remount when the spawn bound a PTY', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-bound')
     transportFactoryQueue.push(transport)
 
-    storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ tabId: 'tab-bound-spawn' }) as never
-      )
+    connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      createDeps({ tabId: 'tab-bound-spawn' }) as never
     )
     await flushAsyncTicks(40)
 
@@ -218,18 +212,16 @@ describe('fresh spawn leaves a local pane unbound', () => {
   // and reporting it is what keeps the attempt from sitting 'pending' for the
   // whole settlement bound and blocking the tab's next recovery.
   it('settles the tab recovery attempt as a success when the spawn binds a PTY', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const settleTerminalTabRecovery = vi.fn()
     storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
     const transport = createMockTransport('pty-bound')
     transportFactoryQueue.push(transport)
 
-    storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ tabId: 'tab-bound-spawn' }) as never
-      )
+    connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      createDeps({ tabId: 'tab-bound-spawn' }) as never
     )
     await flushAsyncTicks(40)
 
@@ -240,19 +232,17 @@ describe('fresh spawn leaves a local pane unbound', () => {
   // 'failed' before it asks for the remount, so a spawn that keeps failing is
   // refused as a settled failure rather than retried on the cooldown.
   it('settles the attempt as failed before asking for the remount', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const settleTerminalTabRecovery = vi.fn()
     storeFixture.patch({ ...storeFixture.read(), settleTerminalTabRecovery } as StoreState)
     const transport = createMockTransport()
     transport.connect.mockImplementation(async () => null)
     transportFactoryQueue.push(transport)
 
-    storeFixture.track(
-      connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ tabId: 'tab-unbound-spawn' }) as never
-      )
+    connectPanePty(
+      createPane(1) as never,
+      createManager(1) as never,
+      createDeps({ tabId: 'tab-unbound-spawn' }) as never
     )
     await flushAsyncTicks(40)
 

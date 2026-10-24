@@ -158,7 +158,7 @@ type ConnectMockPane = (
 async function revealParkedRemotePane(
   serializeBufferOutcome: ReturnType<typeof vi.fn>
 ): Promise<{ transport: MockTransport; writes: string[]; dispose: () => void }> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared mock pane, manager, and deps stand in for the real xterm-backed objects, exactly as every other connectPanePty suite drives them.
   const connectMockPane = connectPanePty as unknown as ConnectMockPane
   const transport = createMockTransport()

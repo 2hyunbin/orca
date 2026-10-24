@@ -148,7 +148,7 @@ describe('remote snapshot replay onto a live alt screen', () => {
     // 'alternate-queued': the TUI's ?1049h is still queued and parses with the first write.
     paneBuffer: 'normal' | 'alternate' | 'alternate-queued' = 'alternate'
   ): Promise<PaneEvent[]> {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('agent-pty')
     const replay: { current: ConnectCallbacks['onReplayData'] | null } = { current: null }
     transport.connect.mockImplementation(async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
@@ -177,9 +177,7 @@ describe('remote snapshot replay onto a live alt screen', () => {
     })
     const deps = buildPaneConnectionDeps(storeFixture)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
-    const binding = storeFixture.track(
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
-    )
+    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(8)
     pane.terminal.cols = COLS
     pane.terminal.rows = ROWS

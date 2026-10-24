@@ -163,7 +163,7 @@ describe('restored snapshot baseline shortfall (STA-5179)', () => {
         terminalMainSideEffectAuthority: true
       } as StoreState['settings']
     })
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-id')
     const capturedDataCallback: {
       current: ((data: string, meta?: { seq?: number; rawLength?: number }) => void) | null
@@ -174,14 +174,12 @@ describe('restored snapshot baseline shortfall (STA-5179)', () => {
     })
     transportFactoryQueue.push(transport)
     const pane = createPane(1)
-    storeFixture.track(
-      connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: true }
-        }) as never
-      )
+    connectPanePty(
+      pane as never,
+      createManager(1) as never,
+      createDeps({
+        isVisibleRef: { current: true }
+      }) as never
     )
     await flushAsyncTicks(6)
     const transportOptions = createdTransportOptions.at(-1) as {

@@ -144,7 +144,7 @@ async function connectAgentPane(args: {
   sendData: (data: string) => void
   confirmExit: (agent: TerminalAgent) => void
 }> {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
   const transport = createMockTransport(args.ptyId)
   transport.connect.mockImplementation(async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
@@ -163,9 +163,7 @@ async function connectAgentPane(args: {
     })
   ]
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
-  storeFixture.track(
-    connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
-  )
+  connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
   await vi.advanceTimersByTimeAsync(20)
   await flushAsyncTicks()
   const paneKey = makePaneKey(tabId, leafIdForPane(paneId))

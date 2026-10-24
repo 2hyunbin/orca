@@ -157,7 +157,7 @@ describe('connectPanePty', () => {
   })
 
   it('repaints overflowed live output when the deadline interrupts an answered snapshot', async () => {
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     const transport = createMockTransport('pty-id')
     let onData: ConnectCallbacks['onData']
     transport.connect.mockImplementation(async ({ callbacks }: { callbacks: ConnectCallbacks }) => {
@@ -177,9 +177,7 @@ describe('connectPanePty', () => {
       .mockResolvedValue({ data: done, cols: 120, rows: 40, seq: hidden.length + overflow.length })
     const pane = createPane(1)
     const deps = createDeps({ isVisibleRef: { current: false }, startup: { command: 'codex' } })
-    const disposable = storeFixture.track(
-      connectPanePty(pane as never, createManager(1) as never, deps as never)
-    )
+    const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(6)
     safeFitAndThen.mockClear()
     safeFitAndThen.mockReturnValueOnce({

@@ -50,7 +50,7 @@ export function registerPtyConnectionRemotePauseDropNoticeTests(): void {
     })
 
     async function connectRemotePane(dropsReported: boolean) {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const remotePtyId = 'remote:env-1@@terminal-1'
       const transport = createMockTransport(remotePtyId)
       const callbacks: { current: ConnectCallbacks } = { current: {} }
@@ -81,9 +81,7 @@ export function registerPtyConnectionRemotePauseDropNoticeTests(): void {
         isVisibleRef: { current: true }
       })
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures model the pane, manager and deps surface connectPanePty reads.
-      const binding = storeFixture.track(
-        connectPanePty(pane as never, createManager(1) as never, deps as never)
-      )
+      const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
       await flushAsyncTicks(6)
       const setVisible = async (visible: boolean): Promise<void> => {
         deps.isVisibleRef.current = visible

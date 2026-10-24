@@ -75,7 +75,7 @@ async function connectBound(
   visible = true,
   transport = createMockTransport()
 ) {
-  const { connectPanePty } = await import('./pty-connection')
+  const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   transportFactoryQueue.push(transport)
   setStore({
     tabsByWorktree: { 'wt-1': [{ id: TAB, ptyId: 'pty-old' }] },
@@ -92,7 +92,7 @@ async function connectBound(
   const args = [createPane(1), createManager(1), deps] as unknown as Parameters<
     typeof connectPanePty
   >
-  const connection = storeFixture.track(connectPanePty(...args))
+  const connection = connectPanePty(...args)
   await flushAsyncTicks()
   return { transport, deps, connection }
 }

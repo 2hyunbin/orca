@@ -56,7 +56,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
     })
 
     it('restores configured paired scrollback after an ordinary park reveal', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const remotePtyId = 'remote:env-1@@terminal-1'
       const transport = createMockTransport(remotePtyId)
       transport.connect.mockImplementation(
@@ -91,7 +91,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
       const { parseCallbacks, writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ mountFollowsTerminalPark: true })
 
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       for (let step = 0; step < 30; step += 1) {
         parseCallbacks.shift()?.()
         await flushAsyncTicks(2)
@@ -108,7 +108,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
     })
 
     it('keeps a parked main-model alt frame at its capture grid while hidden', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const localPtyId = 'global-floating-terminal@@terminal-1'
       const transport = createMockTransport(localPtyId)
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
@@ -152,7 +152,7 @@ export function registerPtyConnectionParkRevealModelSnapshotTests(): void {
         restoredLeafId: LEAF_1,
         restoredPtyIdByLeafId: { [LEAF_1]: localPtyId }
       })
-      storeFixture.track(connectPanePty(pane as never, createManager(1) as never, deps as never))
+      connectPanePty(pane as never, createManager(1) as never, deps as never)
       for (let step = 0; step < 30; step += 1) {
         parseCallbacks.shift()?.()
         await flushAsyncTicks(2)

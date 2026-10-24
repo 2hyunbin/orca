@@ -59,7 +59,7 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
         emit: (data: string, meta?: { droppedOutput?: boolean }) => void
         dispose: () => void
       }> {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const transport = createMockTransport('pty-id')
         const captured: {
           current: ((data: string, meta?: { droppedOutput?: boolean }) => void) | null
@@ -78,9 +78,7 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
         const pane = createPane(1)
         const manager = createManager(1)
         const deps = createDeps({ isVisibleRef: { current: true } })
-        const binding = storeFixture.track(
-          connectPanePty(pane as never, manager as never, deps as never)
-        )
+        const binding = connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(6)
         return {
           transport,
@@ -210,7 +208,7 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
     })
 
     it('records hidden Codex mode 2031 subscribes split across becoming visible', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -230,17 +228,15 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
       const paneLastThemeModeRef = { current: new Map<number, 'dark' | 'light'>() }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef,
-            paneMode2031Ref,
-            paneLastThemeModeRef,
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef,
+          paneMode2031Ref,
+          paneLastThemeModeRef,
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 
@@ -258,7 +254,7 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
     })
 
     it('does not keep mode 2031 subscribed when a skipped hidden chunk unsubscribes last', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-id')
       const capturedDataCallback: { current: ((data: string) => void) | null } = { current: null }
       transport.connect.mockImplementation(
@@ -273,17 +269,15 @@ export function registerPtyConnectionMode2031SubscriptionsTests(): void {
       const paneLastThemeModeRef = { current: new Map<number, 'dark' | 'light'>() }
       const pane = createPane(1)
       const manager = createManager(1)
-      const binding = storeFixture.track(
-        connectPanePty(
-          pane as never,
-          manager as never,
-          createDeps({
-            isVisibleRef: { current: false },
-            paneMode2031Ref,
-            paneLastThemeModeRef,
-            startup: { command: 'codex' }
-          }) as never
-        )
+      const binding = connectPanePty(
+        pane as never,
+        manager as never,
+        createDeps({
+          isVisibleRef: { current: false },
+          paneMode2031Ref,
+          paneLastThemeModeRef,
+          startup: { command: 'codex' }
+        }) as never
       )
       await flushAsyncTicks(6)
 

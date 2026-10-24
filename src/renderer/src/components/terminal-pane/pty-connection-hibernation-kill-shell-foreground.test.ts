@@ -162,7 +162,7 @@ describe('shell showing through a hibernation kill', () => {
     record: SleepingAgentSessionRecord
   }> {
     vi.useFakeTimers()
-    const { connectPanePty } = await import('./pty-connection')
+    const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
     vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
     const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
     const ptyId = 'pty-hibernating'
@@ -186,7 +186,7 @@ describe('shell showing through a hibernation kill', () => {
         })
       })
     ] as unknown as Parameters<typeof connectPanePty>
-    storeFixture.track(connectPanePty(...args))
+    connectPanePty(...args)
     await vi.advanceTimersByTimeAsync(20)
     await flushAsyncTicks()
     storeFixture.read().agentLaunchConfigByPaneKey[paneKey] = {

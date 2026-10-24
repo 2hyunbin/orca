@@ -72,7 +72,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
       }) as unknown as typeof setTimeout
 
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const paneKey = makePaneKey('tab-1', LEAF_2)
         let activePtyId: string | null = 'restored-session'
         const transport = createMockTransport('restored-session')
@@ -132,7 +132,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+        connectPanePty(pane as never, manager as never, deps as never)
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -194,7 +194,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
       }) as unknown as typeof setTimeout
 
       try {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const paneKey = makePaneKey('tab-1', LEAF_2)
         let activePtyId: string | null = 'restored-session'
         const transport = createMockTransport('restored-session')
@@ -260,9 +260,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        storeFixture.track(
-          connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
-        )
+        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -302,7 +300,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
     async function expectLiveNoteKeepsContentlessReattach(
       state: 'working' | 'done'
     ): Promise<void> {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const paneKey = makePaneKey('tab-1', LEAF_2)
       const transport = createMockTransport('restored-session')
       transport.connect.mockResolvedValue({
@@ -340,7 +338,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -356,7 +354,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
     )
 
     it('keeps a contentless reattach when a live status supersedes passive sleep evidence', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const paneKey = makePaneKey('tab-1', LEAF_2)
       const transport = createMockTransport('restored-session')
       transport.connect.mockResolvedValue({
@@ -405,7 +403,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)

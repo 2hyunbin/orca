@@ -88,7 +88,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
         transport: MockTransport
         cacheKey: string
       }> {
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const ptyId = args.ptyId ?? 'tab-pty'
         const tabId = args.tabId ?? `tab-${ptyId}`
         const hasReattachMetadata =
@@ -113,8 +113,10 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: ptyId },
           ...(args.isVisibleRef ? { isVisibleRef: args.isVisibleRef } : {})
         })
-        const binding = storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
+        const binding = connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          deps as never
         ) as unknown as {
           noteVisibilityResume: () => void
           sampleForegroundAgentOnFocus: () => void
@@ -138,7 +140,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
 
       it('does not inspect foreground process for a fresh visible spawn', async () => {
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const getForegroundProcess = vi.mocked(window.api.pty.getForegroundProcess)
         getForegroundProcess.mockResolvedValue('codex')
         const ptyId = 'pty-fresh-visible-no-sample'
@@ -157,9 +159,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
           }
         } as StoreState)
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks(20)
         const spawnHandler = createdTransportOptions[0]?.onPtySpawn as
@@ -743,7 +743,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
       it('fails closed when a leaked 133;D cancels identityless recovery', async () => {
         // Why: a cached visible read has no routing authority; on a racing command boundary, trust the shell marker over stale identity.
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const getForegroundProcess = vi.mocked(window.api.pty.getForegroundProcess)
         getForegroundProcess.mockResolvedValue('codex')
         const ptyId = 'pty-reattach-idle-codex-leaked-d'
@@ -768,9 +768,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
           restoredLeafId: LEAF_1,
           restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
         })
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks(20)
 
@@ -788,7 +786,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
 
       it('re-confirms leaked 133;D after detach moved pane-scoped Droid identity', async () => {
         vi.useFakeTimers()
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const getForegroundProcess = vi.mocked(window.api.pty.getForegroundProcess)
         getForegroundProcess.mockResolvedValue('droid')
         const ptyId = 'pty-detached-droid-leaked-d'
@@ -823,9 +821,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: ptyId }
         })
 
-        storeFixture.track(
-          connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
-        )
+        connectPanePty(createPane(1) as never, createManager(1) as never, deps as never)
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks(20)
         dataCallbackRef.current?.('\x1b]133;D;0\x07')

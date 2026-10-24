@@ -69,7 +69,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
 
     it('uses sleeping-record launch config for pane cold restore after settings change', async () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('fresh-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -128,7 +128,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
       await vi.advanceTimersByTimeAsync(70)
 
@@ -176,17 +176,15 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
     })
 
     it('clears stale launch config when a pane consumes a non-agent startup command', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
-      storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({ startup: { command: 'echo plain-command' } }) as never
-        )
+      connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({ startup: { command: 'echo plain-command' } }) as never
       )
       await flushAsyncTicks()
 
@@ -194,7 +192,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
     })
 
     it('ignores a late exit from a transport that no longer owns the pane', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const oldTransport = createMockTransport('old-pty')
       const replacementTransport = createMockTransport('new-pty')
       transportFactoryQueue.push(oldTransport)
@@ -202,7 +200,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
       const manager = createManager(1)
       const deps = createDeps()
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks()
       deps.paneTransportsRef.current.set(pane.id, replacementTransport)
 
@@ -219,7 +217,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
 
     it('clears launch config when an agent startup spawn produces no PTY', async () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport()
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
@@ -238,19 +236,17 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         }
       } as StoreState)
 
-      const binding = storeFixture.track(
-        connectPanePty(
-          createPane(1) as never,
-          createManager(1) as never,
-          createDeps({
-            startup: {
-              command: 'codex',
-              launchConfig,
-              launchToken: 'launch-token-1',
-              launchAgent: 'codex'
-            }
-          }) as never
-        )
+      const binding = connectPanePty(
+        createPane(1) as never,
+        createManager(1) as never,
+        createDeps({
+          startup: {
+            command: 'codex',
+            launchConfig,
+            launchToken: 'launch-token-1',
+            launchAgent: 'codex'
+          }
+        }) as never
       )
       try {
         await flushAsyncTicks(20)
@@ -281,7 +277,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
 
     it('prefers live-entry launch config for pane cold restore when status survived PTY loss', async () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('fresh-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -331,7 +327,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
       await vi.advanceTimersByTimeAsync(70)
 
@@ -371,7 +367,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
       'restores %s through main with one resume command',
       async (kind) => {
         vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-        const { connectPanePty } = await import('./pty-connection')
+        const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
         const retainedPtyId = 'wt-1@@lost-pty'
         const transport = createMockTransport()
         transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) =>
@@ -420,15 +416,13 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
           }
         } as StoreState)
 
-        storeFixture.track(
-          connectPanePty(
-            createPane(1) as never,
-            createManager(1) as never,
-            createDeps({
-              restoredLeafId: LEAF_1,
-              restoredPtyIdByLeafId: { [LEAF_1]: retainedPtyId }
-            }) as never
-          )
+        connectPanePty(
+          createPane(1) as never,
+          createManager(1) as never,
+          createDeps({
+            restoredLeafId: LEAF_1,
+            restoredPtyIdByLeafId: { [LEAF_1]: retainedPtyId }
+          }) as never
         )
         await flushAsyncTicks(20)
         await vi.advanceTimersByTimeAsync(70)
@@ -458,7 +452,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
 
     it('ignores stale live launch config when cold restore identity lookup rejects it', async () => {
       vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('fresh-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
@@ -527,7 +521,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'lost-pty' }
       })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(20)
       await vi.advanceTimersByTimeAsync(70)
 
@@ -563,7 +557,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
     })
 
     it('shows the restored banner when a sleeping resume falls back to a fresh shell', async () => {
-      const { connectPanePty } = await import('./pty-connection')
+      const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const staleSessionId = 'wt-1@@stale-session'
       const transport = createMockTransport()
       transport.connect.mockImplementation(async (opts: { sessionId?: string }) => {
@@ -622,7 +616,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
       })
       await mainStartsPaneAs({ ptyId: 'pty-main', bind: bindLeaf2, transport })
 
-      storeFixture.track(connectPanePty(pane as never, manager as never, deps as never))
+      connectPanePty(pane as never, manager as never, deps as never)
       await flushAsyncTicks(10)
 
       expect(transport.connect).toHaveBeenNthCalledWith(
