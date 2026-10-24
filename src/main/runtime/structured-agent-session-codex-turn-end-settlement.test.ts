@@ -19,8 +19,6 @@ import type { AgentJournalSubmission } from '../../shared/agent-session-journal-
 import { classifyDispatchRejection } from '../../shared/structured-agent-session-dispatch-rejection'
 import { owesStructuredAgentSessionWork } from '../../shared/structured-agent-session-owed-work'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
-import { structuredAgentSessionStopNoteIdentity } from '../native-chat/agent-session-wire/structured-agent-session-command-turn'
 import {
   HOST_TEST_SESSION as SESSION,
   HOST_TEST_THREAD as THREAD,
@@ -153,6 +151,7 @@ async function stop(turnId?: string): Promise<void> {
   if (!stopped.ok) {
     throw new Error(JSON.stringify(stopped.refusal))
   }
+  await host.collaboratorsForTests().serialize(SESSION, async () => {})
 }
 
 /** `/compact` as the chat surface runs it; refused while the chat still owes work. */
@@ -581,6 +580,7 @@ describe('a Stop sent after Codex answered a cold send, before it opened the tur
     expect(await held).toBe('held')
     expect(interrupts).toBe(1)
     turns.start()
+    await vi.advanceTimersByTimeAsync(1)
     await stopping
 
     expect(interrupts).toBe(2)
@@ -608,15 +608,19 @@ describe('a Stop in that window that the turn never opens for', () => {
     return { stopping, sent }
   }
 
-  it('says Codex had no turn running when that turn ends first', async () => {
-    const { stopping } = await waitingStop()
+  it('ends the session even when that turn ends before the interrupt can take it', async () => {
+    const { stopping, sent } = await waitingStop()
 
     turns.end('interrupted')
     await stopping
 
     expect(interrupts).toBe(1)
-    expect(childCloses).toBe(0)
-    expect(await statusRows()).toContain('Codex had no turn running to stop.')
+    expect(childCloses).toBe(1)
+    // The request stays visible; the withdrawn send has its own stopped result.
+    await vi.waitFor(async () =>
+      expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
+    )
+    expect(await statusRows()).toEqual(['Cancellation requested.'])
   })
 
   it('lets a chat closed behind it close within its bound and one eviction', async () => {
@@ -627,10 +631,7 @@ describe('a Stop in that window that the turn never opens for', () => {
       closing,
       CODEX_TURN_OPEN_WAIT_MS + CHILD_EVICTION_TIMEOUT_MS
     )
-    await vi.advanceTimersByTimeAsync(CODEX_TURN_OPEN_WAIT_MS - 201)
-    expect(openWaits.ended).toEqual([])
-    expect(childCloses).toBe(0)
-    await vi.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(CODEX_TURN_OPEN_WAIT_MS)
     expect(openWaits.ended).toEqual(['turn-1'])
 
     expect(await closedWithinBound).not.toBe('held')
@@ -647,10 +648,7 @@ describe('a Stop in that window that the turn never opens for', () => {
       stopStructuredAgentSessionRuntime(),
       CHILD_EVICTION_TIMEOUT_MS
     )
-    await vi.advanceTimersByTimeAsync(CODEX_TURN_OPEN_WAIT_MS - 201)
-    expect(openWaits.ended).toEqual([])
-    expect(childCloses).toBe(0)
-    await vi.advanceTimersByTimeAsync(1)
+    await vi.advanceTimersByTimeAsync(CODEX_TURN_OPEN_WAIT_MS)
     expect(openWaits.ended).toEqual(['turn-1'])
     expect(await quitWithinBound).not.toBe('held')
     expect(childCloses).toBe(1)
@@ -700,8 +698,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await vi.waitFor(async () => expect((await settled()).owesWork).toBe(false))
   })
 
-  // Stop accepted before turn/started must keep its note with the turn it interrupts.
-  it('keeps its note with the turn the interrupt took', async () => {
+  // The request was recorded before a turn was known, so a later turn cannot take its identity.
+  it('keeps its request separate from a turn that opens after acceptance', async () => {
     const release = turns.holdNextAnswer()
     await send('look around')
     await vi.waitFor(() => expect(answers).toBe(1))
@@ -717,12 +715,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     const notes = items.filter(
       (item) => item.body.kind === 'status' && item.body.text === 'Cancellation requested.'
     )
-    expect(notes.map((note) => [note.itemId, note.turnScope])).toEqual([
-      [
-        agentJournalItemKey(structuredAgentSessionStopNoteIdentity('turn-1')),
-        { kind: 'turn', turnItemId: turn?.itemId }
-      ]
-    ])
+    expect(notes.map((note) => note.turnScope)).toEqual([{ kind: 'thread' }])
+    expect(notes[0]?.itemId).toMatch(/^orca:stop%3A\d{13}-/)
   })
 
   it('ends the child when its interrupt was refused and the turn has not opened by the end of its wait', async () => {
@@ -762,8 +756,8 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await nextSendStartsANewChild()
   })
 
-  // Nothing it stopped stays in the transcript, so a Stop row would read as stopping the turn before.
-  it('leaves no Stop row under the turn before once it takes the send back', async () => {
+  // The accepted request remains separate from the previous completed turn.
+  it('keeps the Stop request after taking back a send, without changing the previous turn', async () => {
     const warmUp = await send('warm up')
     await vi.waitFor(() => expect(answers).toBe(1))
     turns.start()
@@ -775,7 +769,7 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
     await stopWhenItsTurnNeverOpens(release)
 
     expect(verdictOf((await settled()).submissions, sent)).toBe('withdrawn')
-    expect(await statusRows()).toEqual([])
+    expect(await statusRows()).toEqual(['Cancellation requested.'])
     expect(turnRow((await host.journalSnapshot(SESSION)).items)).toMatchObject({
       state: 'completed'
     })
@@ -844,7 +838,7 @@ describe("a Stop pressed while Codex's turn/start is in flight", () => {
 
     await stopWhenItsTurnNeverOpens()
 
-    expect(childCloses).toBe(1)
+    expect(childCloses).toBe(2)
     expect(verdictOf((await settled()).submissions, next)).toBe('withdrawn')
   })
 
