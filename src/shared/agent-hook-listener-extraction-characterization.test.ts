@@ -111,6 +111,18 @@ describe('agent hook extraction boundaries', () => {
     expect(rejected).toBeNull()
     expect(warn).toHaveBeenCalledTimes(1)
 
+    warn.mockClear()
+    const repeatedState = createHookListenerState()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      warnOnHookEnvOrVersionMismatch(repeatedState, {
+        version: 'repeated-version',
+        env: 'repeated-environment',
+        expectedEnv: 'production'
+      })
+    }
+    expect(warn).toHaveBeenCalledTimes(2)
+
+    warn.mockClear()
     const cappedState = createHookListenerState()
     for (let index = 0; index < 40; index++) {
       warnOnHookEnvOrVersionMismatch(cappedState, {
@@ -121,13 +133,7 @@ describe('agent hook extraction boundaries', () => {
     }
     expect(cappedState.warnedVersions.size).toBe(32)
     expect(cappedState.warnedEnvs.size).toBe(32)
-    expect(warn).toHaveBeenCalledTimes(65)
-    warnOnHookEnvOrVersionMismatch(cappedState, {
-      version: 'version-0',
-      env: 'environment-0',
-      expectedEnv: 'production'
-    })
-    expect(warn).toHaveBeenCalledTimes(65)
+    expect(warn).toHaveBeenCalledTimes(64)
   })
 
   it('moves selected pane-owned collections and preserves NUL suffixes', () => {
