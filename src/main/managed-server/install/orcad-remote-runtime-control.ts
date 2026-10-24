@@ -15,6 +15,7 @@ import {
 } from './orcad-remote-launch-windows'
 import {
   ORCAD_READINESS_WAIT_MAX_SECONDS,
+  orcadLaunchExitedDuringWait,
   orcadReadinessWaitCommand,
   parseOrcadReadinessWaitOutput
 } from './orcad-remote-readiness-wait'
@@ -165,7 +166,8 @@ export async function launchOrcadAndAwaitReadiness(
     target.signal?.throwIfAborted()
     lastWaitError = undefined
     last = parseOrcadReadinessWaitOutput(target.host, output)
-    if (last.state !== 'pending') {
+    // An exited launch answers as the deadline would, so callers attach the same log tail.
+    if (last.state !== 'pending' || orcadLaunchExitedDuringWait(target.host, output)) {
       return last
     }
     await sleep(READINESS_RETRY_PAUSE_MS)

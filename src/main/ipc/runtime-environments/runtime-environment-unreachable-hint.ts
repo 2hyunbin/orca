@@ -1,5 +1,5 @@
 /** What to suggest when a server cannot be reached, chosen by the kind of host that owns it. */
-import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime-tailscale-hint'
+import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime/remote-runtime-tailscale-hint'
 import { classifyRuntimeEnvironmentHost } from '../../../shared/runtime-environment-host-kind'
 import type { KnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 

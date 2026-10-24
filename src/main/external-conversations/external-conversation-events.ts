@@ -18,6 +18,8 @@ import {
   type ExternalConversationLinkStore,
   type LinkedConversation
 } from './external-conversation-links'
+import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
+import { sameBinding } from './external-conversation-send'
 import type { ConversationKey } from './external-conversation-types'
 
 type ConversationPane = { conversation: ConversationKey; worktreeId: string; paneKey: string }
@@ -48,11 +50,22 @@ export type ConversationWatchListener = (event: ConversationSnapshot | Conversat
 export type ConversationEventsDeps = {
   store: ExternalConversationLinkStore
   readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
+  readBinding: (paneKey: string) => AgentPromptExpectedBinding | null
   /** The detector's pane changes; returns the release. */
   onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
   pendingPrompt: (link: ExternalConversationLink) => PendingPrompt | null
   setTimer: (run: () => void, delayMs: number) => { cancel: () => void }
   now: () => number
+}
+
+/** The real clock and an unref'd timer, so a pending finish never holds the process open. */
+export const HOST_CLOCK: Pick<ConversationEventsDeps, 'setTimer' | 'now'> = {
+  setTimer: (run, delayMs) => {
+    const timer = setTimeout(run, delayMs)
+    timer.unref?.()
+    return { cancel: () => clearTimeout(timer) }
+  },
+  now: Date.now
 }
 
 /**
@@ -63,6 +76,11 @@ export type ConversationEventsDeps = {
 export class ConversationEvents {
   private readonly listeners = new Set<ConversationWatchListener>()
   private readonly turnStartedAt = new Map<string, number>()
+  // Prompts our cancel rejected, by pane: Claude's hooks report no end for that turn.
+  private readonly rejected = new Map<
+    string,
+    { row: AgentStatusIpcPayload; binding: AgentPromptExpectedBinding; at: number }
+  >()
   private release: (() => void) | null = null
 
   constructor(private readonly deps: ConversationEventsDeps) {}
@@ -77,7 +95,10 @@ export class ConversationEvents {
         started: (item) => this.started(item),
         stopped: (item) => this.ended(item, agentMainAgentVerdict(item.row))
       })
-      const unsubscribe = this.deps.onAgentPaneChange((change) => news.observe(change))
+      const unsubscribe = this.deps.onAgentPaneChange((change) => {
+        this.settleRejected(change.paneKey)
+        news.observe(change)
+      })
       this.release = () => {
         unsubscribe()
         news.dispose()
@@ -102,11 +123,79 @@ export class ConversationEvents {
     })
   }
 
+  rejectedByCancel(
+    paneKey: string,
+    row: AgentStatusIpcPayload,
+    binding: AgentPromptExpectedBinding,
+    at: number
+  ): void {
+    if (!this.release || row.agentType !== 'claude' || row.programStatus?.state !== 'blocked') {
+      return
+    }
+    this.rejected.set(paneKey, { row, binding, at })
+    // The idle observation can arrive before the write acknowledgment.
+    this.settleRejected(paneKey)
+  }
+
+  forgetUnlinked(): void {
+    for (const paneKey of this.rejected.keys()) {
+      if (!this.linkedFor(paneKey)) {
+        this.rejected.delete(paneKey)
+      }
+    }
+  }
+
   dispose(): void {
     this.release?.()
     this.release = null
     this.listeners.clear()
     this.turnStartedAt.clear()
+    this.rejected.clear()
+  }
+
+  /**
+   * The rejected turn ended when Claude's own activity report goes idle while the host still shows
+   * that prompt; once the host's row moves on, its own news tells the turn.
+   */
+  private settleRejected(paneKey: string): void {
+    const rejected = this.rejected.get(paneKey)
+    if (!rejected) {
+      return
+    }
+    const row = this.deps.readHookRow(paneKey)
+    const linked = this.linkedFor(paneKey)
+    const binding = this.deps.readBinding(paneKey)
+    if (
+      !row ||
+      !linked ||
+      linked.link.agent !== 'claude' ||
+      !binding ||
+      !sameBinding(binding, rejected.binding) ||
+      row.agentType !== rejected.row.agentType ||
+      row.state !== rejected.row.state ||
+      row.stateStartedAt !== rejected.row.stateStartedAt ||
+      row.interactivePrompt !== rejected.row.interactivePrompt ||
+      row.toolName !== rejected.row.toolName
+    ) {
+      this.rejected.delete(paneKey)
+      return
+    }
+    const activity = row.programStatus
+    if (
+      activity?.state !== 'idle' ||
+      activity.observedAt < rejected.at ||
+      activity.observedAt <= (rejected.row.programStatus?.observedAt ?? 0)
+    ) {
+      return
+    }
+    this.rejected.delete(paneKey)
+    this.turnStartedAt.delete(paneKey)
+    this.emit({
+      kind: 'turn-ended',
+      ...pane(linked.link, linked.workspace.worktreeId),
+      stopReason: 'cancellation',
+      at: activity.observedAt
+    })
   }
 
   private snapshot(): ConversationSnapshot {
@@ -125,7 +214,7 @@ export class ConversationEvents {
   }
 
   private started(item: TerminalAgentTurnNewsItem): void {
-    const link = this.linkFor(item.paneKey)
+    const link = this.linkedFor(item.paneKey)?.link
     if (!link) {
       return
     }
@@ -135,7 +224,7 @@ export class ConversationEvents {
   }
 
   private told(item: TerminalAgentTurnNewsItem): void {
-    const link = this.linkFor(item.paneKey)
+    const link = this.linkedFor(item.paneKey)?.link
     if (!link) {
       return
     }
@@ -162,7 +251,7 @@ export class ConversationEvents {
   }
 
   private ended(item: TerminalAgentTurnNewsItem, stopReason: AgentTurnOutcome | null): void {
-    const link = this.linkFor(item.paneKey)
+    const link = this.linkedFor(item.paneKey)?.link
     if (!link) {
       return
     }
@@ -177,10 +266,10 @@ export class ConversationEvents {
     })
   }
 
-  private linkFor(paneKey: string): ExternalConversationLink | null {
-    for (const { link } of allLinks(this.deps.store)) {
-      if (link.paneKey === paneKey) {
-        return link
+  private linkedFor(paneKey: string): LinkedConversation | null {
+    for (const linked of allLinks(this.deps.store)) {
+      if (linked.link.paneKey === paneKey) {
+        return linked
       }
     }
     return null

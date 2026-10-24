@@ -31,6 +31,8 @@ import {
   assertPosixOrcadHost as assertPosixHost,
   ORCAD_LOG_FILENAME,
   ORCAD_PID_FILENAME,
+  ORCAD_LAUNCH_MACHINE_COMMAND,
+  ORCAD_PID_MACHINE_FILENAME,
   ORCAD_READINESS_FILENAME,
   ORCAD_READINESS_MAX_BYTES,
   posixProcessAliveShellFunction
@@ -105,7 +107,8 @@ export function orcadLaunchCommand(
   const readiness = quotePosixShell(ORCAD_READINESS_FILENAME)
   const log = quotePosixShell(ORCAD_LOG_FILENAME)
   // Absolute: a nohup launch backgrounds the whole list, `cd` included, then writes this outside it.
-  const pidFile = quotePosixShell(joinRemotePath(host, spec.remoteInstallDir, ORCAD_PID_FILENAME))
+  // Named once: the path is long, and every byte counts against the sent-command budget.
+  const pidFile = '"$orcad_pid"'
   // Absolute: liveness matches the runtime's args against this path.
   const entry = quotePosixShell(
     joinRemotePath(host, spec.remoteInstallDir, ORCAD_LAUNCHER_FILENAME)
@@ -124,6 +127,9 @@ export function orcadLaunchCommand(
     ...orcadManagedLaunchEnv(spec).map(([name, value]) => `${name}=${quotePosixShell(value)}`)
   ]
   return [
+    `orcad_pid=${quotePosixShell(joinRemotePath(host, spec.remoteInstallDir, ORCAD_PID_FILENAME))};`,
+    // In the launching shell, so on the launched process's machine; empty where there is no boot id.
+    `{ ${ORCAD_LAUNCH_MACHINE_COMMAND};}>"$orcad_pid${ORCAD_PID_MACHINE_FILENAME.slice(ORCAD_PID_FILENAME.length)}" 2>/dev/null;`,
     ...(recordSession ? [captureOrcadLaunchSshSessionCommand()] : []),
     // The daemon gets this back: the git, terminals and agents it spawns create the user's files.
     'orcad_login_umask=$(umask);',
