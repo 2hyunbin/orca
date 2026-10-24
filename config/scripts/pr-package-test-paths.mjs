@@ -18,9 +18,8 @@ export const LINUX_PACKAGE_TESTS = [
 ]
 
 // Why: cloud/ is neither linted nor format-checked, so without this a cloud-only diff skips the
-// static job's check-test-file-runners.mjs and lands an orphaned test or a dropped runner green.
-const CLOUD_TEST_RUNNER_INPUT =
-  /^cloud\/(?:.+\.(?:test|spec|e2e|bench)\.[cm]?[jt]sx?|(?:.+\/)?(?:package\.json|vitest\.config\.[cm]?[jt]s))$/
+// static job's check-test-file-runners.mjs; any code file may register tests, so all of them route.
+const CLOUD_TEST_RUNNER_INPUT = /^cloud\/(?:.+\.[cm]?[jt]sx?|(?:.+\/)?package\.json)$/
 
 export function isCloudTestRunnerInput(file) {
   return CLOUD_TEST_RUNNER_INPUT.test(file)

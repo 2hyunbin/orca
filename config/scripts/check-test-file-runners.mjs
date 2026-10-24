@@ -197,7 +197,8 @@ function importsOf(file, source, files) {
     .filter((resolved) => resolved !== null)
 }
 
-// Why transpile: it erases exactly what Vitest's transform erases (type-only, unused, `typeof import()`).
+// Why transpile: it erases what Vitest's transform erases (type-only, unused, `typeof import()`).
+// That holds while no tsconfig sets verbatimModuleSyntax; enabling it only adds spurious failures.
 function runtimeImportsOf(file, source, files) {
   if (!TYPESCRIPT_FILE.test(file)) {
     return importsOf(file, source, files)
