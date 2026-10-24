@@ -1,3 +1,4 @@
+import type { AgentHookEventPayload } from '../listener-event'
 import type { HookListenerState } from '../listener-state'
 import { readString } from '../tool-input-preview'
 
@@ -35,7 +36,14 @@ export function isForeignEphemeralCodexThread(
   if (source === 'startup' || source === 'clear') {
     return false
   }
-  const row = state.lastStatusByPaneKey.get(paneKey)
+  return rowHoldsOtherCodexThread(state.lastStatusByPaneKey.get(paneKey), sessionId)
+}
+
+/** Whether the pane's stored Codex row is a different thread, one with a rollout. */
+export function rowHoldsOtherCodexThread(
+  row: Pick<AgentHookEventPayload, 'payload' | 'providerSession'> | undefined,
+  sessionId: string
+): boolean {
   const thread = row?.payload.agentType === 'codex' ? row.providerSession : undefined
   return Boolean(thread?.transcriptPath && thread.id !== sessionId)
 }
