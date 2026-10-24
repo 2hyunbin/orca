@@ -31,6 +31,8 @@ type TerminalTuiWheelEventInput = Pick<WheelEvent, 'deltaY'> &
 
 type TerminalTuiMouseWheelMetrics = {
   cellHeight?: number
+  /** One notch's wheelDelta in CSS px; Chromium divides both deltas by page zoom. */
+  notchWheelDelta?: number
   rows?: number
 }
 
@@ -76,14 +78,32 @@ function wheelInputTime(event: TerminalTuiWheelEventInput): number | null {
   return null
 }
 
-// Why: Chromium derives wheelDelta from whole notches (120 each) for wheels but
-// from pixel distance for continuous devices (a Mac trackpad reports -3 x deltaY),
-// so an off-grid wheelDelta marks a continuous gesture. A fast trackpad event can
-// land on the grid, so on-grid events stay continuous only shortly after off-grid
-// input and only with the trackpad's 3x shape; a Mac notch moves far less per 120.
+function normalizeNotchWheelDelta(notchWheelDelta: number | undefined): number {
+  if (
+    typeof notchWheelDelta === 'number' &&
+    Number.isFinite(notchWheelDelta) &&
+    notchWheelDelta > 0
+  ) {
+    return notchWheelDelta
+  }
+  return LEGACY_MOUSE_WHEEL_DELTA_UNIT
+}
+
+// wheelDelta is an integer, so a zoomed notch grid is matched to within one unit.
+function isOnNotchGrid(legacyDelta: number, notchWheelDelta: number): boolean {
+  const notches = Math.round(Math.abs(legacyDelta) / notchWheelDelta)
+  return notches >= 1 && Math.abs(Math.abs(legacyDelta) - notches * notchWheelDelta) < 1
+}
+
+// Why: Chromium derives wheelDelta from whole notches for wheels but from pixel
+// distance for continuous devices (a Mac trackpad reports -3 x deltaY), so an
+// off-grid wheelDelta marks a continuous gesture. A fast trackpad event can land on
+// the grid, so on-grid events stay continuous only shortly after off-grid input and
+// only with the trackpad's 3x shape; notches move a different distance per notch.
 function resolveContinuousWheelGesture(
   event: TerminalTuiWheelEventInput,
-  state: TerminalTuiMouseWheelDistanceState
+  state: TerminalTuiMouseWheelDistanceState,
+  notchWheelDelta: number
 ): boolean {
   if ((event.deltaMode ?? DOM_DELTA_PIXEL) !== DOM_DELTA_PIXEL) {
     state.continuousGestureAt = null
@@ -91,11 +111,7 @@ function resolveContinuousWheelGesture(
   }
   const inputAt = wheelInputTime(event)
   const legacyDelta = legacyVerticalWheelDelta(event)
-  if (
-    legacyDelta === null ||
-    legacyDelta === 0 ||
-    legacyDelta % LEGACY_MOUSE_WHEEL_DELTA_UNIT !== 0
-  ) {
+  if (legacyDelta === null || !isOnNotchGrid(legacyDelta, notchWheelDelta)) {
     state.continuousGestureAt = inputAt
     return true
   }
@@ -104,8 +120,8 @@ function resolveContinuousWheelGesture(
     state.continuousGestureAt !== null &&
     inputAt >= state.continuousGestureAt &&
     inputAt - state.continuousGestureAt <= CONTINUOUS_WHEEL_GESTURE_IDLE_MS &&
-    Math.abs(event.deltaY) * CONTINUOUS_WHEEL_LEGACY_RATIO >=
-      Math.abs(legacyDelta) - CONTINUOUS_WHEEL_LEGACY_RATIO
+    Math.abs(Math.abs(event.deltaY) * CONTINUOUS_WHEEL_LEGACY_RATIO - Math.abs(legacyDelta)) <=
+      CONTINUOUS_WHEEL_LEGACY_RATIO
   if (!continuesGesture) {
     state.continuousGestureAt = null
   }
@@ -137,7 +153,9 @@ function resolveWheelDistanceRows(
   }
   const legacyDelta = legacyVerticalWheelDelta(event)
   const rowsFromLegacy =
-    legacyDelta === null ? 0 : Math.abs(legacyDelta) / LEGACY_MOUSE_WHEEL_DELTA_UNIT
+    legacyDelta === null
+      ? 0
+      : Math.abs(legacyDelta) / normalizeNotchWheelDelta(metrics.notchWheelDelta)
   return Math.max(1, rowsFromDelta, rowsFromLegacy)
 }
 
@@ -237,7 +255,11 @@ export function resolveTerminalTuiMouseWheelReportCount(
   }
   state.pendingDirection = direction
 
-  const continuous = resolveContinuousWheelGesture(event, state)
+  const continuous = resolveContinuousWheelGesture(
+    event,
+    state,
+    normalizeNotchWheelDelta(metrics.notchWheelDelta)
+  )
   const distanceRows = resolveWheelDistanceRows(event, metrics, continuous)
   if (continuous) {
     return resolveContinuousWheelReportCount(state, distanceRows)
