@@ -32,7 +32,6 @@ type RuntimeMobileAgentStatusHost = {
   getPtyTitleObservedAtEpochMs?(ptyId: string | null): number | null
 }
 
-/** Preserve hook identity only when its source evidence outranks the selected shell title. */
 export function buildRuntimeMobileAgentStatus(
   pty: RuntimePtyWorktreeRecord | null,
   tab: RuntimeMobileSessionTerminalTab,
