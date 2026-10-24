@@ -40,7 +40,7 @@ export class StructuredAgentSessionStartFlights {
 
   published(sessionId: string, child: StructuredAgentSessionProviderChildIdentity): void {
     const flight = this.get(sessionId)
-    if (flight) {
+    if (flight && !this.ownsChild(sessionId, child)) {
       ;(flight.children ??= []).push({ generation: child.generation, fence: child.fence })
     }
   }

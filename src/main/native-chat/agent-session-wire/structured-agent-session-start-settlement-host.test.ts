@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as TimerPromises from 'node:timers/promises'
 import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
 import { withProviderRequestTimeout } from '../../provider-process/provider-request-timeout'
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
@@ -19,6 +20,18 @@ import {
   hostTestMessage
 } from './structured-agent-session-host-test-data'
 
+const retryClock = vi.hoisted(() => ({ fake: false }))
+vi.mock('node:timers/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof TimerPromises>()
+  return {
+    ...actual,
+    setTimeout: (...args: Parameters<typeof actual.setTimeout>) =>
+      retryClock.fake
+        ? new Promise((resolve) => setTimeout(() => resolve(args[1]), args[0]))
+        : actual.setTimeout(...args)
+  }
+})
+
 let host: ReturnType<typeof hostTestState>['host']
 let acquire: ReturnType<typeof hostTestState>['acquire']
 let dispatch: ReturnType<typeof hostTestState>['dispatch']
@@ -27,6 +40,7 @@ const eventually = (assertion: () => void | Promise<void>) =>
   vi.waitFor(assertion, { timeout: 10_000, interval: 0 })
 
 beforeEach(async () => {
+  retryClock.fake = false
   vi.useFakeTimers({
     toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
   })
@@ -315,4 +329,159 @@ describe('final logical startup settlement', () => {
     expect(acquire).toHaveBeenCalledTimes(1)
     expect(dispatch).not.toHaveBeenCalled()
   })
+
+  it.each([10, 100])(
+    'bounds physical work and retires starts for %i accepted requesters',
+    async (count) => {
+      retryClock.fake = true
+      const { sessions, runtimeState, conversationDelivery } = host.collaboratorsForTests()
+      const other = 'unrelated-chat'
+      const unrelated = hostTestAttachParams(null, {
+        providerHandle: undefined,
+        envelope: envelope(
+          'agentSession.attach',
+          {},
+          { sessionId: other, expectedRuntimeFence: null }
+        )
+      })
+      expect(await host.create(CALLER, unrelated)).toMatchObject({ ok: true })
+      const otherJournal = sessions.get(other)!.journal
+      const frames = Array.from({ length: count }, () => 0)
+      const unsubscribe = frames.map((_, index) =>
+        host.subscribeStatus({
+          id: `count-${index}`,
+          emit: (event) => {
+            if (event.type === 'status' && event.session.sessionId === SESSION) {
+              frames[index]!++
+            }
+          }
+        })
+      )
+      frames.fill(0)
+      const reads = vi.spyOn(otherJournal, 'submissions')
+      const writes = vi.spyOn(otherJournal, 'appendLifecycleBatch')
+      const probe = vi.fn<NonNullable<typeof host.deps.probeOwner>>(async () => ({
+        outcome: 'pid-absent'
+      }))
+      host.deps.probeOwner = probe
+      const baselineTimers = vi.getTimerCount()
+      const active = new Set<AbortSignal>()
+      const begin = runtimeState.acquireAborts.begin.bind(runtimeState.acquireAborts)
+      const handles = vi
+        .spyOn(runtimeState.acquireAborts, 'begin')
+        .mockImplementation((...args) => {
+          const handle = begin(...args)
+          active.add(handle.signal)
+          return {
+            ...handle,
+            end: () => {
+              active.delete(handle.signal)
+              handle.end()
+            }
+          }
+        })
+      try {
+        const ids: string[] = []
+        for (let n = 0; n < count; n++) {
+          ids.push(await accept(`failed requester ${n}`))
+        }
+        const successor = [await accept('successor first'), await accept('successor second')]
+        await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
+        const firstFlight = runtimeState.startFlights.get(SESSION)!
+        for (let n = 0; n < count; n++) {
+          const params = hostTestAttachParams(null)
+          expect(await host.attach(CALLER, params)).toMatchObject({ ok: true })
+          expect(await host.attach(CALLER, params)).toMatchObject({ ok: true, replayed: true })
+        }
+        expect(acquire).toHaveBeenCalledTimes(1)
+        expect(firstFlight.children).toHaveLength(1)
+        const settlements = vi.spyOn(sessions.get(SESSION)!.journal, 'appendLifecycleBatch')
+        for (let n = 0; n < count; n++) {
+          await eventually(() => expect(acquire).toHaveBeenCalledTimes(n * 5 + 1))
+          const flight = runtimeState.startFlights.get(SESSION)!
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await eventually(() => expect(acquire).toHaveBeenCalledTimes(n * 5 + attempt + 1))
+            await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
+            await endAttempt()
+            if (attempt < 4) {
+              await vi.advanceTimersByTimeAsync(100 * 2 ** attempt)
+            }
+          }
+          await expect(flight.outcome).resolves.toMatchObject({ ok: false })
+          expect(flight.children).toHaveLength(5)
+        }
+        await eventually(() => expect(acquire).toHaveBeenCalledTimes(5 * count + 1))
+        await proveOpen()
+        await eventually(() =>
+          expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual(successor)
+        )
+        const snapshot = await host.journalSnapshot(SESSION)
+        const rejected = snapshot.submissions.filter((row) => row.dispatchState === 'rejected')
+        expect(rejected.map((row) => row.clientMessageId)).toEqual(ids)
+        const finalWrites = settlements.mock.calls.filter(([batch]) =>
+          batch.settlementId.startsWith('start-failure:')
+        )
+        expect(finalWrites).toHaveLength(count)
+        expect(
+          finalWrites.flatMap(
+            ([batch]) => batch.dispatches?.map((row) => row.clientMessageId) ?? []
+          )
+        ).toEqual(ids)
+        settlements.mockRestore()
+        expect(snapshot.items.filter((item) => item.body.kind === 'status')).toHaveLength(count)
+        expect(
+          snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
+        ).toHaveLength(count)
+        expect(runtimeState.startFlights.has(SESSION)).toBe(false)
+        expect(runtimeState.startupAttempts.isOpen(SESSION)).toBe(false)
+        await host.close(SESSION, 'evict')
+        const stopped: string[] = []
+        for (let n = 0; n < count; n++) {
+          stopped.push(await accept(`withdraw requester ${n}`))
+        }
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
+          await endAttempt()
+          await vi.advanceTimersByTimeAsync(100 * 2 ** attempt)
+        }
+        await eventually(() => expect(acquire).toHaveBeenCalledTimes(5 * count + 6))
+        await eventually(() => expect(sessions.get(SESSION)?.child).toBeTruthy())
+        expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
+        await vi.advanceTimersByTimeAsync(2000)
+        await eventually(() => expect(conversationDelivery.loop.isRunning(SESSION)).toBe(false))
+        expect(acquire).toHaveBeenCalledTimes(5 * count + 6)
+        expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual(successor)
+        const final = await host.journalSnapshot(SESSION)
+        expect(final.submissions.filter((row) => stopped.includes(row.clientMessageId))).toEqual(
+          stopped.map((clientMessageId) =>
+            expect.objectContaining({
+              clientMessageId,
+              dispatchState: 'rejected',
+              reason: DISPATCH_REJECTED_CANCELLED
+            })
+          )
+        )
+        expect(runtimeState.startFlights.has(SESSION)).toBe(false)
+        expect(runtimeState.startupAttempts.isOpen(SESSION)).toBe(false)
+        expect(runtimeState.currentEventSink(SESSION)).toBeUndefined()
+        expect(active.size).toBe(0)
+        expect(vi.getTimerCount()).toBeLessThanOrEqual(baselineTimers)
+        const place = runtimeState.deliveryOrder.reserve(SESSION)
+        await place.before
+        place.release()
+        expect(reads).not.toHaveBeenCalled()
+        expect(writes).not.toHaveBeenCalled()
+        expect(probe.mock.calls.every(([record]) => record.sessionId !== other)).toBe(true)
+        expect(frames[0]).toBeGreaterThan(0)
+        expect(frames[0]).toBeLessThanOrEqual(20 * (5 * count + 6) + 8 * count)
+        expect(frames.every((value) => value === frames[0])).toBe(true)
+      } finally {
+        handles.mockRestore()
+        reads.mockRestore()
+        writes.mockRestore()
+        unsubscribe.forEach((off) => off())
+      }
+    },
+    120_000
+  )
 })
