@@ -1,6 +1,9 @@
 /** C7: persist WSL hosts and connect for explicit Add/Connect or visible project/terminal demand. Never boot stopped distros for background work. */
 import { errorMessage } from '../../shared/error-message'
-import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
+import {
+  reconcileWslHostBridgePorts,
+  removeWslHostEnvironment
+} from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
   type WslHostDeploymentRecord
@@ -221,7 +224,7 @@ export class WslHostService {
     return this.ensureConnected(environmentId, false)
   }
 
-  /** The user asked for work on this host (a move): like Connect, it may boot the distro. */
+  /** The user asked for work on this host (a move or an undo): like Connect, it may boot the distro. */
   ensureForUserRequest(environmentId: string): Promise<void> {
     return this.ensureConnected(environmentId, true)
   }
@@ -271,6 +274,14 @@ export class WslHostService {
 
   /** Startup: keep the holders a previous run left, without booting anything. */
   async start(): Promise<void> {
+    // Synchronous, before the window first lists its servers.
+    try {
+      for (const environmentId of reconcileWslHostBridgePorts(this.deps.userDataPath())) {
+        console.warn(`[wsl-hosts] Realigned ${environmentId}'s bridge port with its pairing.`)
+      }
+    } catch (error) {
+      console.warn('[wsl-hosts] Could not check WSL host records against their pairings:', error)
+    }
     if (!this.connector || !this.canRun() || this.records().length === 0) {
       return
     }
