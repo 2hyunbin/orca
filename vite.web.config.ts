@@ -9,6 +9,8 @@ import { resolveBuildSourceCommit } from './config/scripts/build-source-commit.m
 
 export default defineConfig({
   root: resolve('src/renderer'),
+  // Cached dependencies must not discover configs from an enclosing checkout.
+  tsconfig: resolve('config/tsconfig.web.json'),
   cacheDir: resolve('.cache/vite/web'),
   // Why: pairing URLs may live under a reverse-proxy path prefix like
   // /orca/web-index.html, so built assets must resolve relative to the page.
