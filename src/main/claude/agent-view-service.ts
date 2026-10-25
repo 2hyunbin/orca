@@ -25,7 +25,7 @@ type ServiceDeps = {
   reconcileConfig: typeof reconcileClaudeAgentViewConfig
   ensurePlugin: typeof ensureClaudeAgentViewPluginAsync
   listProfiles: typeof listClaudeProfileHomesAsync
-  loginEnv: () => Promise<NodeJS.ProcessEnv>
+  loginEnv: typeof resolveLoginShellEnvironment
 }
 
 export class ClaudeAgentViewService {
@@ -62,10 +62,12 @@ export class ClaudeAgentViewService {
     const generation = ++this.generation
     return this.enqueue(async () => {
       const env = enabled ? await this.deps.loginEnv() : process.env
+      const cachedEnv = enabled ? undefined : await this.deps.loginEnv({ cachedOnly: true })
       this.defaultConfig =
         env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
       for (const dir of [
         this.defaultConfig,
+        cachedEnv?.CLAUDE_CONFIG_DIR,
         customConfig,
         ...(await this.deps.listProfiles(this.userDataPath))
       ]) {

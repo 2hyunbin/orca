@@ -43,8 +43,9 @@ PTY spawns use the cached plugin folder without reading or writing HOME.
 Only opted-in local Claude launches wait for pending setup, for at most 200 ms.
 Plain shells, other agents, WSL panes and disabled navigation never wait for it.
 If setup exceeds that budget, subsequent panes can use navigation once setup
-finishes. Disabled cleanup visits known config directories without probing a
-login shell.
+finishes. Disabled cleanup visits known config directories and any config directory
+already cached from the login environment, without starting or waiting for a shell
+probe.
 With navigation off, Orca leaves `CLAUDE_CODE_PLUGIN_DIRS` untouched unless it
 must strip a previously inherited Orca plugin path.
 
