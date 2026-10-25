@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createUnreadableTerminalFrameState,
-  handleTerminalBinaryFrame
-} from './rpc-client-terminal-binary-frame'
+import { handleTerminalBinaryFrame } from './rpc-client-terminal-binary-frame'
+import { TerminalUnreadableFrameResets } from './terminal-unreadable-frame-resets'
 import { RpcClientTerminalStreamRouter } from './rpc-client-terminal-stream-router'
 import {
   encodeTerminalStreamFrame,
@@ -30,7 +28,7 @@ describe('handleTerminalBinaryFrame', () => {
       encodeFrame(TerminalStreamOpcode.Metadata, 42, { cwd: '/repo/src' }),
       {
         terminalSnapshots: new Map(),
-        unreadableFrames: createUnreadableTerminalFrameState(),
+        unreadableFrames: new TerminalUnreadableFrameResets(),
         getListener: (streamId) => (streamId === 42 ? listener : undefined)
       }
     )
@@ -49,7 +47,7 @@ describe('handleTerminalBinaryFrame', () => {
       }),
       {
         terminalSnapshots: new Map(),
-        unreadableFrames: createUnreadableTerminalFrameState(),
+        unreadableFrames: new TerminalUnreadableFrameResets(),
         getListener: () => listener
       }
     )
@@ -61,31 +59,39 @@ describe('handleTerminalBinaryFrame', () => {
     })
   })
 
-  it('ends a stream on an unreadable frame, throttling resets without stranding a stream', () => {
+  it('ends a stream on an unreadable frame, deferring resets inside the interval', () => {
+    vi.useFakeTimers()
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    let now = 1_000
-    const listener = vi.fn()
-    const options = {
-      terminalSnapshots: new Map(),
-      unreadableFrames: createUnreadableTerminalFrameState(() => now),
-      getListener: () => listener
+    try {
+      const listener = vi.fn()
+      const resets = new TerminalUnreadableFrameResets()
+      const options = {
+        terminalSnapshots: new Map(),
+        unreadableFrames: resets,
+        getListener: () => listener
+      }
+
+      handleTerminalBinaryFrame(unreadableFrame(9), options)
+      handleTerminalBinaryFrame(unreadableFrame(9), options)
+      // Another pane hits one inside the interval: deferred, never dropped.
+      handleTerminalBinaryFrame(unreadableFrame(10), options)
+      handleTerminalBinaryFrame(unreadableFrame(11), options)
+      resets.forget(11)
+      expect(listener.mock.calls.map(([event]) => event)).toEqual([
+        expect.objectContaining({ type: 'error', streamId: 9 })
+      ])
+
+      vi.advanceTimersByTime(30_000)
+
+      expect(listener.mock.calls.map(([event]) => event)).toEqual([
+        expect.objectContaining({ type: 'error', streamId: 9 }),
+        expect.objectContaining({ type: 'error', streamId: 10 })
+      ])
+      expect(warn).toHaveBeenCalledTimes(3)
+    } finally {
+      warn.mockRestore()
+      vi.useRealTimers()
     }
-
-    handleTerminalBinaryFrame(unreadableFrame(9), options)
-    handleTerminalBinaryFrame(unreadableFrame(9), options)
-    // Another pane hits one inside the window: logged, not reset yet.
-    handleTerminalBinaryFrame(unreadableFrame(10), options)
-    handleTerminalBinaryFrame(unreadableFrame(10), options)
-    now += 30_000
-    // Its next unreadable frame after the window still ends it.
-    handleTerminalBinaryFrame(unreadableFrame(10), options)
-
-    expect(listener.mock.calls.map(([event]) => event)).toEqual([
-      expect.objectContaining({ type: 'error', streamId: 9 }),
-      expect.objectContaining({ type: 'error', streamId: 10 })
-    ])
-    expect(warn).toHaveBeenCalledTimes(2)
-    warn.mockRestore()
   })
 
   it('lets a released stream id that the host reuses be reset again', () => {

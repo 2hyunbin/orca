@@ -5,6 +5,7 @@ import {
   decodeTerminalStreamText,
   readTerminalStreamFrameId
 } from '../../../src/shared/terminal-stream-protocol'
+import type { TerminalUnreadableFrameResets } from './terminal-unreadable-frame-resets'
 
 export type TerminalSnapshotState = {
   streamId: number
@@ -14,40 +15,9 @@ export type TerminalSnapshotState = {
 
 type StreamingListener = (result: unknown) => void
 
-// Why: a host that always sends an unreadable frame must not turn every resubscribe into another reset.
-const UNREADABLE_FRAME_RESET_INTERVAL_MS = 30_000
-const MAX_TRACKED_UNREADABLE_STREAMS = 256
-
-export type UnreadableTerminalFrameState = {
-  now: () => number
-  lastResetAt: number | null
-  resetStreamIds: Set<number>
-  loggedStreamIds: Set<number>
-}
-
-export function createUnreadableTerminalFrameState(
-  now: () => number = Date.now
-): UnreadableTerminalFrameState {
-  return { now, lastResetAt: null, resetStreamIds: new Set(), loggedStreamIds: new Set() }
-}
-
-/** Call wherever a stream's id is released, so a host that reuses it starts clean. */
-export function forgetUnreadableTerminalFrameStream(
-  state: UnreadableTerminalFrameState,
-  streamId: number
-): void {
-  state.resetStreamIds.delete(streamId)
-  state.loggedStreamIds.delete(streamId)
-}
-
-export function clearUnreadableTerminalFrameStreams(state: UnreadableTerminalFrameState): void {
-  state.resetStreamIds.clear()
-  state.loggedStreamIds.clear()
-}
-
 type TerminalBinaryFrameOptions = {
   terminalSnapshots: Map<number, TerminalSnapshotState>
-  unreadableFrames: UnreadableTerminalFrameState
+  unreadableFrames: TerminalUnreadableFrameResets
   getListener: (streamId: number) => StreamingListener | undefined
 }
 
@@ -162,35 +132,20 @@ function reportUnreadableTerminalFrame(
   streamId: number,
   opcode: number
 ): void {
-  const listener = options.getListener(streamId)
-  const state = options.unreadableFrames
-  // A reset stream is already ending; its later frames have nowhere to go.
-  if (!listener || state.resetStreamIds.has(streamId)) {
+  if (!options.getListener(streamId)) {
     return
   }
-  const now = state.now()
-  const throttled =
-    state.lastResetAt !== null && now - state.lastResetAt < UNREADABLE_FRAME_RESET_INTERVAL_MS
-  if (!state.loggedStreamIds.has(streamId)) {
-    trackUnreadableStream(state.loggedStreamIds, streamId)
-    console.warn('[terminal-stream] unreadable frame', { streamId, opcode, throttled })
-  }
-  if (throttled) {
-    return
-  }
-  state.lastResetAt = now
-  trackUnreadableStream(state.resetStreamIds, streamId)
-  options.terminalSnapshots.delete(streamId)
-  listener({
-    type: 'error',
-    streamId,
-    message: `Unsupported terminal stream frame (opcode ${opcode}).`
+  options.unreadableFrames.report(streamId, opcode, () => {
+    // Re-read: a deferred reset must reach only the stream that is still live.
+    const listener = options.getListener(streamId)
+    if (!listener) {
+      return
+    }
+    options.terminalSnapshots.delete(streamId)
+    listener({
+      type: 'error',
+      streamId,
+      message: `Unsupported terminal stream frame (opcode ${opcode}).`
+    })
   })
-}
-
-function trackUnreadableStream(ids: Set<number>, streamId: number): void {
-  if (ids.size >= MAX_TRACKED_UNREADABLE_STREAMS) {
-    ids.clear()
-  }
-  ids.add(streamId)
 }
