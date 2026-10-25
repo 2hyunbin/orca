@@ -1,3 +1,4 @@
+import { agentSessionGoalControlWords } from './agent-session-goal-control-words'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
@@ -175,7 +176,7 @@ export function NativeChatNoticeRow({
             { agentName },
             sayAgentSessionFailureTranslated
           )
-        : block.text
+        : agentSessionGoalControlWords(block.text)
   const detail =
     failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
       ? failure.detail.text

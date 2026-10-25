@@ -598,3 +598,18 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
     })
   }
 })
+
+it('renders the localized durable-goal uncertainty through the existing Stop notice', async () => {
+  await i18n.changeLanguage('ja')
+  renderStatus({
+    kind: 'status',
+    tone: 'warning',
+    failure: { kind: 'cancelUnconfirmed' },
+    text: 'Codex stopped running, but its goal pause was not confirmed. Check the goal before continuing.'
+  })
+  expect(
+    screen.getByText(
+      'Codex の実行は停止しましたが、目標の一時停止は確認されていません。続行する前に目標を確認してください。'
+    )
+  ).toBeInTheDocument()
+})

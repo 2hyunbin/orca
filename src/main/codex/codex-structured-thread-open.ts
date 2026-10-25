@@ -10,7 +10,7 @@ export type CodexOpenedThread = {
   thread?: Record<string, unknown>
   historyMode?: 'legacy' | 'paginated'
   model?: string
-  effort?: string
+  effort?: string | null
   /** Present, including null, only when this app-server reports the effective tier. */
   serviceTier?: string | null
 }
@@ -119,7 +119,7 @@ export async function openCodexThread(
       ? { historyMode: thread.historyMode }
       : {}),
     ...(model ? { model } : {}),
-    ...(effort ? { effort } : {}),
+    ...(effort || result.reasoningEffort === null ? { effort } : {}),
     ...(serviceTierKnown ? { serviceTier } : {})
   }
 }

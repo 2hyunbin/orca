@@ -19389,7 +19389,13 @@
       "explicitChatSsh": "El chat no está disponible en SSH. En su lugar, abra el agente en una terminal.",
       "explicitChatWsl": "El chat no está disponible en WSL. En su lugar, abra el agente en una terminal.",
       "structuredSessionTerminalNotVisible": "Orca abrió {{value0}} en una terminal, pero no pudo mostrarlo aquí cuando finalizó el lanzamiento. Se mantuvo el borrador de tu chat.",
-      "explicitChatUnavailable": "Este espacio de trabajo no puede ejecutar el chat. Verifique la instalación del agente o ábralo en una terminal."
+      "explicitChatUnavailable": "Este espacio de trabajo no puede ejecutar el chat. Verifique la instalación del agente o ábralo en una terminal.",
+      "goalControl": {
+        "settingsRejected": "Codex no pudo aplicar el modelo y el esfuerzo seleccionados. No se envió este cambio de objetivo. Revisa la selección e inténtalo de nuevo.",
+        "settingsUnconfirmed": "Codex no confirmó el modelo y el esfuerzo seleccionados. No se envió este cambio de objetivo. Revisa el chat e inténtalo de nuevo.",
+        "pauseUnconfirmed": "Codex dejó de ejecutarse, pero no se confirmó la pausa del objetivo. Revisa el objetivo antes de continuar.",
+        "stopUnconfirmed": "Codex no pudo confirmar la detención. Revisa el chat antes de continuar."
+      }
     },
     "tab": {
       "bar": {

@@ -19952,6 +19952,12 @@
       "imagePreview": {
         "fileActions": "Ações do arquivo",
         "linkActions": "Ações do link"
+      },
+      "goalControl": {
+        "settingsRejected": "O Codex não conseguiu aplicar o modelo e o esforço selecionados. Esta alteração de objetivo não foi enviada. Confira a seleção e tente novamente.",
+        "settingsUnconfirmed": "O Codex não confirmou o modelo e o esforço selecionados. Esta alteração de objetivo não foi enviada. Confira o chat e tente novamente.",
+        "pauseUnconfirmed": "O Codex parou de executar, mas a pausa do objetivo não foi confirmada. Confira o objetivo antes de continuar.",
+        "stopUnconfirmed": "O Codex não conseguiu confirmar a parada. Confira o chat antes de continuar."
       }
     },
     "tab": {
