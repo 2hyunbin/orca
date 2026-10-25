@@ -9,8 +9,10 @@ import type {
   AgentStatusMetadata,
   AgentStatusPayload,
   AgentStatusRouting,
-  AgentStatusTiming,
-  AgentProviderSessionMetadata,
+  AgentStatusTiming
+} from './agent-status-contract'
+import type { AgentProviderSessionMetadata } from '../../../../../shared/agent-session-resume'
+import type {
   DropAgentStatusByTabPrefixOptions,
   DropAgentStatusByWorktreeOptions,
   DropAgentStatusOptions,
@@ -20,15 +22,15 @@ import type {
 } from './agent-status-contract'
 import type {
   AgentStatusEntry,
-  AgentStatusOrchestrationContext,
-  MigrationUnsupportedPtyEntry
-} from '../../../../shared/agent-status-types'
+  AgentStatusOrchestrationContext
+} from '../../../../../shared/agent-status-types'
+import type { MigrationUnsupportedPtyEntry } from '../../../../../shared/agent-status-ipc-payload'
 import type {
   ResumableTuiAgent,
   SleepingAgentLaunchConfig,
   SleepingAgentSessionRecord
-} from '../../../../shared/agent-session-resume'
-import type { ProgramStatusFacet } from '../../../../shared/program-status/facet'
+} from '../../../../../shared/agent-session-resume'
+import type { ProgramStatusFacet } from '../../../../../shared/program-status/facet'
 
 export type AgentStatusSlice = {
   /** Explicit agent status entries keyed by `${tabId}:${leafId}`; real-time only, not persisted. */

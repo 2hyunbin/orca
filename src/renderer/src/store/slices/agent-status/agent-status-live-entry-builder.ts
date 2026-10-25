@@ -1,39 +1,37 @@
-import { sameAgentStatusTerminalOwner } from '../../../../shared/agent-status-terminal-owner'
-import type { AppState } from '../types'
+import { sameAgentStatusTerminalOwner } from '../../../../../shared/agent-status-terminal-owner'
+import type { AppState } from '../../types'
 import { resolveAgentStatusLiveEntryMainAgent } from './agent-status-live-entry-main-agent'
-import { resolveAgentStatusLiveEntryStateHistory } from '../../../../shared/agent-status-live-entry-state-history'
-import {
-  pickHostTurnEnd,
-  type MigrationUnsupportedPtyEntry,
-  type AgentStatusEntry
-} from '../../../../shared/agent-status-types'
+import { resolveAgentStatusLiveEntryStateHistory } from '../../../../../shared/agent-status-live-entry-state-history'
+import { pickHostTurnEnd } from '../../../../../shared/agent-status-types'
+import type { MigrationUnsupportedPtyEntry } from '../../../../../shared/agent-status-ipc-payload'
+import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
 import {
   agentProviderSessionsEqual,
   type AgentProviderSessionMetadata,
   type SleepingAgentLaunchConfig,
   type SleepingAgentSessionRecord
-} from '../../../../shared/agent-session-resume'
+} from '../../../../../shared/agent-session-resume'
 import {
   resolveAgentStatusIdentity,
   shouldSuppressInheritedTerminalStatus
-} from '../../../../shared/agent-status-identity'
-import { isCommandCodeNewTurnWhileWorking } from '../../../../shared/command-code-turn-boundary'
+} from '../../../../../shared/agent-status-identity'
+import { isCommandCodeNewTurnWhileWorking } from '../../../../../shared/command-code-turn-boundary'
 import type {
   AgentStatusMetadata,
   AgentStatusPayload,
   AgentStatusRouting,
   AgentStatusTiming
 } from './agent-status-contract'
-import { registryEntryMatchesStatus } from './agent-status-launch-config'
-import { findAgentPaneWorktreeId, getTabIdFromPaneKey } from './agent-status-pane-key-tab-binding'
-import { mergeCurrentOrchestrationContext } from './agent-status-orchestration-context'
+import { registryEntryMatchesStatus } from '../agent-status-launch-config'
+import { findAgentPaneWorktreeId, getTabIdFromPaneKey } from '../agent-status-pane-key-tab-binding'
+import { mergeCurrentOrchestrationContext } from '../agent-status-orchestration-context'
 import { deriveAgentStatusLiveFacts } from './agent-status-live-facts'
 import { liveEntryChildFields } from './agent-status-live-entry-children'
 import {
   canReuseStatusProviderSession,
   recordLaunchConfigForStatus,
   statusRetainsResumableIdentity
-} from '../../../../shared/agent-resume-record-from-status'
+} from '../../../../../shared/agent-resume-record-from-status'
 
 export type AgentStatusLiveEntryBuild = {
   entry: AgentStatusEntry
