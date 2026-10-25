@@ -116,10 +116,11 @@ export function createUpdateWorktreeGitIdentity(
         const shouldClearHostedReviewContext =
           hostedReviewBranchChanged && hasBranchScopedHostedReviewContext(worktree)
         // Why the copy: a same-path twin shares the id, so every guard and clear names this row.
-        // An unstamped legacy row is keyed by the stamp its next listing gives it.
-        const stamped = worktree.hostId
-          ? worktree
-          : withRepoHostOwnership(worktree, ownerHostId ?? repoHostId(s, worktree.repoId))
+        // Keyed by the stamp the next listing gives the row, so legacy or partial stamps still match.
+        const stamped = withRepoHostOwnership(
+          worktree,
+          ownerHostId ?? repoHostId(s, worktree.repoId)
+        )
         const copy = {
           owner: worktreeCopyOwnerKey(stamped),
           rowOwner: worktreeCopyOwnerKey(worktree),
