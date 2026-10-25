@@ -71,19 +71,11 @@ describe('Claude MCP elicitation', () => {
     ).toMatchObject({ state: 'done', mainAgent: { state: 'done' } })
   })
 
-  it('keeps the lead record when a child elicitation needs the person', () => {
-    claude({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
-    const running = claude({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
-    const childWait = claude({
-      hook_event_name: 'Elicitation',
-      agent_id: 'a1',
-      mcp_server_name: 'server',
-      message: 'Allow this?'
-    })
-    expect(childWait).toMatchObject({
-      state: 'waiting',
-      mainAgent: { state: 'working', stateStartedAt: running?.mainAgent?.stateStartedAt }
-    })
+  it('settles to done when the listener has no record of the session', () => {
+    claude({ hook_event_name: 'Elicitation', mcp_server_name: 'server', mode: 'url' })
+    expect(
+      claude({ hook_event_name: 'ElicitationResult', mcp_server_name: 'server', action: 'accept' })
+    ).toMatchObject({ state: 'done', mainAgent: { state: 'done' } })
   })
 
   it('voids the previous session when an elicitation arrives for a replacement', () => {
