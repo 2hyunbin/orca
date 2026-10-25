@@ -7,7 +7,9 @@ import type { Repo } from '../../src/shared/repo-types'
 /** Opens the repo settings panel and pins the UI language to English. */
 async function openRepoSettings(page: Page, repoId: string): Promise<void> {
   // Pin English because host locale controls default UI language.
-  await page.evaluate(() => window.__store!.getState().updateSettings({ uiLanguage: 'en' }))
+  await page.evaluate(async () => {
+    await window.__store!.getState().updateSettings({ uiLanguage: 'en' })
+  })
   await page.evaluate((repoId) => {
     const state = window.__store!.getState()
     state.openSettingsTarget({ pane: 'repo', repoId })
