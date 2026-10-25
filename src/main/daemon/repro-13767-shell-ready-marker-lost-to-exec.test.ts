@@ -9,9 +9,7 @@ import { Session } from './session'
 const describePosix = process.platform === 'win32' ? describe.skip : describe
 const hasZsh = process.platform !== 'win32' && spawnSync('/bin/zsh', ['--version']).status === 0
 const hasBash = process.platform !== 'win32' && spawnSync('/bin/bash', ['--version']).status === 0
-// `script(1)` allocates an inner pty and relays to a command across it -- the shape a
-// figterm-style takeover (`exec -a zsh kiro-cli-term`, #25586) leaves in front of the
-// real shell: a non-shell image in the foreground, the shell one pty behind it.
+// script(1) relays to a shell on an inner pty, like kiro-cli-term (#25586).
 const hasScript =
   process.platform !== 'win32' &&
   (existsSync('/usr/bin/script') || spawnSync('script', ['--version']).status === 0)
@@ -445,20 +443,12 @@ fi
 fi
 `
 
-  // #25586: a figterm-style takeover replaces the foreground with a relay binary, so the
-  // prompt the user sees comes from a shell one pty behind it. The wrapper was exec'd
-  // away (the inner shell deliberately drops ZDOTDIR, so no marker can ever arrive), yet
-  // the queued command must still be typed at the real prompt -- long before the 15s
-  // backstop. The relay probe here is `script(1)`, whose foreground image (/usr/bin/script)
-  // is exactly as non-shell as kiro-cli-term's.
   const relayTest = hasScript && hasZsh ? it : it.skip
   relayTest(
     'releases the queued command behind a pty relay the exec left in front of the shell',
     async () => {
       const readinessEvents: string[] = []
-      // Why `env -u`: a figterm takeover on a real machine leaves the inner shell without
-      // the wrapper env (#13767 follow-up measured `env | grep ORCA_SHELL` empty), and an
-      // inner wrapper would emit the marker, masking the relay-release path under test.
+      // Drop the wrapper env so the inner shell cannot emit the marker, as with kiro-cli-term.
       const scriptRelay =
         process.platform === 'darwin'
           ? 'script -q /dev/null /bin/zsh -o noglobalrcs -l -i'

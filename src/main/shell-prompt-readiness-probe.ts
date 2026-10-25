@@ -1,6 +1,6 @@
 import { createPtySlaveLineEditorProbe } from '../shared/pty-slave-line-discipline-echo'
 import {
-  readRelayedShellReadiness,
+  listChildProcessIds,
   readShellProcessReadiness,
   resolveInstalledShellExecutablePaths,
   resolveShellExecutablePath
@@ -41,8 +41,58 @@ export function createShellPromptReadinessProbe(options: {
   let generation = 0
   let probesStarted = 0
 
+  const isStale = (scheduledGeneration: number): boolean =>
+    disposed || scheduledGeneration !== generation
+
+  const isExpectedShell = async (executablePath: string): Promise<boolean> => {
+    if (!expectedShellName || basename(executablePath).toLowerCase() !== expectedShellName) {
+      return false
+    }
+    const expectedPath = options.shellPath
+      ? await resolveShellExecutablePath(options.shellPath, shellCwd, options.shellPathEnv)
+      : null
+    if (!expectedPath) {
+      return false
+    }
+    if (executablePath === expectedPath) {
+      return true
+    }
+    // Profiles can exec another installed shell; accept only replacements found on this pane's PATH.
+    const installedPaths = await resolveInstalledShellExecutablePaths(
+      expectedShellName,
+      shellCwd,
+      options.shellPathEnv
+    )
+    return installedPaths.includes(executablePath)
+  }
+
+  // A pty relay exec'd over the shell (kiro-cli-term, #25586) runs it as a child on an inner pty.
+  const isRelayedShellAtPrompt = async (
+    relayPid: number,
+    scheduledGeneration: number
+  ): Promise<boolean> => {
+    for (const childPid of await listChildProcessIds(relayPid)) {
+      const child = await readShellProcessReadiness(childPid).catch(() => null)
+      if (isStale(scheduledGeneration)) {
+        return false
+      }
+      if (
+        !child?.foreground ||
+        !child.ttyPath ||
+        child.ttyPath === options.slavePath ||
+        !(await isExpectedShell(child.executablePath))
+      ) {
+        continue
+      }
+      if ((await createPtySlaveLineEditorProbe(child.ttyPath)?.()) === 'line-editor') {
+        return true
+      }
+    }
+    return false
+  }
+
   const probe = async (scheduledGeneration: number): Promise<void> => {
-    if (disposed || scheduledGeneration !== generation) {
+    if (isStale(scheduledGeneration)) {
       return
     }
     const shellPid = options.getShellPid()
@@ -50,74 +100,17 @@ export function createShellPromptReadinessProbe(options: {
       return
     }
     const outerState = await lineEditorProbe()
-    if (disposed || scheduledGeneration !== generation) {
+    if (isStale(scheduledGeneration)) {
       return
     }
-    if (outerState === 'line-editor') {
-      const [shell, expectedPath] = await Promise.all([
-        readShellProcessReadiness(shellPid),
-        options.shellPath
-          ? resolveShellExecutablePath(options.shellPath, shellCwd, options.shellPathEnv)
-          : Promise.resolve(null)
-      ])
-      if (disposed || scheduledGeneration !== generation) {
-        return
-      }
-      if (
-        shell?.foreground &&
-        expectedShellName &&
-        expectedPath &&
-        basename(shell.executablePath).toLowerCase() === expectedShellName
-      ) {
-        if (shell.executablePath !== expectedPath) {
-          // Why widen past the launched path: a startup profile that `exec`s a second
-          // install of the same shell (Homebrew Bash over /bin/bash) keeps the pid but
-          // loses the wrapper's marker. Only installs this pane's own PATH resolves
-          // count, so a binary merely *named* bash/zsh outside it stays rejected.
-          const installedPaths = await resolveInstalledShellExecutablePaths(
-            expectedShellName,
-            shellCwd,
-            options.shellPathEnv
-          )
-          if (
-            disposed ||
-            scheduledGeneration !== generation ||
-            !installedPaths.includes(shell.executablePath)
-          ) {
-            return
-          }
-        }
-        disposed = true
-        options.onPromptReady()
-        return
-      }
-    }
-    // The pane's foreground is not the launched shell image, or the outer pty carries no
-    // line editor at all. A figterm-style takeover (#25586: `exec -a zsh kiro-cli-term`)
-    // leaves exactly that behind -- a relay binary in front, the launched shell one pty
-    // behind it, so the marker can never arrive and the prompt the user sees belongs to
-    // the relayed shell. Release only when that child is a legitimate install of the
-    // expected shell, foreground on its own pty, whose line editor is active -- the same
-    // evidence class the direct path requires, one tty over. A non-shell replacement (a
-    // sqlite3 REPL) has no such child and still waits out the timeout.
-    if (!expectedShellName) {
+    const shell = await readShellProcessReadiness(shellPid)
+    if (isStale(scheduledGeneration) || !shell?.foreground) {
       return
     }
-    const relayed = await readRelayedShellReadiness({
-      foregroundPid: shellPid,
-      shellPath: options.shellPath,
-      shellName: expectedShellName,
-      shellCwd,
-      shellPathEnv: options.shellPathEnv
-    })
-    if (disposed || scheduledGeneration !== generation || !relayed) {
-      return
-    }
-    const innerLineEditorProbe = createPtySlaveLineEditorProbe(relayed.ttyPath)
-    if (!innerLineEditorProbe || (await innerLineEditorProbe()) !== 'line-editor') {
-      return
-    }
-    if (disposed || scheduledGeneration !== generation) {
+    const ready = (await isExpectedShell(shell.executablePath))
+      ? outerState === 'line-editor'
+      : await isRelayedShellAtPrompt(shellPid, scheduledGeneration)
+    if (!ready || isStale(scheduledGeneration)) {
       return
     }
     disposed = true
