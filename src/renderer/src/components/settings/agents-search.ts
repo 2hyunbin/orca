@@ -1,6 +1,7 @@
 import {
   getClaudeSubagentNavigationTitle,
-  getClaudeSubagentNavigationDescription
+  getClaudeSubagentNavigationDescription,
+  getClaudeSubagentNavigationSearchKeywords
 } from './claude-subagent-navigation-copy'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import {
@@ -132,7 +133,7 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
     id: 'claude-subagent-navigation',
     title: getClaudeSubagentNavigationTitle(),
     description: getClaudeSubagentNavigationDescription(),
-    keywords: ['claude', 'subagent', 'navigation', 'plugin', 'mod', 'shortcut']
+    keywords: getClaudeSubagentNavigationSearchKeywords()
   },
   {
     title: getAgentWorkspaceTrustTitle(),
