@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { RpcClient } from '../transport/rpc-client'
+import type { RpcClient } from '../../../transport/rpc-client'
 import {
   GenerationScopedRequestOwner,
   type RequestScope
-} from '../transport/generation-scoped-request-owner'
+} from '../../../transport/generation-scoped-request-owner'
 import {
   nativeChatFileInventoryRead,
   nativeChatFileSearchRead
-} from './mobile-session-read-operations'
-import { rankSuggestions } from './mobile-native-chat-autocomplete'
+} from '../../mobile-session-read-operations'
+import { rankSuggestions } from '../../mobile-native-chat-autocomplete'
 
 const FILE_SEARCH_DEBOUNCE_MS = 120
 const FILE_SEARCH_RESULT_LIMIT = 16

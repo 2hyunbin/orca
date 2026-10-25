@@ -81,8 +81,10 @@ export function clipboardImageMountAdapters(
     },
     'nativeChat.image-upload': ({ client, effect }) => {
       const upload = modules.load<
-        typeof import('../../../session/mobile-native-chat-image-attachment')
-      >('mobile/src/session/mobile-native-chat-image-attachment.ts').uploadMobileNativeChatImages
+        typeof import('../../../session/native-chat/composer/mobile-native-chat-image-attachment')
+      >(
+        'mobile/src/session/native-chat/composer/mobile-native-chat-image-attachment.ts'
+      ).uploadMobileNativeChatImages
       let uploaded: unknown = 'unuploaded'
       let failure: unknown = null
       return {
@@ -116,8 +118,10 @@ export function clipboardImageMountAdapters(
       }
     },
     'nativeChat.image-paste': ({ client }) => {
-      const paste = modules.load<typeof import('../../../session/mobile-native-chat-image-send')>(
-        'mobile/src/session/mobile-native-chat-image-send.ts'
+      const paste = modules.load<
+        typeof import('../../../session/native-chat/composer/mobile-native-chat-image-send')
+      >(
+        'mobile/src/session/native-chat/composer/mobile-native-chat-image-send.ts'
       ).pasteMobileNativeChatImagePaths
       let pasted: unknown = 'unpasted'
       let failure: unknown = null

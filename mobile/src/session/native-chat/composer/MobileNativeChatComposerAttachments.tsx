@@ -8,8 +8,8 @@ import {
   View
 } from 'react-native'
 import { FileText, X } from 'lucide-react-native'
-import { colors, radii, spacing } from '../theme/mobile-theme'
-import { formatPreviewByteLength } from '../files/mobile-file-preview-response'
+import { colors, radii, spacing } from '../../../theme/mobile-theme'
+import { formatPreviewByteLength } from '../../../files/mobile-file-preview-response'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import type { PendingNativeChatFile } from './mobile-native-chat-file-attachment'
 

@@ -1,11 +1,11 @@
-import { agentImagePasteWrites } from '../../../src/shared/agent-image-paste'
-import { buildMobileImagePastePayload } from './mobile-clipboard-image'
+import { agentImagePasteWrites } from '../../../../../src/shared/agent-image-paste'
+import { buildMobileImagePastePayload } from '../../mobile-clipboard-image'
 import {
   MOBILE_NATIVE_CHAT_MIN_WRITE_TIMEOUT_MS,
   openMobileNativeChatSendBudget
-} from './mobile-native-chat-send'
-import { nativeChatTerminalWrite } from './mobile-session-write-operations'
-import type { MobileNativeChatRpcSender } from './mobile-native-chat-send'
+} from '../../mobile-native-chat-send'
+import { nativeChatTerminalWrite } from '../../mobile-session-write-operations'
+import type { MobileNativeChatRpcSender } from '../../mobile-native-chat-send'
 
 // Give the agent TUI a beat to register each bracketed image paste before the
 // message text + Enter arrive, so the image attaches instead of being treated as

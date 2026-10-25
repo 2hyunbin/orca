@@ -1,12 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
-import { CLIPBOARD_IMAGE_TOO_LARGE_ERROR } from '../../../src/shared/clipboard-image'
-import type { RpcClient } from '../transport/rpc-client'
-import type { ConnectionState } from '../transport/types'
-import { useMediaPicker } from '../platform/media-picker'
+import { CLIPBOARD_IMAGE_TOO_LARGE_ERROR } from '../../../../../src/shared/clipboard-image'
+import type { RpcClient } from '../../../transport/rpc-client'
+import type { ConnectionState } from '../../../transport/types'
+import { useMediaPicker } from '../../../platform/media-picker'
 import {
   ImageLibraryPermissionError,
   type MobileImageSource
-} from '../platform/media-picker-contract'
+} from '../../../platform/media-picker-contract'
 import {
   uploadMobileNativeChatImages,
   type PendingNativeChatImage

@@ -11,8 +11,10 @@ export function fileInventoryMountAdapters(
   return {
     'workspace.file-inventory': ({ client }) => {
       const useSearch = modules.load<
-        typeof import('../../../session/use-mobile-native-chat-file-search')
-      >('mobile/src/session/use-mobile-native-chat-file-search.ts').useMobileNativeChatFileSearch
+        typeof import('../../../session/native-chat/composer/use-mobile-native-chat-file-search')
+      >(
+        'mobile/src/session/native-chat/composer/use-mobile-native-chat-file-search.ts'
+      ).useMobileNativeChatFileSearch
       const operations = options.reference
         ? modules
             .load('mobile/src/session/native-host-session-native-chat-operations.ts')

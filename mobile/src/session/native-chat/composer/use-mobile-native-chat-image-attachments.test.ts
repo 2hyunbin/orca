@@ -1,18 +1,18 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
-import { buildAgentTuiClearInputForText } from '../../../src/shared/agent-tui-input-clear'
+import { buildAgentTuiClearInputForText } from '../../../../../src/shared/agent-tui-input-clear'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RpcClient } from '../transport/rpc-client'
-import type { RpcResponse, RpcSuccess } from '../transport/types'
-import { resetMobileNativeChatStaleInputForTests } from './mobile-native-chat-stale-input'
-import { resetMobileNativeChatTerminalWritesForTests } from './mobile-native-chat-terminal-write-lock'
+import type { RpcClient } from '../../../transport/rpc-client'
+import type { RpcResponse, RpcSuccess } from '../../../transport/types'
+import { resetMobileNativeChatStaleInputForTests } from '../../mobile-native-chat-stale-input'
+import { resetMobileNativeChatTerminalWritesForTests } from '../../mobile-native-chat-terminal-write-lock'
 import { useMobileNativeChatImageAttachments } from './use-mobile-native-chat-image-attachments'
 
 // Stubbed at the seam the hook now holds, which keeps the real expo/react-native chain out of the
 // vitest transform (react-native ships Flow syntax rolldown cannot parse) and pins the call site:
 // a hook that went back to importing the picker module directly would load that chain and fail.
 const pick = vi.hoisted(() => vi.fn())
-vi.mock('../platform/media-picker', () => ({ useMediaPicker: () => ({ pickImages: pick }) }))
+vi.mock('../../../platform/media-picker', () => ({ useMediaPicker: () => ({ pickImages: pick }) }))
 
 function ok(id: string, result: unknown): RpcSuccess {
   return { id, ok: true, result, _meta: { runtimeId: 'r' } }
