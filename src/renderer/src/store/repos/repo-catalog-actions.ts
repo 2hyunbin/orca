@@ -1,7 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { Repo } from '../../../../shared/repo-types'
-import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { reconcileCatalogRows } from '../../../../shared/catalog-row-reconcile'
 import { retainValidFilterRepoIds } from '../slices/repo-filter-selection'
 import {
@@ -24,10 +23,10 @@ import { claimHostCatalogFence, isHostCatalogFenceCurrent } from '../host-catalo
 import {
   fetchRepoCatalogForTarget,
   filterSetupsForPrunedRepoRows,
-  mergeFetchedRepoCatalog,
+  finalizeFetchedRepoCatalog,
+  flushEditsOfDroppedRepoWorktrees,
   reconcileFetchedCatalogWorktreeState,
-  reconcileReadoptedSshWorktreeState,
-  reconcileSupersededSshRepos
+  reconcileReadoptedSshWorktreeState
 } from './repo-catalog-merge'
 import {
   getProjectHostSetupOwnerKey,
@@ -101,6 +100,7 @@ export function createRepoCatalogActions(
         if (!isHostCatalogFenceCurrent(get, fence)) {
           return
         }
+        flushEditsOfDroppedRepoWorktrees(get(), catalog)
         let finalizedHostRepos: Repo[] = []
         set((s) => {
           // Why: an in-flight fetch for a just-removed env would re-add purged repos and stick; skip only when the env was tombstoned, not merely unhydrated (#8881).
@@ -108,9 +108,11 @@ export function createRepoCatalogActions(
             return s
           }
           // Why: re-adoption leaves a stale row on the old SSH target id (a ghost that fails "SSH target not found"); drop rows a live-host sibling supersedes.
-          const result = mergeFetchedRepoCatalog(catalog, s.repos)
-          const reconciliation = reconcileSupersededSshRepos(result.repos, s)
-          const prunedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
+          const {
+            result,
+            reconciliation,
+            finalizedRepos: prunedRepos
+          } = finalizeFetchedRepoCatalog(catalog, s)
           const validRepoIds = new Set(prunedRepos.map((repo) => repo.id))
           const validRepoHostIdentities = new Set(prunedRepos.map(getRepoHostIdentity))
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({

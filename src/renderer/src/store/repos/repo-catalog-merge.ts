@@ -14,6 +14,9 @@ import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { fetchProjectHostSetupCompatibility } from '../projects/project-host-routing'
 import { mergeFetchedReposForHost } from './repo-catalog-identity'
 import { dropWorktreeRowsOfDroppedRepos } from './dropped-repo-worktree-rows'
+import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
+import { buildWorktreePurgeState } from '../slices/worktrees/teardown/worktree-purge-state'
+import { flushPurgedWorkspaceEdits } from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
 
 export type FetchedRepoCatalog = {
   repos: readonly Repo[]
@@ -116,20 +119,53 @@ export function reconcileReadoptedSshWorktreeState(
   }
 }
 
-/** The worktree rows a fetched catalog leaves: re-adopted SSH rows moved, dropped repos' rows gone. */
-export function reconcileFetchedCatalogWorktreeState(
-  state: Pick<
-    AppState,
-    | 'repos'
-    | 'pendingSshRepoReadoptions'
-    | 'worktreesByRepo'
-    | 'detectedWorktreesByRepo'
-    | 'sortEpoch'
-  >,
-  nextRepos: readonly Repo[]
-): Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo' | 'sortEpoch'> {
+/** The repo rows a fetched catalog leaves once merged, superseded SSH rows reconciled and ordered. */
+export function finalizeFetchedRepoCatalog(
+  catalog: FetchedRepoCatalog,
+  state: Pick<AppState, 'repos' | 'pendingSshRepoReadoptions' | 'manualRepoOrder'>
+): {
+  result: ReturnType<typeof mergeFetchedRepoCatalog>
+  reconciliation: SshRepoReconciliation
+  finalizedRepos: readonly Repo[]
+} {
+  const result = mergeFetchedRepoCatalog(catalog, state.repos)
+  const reconciliation = reconcileSupersededSshRepos(result.repos, state)
+  return {
+    result,
+    reconciliation,
+    finalizedRepos: applyManualRepoOrder(reconciliation.repos, state.manualRepoOrder)
+  }
+}
+
+function dropRowsOfDroppedRepos(state: AppState, nextRepos: readonly Repo[]) {
   const readopted = reconcileReadoptedSshWorktreeState(state, state.pendingSshRepoReadoptions)
   return dropWorktreeRowsOfDroppedRepos(readopted, state.repos, nextRepos)
+}
+
+/** Why before the update: a purged workspace's delayed editor views must commit their text first. */
+export function flushEditsOfDroppedRepoWorktrees(
+  state: AppState,
+  catalog: FetchedRepoCatalog
+): void {
+  const { removed } = dropRowsOfDroppedRepos(
+    state,
+    finalizeFetchedRepoCatalog(catalog, state).finalizedRepos
+  )
+  if (removed.length > 0) {
+    flushPurgedWorkspaceEdits(state, removed)
+  }
+}
+
+/**
+ * The worktree state a fetched catalog leaves: re-adopted SSH rows moved, and the rows of every
+ * repo registration it dropped purged as an authoritative scan purges a vanished checkout.
+ */
+export function reconcileFetchedCatalogWorktreeState(
+  state: AppState,
+  nextRepos: readonly Repo[]
+): Partial<AppState> {
+  const { removed, ...rows } = dropRowsOfDroppedRepos(state, nextRepos)
+  return removed.length === 0 ? rows : { ...buildWorktreePurgeState(state, removed), ...rows }
 }
 
 export function filterTrustedOrcaHooksToValidRepos(

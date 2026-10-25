@@ -2,7 +2,6 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Repo } from '../../../../shared/repo-types'
-import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { retainValidFilterRepoIds } from '../slices/repo-filter-selection'
 import { readRuntimeWorktreeVisibilitySnapshot } from '../slices/worktree-visibility-owner-settings'
 import { getRepoHostIdentity } from '../slices/repo-host-identity'
@@ -14,9 +13,9 @@ import type { RepoSlice } from './repo-state'
 import {
   fetchRepoCatalogForTarget,
   filterSetupsForPrunedRepoRows,
-  mergeFetchedRepoCatalog,
-  reconcileFetchedCatalogWorktreeState,
-  reconcileSupersededSshRepos
+  finalizeFetchedRepoCatalog,
+  flushEditsOfDroppedRepoWorktrees,
+  reconcileFetchedCatalogWorktreeState
 } from './repo-catalog-merge'
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
@@ -41,6 +40,7 @@ export function createRuntimeRepoCatalogActions(
         if (!isHostCatalogFenceCurrent(get, fence)) {
           return []
         }
+        flushEditsOfDroppedRepoWorktrees(get(), catalog)
         let finalizedHostRepos: Repo[] = []
         set((s) => {
           if (!isHostCatalogFenceCurrent(get, fence)) {
@@ -50,9 +50,7 @@ export function createRuntimeRepoCatalogActions(
           if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
             return s
           }
-          const result = mergeFetchedRepoCatalog(catalog, s.repos)
-          const reconciliation = reconcileSupersededSshRepos(result.repos, s)
-          const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
+          const { result, reconciliation, finalizedRepos } = finalizeFetchedRepoCatalog(catalog, s)
           const validRepoIds = new Set(finalizedRepos.map((repo) => repo.id))
           const validRepoHostIdentities = new Set(finalizedRepos.map(getRepoHostIdentity))
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({

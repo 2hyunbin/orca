@@ -6,7 +6,7 @@ import {
   type RuntimeEnvironmentCallRequest
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
-import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
+import { createTestStore, makeTab, makeWorktree, seedStore } from '../slices/store-test-helpers'
 
 const SERVER = toRuntimeExecutionHostId('env-1')
 
@@ -57,6 +57,11 @@ describe('a fetched catalog that drops a repo registration', () => {
           }),
           makeWorktree({ id: 'old::/legacy', repoId: 'old', path: '/legacy' })
         ]
+      },
+      activeWorktreeId: 'old::/srv/app',
+      tabsByWorktree: {
+        'old::/srv/app': [makeTab({ id: 'server-tab', worktreeId: 'old::/srv/app' })],
+        'old::/local/app': [makeTab({ id: 'local-tab', worktreeId: 'old::/local/app' })]
       }
     })
     serverRepos = [serverRepo('copied')]
@@ -73,6 +78,9 @@ describe('a fetched catalog that drops a repo registration', () => {
       'old::/local/app',
       'old::/legacy'
     ])
+    // Purged like a checkout an authoritative scan lost: its selection and tabs go with it.
+    expect(state.activeWorktreeId).toBeNull()
+    expect(Object.keys(state.tabsByWorktree)).toEqual(['old::/local/app'])
   })
 
   it('drops the pre-host rows too once no host registers the repo id', async () => {
