@@ -67,13 +67,17 @@ export function resolveClaudeAgentTeamsShimBin(
 ): string | null {
   // Why: Windows callers pass an env spelt `Path`; reading only `PATH` there would find no CLI at all.
   const pathValue = env[resolvePathEnvKey(env, process.platform)]
-  const override = env.ORCA_AGENT_TEAMS_SHIM_BIN
-  if (override) {
-    // Why: a bare override name would be resolved by the shim's shell against its cwd, so qualify it or ignore it.
-    const qualified = isAbsolute(override) ? override : findExecutableOnPath(override, pathValue)
-    if (qualified) {
-      return qualified
-    }
+  const rawOverride = env.ORCA_AGENT_TEAMS_SHIM_BIN
+  // Why: a bare override name would be resolved by the shim's shell against its cwd, so qualify it or ignore it.
+  const override = rawOverride
+    ? isAbsolute(rawOverride)
+      ? rawOverride
+      : findExecutableOnPath(rawOverride, pathValue)
+    : null
+  // Why: with a team id the value was inherited from an older leader pane and may name a stale GUI binary.
+  const inheritedFromTeam = Boolean(env.ORCA_AGENT_TEAMS_TEAM_ID)
+  if (override && !inheritedFromTeam) {
+    return override
   }
   // Why first: a headless host has no resources dir, and the PATH fallback below can then find
   // the AppImage's Electron binary, which boots the GUI instead of the CLI.
@@ -86,6 +90,9 @@ export function resolveClaudeAgentTeamsShimBin(
     : null
   if (bundled && isExecutableFile(bundled)) {
     return bundled
+  }
+  if (override) {
+    return override
   }
   return (
     findExecutableOnPath(process.platform === 'win32' ? 'orca-dev.cmd' : 'orca-dev', pathValue) ??

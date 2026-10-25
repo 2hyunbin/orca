@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
+import { getOrcaCliCommandNameForPlatform } from '../../shared/orca-cli-command-name'
 import {
   buildClaudeAgentTeamsLaunchPlan,
   ensureClaudeAgentTeamsShimDir,
@@ -16,7 +17,6 @@ const roots: string[] = []
 
 afterEach(async () => {
   vi.unstubAllEnvs()
-  installFakeAppEnvironment()
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })))
   roots.length = 0
 })
@@ -104,7 +104,7 @@ describe('claude agent teams shim env', () => {
       const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
       roots.push(root)
       // Why: an AppImage puts its Electron binary, named like the CLI, first on PATH.
-      const electron = join(root, 'orca-ide')
+      const electron = join(root, getOrcaCliCommandNameForPlatform(process.platform))
       const launcher = join(root, 'cli', 'bin', 'orca')
       await mkdir(dirname(launcher), { recursive: true })
       for (const path of [electron, launcher]) {
@@ -114,6 +114,14 @@ describe('claude agent teams shim env', () => {
       installFakeAppEnvironment({ getCliLauncherPath: () => launcher })
 
       expect(resolveClaudeAgentTeamsShimBin({ PATH: root })).toBe(launcher)
+      // An older leader pane re-running `orca claude-teams` carries its stale team env.
+      expect(
+        resolveClaudeAgentTeamsShimBin({
+          PATH: root,
+          ORCA_AGENT_TEAMS_TEAM_ID: 'team-old',
+          ORCA_AGENT_TEAMS_SHIM_BIN: electron
+        })
+      ).toBe(launcher)
     }
   )
 
