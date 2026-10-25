@@ -22,7 +22,6 @@ function standaloneStatus(
   return { agent: 'kiro', state, configPath, managedHooksPresent, detail }
 }
 
-/** Status of a hooks file that exists at Orca's path; `file` is null when it did not parse. */
 function getExistingFileStatus(
   configPath: string,
   file: Record<string, unknown> | null
@@ -46,12 +45,10 @@ function getExistingFileStatus(
     : standaloneStatus(configPath, 'partial', `events: ${missing.join(', ')}`, true)
 }
 
-/** Status of the global hooks file kiro-cli's V3 engine loads for every agent. */
 export function getKiroStandaloneHooksStatus(): AgentHookInstallStatus {
   const configPath = getKiroStandaloneHooksFilePath()
   const { raw, config } = readHooksJsonWithRaw(configPath)
   if (raw === null) {
-    // readHooksJsonWithRaw answers {} for a missing file and null for one it could not read.
     return config
       ? standaloneStatus(configPath, 'not_installed', null)
       : standaloneStatus(configPath, 'error', 'Could not read the Orca Kiro hooks file')
@@ -62,7 +59,7 @@ export function getKiroStandaloneHooksStatus(): AgentHookInstallStatus {
 export function installKiroStandaloneHooks(command: string): AgentHookInstallStatus {
   const configPath = getKiroStandaloneHooksFilePath()
   const { raw, config } = readHooksJsonWithRaw(configPath)
-  // Why: the name is Orca's, but a file someone else wrote there keeps its hooks.
+  // A file someone else wrote at Orca's name keeps its hooks.
   if (config && (raw === null || getKiroStandaloneHooksFileConflict(config) === null)) {
     writeHooksJson(configPath, buildKiroStandaloneHooksFile(command))
   }
@@ -93,7 +90,6 @@ export function removeKiroStandaloneHooks(): AgentHookInstallStatus {
   const configPath = getKiroStandaloneHooksFilePath()
   const { config } = readHooksJsonWithRaw(configPath)
   if (config && readManagedKiroStandaloneTriggers(config).size > 0) {
-    // Why: delete the file only when all of it is Orca's; hooks someone else added stay.
     if (getKiroStandaloneHooksFileConflict(config) === null) {
       unlinkSync(configPath)
     } else {
@@ -103,14 +99,14 @@ export function removeKiroStandaloneHooks(): AgentHookInstallStatus {
   return getKiroStandaloneHooksStatus()
 }
 
-/**
- * Agent-config hooks stay the primary status (the default engine); the V3 file only surfaces
- * when Orca could not read or write it, which also keeps `installed` from overstating coverage.
- */
+/** Agent-config status stays primary; the V3 file adds coverage or surfaces its error. */
 export function withKiroStandaloneHooksStatus(
   primary: AgentHookInstallStatus,
   standalone: AgentHookInstallStatus
 ): AgentHookInstallStatus {
+  if (standalone.state === 'installed' && primary.state === 'not_installed') {
+    return { ...primary, state: 'partial', managedHooksPresent: true }
+  }
   if (standalone.state !== 'error') {
     return primary
   }

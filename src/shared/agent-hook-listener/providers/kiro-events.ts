@@ -30,8 +30,7 @@ export function normalizeKiroEvent(
     case 'SessionEnd':
       stateName = 'done'
       break
-    // Why: V3 creates its session lazily, so SessionStart lands right before the first
-    // UserPromptSubmit; settling the pane to done there would flash it idle mid-turn.
+    // V3 fires SessionStart lazily, just before the first prompt; done would flash idle mid-turn.
     default:
       return null
   }

@@ -13,9 +13,7 @@ describe('KiroHookService.installRemote with the V3 standalone hooks file', () =
     const { sftp, fs } = createAgentHookMemorySftp()
 
     const status = await new KiroHookService().installRemote(sftp, '/home/dev/')
-    // The default-engine status stays primary; only a V3 error would surface in it.
-    expect(status).toMatchObject({ agent: 'kiro', state: 'not_installed' })
-    expect(status.detail).not.toContain(REMOTE_HOOKS_FILE)
+    expect(status).toMatchObject({ agent: 'kiro', state: 'partial', managedHooksPresent: true })
 
     const file = JSON.parse(fs.files.get(REMOTE_HOOKS_FILE) ?? '')
     expect(file.version).toBe('v1')
@@ -30,12 +28,12 @@ describe('KiroHookService.installRemote with the V3 standalone hooks file', () =
     expect(script).toContain('/hook/kiro')
   })
 
-  it('keeps the V3 file under the remote home when a KIRO_HOME was probed', async () => {
+  it('puts the V3 file under a probed remote KIRO_HOME', async () => {
     const { sftp, fs } = createAgentHookMemorySftp()
 
     await new KiroHookService().installRemote(sftp, '/home/dev', '/opt/kiro')
-    expect(fs.files.has(REMOTE_HOOKS_FILE)).toBe(true)
-    expect(fs.files.has('/opt/kiro/hooks/orca-agent-status.json')).toBe(false)
+    expect(fs.files.has('/opt/kiro/hooks/orca-agent-status.json')).toBe(true)
+    expect(fs.files.has(REMOTE_HOOKS_FILE)).toBe(false)
   })
 
   it('refuses to overwrite a remote same-named file that holds hooks Orca did not write', async () => {

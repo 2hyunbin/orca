@@ -1,16 +1,11 @@
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, posix as pathPosix } from 'node:path'
+import { resolveKiroHomeDir } from '../../shared/kiro-home'
 import { isPlainObject, MANAGED_HOOK_TIMEOUT_SECONDS } from '../agent-hooks/installer-utils'
 import { getKiroManagedCommandMatcher } from './hook-settings'
 
 const KIRO_STANDALONE_HOOKS_FILE_NAME = 'orca-agent-status.json'
 
-/**
- * Lifecycle triggers kiro-cli's V3 engine (`--v3`) fires from standalone `~/.kiro/hooks/*.json`
- * files, captured from a real `kiro-cli chat --tui --v3` session (2.27.0). V3 uses Claude's
- * names here, not the `PromptSubmit`/`AgentStop` spelling its docs show: 2.27 drops entries
- * with those triggers when it loads the file, so they never fire.
- */
+/** V3 triggers (kiro-cli 2.27+); the docs' `PromptSubmit`/`AgentStop` spellings are dropped on load. */
 export const KIRO_STANDALONE_HOOK_TRIGGERS = [
   'SessionStart',
   'UserPromptSubmit',
@@ -20,14 +15,17 @@ export const KIRO_STANDALONE_HOOK_TRIGGERS = [
   'SessionEnd'
 ] as const
 
-// Why the home dir, not resolveKiroHomeDir(): the V3 engine ignores KIRO_HOME (kiro-cli 2.27.1)
-// and reads standalone hooks from ~/.kiro/hooks, while V2 agent configs follow KIRO_HOME.
+// V3 reads global hooks from $KIRO_HOME/hooks since kiro-cli 2.31 (2.29 used ~/.kiro/hooks).
 export function getKiroStandaloneHooksFilePath(): string {
-  return join(homedir(), '.kiro', 'hooks', KIRO_STANDALONE_HOOKS_FILE_NAME)
+  return join(resolveKiroHomeDir(), 'hooks', KIRO_STANDALONE_HOOKS_FILE_NAME)
 }
 
-export function getKiroRemoteStandaloneHooksFilePath(remoteHome: string): string {
-  return `${remoteHome.replace(/\/$/, '')}/.kiro/hooks/${KIRO_STANDALONE_HOOKS_FILE_NAME}`
+export function getKiroRemoteStandaloneHooksFilePath(
+  remoteHome: string,
+  kiroHomeDir?: string
+): string {
+  const root = kiroHomeDir ?? pathPosix.join(remoteHome.replace(/\/$/, ''), '.kiro')
+  return pathPosix.join(root, 'hooks', KIRO_STANDALONE_HOOKS_FILE_NAME)
 }
 
 export function buildKiroStandaloneHooksFile(command: string): Record<string, unknown> {
@@ -55,10 +53,7 @@ function runsManagedKiroScript(entry: unknown): boolean {
   )
 }
 
-/**
- * Triggers in `file` whose entry runs Orca's script. `activeOnly` drops entries marked
- * `enabled: false`, which Kiro skips.
- */
+/** `activeOnly` drops `enabled: false` entries, which Kiro skips. */
 export function readManagedKiroStandaloneTriggers(
   file: Record<string, unknown>,
   options: { activeOnly?: boolean } = {}
@@ -78,10 +73,7 @@ export function readManagedKiroStandaloneTriggers(
   return present
 }
 
-/**
- * Why `file` is not Orca's to rewrite, or null when it is. Only a `version: "v1"` file with a
- * non-empty `hooks` list that all runs Orca's script, and no other field, counts as Orca's.
- */
+/** Why `file` is not Orca's to rewrite, or null when every field and hook is Orca's. */
 export function getKiroStandaloneHooksFileConflict(file: Record<string, unknown>): string | null {
   const otherField = Object.keys(file).find((key) => key !== 'version' && key !== 'hooks')
   if (otherField !== undefined) {
@@ -96,7 +88,6 @@ export function getKiroStandaloneHooksFileConflict(file: Record<string, unknown>
   return file.version === 'v1' ? null : 'it is not a version "v1" hooks file'
 }
 
-/** `file` with the hooks that run Orca's script dropped and every other hook kept as is. */
 export function removeManagedKiroStandaloneHooks(
   file: Record<string, unknown>
 ): Record<string, unknown> {

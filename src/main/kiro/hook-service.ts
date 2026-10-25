@@ -82,7 +82,7 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
 }
 
 function noAgentsDetail(agentsDir: string): string {
-  return `No custom Kiro agents in ${agentsDir}. Kiro's built-in default agent cannot carry hooks; create one with \`kiro-cli agent create\` and make it the default so Orca can track Kiro's status`
+  return `No custom Kiro agents in ${agentsDir}. On Kiro's V2 engine the built-in default agent cannot carry hooks; create one with \`kiro-cli agent create\` and make it the default so Orca can track Kiro's status`
 }
 
 type AgentFileRead =
@@ -209,8 +209,7 @@ export class KiroHookService {
         preserveMode: true
       })
     }
-    // Why: V3 loads this file for every agent, the built-in default included, so it goes in
-    // even when there is no custom agent (or agents directory) to patch.
+    // V3 applies it to every agent, including the built-in default.
     installKiroStandaloneHooks(command)
     return this.getStatus()
   }
@@ -227,11 +226,9 @@ export class KiroHookService {
       // Write the script first so no hooks file ever points at a missing file.
       await writeManagedScriptRemote(sftp, scriptPath, getManagedScript('posix'))
       const command = getKiroRemoteManagedCommand(scriptPath)
-      // Why: as locally, V3's global file covers the built-in default agent; it lives under
-      // the remote home because V3 ignores KIRO_HOME, which only relocates V2 agents.
       const standalone = await installKiroStandaloneHooksRemote(
         sftp,
-        getKiroRemoteStandaloneHooksFilePath(remoteHome),
+        getKiroRemoteStandaloneHooksFilePath(remoteHome, kiroHomeDir),
         command
       )
       const fileNames = ((await listRemoteDirectory(sftp, agentsDir)) ?? [])
