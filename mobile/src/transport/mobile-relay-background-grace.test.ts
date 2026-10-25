@@ -50,7 +50,7 @@ describe('MobileRelayBackgroundGraceTimer', () => {
 
   it('rejects a stale expiry callback after foreground cancellation and rearming', () => {
     vi.useFakeTimers()
-    const callbacks: Array<() => void> = []
+    const callbacks: (() => void)[] = []
     const onExpired = vi.fn()
     const timer = new MobileRelayBackgroundGraceTimer(
       {
