@@ -1,11 +1,13 @@
 import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectPanePty } from './pty-connection'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import {
   createManager,
   createMockTransport,
   createPane,
+  leafIdForPane,
   type MockTransport
 } from './pty-connection-test-pane-fixtures'
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
@@ -101,6 +103,7 @@ vi.mock('./pty-transport', () => ({
 }))
 
 type ConnectedAgentPane = {
+  paneKey: string
   transport: MockTransport
   type: (data: string) => void
   bind: (ptyId: string) => void
@@ -137,6 +140,7 @@ function connectAgentPane(overrides: Record<string, unknown> = {}): ConnectedAge
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
   const binding = connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
   return {
+    paneKey: makePaneKey('tab-1', leafIdForPane(1)),
     transport,
     type: (data) => {
       for (const listener of userInputListeners) {
@@ -238,7 +242,7 @@ describe('agent pane keys typed before its PTY binds', () => {
     pane.dispose()
   })
 
-  it('keeps later keys behind the held draft until it is pasted', async () => {
+  it('sends keys typed after the bind live and drops the draft rather than pasting over them', async () => {
     let ready!: (value: boolean) => void
     waitForAgentDraftInputReady.mockReturnValue(
       new Promise<boolean>((resolve) => (ready = resolve))
@@ -246,20 +250,70 @@ describe('agent pane keys typed before its PTY binds', () => {
     const pane = connectAgentPane()
     await flushAsyncTicks(20)
 
-    pane.type('fix ')
+    pane.type('fix it')
     pane.bind('pty-1')
-    pane.type('it')
-    expect(pane.transport.sendInput).not.toHaveBeenCalled()
+    pane.type('y')
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('y', 'driving')
 
     ready(true)
     await flushAsyncTicks(20)
 
-    expect(sendAgentDraftPasteContent).toHaveBeenCalledWith(
-      'pty-1',
-      'fix it',
-      'driving',
-      expect.any(Function)
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    expect(onPasteTimeout).toHaveBeenCalledOnce()
+    pane.dispose()
+  })
+
+  // Why: a trust prompt during startup must take the user's answer, never trap it in the draft.
+  it('lets the user answer a startup trust prompt and never pastes the draft into it', async () => {
+    let ready!: (value: boolean) => void
+    waitForAgentDraftInputReady.mockReturnValue(
+      new Promise<boolean>((resolve) => (ready = resolve))
     )
+    const pane = connectAgentPane()
+    await flushAsyncTicks(20)
+
+    pane.type('make the tests pass')
+    pane.bind('pty-1')
+    mockStoreState.agentStatusByPaneKey[pane.paneKey] = {
+      state: 'blocked',
+      prompt: 'Do you trust the files in this folder?',
+      agentType: 'claude',
+      paneKey: pane.paneKey,
+      updatedAt: 1_000,
+      stateStartedAt: 1_000,
+      stateHistory: []
+    }
+    pane.type('1')
+    pane.type('\r')
+
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('1', 'driving')
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('\r', 'driving')
+    ready(true)
+    await flushAsyncTicks(20)
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    pane.dispose()
+  })
+
+  it('drops the draft when the agent is blocked on a prompt at ready time', async () => {
+    waitForAgentDraftInputReady.mockResolvedValue(true)
+    const pane = connectAgentPane()
+    await flushAsyncTicks(20)
+
+    pane.type('later')
+    mockStoreState.agentStatusByPaneKey[pane.paneKey] = {
+      state: 'waiting',
+      prompt: '',
+      agentType: 'claude',
+      paneKey: pane.paneKey,
+      updatedAt: 1_000,
+      stateStartedAt: 1_000,
+      stateHistory: []
+    }
+    pane.bind('pty-1')
+    await flushAsyncTicks(20)
+
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    expect(onPasteTimeout).toHaveBeenCalledOnce()
     pane.dispose()
   })
 
