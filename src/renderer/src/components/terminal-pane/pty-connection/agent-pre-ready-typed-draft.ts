@@ -20,22 +20,33 @@ const CTRL_H = '\b'
 
 /**
  * Adds typed bytes to a draft: printable text only. Enter, Tab, other control keys and escape
- * sequences are dropped so nothing submits or edits; Backspace deletes the last character.
+ * sequences are dropped so nothing submits or edits; Backspace deletes the last character. Line
+ * breaks inside a multi-character chunk (a paste) become one space so words don't run together.
  */
 export function appendTypedDraftText(draft: string, data: string, maxCodeUnits: number): string {
   if (data.startsWith('\x1b')) {
     return draft
   }
+  const isPasteChunk = data.length > 1
   let next = draft
+  let pendingSpace = false
   for (const char of data) {
     if (char === BACKSPACE || char === CTRL_H) {
       next = Array.from(next).slice(0, -1).join('')
+      continue
+    }
+    if (isPasteChunk && (char === '\r' || char === '\n')) {
+      pendingSpace = next !== '' && !/\s$/.test(next)
       continue
     }
     const code = char.codePointAt(0) ?? 0
     if (code < 0x20 || (code >= 0x7f && code < 0xa0)) {
       continue
     }
+    if (pendingSpace && next.length < maxCodeUnits) {
+      next += ' '
+    }
+    pendingSpace = false
     if (next.length + char.length > maxCodeUnits) {
       break
     }
@@ -81,6 +92,11 @@ export function installAgentPreReadyTypedDraft(session: ConnectPanePtySession): 
     if (session.transport.getPtyId() !== null) {
       // Why always live: a trust or permission prompt on screen must take the user's keys.
       liveInputSinceBind ||= wasUserInput
+      if (phase === 'capturing') {
+        // Only keys before the first bind are held; a later unbind (exit, hibernation, a remote
+        // re-attach) keeps today's path, where the host may hold and deliver them itself.
+        phase = draft === '' ? 'closed' : 'delivering'
+      }
       return false
     }
     if (phase !== 'capturing') {
@@ -133,19 +149,21 @@ export function installAgentPreReadyTypedDraft(session: ConnectPanePtySession): 
   }
 
   session.onAgentPreReadyDraftPtyBound = (ptyId: string, freshSpawn: boolean): void => {
-    const draftAgent = agent
-    if (phase !== 'capturing' || !draftAgent) {
+    if (phase !== 'capturing') {
       return
     }
-    liveInputSinceBind = false
-    if (draft === '') {
+    const draftAgent = resolveAgent()
+    if (!draftAgent || draft === '') {
+      draft = ''
       phase = 'closed'
       return
     }
+    liveInputSinceBind = false
     phase = 'delivering'
     if (!freshSpawn) {
-      // A reattached agent is already running; its composer takes the draft now.
-      void pasteDraft(ptyId, draftAgent)
+      // Why drop: an attached pane can still be at the shell before main types the launch line,
+      // where a paste would prefix the command.
+      dropDraft(draftAgent)
       return
     }
     void waitForAgentDraftInputReady(

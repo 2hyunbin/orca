@@ -16,12 +16,15 @@ export function isDeferredSplitInputHold(session: ConnectPanePtySession): boolea
  * live status entry), or a launch main picks for a pane it starts, unseen here.
  */
 export function paneHasStartupWork(session: ConnectPanePtySession): boolean {
+  return paneHasKnownStartupWork(session) || mainStartsPane(session)
+}
+
+function paneHasKnownStartupWork(session: ConnectPanePtySession): boolean {
   const state = useAppStore.getState()
   return Boolean(
     session.paneStartup ||
     session.getSleepingRecordForPane(state) ||
-    findColdRestoreResumeSource(session, state) ||
-    mainStartsPane(session)
+    findColdRestoreResumeSource(session, state)
   )
 }
 
@@ -32,6 +35,10 @@ export function paneHasStartupWork(session: ConnectPanePtySession): boolean {
  * a draft instead (agent-pre-ready-typed-draft.ts).
  */
 function holdsInputUntilConnect(session: ConnectPanePtySession): boolean {
+  if (isDeferredSplitInputHold(session)) {
+    // Why not mainStartsPane: a deferred split keeps holding under the layout-owner build, as before.
+    return !paneHasKnownStartupWork(session)
+  }
   return !paneHasStartupWork(session)
 }
 

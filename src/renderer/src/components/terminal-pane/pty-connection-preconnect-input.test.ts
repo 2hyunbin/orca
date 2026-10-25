@@ -237,6 +237,16 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
+  it('keeps a deferred split holding keys under the layout-owner build, as before', async () => {
+    layoutOwner.isMain = true
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane({ cwdPromise: new Promise<string>(() => {}) })
+
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBe(true)
+    binding.dispose()
+  })
+
   it('drops keys typed into a deliberately slept pane instead of replaying them on wake', async () => {
     markWorktreeSleepIntent('wt-1')
     const transport = Object.assign(createMockTransport(), { abandonPreconnectInput: vi.fn() })

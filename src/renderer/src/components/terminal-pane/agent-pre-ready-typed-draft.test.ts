@@ -107,6 +107,9 @@ type ConnectedAgentPane = {
   transport: MockTransport
   type: (data: string) => void
   bind: (ptyId: string) => void
+  bindAttached: (ptyId: string) => void
+  unbind: () => void
+  resolveConnect: (result: unknown) => void
   dispose: () => void
 }
 
@@ -115,7 +118,8 @@ function connectAgentPane(overrides: Record<string, unknown> = {}): ConnectedAge
   let ptyId: string | null = null
   transport.getPtyId.mockImplementation(() => ptyId)
   transport.sendInput.mockImplementation(() => ptyId !== null)
-  transport.connect.mockImplementation(() => new Promise(() => {}))
+  let resolveConnect: (result: unknown) => void = () => {}
+  transport.connect.mockImplementation(() => new Promise((resolve) => (resolveConnect = resolve)))
   transportFactoryQueue.push(transport)
   const pane = createPane(1)
   const userInputListeners: (() => void)[] = []
@@ -157,11 +161,32 @@ function connectAgentPane(overrides: Record<string, unknown> = {}): ConnectedAge
         onPtySpawn(id)
       }
     },
+    bindAttached: (id) => {
+      ptyId = id
+      const onPtyRebind = createdTransportOptions[0]?.onPtyRebind
+      if (typeof onPtyRebind === 'function') {
+        onPtyRebind(id, 'pty-previous')
+      }
+    },
+    unbind: () => {
+      ptyId = null
+    },
+    resolveConnect: (result) => {
+      if (result && typeof result === 'object' && 'id' in result && typeof result.id === 'string') {
+        ptyId = result.id
+      }
+      resolveConnect(result)
+    },
     dispose: () => binding.dispose()
   }
 }
 
 describe('appendTypedDraftText', () => {
+  it('turns line breaks inside a pasted chunk into one space', () => {
+    expect(appendTypedDraftText('', 'first line\r\nsecond', 100)).toBe('first line second')
+    expect(appendTypedDraftText('typed', '\r', 100)).toBe('typed')
+  })
+
   it('keeps printable text and drops Enter, Tab and control keys', () => {
     expect(appendTypedDraftText('', 'make\tthe tests\x03 pass\r', 100)).toBe('makethe tests pass')
   })
@@ -349,6 +374,58 @@ describe('agent pane keys typed before its PTY binds', () => {
       'driving',
       expect.any(Function)
     )
+    pane.dispose()
+  })
+
+  // Why: after the first bind an unbind (exit, hibernation, remote re-attach) must not trap keys.
+  it('never captures keys again after the first bind, even while unbound', async () => {
+    const pane = connectAgentPane()
+    await flushAsyncTicks(20)
+
+    pane.bind('pty-1')
+    pane.unbind()
+    pane.type('abc')
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('abc', 'driving')
+
+    pane.bind('pty-2')
+    await flushAsyncTicks(20)
+    expect(waitForAgentDraftInputReady).not.toHaveBeenCalled()
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    pane.dispose()
+  })
+
+  it('discards the draft when the first bind is a reattach result, then sends keys live', async () => {
+    const pane = connectAgentPane()
+    await flushAsyncTicks(20)
+
+    waitForAgentDraftInputReady.mockResolvedValue(true)
+    pane.type('held')
+    pane.resolveConnect({ id: 'pty-1', isReattach: true })
+    await flushAsyncTicks(40)
+    // A later fresh spawn (the cold-restore resume) must not receive the old draft either.
+    pane.unbind()
+    pane.bind('pty-2')
+    await flushAsyncTicks(20)
+    pane.type('z')
+
+    expect(waitForAgentDraftInputReady).not.toHaveBeenCalled()
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('z', 'driving')
+    pane.dispose()
+  })
+
+  // Why: an attach can land on a shell before main types the launch line; a paste would prefix it.
+  it('drops the draft with a notice when the first bind is not a fresh spawn', async () => {
+    const pane = connectAgentPane()
+    await flushAsyncTicks(20)
+
+    pane.type('held')
+    pane.bindAttached('pty-1')
+    await flushAsyncTicks(20)
+
+    expect(waitForAgentDraftInputReady).not.toHaveBeenCalled()
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
+    expect(onPasteTimeout).toHaveBeenCalledOnce()
     pane.dispose()
   })
 
