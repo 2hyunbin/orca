@@ -1,5 +1,5 @@
 import type { WebContents } from 'electron'
-import { beginWatcherInstall } from './watcher-removal-gate'
+import { beginWatcherInstall } from '../../watcher-removal-gate'
 import type { LocalWatcherInstallToken } from './filesystem-watcher-lifecycle-state'
 import {
   WATCHER_TEARDOWN_GRACE_MS,

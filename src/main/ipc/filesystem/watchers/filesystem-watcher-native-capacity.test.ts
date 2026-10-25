@@ -11,7 +11,7 @@ const { handleMock, statMock, subscribeViaWatcherProcessMock, disposeWatcherProc
 
 vi.mock('electron', () => ({ ipcMain: { handle: handleMock } }))
 vi.mock('node:fs/promises', () => ({ stat: statMock }))
-vi.mock('./filesystem/watcher-process/parcel-watcher-process', () => ({
+vi.mock('../watcher-process/parcel-watcher-process', () => ({
   subscribeViaWatcherProcess: subscribeViaWatcherProcessMock,
   disposeWatcherProcess: disposeWatcherProcessMock
 }))
@@ -23,7 +23,7 @@ import {
   reserveWatcherChild,
   resetWatcherChildRegistryForTest,
   WatcherChildCapacityError
-} from './filesystem/watcher-process/parcel-watcher-child-registry'
+} from '../watcher-process/parcel-watcher-child-registry'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 

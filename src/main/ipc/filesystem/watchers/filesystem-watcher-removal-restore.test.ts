@@ -9,7 +9,7 @@ const { handleMock, statMock, subscribeMock } = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({ ipcMain: { handle: handleMock } }))
 vi.mock('node:fs/promises', () => ({ stat: statMock }))
-vi.mock('./filesystem/watcher-process/parcel-watcher-process', () => ({
+vi.mock('../watcher-process/parcel-watcher-process', () => ({
   subscribeViaWatcherProcess: subscribeMock,
   disposeWatcherProcess: vi.fn()
 }))
@@ -18,11 +18,11 @@ vi.mock('./filesystem-watcher-wsl', () => ({ createWslWatcher: vi.fn() }))
 import { closeAllWatchers } from './filesystem-watcher-shutdown'
 import { registerFilesystemWatcherHandlers } from './filesystem-watcher-handlers'
 import { desktopWorktreeWatcherRemoval } from './filesystem-watcher'
-import { setWorktreeWatcherRemoval } from './worktree-watcher-removal'
-import { createRuntimeFileWatcherRemoval } from '../runtime/runtime-file-watcher-removal'
+import { setWorktreeWatcherRemoval } from '../../worktree-watcher-removal'
+import { createRuntimeFileWatcherRemoval } from '../../../runtime/runtime-file-watcher-removal'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { getLocalWatcherRoot } from './filesystem-watcher-paths'
-import { resetWatcherChildRegistryForTest } from './filesystem/watcher-process/parcel-watcher-child-registry'
+import { resetWatcherChildRegistryForTest } from '../watcher-process/parcel-watcher-child-registry'
 
 type Handler = (event: unknown, args: unknown) => unknown
 

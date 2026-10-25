@@ -1,12 +1,12 @@
 import { stat } from 'node:fs/promises'
 import type { Event as WatcherEvent } from '@parcel/watcher'
-import type { FsChangeEvent, FsChangedPayload } from '../../shared/filesystem-entry-types'
-import { watchBatchFlushDelayMs } from '../../shared/filesystem-watch-batch-window'
+import type { FsChangeEvent, FsChangedPayload } from '../../../../shared/filesystem-entry-types'
+import { watchBatchFlushDelayMs } from '../../../../shared/filesystem-watch-batch-window'
 import { MAX_BATCHED_WATCHER_EVENTS, queueWatcherEvents } from './filesystem-watcher-event-batch'
 // Filter high-churn events at source; Explorer display filters only hide rows.
 import { WATCHER_IGNORE_DIRS, buildParcelWatcherIgnoreOptions } from './filesystem-watcher-ignore'
 import type { WatchedRoot } from './filesystem-watcher-wsl'
-import { subscribeViaWatcherProcess } from './filesystem/watcher-process/parcel-watcher-process'
+import { subscribeViaWatcherProcess } from '../watcher-process/parcel-watcher-process'
 import { normalizeWatcherEventPath } from './filesystem-watcher-paths'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import {
@@ -14,7 +14,7 @@ import {
   trackDetachedLocalUnsubscribe
 } from './filesystem-watcher-listener-lifecycle'
 import { cancelLocalBatchFlush, createDebouncedBatch } from './filesystem-watcher-batch-control'
-import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+import { mapWithConcurrency } from '../../../../shared/map-with-concurrency'
 import {
   notifyLocalWatcherEvents,
   notifyLocalWatcherInterrupted

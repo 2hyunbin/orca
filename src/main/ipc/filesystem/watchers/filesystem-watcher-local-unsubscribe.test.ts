@@ -1,6 +1,6 @@
 import { createWatcherSender } from './filesystem-watcher-test-sender'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ParcelWatcherProcess from './filesystem/watcher-process/parcel-watcher-process'
+import type * as ParcelWatcherProcess from '../watcher-process/parcel-watcher-process'
 
 const { handleMock } = vi.hoisted(() => ({
   handleMock: vi.fn()
@@ -24,7 +24,7 @@ vi.mock('./filesystem-watcher-wsl', () => ({
   createWslWatcher: vi.fn()
 }))
 
-vi.mock('./filesystem/watcher-process/parcel-watcher-process', async (importOriginal) => {
+vi.mock('../watcher-process/parcel-watcher-process', async (importOriginal) => {
   const actual = await importOriginal<typeof ParcelWatcherProcess>()
   return {
     ...actual,
@@ -40,8 +40,8 @@ import {
 import { registerFilesystemWatcherHandlers } from './filesystem-watcher-handlers'
 import { stat } from 'node:fs/promises'
 import { subscribe as subscribeParcelWatcher } from '@parcel/watcher'
-import { subscribeViaWatcherProcess } from './filesystem/watcher-process/parcel-watcher-process'
-import { WatcherProcessFailure } from './filesystem/watcher-process/parcel-watcher-process-failure'
+import { subscribeViaWatcherProcess } from '../watcher-process/parcel-watcher-process'
+import { WatcherProcessFailure } from '../watcher-process/parcel-watcher-process-failure'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 

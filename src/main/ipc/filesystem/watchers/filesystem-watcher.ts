@@ -1,4 +1,4 @@
-import type { WorktreeWatcherRemoval } from './worktree-watcher-removal'
+import type { WorktreeWatcherRemoval } from '../../worktree-watcher-removal'
 import {
   closeLocalWatcherForWorktreePath,
   forgetLocalWatcherRemovalSnapshot,

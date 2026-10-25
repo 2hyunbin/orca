@@ -1,9 +1,9 @@
 import { stat } from 'node:fs/promises'
-import { isWslPath } from '../wsl'
+import { isWslPath } from '../../../wsl'
 import { WATCHER_IGNORE_DIRS } from './filesystem-watcher-ignore'
 import { createWslWatcher, type WatchedRoot } from './filesystem-watcher-wsl'
-import { WatcherChildCapacityError } from './filesystem/watcher-process/parcel-watcher-child-registry'
-import { isWatcherProcessFailure } from './filesystem/watcher-process/parcel-watcher-process-failure'
+import { WatcherChildCapacityError } from '../watcher-process/parcel-watcher-child-registry'
+import { isWatcherProcessFailure } from '../watcher-process/parcel-watcher-process-failure'
 import type {
   LocalWatcherInstallResult,
   LocalWatcherInstallToken

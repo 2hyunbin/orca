@@ -32,7 +32,7 @@ import type { Event as WatcherEvent } from '@parcel/watcher'
 import {
   WATCH_BATCH_INTERVAL_MS,
   WATCH_BATCH_LEADING_MS
-} from '../../shared/filesystem-watch-batch-window'
+} from '../../../../shared/filesystem-watch-batch-window'
 
 type HandlerMap = Record<string, (_event: unknown, args: unknown) => unknown>
 
