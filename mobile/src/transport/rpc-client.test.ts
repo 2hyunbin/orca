@@ -855,7 +855,7 @@ describe('mobile rpc-client connection timeout', () => {
         new Uint8Array([0xff, 0x00, 0x01])
       ]) {
         const client = connect('ws://desktop.invalid', 'token', 'server-key')
-        const socket = mockSockets[mockSockets.length - 1]!
+        const socket = mockSockets.at(-1)!
         openAndAuthenticate(socket)
         client.notifyForeground()
         socket.receive(payload)
@@ -907,7 +907,7 @@ describe('mobile rpc-client connection timeout', () => {
       expect(client.getState()).toBe('reconnecting')
 
       await vi.advanceTimersByTimeAsync(500)
-      openAndAuthenticate(mockSockets[mockSockets.length - 1]!)
+      openAndAuthenticate(mockSockets.at(-1)!)
       expect(client.getState()).toBe('connected')
 
       client.close()
@@ -946,7 +946,7 @@ describe('mobile rpc-client connection timeout', () => {
         socket.receive('encrypted:{"type":"e2ee_error","error":{"code":"unauthorized"}}')
       }
       await vi.advanceTimersByTimeAsync(1_000)
-      openAndAuthenticate(mockSockets[mockSockets.length - 1]!)
+      openAndAuthenticate(mockSockets.at(-1)!)
       expect(client.getState()).toBe('connected')
 
       const live = mockSockets[mockSockets.length - 1]!
