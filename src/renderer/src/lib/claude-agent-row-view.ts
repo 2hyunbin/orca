@@ -12,7 +12,7 @@ import type { ClaudeAgentViewResult } from '../../../shared/claude-agent-view'
 export async function viewClaudeAgentFromRow(agent: DashboardAgentRow): Promise<void> {
   const state = useAppStore.getState()
   const paneKey = agent.activationPaneKey ?? agent.paneKey
-  const parent = agent.rowSource === 'subagent' ? state.agentStatusByPaneKey[paneKey] : agent.entry
+  const parent = state.agentStatusByPaneKey[paneKey] ?? agent.entry
   if (parent?.agentType !== 'claude' || parent.structuredHostOwned) {
     return
   }

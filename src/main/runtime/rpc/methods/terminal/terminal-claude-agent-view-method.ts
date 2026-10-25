@@ -1,4 +1,5 @@
-import { defineMethod } from '../../core'
+import { defineMethod, defineStreamingMethod } from '../../core'
+import { bindStructuredAgentSessionStream } from '../structured-agent-session-status-stream'
 import { TerminalViewClaudeAgent } from '../../../../../shared/rpc-contract/terminal-unary-params'
 import { agentHookServer } from '../../../../agent-hooks/server'
 import { assertTerminalAgentSendable } from '../../terminal-agent-send-guard'
@@ -9,6 +10,23 @@ import {
 import type { ClaudeAgentViewResult } from '../../../../../shared/claude-agent-view'
 
 export const TERMINAL_CLAUDE_AGENT_VIEW_METHODS = [
+  defineStreamingMethod({
+    name: 'terminal.subscribeClaudeAgentViews',
+    permission: 'workspace',
+    params: null,
+    handler: async (_params, ctx, emit) => {
+      let dispose = () => {}
+      const id = `claude-agent-views:${ctx.connectionId ?? 'local'}:${ctx.requestId ?? ''}`
+      const stream = bindStructuredAgentSessionStream(ctx, id, () => dispose())
+      if (stream.isClosed()) {
+        return
+      }
+      dispose = agentHookServer.claudeAgentViews.subscribe(emit)
+      if (stream.isClosed()) {
+        dispose()
+      }
+    }
+  }),
   defineMethod({
     name: 'terminal.viewClaudeAgent',
     permission: 'workspace',

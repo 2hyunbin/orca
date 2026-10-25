@@ -8,6 +8,8 @@ let identity
 let configDir
 let paneKey
 let endedSessionId
+let observedView
+let viewRevision = 0
 
   async function post($, action, data = {}, session = identity) {
     if (!session) return {}
@@ -38,7 +40,10 @@ let endedSessionId
       if (!identity || identity.sessionId !== sessionId) {
         identity = { paneKey, sessionId, instanceId: String(await $.clock.now()) + '-' + String(Math.random()) }
       }
-      return await post($, 'register', { keybindings: await $.fs.read(configDir + '/keybindings.json') })
+      return await post($, 'register', {
+        keybindings: await $.fs.read(configDir + '/keybindings.json'),
+        ...(observedView?.sessionId === sessionId ? { view: observedView.view } : {})
+      })
     } catch {
       try { await post($, 'end') } catch {}
       return {}
@@ -46,6 +51,20 @@ let endedSessionId
   }
 
 export function register(on) {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, event, next) => {
+    if (event.surface === 'terminal' && event.props.view) {
+      const sessionId = await $.session.id()
+      const agentId = event.props.view.agentId
+      if (observedView?.sessionId !== sessionId || observedView.view.agentId !== agentId) {
+        observedView = { sessionId, view: { ...(agentId ? { agentId } : {}), revision: ++viewRevision } }
+        if (identity?.sessionId === sessionId) {
+          try { await post($, 'observe', { view: observedView.view }) } catch {}
+        }
+      }
+    }
+    return next(event)
+  })
+
   on('session.start', async ($, event, next) => {
     const targetPane = await $.env.get('ORCA_PANE_KEY')
     if (!event.isInteractive || event.surface !== 'terminal' || !targetPane) return next(event)

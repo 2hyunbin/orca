@@ -8,9 +8,14 @@ it('registers the new session after clear and refuses commands belonging to the 
     surface?: 'terminal'
     reason?: 'clear' | 'resume'
     sessionId?: string
+    props?: { view: { agentId?: string } }
   }
   type Hook = (api: unknown, event: SessionEvent, next: () => Promise<object>) => Promise<unknown>
-  type On = (event: string, matcherOrHook: { command: string } | Hook, hook?: Hook) => void
+  type On = (
+    event: string,
+    matcherOrHook: { command: string } | { component: string } | Hook,
+    hook?: Hook
+  ) => void
   const handlers = new Map<string, Hook>()
   const register: (on: On) => void = runInNewContext(
     `${CLAUDE_AGENT_VIEW_MOD_SOURCE.replace(
@@ -27,7 +32,12 @@ it('registers the new session after clear and refuses commands belonging to the 
   })
   let sessionId = 'session-before-clear'
   let heartbeat: (() => Promise<unknown>) | undefined
-  const posts: { action: string; sessionId: string; instanceId: string }[] = []
+  const posts: {
+    action: string
+    sessionId: string
+    instanceId: string
+    view?: { agentId?: string; revision: number }
+  }[] = []
   const view = vi.fn(async () => ({}))
   const api = {
     env: {
@@ -89,6 +99,21 @@ it('registers the new session after clear and refuses commands belonging to the 
   }
   await invoke('session.start', { isInteractive: true, surface: 'terminal' })
   expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
+  await invoke('ui.render', { surface: 'terminal', props: { view: {} } })
+  expect(posts.at(-1)).toMatchObject({ action: 'observe', view: { revision: 1 } })
+  await invoke('ui.render', { surface: 'terminal', props: { view: { agentId: 'keyboard-child' } } })
+  expect(posts.at(-1)).toMatchObject({
+    action: 'observe',
+    view: { agentId: 'keyboard-child', revision: 2 }
+  })
+  const count = posts.length
+  await invoke('ui.render', { surface: 'terminal', props: { view: { agentId: 'keyboard-child' } } })
+  expect(posts).toHaveLength(count)
+  await heartbeat?.()
+  expect(posts.at(-1)).toMatchObject({
+    action: 'register',
+    view: { agentId: 'keyboard-child', revision: 2 }
+  })
   const firstInstance = posts.at(-1)?.instanceId
   await invoke('session.end', { reason: 'clear', sessionId })
   await heartbeat?.()
@@ -99,6 +124,7 @@ it('registers the new session after clear and refuses commands belonging to the 
   await heartbeat?.()
   expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
   expect(posts.at(-1)?.instanceId).not.toBe(firstInstance)
+  expect(posts.at(-1)?.view).toBeUndefined()
   await invoke('command.run')
   expect(view).toHaveBeenCalledWith({ agentId: 'child' })
   expect(posts.at(-1)).toMatchObject({ action: 'ack', sessionId })

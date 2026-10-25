@@ -8,6 +8,7 @@ import {
   waitForActivePaneHookDescriptor,
   waitForActivePanePtyId,
   waitForActiveTerminalManager,
+  sendToTerminal,
   waitForTerminalOutput
 } from './helpers/terminal'
 import { dismissSetupScriptPrompts } from './helpers/sidebar-setup-prompt'
@@ -43,10 +44,13 @@ process.title = 'claude'
 const sink = process.argv[2]
 const endpoint = ${JSON.stringify(endpoint)}
 const identity = {paneKey:${JSON.stringify(descriptor.paneKey)},sessionId:${JSON.stringify(SESSION)},instanceId:'test-mod-instance'}
+let agentId
+let revision=1
 const record = value => appendFileSync(sink, JSON.stringify(value)+'\\n')
 const post = async (action, extra={}) => (await fetch('http://127.0.0.1:'+endpoint.port+'/claude/agent-view',{method:'POST',headers:{'content-type':'application/json','x-orca-agent-hook-token':endpoint.token},body:JSON.stringify({...identity,action,...extra})})).json()
-await post('register',{keybindings:JSON.stringify({bindings:[{context:'Chat',bindings:{'ctrl+alt+g':'command:orca-agent-view'}}]})})
-setInterval(()=>post('register',{keybindings:JSON.stringify({bindings:[{context:'Chat',bindings:{'ctrl+alt+g':'command:orca-agent-view'}}]})}),5000)
+const register=()=>post('register',{keybindings:JSON.stringify({bindings:[{context:'Chat',bindings:{'ctrl+alt+g':'command:orca-agent-view'}}]}),view:{agentId,revision}})
+await register()
+setInterval(register,5000)
 process.stdin.setRawMode(true)
 record({ready:process.pid})
 process.stdout.write('Claude view fixture ready\\r\\n')
@@ -57,8 +61,13 @@ process.stdin.on('data',async bytes=>{
   const request=await post('take')
   if(!request.requestId)return
   record({view:request.agentId||'main',draft})
+  agentId=request.agentId
+  await post('observe',{view:{agentId,revision:++revision}})
   process.stdout.write('Viewing '+(request.agentId||'main')+' draft='+draft+'\\r\\n')
   await post('ack',{requestId:request.requestId})
+ } else if(text==='\x0b') {
+  agentId=agentId?undefined:${JSON.stringify(CHILD)}
+  await post('observe',{view:{agentId,revision:++revision}})
  } else {record({unexpected:text});draft+=text}
 })
 process.stdin.resume()
@@ -130,8 +139,9 @@ process.stdin.resume()
   const child = sidebar
     .locator('.compact-agent-row')
     .filter({ hasText: 'Sidebar child proof' })
-    .first()
+    .last()
   await expect(child).toBeVisible()
+  await expect(parent).toHaveAttribute('aria-current', 'true')
   await orcaPage.mouse.move(20, 20)
   await expect(
     orcaPage.getByRole('tooltip').filter({ hasText: 'Workspace board moved to the bottom bar' })
@@ -145,6 +155,8 @@ process.stdin.resume()
     .poll(() => events().find((event) => event.view === CHILD))
     .toEqual({ view: CHILD, draft: 'ORCA_KEEP_DRAFT' })
   await waitForTerminalOutput(orcaPage, `Viewing ${CHILD} draft=ORCA_KEEP_DRAFT`)
+  await expect(child).toHaveAttribute('aria-current', 'true')
+  await expect(parent).not.toHaveAttribute('aria-current')
   await orcaPage.screenshot({
     path: testInfo.outputPath('after-child-navigation.png'),
     animations: 'disabled'
@@ -153,6 +165,18 @@ process.stdin.resume()
   await expect
     .poll(() => events().find((event) => event.view === 'main'))
     .toEqual({ view: 'main', draft: 'ORCA_KEEP_DRAFT' })
+  await expect(parent).toHaveAttribute('aria-current', 'true')
+  await expect(child).not.toHaveAttribute('aria-current')
+  await sendToTerminal(orcaPage, ptyId, '\x0b')
+  await expect(child).toHaveAttribute('aria-current', 'true')
+  await disclosure.click()
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false')
+  await expect(child.locator('xpath=ancestor::*[@inert]')).toHaveCount(1)
+  await expect(parent.getByLabel('Viewing subagent Sidebar child proof')).toBeVisible()
+  await orcaPage.screenshot({ path: testInfo.outputPath('collapsed-child-indicator.png') })
+  await disclosure.click()
+  await sendToTerminal(orcaPage, ptyId, '\x0b')
+  await expect(parent).toHaveAttribute('aria-current', 'true')
   expect(events().filter((event) => event.unexpected)).toEqual([])
   await orcaPage.evaluate(() => window.__store!.getState().setAgentActivityDisplayMode('full'))
   const fullChild = sidebar
@@ -161,12 +185,14 @@ process.stdin.resume()
     .last()
   await fullChild.click()
   await expect.poll(() => events().filter((event) => event.view === CHILD).length).toBe(2)
+  await expect(fullChild).toHaveAttribute('aria-current', 'true')
   const fullParent = sidebar
     .locator('.agent-disclosure-row')
     .filter({ hasText: 'Sidebar parent proof' })
     .first()
   await fullParent.click()
   await expect.poll(() => events().filter((event) => event.view === 'main').length).toBe(2)
+  await expect(fullParent).toHaveAttribute('aria-current', 'true')
   expect(
     events()
       .filter((event) => event.view)

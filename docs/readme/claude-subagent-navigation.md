@@ -4,6 +4,10 @@ Click a Claude child row in the desktop sidebar or dashboard to open that
 subagent's transcript in Claude's terminal view. Click the parent row to return
 to the main conversation. The composer draft stays in place.
 
+An eye marks the transcript Claude is displaying. It follows Claude's keyboard
+navigation too. When child rows are collapsed, the parent shows the viewed
+child's name; the compact group summary keeps the focused agent's indicator.
+
 ## Setup
 
 Enable Orca's agent status hooks and use Claude Code 2.1.300 or newer. Orca's
@@ -36,6 +40,13 @@ restarts. Updated remote runtime hosts serve the same RPC; the WSL hook relay
 forwards mod requests and replies. An older host without the method or a pane
 without a live mod registration receives no shortcut.
 
+A newer click supersedes a pending selection, so returning to the parent does
+not get lost while a child opens. The mod reports Claude's `AbovePrompt` view
+through the authenticated bridge. One host stream carries these observations
+to desktop rows; ended, expired or disconnected sessions lose their marker
+until fresh evidence arrives. Older hosts without observation support retain
+navigation without a view indicator.
+
 ## Limits and validation
 
 Claude's mod API is early access; version alone does not guarantee availability.
@@ -47,7 +58,9 @@ Live validation used Claude Code 2.1.309 on Linux: selecting a real child and
 returning to its parent preserved a plain-text draft, including after `/clear`
 and an endpoint port/token replacement. Hidden Electron/Playwright validation
 clicks both compact and full sidebar layouts and verifies actual RPC/PTY
-delivery with an owned protocol fixture. Unit tests cover installation,
+delivery and keyboard-driven observation updates with an owned protocol fixture.
+Live Claude also reported returning to main through its keyboard navigation.
+Unit tests cover installation,
 shortcut collisions, JSONC preservation, request expiry, stale identities,
 permission/PTY/input-ownership races, and WSL forwarding. Native macOS, Windows,
 live remote hosts, attachment drafts and every Claude modal variant have not

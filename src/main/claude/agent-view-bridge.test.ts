@@ -61,10 +61,69 @@ describe('Claude agent view delivery', () => {
     const taken = bridge.receive({ ...identity, action: 'take' })
     expect(taken).toMatchObject({ agentId: 'child' })
     expect(bridge.receive({ ...identity, action: 'take' })).toEqual({})
-    expect(await bridge.view({ ...identity, trigger })).toEqual({ status: 'busy' })
     bridge.receive({ ...identity, action: 'ack', ...taken, deny: 'no agent under that id' })
     expect(await result).toEqual({ status: 'denied', reason: 'no agent under that id' })
     expect(bridge.receive({ ...identity, action: 'take' })).toEqual({})
+  })
+
+  it('lets a parent click supersede a child that is still opening and ignores its late acknowledgement', async () => {
+    const bridge = new ClaudeAgentViewBridge()
+    bridge.receive({
+      ...identity,
+      action: 'register',
+      keybindings: JSON.stringify({
+        bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } }]
+      })
+    })
+    const child = bridge.view({ ...identity, agentId: 'child', trigger: async () => true })
+    const takenChild = bridge.receive({ ...identity, action: 'take' })
+    const parent = bridge.view({ ...identity, trigger: async () => true })
+    expect(await child).toEqual({ status: 'busy' })
+    const takenParent = bridge.receive({ ...identity, action: 'take' })
+    expect(takenParent.requestId).not.toBe(takenChild.requestId)
+    expect(takenParent.agentId).toBeUndefined()
+    bridge.receive({ ...identity, action: 'ack', ...takenChild, deny: 'the view moved meanwhile' })
+    bridge.receive({ ...identity, action: 'ack', ...takenParent })
+    expect(await parent).toEqual({ status: 'viewed' })
+  })
+
+  it('publishes observed keyboard switches, rejects reordered reports and withdraws stale sessions', async () => {
+    vi.useFakeTimers()
+    const bridge = new ClaudeAgentViewBridge()
+    const snapshots: unknown[] = []
+    const unsubscribe = bridge.subscribe((snapshot) => snapshots.push(snapshot))
+    const registration = {
+      ...identity,
+      action: 'register',
+      keybindings: JSON.stringify({
+        bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } }]
+      })
+    }
+    bridge.receive({ ...registration, view: { revision: 1 } })
+    expect(snapshots.at(-1)).toEqual([{ paneKey: identity.paneKey, sessionId: identity.sessionId }])
+    bridge.receive({
+      ...identity,
+      action: 'observe',
+      view: { agentId: 'keyboard-child', revision: 3 }
+    })
+    expect(snapshots.at(-1)).toEqual([
+      { paneKey: identity.paneKey, sessionId: identity.sessionId, agentId: 'keyboard-child' }
+    ])
+    const count = snapshots.length
+    bridge.receive({ ...registration, view: { revision: 2 } })
+    bridge.receive({
+      ...identity,
+      instanceId: 'obsolete',
+      action: 'observe',
+      view: { revision: 4 }
+    })
+    expect(snapshots).toHaveLength(count)
+    bridge.receive({ ...identity, action: 'observe', view: { revision: 4 } })
+    expect(snapshots.at(-1)).toEqual([{ paneKey: identity.paneKey, sessionId: identity.sessionId }])
+    await vi.advanceTimersByTimeAsync(16000)
+    expect(snapshots.at(-1)).toEqual([])
+    unsubscribe()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('expires a swallowed trigger so a later shortcut cannot switch views', async () => {
