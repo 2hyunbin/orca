@@ -271,8 +271,12 @@ describe('doc preview guest policy', () => {
 
     it('copies only boolean modifiers and derives grant identity from the sender', () => {
       const { grant, guest } = boundGuest()
+      const contents = getWorkspaceDocPageGuest(grant.browserPageId, guest.hostId)
+      if (!contents) {
+        throw new Error('Expected a registered preview guest')
+      }
 
-      reportDocPreviewLinkClick(guest.contents as never, 'https://example.com/docs', {
+      reportDocPreviewLinkClick(contents, 'https://example.com/docs', {
         metaKey: true,
         ctrlKey: 'true',
         shiftKey: 1,
