@@ -119,6 +119,14 @@ describe('lists while a converted host keeps its source rows', () => {
     ])
     const changed = { ...FENCED, orcadFence: { environmentId: 'env-1', sourceChangedAt: 'x' } }
     expect(visibleSessionHostIds(catalog([changed]), hostIds)).toEqual(hostIds)
+    // A fenced move that has not committed still shows its repos, so their session stays too.
+    const inFlight = mkdtempSync(join(tmpdir(), 'orcad-retained-lists-'))
+    try {
+      writeOrcadMigrationSourceCutover(inFlight, orcadMigrationCutoverFixture('m-1', FENCED.id))
+      expect(visibleSessionHostIds(catalog([FENCED]), hostIds, () => inFlight)).toEqual(hostIds)
+    } finally {
+      rmSync(inFlight, { recursive: true, force: true })
+    }
   })
 
   it('shows them until the migration commits, while freezing the session from the fence on', () => {
