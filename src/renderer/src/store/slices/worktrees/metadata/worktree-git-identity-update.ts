@@ -24,7 +24,8 @@ import {
   type WorktreeCopyClear
 } from './worktree-copy-review-clear'
 import { persistWorktreeMeta } from './worktree-meta-persist'
-import { repoHostId, withRepoHostOwnership } from '../listing/worktree-host-ownership'
+import { withRepoHostOwnership } from '../listing/worktree-host-ownership'
+import { getRepoRegistrationHostIds } from '../../../../../../shared/repo-host-identity'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
@@ -67,6 +68,15 @@ function gitIdentityTargets(
     hostWorktreeTarget({ id: worktreeId, hostId: ownerHostId })
   )
   return { rows: new Set(row ? [row] : []), isTwin: true }
+}
+
+/** The one host registering `repoId`, which its listings stamp rows with; else undefined. */
+function soleRegistrationHostId(
+  repos: Parameters<typeof getRepoRegistrationHostIds>[0],
+  repoId: string
+): ExecutionHostId | undefined {
+  const hosts = getRepoRegistrationHostIds(repos, repoId)
+  return hosts.size === 1 ? [...hosts][0] : undefined
 }
 
 export function createUpdateWorktreeGitIdentity(
@@ -118,10 +128,8 @@ export function createUpdateWorktreeGitIdentity(
         // Why the copy: a same-path twin shares the id, so every guard and clear names this row.
         // Keyed by the stamp the next listing gives the row, so legacy or partial stamps still match.
         // Only missing parts are filled in; a row's own host or publishing server is never replaced.
-        const listingStamp = withRepoHostOwnership(
-          worktree,
-          repoHostId(s, worktree.repoId, ownerHostId)
-        )
+        const stampHostId = ownerHostId ?? soleRegistrationHostId(s.repos, worktree.repoId)
+        const listingStamp = stampHostId ? withRepoHostOwnership(worktree, stampHostId) : worktree
         const stamped = {
           hostId: worktree.hostId ?? listingStamp.hostId,
           runtimeOwnerEnvironmentId:
