@@ -48,7 +48,7 @@ async function startWorkerPane(launchAgent: TuiAgent) {
   runtime.setOrchestrationDb(db)
   const write = async (chunks: readonly string[]) => {
     for (const chunk of chunks) {
-      runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, chunk, Date.now())
+      runtime.onPtyData(TRANSCRIPT_PANE_PTY_ID, chunk, 1)
     }
     await runtime.readTerminal(handle)
   }
