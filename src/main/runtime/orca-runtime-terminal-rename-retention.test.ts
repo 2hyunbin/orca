@@ -344,8 +344,7 @@ describe('first-turn identity under recorded title clocks (#32030)', () => {
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal()
     )
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Shared fixture implements RuntimeStore; its legacy Mock typing loses callable signatures.
-    return new OrcaRuntimeService(runtimeStore as RuntimeStore)
+    return new OrcaRuntimeService(runtimeStore)
   }
 
   it('keeps the first clock of a shell title that inventory replays after the hook', () => {
