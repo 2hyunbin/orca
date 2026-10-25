@@ -236,21 +236,28 @@ describe('the row a usage limit leaves', () => {
     )
   }
 
-  it('says when the limit resets in this clock, and continues the turn it ended', () => {
-    vi.useFakeTimers({ now: new Date(2026, 9, 18, 12, 30), toFake: ['Date'] })
+  it('says when the limit resets in this clock, and offers Continue Now only once it has', () => {
+    vi.useFakeTimers({
+      now: new Date(2026, 9, 18, 12, 30),
+      toFake: ['Date', 'setTimeout', 'clearTimeout']
+    })
     const continueUsageLimit = vi.fn()
     renderStatus(row, null, false, false, 'Claude', {
       ...NO_OFFER,
       usageLimitTurnItemId: 'cut-turn',
       continueUsageLimit
     })
-    vi.useRealTimers()
     const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
       resetsAt
     )
     expect(
       screen.getByText(`Claude hit its session limit. It resets at ${clock}.`)
     ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue Now' })).toBeNull()
+    act(() => {
+      vi.advanceTimersByTime(resetsAt - Date.now())
+    })
+    vi.useRealTimers()
     fireEvent.click(screen.getByRole('button', { name: 'Continue Now' }))
     expect(continueUsageLimit).toHaveBeenCalledTimes(1)
   })

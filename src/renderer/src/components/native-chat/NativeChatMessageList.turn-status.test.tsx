@@ -292,7 +292,7 @@ const usageLimitView = {
             ...agentSessionFailureWords(
               {
                 kind: 'usageLimitReached',
-                usageLimit: { window: 'session', resetsAt: Date.now() + 3600_000 },
+                usageLimit: { window: 'session', resetsAt: Date.now() - 60_000 },
                 detail: { text: 'The provider refused this request.', audience: 'person' }
               },
               { surface: 'row' }

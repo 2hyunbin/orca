@@ -1,6 +1,7 @@
 import { NativeChatUsageLimitActions } from './NativeChatUsageLimitActions'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useEffect, useState } from 'react'
 import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import { NativeChatMarkdown } from './NativeChatMarkdown'
 import { NativeChatCodeBlock } from './NativeChatCodeBlock'
@@ -199,17 +200,10 @@ export function NativeChatNoticeRow({
         {continueOffered ? (
           <NativeChatInterruptedContinueButton onContinue={orcaStopView.continueNow} />
         ) : usageLimitContinue ? (
-          <NativeChatInterruptedContinueButton
-            label={translate(
-              'components.native-chat.usageLimitActions.continueNow',
-              'Continue Now'
-            )}
-            onContinue={orcaStopView.continueUsageLimit}
-            disabled={orcaStopView.usageLimitContinueDisabled}
-            explanation={translate(
-              'components.native-chat.interruptedContinue.usageLimitExplanation',
-              'Asks the agent to continue where it left off. Use it once the limit resets.'
-            )}
+          <UsageLimitContinueNow
+            resetsAt={
+              failure?.kind === 'usageLimitReached' ? failure.usageLimit?.resetsAt : undefined
+            }
           />
         ) : null}
       </div>
@@ -233,5 +227,36 @@ export function NativeChatNoticeRow({
         />
       ) : null}
     </div>
+  )
+}
+
+// Before the reported reset the same limit refuses the message, so Continue Now waits for it.
+function UsageLimitContinueNow({
+  resetsAt
+}: {
+  resetsAt: number | undefined
+}): React.JSX.Element | null {
+  const orcaStopView = useNativeChatOrcaStopView()
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (resetsAt === undefined || now >= resetsAt) {
+      return
+    }
+    const timer = setTimeout(() => setNow(Date.now()), resetsAt - now)
+    return () => clearTimeout(timer)
+  }, [now, resetsAt])
+  if (resetsAt === undefined || now < resetsAt) {
+    return null
+  }
+  return (
+    <NativeChatInterruptedContinueButton
+      label={translate('components.native-chat.usageLimitActions.continueNow', 'Continue Now')}
+      onContinue={orcaStopView.continueUsageLimit}
+      disabled={orcaStopView.usageLimitContinueDisabled}
+      explanation={translate(
+        'components.native-chat.interruptedContinue.usageLimitExplanation',
+        'Asks the agent to continue where it left off. Use it once the limit resets.'
+      )}
+    />
   )
 }
