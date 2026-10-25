@@ -89,6 +89,7 @@ export function SshUnrestoredPortRow({
         )}
         onClick={(event) => void handleRemove(event)}
         disabled={removing}
+        aria-label={translate('auto.components.right.sidebar.PortsPanel.e740075063', 'Remove')}
         title={translate('auto.components.right.sidebar.PortsPanel.e740075063', 'Remove')}
       >
         <Trash2 size={13} />

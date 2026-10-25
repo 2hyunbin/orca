@@ -134,6 +134,18 @@ export function SshPortsPanel({
         <p className="text-xs mt-1">
           {translate('auto.components.right.sidebar.PortsPanel.d4c3cd679c', 'Reconnecting...')}
         </p>
+        {/* Saved forwards stay removable offline; main edits them without a connection. */}
+        {unrestoredForwards.length > 0 && (
+          <div className="mt-4 w-full text-left">
+            {unrestoredForwards.map((forward) => (
+              <SshUnrestoredPortRow
+                key={`${forward.localPort}:${forward.remoteHost}:${forward.remotePort}`}
+                targetId={activeConnectionId}
+                forward={forward}
+              />
+            ))}
+          </div>
+        )}
       </div>
     )
   }

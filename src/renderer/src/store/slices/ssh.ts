@@ -178,8 +178,7 @@ export const createSshSlice: StateCreator<AppState, [], [], SshSlice> = (set) =>
   clearPortForwards: (targetId) =>
     set((s) => {
       const { [targetId]: _, ...rest } = s.portForwardsByConnection
-      const { [targetId]: _unrestored, ...unrestored } = s.unrestoredPortForwardsByConnection
-      return { portForwardsByConnection: rest, unrestoredPortForwardsByConnection: unrestored }
+      return { portForwardsByConnection: rest }
     }),
 
   setDetectedPorts: (targetId, ports) =>

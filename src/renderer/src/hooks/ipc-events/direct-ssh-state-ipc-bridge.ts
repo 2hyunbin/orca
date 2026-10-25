@@ -171,6 +171,15 @@ export function registerDirectSshStateIpcBridge(unsubs: (() => void)[]): () => v
 
       store.clearPortForwards(targetId)
       store.setDetectedPorts(targetId, [])
+      // Saved forwards stay listed while offline, so one that can't start is still removable.
+      void window.api.ssh
+        .listUnrestoredPortForwards({ targetId })
+        .then((unrestored) => {
+          if (!isStopped()) {
+            useAppStore.getState().setUnrestoredPortForwards(targetId, unrestored)
+          }
+        })
+        .catch(() => {})
       return
     }
 

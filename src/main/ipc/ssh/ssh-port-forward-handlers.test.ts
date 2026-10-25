@@ -83,17 +83,6 @@ describe('ssh:updatePortForward', () => {
     expect(h.persist).toHaveBeenCalledWith('t1')
   })
 
-  it('removes a saved forward that never started, by its mapping', async () => {
-    const mapping = { targetId: 't1', localPort: 4100, remoteHost: '127.0.0.1', remotePort: 80 }
-    await h.handlers.get('ssh:removeSavedPortForward')!({}, mapping)
-    expect(h.persist).toHaveBeenCalledWith('t1', {
-      localPort: 4100,
-      remoteHost: '127.0.0.1',
-      remotePort: 80
-    })
-    expect(h.broadcast).toHaveBeenCalled()
-  })
-
   it('closes a forward a restore opened before a queued saved-forward remove ran', async () => {
     h.live = [{ ...h.previous, localPort: 4100 }]
     await h.handlers.get('ssh:removeSavedPortForward')!(

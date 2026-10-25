@@ -354,4 +354,24 @@ describe('saved port forward restore', () => {
       vi.useRealTimers()
     }
   })
+
+  it('starts a fresh backoff for a forward that stayed up before it died', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      recordForwardFailure('t1', FORWARD, 'exited unexpectedly', 'exit')
+      recordForwardFailure('t1', FORWARD, 'exited unexpectedly', 'exit')
+      vi.setSystemTime(Date.now() + 60_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
+      // Healthy for 5 minutes, then it dies: the next retry waits the base 30 s, not 120 s.
+      vi.setSystemTime(Date.now() + 5 * 60_000)
+      h.active.length = 0
+      recordForwardFailure('t1', FORWARD, 'exited unexpectedly', 'exit')
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
