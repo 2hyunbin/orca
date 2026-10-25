@@ -64,24 +64,19 @@ describe('updateWorktreeGitIdentity with a same-path twin on another host', () =
     expect(onB.branch).toBe('refs/heads/feature')
   })
 
-  it('persists a branch-switch review clear for the copy that switched', async () => {
+  it("never clears or persists a sibling's review link from a twin's branch switch", async () => {
     const store = storeWith(
-      { hostId: 'local', branch: 'refs/heads/master' },
+      { hostId: 'local', branch: 'refs/heads/stack/two', linkedPR: 7 },
       { hostId: 'ssh:box-b', branch: 'refs/heads/stack/one', linkedPR: 101 }
     )
 
     store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/stack/two' }, 'ssh:box-b')
+    await Promise.resolve()
+    await Promise.resolve()
 
-    await vi.waitFor(() =>
-      expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(
-        expect.objectContaining({
-          worktreeId: id,
-          updates: expect.objectContaining({ linkedPR: null })
-        })
-      )
-    )
+    expect(mockApi.worktrees.updateMeta).not.toHaveBeenCalled()
     const [localAfter, remoteAfter] = store.getState().worktreesByRepo.repo1
-    expect(localAfter.branch).toBe('refs/heads/master')
+    expect(localAfter).toMatchObject({ branch: 'refs/heads/stack/two', linkedPR: 7 })
     expect(remoteAfter.branch).toBe('refs/heads/stack/two')
   })
 })
