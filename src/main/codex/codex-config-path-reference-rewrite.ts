@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { join, posix as pathPosix, resolve, win32 as pathWin32 } from 'node:path'
 import {
   CODEX_BUNDLED_MARKETPLACE_NAMES,
@@ -36,21 +37,35 @@ export function rewriteRelativePathConfigValues(config: string, sourceConfigDir:
   )
 }
 
-// Codex only trusts openai-bundled marketplaces whose source sits under the active CODEX_HOME.
+// Codex only trusts openai-bundled marketplaces whose source sits under the canonical CODEX_HOME.
 export function rebaseBundledMarketplaceSources(
   config: string,
   systemHomeDir: string,
   runtimeHomeDir: string
 ): string {
+  const systemHomeDirs = [systemHomeDir, resolveRealPath(systemHomeDir)]
+  const canonicalRuntimeHomeDir = resolveRealPath(runtimeHomeDir)
   return rewriteTomlStringSettings(config, (keyPath, value) => {
     const name = CODEX_BUNDLED_MARKETPLACE_NAMES.find(
       (candidate) => keyPath === `marketplaces.${candidate}.source`
     )
-    if (!name || !isSamePath(value, join(systemHomeDir, CODEX_BUNDLED_MARKETPLACES_ENTRY, name))) {
-      return null
-    }
-    return join(runtimeHomeDir, CODEX_BUNDLED_MARKETPLACES_ENTRY, name)
+    const pointsAtSystemHome =
+      name !== undefined &&
+      systemHomeDirs.some((dir) =>
+        isSamePath(value, join(dir, CODEX_BUNDLED_MARKETPLACES_ENTRY, name))
+      )
+    return pointsAtSystemHome
+      ? join(canonicalRuntimeHomeDir, CODEX_BUNDLED_MARKETPLACES_ENTRY, name)
+      : null
   })
+}
+
+function resolveRealPath(path: string): string {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return path
+  }
 }
 
 function isSamePath(left: string, right: string): boolean {
