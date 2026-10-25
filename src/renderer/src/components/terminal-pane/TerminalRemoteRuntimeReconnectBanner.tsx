@@ -12,6 +12,8 @@ import {
 } from './remote-runtime-recovery-copy'
 import { selectRuntimeServerName, selectRuntimeServerTailscaleHost } from './remote-server-outage'
 import { useAppStore } from '@/store'
+import { StoppedMachineBanner } from '@/components/machines/StoppedMachineBanner'
+import type { MachineMatch } from '@/lib/machines/machine-host-match'
 
 type BannerProps = {
   recovery: Pick<VisiblePtyRecoveryState, 'phase' | 'cause' | 'waiting'>
@@ -25,6 +27,14 @@ type BannerProps = {
   pairingRefused?: boolean
   /** Main refused because the SSH host is waiting for the user to sign in; it resumes after. */
   awaitingSignIn?: boolean
+  /** The pane's machine is waking, which is why it reconnects; named so one place says so. */
+  wakingMachineName?: string | null
+  /** Why waking `wakingMachineName` failed; the button then retries the wake. */
+  wakeFailure?: string | null
+  /** The pane's machine sleeps or is archived, so nothing reconnects until it wakes. */
+  stoppedMachine?: MachineMatch | null
+  /** The pane's worktree, so Wake holds its terminals like opening it does. */
+  machineWorktreeId?: string
 }
 
 function reconnectAction(onReconnect: () => void): { label: string; onClick: () => void } {
@@ -45,7 +55,11 @@ export function TerminalRemoteRuntimeReconnectBanner({
   tailscaleHost = null,
   wslHostUnavailable = null,
   pairingRefused = false,
-  awaitingSignIn = false
+  awaitingSignIn = false,
+  wakingMachineName = null,
+  wakeFailure = null,
+  stoppedMachine = null,
+  machineWorktreeId
 }: BannerProps): React.JSX.Element {
   if (wslHostUnavailable) {
     return <WslHostUnavailableBanner reason={wslHostUnavailable} />
@@ -89,6 +103,47 @@ export function TerminalRemoteRuntimeReconnectBanner({
         }}
       />
     )
+  }
+  if (stoppedMachine && wakingMachineName === null) {
+    return <StoppedMachineBanner match={stoppedMachine} worktreeId={machineWorktreeId} />
+  }
+  if (wakingMachineName !== null) {
+    if (recovery.phase !== 'disconnected') {
+      return (
+        <RemoteRuntimeRecoveryCard
+          icon="retrying"
+          data={{ 'data-terminal-remote-runtime-reconnect-banner': recovery.phase }}
+          title={translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.wakingTitle',
+            'Waking {{name}}…',
+            { name: wakingMachineName }
+          )}
+          body={translate(
+            'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.wakingBody',
+            'This terminal resumes once the machine is running.'
+          )}
+        />
+      )
+    }
+    if (wakeFailure !== null) {
+      return (
+        <RemoteRuntimeRecoveryCard
+          icon="stopped"
+          data={{ 'data-terminal-remote-runtime-reconnect-banner': 'disconnected' }}
+          title={translate('auto.lib.machines.machineWakeOnOpen.wakeFailed', 'Couldn’t wake {{name}}', {
+            name: wakingMachineName
+          })}
+          body={wakeFailure}
+          action={{
+            label: translate(
+              'auto.components.terminal.pane.TerminalRemoteRuntimeReconnectBanner.retryWakeButton',
+              'Retry'
+            ),
+            onClick: onReconnect
+          }}
+        />
+      )
+    }
   }
   if (recovery.phase === 'disconnected') {
     return (
@@ -164,7 +219,8 @@ export function CalmRemoteRuntimeReconnectBanner({
     (recovery.phase === 'disconnected' ||
       Boolean(props.awaitingSignIn) ||
       Boolean(props.wslHostUnavailable) ||
-      Boolean(props.pairingRefused))
+      Boolean(props.pairingRefused) ||
+      Boolean(props.stoppedMachine && !props.wakingMachineName))
   if (active && needsAction !== lastNeededAction) {
     setLastNeededAction(needsAction)
   }

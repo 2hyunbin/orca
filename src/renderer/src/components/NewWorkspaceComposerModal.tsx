@@ -14,6 +14,7 @@ import NewWorkspaceComposerCard from '@/components/NewWorkspaceComposerCard'
 import AgentSettingsDialog from '@/components/agent/AgentSettingsDialog'
 import type { AddRepoDialogHostedController } from '@/components/sidebar/use-add-repo-hosted-controller'
 import { useComposerState } from '@/hooks/useComposerState'
+import { useMachineSignInRestore } from '@/hooks/composer-state/use-machine-sign-in-restore'
 import {
   composerLaunchWorkspace,
   pickQuickWorkspaceAgent,
@@ -161,6 +162,27 @@ function QuickTabBody({
     ...(modalData.telemetrySource ? { telemetrySource: modalData.telemetrySource } : {}),
     enableIssueAutomation: modalData.enableIssueAutomation === true
   })
+  const signInSnapshot = useMemo(
+    () => ({
+      name: cardProps.name,
+      projectId: cardProps.selectedProjectId ?? null,
+      hostId: cardProps.selectedRepoExecutionHostId ?? null,
+      projectHostSetupId: cardProps.selectedProjectHostSetupId ?? null,
+      ephemeralVmRecipeId: cardProps.selectedEphemeralVmRecipeId ?? null
+    }),
+    [
+      cardProps.name,
+      cardProps.selectedEphemeralVmRecipeId,
+      cardProps.selectedProjectHostSetupId,
+      cardProps.selectedProjectId,
+      cardProps.selectedRepoExecutionHostId
+    ]
+  )
+  const machineSelection = useMachineSignInRestore(
+    cardProps.machineSelection,
+    modalData,
+    signInSnapshot
+  )
   // Why: the composer's built-in `onOpenAgentSettings` handler navigates to
   // the settings page and closes the modal. For the quick-create flow we want
   // a less disruptive affordance — a nested dialog layered over the composer
@@ -380,6 +402,7 @@ function QuickTabBody({
               }
             : undefined
         }
+        machineSelection={machineSelection}
         primaryActionLabel={primaryActionLabel}
         onOpenAgentSettings={() => setAgentSettingsOpen(true)}
         onCreate={() => void handleCreate()}

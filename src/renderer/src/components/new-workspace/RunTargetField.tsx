@@ -1,12 +1,22 @@
 import { ImeInput } from '@/lib/ime-text-field'
 import React from 'react'
-import { ChevronDown, Cloud } from 'lucide-react'
+import { Box, ChevronDown, Cloud, Search } from 'lucide-react'
 import { PopoverAnchor } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { HostRowIcon } from './RunTargetComboboxRow'
 import { COMBOBOX_FIELD_SHELL } from './type-ahead-combobox-styles'
+import { MachineStateLabel } from '@/components/machines/MachineStateLabel'
+import { formatMachineSummary } from '@/lib/machines/machine-copy'
+import { machineGroupLabel } from './RunTargetMachineRow'
+import type { MachineGroupOption, MachineOption } from '@/lib/machines/machine-group-options'
+import type { ReadyProjectHostSetupOption } from '@/lib/project-host-setup-options'
+import {
+  getEphemeralVmLabel,
+  getRecipeDetail,
+  type EphemeralVmRecipeOption
+} from './run-target-options'
 
 /**
  * The run-target field: a text input that *is* the search box, painted over
@@ -20,7 +30,8 @@ export default function RunTargetField({
   onOpenRequest,
   onToggle,
   committed,
-  isRecipe,
+  kind,
+  status,
   hostId,
   label,
   detail,
@@ -35,7 +46,10 @@ export default function RunTargetField({
   onOpenRequest: () => void
   onToggle: () => void
   committed: boolean
-  isRecipe: boolean
+  /** What the committed selection is, which picks its glyph. */
+  kind: 'host' | 'recipe' | 'machine'
+  /** A machine's state, beside its detail. */
+  status: React.ReactNode
   hostId: ExecutionHostId | null
   label: string
   detail: string
@@ -56,11 +70,15 @@ export default function RunTargetField({
       >
         <span className="flex w-4 shrink-0 items-center justify-center">
           {committed ? (
-            isRecipe ? (
+            kind === 'machine' ? (
+              <Box className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : kind === 'recipe' ? (
               <Cloud className="size-3.5 shrink-0 text-muted-foreground" />
             ) : hostId ? (
               <HostRowIcon hostId={hostId} />
             ) : null
+          ) : query ? (
+            <Search className="size-3.5 shrink-0 text-muted-foreground" />
           ) : null}
         </span>
         <div className="relative min-w-0 flex-1 overflow-hidden">
@@ -108,6 +126,7 @@ export default function RunTargetField({
                 >
                   {detail}
                 </span>
+                {status}
               </div>
             </div>
           ) : null}
@@ -132,4 +151,55 @@ export default function RunTargetField({
       </div>
     </PopoverAnchor>
   )
+}
+
+/** What the closed field paints: the machine being created, a machine, a recipe, or a host. */
+export function describeCommittedTarget({
+  creatingMachine,
+  selectedMachine,
+  selectedRecipe,
+  selectedHost
+}: {
+  creatingMachine: { summary: string } | null
+  selectedMachine: { group: MachineGroupOption; machine: MachineOption } | null
+  selectedRecipe: EphemeralVmRecipeOption | null
+  selectedHost: ReadyProjectHostSetupOption | null
+}): {
+  kind: 'host' | 'recipe' | 'machine'
+  label: string
+  detail: string
+  status: React.ReactNode
+} {
+  if (creatingMachine) {
+    return {
+      kind: 'machine',
+      label: translate('auto.components.new.workspace.RunTargetCombobox.newMachine', 'New machine'),
+      detail: creatingMachine.summary,
+      status: null
+    }
+  }
+  if (selectedMachine) {
+    const { machine } = selectedMachine
+    return {
+      kind: 'machine',
+      label: machine.name,
+      detail: formatMachineSummary(machineGroupLabel(selectedMachine.group), machine),
+      // Why: Running is the expected state, so only another state earns the dot and word.
+      status: machine.state === 'running' ? null : <MachineStateLabel state={machine.state} />
+    }
+  }
+  if (selectedRecipe) {
+    return {
+      kind: 'recipe',
+      label: `${getEphemeralVmLabel()} / ${selectedRecipe.name}`,
+      detail: getRecipeDetail(selectedRecipe),
+      status: null
+    }
+  }
+  return {
+    kind: 'host',
+    label: selectedHost?.label ?? '',
+    detail: selectedHost?.path ?? '',
+    status: null
+  }
 }

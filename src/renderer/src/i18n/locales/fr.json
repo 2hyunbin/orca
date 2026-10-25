@@ -1293,7 +1293,9 @@
         "settingUpWorkspace": "Configuration de votre espace de travail…",
         "preparingWorkspace": "Préparation de l'espace de travail…",
         "creatingWorktree": "Création du worktree…",
-        "fetchingBaseBranch": "Récupération de la branche de base…"
+        "fetchingBaseBranch": "Récupération de la branche de base…",
+        "startingMachine": "Démarrage de la machine…",
+        "settingUpRepo": "Configuration du dépôt…"
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}} et {{value1}} sont le même serveur associé deux fois. Supprimez-en un dans Paramètres > Serveurs Orca distants."
@@ -1311,6 +1313,117 @@
               }
             }
           }
+        }
+      },
+      "machineWorktreeCreation": {
+        "noCloneUrl": "Ce projet n’a pas de dépôt distant à cloner sur la machine.",
+        "cloneFailed": "Impossible de configurer le projet sur la machine.",
+        "createUnsettled": "Le fournisseur crée peut-être encore {{name}}. Réessayez dans une minute.",
+        "createUnchecked": "Impossible de vérifier si {{name}} a déjà été créée."
+      },
+      "machines": {
+        "machineCopy": {
+          "deletesAt": "Supprimée à {{time}}",
+          "cantReach": "Injoignable",
+          "cantReachSeen": "Injoignable · vu il y a {{ago}}",
+          "deletesAtLower": "supprimée à {{time}}",
+          "temporary": "Temporaire",
+          "persistent": "Persistante",
+          "failureSignIn": "Le fournisseur vous demande de vous reconnecter.",
+          "failureNotFound": "Le fournisseur n’a plus cette machine.",
+          "failureQuota": "Le fournisseur n’a plus de place pour d’autres machines.",
+          "failureTimeout": "Le fournisseur n’a pas répondu à temps.",
+          "failureUnsupported": "Le fournisseur ne peut pas faire cela pour cette machine.",
+          "failureCancelled": "L’opération a été annulée.",
+          "failureUnavailable": "Le fournisseur a rencontré un problème.",
+          "onProvider": "{{machine}} sur {{provider}}",
+          "actionConflict": "Une autre action est en cours sur {{name}}."
+        },
+        "machineDisplayState": {
+          "starting": "Démarrage",
+          "running": "En cours",
+          "stopping": "Mise en veille…",
+          "sleeping": "En veille",
+          "archived": "Archivée",
+          "unreachable": "Injoignable",
+          "gone": "Disparue",
+          "error": "Erreur"
+        },
+        "machineWakeOnOpen": {
+          "wakeFailed": "Impossible de réveiller {{name}}",
+          "waking": "Réveil de {{name}}…",
+          "wakeFailedUnknown": "Orca n’a pas pu joindre le fournisseur de la machine."
+        },
+        "machineCreationStages": {
+          "waking": "Réveil…",
+          "connecting": "Connexion…",
+          "cloning": "Clonage…",
+          "fetching": "Récupération de la branche de base…",
+          "creatingWorktree": "Création du worktree…",
+          "startingMachine": "Démarrage de la machine",
+          "settingUpRepo": "Configuration du dépôt",
+          "startingAgent": "Démarrage de l’agent",
+          "openingTerminal": "Ouverture du terminal",
+          "creating": "Création…",
+          "canceled": "Annulé",
+          "cloningProject": "Clonage de {{project}}…"
+        },
+        "machineStart": {
+          "readFailed": "Impossible de joindre {{name}}.",
+          "gone": "{{name}} n’existe plus.",
+          "wakeFailed": "Impossible de réveiller {{name}}.",
+          "connectFailed": "Impossible de se connecter à {{name}}.",
+          "noProjectRoot": "Le fournisseur n’a pas indiqué où se trouvent les projets sur {{name}}.",
+          "noServer": "Orca n’a pas pu démarrer son serveur sur {{name}}, nécessaire pour configurer le projet.",
+          "createFailed": "Impossible de créer {{name}}.",
+          "nameTaken": "Une machine nommée {{name}} existe déjà. Choisissez un autre nom dans Avancé.",
+          "createStillRunning": "Le fournisseur crée encore {{name}}. Réessayez dans une minute."
+        },
+        "machineProviderActions": {
+          "signInStarted": "Terminez la connexion à {{provider}}, puis revenez à votre nouveau worktree.",
+          "backToComposer": "Revenir au nouveau worktree"
+        },
+        "machineActions": {
+          "archive": "Archiver",
+          "copySsh": "Copier la commande SSH",
+          "retry": "Réessayer",
+          "refresh": "Actualiser",
+          "delete": "Supprimer…",
+          "copied": "Commande SSH copiée",
+          "wakeFailed": "Impossible de réveiller {{name}}",
+          "sleepFailed": "Impossible de mettre {{name}} en veille",
+          "archiveFailed": "Impossible d’archiver {{name}}",
+          "wakeMachine": "Réveiller la machine",
+          "sleepMachine": "Mettre la machine en veille",
+          "refreshFailed": "Impossible d’actualiser {{provider}}",
+          "sleepAgentsOne": "1 agent travaille sur {{name}}",
+          "sleepAgents": "{{count}} agents travaillent sur {{name}}",
+          "sleepAgentsBody": "Mettre la machine en veille les arrête.",
+          "sleepAnyway": "Mettre en veille quand même"
+        },
+        "machineExpiryWarning": {
+          "uncommitted": "{{count}} modifications non validées",
+          "unpushed": "{{count}} commits non poussés",
+          "warningAt": "Supprimée à {{time}} · {{work}}",
+          "unpushedOne": "1 commit non poussé",
+          "uncommittedOne": "1 modification non validée",
+          "unknown": "Impossible de vérifier le travail non enregistré"
+        },
+        "machineDeleteWork": {
+          "checking": "Vérification…",
+          "uncommittedUnknown": "Impossible de vérifier les modifications non validées",
+          "uncommitted_one": "1 non validée",
+          "uncommitted_other": "{{count}} non validées",
+          "unpushedUnknown": "Impossible de vérifier les commits non poussés",
+          "noUpstream": "Jamais poussé",
+          "unpushed_one": "1 non poussé",
+          "unpushed_other": "{{count}} non poussés",
+          "noChanges": "Aucune modification",
+          "allUnknown": "Impossible de vérifier le travail non enregistré"
+        },
+        "machineDelete": {
+          "worktreesLeft": "{{name}} a été supprimée, mais {{count}} de ses worktrees sont toujours listés. Retirez-les depuis leur menu.",
+          "stillThere": "{{name}} n’a pas été supprimée. Le fournisseur l’indique encore comme {{state}}."
         }
       }
     },
@@ -2058,7 +2171,9 @@
         "addRemoteOrcaServer": "Ajouter un serveur Orca distant",
         "addRemoteOrcaServerHint": "Appairer un autre runtime Orca",
         "hostConnectionFailed": "Échec de la connexion",
-        "defaultBranchUpdateFailed": "Impossible de mettre à jour la branche par défaut du projet. Essayer à nouveau."
+        "defaultBranchUpdateFailed": "Impossible de mettre à jour la branche par défaut du projet. Essayer à nouveau.",
+        "machineFromPlugin": "Machine via un plugin…",
+        "machineFromPluginHint": "Trouver un plugin fournisseur de machines"
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "Créer un worktree",
@@ -3199,7 +3314,33 @@
             "767951265d": "Un problème est survenu lors de la création du worktree.",
             "vmProvisioningTitle": "Provisionnement de la VM",
             "cancelProvisioning": "Annuler",
-            "vmProvisioningLogEmpty": "En attente de la sortie de la recette…"
+            "vmProvisioningLogEmpty": "En attente de la sortie de la recette…",
+            "newMachine": "Nouvelle machine"
+          },
+          "MachineCreationStatus": {
+            "failedTitle": "Impossible de configurer {{name}}",
+            "title": "Configuration de {{name}}",
+            "machineOn": "{{machine}} sur {{provider}}",
+            "retry": "Réessayer",
+            "removeWorktree": "Supprimer le worktree",
+            "showLog": "Afficher le journal",
+            "logEmpty": "En attente de la sortie du fournisseur…",
+            "canceledDetail": "{{provider}} a peut-être démarré une machine avant votre annulation.",
+            "newMachineOn": "Nouvelle machine {{machine}} sur {{provider}}",
+            "canceled": "Annulé",
+            "cancel": "Annuler",
+            "canceledCreated": "{{machine}} a déjà été créée sur {{provider}} et tourne toujours.",
+            "canceledDeleted": "La machine laissée par cette création a été supprimée."
+          },
+          "MachineLeftoverCheck": {
+            "check": "Rechercher une machine restante",
+            "none": "Aucune machine restante",
+            "delete": "Supprimer {{name}}",
+            "deleted": "Machine restante supprimée",
+            "checkAgain": "Vérifier à nouveau",
+            "unknown": "Impossible de joindre {{provider}} pour vérifier.",
+            "deleteFailed": "Impossible de la supprimer. {{reason}}",
+            "notFoundYet": "Rien trouvé pour l’instant."
           }
         }
       },
@@ -3706,7 +3847,10 @@
             "fallbackServerName": "le serveur",
             "connectionLostTitle": "Reconnexion à {{server}}",
             "connectionLostBody": "La connexion au serveur a été perdue. Orca réessaie automatiquement et les terminaux reprendront à son retour.",
-            "reattachingBody": "Orca reconnecte automatiquement ce terminal à {{server}}."
+            "reattachingBody": "Orca reconnecte automatiquement ce terminal à {{server}}.",
+            "wakingTitle": "Réveil de {{name}}…",
+            "wakingBody": "Ce terminal reprendra dès que la machine sera en marche.",
+            "retryWakeButton": "Réessayer"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "Hôte indisponible",
@@ -5706,7 +5850,8 @@
         "PendingWorktreeRow": {
           "af21e953d1": "Annuler la création du worktree",
           "188f6922a0": "Annuler",
-          "creatingWorkspace": "Création de l'espace de travail…"
+          "creatingWorkspace": "Création de l'espace de travail…",
+          "canceled": "Annulé"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "Annuler",
@@ -6908,6 +7053,9 @@
               "740e8d0d46": "Utiliser Ajouter un projet pour les chemins d'hôte"
             }
           }
+        },
+        "ArchivedMachinesRow": {
+          "label": "Machines archivées ({{count}})"
         }
       },
       "shared": {
@@ -8739,7 +8887,8 @@
           "pairedTwice": "Même serveur que {{value0}}, associé deux fois. Supprimez-en un pour pouvoir modifier ses projets.",
           "removeDefaultServerDescription": "Ce serveur est l’hôte par défaut des nouveaux projets. Choisissez-en un autre dans « Les nouveaux projets s’ouvrent sur » avant de le supprimer. Les sessions existantes ne sont pas touchées.",
           "connectedNewProjectsHint": "Connecté à {{value0}}. Pour y créer les nouveaux projets par défaut, choisissez-le dans « Les nouveaux projets s’ouvrent sur ».",
-          "removeDefaultServerBlocked": "Ce serveur est l’hôte par défaut des nouveaux projets. Choisissez-en un autre dans « Les nouveaux projets s’ouvrent sur » avant de le supprimer."
+          "removeDefaultServerBlocked": "Ce serveur est l’hôte par défaut des nouveaux projets. Choisissez-en un autre dans « Les nouveaux projets s’ouvrent sur » avant de le supprimer.",
+          "serverMachineDeleted": "Machine supprimée"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "Copier {{value0}}"
@@ -12284,7 +12433,10 @@
           "resume": "Reprendre",
           "destroy": "Détruire",
           "heading": "Commandes de recette de VM",
-          "commandLabel": "{{value0}} · {{value1}} commande"
+          "commandLabel": "{{value0}} · {{value1}} commande",
+          "machineProvider": "Fournisseur de machines · Orca ajoute <verb> --json [--id <machine>]",
+          "machineProviderLabel": "{{value0}} · commande du fournisseur de machines",
+          "machineProviderHeading": "Commande du fournisseur de machines"
         },
         "PluginThemeUseNow": {
           "label": "Utiliser maintenant :",
@@ -15349,7 +15501,42 @@
           "RunTargetCombobox": {
             "listLabel": "Cibles d'exécution",
             "label": "Exécuter sur",
-            "browse": "Parcourir les cibles d'exécution"
+            "browse": "Parcourir les cibles d'exécution",
+            "newMachine": "Nouvelle machine"
+          },
+          "RunTargetMachineRow": {
+            "differentAccount": "Connecté avec un autre compte",
+            "invalidResponse": "A envoyé une réponse non valide",
+            "showFewer": "Afficher moins",
+            "showAll": "Tout afficher ({{count}})",
+            "archived": "Archivées ({{count}})",
+            "signIn": "Se connecter à {{provider}}",
+            "retry": "Réessayer {{provider}}",
+            "showDetails": "Afficher les détails",
+            "noMachines": "Aucune machine",
+            "signInOnServer": "Connexion requise sur {{server}}",
+            "noLocation": "Projet non configuré ici",
+            "newMachine": "Nouvelle machine sur {{provider}}…"
+          },
+          "RunTargetRowList": {
+            "sshHosts": "Hôtes SSH",
+            "otherHosts": "Autres hôtes"
+          },
+          "MachineCreateFields": {
+            "machine": "Machine",
+            "lifetime": "Durée de vie",
+            "deleteAfter": "Supprimer après",
+            "image": "Image",
+            "machineName": "Nom de la machine",
+            "sameAsWorktree": "Identique au worktree",
+            "days_one": "1 jour",
+            "days_other": "{{count}} jours",
+            "hours_one": "1 heure",
+            "hours_other": "{{count}} heures",
+            "minutes_one": "1 minute",
+            "minutes_other": "{{count}} minutes",
+            "finalName": "Sera nommée {{name}}",
+            "fallbackName": "Sera nommée machine-… (un nom unique)"
           }
         }
       },
@@ -18877,6 +19064,49 @@
         "copyFailed": "Impossible de copier le lien.",
         "signingIn": "Connexion…",
         "cancel": "Annuler"
+      },
+      "machines": {
+        "DashboardMachinesStrip": {
+          "noAgents": "aucun agent",
+          "oneAgent": "1 agent",
+          "agents": "{{count}} agents",
+          "actions": "Actions de la machine",
+          "title": "Machines",
+          "expand": "Afficher les machines",
+          "collapse": "Masquer les machines"
+        },
+        "MachineDeleteDialog": {
+          "confirm": "Supprimer la machine",
+          "confirmWithWorktree": "Supprimer la machine et 1 worktree",
+          "confirmWithWorktrees": "Supprimer la machine et {{count}} worktrees",
+          "failed": "Impossible de supprimer {{name}}",
+          "title": "Supprimer {{name}}",
+          "descriptionWithWorktrees": "Supprime la machine sur {{provider}} et les {{count}} worktrees qu’elle contient. Action irréversible.",
+          "description": "Supprime la machine sur {{provider}}. Action irréversible.",
+          "unpushed": "{{count}} commits non poussés de ces worktrees seront perdus.",
+          "archiveInstead": "Archiver plutôt",
+          "cancel": "Annuler",
+          "unpushedOne": "1 commit non poussé de ces worktrees sera perdu.",
+          "machineTotal": "Dans ces worktrees : {{work}}",
+          "descriptionWithWorktree": "Supprime la machine sur {{provider}} et le worktree qu’elle contient. Cette action est irréversible."
+        },
+        "StoppedMachineBanner": {
+          "archived": "{{name}} est archivée",
+          "sleeping": "{{name}} est en veille",
+          "body": "Réveillez-la pour reprendre ce terminal.",
+          "wake": "Réveiller la machine",
+          "gone": "{{name}} a été supprimée",
+          "goneBody": "Ce terminal ne peut pas reprendre. Retirez le worktree depuis son menu quand vous avez fini.",
+          "unreachable": "Impossible de joindre {{name}}",
+          "unreachableBody": "Elle est peut-être encore en démarrage. Si cela persiste, mettez-la en veille puis réveillez-la depuis son menu.",
+          "reopenBody": "Ce terminal reprend quand la machine se réveille.",
+          "stopping": "{{name}} se met en veille"
+        }
+      },
+      "worktreeCreation": {
+        "MachineLeftoverCheck": {
+          "stillThere": "Le fournisseur l’indique encore. Réessayez dans une minute."
+        }
       }
     },
     "i18n": {
@@ -21409,5 +21639,21 @@
       "unavailable": "Cet espace de travail est protégé ou indisponible."
     },
     "rowActions": "Actions pour {{name}}"
+  },
+  "machines": {
+    "expiryWarning": {
+      "title": "{{machine}} sera supprimée à {{time}}",
+      "unknownWork": "Orca n’a pas pu vérifier s’il y a du travail non enregistré.",
+      "noWork": "Tout ce qu’elle contient sera supprimé avec elle. Orca n’a trouvé aucun travail non validé ou non poussé.",
+      "work": "{{work}} seront perdus si vous ne poussez pas avant."
+    },
+    "workAtRisk": {
+      "uncommitted_one": "{{count}} modification non validée",
+      "uncommitted_other": "{{count}} modifications non validées",
+      "unpushed_one": "{{count}} commit non poussé",
+      "unpushed_other": "{{count}} commits non poussés",
+      "neverPushed_one": "{{count}} branche jamais poussée",
+      "neverPushed_other": "{{count}} branches jamais poussées"
+    }
   }
 }

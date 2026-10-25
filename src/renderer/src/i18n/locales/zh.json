@@ -1153,7 +1153,9 @@
         "settingUpWorkspace": "正在设置工作区…",
         "preparingWorkspace": "正在准备工作区…",
         "creatingWorktree": "正在创建工作树…",
-        "fetchingBaseBranch": "正在获取基础分支…"
+        "fetchingBaseBranch": "正在获取基础分支…",
+        "startingMachine": "正在启动机器…",
+        "settingUpRepo": "正在设置仓库…"
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}} 和 {{value1}} 是同一台服务器被配对了两次。请在“设置 > 远程 Orca 服务器”中移除其中一个。"
@@ -1171,6 +1173,117 @@
               }
             }
           }
+        }
+      },
+      "machineWorktreeCreation": {
+        "noCloneUrl": "此项目没有可克隆到机器上的远程仓库。",
+        "cloneFailed": "无法在机器上设置项目。",
+        "createUnsettled": "提供方可能仍在创建 {{name}}。请一分钟后重试。",
+        "createUnchecked": "无法确认 {{name}} 是否已创建。"
+      },
+      "machines": {
+        "machineCopy": {
+          "deletesAt": "{{time}} 删除",
+          "cantReach": "无法连接",
+          "cantReachSeen": "无法连接 · {{ago}}前可见",
+          "deletesAtLower": "{{time}} 删除",
+          "temporary": "临时",
+          "persistent": "持久",
+          "failureSignIn": "提供方需要你重新登录。",
+          "failureNotFound": "提供方已不再有这台机器。",
+          "failureQuota": "提供方已没有空间容纳更多机器。",
+          "failureTimeout": "提供方未及时响应。",
+          "failureUnsupported": "提供方无法对这台机器执行该操作。",
+          "failureCancelled": "已取消。",
+          "failureUnavailable": "提供方遇到了问题。",
+          "onProvider": "{{provider}} 上的 {{machine}}",
+          "actionConflict": "{{name}} 上正在执行另一个操作。"
+        },
+        "machineDisplayState": {
+          "starting": "启动中",
+          "running": "运行中",
+          "stopping": "正在休眠…",
+          "sleeping": "休眠中",
+          "archived": "已归档",
+          "unreachable": "无法访问",
+          "gone": "已消失",
+          "error": "错误"
+        },
+        "machineWakeOnOpen": {
+          "wakeFailed": "无法唤醒 {{name}}",
+          "waking": "正在唤醒 {{name}}…",
+          "wakeFailedUnknown": "Orca 无法连接到机器的提供方。"
+        },
+        "machineCreationStages": {
+          "waking": "正在唤醒…",
+          "connecting": "正在连接…",
+          "cloning": "正在克隆…",
+          "fetching": "正在获取基础分支…",
+          "creatingWorktree": "正在创建工作树…",
+          "startingMachine": "启动机器",
+          "settingUpRepo": "设置仓库",
+          "startingAgent": "启动智能体",
+          "openingTerminal": "打开终端",
+          "creating": "正在创建…",
+          "canceled": "已取消",
+          "cloningProject": "正在克隆 {{project}}…"
+        },
+        "machineStart": {
+          "readFailed": "无法连接 {{name}}。",
+          "gone": "{{name}} 已不存在。",
+          "wakeFailed": "无法唤醒 {{name}}。",
+          "connectFailed": "无法连接到 {{name}}。",
+          "noProjectRoot": "提供方未说明 {{name}} 上项目的位置。",
+          "noServer": "Orca 无法在 {{name}} 上启动其服务器，而设置项目需要该服务器。",
+          "createFailed": "无法创建 {{name}}。",
+          "nameTaken": "已存在名为 {{name}} 的机器。请在高级选项中选择其他名称。",
+          "createStillRunning": "提供方仍在创建 {{name}}。请一分钟后重试。"
+        },
+        "machineProviderActions": {
+          "signInStarted": "完成 {{provider}} 登录后，返回你的新工作树。",
+          "backToComposer": "返回新建工作树"
+        },
+        "machineActions": {
+          "archive": "归档",
+          "copySsh": "复制 SSH 命令",
+          "retry": "重试",
+          "refresh": "刷新",
+          "delete": "删除…",
+          "copied": "已复制 SSH 命令",
+          "wakeFailed": "无法唤醒 {{name}}",
+          "sleepFailed": "无法让 {{name}} 休眠",
+          "archiveFailed": "无法归档 {{name}}",
+          "wakeMachine": "唤醒机器",
+          "sleepMachine": "让机器休眠",
+          "refreshFailed": "无法刷新 {{provider}}",
+          "sleepAgentsOne": "{{name}} 上有 1 个智能体正在工作",
+          "sleepAgents": "{{name}} 上有 {{count}} 个智能体正在工作",
+          "sleepAgentsBody": "让机器休眠会停止它们。",
+          "sleepAnyway": "仍然休眠"
+        },
+        "machineExpiryWarning": {
+          "uncommitted": "{{count}} 个未提交的更改",
+          "unpushed": "{{count}} 个未推送的提交",
+          "warningAt": "{{time}} 删除 · {{work}}",
+          "unpushedOne": "1 个未推送的提交",
+          "uncommittedOne": "1 个未提交的更改",
+          "unknown": "无法检查未保存的工作"
+        },
+        "machineDeleteWork": {
+          "checking": "正在检查…",
+          "uncommittedUnknown": "无法检查未提交的更改",
+          "uncommitted_one": "1 个未提交",
+          "uncommitted_other": "{{count}} 个未提交",
+          "unpushedUnknown": "无法检查未推送的提交",
+          "noUpstream": "从未推送",
+          "unpushed_one": "1 个未推送",
+          "unpushed_other": "{{count}} 个未推送",
+          "noChanges": "无更改",
+          "allUnknown": "无法检查未保存的工作"
+        },
+        "machineDelete": {
+          "worktreesLeft": "已删除 {{name}}，但仍列出其 {{count}} 个工作树。请从各自菜单中移除。",
+          "stillThere": "{{name}} 未被删除。提供方仍将其列为 {{state}}。"
         }
       }
     },
@@ -1899,7 +2012,9 @@
         "defaultBranchUpdateFailed": "无法更新项目默认分支。再试一次。",
         "setLocation": "设置项目位置",
         "setLocationOnHost": "将项目位置设置为 {{host}}",
-        "setLocationTooltip": "选择一个文件夹或将此项目克隆到 {{host}} 上。"
+        "setLocationTooltip": "选择一个文件夹或将此项目克隆到 {{host}} 上。",
+        "machineFromPlugin": "来自插件的机器…",
+        "machineFromPluginHint": "查找机器提供方插件"
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "创建工作树",
@@ -3040,7 +3155,33 @@
             "767951265d": "创建工作树时出现问题。",
             "vmProvisioningTitle": "正在预配虚拟机",
             "cancelProvisioning": "取消",
-            "vmProvisioningLogEmpty": "正在等待环境模板输出…"
+            "vmProvisioningLogEmpty": "正在等待环境模板输出…",
+            "newMachine": "新机器"
+          },
+          "MachineCreationStatus": {
+            "failedTitle": "无法设置 {{name}}",
+            "title": "正在设置 {{name}}",
+            "machineOn": "{{provider}} 上的 {{machine}}",
+            "retry": "重试",
+            "removeWorktree": "移除工作树",
+            "showLog": "显示日志",
+            "logEmpty": "正在等待提供方输出…",
+            "canceledDetail": "在你取消之前，{{provider}} 可能已启动了一台机器。",
+            "newMachineOn": "{{provider}} 上的新机器 {{machine}}",
+            "canceled": "已取消",
+            "cancel": "取消",
+            "canceledCreated": "{{machine}} 已在 {{provider}} 上创建，仍在运行。",
+            "canceledDeleted": "此次创建遗留的机器已删除。"
+          },
+          "MachineLeftoverCheck": {
+            "check": "检查是否有遗留机器",
+            "none": "没有遗留机器",
+            "delete": "删除 {{name}}",
+            "deleted": "已删除遗留机器",
+            "checkAgain": "再次检查",
+            "unknown": "无法连接 {{provider}} 进行检查。",
+            "deleteFailed": "无法删除。{{reason}}",
+            "notFoundYet": "暂未找到。"
           }
         }
       },
@@ -3526,7 +3667,10 @@
             "fallbackServerName": "服务器",
             "connectionLostTitle": "正在重新连接 {{server}}",
             "connectionLostBody": "与服务器的连接已断开。Orca 正在自动重试，连接恢复后终端会继续运行。",
-            "reattachingBody": "Orca 正在自动将此终端重新连接到 {{server}}。"
+            "reattachingBody": "Orca 正在自动将此终端重新连接到 {{server}}。",
+            "wakingTitle": "正在唤醒 {{name}}…",
+            "wakingBody": "机器运行后此终端将恢复。",
+            "retryWakeButton": "重试"
           },
           "TerminalLinkActionPopover": {
             "openLink": "打开链接",
@@ -5509,7 +5653,8 @@
         "PendingWorktreeRow": {
           "af21e953d1": "取消工作树创建",
           "188f6922a0": "取消",
-          "creatingWorkspace": "正在创建工作区…"
+          "creatingWorkspace": "正在创建工作区…",
+          "canceled": "已取消"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "取消",
@@ -6748,6 +6893,9 @@
           "outsideDistro": "请选择 {{value0}} 内的文件夹。",
           "underDistro": "此主机只能添加 \\\\wsl.localhost\\{{value0}} 下的文件夹。",
           "windowsDrive": "Windows 驱动器上的文件夹保留在此计算机上。请选择此计算机作为主机以添加。"
+        },
+        "ArchivedMachinesRow": {
+          "label": "已归档的机器（{{count}}）"
         }
       },
       "shared": {
@@ -8526,7 +8674,8 @@
           "pairedTwice": "与 {{value0}} 是同一台服务器，被配对了两次。请移除其中一个，以便编辑其项目。",
           "removeDefaultServerDescription": "此服务器是新项目的默认主机。移除前请在“新项目打开位置”中选择其他主机。现有会话不受影响。",
           "connectedNewProjectsHint": "已连接到 {{value0}}。若要默认在此创建新项目，请在“新项目打开位置”中选择它。",
-          "removeDefaultServerBlocked": "此服务器是新项目的默认主机。移除前请在“新项目打开位置”中选择其他主机。"
+          "removeDefaultServerBlocked": "此服务器是新项目的默认主机。移除前请在“新项目打开位置”中选择其他主机。",
+          "serverMachineDeleted": "机器已删除"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "复制 {{value0}}"
@@ -12133,7 +12282,10 @@
           "resume": "恢复",
           "destroy": "销毁",
           "heading": "VM 配方命令",
-          "commandLabel": "{{value0}} · {{value1}} 个命令"
+          "commandLabel": "{{value0}} · {{value1}} 个命令",
+          "machineProvider": "机器提供程序 · Orca 会追加 <verb> --json [--id <machine>]",
+          "machineProviderLabel": "{{value0}} · 机器提供程序命令",
+          "machineProviderHeading": "机器提供程序命令"
         },
         "PluginThemeUseNow": {
           "label": "立即使用：",
@@ -15180,7 +15332,8 @@
           "RunTargetCombobox": {
             "listLabel": "运行目标",
             "label": "运行在",
-            "browse": "浏览运行目标"
+            "browse": "浏览运行目标",
+            "newMachine": "新机器"
           },
           "SetProjectLocationDialog": {
             "title": "设置项目位置",
@@ -15190,6 +15343,40 @@
             "cloneFromUrl": "从 URL 克隆",
             "cloneFromUrlHelp": "将此存储库克隆到 {{host}} 上。",
             "saveLocation": "设置位置"
+          },
+          "RunTargetMachineRow": {
+            "differentAccount": "已使用其他账号登录",
+            "invalidResponse": "返回了无效的响应",
+            "showFewer": "收起",
+            "showAll": "全部显示（{{count}}）",
+            "archived": "已归档（{{count}}）",
+            "signIn": "登录 {{provider}}",
+            "retry": "重试 {{provider}}",
+            "showDetails": "显示详情",
+            "noMachines": "没有机器",
+            "signInOnServer": "需要在 {{server}} 上登录",
+            "noLocation": "此处未设置项目",
+            "newMachine": "在 {{provider}} 上新建机器…"
+          },
+          "RunTargetRowList": {
+            "sshHosts": "SSH 主机",
+            "otherHosts": "其他主机"
+          },
+          "MachineCreateFields": {
+            "machine": "机器",
+            "lifetime": "生命周期",
+            "deleteAfter": "删除时间",
+            "image": "镜像",
+            "machineName": "机器名称",
+            "sameAsWorktree": "与工作树相同",
+            "days_one": "1 天",
+            "days_other": "{{count}} 天",
+            "hours_one": "1 小时",
+            "hours_other": "{{count}} 小时",
+            "minutes_one": "1 分钟",
+            "minutes_other": "{{count}} 分钟",
+            "finalName": "名称：{{name}}",
+            "fallbackName": "名称：machine-…（唯一名称）"
           }
         }
       },
@@ -18736,6 +18923,49 @@
         "cancelled": "此普通 SSH 终端在启动前已关闭。",
         "terminalUnavailable": "Orca 无法在此处打开终端。",
         "openHint": "在 Orca 无法在该主机上完成设置时，仍可让你继续在主机上工作。"
+      },
+      "machines": {
+        "DashboardMachinesStrip": {
+          "noAgents": "没有智能体",
+          "oneAgent": "1 个智能体",
+          "agents": "{{count}} 个智能体",
+          "actions": "机器操作",
+          "title": "机器",
+          "expand": "显示机器",
+          "collapse": "隐藏机器"
+        },
+        "MachineDeleteDialog": {
+          "confirm": "删除机器",
+          "confirmWithWorktree": "删除机器和 1 个工作树",
+          "confirmWithWorktrees": "删除机器和 {{count}} 个工作树",
+          "failed": "无法删除 {{name}}",
+          "title": "删除 {{name}}",
+          "descriptionWithWorktrees": "删除 {{provider}} 上的机器及其上的 {{count}} 个工作树。此操作无法撤销。",
+          "description": "删除 {{provider}} 上的机器。此操作无法撤销。",
+          "unpushed": "这些工作树上 {{count}} 个未推送的提交将丢失。",
+          "archiveInstead": "改为归档",
+          "cancel": "取消",
+          "unpushedOne": "这些工作树上 1 个未推送的提交将丢失。",
+          "machineTotal": "这些工作树合计：{{work}}",
+          "descriptionWithWorktree": "删除 {{provider}} 上的机器及其上的工作树。此操作无法撤销。"
+        },
+        "StoppedMachineBanner": {
+          "archived": "{{name}} 已归档",
+          "sleeping": "{{name}} 正在休眠",
+          "body": "唤醒它以恢复此终端。",
+          "wake": "唤醒机器",
+          "gone": "{{name}} 已删除",
+          "goneBody": "此终端无法恢复。完成后请从菜单中移除该工作树。",
+          "unreachable": "无法连接到 {{name}}",
+          "unreachableBody": "它可能仍在启动。如果一直如此，请从菜单中将其休眠后再唤醒。",
+          "reopenBody": "机器唤醒后，此终端将恢复。",
+          "stopping": "{{name}} 正在进入休眠"
+        }
+      },
+      "worktreeCreation": {
+        "MachineLeftoverCheck": {
+          "stillThere": "提供方仍列出它。请一分钟后重试。"
+        }
       }
     },
     "i18n": {
@@ -21408,5 +21638,21 @@
       "unavailable": "该工作区受保护或不可用。"
     },
     "rowActions": "{{name}} 的操作"
+  },
+  "machines": {
+    "expiryWarning": {
+      "title": "{{machine}} 将于 {{time}} 删除",
+      "unknownWork": "Orca 无法检查其中是否有未保存的工作。",
+      "noWork": "其中的所有内容都会一起删除。Orca 没有发现未提交或未推送的工作。",
+      "work": "{{work}}将会丢失，除非你先推送。"
+    },
+    "workAtRisk": {
+      "uncommitted_one": "{{count}} 个未提交的更改",
+      "uncommitted_other": "{{count}} 个未提交的更改",
+      "unpushed_one": "{{count}} 个未推送的提交",
+      "unpushed_other": "{{count}} 个未推送的提交",
+      "neverPushed_one": "{{count}} 个从未推送的分支",
+      "neverPushed_other": "{{count}} 个从未推送的分支"
+    }
   }
 }

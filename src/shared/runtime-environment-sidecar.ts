@@ -48,7 +48,9 @@ const SidecarEntrySchema = z.object({
   orcadMigratedAt: z.string().datetime().optional(),
   // Keeps the overlaid pairing revision monotonic after the access that raised it is removed.
   pairingRevisionFloor: z.number().finite().optional(),
-  reconciliation: RuntimeEnvironmentReconciliationRecordSchema.optional()
+  reconciliation: RuntimeEnvironmentReconciliationRecordSchema.optional(),
+  // The server's host is gone for good (its machine was deleted); nothing dials it until Connect.
+  retiredAt: z.string().datetime().optional()
 })
 
 const SidecarSchema = z.object({
@@ -190,7 +192,8 @@ export function overlayRuntimeEnvironmentSidecar(
       : {}),
     ...(current.orcadDeployment ? { orcadDeployment: current.orcadDeployment } : {}),
     ...(current.orcadMigratedAt ? { orcadMigratedAt: current.orcadMigratedAt } : {}),
-    ...(current.reconciliation ? { reconciliation: current.reconciliation } : {})
+    ...(current.reconciliation ? { reconciliation: current.reconciliation } : {}),
+    ...(current.retiredAt ? { retiredAt: current.retiredAt } : {})
   })
   return overlaid.success ? overlaid.data : base
 }
@@ -238,6 +241,7 @@ export function writeRuntimeEnvironmentSidecarEntry(
       entry.orcadDeployment !== undefined ||
       entry.orcadMigratedAt !== undefined ||
       entry.reconciliation !== undefined ||
+      entry.retiredAt !== undefined ||
       (entry.pairingRevisionFloor ?? basePairingRevision) > basePairingRevision)
   if (entry && hasState) {
     const { pendingBinding: _staleTarget, ...state } = entry

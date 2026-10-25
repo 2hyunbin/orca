@@ -1153,7 +1153,9 @@
         "settingUpWorkspace": "워크스페이스 설정 중…",
         "preparingWorkspace": "워크스페이스 준비 중…",
         "creatingWorktree": "작업 트리 만드는 중…",
-        "fetchingBaseBranch": "기본 브랜치 가져오는 중…"
+        "fetchingBaseBranch": "기본 브랜치 가져오는 중…",
+        "startingMachine": "머신 시작 중…",
+        "settingUpRepo": "저장소 설정 중…"
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}}와(과) {{value1}}은(는) 두 번 페어링된 같은 서버입니다. 설정 > 원격 Orca 서버에서 하나를 제거하세요."
@@ -1171,6 +1173,117 @@
               }
             }
           }
+        }
+      },
+      "machineWorktreeCreation": {
+        "noCloneUrl": "이 프로젝트에는 머신에 복제할 원격 저장소가 없습니다.",
+        "cloneFailed": "머신에 프로젝트를 설정할 수 없습니다.",
+        "createUnsettled": "공급자가 아직 {{name}}을(를) 만드는 중일 수 있습니다. 1분 후 다시 시도하세요.",
+        "createUnchecked": "{{name}}이(가) 이미 만들어졌는지 확인할 수 없습니다."
+      },
+      "machines": {
+        "machineCopy": {
+          "deletesAt": "{{time}}에 삭제",
+          "cantReach": "연결할 수 없음",
+          "cantReachSeen": "연결할 수 없음 · {{ago}} 전에 확인됨",
+          "deletesAtLower": "{{time}}에 삭제",
+          "temporary": "임시",
+          "persistent": "영구",
+          "failureSignIn": "공급자에 다시 로그인해야 합니다.",
+          "failureNotFound": "공급자에 이 머신이 더 이상 없습니다.",
+          "failureQuota": "공급자에 머신을 더 만들 공간이 없습니다.",
+          "failureTimeout": "공급자가 제시간에 응답하지 않았습니다.",
+          "failureUnsupported": "공급자가 이 머신에서 그 작업을 할 수 없습니다.",
+          "failureCancelled": "취소되었습니다.",
+          "failureUnavailable": "공급자에 문제가 발생했습니다.",
+          "onProvider": "{{provider}}의 {{machine}}",
+          "actionConflict": "{{name}}에서 다른 작업이 진행 중입니다."
+        },
+        "machineDisplayState": {
+          "starting": "시작 중",
+          "running": "실행 중",
+          "stopping": "절전 전환 중…",
+          "sleeping": "절전 중",
+          "archived": "보관됨",
+          "unreachable": "연결 불가",
+          "gone": "사라짐",
+          "error": "오류"
+        },
+        "machineWakeOnOpen": {
+          "wakeFailed": "{{name}}을(를) 깨울 수 없습니다",
+          "waking": "{{name}} 깨우는 중…",
+          "wakeFailedUnknown": "Orca가 머신 공급자에 연결할 수 없습니다."
+        },
+        "machineCreationStages": {
+          "waking": "깨우는 중…",
+          "connecting": "연결 중…",
+          "cloning": "복제 중…",
+          "fetching": "기준 브랜치 가져오는 중…",
+          "creatingWorktree": "워크트리 만드는 중…",
+          "startingMachine": "머신 시작",
+          "settingUpRepo": "저장소 설정",
+          "startingAgent": "에이전트 시작",
+          "openingTerminal": "터미널 여는 중",
+          "creating": "만드는 중…",
+          "canceled": "취소됨",
+          "cloningProject": "{{project}} 복제 중…"
+        },
+        "machineStart": {
+          "readFailed": "{{name}}에 연결할 수 없습니다.",
+          "gone": "{{name}}이(가) 사라졌습니다.",
+          "wakeFailed": "{{name}}을(를) 깨울 수 없습니다.",
+          "connectFailed": "{{name}}에 연결할 수 없습니다.",
+          "noProjectRoot": "공급자가 {{name}}에서 프로젝트 위치를 알려 주지 않았습니다.",
+          "noServer": "Orca가 {{name}}에서 서버를 시작할 수 없습니다. 프로젝트를 설정하려면 서버가 필요합니다.",
+          "createFailed": "{{name}}을(를) 만들 수 없습니다.",
+          "nameTaken": "{{name}} 이름의 머신이 이미 있습니다. 고급에서 다른 이름을 선택하세요.",
+          "createStillRunning": "공급자가 아직 {{name}}을(를) 만들고 있습니다. 1분 후에 다시 시도하세요."
+        },
+        "machineProviderActions": {
+          "signInStarted": "{{provider}} 로그인을 마친 후 새 워크트리로 돌아가세요.",
+          "backToComposer": "새 워크트리로 돌아가기"
+        },
+        "machineActions": {
+          "archive": "보관",
+          "copySsh": "SSH 명령 복사",
+          "retry": "다시 시도",
+          "refresh": "새로 고침",
+          "delete": "삭제…",
+          "copied": "SSH 명령을 복사했습니다",
+          "wakeFailed": "{{name}}을(를) 깨울 수 없습니다",
+          "sleepFailed": "{{name}}을(를) 절전시킬 수 없습니다",
+          "archiveFailed": "{{name}}을(를) 보관할 수 없습니다",
+          "wakeMachine": "머신 깨우기",
+          "sleepMachine": "머신 절전",
+          "refreshFailed": "{{provider}}을(를) 새로 고칠 수 없습니다",
+          "sleepAgentsOne": "{{name}}에서 에이전트 1개가 작업 중입니다",
+          "sleepAgents": "{{name}}에서 에이전트 {{count}}개가 작업 중입니다",
+          "sleepAgentsBody": "머신을 절전하면 중지됩니다.",
+          "sleepAnyway": "그래도 절전"
+        },
+        "machineExpiryWarning": {
+          "uncommitted": "커밋되지 않은 변경 {{count}}개",
+          "unpushed": "푸시되지 않은 커밋 {{count}}개",
+          "warningAt": "{{time}}에 삭제 · {{work}}",
+          "unpushedOne": "푸시되지 않은 커밋 1개",
+          "uncommittedOne": "커밋되지 않은 변경 1개",
+          "unknown": "저장되지 않은 작업을 확인할 수 없습니다"
+        },
+        "machineDeleteWork": {
+          "checking": "확인 중…",
+          "uncommittedUnknown": "커밋되지 않은 변경을 확인할 수 없습니다",
+          "uncommitted_one": "커밋 안 됨 1개",
+          "uncommitted_other": "커밋 안 됨 {{count}}개",
+          "unpushedUnknown": "푸시되지 않은 커밋을 확인할 수 없습니다",
+          "noUpstream": "푸시한 적 없음",
+          "unpushed_one": "푸시 안 됨 1개",
+          "unpushed_other": "푸시 안 됨 {{count}}개",
+          "noChanges": "변경 없음",
+          "allUnknown": "저장되지 않은 작업을 확인할 수 없습니다"
+        },
+        "machineDelete": {
+          "worktreesLeft": "{{name}}을(를) 삭제했지만 워크트리 {{count}}개가 아직 목록에 있습니다. 각 메뉴에서 제거하세요.",
+          "stillThere": "{{name}}이(가) 삭제되지 않았습니다. 공급자가 아직 {{state}} 상태로 표시합니다."
         }
       }
     },
@@ -1899,7 +2012,9 @@
         "defaultBranchUpdateFailed": "프로젝트 기본 브랜치를 업데이트할 수 없습니다. 다시 시도해 보세요.",
         "setLocation": "프로젝트 위치 설정",
         "setLocationOnHost": "{{host}}에 프로젝트 위치 설정",
-        "setLocationTooltip": "폴더를 선택하거나 이 프로젝트를 {{host}}에 복제하세요."
+        "setLocationTooltip": "폴더를 선택하거나 이 프로젝트를 {{host}}에 복제하세요.",
+        "machineFromPlugin": "플러그인의 머신…",
+        "machineFromPluginHint": "머신 공급자 플러그인 찾기"
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "작업 트리 만들기",
@@ -3040,7 +3155,33 @@
             "767951265d": "작업 트리를 만드는 중에 문제가 발생했습니다.",
             "vmProvisioningTitle": "VM 프로비저닝",
             "cancelProvisioning": "취소",
-            "vmProvisioningLogEmpty": "레시피 출력을 기다리는 중…"
+            "vmProvisioningLogEmpty": "레시피 출력을 기다리는 중…",
+            "newMachine": "새 머신"
+          },
+          "MachineCreationStatus": {
+            "failedTitle": "{{name}}을(를) 설정할 수 없습니다",
+            "title": "{{name}} 설정 중",
+            "machineOn": "{{provider}}의 {{machine}}",
+            "retry": "다시 시도",
+            "removeWorktree": "워크트리 제거",
+            "showLog": "로그 보기",
+            "logEmpty": "공급자 출력을 기다리는 중…",
+            "canceledDetail": "취소하기 전에 {{provider}}이(가) 머신을 시작했을 수 있습니다.",
+            "newMachineOn": "{{provider}}의 새 머신 {{machine}}",
+            "canceled": "취소됨",
+            "cancel": "취소",
+            "canceledCreated": "{{machine}}은(는) {{provider}}에 이미 만들어졌고 아직 실행 중입니다.",
+            "canceledDeleted": "이 생성으로 남은 머신을 삭제했습니다."
+          },
+          "MachineLeftoverCheck": {
+            "check": "남은 머신 확인",
+            "none": "남은 머신 없음",
+            "delete": "{{name}} 삭제",
+            "deleted": "남은 머신을 삭제했습니다",
+            "checkAgain": "다시 확인",
+            "unknown": "확인하기 위해 {{provider}}에 연결할 수 없습니다.",
+            "deleteFailed": "삭제할 수 없습니다. {{reason}}",
+            "notFoundYet": "아직 찾은 것이 없습니다."
           }
         }
       },
@@ -3526,7 +3667,10 @@
             "fallbackServerName": "서버",
             "connectionLostTitle": "{{server}}에 다시 연결하는 중",
             "connectionLostBody": "서버와의 연결이 끊겼습니다. Orca가 자동으로 다시 시도하고 있으며, 연결이 복구되면 터미널이 재개됩니다.",
-            "reattachingBody": "Orca가 이 터미널을 {{server}}에 자동으로 다시 연결하고 있습니다."
+            "reattachingBody": "Orca가 이 터미널을 {{server}}에 자동으로 다시 연결하고 있습니다.",
+            "wakingTitle": "{{name}} 깨우는 중…",
+            "wakingBody": "머신이 실행되면 이 터미널이 다시 시작됩니다.",
+            "retryWakeButton": "다시 시도"
           },
           "TerminalLinkActionPopover": {
             "openLink": "링크 열기",
@@ -5509,7 +5653,8 @@
         "PendingWorktreeRow": {
           "af21e953d1": "워크트리 만들기 취소",
           "188f6922a0": "취소",
-          "creatingWorkspace": "워크스페이스 만드는 중…"
+          "creatingWorkspace": "워크스페이스 만드는 중…",
+          "canceled": "취소됨"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "취소",
@@ -6748,6 +6893,9 @@
           "outsideDistro": "{{value0}} 안의 폴더를 선택하세요.",
           "underDistro": "이 호스트는 \\\\wsl.localhost\\{{value0}} 아래의 폴더만 추가할 수 있습니다.",
           "windowsDrive": "Windows 드라이브의 폴더는 이 컴퓨터에 남습니다. 추가하려면 이 컴퓨터를 호스트로 선택하세요."
+        },
+        "ArchivedMachinesRow": {
+          "label": "보관된 머신 ({{count}})"
         }
       },
       "shared": {
@@ -8526,7 +8674,8 @@
           "pairedTwice": "{{value0}}와(과) 같은 서버가 두 번 페어링되었습니다. 프로젝트를 편집하려면 하나를 제거하세요.",
           "removeDefaultServerDescription": "이 서버는 새 프로젝트의 기본 호스트입니다. 제거하기 전에 '새 프로젝트를 여는 위치'에서 다른 서버를 선택하세요. 기존 세션은 그대로 유지됩니다.",
           "connectedNewProjectsHint": "{{value0}}에 연결되었습니다. 새 프로젝트를 기본적으로 이곳에 만들려면 '새 프로젝트를 여는 위치'에서 선택하세요.",
-          "removeDefaultServerBlocked": "이 서버는 새 프로젝트의 기본 호스트입니다. 제거하기 전에 '새 프로젝트를 여는 위치'에서 다른 서버를 선택하세요."
+          "removeDefaultServerBlocked": "이 서버는 새 프로젝트의 기본 호스트입니다. 제거하기 전에 '새 프로젝트를 여는 위치'에서 다른 서버를 선택하세요.",
+          "serverMachineDeleted": "머신 삭제됨"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "{{value0}} 복사"
@@ -12133,7 +12282,10 @@
           "resume": "재개",
           "destroy": "파괴",
           "heading": "VM 레시피 명령",
-          "commandLabel": "{{value0}} · {{value1}}개 명령"
+          "commandLabel": "{{value0}} · {{value1}}개 명령",
+          "machineProvider": "머신 공급자 · Orca가 <verb> --json [--id <machine>]을(를) 덧붙입니다",
+          "machineProviderLabel": "{{value0}} · 머신 공급자 명령",
+          "machineProviderHeading": "머신 공급자 명령"
         },
         "PluginThemeUseNow": {
           "label": "지금 사용:",
@@ -15180,7 +15332,8 @@
           "RunTargetCombobox": {
             "listLabel": "실행 대상",
             "label": "실행 위치",
-            "browse": "실행 대상 검색"
+            "browse": "실행 대상 검색",
+            "newMachine": "새 머신"
           },
           "SetProjectLocationDialog": {
             "title": "프로젝트 위치 설정",
@@ -15190,6 +15343,40 @@
             "cloneFromUrl": "URL에서 복제",
             "cloneFromUrlHelp": "이 저장소를 {{host}}에 복제하세요.",
             "saveLocation": "위치 설정"
+          },
+          "RunTargetMachineRow": {
+            "differentAccount": "다른 계정으로 로그인됨",
+            "invalidResponse": "잘못된 응답을 보냄",
+            "showFewer": "간단히 보기",
+            "showAll": "모두 보기 ({{count}})",
+            "archived": "보관됨 ({{count}})",
+            "signIn": "{{provider}}에 로그인",
+            "retry": "{{provider}} 다시 시도",
+            "showDetails": "세부 정보 보기",
+            "noMachines": "머신 없음",
+            "signInOnServer": "{{server}}에서 로그인 필요",
+            "noLocation": "여기에 프로젝트가 설정되지 않음",
+            "newMachine": "{{provider}}에 새 머신…"
+          },
+          "RunTargetRowList": {
+            "sshHosts": "SSH 호스트",
+            "otherHosts": "기타 호스트"
+          },
+          "MachineCreateFields": {
+            "machine": "머신",
+            "lifetime": "수명",
+            "deleteAfter": "삭제 시점",
+            "image": "이미지",
+            "machineName": "머신 이름",
+            "sameAsWorktree": "워크트리와 동일",
+            "days_one": "1일",
+            "days_other": "{{count}}일",
+            "hours_one": "1시간",
+            "hours_other": "{{count}}시간",
+            "minutes_one": "1분",
+            "minutes_other": "{{count}}분",
+            "finalName": "이름: {{name}}",
+            "fallbackName": "이름: machine-… (고유한 이름)"
           }
         }
       },
@@ -18736,6 +18923,49 @@
         "cancelled": "이 일반 SSH 터미널은 시작되기 전에 닫혔습니다.",
         "terminalUnavailable": "Orca에서 여기의 터미널을 열 수 없습니다.",
         "openHint": "Orca가 호스트에서 설정할 수 없는 동안에도 호스트에서 계속 작업할 수 있습니다."
+      },
+      "machines": {
+        "DashboardMachinesStrip": {
+          "noAgents": "에이전트 없음",
+          "oneAgent": "에이전트 1개",
+          "agents": "에이전트 {{count}}개",
+          "actions": "머신 작업",
+          "title": "머신",
+          "expand": "머신 보기",
+          "collapse": "머신 숨기기"
+        },
+        "MachineDeleteDialog": {
+          "confirm": "머신 삭제",
+          "confirmWithWorktree": "머신과 워크트리 1개 삭제",
+          "confirmWithWorktrees": "머신과 워크트리 {{count}}개 삭제",
+          "failed": "{{name}}을(를) 삭제할 수 없습니다",
+          "title": "{{name}} 삭제",
+          "descriptionWithWorktrees": "{{provider}}의 머신과 그 안의 워크트리 {{count}}개를 삭제합니다. 되돌릴 수 없습니다.",
+          "description": "{{provider}}의 머신을 삭제합니다. 되돌릴 수 없습니다.",
+          "unpushed": "이 워크트리의 푸시되지 않은 커밋 {{count}}개가 사라집니다.",
+          "archiveInstead": "대신 보관",
+          "cancel": "취소",
+          "unpushedOne": "이 워크트리의 푸시되지 않은 커밋 1개가 사라집니다.",
+          "machineTotal": "이 워크트리 전체: {{work}}",
+          "descriptionWithWorktree": "{{provider}}의 머신과 그 위의 워크트리를 삭제합니다. 되돌릴 수 없습니다."
+        },
+        "StoppedMachineBanner": {
+          "archived": "{{name}}이(가) 보관되었습니다",
+          "sleeping": "{{name}}이(가) 절전 중입니다",
+          "body": "깨우면 이 터미널이 다시 시작됩니다.",
+          "wake": "머신 깨우기",
+          "gone": "{{name}}이(가) 삭제되었습니다",
+          "goneBody": "이 터미널은 다시 시작할 수 없습니다. 끝나면 메뉴에서 워크트리를 제거하세요.",
+          "unreachable": "{{name}}에 연결할 수 없습니다",
+          "unreachableBody": "아직 시작 중일 수 있습니다. 계속되면 메뉴에서 절전 후 다시 깨우세요.",
+          "reopenBody": "머신이 깨어나면 이 터미널이 다시 시작됩니다.",
+          "stopping": "{{name}}이(가) 절전 모드로 전환 중입니다"
+        }
+      },
+      "worktreeCreation": {
+        "MachineLeftoverCheck": {
+          "stillThere": "공급자에 아직 표시됩니다. 1분 후에 다시 시도하세요."
+        }
       }
     },
     "i18n": {
@@ -21408,5 +21638,21 @@
       "main": "기본 작업 트리가 보호됩니다."
     },
     "rowActions": "{{name}}에 대한 작업"
+  },
+  "machines": {
+    "expiryWarning": {
+      "title": "{{machine}}은(는) {{time}}에 삭제됩니다",
+      "unknownWork": "Orca가 저장되지 않은 작업을 확인하지 못했습니다.",
+      "noWork": "안의 모든 것이 함께 삭제됩니다. 커밋하거나 푸시하지 않은 작업은 없습니다.",
+      "work": "{{work}}은(는) 먼저 푸시하지 않으면 사라집니다."
+    },
+    "workAtRisk": {
+      "uncommitted_one": "커밋하지 않은 변경 {{count}}개",
+      "uncommitted_other": "커밋하지 않은 변경 {{count}}개",
+      "unpushed_one": "푸시하지 않은 커밋 {{count}}개",
+      "unpushed_other": "푸시하지 않은 커밋 {{count}}개",
+      "neverPushed_one": "푸시하지 않은 브랜치 {{count}}개",
+      "neverPushed_other": "푸시하지 않은 브랜치 {{count}}개"
+    }
   }
 }

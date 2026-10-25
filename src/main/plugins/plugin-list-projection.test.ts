@@ -48,9 +48,13 @@ function serviceWith(
     activation?: ReturnType<PluginService['activationState']>
     worker?: ReturnType<PluginService['workerState']>
     vmRecipes?: ReturnType<PluginService['contentPacks']['vmRecipes']['preview']>
+    machineProviders?: ReturnType<
+      PluginService['contentPacks']['vmRecipes']['previewMachineProviders']
+    >
     commands?: ReturnType<PluginService['contentPacks']['commands']['preview']>
   } = {}
 ): PluginService {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: buildPluginList reads only these PluginService members.
   return {
     options: {
       getPluginConsents: () => ({}),
@@ -61,7 +65,10 @@ function serviceWith(
     workerState: () => options.worker ?? { state: 'inactive', restarts: 0 },
     activationError: () => null,
     contentPacks: {
-      vmRecipes: { preview: () => options.vmRecipes ?? [] },
+      vmRecipes: {
+        preview: () => options.vmRecipes ?? [],
+        previewMachineProviders: () => options.machineProviders ?? []
+      },
       commands: { preview: () => options.commands ?? [] }
     }
   } as unknown as PluginService
@@ -183,6 +190,13 @@ describe('buildPluginList consent identity', () => {
                   destroyDisabled: true
                 }
               }
+            ],
+            machineProviders: [
+              {
+                pluginKey: plugin.pluginKey,
+                pluginRootDir: plugin.rootDir,
+                provider: { id: 'omarchy', name: 'Omarchy', command: ['ssh', 'omarchy'] }
+              }
             ]
           }),
           emptyPluginLockfile()
@@ -196,6 +210,12 @@ describe('buildPluginList consent identity', () => {
           { phase: 'create', command: './create.sh' },
           { phase: 'destroy', command: 'none' }
         ]
+      },
+      {
+        id: 'omarchy',
+        name: 'Omarchy',
+        commands: [{ phase: 'create', command: '"ssh" "omarchy"' }],
+        machineProviderCommand: ['ssh', 'omarchy']
       }
     ])
   })

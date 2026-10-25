@@ -1400,7 +1400,9 @@
         "settingUpWorkspace": "Setting up your workspace…",
         "preparingWorkspace": "Preparing workspace…",
         "creatingWorktree": "Creating worktree…",
-        "fetchingBaseBranch": "Fetching base branch…"
+        "fetchingBaseBranch": "Fetching base branch…",
+        "startingMachine": "Starting machine…",
+        "settingUpRepo": "Setting up repo…"
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}} and {{value1}} are the same server paired twice. Remove one in Settings > Remote Orca Servers."
@@ -1418,6 +1420,117 @@
               }
             }
           }
+        }
+      },
+      "machineWorktreeCreation": {
+        "noCloneUrl": "This project has no remote to clone onto the machine.",
+        "cloneFailed": "Couldn’t set up the project on the machine.",
+        "createUnsettled": "The provider may still be creating {{name}}. Try again in a minute.",
+        "createUnchecked": "Couldn’t check whether {{name}} was already created."
+      },
+      "machines": {
+        "machineCopy": {
+          "deletesAt": "Deletes {{time}}",
+          "cantReach": "Can’t reach",
+          "cantReachSeen": "Can’t reach · seen {{ago}} ago",
+          "deletesAtLower": "deletes {{time}}",
+          "temporary": "Temporary",
+          "persistent": "Persistent",
+          "failureSignIn": "The provider needs you to sign in again.",
+          "failureNotFound": "The provider no longer has this machine.",
+          "failureQuota": "The provider is out of room for more machines.",
+          "failureTimeout": "The provider didn’t answer in time.",
+          "failureUnsupported": "The provider can’t do that for this machine.",
+          "failureCancelled": "It was canceled.",
+          "failureUnavailable": "The provider ran into a problem.",
+          "onProvider": "{{machine}} on {{provider}}",
+          "actionConflict": "Another action is running on {{name}}."
+        },
+        "machineDisplayState": {
+          "starting": "Starting",
+          "running": "Running",
+          "sleeping": "Sleeping",
+          "archived": "Archived",
+          "unreachable": "Unreachable",
+          "gone": "Gone",
+          "stopping": "Sleeping…",
+          "error": "Error"
+        },
+        "machineWakeOnOpen": {
+          "wakeFailed": "Couldn’t wake {{name}}",
+          "waking": "Waking {{name}}…",
+          "wakeFailedUnknown": "Orca couldn’t reach the machine’s provider."
+        },
+        "machineCreationStages": {
+          "waking": "Waking…",
+          "connecting": "Connecting…",
+          "cloning": "Cloning…",
+          "fetching": "Fetching base branch…",
+          "creatingWorktree": "Creating worktree…",
+          "startingMachine": "Starting machine",
+          "settingUpRepo": "Setting up repo",
+          "startingAgent": "Starting agent",
+          "openingTerminal": "Opening terminal",
+          "creating": "Creating…",
+          "cloningProject": "Cloning {{project}}…",
+          "canceled": "Canceled"
+        },
+        "machineStart": {
+          "readFailed": "Couldn’t reach {{name}}.",
+          "gone": "{{name}} is gone.",
+          "wakeFailed": "Couldn’t wake {{name}}.",
+          "connectFailed": "Couldn’t connect to {{name}}.",
+          "noProjectRoot": "The provider didn’t say where projects live on {{name}}.",
+          "noServer": "Orca couldn’t start its server on {{name}}, which it needs to set up the project.",
+          "nameTaken": "A machine named {{name}} already exists. Pick another name in Advanced.",
+          "createFailed": "Couldn’t create {{name}}.",
+          "createStillRunning": "The provider is still creating {{name}}. Try again in a minute."
+        },
+        "machineProviderActions": {
+          "signInStarted": "Finish signing in to {{provider}}, then go back to your new worktree.",
+          "backToComposer": "Back to new worktree"
+        },
+        "machineActions": {
+          "archive": "Archive",
+          "copySsh": "Copy SSH command",
+          "retry": "Retry",
+          "refresh": "Refresh",
+          "delete": "Delete…",
+          "copied": "SSH command copied",
+          "wakeFailed": "Couldn’t wake {{name}}",
+          "sleepFailed": "Couldn’t put {{name}} to sleep",
+          "archiveFailed": "Couldn’t archive {{name}}",
+          "wakeMachine": "Wake machine",
+          "sleepMachine": "Sleep machine",
+          "refreshFailed": "Couldn’t refresh {{provider}}",
+          "sleepAgentsOne": "1 agent is working on {{name}}",
+          "sleepAgents": "{{count}} agents are working on {{name}}",
+          "sleepAgentsBody": "Sleeping the machine stops them.",
+          "sleepAnyway": "Sleep anyway"
+        },
+        "machineExpiryWarning": {
+          "uncommitted": "{{count}} uncommitted changes",
+          "unpushed": "{{count}} unpushed commits",
+          "warningAt": "Deletes {{time}} · {{work}}",
+          "uncommittedOne": "1 uncommitted change",
+          "unpushedOne": "1 unpushed commit",
+          "unknown": "Couldn’t check unsaved work"
+        },
+        "machineDeleteWork": {
+          "checking": "Checking…",
+          "uncommittedUnknown": "Couldn’t check uncommitted changes",
+          "uncommitted_one": "1 uncommitted",
+          "uncommitted_other": "{{count}} uncommitted",
+          "unpushedUnknown": "Couldn’t check unpushed commits",
+          "noUpstream": "Never pushed",
+          "unpushed_one": "1 unpushed",
+          "unpushed_other": "{{count}} unpushed",
+          "noChanges": "No changes",
+          "allUnknown": "Couldn’t check unsaved work"
+        },
+        "machineDelete": {
+          "worktreesLeft": "Deleted {{name}}, but {{count}} of its worktrees are still listed. Remove them from their menu.",
+          "stillThere": "{{name}} wasn’t deleted. The provider still lists it as {{state}}."
         }
       }
     },
@@ -2152,7 +2265,9 @@
         "addSshHostHint": "Use an existing machine over SSH",
         "addRemoteOrcaServer": "Add Remote Orca Server",
         "addRemoteOrcaServerHint": "Pair another Orca runtime",
-        "hostConnectionFailed": "Connection failed"
+        "hostConnectionFailed": "Connection failed",
+        "machineFromPlugin": "Machine from a plugin…",
+        "machineFromPluginHint": "Find a machine provider plugin"
       },
       "NewWorkspaceComposerModal": {
         "createWorktree": "Create worktree",
@@ -3337,7 +3452,33 @@
             "767951265d": "Something went wrong while creating the worktree.",
             "vmProvisioningTitle": "Provisioning VM",
             "cancelProvisioning": "Cancel",
-            "vmProvisioningLogEmpty": "Waiting for recipe output…"
+            "vmProvisioningLogEmpty": "Waiting for recipe output…",
+            "newMachine": "New machine"
+          },
+          "MachineCreationStatus": {
+            "failedTitle": "Couldn’t set up {{name}}",
+            "title": "Setting up {{name}}",
+            "machineOn": "{{machine}} on {{provider}}",
+            "retry": "Retry",
+            "removeWorktree": "Remove worktree",
+            "showLog": "Show log",
+            "logEmpty": "Waiting for provider output…",
+            "canceledCreated": "{{machine}} was already created on {{provider}} and is still running.",
+            "canceledDetail": "{{provider}} may have started a machine before you canceled.",
+            "newMachineOn": "New machine {{machine}} on {{provider}}",
+            "canceled": "Canceled",
+            "cancel": "Cancel",
+            "canceledDeleted": "The machine this create left behind was deleted."
+          },
+          "MachineLeftoverCheck": {
+            "checkAgain": "Check again",
+            "check": "Check for a leftover machine",
+            "unknown": "Couldn’t reach {{provider}} to check.",
+            "none": "No leftover machine",
+            "delete": "Delete {{name}}",
+            "deleteFailed": "Couldn’t delete it. {{reason}}",
+            "deleted": "Leftover machine deleted",
+            "notFoundYet": "Nothing found yet."
           }
         }
       },
@@ -3844,7 +3985,10 @@
             "fallbackServerName": "the server",
             "connectionLostTitle": "Reconnecting to {{server}}",
             "connectionLostBody": "The connection to the server dropped. Orca is retrying automatically, and terminals resume when it returns.",
-            "reattachingBody": "Orca is reattaching this terminal to {{server}} automatically."
+            "reattachingBody": "Orca is reattaching this terminal to {{server}} automatically.",
+            "wakingTitle": "Waking {{name}}…",
+            "wakingBody": "This terminal resumes once the machine is running.",
+            "retryWakeButton": "Retry"
           },
           "TerminalQuickCommandsSubmenu": {
             "3ccc7981bb": "Host unavailable",
@@ -5857,7 +6001,8 @@
         "PendingWorktreeRow": {
           "af21e953d1": "Cancel worktree creation",
           "188f6922a0": "Cancel",
-          "creatingWorkspace": "Creating workspace…"
+          "creatingWorkspace": "Creating workspace…",
+          "canceled": "Canceled"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "Cancel",
@@ -7058,6 +7203,9 @@
           "outsideDistro": "Pick a folder inside {{value0}}.",
           "underDistro": "This host can only add folders under \\\\wsl.localhost\\{{value0}}.",
           "windowsDrive": "Folders on a Windows drive stay on this computer. Choose this computer as the host to add one."
+        },
+        "ArchivedMachinesRow": {
+          "label": "Archived machines ({{count}})"
         }
       },
       "shared": {
@@ -8896,7 +9044,8 @@
           "pairedTwice": "Same server as {{value0}}, paired twice. Remove one so its projects can be edited.",
           "removeDefaultServerDescription": "This server is the default host for new projects. Choose another one under New projects open on before removing it. Existing host sessions are left alone.",
           "connectedNewProjectsHint": "Connected to {{value0}}. To create new projects there by default, choose it under New projects open on.",
-          "removeDefaultServerBlocked": "This server is the default host for new projects. Choose another one under New projects open on before removing it."
+          "removeDefaultServerBlocked": "This server is the default host for new projects. Choose another one under New projects open on before removing it.",
+          "serverMachineDeleted": "Machine deleted"
         },
         "RuntimePairingGeneratedUrlRows": {
           "0495f68959": "Copy {{value0}}"
@@ -12433,7 +12582,10 @@
           "resume": "Resume",
           "destroy": "Destroy",
           "heading": "VM recipe commands",
-          "commandLabel": "{{value0}} · {{value1}} command"
+          "commandLabel": "{{value0}} · {{value1}} command",
+          "machineProvider": "Machine provider · Orca appends <verb> --json [--id <machine>]",
+          "machineProviderLabel": "{{value0}} · machine provider command",
+          "machineProviderHeading": "Machine provider command"
         },
         "pluginError": {
           "installManifestMissing": "No readable orca-plugin.json was found. Choose the plugin's root folder.",
@@ -15560,7 +15712,42 @@
           "RunTargetCombobox": {
             "listLabel": "Run targets",
             "label": "Run on",
-            "browse": "Browse run targets"
+            "browse": "Browse run targets",
+            "newMachine": "New machine"
+          },
+          "RunTargetMachineRow": {
+            "differentAccount": "Signed in as a different account",
+            "invalidResponse": "Sent an invalid response",
+            "showFewer": "Show fewer",
+            "showAll": "Show all ({{count}})",
+            "archived": "Archived ({{count}})",
+            "signIn": "Sign in to {{provider}}",
+            "retry": "Retry {{provider}}",
+            "showDetails": "Show details",
+            "noMachines": "No machines",
+            "signInOnServer": "Needs sign-in on {{server}}",
+            "noLocation": "Project not set up here",
+            "newMachine": "New machine on {{provider}}…"
+          },
+          "RunTargetRowList": {
+            "sshHosts": "SSH hosts",
+            "otherHosts": "Other hosts"
+          },
+          "MachineCreateFields": {
+            "days_one": "1 day",
+            "days_other": "{{count}} days",
+            "hours_one": "1 hour",
+            "hours_other": "{{count}} hours",
+            "minutes_one": "1 minute",
+            "minutes_other": "{{count}} minutes",
+            "machine": "Machine",
+            "lifetime": "Lifetime",
+            "deleteAfter": "Delete after",
+            "image": "Image",
+            "machineName": "Machine name",
+            "sameAsWorktree": "Same as the worktree",
+            "finalName": "Named {{name}}",
+            "fallbackName": "Named machine-… (a unique name)"
           }
         }
       },
@@ -19059,6 +19246,49 @@
         "cancelled": "This plain SSH terminal was closed before it started.",
         "terminalUnavailable": "Orca couldn’t open a terminal here.",
         "openHint": "Keeps you working on the host while Orca can’t set up there."
+      },
+      "machines": {
+        "DashboardMachinesStrip": {
+          "noAgents": "no agents",
+          "oneAgent": "1 agent",
+          "agents": "{{count}} agents",
+          "actions": "Machine actions",
+          "title": "Machines",
+          "expand": "Show machines",
+          "collapse": "Hide machines"
+        },
+        "MachineDeleteDialog": {
+          "confirm": "Delete machine",
+          "confirmWithWorktree": "Delete machine and 1 worktree",
+          "confirmWithWorktrees": "Delete machine and {{count}} worktrees",
+          "failed": "Couldn’t delete {{name}}",
+          "title": "Delete {{name}}",
+          "descriptionWithWorktrees": "Deletes the machine on {{provider}} and the {{count}} worktrees on it. This can’t be undone.",
+          "description": "Deletes the machine on {{provider}}. This can’t be undone.",
+          "unpushed": "{{count}} unpushed commits on these worktrees will be lost.",
+          "archiveInstead": "Archive instead",
+          "cancel": "Cancel",
+          "unpushedOne": "1 unpushed commit on these worktrees will be lost.",
+          "machineTotal": "Across these worktrees: {{work}}",
+          "descriptionWithWorktree": "Deletes the machine on {{provider}} and the worktree on it. This can’t be undone."
+        },
+        "StoppedMachineBanner": {
+          "archived": "{{name}} is archived",
+          "sleeping": "{{name}} is asleep",
+          "body": "Wake it to resume this terminal.",
+          "wake": "Wake machine",
+          "gone": "{{name}} was deleted",
+          "goneBody": "This terminal can’t resume. Remove the worktree from its menu when you’re done.",
+          "unreachable": "Can’t reach {{name}}",
+          "unreachableBody": "It may still be starting. If this stays, sleep and wake it from its menu.",
+          "reopenBody": "This terminal resumes when the machine wakes.",
+          "stopping": "{{name}} is going to sleep"
+        }
+      },
+      "worktreeCreation": {
+        "MachineLeftoverCheck": {
+          "stillThere": "The provider still lists it. Try again in a minute."
+        }
       }
     },
     "i18n": {
@@ -21527,5 +21757,21 @@
     "restartLocal": "Restart local daemon",
     "killAllLocal": "Kill all local sessions",
     "killFailed": "The terminal could not be ended. Last-observed sessions are retained."
+  },
+  "machines": {
+    "expiryWarning": {
+      "title": "{{machine}} deletes at {{time}}",
+      "unknownWork": "Orca couldn’t check for unsaved work on it.",
+      "noWork": "Everything on it is deleted with it. Orca found no uncommitted or unpushed work.",
+      "work": "{{work}} on it will be lost unless you push first."
+    },
+    "workAtRisk": {
+      "uncommitted_one": "{{count}} uncommitted change",
+      "uncommitted_other": "{{count}} uncommitted changes",
+      "unpushed_one": "{{count}} unpushed commit",
+      "unpushed_other": "{{count}} unpushed commits",
+      "neverPushed_one": "{{count}} branch never pushed",
+      "neverPushed_other": "{{count}} branches never pushed"
+    }
   }
 }

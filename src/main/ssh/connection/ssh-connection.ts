@@ -44,6 +44,7 @@ import type { SshConnectionCallbacks, SshCredentialKind } from './ssh-connection
 import { collectKeyboardInteractiveResponses } from '../ssh-keyboard-interactive'
 import { resolveEffectiveProxy, spawnProxyCommand } from '../ssh-proxy-command'
 import { resolveWithSshG, type SshResolvedConfig } from '../config/ssh-g-config-resolution'
+import { writePinnedKnownHosts } from '../system-transport/pinned-known-hosts'
 import {
   createCancelledConnectAttemptError,
   isCancelledConnectAttemptError
@@ -567,6 +568,8 @@ export class SshConnection {
     if (!this.isCurrentConnectAttempt(connectGeneration)) {
       throw createCancelledConnectAttemptError()
     }
+    // Before the transport flips: a pinned target without usable keys must fail, not fall back.
+    writePinnedKnownHosts(this.target)
     this.useSystemSshTransport = true
     this.client = null
     this.killProxy()

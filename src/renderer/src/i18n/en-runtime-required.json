@@ -630,6 +630,12 @@
           }
         }
       },
+      "machines": {
+        "MachineDeleteDialog": {
+          "unpushed": "{{count}} unpushed commits on these worktrees will be lost.",
+          "unpushedOne": "1 unpushed commit on these worktrees will be lost."
+        }
+      },
       "mobile": {
         "MobileHero": {
           "79d2f480da": "Network interface to advertise",
@@ -662,6 +668,14 @@
       },
       "new": {
         "workspace": {
+          "MachineCreateFields": {
+            "days_one": "1 day",
+            "days_other": "{{count}} days",
+            "hours_one": "1 hour",
+            "hours_other": "{{count}} hours",
+            "minutes_one": "1 minute",
+            "minutes_other": "{{count}} minutes"
+          },
           "SmartWorkspaceNameField": {
             "69ce292138": "linear",
             "9c004911c3": "gitlab"
@@ -3033,6 +3047,20 @@
         "symlink": "Symbolic links cannot be attached.",
         "unsupported": "Unsupported file type."
       },
+      "machines": {
+        "machineDeleteWork": {
+          "uncommitted_one": "1 uncommitted",
+          "uncommitted_other": "{{count}} uncommitted",
+          "unpushed_one": "1 unpushed",
+          "unpushed_other": "{{count}} unpushed"
+        },
+        "machineExpiryWarning": {
+          "uncommitted": "{{count}} uncommitted changes",
+          "uncommittedOne": "1 uncommitted change",
+          "unpushed": "{{count}} unpushed commits",
+          "unpushedOne": "1 unpushed commit"
+        }
+      },
       "terminal": {
         "shortcut": {
           "capture": {
@@ -3530,6 +3558,16 @@
   "jira": {
     "workspace": {
       "open": "Open workspace linked to {{key}}"
+    }
+  },
+  "machines": {
+    "workAtRisk": {
+      "neverPushed_one": "{{count}} branch never pushed",
+      "neverPushed_other": "{{count}} branches never pushed",
+      "uncommitted_one": "{{count}} uncommitted change",
+      "uncommitted_other": "{{count}} uncommitted changes",
+      "unpushed_one": "{{count}} unpushed commit",
+      "unpushed_other": "{{count}} unpushed commits"
     }
   },
   "menu": {

@@ -9,6 +9,7 @@ import { isInvalidDiscoveredPlugin, type DiscoveredPlugin } from './plugin-disco
 import type { PluginHostImages } from '../../shared/plugins/plugin-image-url'
 import { pluginInstalledHostImages } from './plugin-manifest-images'
 import type { PluginService } from './plugin-service'
+import { formatMachineProviderArgv } from '../../shared/machine-provider-command'
 import { listPluginVmRecipeCommands } from '../../shared/plugins/artifacts/plugin-vm-recipe-artifact'
 import type { PluginCommandAliasActionId } from '../../shared/plugins/plugin-command-actions'
 import {
@@ -209,12 +210,26 @@ export async function buildPluginList(
           keybindings: command.keybindings
         })),
         hasWorker: Boolean(plugin.manifest.main),
-        vmRecipes: service.contentPacks.vmRecipes.preview(plugin.pluginKey).map(({ recipe }) => ({
-          id: recipe.id,
-          name: recipe.name,
-          ...(recipe.description ? { description: recipe.description } : {}),
-          commands: listPluginVmRecipeCommands(recipe)
-        })),
+        vmRecipes: [
+          ...service.contentPacks.vmRecipes.preview(plugin.pluginKey).map(({ recipe }) => ({
+            id: recipe.id,
+            name: recipe.name,
+            ...(recipe.description ? { description: recipe.description } : {}),
+            commands: listPluginVmRecipeCommands(recipe)
+          })),
+          ...service.contentPacks.vmRecipes
+            .previewMachineProviders(plugin.pluginKey)
+            .map(({ provider }) => ({
+              id: provider.id,
+              name: provider.name,
+              ...(provider.description ? { description: provider.description } : {}),
+              // Older clients render only `commands`, so they must still show what they approve.
+              commands: [
+                { phase: 'create' as const, command: formatMachineProviderArgv(provider.command) }
+              ],
+              machineProviderCommand: provider.command
+            }))
+        ],
         restarts: worker.restarts,
         ...(killListEntry
           ? {
