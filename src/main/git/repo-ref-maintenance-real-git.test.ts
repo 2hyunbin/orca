@@ -130,6 +130,8 @@ function createMaintenance(
       })
       maintenance.arm({
         ...target,
+        // Repacking is covered by its own real-Git test; these assert pack files stay untouched.
+        maintainObjects: undefined,
         packRefs: async (signal) => {
           onPackRefs()
           await target.packRefs(signal)
@@ -310,9 +312,9 @@ describe('idle ref maintenance against real Git', () => {
     await expect(countLooseRefs(refsDir, 10_000)).resolves.toMatchObject({ count: 3 })
   }, 30_000)
 
-  it('honours maintenance.auto=false in the repository config', async () => {
+  it('honours gc.auto=0 in the repository config', async () => {
     const { repoPath, refsDir } = await createRepo(THRESHOLD + 30)
-    git(repoPath, ['config', 'maintenance.auto', 'false'])
+    git(repoPath, ['config', 'gc.auto', '0'])
     let packed = 0
     const { maintenance, arm } = createMaintenance(() => {
       packed += 1

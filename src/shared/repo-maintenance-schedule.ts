@@ -1,5 +1,11 @@
 import { BoundedMap } from './bounded-map'
 import {
+  OBJECT_MAINTENANCE_BACKLOG_RETRY_MS,
+  OBJECT_MAINTENANCE_COOLDOWN_MS,
+  OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS,
+  type ObjectMaintenanceOutcome
+} from './repo-object-maintenance-policy'
+import {
   PACK_INDEX_MAINTENANCE_COOLDOWN_MS,
   PACK_INDEX_MAINTENANCE_FAILURE_COOLDOWN_MS,
   type PackIndexMaintenanceOutcome
@@ -14,6 +20,7 @@ import {
 export class RepoMaintenanceSchedule {
   private readonly refCooldownUntil = new BoundedMap<string, number>({ maxEntries: 256 })
   private readonly indexCooldownUntil = new BoundedMap<string, number>({ maxEntries: 256 })
+  private readonly objectCooldownUntil = new BoundedMap<string, number>({ maxEntries: 256 })
 
   constructor(private readonly now: () => number) {}
 
@@ -25,6 +32,20 @@ export class RepoMaintenanceSchedule {
     return this.indexCooldownUntil.get(key) ?? 0
   }
 
+  /** Earliest time any phase this target supports is off cooldown. */
+  nextDueAt(target: RepoRefMaintenanceTarget): number {
+    const refDueAt = this.refDueAt(target.key)
+    return Math.min(
+      refDueAt,
+      target.maintainPackIndex ? this.indexDueAt(target.key) : refDueAt,
+      target.maintainObjects ? this.objectDueAt(target.key) : refDueAt
+    )
+  }
+
+  objectDueAt(key: string): number {
+    return this.objectCooldownUntil.get(key) ?? 0
+  }
+
   postponeIndex(key: string, cooldownMs: number): void {
     this.indexCooldownUntil.set(key, this.now() + cooldownMs)
   }
@@ -32,6 +53,7 @@ export class RepoMaintenanceSchedule {
   clear(): void {
     this.refCooldownUntil.clear()
     this.indexCooldownUntil.clear()
+    this.objectCooldownUntil.clear()
   }
 
   settleRefs(
@@ -55,6 +77,7 @@ export class RepoMaintenanceSchedule {
         return false
       }
       this.postponeIndex(target.key, REF_MAINTENANCE_CLEAN_COOLDOWN_MS)
+      this.objectCooldownUntil.set(target.key, this.now() + REF_MAINTENANCE_CLEAN_COOLDOWN_MS)
       this.settleRefs(target.key, span, 'opted_out', REF_MAINTENANCE_CLEAN_COOLDOWN_MS)
       return true
     } catch (error) {
@@ -87,6 +110,37 @@ export class RepoMaintenanceSchedule {
           ? REF_MAINTENANCE_CLEAN_COOLDOWN_MS
           : PACK_INDEX_MAINTENANCE_COOLDOWN_MS
     this.postponeIndex(target.key, cooldown)
+    return outcome
+  }
+
+  /** Defers when admission closed; a finished repack settles even if the attempt was interrupted. */
+  async maintainObjects(
+    target: RepoRefMaintenanceTarget,
+    signal: AbortSignal,
+    span: RefMaintenanceSpan,
+    canWrite: () => boolean
+  ): Promise<ObjectMaintenanceOutcome | void> {
+    if (!canWrite()) {
+      return 'deferred'
+    }
+    if (!target.maintainObjects || this.now() < this.objectDueAt(target.key)) {
+      return
+    }
+    const outcome = await target.maintainObjects(signal, span, canWrite)
+    span.setAttribute('git.object_maintenance_outcome', outcome)
+    if (outcome === 'deferred') {
+      return outcome
+    }
+    if (outcome !== 'ran' && (signal.aborted || !canWrite())) {
+      return 'deferred'
+    }
+    const cooldown =
+      outcome === 'failed' || outcome === 'unsupported'
+        ? OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS
+        : outcome === 'backlog_deferred' || outcome === 'busy'
+          ? OBJECT_MAINTENANCE_BACKLOG_RETRY_MS
+          : OBJECT_MAINTENANCE_COOLDOWN_MS
+    this.objectCooldownUntil.set(target.key, this.now() + cooldown)
     return outcome
   }
 }

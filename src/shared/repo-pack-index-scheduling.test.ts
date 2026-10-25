@@ -3,8 +3,13 @@ import {
   PACK_INDEX_MAINTENANCE_COOLDOWN_MS,
   PACK_INDEX_MAINTENANCE_FAILURE_COOLDOWN_MS
 } from './repo-pack-index-maintenance-policy'
+import {
+  OBJECT_MAINTENANCE_BACKLOG_RETRY_MS,
+  OBJECT_MAINTENANCE_COOLDOWN_MS
+} from './repo-object-maintenance-policy'
 import { RepoRefMaintenance } from './repo-ref-maintenance'
 import {
+  REF_MAINTENANCE_ATTEMPT_DEADLINE_MS,
   REF_MAINTENANCE_CLEAN_COOLDOWN_MS,
   REF_MAINTENANCE_PACKED_COOLDOWN_MS,
   type RepoRefMaintenanceTarget
@@ -151,5 +156,47 @@ describe('independent idle pack-index scheduling', () => {
     await maintenance.whenAttemptSettled()
     expect(packRefs).not.toHaveBeenCalled()
     release()
+  })
+})
+
+describe('idle object maintenance scheduling', () => {
+  it('lets a repack outlive the attempt deadline and finishes refs on a fresh attempt', async () => {
+    countLooseRefsMock.mockResolvedValue({ count: 20, saturated: true })
+    const { maintenance, target, packRefs, maintainPackIndex } = fixture()
+    target.maintainObjects = vi
+      .fn<NonNullable<RepoRefMaintenanceTarget['maintainObjects']>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => resolve('ran'), REF_MAINTENANCE_ATTEMPT_DEADLINE_MS + 1)
+          )
+      )
+      .mockResolvedValue('below_threshold')
+    maintenance.arm(target)
+    await advance(maintenance, QUIET_MS + REF_MAINTENANCE_ATTEMPT_DEADLINE_MS + 1)
+    expect(target.maintainObjects).toHaveBeenCalledTimes(1)
+    expect(maintainPackIndex).not.toHaveBeenCalled()
+    expect(packRefs).not.toHaveBeenCalled()
+
+    await advance(maintenance, QUIET_MS)
+    expect(maintainPackIndex).toHaveBeenCalledTimes(1)
+    expect(packRefs).toHaveBeenCalledTimes(1)
+    expect(target.maintainObjects).toHaveBeenCalledTimes(1)
+    maintenance.arm(target)
+    await advance(maintenance, OBJECT_MAINTENANCE_COOLDOWN_MS)
+    expect(target.maintainObjects).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps index and ref phases running while a huge backlog waits for the user to leave', async () => {
+    countLooseRefsMock.mockResolvedValue({ count: 20, saturated: true })
+    const { maintenance, target, packRefs } = fixture()
+    target.maintainObjects = vi.fn(async () => 'backlog_deferred' as const)
+    maintenance.arm(target)
+    await advance(maintenance, QUIET_MS)
+    expect(packRefs).toHaveBeenCalledTimes(1)
+    maintenance.arm(target)
+    await advance(maintenance, OBJECT_MAINTENANCE_BACKLOG_RETRY_MS)
+    expect(target.maintainObjects).toHaveBeenCalledTimes(2)
+    expect(packRefs).toHaveBeenCalledTimes(1)
   })
 })

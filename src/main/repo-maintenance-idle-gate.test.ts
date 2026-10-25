@@ -4,6 +4,9 @@ const isOnBatteryPowerMock = vi.hoisted(() => vi.fn(() => false))
 const hasPendingPreparationsMock = vi.hoisted(() => vi.fn(() => false))
 const hasRemovalsInFlightMock = vi.hoisted(() => vi.fn(() => false))
 const setProbeMock = vi.hoisted(() => vi.fn())
+const setBacklogProbeMock = vi.hoisted(() => vi.fn<(probe: (() => boolean) | null) => void>())
+const focusedWindowMock = vi.hoisted(() => vi.fn((): object | null => null))
+const systemIdleSecondsMock = vi.hoisted(() => vi.fn(() => 0))
 const disposeMock = vi.hoisted(() => vi.fn(async () => {}))
 const postponeMock = vi.hoisted(() => vi.fn())
 const powerListeners = vi.hoisted(() => new Map<string, () => void>())
@@ -14,8 +17,10 @@ vi.mock('electron', () => ({
     on: (event: string, listener: () => void) => appListeners.set(event, listener),
     off: (event: string) => appListeners.delete(event)
   },
+  BrowserWindow: { getFocusedWindow: focusedWindowMock },
   powerMonitor: {
     isOnBatteryPower: isOnBatteryPowerMock,
+    getSystemIdleTime: systemIdleSecondsMock,
     on: (event: string, listener: () => void) => powerListeners.set(event, listener),
     off: (event: string) => powerListeners.delete(event)
   }
@@ -31,6 +36,7 @@ vi.mock('./ipc/worktrees/worktree-ipc-context', () => ({
 
 vi.mock('./git/local-repo-ref-maintenance', () => ({
   setRepoMaintenanceActivityProbe: setProbeMock,
+  setRepoObjectBacklogProbe: setBacklogProbeMock,
   disposeLocalRepoRefMaintenance: disposeMock,
   postponeRepoRefMaintenance: postponeMock
 }))
@@ -56,6 +62,9 @@ beforeEach(() => {
   powerListeners.clear()
   appListeners.clear()
   setProbeMock.mockClear()
+  setBacklogProbeMock.mockClear()
+  focusedWindowMock.mockReturnValue(null)
+  systemIdleSecondsMock.mockReturnValue(0)
   disposeMock.mockClear()
 })
 
@@ -102,6 +111,22 @@ describe('repo maintenance idle gate', () => {
     expect(installProbe().probe()).toBe(false)
   })
 
+  it('admits a huge first repack only while the user is away from a plugged-in, agent-free app', () => {
+    const backlog = (overrides: Parameters<typeof installProbe>[0] = {}): boolean | undefined => {
+      installProbe(overrides)
+      return setBacklogProbeMock.mock.calls.at(-1)?.[0]?.()
+    }
+    expect(backlog()).toBe(true)
+    focusedWindowMock.mockReturnValue({})
+    expect(backlog()).toBe(false)
+    systemIdleSecondsMock.mockReturnValue(5 * 60)
+    expect(backlog()).toBe(true)
+    isOnBatteryPowerMock.mockReturnValue(true)
+    expect(backlog()).toBe(false)
+    isOnBatteryPowerMock.mockReturnValue(false)
+    expect(backlog({ getWorkingAgentCount: () => 1 })).toBe(false)
+  })
+
   it('pushes the next attempt out when the machine drops onto battery', () => {
     installProbe()
 
@@ -126,5 +151,6 @@ describe('repo maintenance idle gate', () => {
     expect(powerListeners.has('on-battery')).toBe(false)
     expect(appListeners.has('browser-window-focus')).toBe(false)
     expect(setProbeMock).toHaveBeenLastCalledWith(null)
+    expect(setBacklogProbeMock).toHaveBeenLastCalledWith(null)
   })
 })

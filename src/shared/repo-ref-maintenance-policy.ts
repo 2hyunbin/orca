@@ -1,3 +1,4 @@
+import type { ObjectMaintenanceOutcome } from './repo-object-maintenance-policy'
 import type { PackIndexMaintenanceOutcome } from './repo-pack-index-maintenance-policy'
 
 /**
@@ -119,6 +120,15 @@ export type RepoRefMaintenanceTarget = {
   isOptedOut?(signal: AbortSignal): Promise<boolean>
   /** True while work on *this repo* is in flight -- a fetch, a create, a removal. */
   isBusy?(): boolean
+  /**
+   * Repack packs and loose objects under the same idle admission. A started run is
+   * never killed; its signal cancels admission only.
+   */
+  maintainObjects?(
+    signal: AbortSignal,
+    span: RefMaintenanceSpan,
+    canWrite: () => boolean
+  ): Promise<ObjectMaintenanceOutcome>
   /** Repair object lookup metadata before counting refs, under the same idle admission. */
   maintainPackIndex?(
     signal: AbortSignal,

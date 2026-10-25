@@ -1,5 +1,6 @@
 import { posix, win32 } from 'node:path'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
+import type { RepoMaintenanceConfig } from '../../shared/repo-maintenance-config'
 import { RepoRefMaintenance } from '../../shared/repo-ref-maintenance'
 import {
   PACK_REFS_ARGS,
@@ -11,10 +12,12 @@ import {
 } from '../../shared/repo-ref-maintenance-policy'
 import { isWslUncPath, toWindowsWslPath } from '../../shared/wsl-paths'
 import { withSpan } from '../observability/tracer'
+import { clearHostGitVersionCache } from './git-version'
 import { PackRefsLockOwnership } from './pack-refs-lock-ownership'
+import { probeRepoMaintenanceConfig } from './repo-maintenance-config-probe'
+import { maintainRepoObjects } from './repo-object-maintenance'
 import {
   clearRepoPackIndexMaintenanceCache,
-  isUnsetGitConfigError,
   maintainRepoPackIndex
 } from './repo-pack-index-maintenance'
 import { gitExecFileAsync } from './runner'
@@ -27,6 +30,7 @@ export type RepoMaintenanceActivityProbe = () => boolean
 const REPO_BUSY_PROBE_MAX = 64
 
 let activityProbe: RepoMaintenanceActivityProbe | null = null
+let backlogProbe: RepoMaintenanceActivityProbe | null = null
 let shared: RepoRefMaintenance | null = null
 // All arming paths must share the current per-repo busy probe.
 const repoBusyProbes = new Map<string, () => boolean>()
@@ -47,6 +51,11 @@ export function setRepoRefMaintenanceBusyProbe(key: string, probe: () => boolean
 /** The main entry point supplies agent, battery, creation and quit activity unavailable in the Git layer. */
 export function setRepoMaintenanceActivityProbe(probe: RepoMaintenanceActivityProbe | null): void {
   activityProbe = probe
+}
+
+/** True when a huge first repack may start; unset means never run one unattended. */
+export function setRepoObjectBacklogProbe(probe: RepoMaintenanceActivityProbe | null): void {
+  backlogProbe = probe
 }
 
 function isDisabled(): boolean {
@@ -79,6 +88,7 @@ export function disposeLocalRepoRefMaintenance(): Promise<void> {
   shared = null
   repoBusyProbes.clear()
   clearRepoPackIndexMaintenanceCache()
+  clearHostGitVersionCache()
   return settling
 }
 
@@ -113,8 +123,10 @@ export function _resetLocalRepoRefMaintenanceForTests(
   shared?.dispose()
   shared = overrides ? new RepoRefMaintenance({ ...localMaintenanceOptions(), ...overrides }) : null
   activityProbe = null
+  backlogProbe = null
   repoBusyProbes.clear()
   clearRepoPackIndexMaintenanceCache()
+  clearHostGitVersionCache()
 }
 
 /** Translate WSL Git's common dir to a UNC refs directory the main process can enumerate. */
@@ -124,17 +136,6 @@ function refsDirectoryForMainProcess(commonDir: string, wslDistro: string | unde
   }
   // Decided by path syntax, not by platform: `win32.isAbsolute` accepts POSIX paths too.
   return (isWindowsAbsolutePathLike(commonDir) ? win32 : posix).join(commonDir, 'refs')
-}
-
-/** Read user opt-outs; Orca's per-command maintenance suppression never appears in persisted config. */
-export function isGitAutoMaintenanceDisabled(configOutput: string): boolean {
-  return configOutput
-    .split('\n')
-    .some(
-      (line) =>
-        /^\s*maintenance\.auto\s+(?:false|no|off|0)?\s*$/i.test(line) ||
-        /^\s*gc\.auto\s+[+-]?0+(?:[kmg])?\s*$/i.test(line)
-    )
 }
 
 /** Choose path syntax after WSL-to-UNC conversion; choosing before it would derive . instead. */
@@ -171,6 +172,13 @@ export function createLocalRepoRefMaintenanceTarget(
     })
     return commonDir
   }
+  // The opt-out probe runs first in every attempt, so the object phase reuses its answer.
+  let config: RepoMaintenanceConfig | undefined
+  const readConfig = async (signal: AbortSignal): Promise<RepoMaintenanceConfig> => {
+    const resolved = await resolveCommonDir(signal)
+    config = await probeRepoMaintenanceConfig({ ...args, commonDir: resolved, signal })
+    return config
+  }
   return {
     key: args.key,
     isBusy: () => repoBusyProbes.get(args.key)?.() ?? false,
@@ -179,19 +187,23 @@ export function createLocalRepoRefMaintenanceTarget(
       return resolved ? refsDirectoryForMainProcess(resolved, args.wslDistro) : undefined
     },
     async isOptedOut(signal: AbortSignal) {
-      try {
-        const { stdout } = await gitExecFileAsync(
-          ['config', '--get-regexp', '^(maintenance\\.auto|gc\\.auto)$'],
-          { cwd: args.repoPath, ...gitOptions, admissionTier: 'background', signal }
-        )
-        return isGitAutoMaintenanceDisabled(stdout)
-      } catch (error) {
-        if (isUnsetGitConfigError(error)) {
-          return false
-        }
-        // A failed probe blocks writers and retries without claiming a user opt-out.
-        throw error
+      return (await readConfig(signal)).optOut !== null
+    },
+    async maintainObjects(signal, span, canWrite) {
+      const resolved = await resolveCommonDir(signal)
+      if (!resolved) {
+        return 'unsupported'
       }
+      return maintainRepoObjects({
+        repoPath: args.repoPath,
+        commonDir: gitCommonDirForMainProcess(resolved, args.wslDistro),
+        ...gitOptions,
+        config: config ?? (await readConfig(signal)),
+        signal,
+        span,
+        canWrite,
+        canRunBacklog: () => backlogProbe?.() ?? false
+      })
     },
     async maintainPackIndex(signal, span, canWrite) {
       const resolved = await resolveCommonDir(signal)

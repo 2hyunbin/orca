@@ -71,7 +71,7 @@ beforeEach(() => {
   releaseOwner.mockResolvedValue(undefined)
   capture.mockImplementation(async (_binary, argv, options) => {
     options.onChildTerminated?.()
-    if (argv[0] === 'config') {
+    if (argv[0] === 'config' || argv[0] === '--version') {
       throw Object.assign(new Error('unset'), { code: 1 })
     }
     return { stdout: '', stderr: '' }
@@ -292,7 +292,7 @@ describe('maintenance writer admission cancellation', () => {
       const quietPeriodMs = 1000
       let finishWriter: (() => void) | undefined
       capture.mockImplementation(async (_binary, argv, options) => {
-        if (argv[0] === 'config') {
+        if (argv[0] === 'config' || argv[0] === '--version') {
           options.onChildTerminated?.()
           throw Object.assign(new Error('unset'), { code: 1 })
         }
@@ -380,7 +380,7 @@ describe('maintenance writer admission cancellation', () => {
             let failedWriter = false
             capture.mockImplementation(async (_binary, argv, options) => {
               options.onChildTerminated?.()
-              if (argv[0] === 'config') {
+              if (argv[0] === 'config' || argv[0] === '--version') {
                 throw Object.assign(new Error('unset'), { code: 1 })
               }
               if (argv[0] === 'pack-refs' && !failedWriter) {
@@ -572,7 +572,7 @@ describe('maintenance writer admission cancellation', () => {
     async (writer) => {
       let finishWriter: (() => void) | undefined
       capture.mockImplementation(async (_binary, argv, options) => {
-        if (argv[0] === 'config') {
+        if (argv[0] === 'config' || argv[0] === '--version') {
           options.onChildTerminated?.()
           throw Object.assign(new Error('unset'), { code: 1 })
         }
