@@ -133,6 +133,7 @@ describe('dead-man trip slots', () => {
     const { database, reserve } = await cell(() => now)
     await trippedPeer(database, 'production-gce-c90', now)
     await reserve.bookedHost(3)
+    expect(reserve.relay.sessions.inReserveMode()).toBe(true)
     now += reserveDeadManWindowMs(reserve.config.cellId) + 1_000
     expect(reserve.relay.sessions.inReserveMode()).toBe(false)
   }, 30_000)

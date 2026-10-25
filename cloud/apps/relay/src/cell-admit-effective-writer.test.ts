@@ -4,8 +4,11 @@ import {
   CellAdmitEffectiveWriter,
   DEAD_MAN_SLOT_CLAIM_RETRY_MS
 } from './cell-admit-effective-writer.js'
+import { DEAD_MAN_SLOT_HOLD_MS } from './cell-dead-man-trip-slot.js'
 
-function setup(options: { fail?: boolean; busy?: boolean; slotFree?: () => boolean } = {}) {
+function setup(
+  options: { fail?: boolean; busy?: boolean; busyWhen?: () => boolean; slotFree?: () => boolean } = {}
+) {
   const clock = { value: 1_000 }
   const writes: ('db' | 'reserve' | 'claim')[] = []
   const pending: Array<() => void> = []
@@ -21,7 +24,7 @@ function setup(options: { fail?: boolean; busy?: boolean; slotFree?: () => boole
       await new Promise<void>((resolve) => pending.push(resolve))
       return slots > 0 && (options.slotFree?.() ?? true)
     },
-    databaseBusy: () => options.busy === true,
+    databaseBusy: () => options.busy === true || options.busyWhen?.() === true,
     now: () => clock.value,
     log: (line) => logs.push(line)
   })
@@ -123,6 +126,22 @@ describe('CellAdmitEffectiveWriter', () => {
     // The claim wrote the db row, so the trip that follows writes nothing more.
     writer.tick('db', true)
     expect(writes).toEqual(['reserve', 'claim', 'reserve', 'claim'])
+  })
+
+  it('refreshes a tripped row past a saturated pool before its slot hold runs out', async () => {
+    let busy = false
+    const { clock, writes, writer, settle } = setup({ busyWhen: () => busy })
+    writer.tick('db', true)
+    await settle()
+    busy = true
+    clock.value += 4 * 60_000
+    writer.tick('db', true)
+    expect(writes).toEqual(['db'])
+    clock.value += 60_000
+    writer.tick('db', true)
+    await settle()
+    expect(writes).toEqual(['db', 'db'])
+    expect(DEAD_MAN_SLOT_HOLD_MS).toBeGreaterThan(5 * 60_000)
   })
 
   it('never claims while requests wait for the pool, or with the switch off reserve', async () => {

@@ -1,3 +1,5 @@
+import { DEAD_MAN_SLOT_HOLD_MS } from './cell-dead-man-trip-slot.js'
+
 // The cell's raw admit mode in Postgres (relay_cell_admit_effective), so the database path can
 // place on a tripped reserve cell even when no director's feed poll reaches it. Only the database
 // path's PG-reserve cells need a row, so a cell writes only while its switch says reserve, plus
@@ -6,6 +8,8 @@ export const CELL_ADMIT_EFFECTIVE_REFRESH_MS = 15_000
 const CELL_ADMIT_EFFECTIVE_FAILURE_LOG_MS = 60_000
 // A held dead-man asks for a trip slot this often; each ask is one short locked transaction.
 export const DEAD_MAN_SLOT_CLAIM_RETRY_MS = 30_000
+// A tripped cell's db row holds its slot, so a saturated pool still refreshes it well inside the hold.
+const TRIPPED_ROW_BUSY_OVERRIDE_MS = DEAD_MAN_SLOT_HOLD_MS / 2
 
 export class CellAdmitEffectiveWriter {
   private written: { mode: 'db' | 'reserve'; at: number } | null = null
@@ -43,7 +47,12 @@ export class CellAdmitEffectiveWriter {
       return
     }
     const at = this.input.now()
-    if (this.inFlight || this.input.databaseBusy()) {
+    const trippedRowOverdue =
+      switchReserve &&
+      rawMode === 'db' &&
+      this.written?.mode === 'db' &&
+      at - this.written.at >= TRIPPED_ROW_BUSY_OVERRIDE_MS
+    if (this.inFlight || (this.input.databaseBusy() && !trippedRowOverdue)) {
       return
     }
     const claimTrip = this.input.claimTrip
