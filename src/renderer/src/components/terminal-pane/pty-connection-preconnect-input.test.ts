@@ -138,7 +138,8 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
-  it('keeps holding a deferred split’s keys even when it has startup work, as before', async () => {
+  // Why: held split keys flushed at bind would land ahead of the startup command.
+  it('does not hold a deferred split’s keys in the transport when it has startup work', async () => {
     transportFactoryQueue.push(createMockTransport('pty-1'))
 
     const binding = connectPlainPane({
@@ -146,7 +147,7 @@ describe('connectPanePty pre-connect input', () => {
       cwdPromise: new Promise<string>(() => {})
     })
 
-    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBe(true)
+    expect(createdTransportOptions[0]?.bufferInputUntilConnect).toBeUndefined()
     binding.dispose()
   })
 

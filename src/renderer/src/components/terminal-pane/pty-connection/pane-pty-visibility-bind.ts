@@ -141,6 +141,7 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     // samples. A visible-pty sample would instead let a slow boot latch a
     // known-agent shell-confirm that clears launch identity and blocks recovery.
     // A real OSC 133;C, if it arrives, simply supersedes this.
+    session.onAgentPreReadyDraftPtyBound?.(ptyId, session.spawnedFreshPtyId === ptyId)
     if (options.sampleVisibleForegroundAgent === true) {
       session.sampleVisiblePaneForegroundAgent()
     } else if (options.seedInitialAgentStatus === true) {
