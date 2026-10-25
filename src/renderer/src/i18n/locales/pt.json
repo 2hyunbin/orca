@@ -1910,6 +1910,11 @@
         "openInChat": "Esta conversa de {{value0}} está aberta em um chat. Atualize o Histórico de sessões para abri-la.",
         "ownershipUnknown": "O Orca não conseguiu confirmar quem é o proprietário desta conversa de {{value0}}. Atualize o Histórico de sessões e tente novamente."
       },
+      "composerCreateHandoff": {
+        "reopen": "Reabrir",
+        "preparationTimedOut": "A preparação do worktree expirou.",
+        "needsInput": "O worktree não foi criado porque precisa de mais informações."
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "Obtendo arquivos… {{percent}}%",
         "provisioningVm": "Provisionando VM…",

@@ -3,6 +3,7 @@ import {
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
+import { TerminalUnreadableFrameResets } from './terminal-unreadable-frame-resets'
 import {
   buildStreamUnsubscribe,
   buildTerminalUnsubscribeParams,
@@ -78,6 +79,7 @@ export class MobileRelayRpcStreams {
   >()
   private readonly terminalListeners = new Map<number, (result: unknown) => void>()
   private readonly terminalSnapshots = new Map<number, TerminalSnapshotState>()
+  private readonly unreadableTerminalFrames = new TerminalUnreadableFrameResets()
   private activeBrowserStream: StreamRecord | null = null
   private sendCount = 0
 
@@ -199,6 +201,7 @@ export class MobileRelayRpcStreams {
     }
     handleTerminalBinaryFrame(bytes, {
       terminalSnapshots: this.terminalSnapshots,
+      unreadableFrames: this.unreadableTerminalFrames,
       getListener: (streamId) => this.terminalListeners.get(streamId)
     })
   }
@@ -211,6 +214,7 @@ export class MobileRelayRpcStreams {
     this.cancelledSubscriptions.clear()
     this.terminalListeners.clear()
     this.terminalSnapshots.clear()
+    this.unreadableTerminalFrames.clear()
     this.activeBrowserStream = null
   }
 
@@ -299,6 +303,7 @@ export class MobileRelayRpcStreams {
     for (const streamId of stream.streamIds) {
       this.terminalListeners.delete(streamId)
       this.terminalSnapshots.delete(streamId)
+      this.unreadableTerminalFrames.forget(streamId)
     }
     if (this.activeBrowserStream === stream) {
       this.activeBrowserStream = null

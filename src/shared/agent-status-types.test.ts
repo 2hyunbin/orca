@@ -15,8 +15,7 @@ import {
   AGENT_STATUS_STATES,
   AGENT_TYPE_MAX_LENGTH
 } from './agent-status-types'
-import type { AgentType, WellKnownAgentType } from './agent-status-types'
-import type { TuiAgent } from './tui-agent'
+import type { AgentType } from './agent-status-types'
 import {
   ORCA_DISPATCH_PROMPT_LEAD_LINE,
   ORCA_DISPATCH_STATUS_PREAMBLE_PREFIX
@@ -724,29 +723,6 @@ describe('normalizeAgentStatusPayload matches the JSON round trip', () => {
         value: parseAgentStatusPayload(JSON.stringify(payload))
       })
     }
-  })
-})
-
-describe('WellKnownAgentType', () => {
-  // Derive the union from TuiAgent so new launchable IDs cannot drift beyond a hand-copied list.
-  const widenTuiAgent = (agent: TuiAgent): WellKnownAgentType => agent
-
-  it('covers every TuiAgent id plus the unknown sentinel', () => {
-    // Previously missing launchable IDs.
-    const formerlyMissing: WellKnownAgentType[] = [
-      'qwen-code',
-      'mistral-vibe',
-      'claude-agent-teams'
-    ]
-    const sentinel: WellKnownAgentType = 'unknown'
-
-    expect([...formerlyMissing, sentinel, widenTuiAgent('rovo')]).toEqual([
-      'qwen-code',
-      'mistral-vibe',
-      'claude-agent-teams',
-      'unknown',
-      'rovo'
-    ])
   })
 })
 

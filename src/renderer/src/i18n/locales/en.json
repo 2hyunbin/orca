@@ -1402,6 +1402,11 @@
         "openInChat": "This {{value0}} conversation is open in a chat. Refresh Session History to open it.",
         "ownershipUnknown": "Orca could not confirm who owns this {{value0}} conversation. Refresh Session History and try again."
       },
+      "composerCreateHandoff": {
+        "reopen": "Reopen",
+        "preparationTimedOut": "Worktree preparation timed out.",
+        "needsInput": "Worktree was not created because it needs more input."
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "Checking out files… {{percent}}%",
         "provisioningVm": "Provisioning VM…",

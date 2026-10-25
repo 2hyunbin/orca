@@ -70,7 +70,8 @@ export function EntryActionRow({
         'flex h-6 w-full items-center gap-1.5 rounded-[7px] px-1 text-left text-[11px] leading-5 outline-none disabled:cursor-not-allowed disabled:opacity-50',
         selected
           ? 'bg-black/8 text-accent-foreground dark:bg-white/14'
-          : // CSS hover also matches disabled buttons; pending rows must not imply activation.
+          : // Why: CSS :hover still matches a disabled button, so a pending row would
+            // light up under the pointer despite being unactivatable.
             'text-muted-foreground hover:bg-black/8 hover:text-accent-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground dark:hover:bg-white/14 dark:disabled:hover:bg-transparent'
       )}
       onClick={onClick}
@@ -98,7 +99,8 @@ export function EntryActionRow({
     </button>
   )
 
-  // Only filename-first rows hide detail; full-text rows do not need redundant tooltips.
+  // Only the filename-first rows hide information. Every other row already shows
+  // its detail in full, and the STYLEGUIDE tooltip rule rules out labelling those.
   if (!presentation.prioritizeFilename) {
     return row
   }

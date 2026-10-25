@@ -6,9 +6,11 @@ import type { IPty } from 'node-pty'
 import { runProcess } from '@orca/process-host'
 import {
   isPtyJobOwnershipAvailable,
+  killConptyNow,
   listPtyJobProcessIds,
   terminatePtyJob
 } from './windows-pty-job'
+import { watchConptyStartup } from '../daemon/pty-subprocess/conpty-startup-input-reader'
 
 /** Real Windows jobs must find detached/reparented grandchildren that console/PID walks miss (#9045/#10475/#10897). */
 const describeOnWindows = process.platform === 'win32' ? describe : describe.skip
@@ -90,6 +92,36 @@ describeOnWindows('ConPTY job ownership', () => {
     await sleep(1_000)
     return { proc, grandchildPid }
   }
+
+  it('announces an input reader the daemon recognizes', async () => {
+    // A ConPTY upgrade that changes its startup must fail here, not respawn every pane.
+    const nodePty = await import('node-pty')
+    const proc = nodePty.spawn('cmd.exe', ['/d', '/q'], {
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      useConptyDll: true
+    })
+    spawned.push(proc)
+    const startup = watchConptyStartup(proc)
+    expect(await startup.verdict).toBe('input-reader')
+    startup.claim()
+  }, 30_000)
+
+  it('tears down a pane discarded before its first output', async () => {
+    // node-pty's own kill() would wait for output that a discarded pane never sends.
+    const nodePty = await import('node-pty')
+    const proc = nodePty.spawn('cmd.exe', ['/d', '/q'], {
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      useConptyDll: true
+    })
+    spawned.push(proc)
+    killConptyNow(proc)
+    await waitUntilDead(proc.pid)
+    expect(isAlive(proc.pid)).toBe(false)
+  }, 30_000)
 
   it('reports this build as able to own pty trees', () => {
     // Require patched job support or fallback would let ownership assertions pass vacuously.

@@ -201,7 +201,7 @@ describe('ExternalAutomationManagers toggle', () => {
     expect(getSwitch().disabled).toBe(true)
   })
 
-  it('shows the sibling spinner only while a pause/resume targets this row', () => {
+  it('shows the sibling spinner for a matching resume key on an enabled row', () => {
     const entry = scoped({ jobs: [makeJob({ id: 'job-1', enabled: true })] })
     // Match both pause/resume keys because enabled can flip before the action settles.
     renderManagers([entry], {

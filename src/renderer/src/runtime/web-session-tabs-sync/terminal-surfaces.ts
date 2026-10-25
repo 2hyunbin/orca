@@ -26,6 +26,10 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { structuredAgentSessionTabId } from '../../../../shared/structured-agent-session-projection'
 import { hasStructuredAgentSessionLaunchCancellationTombstone } from '@/lib/structured-agent-session-launch-registry'
 import { withPendingPaneTitleRenames } from '../pending-pane-title-renames'
+import {
+  isMirroredTerminalOfAnotherEnvironment,
+  type MirrorRowOwnershipState
+} from './mirror-row-ownership'
 
 export function isReadyTerminalTab(
   tab: RuntimeMobileSessionTabsResult['tabs'][number]
@@ -232,6 +236,7 @@ export function chooseRemoteTerminalLayout(
 }
 
 export function shouldReplaceTerminalTab(
+  state: MirrorRowOwnershipState,
   tab: TerminalTab,
   environmentId: string,
   nextRemotePtyIds: ReadonlySet<string>,
@@ -244,8 +249,11 @@ export function shouldReplaceTerminalTab(
     return true
   }
   if (isMirroredTerminalSurfaceId(tab.id)) {
-    // Why: host snapshots are authoritative for mirrored tabs; replace old mirrors even when the next surface still awaits a stream handle, else parity drifts.
-    return true
+    // Why: host snapshots are authoritative for their own mirrored tabs; replace them even when the next surface still awaits a stream handle, else parity drifts.
+    return (
+      nextMirroredTerminalIds.has(tab.id) ||
+      !isMirroredTerminalOfAnotherEnvironment(state, tab, environmentId)
+    )
   }
   if (tab.pendingActivationSpawn && tab.ptyId === null && nextRemotePtyIds.size > 0) {
     // Fresh placeholders lack identity; restored rows may retire only when their own PTYs arrive (#25339).

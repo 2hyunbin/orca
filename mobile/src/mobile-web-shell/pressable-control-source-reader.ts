@@ -1,4 +1,4 @@
-import ts from 'typescript'
+import ts from 'typescript-api'
 
 // Share source-reading rules across accessibility censuses so unnamed-control checks agree without rendering.
 export const PRESSABLE_TAGS = new Set(['Pressable', 'TouchableOpacity'])

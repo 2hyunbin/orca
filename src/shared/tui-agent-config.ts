@@ -243,6 +243,7 @@ const TUI_AGENT_CONFIG_SOURCE: Record<TuiAgent, TuiAgentConfigSource> = {
     ctrlEnterEncoding: 'csi-u'
   },
   kimi: {
+    preflightTrust: 'kimi',
     // The kimi launcher runs as kimi-code; recognize the alias for reuse and dispatch --inject.
     detectCmd: 'kimi',
     detectCmdAliases: ['kimi-code'],

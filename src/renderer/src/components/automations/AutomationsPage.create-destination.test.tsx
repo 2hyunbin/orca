@@ -146,7 +146,7 @@ async function save(): Promise<void> {
   })
 }
 
-function runtimeCreateCalls(): unknown[][] {
+function createRpcCalls(): unknown[][] {
   return mocks.callRuntimeRpc.mock.calls.filter((call) => call[1] === 'automation.create')
 }
 
@@ -166,8 +166,10 @@ describe('AutomationsPage create destination', () => {
 
     // Send the runtime’s own repo ID to its authority; the desktop is always the client authority, not the selected host.
     expect(api.automations.create).not.toHaveBeenCalled()
-    expect(runtimeCreateCalls()).toHaveLength(1)
-    expect(runtimeCreateCalls()[0]?.[2]).toMatchObject({
+    expect(createRpcCalls()).toHaveLength(1)
+    expect(createRpcCalls()[0]?.[0]).toEqual({ kind: 'environment', environmentId: RUNTIME_ID })
+    expect(createRpcCalls()[0]?.[3]).toMatchObject({ expectedEnvironmentPairingRevision: 4 })
+    expect(createRpcCalls()[0]?.[2]).toMatchObject({
       repo: `id:${RUNTIME_REPO_ID}`,
       workspace: `id:${RUNTIME_WORKSPACE_ID}`,
       destination: { selector: { kind: 'self' } }
@@ -188,7 +190,7 @@ describe('AutomationsPage create destination', () => {
     await save()
 
     expect(api.automations.create).not.toHaveBeenCalled()
-    expect(runtimeCreateCalls()).toHaveLength(0)
+    expect(createRpcCalls()).toHaveLength(0)
     expect(mocks.editorDialog?.notice?.message).toBeTruthy()
     expect(mocks.editorDialog?.open).toBe(true)
   })
@@ -222,7 +224,7 @@ describe('AutomationsPage create destination', () => {
     await save()
 
     expect(api.automations.create).not.toHaveBeenCalled()
-    expect(runtimeCreateCalls()).toHaveLength(0)
+    expect(createRpcCalls()).toHaveLength(0)
     expect(mocks.editorDialog?.notice?.message).toBeTruthy()
     expect(mocks.editorDialog?.createDestination?.entries.map((entry) => entry.stableKey)).toEqual(
       expect.arrayContaining([DESKTOP_SELF_KEY, RUNTIME_SELF_KEY])
@@ -242,7 +244,7 @@ describe('AutomationsPage create destination', () => {
     })
     await save()
 
-    expect(runtimeCreateCalls()).toHaveLength(1)
+    expect(createRpcCalls()).toHaveLength(1)
     expect(api.automations.create).not.toHaveBeenCalled()
   })
 
@@ -344,7 +346,7 @@ describe('AutomationsPage create destination', () => {
     await rerender()
     await save()
 
-    expect(runtimeCreateCalls()).toHaveLength(0)
+    expect(createRpcCalls()).toHaveLength(0)
     expect(api.automations.create).not.toHaveBeenCalled()
     expect(mocks.editorDialog?.notice?.message).toBeTruthy()
     expect(mocks.editorDialog?.open).toBe(true)
@@ -480,8 +482,8 @@ describe('AutomationsPage edit destination', () => {
     await save()
 
     expect(api.automations.update).not.toHaveBeenCalled()
-    expect(runtimeCreateCalls()).toHaveLength(1)
-    expect(runtimeCreateCalls()[0]?.[2]).toMatchObject({
+    expect(createRpcCalls()).toHaveLength(1)
+    expect(createRpcCalls()[0]?.[2]).toMatchObject({
       repo: `id:${RUNTIME_REPO_ID}`,
       dtstart: automation.dtstart
     })
@@ -506,8 +508,8 @@ describe('AutomationsPage edit destination', () => {
     })
     await save()
 
-    expect(runtimeCreateCalls()).toHaveLength(1)
-    expect(runtimeCreateCalls()[0]?.[2]).toMatchObject({ repo: `id:${REPO_ID}` })
+    expect(createRpcCalls()).toHaveLength(1)
+    expect(createRpcCalls()[0]?.[2]).toMatchObject({ repo: `id:${REPO_ID}` })
     expect(api.automations.delete).toHaveBeenCalled()
   })
 
@@ -564,7 +566,7 @@ describe('AutomationsPage edit destination', () => {
       nowSpy.mockRestore()
     }
 
-    const creationKeys = runtimeCreateCalls().map(
+    const creationKeys = createRpcCalls().map(
       (call) => (call[2] as { creationKey?: string }).creationKey
     )
     expect(creationKeys).toHaveLength(2)
@@ -600,7 +602,7 @@ describe('AutomationsPage edit destination', () => {
     })
     await save()
 
-    expect(runtimeCreateCalls()).toHaveLength(1)
+    expect(createRpcCalls()).toHaveLength(1)
     expect(api.automations.delete).toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('could not be deleted'))
     expect(mocks.toastSuccess).not.toHaveBeenCalled()

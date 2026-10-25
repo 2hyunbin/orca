@@ -12,7 +12,6 @@ import {
   symlinkSync,
   writeFileSync
 } from 'node:fs'
-import net from 'node:net'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
@@ -24,6 +23,14 @@ import {
   selectStaleDevBundleDirs
 } from './dev-electron-bundle-cache.mjs'
 import { startDevStorageReclaim } from './dev-storage-reclaim.mjs'
+import {
+  announceDevInstance,
+  dropInheritedDevInstanceEnv,
+  resolveDevInstancePorts,
+  resolveDevProfile,
+  writeWorktreeProfileMarker
+} from './dev-instance-isolation.mjs'
+import { getDefaultSeedSource, profileHasState, seedDevProfile } from './dev-profile-seed.mjs'
 import {
   captureDevWebClientInputs,
   isDevWebClientFresh,
@@ -46,10 +53,34 @@ const rawForwardedArgs = process.argv.slice(2)
 // Runner-only escape hatch for tools requiring stock Electron name; never forward to Chromium/electron-vite.
 const useStableElectronName =
   process.env.ORCA_DEV_STABLE_NAME === '1' || rawForwardedArgs.includes(STABLE_NAME_FLAG)
-const forwardedRaw = rawForwardedArgs.filter((arg) => arg !== STABLE_NAME_FLAG)
+const SHARED_PROFILE_FLAG = '--shared-profile'
+const WORKTREE_PROFILE_FLAG = '--worktree-profile'
+const SEED_PROFILE_FLAG = '--seed-profile'
+const isSeedProfileArg = (arg) =>
+  arg === SEED_PROFILE_FLAG || arg.startsWith(`${SEED_PROFILE_FLAG}=`)
+const seedProfileArg = rawForwardedArgs.findLast(isSeedProfileArg)
+// Why: profile flags are runner-only, like --stable-name.
+const forwardedRaw = rawForwardedArgs.filter(
+  (arg) =>
+    arg !== STABLE_NAME_FLAG &&
+    arg !== SHARED_PROFILE_FLAG &&
+    arg !== WORKTREE_PROFILE_FLAG &&
+    !isSeedProfileArg(arg)
+)
+const requestedProfileMode = rawForwardedArgs.includes(SHARED_PROFILE_FLAG)
+  ? 'shared'
+  : rawForwardedArgs.includes(WORKTREE_PROFILE_FLAG)
+    ? 'worktree'
+    : undefined
+// `--seed-profile` uses the default source; `--seed-profile=<dir>` or ORCA_DEV_SEED_PROFILE=<dir|1> pick one.
+const seedProfileRequest =
+  seedProfileArg?.slice(SEED_PROFILE_FLAG.length + 1) ?? process.env.ORCA_DEV_SEED_PROFILE ?? null
 if (useStableElectronName) {
   process.env.ORCA_DEV_STABLE_NAME = '1'
 }
+// Why: --help/--version exit immediately; binding probe sockets or printing instance lines is noise.
+const isHelpOrVersion = forwardedRaw.some((a) => a === '--help' || a === '-h' || a === '--version')
+dropInheritedDevInstanceEnv(process.env, repoRoot)
 
 function readGitValue(args) {
   try {
@@ -381,27 +412,35 @@ function restoreElectronFrameworkSymlinks(appPath) {
   }
 }
 
-function getDevUserDataPath() {
-  if (process.env.ORCA_DEV_USER_DATA_PATH) {
-    return process.env.ORCA_DEV_USER_DATA_PATH
-  }
-  if (process.platform === 'darwin') {
-    return path.join(process.env.HOME ?? '', 'Library', 'Application Support', 'orca-dev')
-  }
-  if (process.platform === 'win32') {
-    return path.join(
-      process.env.APPDATA ?? path.join(process.env.USERPROFILE ?? '', 'AppData', 'Roaming'),
-      'orca-dev'
-    )
-  }
-  return path.join(
-    process.env.XDG_CONFIG_HOME ?? path.join(process.env.HOME ?? '', '.config'),
-    'orca-dev'
-  )
+function readGitCommonDir() {
+  const value = readGitValue(['rev-parse', '--git-common-dir'])
+  return value ? path.resolve(repoRoot, value) : null
 }
 
-function prepareDevCliWrapper() {
-  const userDataPath = getDevUserDataPath()
+async function prepareDevProfile({ kind, userDataPath }) {
+  if (kind === 'worktree') {
+    // Why: storage reclaim uses this marker to delete the profile once its worktree is removed.
+    writeWorktreeProfileMarker(userDataPath, {
+      repoRoot,
+      instanceKey: process.env.ORCA_DEV_INSTANCE_KEY,
+      gitCommonDir: readGitCommonDir()
+    })
+  }
+  if (seedProfileRequest === null || profileHasState(userDataPath)) {
+    return
+  }
+  const sourceDir =
+    seedProfileRequest === '' || seedProfileRequest === '1'
+      ? getDefaultSeedSource()
+      : path.resolve(seedProfileRequest)
+  try {
+    await seedDevProfile({ sourceDir, targetDir: userDataPath })
+  } catch (error) {
+    console.error(`[orca-dev] Profile seed skipped: ${error.message}`)
+  }
+}
+
+function prepareDevCliWrapper(userDataPath) {
   const { binDir } = prepareDevCliTerminalWrappers({
     repoRoot,
     userDataPath,
@@ -419,11 +458,22 @@ function getElectronExecutable() {
   return path.join(repoRoot, 'node_modules', '.bin', 'electron')
 }
 
-if (process.env.ORCA_SKIP_DEV_CLI_PREPARE !== '1') {
-  prepareDevCliWrapper()
+seedDevInstanceIdentityEnv()
+const devProfile = resolveDevProfile({
+  repoRoot,
+  instanceKey: process.env.ORCA_DEV_INSTANCE_KEY,
+  mode: requestedProfileMode
+})
+// Why: Electron main reads this; without it main falls back to the shared orca-dev profile.
+process.env.ORCA_DEV_USER_DATA_PATH = devProfile.userDataPath
+if (!isHelpOrVersion) {
+  await prepareDevProfile(devProfile)
 }
 
-seedDevInstanceIdentityEnv()
+if (process.env.ORCA_SKIP_DEV_CLI_PREPARE !== '1') {
+  prepareDevCliWrapper(devProfile.userDataPath)
+}
+
 if (!useStableElectronName && process.env.ORCA_SKIP_DEV_ELECTRON_APP_PREPARE !== '1') {
   prepareMacDevElectronApp()
 }
@@ -476,49 +526,6 @@ function prepareDevWebClient() {
   recordDevWebClientInputs(repoRoot, inputs)
 }
 
-// Choose deterministic worktree CDP port then probe nearby ports to avoid collisions across simultaneous worktrees.
-function isPortFree(port) {
-  return new Promise((resolve) => {
-    const srv = net.createServer()
-    srv.once('error', () => {
-      // Error can precede bind; swallow close failure and release listeners across probe sweep.
-      try {
-        srv.close()
-      } catch {}
-      resolve(false)
-    })
-    srv.once('listening', () => srv.close(() => resolve(true)))
-    srv.listen(port, '127.0.0.1')
-  })
-}
-async function pickDebugPort() {
-  // 32-bit hash reduces bias but modulo 200 still collides; probe sweep resolves collisions.
-  const seed = Number.parseInt(createHash('sha1').update(repoRoot).digest('hex').slice(0, 8), 16)
-  const base = 9333 + (seed % 200) // deterministic base in 9333..9532; probe sweeps up to base+63
-  for (let i = 0; i < 64; i++) {
-    const p = base + i
-    if (await isPortFree(p)) {
-      return p
-    }
-  }
-  return null
-}
-function parseDebugPortEnv(raw) {
-  const n = Number.parseInt(raw, 10)
-  if (!Number.isInteger(n) || n < 1 || n > 65535 || String(n) !== raw.trim()) {
-    return null
-  }
-  return n
-}
-// Match exact/equals/space port flags; preserve explicit debugging pipe choice instead of injecting TCP port.
-const userPassedPort = forwardedRaw.some(
-  (a) =>
-    a === '--remote-debugging-port' ||
-    a.startsWith('--remote-debugging-port=') ||
-    a === '--remote-debugging-pipe'
-)
-// Skip port probing/logging for immediate --help/--version exit.
-const isHelpOrVersion = forwardedRaw.some((a) => a === '--help' || a === '-h' || a === '--version')
 if (!isHelpOrVersion && process.env.ORCA_DEV_INSTANCE_LABEL) {
   console.error(`[orca-dev] Instance: ${process.env.ORCA_DEV_INSTANCE_LABEL}`)
 }
@@ -527,29 +534,13 @@ if (!isHelpOrVersion && process.env.ORCA_BACKGROUND_LAUNCH === '1') {
   console.error('[orca-dev] Background launch: window stays off screen; automate through CDP')
 }
 let forwardedExtras = []
-if (!userPassedPort && !isHelpOrVersion) {
-  const envPortRaw = process.env.REMOTE_DEBUGGING_PORT
-  let port = null
-  if (envPortRaw) {
-    port = parseDebugPortEnv(envPortRaw)
-    if (port === null) {
-      console.error(
-        `[orca-dev] Ignoring invalid REMOTE_DEBUGGING_PORT=${JSON.stringify(envPortRaw)}; falling back to probe.`
-      )
-    }
-  }
-  if (port === null) {
-    port = await pickDebugPort()
-  }
-  if (port !== null) {
-    forwardedExtras = [`--remote-debugging-port=${port}`]
-    // Log on stderr to preserve stdout; use probed 127.0.0.1 because localhost may resolve IPv6.
-    console.error(`[orca-dev] Remote debugging on http://127.0.0.1:${port}`)
-  } else {
-    console.error(
-      '[orca-dev] No free debug port found in sweep; starting without --remote-debugging-port.'
-    )
-  }
+if (!isHelpOrVersion) {
+  const ports = await resolveDevInstancePorts({
+    forwardedArgs: forwardedRaw,
+    instanceKey: process.env.ORCA_DEV_INSTANCE_KEY || repoRoot
+  })
+  forwardedExtras = ports.forwardedExtras
+  announceDevInstance({ repoRoot, profile: devProfile, ...ports })
 }
 prepareDevWebClient()
 const forwardedArgs = ['dev', ...forwardedRaw, ...forwardedExtras]

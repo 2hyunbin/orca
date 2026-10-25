@@ -1147,6 +1147,11 @@
         "openInChat": "此 {{value0}} 会话已在聊天中打开。请刷新会话历史以打开它。",
         "ownershipUnknown": "Orca 无法确认此 {{value0}} 会话的归属。请刷新会话历史并重试。"
       },
+      "composerCreateHandoff": {
+        "reopen": "重新打开",
+        "preparationTimedOut": "工作树准备超时。",
+        "needsInput": "需要更多输入，因此未创建工作树。"
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "正在检出文件… {{percent}}%",
         "provisioningVm": "正在预配虚拟机…",

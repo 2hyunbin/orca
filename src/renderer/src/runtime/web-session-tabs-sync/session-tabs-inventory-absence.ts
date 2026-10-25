@@ -69,7 +69,8 @@ export function isTrackedWebSessionTabsOmissionCurrent(
   )
 }
 
-// Tombstones clear sibling environments too; treat as visibility, never host-close evidence.
+// Why: a tombstone empties its host's whole share of a worktree mirror, so it is a visibility fact,
+// never evidence that the host closed anything.
 export function isWebSessionTabsWorktreeRemovalFrame(
   snapshot: RuntimeMobileSessionTabsResult
 ): boolean {
@@ -79,7 +80,8 @@ export function isWebSessionTabsWorktreeRemovalFrame(
   )
 }
 
-// Mirror-settle needs complete host evidence: authoritative PTY census permits one omission; unlabeled/version-skewed censuses must repeat before destructive tombstones.
+// Tombstones need mirror-settle evidence: one authoritative PTY census omission suffices.
+// Unlabelled degraded/version-skewed inventories must repeat before destroying anything.
 export function buildMissingWebSessionTabsRemovals(
   environmentId: string,
   trackedWorktrees: readonly TrackedWebSessionTabsWorktree[],

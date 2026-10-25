@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { pathToFileURL } from 'node:url'
-import { resolveMobileTypecheckCompiler } from './mobile-typecheck-compiler.mjs'
+import { resolveMobileTypecheckCommand } from './mobile-typecheck-compiler.mjs'
 
 // Mobile release tsconfig excludes tests and Vitest does not typecheck; separate test program freezes existing errors with a shrink-only baseline.
 
@@ -136,33 +136,16 @@ export function diffBaseline(current, baseline) {
   }
 }
 
-function runTsc(root, args, compiler) {
-  return runProcessSync({
-    program: compiler.program,
-    args: [...compiler.args, ...args],
-    cwd: root,
+// Type errors are expected; only compiler crash is fatal. One pass collects both program files and diagnostics.
+export function collectTypecheckPass(root = process.cwd()) {
+  const command = resolveMobileTypecheckCommand(PROJECT, root)
+  const result = runProcessSync({
+    program: command.program,
+    args: [...command.args, '--listFiles'],
+    cwd: command.cwd,
     timeoutMs: null,
     maxOutputBytes: 64 * 1024 * 1024
   })
-}
-
-// Type errors are expected; only compiler crash is fatal. One pass collects both program files and diagnostics.
-export function collectTypecheckPass(root = process.cwd()) {
-  const compiler = resolveMobileTypecheckCompiler()
-  const cache = process.env.ORCA_MOBILE_TYPECHECK_CACHE_DIR
-  const result = runTsc(
-    root,
-    [
-      '--noEmit',
-      '--listFiles',
-      '-p',
-      PROJECT,
-      ...(cache && !compiler.native
-        ? ['--incremental', '--tsBuildInfoFile', path.join(cache, 'tests.tsbuildinfo')]
-        : [])
-    ],
-    compiler
-  )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
   return {
     failing: parseFailingFiles(output),
