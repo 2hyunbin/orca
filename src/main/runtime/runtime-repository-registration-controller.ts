@@ -18,6 +18,7 @@ import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { runtimePathsEqual } from './runtime-worktree-path-identity'
 import { runtimeRepoIsRegistrationCandidate } from './runtime-worktree-selection'
+import { describeWslUncAccessDenied } from '../wsl/wsl-unc-access-denied'
 
 type RuntimeRepositoryRegistrationDependencies = {
   getStore: () => RuntimeStore | null
@@ -44,7 +45,9 @@ export class RuntimeRepositoryRegistrationController {
     }
     const gitInfo = kind === 'git' ? await inspectGitRepoForRegistrationAsync(path) : null
     if (gitInfo && !gitInfo.isRepo) {
-      throw new Error(`Not a valid git repository: ${path}`)
+      throw new Error(
+        (await describeWslUncAccessDenied(path)) ?? `Not a valid git repository: ${path}`
+      )
     }
     // Store Git's resolved toplevel; symlink aliases/subfolders hide the main checkout as external.
     const repoPath = gitInfo?.rootPath ?? path
