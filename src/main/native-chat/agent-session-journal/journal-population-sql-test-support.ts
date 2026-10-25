@@ -1,6 +1,5 @@
 import type { PopulationWrap } from './journal-population-method-test-support'
 import { expect } from 'vitest'
-import { deserialize } from 'node:v8'
 import Database from '../../sqlite/sync-database'
 import { populationEncodedBytes, type PopulationCost } from './journal-population-cost-test-support'
 
@@ -83,7 +82,7 @@ export function instrumentPopulationSql(
                 cost.countCardinality += cardinality
                 const space =
                   parameters[0] instanceof Uint8Array
-                    ? String(deserialize(Buffer.from(parameters[0])))
+                    ? Buffer.from(parameters[0]).toString('utf16le')
                     : 'all'
                 cost.countNamespaces[space] = (cost.countNamespaces[space] ?? 0) + cardinality
               }
