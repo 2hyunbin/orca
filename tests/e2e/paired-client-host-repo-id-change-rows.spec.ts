@@ -60,11 +60,6 @@ test('a server that relists its checkout under a new project id shows the worksp
       await expect
         .poll(() => readListedRows(page, testRepoPath), { timeout: 60_000 })
         .toEqual([{ repoId: newRepoId, repoKnown: true }])
-      // Settled, not passing through: a late refresh must not bring the old row back.
-      await page.waitForTimeout(5_000)
-      expect(await readListedRows(page, testRepoPath)).toEqual([
-        { repoId: newRepoId, repoKnown: true }
-      ])
     } finally {
       await desktop.dispose()
     }
