@@ -1,8 +1,6 @@
 name: WSL orcad E2E frozen-runner retry
 
-# About 3% of hosted windows-2025 WSL2 jobs freeze while WSL2 provisions: the runner stops, no step
-# timeout fires, no log uploads, and the job is reaped at its time cap. This is a hosted-runner fault.
-# Reruns such a job once. Only the run id is read from the event; no pull request code is checked out.
+# ~3% of hosted Windows runners freeze during WSL2 setup (no step timeout, no logs); rerun such a job once.
 on:
   workflow_run:
     workflows: [WSL orcad E2E]
@@ -12,7 +10,10 @@ permissions: {}
 
 jobs:
   retry:
-    if: github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.conclusion != 'success'
+    # The name match also admits same-named fork workflows; the path pins ours.
+    if: >-
+      github.event.workflow_run.path == '.github/workflows/wsl-orcad-e2e.yml' &&
+      github.event.workflow_run.run_attempt == 1 && github.event.workflow_run.conclusion != 'success'
     runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 5
     permissions:
@@ -25,11 +26,12 @@ jobs:
           script: |
             const run = context.payload.workflow_run
             const { owner, repo } = context.repo
-            // A newer run for the branch (a push, or concurrency) makes this one moot.
-            const latest = await github.rest.actions.listWorkflowRuns({
-              owner, repo, workflow_id: run.workflow_id, branch: run.head_branch, event: run.event, per_page: 1
+            // A newer run for the same branch and repository supersedes this one; fork branch names collide.
+            const recent = await github.rest.actions.listWorkflowRuns({
+              owner, repo, workflow_id: run.workflow_id, branch: run.head_branch, event: run.event, per_page: 20
             })
-            if (latest.data.workflow_runs[0]?.id !== run.id) {
+            const latest = recent.data.workflow_runs.find((r) => r.head_repository?.id === run.head_repository?.id)
+            if (latest?.id !== run.id) {
               core.info('A newer run exists; not retrying')
               return
             }
