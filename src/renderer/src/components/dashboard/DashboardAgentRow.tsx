@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { viewClaudeAgentFromRow } from '@/lib/claude-agent-row-view'
 import {
   AgentStateDot,
   agentStateLabel,
@@ -117,10 +118,10 @@ const DashboardAgentRow = React.memo(function DashboardAgentRow({
   const handleActivate = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
-      // Why: subagent rows have no pane of their own, so focus the spawning parent's pane.
       onActivate(agent.tab.id, agent.activationPaneKey ?? agent.paneKey)
+      void viewClaudeAgentFromRow(agent)
     },
-    [onActivate, agent.tab.id, agent.activationPaneKey, agent.paneKey]
+    [onActivate, agent]
   )
   const handleSendTargetClickCapture = useCallback(
     (e: React.MouseEvent) => {

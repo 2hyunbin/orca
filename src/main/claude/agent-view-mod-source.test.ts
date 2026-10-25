@@ -1,0 +1,99 @@
+import { runInNewContext } from 'node:vm'
+import { expect, it, vi } from 'vitest'
+import { CLAUDE_AGENT_VIEW_MOD_SOURCE } from './agent-view-mod-source'
+
+it('registers the new session after clear and refuses commands belonging to the ending session', async () => {
+  type Hook = (api: unknown, event: object, next: () => Promise<object>) => Promise<unknown>
+  type On = (event: string, matcherOrHook: { command: string } | Hook, hook?: Hook) => void
+  const handlers = new Map<string, Hook>()
+  const register: (on: On) => void = runInNewContext(
+    `${CLAUDE_AGENT_VIEW_MOD_SOURCE.replace(
+      'export function register',
+      'function register'
+    )}\nregister`
+  )
+  register((event, matcherOrHook, hook) => {
+    if (typeof matcherOrHook === 'function') {
+      handlers.set(event, matcherOrHook)
+    } else if (hook) {
+      handlers.set(event, hook)
+    }
+  })
+  let sessionId = 'session-before-clear'
+  let heartbeat: (() => Promise<unknown>) | undefined
+  const posts: { action: string; sessionId: string; instanceId: string }[] = []
+  const view = vi.fn(async () => ({}))
+  const api = {
+    env: {
+      get: async (key: string) =>
+        ({
+          ORCA_PANE_KEY: 'tab:11111111-1111-4111-8111-111111111111',
+          ORCA_AGENT_HOOK_PORT: '1234',
+          ORCA_AGENT_HOOK_TOKEN: 'test-token',
+          HOME: '/test'
+        })[key]
+    },
+    fs: {
+      read: async () =>
+        JSON.stringify({
+          bindings: [
+            {
+              context: 'Chat',
+              bindings: {
+                'Alt+Control+G': 'command:orca-agent-view'
+              }
+            }
+          ]
+        })
+    },
+    session: { id: async () => sessionId },
+    clock: {
+      now: async () => Date.now(),
+      every: (_ms: number, callback: () => Promise<unknown>) => {
+        heartbeat = callback
+      }
+    },
+    command: { register: vi.fn() },
+    ui: { view },
+    http: {
+      fetch: async (_url: string, options: { body: string }) => {
+        const body = JSON.parse(options.body)
+        posts.push(body)
+        return {
+          ok: true,
+          text: JSON.stringify(
+            body.action === 'take'
+              ? {
+                  requestId: 'request',
+                  agentId: 'child',
+                  expiresAt: Date.now() + 1000
+                }
+              : {}
+          )
+        }
+      }
+    }
+  }
+  const invoke = async (name: string, event: object = {}) => {
+    const handler = handlers.get(name)
+    if (!handler) {
+      throw new Error(`Missing handler: ${name}`)
+    }
+    return handler(api, event, async () => ({}))
+  }
+  await invoke('session.start', { isInteractive: true, surface: 'terminal' })
+  expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
+  const firstInstance = posts.at(-1)?.instanceId
+  await invoke('session.end', { reason: 'clear', sessionId })
+  await heartbeat?.()
+  await invoke('command.run')
+  expect(posts.at(-1)?.action).toBe('end')
+  expect(view).not.toHaveBeenCalled()
+  sessionId = 'session-after-clear'
+  await heartbeat?.()
+  expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
+  expect(posts.at(-1)?.instanceId).not.toBe(firstInstance)
+  await invoke('command.run')
+  expect(view).toHaveBeenCalledWith({ agentId: 'child' })
+  expect(posts.at(-1)).toMatchObject({ action: 'ack', sessionId })
+})

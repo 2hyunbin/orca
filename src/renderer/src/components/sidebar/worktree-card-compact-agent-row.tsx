@@ -6,6 +6,7 @@ import type { DashboardAgentRow as DashboardAgentRowData } from '@/components/da
 import { AgentTypeIcon } from '@/lib/agent-type-icon'
 import { formatAgentTypeLabel } from '@/lib/agent-status'
 import { cn } from '@/lib/utils'
+import { viewClaudeAgentFromRow } from '@/lib/claude-agent-row-view'
 import { getAgentDotState } from './worktree-card-agent-summary'
 import { getAgentRowPrimaryText } from '../../../../shared/agent-row-primary-text'
 import { formatAgentToolPreview } from '@/lib/agent-row-tool-preview'
@@ -160,8 +161,9 @@ export const CompactAgentRow = React.memo(function CompactAgentRow({
       e.stopPropagation()
       // Child agents activate their spawning parent pane because they have no pane of their own.
       onActivate(agent.tab.id, agent.activationPaneKey ?? agent.paneKey)
+      void viewClaudeAgentFromRow(agent)
     },
-    [agent.activationPaneKey, agent.paneKey, agent.tab.id, onActivate]
+    [agent, onActivate]
   )
   const handleSendTargetClickCapture = useCallback(
     (e: React.MouseEvent) => {

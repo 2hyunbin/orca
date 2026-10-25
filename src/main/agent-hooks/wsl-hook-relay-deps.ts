@@ -52,6 +52,7 @@ export type WslHookRelayManagerDeps = {
   runInstall: typeof runWslInstallProcess
   waitForSentinel: typeof waitForWslRelaySentinel
   ingest: (envelope: Record<string, unknown>, connectionId: string) => void
+  receiveClaudeAgentView?: (body: unknown) => unknown
   bindInterruptReconciliation?: (
     mux: Parameters<typeof bindRemoteClaudeInterruptReconciliation>[1],
     connectionId: string,
@@ -79,6 +80,7 @@ export const defaultWslHookRelayDeps: WslHookRelayManagerDeps = {
   platform: () => process.platform,
   remoteHooksEnabled: () => isWslAgentHookRelayEnabled(),
   hookCoordsEnv: () => agentHookServer.buildPtyEnv(),
+  receiveClaudeAgentView: (body) => agentHookServer.claudeAgentViews.receive(body),
   // A restart-stable endpoint namespace lets surviving agents rediscover this instance.
   instanceKey: () => {
     const source = agentHookServer.endpointFilePath

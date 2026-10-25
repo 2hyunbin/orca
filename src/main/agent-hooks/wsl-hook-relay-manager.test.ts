@@ -13,6 +13,7 @@ import {
   REMOTE_MANAGED_HOOK_INSTALLER_AGENTS
 } from './remote-managed-hook-installers'
 import { WslHookRelayManager } from './wsl-hook-relay-manager'
+import { CLAUDE_AGENT_VIEW_RELAY_METHOD } from '../../shared/claude-agent-view'
 import { awaitExplicitPiOmpGuestReadiness } from './wsl-pi-omp-guest-readiness'
 import { FAILURE_COOLDOWN_BASE_MS, type WslHookRelayManagerDeps } from './wsl-hook-relay-deps'
 import {
@@ -302,6 +303,28 @@ describe('WslHookRelayManager', () => {
     } finally {
       manager.disposeAll()
     }
+  })
+
+  it('forwards Claude view requests from the guest only while hooks are enabled', async () => {
+    let enabled = true
+    const receive = vi.fn(() => ({ registered: true }))
+    const { manager, deps } = createManager({
+      receiveClaudeAgentView: receive,
+      managedHookSettings: () => ({ agentStatusHooksEnabled: enabled })
+    })
+    await manager.ensureForDistro('Ubuntu', codexHome)
+    await vi.waitFor(() => expect(deps.installHooks).toHaveBeenCalledOnce())
+    const guest = harnesses[0].guestDispatcher
+    harnesses[0].mux.dispose()
+    const body = { action: 'register', paneKey: 'pane', sessionId: 'session' }
+    expect(await guest.requestPrimary(CLAUDE_AGENT_VIEW_RELAY_METHOD, { body })).toEqual({
+      registered: true
+    })
+    expect(receive).toHaveBeenCalledWith(body)
+    enabled = false
+    expect(await guest.requestPrimary(CLAUDE_AGENT_VIEW_RELAY_METHOD, { body })).toEqual({})
+    expect(receive).toHaveBeenCalledOnce()
+    manager.disposeAll()
   })
 
   it('waits for guest materialization when an explicit Pi or OMP launch needs it', async () => {

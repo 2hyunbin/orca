@@ -227,6 +227,8 @@ export class WslHookRelayManager {
       child,
       distro: state.distro,
       ingest: this.deps.ingest,
+      receiveClaudeAgentView: (body) =>
+        isWslHookRelayAllowed(this.deps) ? (this.deps.receiveClaudeAgentView?.(body) ?? {}) : {},
       warn: this.deps.warn,
       onDead: (reason) => {
         if (this.disposed || state.mux !== mux) {
