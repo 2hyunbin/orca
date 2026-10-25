@@ -34,19 +34,20 @@ export abstract class OrcaRuntimeWithPreparePiTerminalPrompt extends OrcaRuntime
       const pendingOutput = state.writeChain
       await pendingOutput
       this.assertAgentPromptExpectedBinding(handle, binding)
-      const supported =
+      return (
         state.writeChain === pendingOutput &&
         this.headlessTerminals.get(binding.ptyId) === state &&
         !this.providerSnapshotPreferredPtys.has(binding.ptyId) &&
         state.emulator.getModes().bracketedPaste
-      const pty = this.ptysById.get(binding.ptyId)
-      if (supported && pty) {
-        pty.foregroundAgent = 'pi'
-      }
-      return supported
+      )
     }
     if (!(await canPaste())) {
       return null
+    }
+    const pty = this.ptysById.get(binding.ptyId)
+    // Clear stale Claude/Codex identity so the writer neither joins Enter nor claims settlement.
+    if (pty) {
+      pty.foregroundAgent = 'pi'
     }
     return {
       expectedBinding: binding,
