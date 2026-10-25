@@ -49,6 +49,8 @@ import {
 } from './ssh-ipc-context'
 import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
 import { persistPortForwardsWithUnrestored } from './ssh-port-forward-persistence'
+import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
+import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
 import { resetSshShutdownDrain } from './ssh-shutdown-drain'
 import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
@@ -129,6 +131,8 @@ export function registerSshHandlers(
       broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
     }
   })
+  // Every served status restores saved forwards, whichever path brought the host up.
+  setSshHostServedListener((targetId) => void restoreManagedHostPortForwards(targetId))
   registerPowerMonitorReconnect(() => getAppEnvironment().getPath('userData'))
   registerSshBrowseHandler(() => connectionManager)
   setSshConnectionManagerResolver(() => connectionManager)

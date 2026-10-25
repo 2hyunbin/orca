@@ -62,7 +62,10 @@ vi.mock('./ssh-ipc-context', () => ({
   getCurrentMainWindow: () => null
 }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastPortForwards: h.broadcastPortForwards }))
-vi.mock('../../ssh/ssh-host-server-status', () => ({ getSshHostServerStatus: h.hostServerStatus }))
+vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getSshHostServerStatus: h.hostServerStatus
+}))
 
 import { restorePortForwards } from './ssh-port-forward-persistence'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'

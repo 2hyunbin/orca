@@ -1,11 +1,12 @@
-import { getSshHostServerStatus } from '../../ssh/ssh-host-server-status'
+import { getSshHostServerStatus, isSshHostServed } from '../../ssh/ssh-host-server-status'
 import { getCurrentMainWindow } from './ssh-ipc-context'
 import { restorePortForwards } from './ssh-port-forward-persistence'
 
 const restoring = new Map<string, Promise<void>>()
 
 export function restoreManagedHostPortForwards(targetId: string): Promise<void> {
-  if (getSshHostServerStatus(targetId)?.kind !== 'managed') {
+  // Unsettled hosts may still tear the transport down for a deploy or conversion.
+  if (!isSshHostServed(getSshHostServerStatus(targetId))) {
     return Promise.resolve()
   }
   // Serialize restores so concurrent connects cannot bind the same saved port twice.
@@ -13,7 +14,7 @@ export function restoreManagedHostPortForwards(targetId: string): Promise<void> 
   const next = previous
     // A queued disconnect may have changed managed status while the previous restore ran.
     .then(() =>
-      getSshHostServerStatus(targetId)?.kind === 'managed'
+      isSshHostServed(getSshHostServerStatus(targetId))
         ? restorePortForwards(targetId, getCurrentMainWindow)
         : undefined
     )

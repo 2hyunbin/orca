@@ -30,7 +30,7 @@ const { publishManagedServerConnect } = await import('./ssh-host-server-connect'
 const { disconnectRegisteredSshTarget } = await import('./ssh-session-teardown')
 const { connectInFlight } = await import('./ssh-connect-attempt-registry')
 const { getSshProviderAuthority } = await import('../../ssh/ssh-provider-authority')
-const { clearSshHostServerStatus, setSshHostServerStatus } =
+const { clearSshHostServerStatus, setSshHostServerStatus, setSshHostServedListener } =
   await import('../../ssh/ssh-host-server-status')
 
 const connected = { targetId: 't1', status: 'connected', error: null, reconnectAttempt: 0 } as const
@@ -42,8 +42,14 @@ describe('saved port forwards on a managed host', () => {
   })
 
   it('restores them when a managed connect is published', () => {
-    publishManagedServerConnect('t1', 'env-1')
-    expect(h.restore).toHaveBeenCalledWith('t1')
+    // Registration installs this listener; the publish reaches it through the served status.
+    setSshHostServedListener((targetId) => void h.restore(targetId))
+    try {
+      publishManagedServerConnect('t1', 'env-1')
+      expect(h.restore).toHaveBeenCalledWith('t1')
+    } finally {
+      setSshHostServedListener(null)
+    }
   })
 
   it('restores them when the managed host transport reconnects on its own', () => {
