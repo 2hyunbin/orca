@@ -18,17 +18,14 @@ import { createStructuredAgentSessionHostMutationContext } from './structured-ag
 import * as lifetime from './structured-agent-session-conversation-lifetime'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import { createStructuredAgentSessionTabSurface as createTabs } from './structured-agent-session-host-tabs'
-import {
-  structuredAgentSessionMutationDelegates,
-  type StructuredAgentSessionMutationContext
-} from './structured-agent-session-host-mutations'
+import * as hostMutations from './structured-agent-session-host-mutations'
 import { flushStructuredAgentSessionHost } from './structured-agent-session-host-teardown'
 import type * as HostTypes from './structured-agent-session-host-types'
 import { StructuredAgentSessionEventRecovery } from './structured-agent-session-event-recovery'
 import { StructuredAgentSessionBackgroundTaskChannel } from './structured-agent-session-background-task-channel'
 import { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
 import { StructuredAgentSessionConversations } from './structured-agent-session-conversations'
-import * as restart from './structured-agent-session-restart-resume-host'
+import * as resume from './structured-agent-session-restart-resume-host'
 import { structuredAgentSessionRestartResumeSurfaces } from './structured-agent-session-restart-resume-wiring'
 import * as conversation from './structured-agent-session-host-delivery'
 import { wireStructuredAgentSessionQueuedMessages } from './structured-agent-session-queued-wiring'
@@ -64,7 +61,8 @@ export class StructuredAgentSessionHost {
     this.queued,
     (sessionId) => this.restartResume.onAgentStarted(sessionId),
     (sessionId) => this.backgroundTasks.publish(sessionId),
-    (sessionId) => this.backgroundTasks.read(sessionId)
+    (sessionId) => this.backgroundTasks.read(sessionId),
+    (sessionId) => this.runtimeState?.startFlights.projectsStarting(sessionId) ?? false
   )
   private readonly subscribers = this.clientDelivery.subscribers
   private readonly tasks = new StructuredAgentSessionTaskQueue()
@@ -75,7 +73,7 @@ export class StructuredAgentSessionHost {
   private readonly conversationDelivery: conversation.StructuredAgentSessionConversationDelivery
   private readonly eventRecovery: StructuredAgentSessionEventRecovery
   private readonly backgroundTasks: StructuredAgentSessionBackgroundTaskChannel
-  readonly restartResume: restart.StructuredAgentSessionRestartResume
+  readonly restartResume: resume.StructuredAgentSessionRestartResume
 
   constructor(readonly deps: HostTypes.StructuredAgentSessionHostDeps) {
     // Collaborators share a logger wrapper that cannot fail the operation it reports.
@@ -111,6 +109,7 @@ export class StructuredAgentSessionHost {
       startProviderChild: (sessionId, startedFor) =>
         agentStart.claimStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
+      startFlights: this.runtimeState.startFlights,
       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
       // Retire at rest; the next start refreshes login and permission mode.
       stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),
@@ -141,7 +140,7 @@ export class StructuredAgentSessionHost {
       failStartingChild: (...args) => this.lifetime.failStartingChild(...args),
       trackOpen: (open) => this.tasks.trackAttach(open)
     })
-    this.restartResume = restart.createStructuredAgentSessionRestartResume(deps, this.sessions, {
+    this.restartResume = resume.createStructuredAgentSessionRestartResume(deps, this.sessions, {
       ...structuredAgentSessionRestartResumeSurfaces(this, this.now),
       readChildWork: this.clientDelivery.readChildWork,
       childWorkOpen: this.clientDelivery.childWorkOpen,
@@ -271,7 +270,7 @@ export class StructuredAgentSessionHost {
     }).finally(() => this.clientDelivery.closeAll())
   }
 
-  private mutationContext = (): StructuredAgentSessionMutationContext =>
+  private mutationContext = (): hostMutations.StructuredAgentSessionMutationContext =>
     createStructuredAgentSessionHostMutationContext({
       deps: this.deps,
       sessions: this.sessions,
@@ -296,7 +295,9 @@ export class StructuredAgentSessionHost {
 
   waitForSendSettlement = this.clientDelivery.waitForSendSettlement
 
-  private mutations = structuredAgentSessionMutationDelegates(() => this.mutationContext())
+  private mutations = hostMutations.structuredAgentSessionMutationDelegates(() =>
+    this.mutationContext()
+  )
   cancel = this.mutations.cancel
   respondToPrompt = this.mutations.respondToPrompt
   setOption = this.mutations.setOption

@@ -11,7 +11,10 @@ import {
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
 import { isCodexStateDbBackfillPending } from '../codex/codex-state-db'
-import { startCodexStateDbBackfillRecoveryInBackground } from '../codex/codex-state-db-backfill-recovery'
+import {
+  hasCodexStateDbBackfillRecoveryGivenUp,
+  startCodexStateDbBackfillRecoveryInBackground
+} from '../codex/codex-state-db-backfill-recovery'
 import { spawnProcessOnWorkerThread } from '../worker-thread-child-process/worker-thread-child-process'
 import { buildConfiguredProxyEnv } from '../../shared/network-proxy'
 import { getMainHttpClient } from '../network/http-client'
@@ -190,8 +193,18 @@ export async function fetchCodexRateLimits(
 
   if (options?.codexHomePath && isCodexStateDbBackfillPending(options.codexHomePath)) {
     void startCodexStateDbBackfillRecoveryInBackground(options.codexHomePath)
+    // HTTP usage never opens the state DB, so it cannot contend with the backfill (#15741).
+    const backendResult = isWslHome ? null : await fetchBackendUsage(options)
+    if (options?.signal?.aborted) {
+      return abortedCodexRateLimitResult()
+    }
+    if (backendResult) {
+      return backendResult
+    }
     return codexUnavailable(
-      'Codex is rebuilding its session index; usage will refresh when recovery finishes',
+      hasCodexStateDbBackfillRecoveryGivenUp(options.codexHomePath)
+        ? `Codex could not rebuild its session index in ${options.codexHomePath}; restart Orca to retry (a codex wrapper that sets CODEX_HOME can cause this)`
+        : 'Codex is rebuilding its session index; usage will refresh when recovery finishes',
       'error'
     )
   }
