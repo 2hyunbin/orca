@@ -42,7 +42,7 @@ export const EXACT_NODE_ENTRYPOINT_IDENTITIES: readonly {
     agent: 'dsh',
     processName: 'dsh'
   },
-  // Why: Qwen's npm bin is a generic `cli-entry.js` that re-runs `cli.js` in a child node on
+  // Why: Qwen's npm bin is a generic `cli-entry` script that re-runs `cli` in a child node on
   // Windows; the standalone installer ships the same pair under `qwen-code/lib/`.
   {
     pattern:
