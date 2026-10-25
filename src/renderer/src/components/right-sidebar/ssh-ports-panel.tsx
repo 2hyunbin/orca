@@ -126,7 +126,7 @@ export function SshPortsPanel({
 
   if (isDisconnected) {
     return (
-      <div className="flex flex-col items-center justify-center h-full px-4 text-center text-muted-foreground">
+      <div className="flex flex-col items-center justify-center-safe h-full overflow-y-auto scrollbar-sleek px-4 py-4 text-center text-muted-foreground">
         <Unplug size={32} className="mb-3 opacity-50" />
         <p className="text-sm font-medium">
           {translate('auto.components.right.sidebar.PortsPanel.a2f1a47f42', 'SSH connection lost')}
