@@ -1,6 +1,8 @@
-import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalSnapshot,
+  AgentJournalSubmission
+} from '../../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
-import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
 import { projectNativeChatTranscriptMessages } from '../../../shared/native-chat-transcript-projection'
