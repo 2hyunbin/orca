@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resolveEditorModelOwner } from '@/components/editor/editor-model-owner'
+import { makeFolderWorkspace, makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { useAppStore } from '@/store'
 import {
   assertEditorFileOperationCurrent,
@@ -290,5 +293,87 @@ describe('editor file operation owner', () => {
         assertEditorFileOperationCurrent(useAppStore.getState(), folderKey, provenance)
       ).toThrow('Reopen the file')
     })
+  })
+})
+
+afterEach(() => vi.unstubAllGlobals())
+
+describe('shared editor owner interpretation', () => {
+  it.each(['runtime:hub-a', 'ssh:private'] as const)(
+    'keeps uncaptured models and operations on stamped paired owner %s',
+    (hostId) => {
+      vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+      useAppStore.setState({
+        worktreesByRepo: {
+          repo: [
+            makeWorktree({
+              id: worktreeId,
+              repoId: 'repo',
+              hostId,
+              runtimeOwnerEnvironmentId: 'hub-a'
+            })
+          ]
+        }
+      })
+      const state = useAppStore.getState()
+      const provenance = captureEditorFileOperationProvenance(state, worktreeId, undefined, false)
+      const route = assertEditorFileOperationCurrent(state, worktreeId, provenance)
+      expect(resolveEditorModelOwner({ worktreeId }, state)).toEqual({
+        environmentId: route.runtimeEnvironmentId,
+        hostId: route.executionHostId
+      })
+      expect(route).toEqual({ executionHostId: hostId, runtimeEnvironmentId: 'hub-a' })
+    }
+  )
+
+  it('qualifies a same-id folder at capture without letting later focus change model identity', () => {
+    const workspace = folderWorkspaceKey('twin')
+    useAppStore.setState({
+      folderWorkspaces: [
+        makeFolderWorkspace({ id: 'twin', executionHostId: 'local' }),
+        makeFolderWorkspace({ id: 'twin', executionHostId: 'runtime:hub-a' })
+      ],
+      activeWorktreeId: workspace,
+      activeWorkspaceExecutionHostId: 'local'
+    })
+    const provenance = captureEditorFileOperationProvenance(
+      useAppStore.getState(),
+      workspace,
+      undefined,
+      false
+    )
+    for (const host of ['local', 'runtime:hub-a'] as const) {
+      useAppStore.setState({ activeWorkspaceExecutionHostId: host })
+      const state = useAppStore.getState()
+      expect(resolveEditorModelOwner({ worktreeId: workspace }, state).hostId).toBeNull()
+      expect(
+        resolveEditorModelOwner({ worktreeId: workspace, operationProvenance: provenance }, state)
+      ).toEqual({ environmentId: null, hostId: 'local' })
+      expect(assertEditorFileOperationCurrent(state, workspace, provenance).executionHostId).toBe(
+        'local'
+      )
+    }
+  })
+
+  it('retains captured model identity while refusing vanished or ambiguous mutation owners', () => {
+    const owner = makeWorktree({ id: worktreeId, repoId: 'repo', hostId: 'local' })
+    useAppStore.setState({ worktreesByRepo: { repo: [owner] } })
+    const provenance = captureEditorFileOperationProvenance(
+      useAppStore.getState(),
+      worktreeId,
+      undefined,
+      false
+    )
+    for (const worktrees of [[], [owner, { ...owner, hostId: 'runtime:hub-a' as const }]]) {
+      useAppStore.setState({ worktreesByRepo: { repo: worktrees } })
+      const state = useAppStore.getState()
+      expect(() => assertEditorFileOperationCurrent(state, worktreeId, provenance)).toThrow(
+        'Reopen the file'
+      )
+      expect(
+        resolveEditorModelOwner({ worktreeId, operationProvenance: provenance }, state).hostId
+      ).toBe('local')
+      expect(resolveEditorModelOwner({ worktreeId }, state).hostId).toBeNull()
+    }
   })
 })
