@@ -279,10 +279,11 @@ export async function provisionClaudeProfile(args: {
       // Share linked entries according to their target type.
       const entry = statSync(source, { throwIfNoEntry: false })
       if (entry?.isDirectory()) {
+        const outcome = linkClaudeProfileDirectory(source, target, platform)
         // Why: a pane's `claude` can run before setup and create e.g. plugins/installed_plugins.json.
-        return args.firstSetup && lstatIfPresent(target)?.isDirectory()
+        return outcome === 'user-owned' && args.firstSetup && lstatIfPresent(target)?.isDirectory()
           ? mergeClaudeProfileDirectory(args.profileHome, defaultHome, name, platform, report)
-          : linkClaudeProfileDirectory(source, target, platform)
+          : outcome
       }
       if (!entry?.isFile()) {
         return 'absent'
