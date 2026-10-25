@@ -137,6 +137,12 @@ async function waitForAgentStart(
   return false
 }
 
+function describeBlockedAgent(blockedReason: string): string {
+  return `Automation agent is blocked: ${blockedReason}.`
+}
+
+export const AGENT_HOOKS_REVIEW_BLOCKED_ERROR = describeBlockedAgent('agent-hooks-review-prompt')
+
 async function readTerminalSnapshot(
   runtime: AutomationRunTerminalHost,
   handle: string
@@ -164,7 +170,7 @@ async function buildObservation(
     status: 'dispatch_failed',
     outputSnapshot,
     error: wait.blockedReason
-      ? `Automation agent is blocked: ${wait.blockedReason}.`
+      ? describeBlockedAgent(wait.blockedReason)
       : 'Automation agent did not report completion.'
   }
 }
