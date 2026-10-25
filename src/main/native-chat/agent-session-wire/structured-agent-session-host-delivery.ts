@@ -70,6 +70,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     StructuredAgentSessionClientDelivery,
     | 'publishRestored'
     | 'readChildWork'
+    | 'publishHandoverChanged'
     | 'childWorkOpen'
     | 'readStopping'
     | 'publishStatus'

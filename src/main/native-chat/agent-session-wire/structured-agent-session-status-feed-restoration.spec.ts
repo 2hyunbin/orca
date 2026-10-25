@@ -1,3 +1,5 @@
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { createCodexDispatchEchoes } from '../../codex/codex-structured-dispatch-echo'
@@ -40,7 +42,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         TURN_IDENTITY,
         { kind: 'turn', turnId: 'turn-1', state: 'interrupted', startedAt: 100 },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
       const record = { ...agentSessionRecordFixture(), sessionId: `provenance-${cause}` }
       const projection = new StructuredAgentSessionJournalProjections()
@@ -70,7 +72,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         { ...TURN_IDENTITY, turnId: 'new-turn' },
         { kind: 'turn', turnId: 'new-turn', state: 'completed', outcome: 'success' },
-        { fence: 2 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 2 }
       )
       expect(projection.read(journal, record).state.summary.turnOutcome).toBe('success')
       record.lease.deathEvidence = null
@@ -78,7 +80,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         { ...TURN_IDENTITY, turnId: 'live-fault' },
         { kind: 'turn', turnId: 'live-fault', state: 'interrupted' },
-        { fence: 2 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 2 }
       )
       expect(projection.read(journal, record).state.summary.turnOutcome).toBe('interruption')
     }
@@ -91,7 +93,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         TURN_IDENTITY,
         { kind: 'turn', turnId: 'turn-1', state: cut ? 'completed' : 'running', startedAt: 100 },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
       await journal.close()
       const database = openTestJournalHostDatabase(join(directory(), SESSION))
@@ -134,7 +136,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         { ...USER_IDENTITY, ordinal: 2 },
         { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'hygiene' }] },
-        { fence: 2 }
+        { turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(TURN_IDENTITY) }, fence: 2 }
       )
       feed.publish(SESSION, journal)
       check()
@@ -150,7 +152,7 @@ export function registerStatusFeedRestorationContracts({
       await journal.appendItem(
         { ...TURN_IDENTITY, turnId: 'genuine-new' },
         { kind: 'turn', turnId: 'genuine-new', state: 'running', startedAt: 2000 },
-        { fence: 3 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 3 }
       )
       feed.publish(SESSION, journal)
       expect(published.at(-1)).toMatchObject({ status: 'working' })

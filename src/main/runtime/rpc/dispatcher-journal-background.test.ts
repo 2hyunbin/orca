@@ -1,3 +1,4 @@
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { sendTerminalStreamInput } from './methods/terminal/terminal-input-delivery'
 vi.mock('../../native-chat/agent-session-journal/journal-legacy-rest-worker', async () => {
   const { InProcessLegacyRestWorker } =
@@ -63,7 +64,7 @@ it.each(['dispatch', 'streaming'] as const)(
     await journal.appendItem(
       { provider: 'claude', sessionId: 'provider-1', uuid: 'turn' },
       { kind: 'turn', turnId: 'turn', state: 'running', startedAt: 100 },
-      { fence: 7 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 7 }
     )
     await journal.close()
     database.db
@@ -159,7 +160,12 @@ it.each(['dispatch', 'streaming'] as const)(
     }
     const abort = new AbortController()
     const pending = call(
-      { id: 'wait', method: 'terminal.wait', params: { terminal: 'term_probe', for: 'exit' } },
+      {
+        authToken: '',
+        id: 'wait',
+        method: 'terminal.wait',
+        params: { terminal: 'term_probe', for: 'exit' }
+      },
       abort.signal
     )
     try {
@@ -170,7 +176,7 @@ it.each(['dispatch', 'streaming'] as const)(
       await initializer.advance(structuredJournalBackgroundReady)
       expect(initialized).not.toHaveBeenCalled()
       setStructuredJournalReadiness(() => true)
-      const short = call({ id: 'short', method: 'worktree.list', params: {} })
+      const short = call({ authToken: '', id: 'short', method: 'worktree.list', params: {} })
       await shortEntered.promise
       expect(structuredJournalBackgroundReady()).toBe(false)
       await initializer.advance(structuredJournalBackgroundReady)
@@ -233,6 +239,7 @@ it.each(['dispatch', 'streaming'] as const)(
         : dispatcher.dispatchStreaming(request, () => undefined)
     const pending = call({
       id: 'launch',
+      authToken: '',
       method: 'agent.launch',
       params: { prompt: 'recorded fixture' }
     })
@@ -242,7 +249,7 @@ it.each(['dispatch', 'streaming'] as const)(
     release.resolve()
     await pending
     expect(structuredJournalBackgroundReady()).toBe(true)
-    await call({ id: 'reject', method: 'agent.launch', params: {} })
+    await call({ authToken: '', id: 'reject', method: 'agent.launch', params: {} })
     expect(structuredJournalBackgroundReady()).toBe(true)
   }
 )
@@ -272,7 +279,7 @@ it('releases passive streaming admission before the persistent receive phase', a
     ]
   })
   const pending = dispatcher.dispatchStreaming(
-    { id: 'persistent', method: 'layout.subscribe', params: {} },
+    { authToken: '', id: 'persistent', method: 'layout.subscribe', params: {} },
     () => undefined
   )
   await entered.promise

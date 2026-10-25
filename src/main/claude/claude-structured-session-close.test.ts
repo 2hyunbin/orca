@@ -106,7 +106,9 @@ describe('Claude published session close lifecycle', () => {
       [],
       undefined,
       persistHandle,
-      (_sessionId, evidence) => childWork.push(...evidence.map((edge) => edge.type))
+      (_sessionId, evidence) => {
+        childWork.push(...evidence.map((edge) => edge.type))
+      }
     )
     const journalSink: StructuredAgentSessionEventSink = {
       appendItem: () => {},

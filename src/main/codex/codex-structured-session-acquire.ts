@@ -33,7 +33,7 @@ import {
 } from './codex-structured-session-state'
 import type { CodexStructuredSessionTeardown } from './codex-structured-session-teardown'
 import type { CodexStructuredNotificationRetry } from './codex-structured-notification-retry'
-import type { CodexJournalTranslationAdmission } from './codex-structured-journal-contracts'
+import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'
 import type { deliverCodexServerRequest } from './codex-structured-provider-events'
 import { codexAcquisitionNotificationHandler } from './codex-structured-acquisition-notification'
 
@@ -79,7 +79,7 @@ export async function acquireCodexStructuredSession(input: {
   }
   const subagentExecutions = new CodexSubagentExecutions()
   const dispatchEchoes = createCodexDispatchEchoes((changes) => {
-    let retry: (() => CodexJournalTranslationAdmission) | undefined
+    let retry: (() => ChildWorkAdmission) | undefined
     notificationRetries.continueWork(sessionId, () => {
       const result = retry?.() ??
         deps.onHeldSendsChanged?.({

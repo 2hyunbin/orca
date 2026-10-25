@@ -5,7 +5,10 @@ import {
 } from '../../../shared/agent-session-journal-item-key'
 import type { AgentSessionJournal } from './journal-store'
 import { populationState, populationWriter } from './journal-population-owner-test-support'
-import { AGENT_SESSION_JOURNAL_SCHEMA_VERSION } from '../../../shared/agent-session-journal-types'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  AGENT_SESSION_JOURNAL_SCHEMA_VERSION
+} from '../../../shared/agent-session-journal-types'
 
 const identity = (id: string) =>
   ({ provider: 'codex', threadId: 'population-thread', turnId: id, ordinal: 0 }) as const
@@ -35,7 +38,7 @@ export async function exerciseRetainedPopulation(
         outcome: 'cancellation',
         startedAt: 777
       },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     expect(journal.restFact()).toEqual({ itemId: agentJournalItemKey(cut), since: 777 })
     await journal.appendItem(
@@ -48,7 +51,7 @@ export async function exerciseRetainedPopulation(
         startedAt: 888,
         completedAt: 889
       },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     expect(journal.requestFrontier()).toBe(agentJournalItemKey(finished))
     expect(journal.restFact()).toBeNull()
@@ -71,7 +74,7 @@ export async function exerciseRetainedPopulation(
           startedAt: 1000 + index,
           completedAt: 2000 + index
         },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
       expect(journal.requestFrontier()).toBe(agentJournalItemKey(identity(`descending-${index}`)))
       expect(journal.restFact()).toEqual({ itemId: source, since: 100 })
@@ -85,7 +88,7 @@ export async function exerciseRetainedPopulation(
         state: 'running',
         startedAt: 1
       },
-      { fence: 1, observedAt: -333 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1, observedAt: -333 }
     )
     expect(journal.item(lateKey)!.sequence).toBeGreaterThan(sourceSequence)
     expect(journal.item(lateKey)!.observedAt).toBe(-333)
@@ -117,7 +120,7 @@ export async function exerciseRetainedPopulation(
         startedAt: 1,
         completedAt: 2
       },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     expect(journal.restFact()).toBeNull()
     expect(journal.requestFrontier()).toBe(source)
@@ -152,7 +155,10 @@ export async function exerciseRetainedPopulation(
           text: 'retained clear',
           contextClear: { operationId: `retained-${index}`, afterFence: 1, clearedAt: 3000 + index }
         },
-        { fence: 1 }
+        {
+          turnScope: state.derivedTurnScope.scopeFor({ kind: 'status', text: 'retained clear' }),
+          fence: 1
+        }
       )
     }
   })

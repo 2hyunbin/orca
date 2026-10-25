@@ -8,10 +8,14 @@ import {
   agentJournalSubmissionKey
 } from '../../../shared/agent-session-journal-item-key'
 import {
+  AGENT_JOURNAL_THREAD_SCOPE,
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
   type AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
-import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  agentSessionJournalProviderHandle,
+  codexProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { openAgentSessionJournal } from './journal-store-factory'
@@ -102,7 +106,10 @@ export async function runJournalPopulationContract(
         seq,
         ts: at,
         fence: 1,
-        providerHandle: codexProviderHandle('population-thread'),
+        providerHandle: agentSessionJournalProviderHandle({
+          agent: 'codex',
+          providerHandle: codexProviderHandle('population-thread')
+        }),
         clientMessageId: raw,
         body: text,
         payloadFingerprint: fingerprint,
@@ -127,7 +134,11 @@ export async function runJournalPopulationContract(
         )
       )
     const status = (id: string) =>
-      current.appendItem(turnIdentity(id), { kind: 'status', text: id }, { fence: 1 })
+      current.appendItem(
+        turnIdentity(id),
+        { kind: 'status', text: id },
+        { turnScope: state.derivedTurnScope.scopeFor({ kind: 'status', text: id }), fence: 1 }
+      )
     await measure('construction', async () => {
       for (let index = 0; index < count; index++) {
         await submission(`echo-${index}`, 100 + count - index)
@@ -140,7 +151,7 @@ export async function runJournalPopulationContract(
             startedAt: 200 + index,
             userItemId: agentJournalSubmissionKey(`echo-${index}`)
           },
-          { fence: 1 }
+          { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
         )
         await current.appendItem(
           turnIdentity(`cut-${index}`),
@@ -151,7 +162,7 @@ export async function runJournalPopulationContract(
             outcome: 'cancellation',
             startedAt: 300 + index
           },
-          { fence: 1 }
+          { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
         )
         await queue(`group-card-${index}`, 'shared-report', index + 1)
         await queue(`other-card-${index}`, `absent-${index}`, count + index + 1, text)
@@ -267,7 +278,7 @@ export async function runJournalPopulationContract(
         state: 'completed',
         outcome: 'failure'
       },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     const expected = current.restFact()
     const tip = current.cursor().sequence

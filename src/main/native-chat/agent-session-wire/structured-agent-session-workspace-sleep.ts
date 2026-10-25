@@ -16,7 +16,7 @@ type WorkspaceSleepHost = {
   deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'logger' | 'hasOpenDispatch' | 'now'>
   tasks: StructuredAgentSessionTaskQueue
   lifetime: Pick<StructuredAgentSessionConversationLifetime, 'closeForWorkspaceSleep'>
-  sessions: StructuredAgentSessionConversations
+  sessions: Pick<StructuredAgentSessionConversations, 'get'>
   deliveryRunning: (sessionId: string) => boolean
   childWorkIncomplete: (sessionId: string) => boolean
   publishRecordNotes: (sessionId: string) => void

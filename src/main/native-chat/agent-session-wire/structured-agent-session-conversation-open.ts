@@ -110,7 +110,11 @@ export async function openStructuredAgentSessionConversationJournal(
       legacyCursor = marker.journalCursor
     }
   } catch (error) {
-    deps.logger.warn('saving legacy restart fact on open failed', { sessionId, error })
+    deps.logger.warn('saving legacy restart fact on open failed', {
+      scope: 'legacy-restart-fact',
+      sessionId,
+      error
+    })
   }
   const journal = await openAgentSessionJournal({
     identity,

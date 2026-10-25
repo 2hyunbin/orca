@@ -10,7 +10,10 @@ import {
   type AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
-import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  agentSessionJournalProviderHandle,
+  codexProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 import { JournalWriteQueue } from './journal-write-queue'
 import type { AgentSessionJournal } from './journal-store'
 import { openTestJournalHostDatabase } from './journal-host-database-test-support'
@@ -57,7 +60,10 @@ export async function runLegacyPopulation(
         queuedMessageId: `legacy-${index}`,
         body: text,
         payloadFingerprint: fp,
-        providerHandle: codexProviderHandle('population-thread'),
+        providerHandle: agentSessionJournalProviderHandle({
+          agent: 'codex',
+          providerHandle: codexProviderHandle('population-thread')
+        }),
         handoverRecorded: true
       }))
       if (rejection) {

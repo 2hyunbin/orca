@@ -55,17 +55,18 @@ export async function runPopulationUpgrade(
   let cleanupSteps = 0
   const afterSequences: number[] = []
   const save = JournalStructuralScratch.prototype.save
-  const saveSpy = vi
-    .spyOn(JournalStructuralScratch.prototype, 'save')
-    .mockImplementation(function (value) {
-      checkpoints++
-      const result = save.call(this, value)
-      if (failNextSave) {
-        failNextSave = false
-        throw new Error('population scratch after-save rollback')
-      }
-      return result
-    })
+  const saveSpy = vi.spyOn(JournalStructuralScratch.prototype, 'save').mockImplementation(function (
+    this: JournalStructuralScratch,
+    value
+  ) {
+    checkpoints++
+    const result = save.call(this, value)
+    if (failNextSave) {
+      failNextSave = false
+      throw new Error('population scratch after-save rollback')
+    }
+    return result
+  })
   const prepare = database.db.prepare.bind(database.db)
   const statements = new WeakSet<object>()
   const sql = vi.spyOn(database.db, 'prepare').mockImplementation((query) => {
@@ -86,7 +87,7 @@ export async function runPopulationUpgrade(
   const cleanup = JournalStructuralScratch.prototype.cleanupStep
   const cleanupSpy = vi
     .spyOn(JournalStructuralScratch.prototype, 'cleanupStep')
-    .mockImplementation(function (limit, canWork) {
+    .mockImplementation(function (this: JournalStructuralScratch, limit, canWork) {
       try {
         return cleanup.call(this, limit, canWork)
       } finally {

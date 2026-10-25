@@ -18,6 +18,7 @@ export function materializeRestartMarkers(
       materializeJournalLegacyCut(deps.journalDatabase.db, marker.sessionId, marker.recordedAt)
     } catch (error) {
       deps.logger.warn('saving legacy restart fact failed', {
+        scope: 'legacy-restart-fact',
         sessionId: marker.sessionId,
         error
       })

@@ -1,3 +1,4 @@
+import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -362,7 +363,7 @@ it.each(['bind', 'close'] as const)(
 
 function identityLocation() {
   return {
-    executionHostId: 'local',
+    executionHostId: LOCAL_EXECUTION_HOST_ID,
     workspaceId: 'workspace-1',
     workspaceKind: 'git-worktree' as const,
     wslDistro: null

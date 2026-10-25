@@ -1,3 +1,4 @@
+import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 import { setStructuredJournalReadiness } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { RuntimeLinearCommandSurface } from './runtime-linear-command-surface'
 import { installRuntimeLinearCommandSurface } from './runtime-linear-command-surface'

@@ -1,3 +1,4 @@
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 vi.mock('../agent-session-journal/journal-legacy-rest-worker', async () => {
   const { InProcessLegacyRestWorker } =
     await import('../agent-session-journal/journal-legacy-rest-replay-test-support')
@@ -359,7 +360,14 @@ it('classifies explicit Run targets serially through real ownership despite 25 f
   installAcquisitionFixture()
   host.deps.adapter.dispatch = async (input) => {
     await input.beforeDispatch?.()
-    return { state: 'accepted', providerIdentity: null }
+    return {
+      state: 'accepted',
+      providerIdentity: {
+        provider: 'claude',
+        sessionId: `${input.sessionId}-provider`,
+        uuid: input.clientMessageId
+      }
+    }
   }
   for (const id of [CUT, DONE]) {
     const sent = await sendAgentTurn({
@@ -398,7 +406,17 @@ it('classifies explicit Run targets serially through real ownership despite 25 f
             resolvedAt: null
           }
         },
-        { fence }
+        {
+          fence,
+          turnScope: {
+            kind: 'turn',
+            turnItemId: agentJournalItemKey({
+              provider: 'claude',
+              sessionId: `${id}-provider`,
+              uuid: 'successor-turn'
+            })
+          }
+        }
       )
     }
   }
@@ -540,7 +558,9 @@ it('preserves waiting-card pause and failed-mark fallback across cache reacquisi
   await journal.close()
   const seen = new Map<string, AgentSessionJournal>()
   const open = AgentSessionJournal.prototype.open
-  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function () {
+  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function (
+    this: AgentSessionJournal
+  ) {
     await open.call(this)
     seen.set(this.snapshot().sessionId, this)
   })
@@ -586,7 +606,9 @@ it('lists failures and names without opens, opens only an admitted selection, an
   )
   const opened: string[] = []
   const original = AgentSessionJournal.prototype.open
-  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function () {
+  vi.spyOn(AgentSessionJournal.prototype, 'open').mockImplementation(async function (
+    this: AgentSessionJournal
+  ) {
     await original.call(this)
     opened.push(this.snapshot().sessionId)
   })

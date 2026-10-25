@@ -86,6 +86,7 @@ export function createStructuredAgentSessionHostRestore(
             )
           } catch (error) {
             deps.logger.warn('saving legacy restart fact failed', {
+              scope: 'legacy-restart-fact',
               sessionId: marker.sessionId,
               error
             })

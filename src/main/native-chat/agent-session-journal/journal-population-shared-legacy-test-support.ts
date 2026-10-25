@@ -1,3 +1,5 @@
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { expect } from 'vitest'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
@@ -15,6 +17,10 @@ export async function exerciseSharedLegacyPopulation(
 ): Promise<void> {
   const database = openTestJournalHostDatabase(root)
   const sessionId = `shared-legacy-${count}`
+  const refusal = agentSessionFailureWords(
+    { kind: 'providerRejected' },
+    { agentName: 'Codex', surface: 'rejection' }
+  )
   const raw = 'shared-R'
   const rawAt = (index: number) => (index === 0 ? raw : `${raw}-${index}`)
   const body = {
@@ -117,13 +123,23 @@ export async function exerciseSharedLegacyPopulation(
     }
     await measure('shared-legacy-point', async () => {
       clock++
-      await current.resolveDispatch({ clientMessageId: raw, state: 'pending', fence: 2 })
+      await current.resolveDispatch({
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+        clientMessageId: raw,
+        state: 'pending',
+        fence: 2
+      })
       assertUnchanged()
     })
     await measure('shared-legacy-series', async () => {
       for (let index = 0; index < count; index++) {
         clock++
-        await current.resolveDispatch({ clientMessageId: raw, state: 'pending', fence: 2 })
+        await current.resolveDispatch({
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          clientMessageId: raw,
+          state: 'pending',
+          fence: 2
+        })
         assertUnchanged()
       }
     })
@@ -139,7 +155,7 @@ export async function exerciseSharedLegacyPopulation(
       await current.appendItem(
         report,
         { kind: 'turn', turnId: 'shared-R', state: 'completed', outcome: 'failure' },
-        { fence: 2 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 2 }
       )
       assertUnchanged()
     })
@@ -153,14 +169,15 @@ export async function exerciseSharedLegacyPopulation(
         clientMessageId: rawAt(index),
         state: 'rejected',
         fence: 2,
-        reason: 'shared content refused'
+        ...refusal
       })
       const card = queues.get(`shared-card-${index}`)
       expect(card?.state).toBe('returned')
       expect(card).toEqual({
         ...cards[index],
         state: 'returned',
-        returnedReason: 'shared content refused'
+        returnedReason: refusal.reason,
+        returnedRejection: refusal.rejection
       })
       expect(queues.revision()).not.toBe(before)
       expect(queues.normalizationKey()).toBe(normalization)
@@ -179,7 +196,8 @@ export async function exerciseSharedLegacyPopulation(
       expect(card).toEqual({
         ...cards[index],
         state: 'returned',
-        returnedReason: 'shared content refused'
+        returnedReason: refusal.reason,
+        returnedRejection: refusal.rejection
       })
     }
     expect(queues.revision()).not.toBe(key)

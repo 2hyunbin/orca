@@ -197,7 +197,7 @@ export class StructuredAgentSessionHost {
     }
   }
 
-  private attachContext(): StructuredAgentSessionAttachContext {
+  private attachContext() {
     return {
       ...this.lifetimeContext(),
       subscribers: this.subscribers,
@@ -206,7 +206,7 @@ export class StructuredAgentSessionHost {
       serialize: (sessionId, task) => this.serialize(sessionId, task),
       openProviderChild: this.eventRecovery.openProviderChild,
       openConversation: this.conversationDelivery.open
-    }
+    } satisfies StructuredAgentSessionAttachContext
   }
   /** Release resources; user-close cancels cut turns, while eviction leaves their failure reportable. */
   close: lifetime.StructuredAgentSessionConversationLifetime['close'] = (sessionId, cause) =>

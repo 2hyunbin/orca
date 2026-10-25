@@ -17,7 +17,9 @@ describe('Codex child message preview ownership', () => {
     const evidence: AgentChildWorkEvidence[] = []
     const tracker = new CodexBackgroundTaskTracker('primary', executions, {
       now: () => 1_500,
-      deliver: (edges) => evidence.push(...edges)
+      deliver: (edges) => {
+        evidence.push(...edges)
+      }
     })
     const translator = createCodexJournalTranslator({
       primaryThreadId: () => 'primary',

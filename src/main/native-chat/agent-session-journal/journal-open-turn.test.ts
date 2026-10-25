@@ -30,6 +30,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Database from '../../sqlite/sync-database'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalMessageItem,
   type AgentJournalItemIdentity,
   type AgentJournalTurnItem
 } from '../../../shared/agent-session-journal-types'
@@ -37,7 +38,10 @@ import {
   agentJournalItemKey,
   parseAgentJournalItemKey
 } from '../../../shared/agent-session-journal-item-key'
-import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  agentSessionJournalProviderHandle,
+  codexProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 import { journalPragmaNumber } from './journal-database'
 import { JOURNAL_DB_SCHEMA_VERSION } from './journal-database-schema'
 import { journalDatabasePath } from './journal-host-database'
@@ -144,7 +148,9 @@ it.each(['s'.repeat(1_500_001), ' ', '\0\ud800', 'x~orca-oversized~1025~01234567
           { ...body, startedAt: STARTED_AT + 1 }
         ]
       ] as const) {
-        await expect(journal.appendItem(address, value, { fence: 1 })).rejects.toThrow()
+        await expect(
+          journal.appendItem(address, value, { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 })
+        ).rejects.toThrow()
       }
       await journal.appendLifecycleBatch({
         settlementId: phase,
@@ -167,11 +173,20 @@ it.each(['open', 'queue', 'text'])(
   'initializes an already-final schema4 cut through %s, atomically and without gating open',
   async (mode) => {
     let journal = await openJournal()
-    await journal.appendItem(turnIdentity('t1'), turn('t1', 'interrupted'), { fence: 1 })
+    await journal.appendItem(turnIdentity('t1'), turn('t1', 'interrupted'), {
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+      fence: 1
+    })
     const assistant = { ...turnIdentity('t1'), ordinal: 1 }
-    const text = (value: string) =>
-      ({ kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: value }] }) as const
-    await journal.appendItem(assistant, text('old'), { fence: 1 })
+    const text = (value: string): AgentJournalMessageItem => ({
+      kind: 'message',
+      role: 'assistant',
+      blocks: [{ type: 'text', text: value }]
+    })
+    await journal.appendItem(assistant, text('old'), {
+      turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(turnIdentity('t1')) },
+      fence: 1
+    })
     await journal.close()
     closeTestJournalHostDatabases()
     const old = new Database(journalDatabasePath(root))
@@ -199,7 +214,10 @@ it.each(['open', 'queue', 'text'])(
       const append = () =>
         mode === 'queue'
           ? journal.appendQueueReopen(1)
-          : journal.appendItem(assistant, text('next'), { fence: 1 })
+          : journal.appendItem(assistant, text('next'), {
+              turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(turnIdentity('t1')) },
+              fence: 1
+            })
       vi.spyOn(database, 'transaction').mockImplementationOnce((run, streamed) =>
         transaction((db) => {
           expect(streamed).toBe(false)
@@ -216,7 +234,10 @@ it.each(['open', 'queue', 'text'])(
     expect(openTurn()).toEqual(cut)
     const sql = vi.spyOn(database.db, 'prepare')
     const durable = vi.spyOn(database, 'transaction')
-    await journal.appendItem(assistant, text('coherent'), { fence: 1 })
+    await journal.appendItem(assistant, text('coherent'), {
+      turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(turnIdentity('t1')) },
+      fence: 1
+    })
     expect(durable.mock.calls.at(-1)?.[1]).toBe(true)
     expect(sql.mock.calls.some(([query]) => query.startsWith('UPDATE journal_sessions'))).toBe(
       false
@@ -273,8 +294,7 @@ it('agrees with the canonical current-context request through retained-history m
   assertFact()
   await journal.context.clear(
     { operationId: 'clear-1', afterFence: 1, clearedAt: STARTED_AT },
-    { write: () => {}, committed: () => {} },
-    'clear-op'
+    { write: () => {}, committed: () => {} }
   )
   assertFact()
   const floor = journal.context.floor()!
@@ -324,7 +344,12 @@ it('stages canonical command, revision and inherited-producer semantics without 
     {
       itemId: 'cmd',
       revision: 1,
-      body: { kind: 'message', role: 'user', blocks: [], command: { name: 'compact' } } as const
+      body: {
+        kind: 'message',
+        role: 'user',
+        blocks: [],
+        command: { name: 'compact' }
+      } satisfies AgentJournalMessageItem
     },
     { itemId: 'tc', revision: 1, body: { ...turn('tc', 'completed'), userItemId: 'cmd' } },
     { itemId: 'sub', revision: 1, agentId: 'child', body: turn('sub', 'completed') },
@@ -340,35 +365,51 @@ it('does no transcript iteration for streamed output or ordinary turn edges at N
     const journal = await openJournal()
     for (let i = 0; i < count; i++) {
       await journal.appendItem(turnIdentity(`history-${i}`), turn(`history-${i}`, 'completed'), {
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
         fence: 1
       })
     }
     const original = Map.prototype[Symbol.iterator]
     const values = Map.prototype.values
     let visits = 0
-    const entries = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* () {
+    const entries = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* (
+      this: typeof Map.prototype
+    ): ReturnType<typeof original> {
       for (const entry of original.call(this)) {
         visits++
         yield entry
       }
+      return undefined
     })
-    const observedValues = vi.spyOn(Map.prototype, 'values').mockImplementation(function* () {
+    const observedValues = vi.spyOn(Map.prototype, 'values').mockImplementation(function* (
+      this: typeof Map.prototype
+    ): ReturnType<typeof values> {
       for (const value of values.call(this)) {
         visits++
         yield value
       }
+      return undefined
     })
     try {
-      await journal.appendItem(turnIdentity('live'), turn('live', 'running'), { fence: 1 })
+      await journal.appendItem(turnIdentity('live'), turn('live', 'running'), {
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+        fence: 1
+      })
       const assistant = { ...turnIdentity('live'), ordinal: 1 } as const
       for (let i = 0; i < 8; i++) {
         await journal.appendItem(
           assistant,
           { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `${i}` }] },
-          { fence: 1 }
+          {
+            turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(turnIdentity('live')) },
+            fence: 1
+          }
         )
       }
-      await journal.appendItem(turnIdentity('live'), turn('live', 'completed'), { fence: 1 })
+      await journal.appendItem(turnIdentity('live'), turn('live', 'completed'), {
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+        fence: 1
+      })
       return visits
     } finally {
       entries.mockRestore()
@@ -382,7 +423,16 @@ it('does no transcript iteration for streamed output or ordinary turn edges at N
 it('accepts known-id echoes without scanning/copying unrelated submissions; retains digest fallback', () => {
   for (const count of [20, 200]) {
     const state = createJournalReducerState(SESSION, 'e')
-    const base = { v: 1, epoch: 'e', fence: 1, ts: STARTED_AT } as const
+    const base = {
+      v: 1,
+      epoch: 'e',
+      fence: 1,
+      ts: STARTED_AT,
+      providerHandle: agentSessionJournalProviderHandle({
+        agent: 'codex',
+        providerHandle: codexProviderHandle('thread-1')
+      })
+    } as const
     for (let index = 0; index < count; index++) {
       applyJournalRow(state, {
         ...base,
@@ -450,7 +500,10 @@ it.each(['success', 'core-failure', 'closed'] as const)(
     const request = (recordId: string) =>
       ({ provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId }) as const
     const journal = await openGrok()
-    await journal.appendItem(request('before'), turn('before', 'completed'), { fence: 1 })
+    await journal.appendItem(request('before'), turn('before', 'completed'), {
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+      fence: 1
+    })
     const deferred = createDeferredStructuredAgentSessionEventSink({
       ...testEventSinkLogging(SESSION),
       watermarks: { maxLifecycleQueuedOperations: 2 }
@@ -466,7 +519,7 @@ it.each(['success', 'core-failure', 'closed'] as const)(
       generation: 'capture',
       providerSessionId: 'session-1',
       dialect: GROK_ACP_DIALECT,
-      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      logger: { warn: vi.fn(), error: vi.fn() },
       onInputAccepted: vi.fn(),
       onFailed: failures,
       onChildWorkFailure: failures,
@@ -495,7 +548,10 @@ it.each(['success', 'core-failure', 'closed'] as const)(
     )!
     lane.apply(lane.translator.notification(frame.message.method!, frame.message.params, 700))
     expect(observed).toHaveBeenCalledTimes(1)
-    await journal.appendItem(request('later'), turn('later', 'completed'), { fence: 1 })
+    await journal.appendItem(request('later'), turn('later', 'completed'), {
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+      fence: 1
+    })
     expect(
       journal.snapshot().items.some(({ body }) => readAgentJournalTurn(body)?.state === 'running')
     ).toBe(true)
@@ -603,12 +659,22 @@ it.each(['close', 'exit', 'core-failure', 'closed'])(
     expect(observed).not.toHaveBeenCalled()
     expect(
       deferred.sink.tryAppendLifecycleBatch?.('actual-prefix', [
-        { kind: 'item', identity: request('prefix'), body: turn('prefix', 'completed') }
+        {
+          kind: 'item',
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          identity: request('prefix'),
+          body: turn('prefix', 'completed')
+        }
       ])
     ).toEqual({ accepted: true })
     expect(
       deferred.sink.tryAppendLifecycleBatch?.('second-prefix', [
-        { kind: 'item', identity: request('prefix'), body: turn('prefix', 'completed') }
+        {
+          kind: 'item',
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          identity: request('prefix'),
+          body: turn('prefix', 'completed')
+        }
       ])
     ).toEqual({ accepted: true })
     const frame = capturedCodexTurn('turn/started', HELPER, HELPER_TURN)
@@ -621,7 +687,10 @@ it.each(['close', 'exit', 'core-failure', 'closed'])(
       accepted: false,
       reason: 'backpressure'
     })
-    const later = journal.appendItem(request('later'), turn('later', 'completed'), { fence: 7 })
+    const later = journal.appendItem(request('later'), turn('later', 'completed'), {
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+      fence: 7
+    })
     if (mode === 'closed') {
       deferred.close()
     }
@@ -720,7 +789,12 @@ it('holds the original Claude SDK read binding until its normalized work suffix 
     ({ provider: 'legacy', agent: 'claude', sessionId: SESSION, recordId }) as const
   expect(
     deferred.sink.tryAppendLifecycleBatch?.('claude-prefix', [
-      { kind: 'item', identity: request('prefix'), body: turn('prefix', 'completed') }
+      {
+        kind: 'item',
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+        identity: request('prefix'),
+        body: turn('prefix', 'completed')
+      }
     ])
   ).toEqual({ accepted: true })
   const connection = claude.connections[0]
@@ -734,7 +808,10 @@ it('holds the original Claude SDK read binding until its normalized work suffix 
   expect(observed).toHaveBeenCalledOnce()
   expect(pause).toHaveBeenCalled()
   expect(resume).not.toHaveBeenCalled()
-  await journal.appendItem(request('later'), turn('later', 'completed'), { fence: 7 })
+  await journal.appendItem(request('later'), turn('later', 'completed'), {
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+    fence: 7
+  })
   await expect(producer?.written?.()).resolves.toEqual({ ok: true })
   expect(observed).toHaveBeenCalledOnce()
   expect(resume).toHaveBeenCalled()

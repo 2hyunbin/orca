@@ -1,3 +1,4 @@
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { legacyRestScratchPath } from './journal-legacy-rest-scratch'
 vi.mock('./journal-legacy-rest-worker', async () => {
   const { InProcessLegacyRestWorker } = await import('./journal-legacy-rest-replay-test-support')
@@ -8,7 +9,10 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalMessageItem
+} from '../../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
@@ -68,14 +72,14 @@ it.each([64, 640])(
     await journal.appendItem(
       identity('older'),
       { kind: 'turn', turnId: 'older', state: 'completed', outcome: 'success' },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     const rawId = '\0\ud800\nraw'
-    const body = {
+    const body: AgentJournalMessageItem = {
       kind: 'message',
       role: 'user',
       blocks: [{ type: 'text', text: 'retained exact payload' }]
-    } as const
+    }
     await journal.appendSubmission({
       clientMessageId: rawId,
       body,
@@ -91,6 +95,7 @@ it.each([64, 640])(
       mutations: [
         {
           kind: 'item',
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
           identity: identity('newer'),
           body: {
             kind: 'turn',
@@ -106,7 +111,7 @@ it.each([64, 640])(
     await journal.appendItem(
       identity('older'),
       { kind: 'turn', turnId: 'older', state: 'completed', outcome: 'success' },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     const command = { ...identity('compact'), ordinal: 1 }
     await journal.appendItem(
@@ -127,12 +132,12 @@ it.each([64, 640])(
         state: 'running',
         userItemId: agentJournalItemKey(command)
       },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     await journal.appendItem(
       identity('compact'),
       { kind: 'status', text: 'compacted' },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     await journal.appendLifecycleBatch({
       settlementId: 'temporary-turn',
@@ -140,6 +145,7 @@ it.each([64, 640])(
       mutations: [
         {
           kind: 'item',
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
           identity: identity('removed'),
           body: { kind: 'turn', turnId: 'removed', state: 'running' }
         },
@@ -152,7 +158,7 @@ it.each([64, 640])(
       {
         fence: 1,
         agentId: 'helper',
-        producerKind: 'subagent',
+        producerKind: 'agent',
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
       }
     )
@@ -160,7 +166,7 @@ it.each([64, 640])(
       await journal.appendItem(
         { ...identity('newer'), ordinal: 2 },
         { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `stream ${i}` }] },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
     }
     const tip = journal.cursor().sequence
@@ -200,7 +206,7 @@ it.each([64, 640])(
     const reads: unknown[][] = []
     const sql = vi.spyOn(database.db, 'prepare').mockImplementation((query) => {
       const statement = prepare(query)
-      if (query.includes('ORDER BY seq ASC LIMIT') && !vi.isMockFunction(statement.all)) {
+      if (String(query).includes('ORDER BY seq ASC LIMIT') && !vi.isMockFunction(statement.all)) {
         const all = statement.all.bind(statement)
         vi.spyOn(statement, 'all').mockImplementation((...args) => {
           reads.push(args)
@@ -231,7 +237,11 @@ it.each([64, 640])(
 
 it('preserves equal-time claimant order through a dispatch checkpoint and implicit echo', async () => {
   const journal = await open(() => 100)
-  const body = { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'same' }] } as const
+  const body: AgentJournalMessageItem = {
+    kind: 'message',
+    role: 'user',
+    blocks: [{ type: 'text', text: 'same' }]
+  }
   for (const clientMessageId of ['A', 'B']) {
     await journal.appendSubmission({
       clientMessageId,
@@ -252,7 +262,7 @@ it('preserves equal-time claimant order through a dispatch checkpoint and implic
     await journal.appendItem(
       { ...identity('prefix'), ordinal: 1 },
       { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `prefix ${i}` }] },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
   }
   const echo = { ...identity('echo'), ordinal: 1 }
@@ -268,13 +278,16 @@ it('preserves equal-time claimant order through a dispatch checkpoint and implic
       startedAt: 100,
       userItemId: agentJournalItemKey(echo)
     },
-    { fence: 1 }
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
   )
   await journal.resolveDispatch({
     clientMessageId: 'B',
     fence: 1,
     state: 'rejected',
-    reason: 'not sent'
+    ...agentSessionFailureWords(
+      { kind: 'providerRejected' },
+      { agentName: 'Codex', surface: 'rejection' }
+    )
   })
   expect(journal.submission('A')?.providerItemId).toBe(agentJournalItemKey(echo))
   expect(journal.submission('B')?.providerItemId).toBeNull()
@@ -330,7 +343,7 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
     await journal.appendItem(
       identity('cut'),
       { kind: 'turn', turnId: 'cut', state: 'running', startedAt: since },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
     await journal.close()
     unknown()
@@ -370,28 +383,33 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
       race === 'tip' ? vi.spyOn(LegacyRestSourceOwner.prototype, 'commit') : undefined
     if (race === 'tip') {
       const grant = InProcessLegacyRestWorker.prototype.grant
-      vi.spyOn(InProcessLegacyRestWorker.prototype, 'grant').mockImplementation(
-        async function (request, canWork) {
-          const response = await grant.call(this, request, canWork)
-          if (request.mode === 'replay' && response.status === 'complete') {
-            expect(completeReplies).toBe(0)
-            expect(request.source?.tip).toBe(2)
-            expect(response.cursor).toBe(2)
-            expect(response.pending).toBe(false)
-            expect(response.guard).toBe(request.source?.guard)
-            expect(response.fact).toEqual({ itemId: agentJournalItemKey(identity('cut')), since })
-            const removed = database.db
-              .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
-              .run(sessionId)
-            expect(removed.changes).toBe(1)
-            completedGuard = response.guard
-            completeReplies++
-          }
-          return response
+      vi.spyOn(InProcessLegacyRestWorker.prototype, 'grant').mockImplementation(async function (
+        this: InProcessLegacyRestWorker,
+        request,
+        canWork
+      ) {
+        const response = await grant.call(this, request, canWork)
+        if (request.mode === 'replay' && response.status === 'complete') {
+          expect(completeReplies).toBe(0)
+          expect(request.source?.tip).toBe(2)
+          expect(response.cursor).toBe(2)
+          expect(response.pending).toBe(false)
+          expect(response.guard).toBe(request.source?.guard)
+          expect(response.fact).toEqual({ itemId: agentJournalItemKey(identity('cut')), since })
+          const removed = database.db
+            .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
+            .run(sessionId)
+          expect(removed.changes).toBe(1)
+          completedGuard = response.guard
+          completeReplies++
         }
-      )
+        return response
+      })
       const source = LegacyRestSourceOwner.prototype.source
-      vi.spyOn(LegacyRestSourceOwner.prototype, 'source').mockImplementation(function (id) {
+      vi.spyOn(LegacyRestSourceOwner.prototype, 'source').mockImplementation(function (
+        this: LegacyRestSourceOwner,
+        id
+      ) {
         const current = source.call(this, id)
         if (completedGuard !== undefined) {
           expect(staleRefusals).toBe(0)
@@ -443,40 +461,60 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
 )
 
 it('bounds independent linked request retirement and checkpoint replay at N and 10N', async () => {
-  const measurements = []
+  const measurements: {
+    count: number
+    mapVisits: number
+    structuralVisits: number
+    mainRows: number
+    indexOperations: number
+    structuralSql: number
+    structuralExec: number
+    updates: number
+  }[] = []
   for (const count of [16, 160]) {
     let updates = 0
     let depth = 0
     let indexOperations = 0
     const originalUpdate = WorkBucket.prototype.update
-    const update = vi
-      .spyOn(WorkBucket.prototype, 'update')
-      .mockImplementation(function (key, value) {
-        updates++
-        depth++
-        try {
-          return originalUpdate.call(this, key, value)
-        } finally {
-          depth--
-        }
-      })
+    const update = vi.spyOn(WorkBucket.prototype, 'update').mockImplementation(function (
+      this: WorkBucket,
+      key,
+      value
+    ) {
+      updates++
+      depth++
+      try {
+        return originalUpdate.call(this, key, value)
+      } finally {
+        depth--
+      }
+    })
     const originalGet = Map.prototype.get
     const originalSet = Map.prototype.set
     const originalDelete = Map.prototype.delete
     const keyed = [
-      vi.spyOn(Map.prototype, 'get').mockImplementation(function (...args) {
+      vi.spyOn(Map.prototype, 'get').mockImplementation(function (
+        this: typeof Map.prototype,
+        ...args
+      ) {
         if (depth) {
           indexOperations++
         }
         return originalGet.apply(this, args)
       }),
-      vi.spyOn(Map.prototype, 'set').mockImplementation(function (...args) {
+      vi.spyOn(Map.prototype, 'set').mockImplementation(function (
+        this: typeof Map.prototype,
+        ...args
+      ) {
         if (depth) {
           indexOperations++
         }
         return originalSet.apply(this, args)
       }),
-      vi.spyOn(Map.prototype, 'delete').mockImplementation(function (...args) {
+      vi.spyOn(Map.prototype, 'delete').mockImplementation(function (
+        this: typeof Map.prototype,
+        ...args
+      ) {
         if (depth) {
           indexOperations++
         }
@@ -506,7 +544,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
           state: 'running',
           startedAt: since
         },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
     }
     const expectedAt = new Map([[journal.cursor().sequence, journal.restFact()]])
@@ -515,17 +553,26 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
       await journal.appendItem(
         { ...identity('checkpoint-gap'), ordinal: 1 },
         { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `${i}` }] },
-        { fence: 1 }
+        {
+          turnScope: {
+            kind: 'turn',
+            turnItemId: agentJournalItemKey(identity(`linked-${count}-${count - 1}`))
+          },
+          fence: 1
+        }
       )
     }
     expectedAt.set(journal.cursor().sequence, journal.restFact())
     let mapVisits = 0
     const values = Map.prototype.values
-    const visits = vi.spyOn(Map.prototype, 'values').mockImplementation(function* () {
+    const visits = vi.spyOn(Map.prototype, 'values').mockImplementation(function* (
+      this: typeof Map.prototype
+    ): ReturnType<typeof values> {
       for (const value of values.call(this)) {
         mapVisits++
         yield value
       }
+      return undefined
     })
     for (let i = 0; i < count; i++) {
       await journal.appendItem(
@@ -538,7 +585,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
           outcome: 'success',
           startedAt: since
         },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
       const expected =
         i + 1 === count
@@ -584,7 +631,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
       const statement = originalPrepare.call(this, query)
       if (
         this === database.db &&
-        query.includes('ORDER BY seq ASC LIMIT') &&
+        String(query).includes('ORDER BY seq ASC LIMIT') &&
         !rowStatements.has(statement)
       ) {
         rowStatements.add(statement)

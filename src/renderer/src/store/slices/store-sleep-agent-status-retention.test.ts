@@ -664,7 +664,7 @@ it.each(['success', 'failure', 'cancellation', 'restored'] as const)(
       },
       'Codex',
       { updatedAt: 100, stateStartedAt: 100 },
-      wt
+      { worktreeId: wt }
     )
     const before = store.getState().agentStatusByPaneKey[paneKey]
     const captured = collectHibernatedCompletionEvidenceForWorktree(store.getState(), wt, [paneKey])

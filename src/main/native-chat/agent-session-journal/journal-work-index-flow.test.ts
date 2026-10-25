@@ -1,3 +1,4 @@
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import {
   assertScratchKeyEncoding,
   legacyEncodedRelations,
@@ -9,7 +10,10 @@ vi.mock('./journal-legacy-rest-worker', async () => {
   return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
 })
 
-import { runJournalPopulationContract } from './journal-population-flow-test-support'
+import {
+  runJournalPopulationContract,
+  type PopulationReceipt
+} from './journal-population-flow-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -74,7 +78,7 @@ it.each([16, 160])(
           startedAt: 100 + i,
           state: 'running'
         },
-        { fence: 1 }
+        { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
       )
     }
     const database = openTestJournalHostDatabase(root)
@@ -83,6 +87,7 @@ it.each([16, 160])(
     const pair = readJournalRestFacts(database.db, sessionId)
     const mutations = [0, 1].map((i) => ({
       kind: 'item' as const,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
       identity: identity(`root-${i}`),
       body: {
         kind: 'turn' as const,
@@ -110,19 +115,24 @@ it.each([16, 160])(
     })
     let updates = 0
     const original = WorkBucket.prototype.update
-    const observed = vi
-      .spyOn(WorkBucket.prototype, 'update')
-      .mockImplementation(function (key, value) {
-        updates++
-        return original.call(this, key, value)
-      })
+    const observed = vi.spyOn(WorkBucket.prototype, 'update').mockImplementation(function (
+      this: WorkBucket,
+      key,
+      value
+    ) {
+      updates++
+      return original.call(this, key, value)
+    })
     let visits = 0
     const entries = Map.prototype.entries
-    const scan = vi.spyOn(Map.prototype, 'entries').mockImplementation(function* () {
+    const scan = vi.spyOn(Map.prototype, 'entries').mockImplementation(function* (
+      this: typeof Map.prototype
+    ): ReturnType<typeof entries> {
       for (const value of entries.call(this)) {
         visits++
         yield value
       }
+      return undefined
     })
     await journal.appendItem(
       identity('context'),
@@ -131,7 +141,10 @@ it.each([16, 160])(
         text: 'Context cleared',
         contextClear: { operationId: 'clear-context', afterFence: 1, clearedAt: 200 }
       },
-      { fence: 1 }
+      {
+        turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(identity(`root-${count - 1}`)) },
+        fence: 1
+      }
     )
     observed.mockRestore()
     scan.mockRestore()
@@ -154,7 +167,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
     await journal.appendItem(
       identity(`root-${i}`),
       { kind: 'turn', turnId: `root-${i}`, startedAt: 100 + i, state: 'running' },
-      { fence: 1 }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 }
     )
   }
   const expected = journal.restFact()
@@ -192,7 +205,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   const save = JournalStructuralScratch.prototype.save
   const failure = vi
     .spyOn(JournalStructuralScratch.prototype, 'save')
-    .mockImplementationOnce(function (value) {
+    .mockImplementationOnce(function (this: JournalStructuralScratch, value) {
       save.call(this, value)
       throw new Error('failed between relation updates and checkpoint COMMIT')
     })
@@ -256,7 +269,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
 })
 
 it('bounds the complete writer, COW and resumable SQLite fold at N and 10N', async () => {
-  const receipts = []
+  const receipts: PopulationReceipt[] = []
   for (const count of [16, 160]) {
     receipts.push(await runJournalPopulationContract(join(root, `population-${count}`), count))
   }

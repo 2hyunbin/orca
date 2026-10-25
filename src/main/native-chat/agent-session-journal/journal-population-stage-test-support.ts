@@ -52,6 +52,7 @@ export function instrumentPopulationStaging(
   })
   const fork = JournalRestProjection.prototype.fork
   const rest = vi.spyOn(JournalRestProjection.prototype, 'fork').mockImplementation(function (
+    this: JournalRestProjection,
     ...args
   ) {
     const result = fork.apply(this, args)
@@ -59,13 +60,17 @@ export function instrumentPopulationStaging(
     return result
   })
   const heapFork = JournalKeyedHeap.prototype.fork
-  const heap = vi.spyOn(JournalKeyedHeap.prototype, 'fork').mockImplementation(function () {
+  const heap = vi.spyOn(JournalKeyedHeap.prototype, 'fork').mockImplementation(function (
+    this: typeof JournalKeyedHeap.prototype
+  ) {
     const result = heapFork.call(this)
     inspect(populationHeapCollections(result))
     return result
   })
   const workFork = WorkBucket.prototype.fork
-  const work = vi.spyOn(WorkBucket.prototype, 'fork').mockImplementation(function () {
+  const work = vi.spyOn(WorkBucket.prototype, 'fork').mockImplementation(function (
+    this: WorkBucket
+  ) {
     const result = workFork.call(this)
     inspect([result.entries])
     return result

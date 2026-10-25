@@ -60,7 +60,7 @@ export function handleCodexSessionExit(input: {
   // A synchronous sink rejection (usually backpressure) leaves the terminal rows to the host's
   // exit settlement, which writes its own bounded fallback. The exit itself is observed, so the
   // session ends either way: holding a dead child as unproven over a refused row would strand it.
-  const producer = session.workProducer ?? session.events
+  const producer: CodexSession['workProducer'] = session.workProducer ?? session.events
   let translate = () => session.translator?.handle(event) ?? { accepted: true as const }
   let suffix: (() => ChildWorkAdmission) | undefined
   const append = (): ChildWorkAdmission => {

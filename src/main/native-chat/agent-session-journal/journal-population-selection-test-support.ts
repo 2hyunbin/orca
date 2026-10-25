@@ -143,7 +143,7 @@ export async function exercisePopulationEchoContext(input: {
           text: 'clear',
           contextClear: { operationId: `clear-${index}`, afterFence: 1, clearedAt: 500 + index }
         },
-        { fence: 1 }
+        { turnScope: state.derivedTurnScope.scopeFor(text), fence: 1 }
       )
       expect(state.selection.echo(fingerprint)).toBeUndefined()
       await current.appendTombstone(clear, { fence: 1 })
@@ -162,6 +162,7 @@ export async function exercisePopulationEchoContext(input: {
     mutations: [
       {
         kind: 'item',
+        turnScope: state.derivedTurnScope.scopeFor(text),
         identity: liveClear,
         body: {
           kind: 'status',
@@ -169,7 +170,7 @@ export async function exercisePopulationEchoContext(input: {
           contextClear: { operationId: 'live-clear', afterFence: 1, clearedAt: 599 }
         }
       },
-      { kind: 'item', identity: blockedEcho, body: text }
+      { kind: 'item', turnScope: AGENT_JOURNAL_THREAD_SCOPE, identity: blockedEcho, body: text }
     ]
   })
   expect(state.aliases.has(agentJournalItemKey(blockedEcho))).toBe(false)
@@ -183,6 +184,7 @@ export async function exercisePopulationEchoContext(input: {
     mutations: [
       {
         kind: 'item',
+        turnScope: state.derivedTurnScope.scopeFor(text),
         identity: compoundClear,
         body: {
           kind: 'status',
@@ -191,7 +193,7 @@ export async function exercisePopulationEchoContext(input: {
         }
       },
       { kind: 'tombstone', identity: compoundClear },
-      { kind: 'item', identity: compoundEcho, body: text }
+      { kind: 'item', turnScope: AGENT_JOURNAL_THREAD_SCOPE, identity: compoundEcho, body: text }
     ]
   })
   expect(state.aliases.get(agentJournalItemKey(compoundEcho))).toBe(
@@ -199,9 +201,13 @@ export async function exercisePopulationEchoContext(input: {
   )
   const nextRaw = state.selection.echo(fingerprint)!
   const echoIdentity = { ...turnIdentity('actual-echo'), ordinal: 1 }
-  await current.appendItem(echoIdentity, text, { fence: 1 })
+  await current.appendItem(echoIdentity, text, { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1 })
   expect(current.submission(nextRaw)?.providerItemId).toBe(agentJournalItemKey(echoIdentity))
   const explicitNull = { ...turnIdentity('explicit-null'), ordinal: 1 }
-  await current.appendItem(explicitNull, text, { fence: 1, echoOf: null })
+  await current.appendItem(explicitNull, text, {
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+    fence: 1,
+    echoOf: null
+  })
   expect(state.aliases.has(agentJournalItemKey(explicitNull))).toBe(false)
 }

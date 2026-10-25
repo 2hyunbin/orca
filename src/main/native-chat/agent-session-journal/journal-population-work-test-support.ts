@@ -122,7 +122,7 @@ export async function exercisePopulationWork(
       state: 'running',
       startedAt: 1
     },
-    { fence: 1, observedAt: -500 }
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1, observedAt: -500 }
   )
   const lateKey = agentJournalItemKey(identity('late-provider-root'))
   expect(journal.item(lateKey)?.observedAt).toBe(-500)
@@ -138,7 +138,7 @@ export async function exercisePopulationWork(
       startedAt: 1,
       completedAt: 2
     },
-    { fence: 1, observedAt: -900 }
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 1, observedAt: -900 }
   )
   expect(active.entries.has(lateKey)).toBe(false)
   expect(journal.requestFrontier()).toBe(lateKey)

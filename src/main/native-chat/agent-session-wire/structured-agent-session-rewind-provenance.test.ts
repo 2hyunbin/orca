@@ -123,15 +123,14 @@ it.each(['epoch', 'context'])(
     if (mode === 'context') {
       await journal.context.clear(
         { operationId: 'clear', afterFence: DEAD, clearedAt: 1 },
-        { write: () => {}, committed: () => {} },
-        'clear'
+        { write: () => {}, committed: () => {} }
       )
     }
     const floor = journal.context.floor()
     await journal.appendItem(
       TURN,
       { kind: 'turn', turnId: 'turn-dead', state: 'completed', outcome: 'success' },
-      { fence: DEAD }
+      { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: DEAD }
     )
     const accepted = await journal.appendSubmission({
       clientMessageId: 'unanswered',
@@ -169,7 +168,7 @@ it.each(['epoch', 'context'])(
         startedAt: journal.submission('unanswered')!.submittedAt,
         phase: 'settled'
       },
-      { fence: DEAD }
+      { turnScope: { kind: 'turn', turnItemId: agentJournalItemKey(TURN) }, fence: DEAD }
     )
     const saved = journal.submission('unanswered')!
     const source = {
@@ -193,7 +192,7 @@ it.each(['epoch', 'context'])(
     } as const
     const scope = { kind: 'turn', turnItemId: agentJournalItemKey(TURN) } as const
     await journal.appendItem(identity, body, { fence: DEAD, observedAt: 10, turnScope: scope })
-    await journal.appendItem(UNDONE, UNDONE_BODY, { fence: DEAD })
+    await journal.appendItem(UNDONE, UNDONE_BODY, { turnScope: scope, fence: DEAD })
     await journal.appendItem(
       identity,
       { ...body, phase: 'interrupted', afterRequest: journal.requestFrontier() },

@@ -1,7 +1,10 @@
 import { expect } from 'vitest'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
-import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import { AGENT_SESSION_JOURNAL_SCHEMA_VERSION } from '../../../shared/agent-session-journal-types'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  AGENT_SESSION_JOURNAL_SCHEMA_VERSION,
+  type AgentJournalMessageItem
+} from '../../../shared/agent-session-journal-types'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { parseJournalRow } from './journal-row-schema'
 import { buildJournalQueueRow } from './journal-queue-events'
@@ -57,7 +60,12 @@ export async function exercisePopulationQueue(input: {
       settlementId: 'absent-report-at-end',
       fence: 1,
       mutations: [
-        { kind: 'item', identity: reportIdentity, body: reportBody },
+        {
+          kind: 'item',
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+          identity: reportIdentity,
+          body: reportBody
+        },
         { kind: 'tombstone', identity: reportIdentity }
       ]
     })
@@ -66,7 +74,12 @@ export async function exercisePopulationQueue(input: {
   expect(state.queue.revision).toBe(beforeReport)
   expect(state.queue.cards.get('group-card-0')?.state).toBe('returned')
   const beforePublication = publications.length
-  await measure('queue-flush', () => current.appendItem(reportIdentity, reportBody, { fence: 1 }))
+  await measure('queue-flush', () =>
+    current.appendItem(reportIdentity, reportBody, {
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+      fence: 1
+    })
+  )
   expect(state.queue.revision).toBe(beforeReport + count)
   expect(
     Array.from({ length: count }, (_, index) => state.queue.cards.get(`group-card-${index}`)?.state)

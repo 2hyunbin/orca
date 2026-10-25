@@ -172,7 +172,7 @@ export async function assertOldScratchEncodingRebuild(
   const original = JournalStructuralScratch.prototype.cleanupStep
   const cleanup = vi
     .spyOn(JournalStructuralScratch.prototype, 'cleanupStep')
-    .mockImplementation(function (limit, canWork) {
+    .mockImplementation(function (this: JournalStructuralScratch, limit, canWork) {
       try {
         return original.call(this, limit, canWork)
       } finally {

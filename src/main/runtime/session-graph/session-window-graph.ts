@@ -12,6 +12,11 @@ import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow {
+  protected abstract noteStartupRestorationReady(
+    windowId: number,
+    startupRestorationReady: boolean
+  ): void
+
   /** Layout-owner builds: main's panes in place of the window's (session-tabs-inventory.ts). */
   protected abstract withMainSurfaces(
     windowId: number,

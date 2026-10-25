@@ -1,3 +1,4 @@
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 vi.mock('../agent-session-journal/journal-legacy-rest-worker', async () => {
   const { InProcessLegacyRestWorker } =
     await import('../agent-session-journal/journal-legacy-rest-replay-test-support')
@@ -42,7 +43,7 @@ let host: StructuredAgentSessionHost | undefined
 const NOW = 1_800_000_000_000
 const savedAt = 100
 const sessionId = 'r3-cold-session'
-const record = (id = sessionId) => {
+const record = (id = sessionId): AgentSessionRecord => {
   const value = agentSessionRecordFixture(
     agentSessionLeaseFixture({
       sessionId: id,
@@ -86,7 +87,7 @@ async function seed(id: string, running = true): Promise<void> {
       startedAt: savedAt,
       ...(running ? {} : { outcome: 'success' as const })
     },
-    { fence: 7 }
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 7 }
   )
   await journal.close()
 }
@@ -321,7 +322,7 @@ it.each([32, 320])(
     const reconsider = JournalLegacyRestInitializer.prototype.reconsider
     const reconsidered = vi
       .spyOn(JournalLegacyRestInitializer.prototype, 'reconsider')
-      .mockImplementation(function (id) {
+      .mockImplementation(function (this: JournalLegacyRestInitializer, id) {
         reconsidering = true
         try {
           return reconsider.call(this, id)
