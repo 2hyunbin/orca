@@ -255,6 +255,7 @@ export function createUpdateWorktreeGitIdentity(
           await persistWorktreeMeta(
             persistTo(currentWorktreeId),
             currentWorktreeId,
+            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a visible or detected row; both carry every review-link field read here.
             getHostedReviewLinkUpdates(latest as Worktree),
             twinCopy?.hostId
           )
