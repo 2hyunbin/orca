@@ -254,7 +254,7 @@ describe('restored floating and ordinary views', () => {
       expect(floating.operationProvenance).toBeUndefined()
       const model = mount(store, ordinary.id)
       expect(mount(store, floating.id)).toBe(model)
-      store.setState({ settings: { editorAutoSave: false } })
+      store.setState((state) => ({ settings: { ...state.settings, editorAutoSave: false } }))
       const cleanup = attachEditorAutosaveController(store)
       try {
         for (const source of [ordinary, floating]) {

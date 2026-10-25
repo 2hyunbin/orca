@@ -6,6 +6,7 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { makeDetectedResult } from '@/store/slices/worktrees-detected-listing-fixtures'
 import { useAppStore } from '@/store'
 import {
   assertEditorFileOperationCurrent,
@@ -365,6 +366,12 @@ describe('shared editor owner interpretation', () => {
     }
     const provenance = captureEditorFileOperationProvenance(base, workspace, undefined, false)
     for (let generation = 0; generation < 20; generation += 1) {
+      const detected = makeDetectedResult(
+        'unrelated',
+        Array.from({ length: size }, (_, index) =>
+          makeWorktree({ id: `detected-${index}`, repoId: 'unrelated' })
+        )
+      )
       const state = {
         ...base,
         worktreesByRepo: {
@@ -374,9 +381,8 @@ describe('shared editor owner interpretation', () => {
         },
         detectedWorktreesByRepo: {
           unrelated: {
-            worktrees: Array.from({ length: size }, (_, index) =>
-              counted(makeWorktree({ id: `detected-${index}`, repoId: 'unrelated' }), 'detected')
-            )
+            ...detected,
+            worktrees: detected.worktrees.map((row) => counted(row, 'detected'))
           }
         },
         repos: Array.from({ length: size }, (_, index) =>
