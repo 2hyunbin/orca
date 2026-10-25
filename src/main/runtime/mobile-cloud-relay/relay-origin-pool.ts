@@ -181,7 +181,7 @@ export class RelayOriginPool {
     if (!this.drainRetry.pending) {
       this.rotationPromise = this.resolveDrainTarget(origin, message).finally(() => {
         this.rotationPromise = null
-        const queued = this.queuedDrain
+        const queued = this.isCurrent() ? this.queuedDrain : null
         this.queuedDrain = null
         if (queued && !queued.origin.hasLiveControl()) {
           this.handleDrain(queued.origin, queued.message)
