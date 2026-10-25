@@ -187,6 +187,7 @@ require(${JSON.stringify(emitted)});
   const savedReader = new JournalStructuralScratch(fixedPath)
   const saved = savedReader.load<JournalStructuralCheckpoint>()!
   expect(saved.cursor).toBe(first.cursor)
+  expect(saved.selection?.format).toBe(7)
   const savedBytes = serialize(saved)
   savedReader.close()
   const orphan = await seed.grant({

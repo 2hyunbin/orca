@@ -1,3 +1,4 @@
+import { JOURNAL_STRUCTURAL_SCRATCH_FORMAT } from './journal-structural-scratch-encoding'
 import { createHash } from 'node:crypto'
 import type Database from '../../sqlite/sync-database'
 import { stepStructuralJournalRow } from './journal-structural-fold-step'
@@ -83,7 +84,7 @@ export function replayLegacyRestChunk(
       guard: source.guard,
       cursor: completed,
       pending,
-      selection: state.selection.checkpoint(),
+      selection: { format: JOURNAL_STRUCTURAL_SCRATCH_FORMAT },
       agent: state.agent,
       rest: state.rest.checkpoint(),
       scope: state.derivedTurnScope.checkpoint(),

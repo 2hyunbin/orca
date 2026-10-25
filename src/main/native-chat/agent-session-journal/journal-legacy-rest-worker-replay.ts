@@ -1,3 +1,4 @@
+import { JOURNAL_STRUCTURAL_SCRATCH_FORMAT } from './journal-structural-scratch-encoding'
 import type Database from '../../sqlite/sync-database'
 import { readJournalSessionProjection } from './journal-row-table'
 import { replayLegacyRestChunk } from './journal-legacy-rest-replay'
@@ -60,7 +61,9 @@ export class LegacyRestReplay {
         if (
           request.mode === 'cleanup' ||
           saved?.cleanup ||
-          (saved && (saved.guard !== source?.guard || saved.selection?.format !== 6))
+          (saved &&
+            (saved.guard !== source?.guard ||
+              saved.selection?.format !== JOURNAL_STRUCTURAL_SCRATCH_FORMAT))
         ) {
           const chunkStarted = performance.now()
           scratch.db.exec('BEGIN IMMEDIATE')

@@ -1,6 +1,12 @@
+export type { JournalStructuralCheckpoint } from './journal-structural-scratch-encoding'
+import {
+  JournalScratchNamespaces,
+  encodeStructuralScratchKey,
+  decodeStructuralScratchKey,
+  type JournalStructuralCheckpoint
+} from './journal-structural-scratch-encoding'
 import { JournalSelection } from './journal-selection'
 import { bindJournalSelection } from './journal-selection-binding'
-import type { JournalPendingRow } from './journal-structural-fold-step'
 import { serialize, deserialize } from 'node:v8'
 import Database from '../../sqlite/sync-database'
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
@@ -12,6 +18,7 @@ import { JournalDerivedTurnScope } from './journal-derived-turn-scope'
 /** Derived upgrade work only: every cursor and relation commits together, never transcript prose. */
 export class JournalStructuralScratch implements JournalStructuralStorage {
   readonly db: Database.Database
+  private readonly namespaces = new JournalScratchNamespaces()
   constructor(path: string) {
     this.db = new Database(path)
     this.db.exec(`PRAGMA cache_size = -1024; PRAGMA journal_mode = WAL;
@@ -27,7 +34,7 @@ export class JournalStructuralScratch implements JournalStructuralStorage {
     name: string,
     codec?: { encode: (value: V) => Stored; decode: (value: Stored) => V }
   ): Map<K, V> {
-    return new StructuralMap(this.db, name, codec)
+    return new StructuralMap(this.db, this.namespaces.bind(name), codec)
   }
   set<T>(name: string): Set<T> {
     return new StructuralSet(this.map<T, true>(name))
@@ -79,25 +86,24 @@ export class JournalStructuralScratch implements JournalStructuralStorage {
     return true
   }
   close(): void {
+    this.namespaces.clear()
     this.db.close()
   }
 }
 
 class StructuralMap<K, V, Stored = V> extends Map<K, V> {
-  private readonly space: Buffer
   constructor(
     private readonly db: Database.Database,
-    space: string,
+    private readonly space: Buffer,
     private readonly codec?: { encode: (value: V) => Stored; decode: (value: Stored) => V },
     private readonly changed?: (key: K, value: V | undefined, previous: V | undefined) => void
   ) {
     super()
-    this.space = serialize(space)
   }
   override get(key: K): V | undefined {
     const row = this.db
       .prepare('SELECT value FROM relations WHERE space = ? AND key = ?')
-      .get(this.space, serialize(key))
+      .get(this.space, encodeStructuralScratchKey(key))
     if (!(row?.value instanceof Uint8Array)) {
       return undefined
     }
@@ -107,14 +113,18 @@ class StructuralMap<K, V, Stored = V> extends Map<K, V> {
   override has(key: K): boolean {
     return !!this.db
       .prepare('SELECT id FROM relations WHERE space = ? AND key = ?')
-      .get(this.space, serialize(key))
+      .get(this.space, encodeStructuralScratchKey(key))
   }
   override set(key: K, value: V): this {
     const previous = this.changed ? this.get(key) : undefined
     this.db
       .prepare(`INSERT INTO relations(space,key,value) VALUES(?,?,?)
       ON CONFLICT(space,key) DO UPDATE SET value = excluded.value`)
-      .run(this.space, serialize(key), serialize(this.codec ? this.codec.encode(value) : value))
+      .run(
+        this.space,
+        encodeStructuralScratchKey(key),
+        serialize(this.codec ? this.codec.encode(value) : value)
+      )
     this.changed?.(key, value, previous)
     return this
   }
@@ -124,7 +134,7 @@ class StructuralMap<K, V, Stored = V> extends Map<K, V> {
     return (
       this.db
         .prepare('DELETE FROM relations WHERE space = ? AND key = ?')
-        .run(this.space, serialize(key)).changes > 0
+        .run(this.space, encodeStructuralScratchKey(key)).changes > 0
     )
   }
   override clear(): void {
@@ -152,7 +162,9 @@ class StructuralMap<K, V, Stored = V> extends Map<K, V> {
       }
       after = row.id
       const value = deserialize(Buffer.from(row.value))
-      yield [deserialize(Buffer.from(row.key)), this.codec ? this.codec.decode(value) : value]
+      // SAFETY: the namespace owner writes K and the reversible key codec preserves that domain.
+      const key = decodeStructuralScratchKey(row.key) as K
+      yield [key, this.codec ? this.codec.decode(value) : value]
     }
   }
   override [Symbol.iterator]() {
@@ -242,19 +254,6 @@ function structuralItem(item: AgentJournalRenderItem): AgentJournalRenderItem {
       ...(lifecycle ? { turnLifecycle: lifecycle } : {})
     }
   }
-}
-
-export type JournalStructuralCheckpoint = {
-  sessionId: string
-  guard: string
-  cursor: number
-  pending?: JournalPendingRow
-  selection?: { format: 6 }
-  agent?: string
-  rest: ReturnType<JournalRestProjection['checkpoint']>
-  scope: string | null
-  latestAcceptedTurnSequence: number
-  queueRevision?: number
 }
 
 export function structuralJournalState(

@@ -1,3 +1,8 @@
+import {
+  assertScratchKeyEncoding,
+  legacyEncodedRelations,
+  assertOldScratchEncodingRebuild
+} from './journal-scratch-encoding-test-support'
 import { legacyRestScratchPath } from './journal-legacy-rest-scratch'
 vi.mock('./journal-legacy-rest-worker', async () => {
   const { InProcessLegacyRestWorker } = await import('./journal-legacy-rest-replay-test-support')
@@ -143,6 +148,7 @@ it.each([16, 160])(
 )
 
 it('rolls back failed scratch relations and resumes the exact committed index/cursor', async () => {
+  assertScratchKeyEncoding(root)
   const journal = await open()
   for (let i = 0; i < 80; i++) {
     await journal.appendItem(
@@ -180,6 +186,8 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   const saved = scratch.load<JournalStructuralCheckpoint>()!
   expect(saved.cursor).toBeGreaterThan(1)
   expect(saved.cursor).toBeLessThan(tip)
+  expect(saved.selection?.format).toBe(7)
+  const legacyRelations = legacyEncodedRelations(scratch)
   const relations = Array.from(scratch.map('work:active:slots'))
   const save = JournalStructuralScratch.prototype.save
   const failure = vi
@@ -238,6 +246,10 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   expect(new Set(cursors.slice(readsBeforeUpgrade)).size).toBe(tip + 1)
   expect(cursors[readsBeforeUpgrade]).toBe(0)
   expect(initialized).toHaveBeenCalledTimes(2)
+  expect(readJournalRestFacts(database.db, sessionId)?.openTurn).toEqual(expected)
+  await assertOldScratchEncodingRebuild(database, scratch, saved, legacyRelations, make, cursors)
+  expect(initialized).toHaveBeenCalledTimes(3)
+  expect(failed).toHaveBeenCalledOnce()
   expect(readJournalRestFacts(database.db, sessionId)?.openTurn).toEqual(expected)
   main.mockRestore()
   scratch.close()
