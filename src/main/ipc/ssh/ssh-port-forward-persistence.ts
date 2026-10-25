@@ -19,12 +19,13 @@ export function persistPortForwards(
   dropped?: Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
 ): void {
   const active = portForwardManager!.listForwards(targetId)
-  const activeKeys = new Set(active.map(forwardKey))
+  // A live forward on a saved one's local port replaced it, whatever its destination.
+  const activePorts = new Set(active.map((forward) => forward.localPort))
   const droppedKey = dropped ? forwardKey(dropped) : null
 
   const existing = getSshTargetRegistryStore()!.getTarget(targetId)?.portForwards ?? []
   const unrestored = existing.filter(
-    (pf) => !activeKeys.has(forwardKey(pf)) && forwardKey(pf) !== droppedKey
+    (pf) => !activePorts.has(pf.localPort) && forwardKey(pf) !== droppedKey
   )
 
   const saved: SavedPortForward[] = [
@@ -39,6 +40,13 @@ export function persistPortForwards(
   getSshTargetRegistryStore()!.updateTarget(targetId, {
     portForwards: saved.length > 0 ? saved : undefined
   })
+}
+
+/** Whether every saved forward has a live runtime entry. */
+export function savedPortForwardsAllLive(targetId: string): boolean {
+  const live = new Set(portForwardManager!.listForwards(targetId).map(forwardKey))
+  const saved = getSshTargetRegistryStore()!.getTarget(targetId)?.portForwards ?? []
+  return saved.every((forward) => live.has(forwardKey(forward)))
 }
 
 /** Resolves true once every saved forward is live on this transport. */

@@ -1,10 +1,10 @@
 import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import { getSshHostServerStatus, isSshHostServed } from '../../ssh/ssh-host-server-status'
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
-import { restorePortForwards } from './ssh-port-forward-persistence'
+import { restorePortForwards, savedPortForwardsAllLive } from './ssh-port-forward-persistence'
 
 const restoring = new Map<string, Promise<void>>()
-/** The transport each host last restored on; a full restore has nothing to add on it. */
+/** The transport each host last restored on, so repeat triggers on it stay cheap. */
 const restoredOn = new Map<
   string,
   { conn: SshConnection; generation: number; complete: boolean; at: number }
@@ -29,7 +29,11 @@ function alreadyRestored(targetId: string): boolean {
   if (!conn || last?.conn !== conn || last.generation !== conn.getConnectGeneration()) {
     return false
   }
-  return last.complete || Date.now() - last.at < INCOMPLETE_RETRY_MS
+  // A forward whose process exited since is missing again, so a full restore is not final.
+  if (last.complete && savedPortForwardsAllLive(targetId)) {
+    return true
+  }
+  return !last.complete && Date.now() - last.at < INCOMPLETE_RETRY_MS
 }
 
 export function restoreManagedHostPortForwards(

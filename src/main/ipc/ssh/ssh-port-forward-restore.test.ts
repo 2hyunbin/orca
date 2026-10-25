@@ -212,4 +212,25 @@ describe('saved port forward restore', () => {
       vi.useRealTimers()
     }
   })
+
+  it('restores again on the same transport once a restored forward closed', async () => {
+    await restoreManagedHostPortForwards('t1')
+    h.active.length = 0
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+  })
+
+  it('replaces an unrestored mapping whose local port a new forward took', () => {
+    h.active.push({
+      id: 'pf-1',
+      connectionId: 't1',
+      localPort: FORWARD.localPort,
+      remoteHost: 'db',
+      remotePort: 5432
+    })
+    persistPortForwards('t1')
+    expect(h.saved.portForwards).toEqual([
+      { localPort: FORWARD.localPort, remoteHost: 'db', remotePort: 5432, label: undefined }
+    ])
+  })
 })
