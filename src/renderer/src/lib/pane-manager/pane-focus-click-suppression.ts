@@ -1,6 +1,6 @@
 export type FocusClickSuppressionInput = {
-  /** Whether the clicked pane was already the active one when the gesture began. */
-  paneWasActive: boolean
+  /** Whether this pane's xterm textarea held keyboard focus when the gesture began. */
+  terminalHadFocus: boolean
   /** False when the pointer landed on a pane-local app control rather than the terminal. */
   focusesTerminal: boolean
   mouseTrackingMode: string
@@ -12,26 +12,21 @@ export type FocusClickSuppressionInput = {
 }
 
 /**
- * Whether the click that reactivates a pane should stop before xterm sees it.
- *
- * Only a mouse-tracking TUI turns such a click into input, and there the row
- * under the pointer can be a prompt option the user never meant to answer.
+ * Whether a click that only gives the terminal keyboard focus should stop before
+ * xterm turns it into a mouse report (e.g. answering an agent's prompt row).
  */
 export function shouldSwallowFocusClick(input: FocusClickSuppressionInput): boolean {
-  if (input.paneWasActive || !input.focusesTerminal) {
+  if (input.terminalHadFocus || !input.focusesTerminal) {
     return false
   }
-  // Why: without tracking the click only moves the cursor or starts a selection,
-  // and swallowing it would break click-to-place in an inactive pane.
+  // Why: without tracking the click only places the cursor or starts a selection.
   if (input.mouseTrackingMode === 'none') {
     return false
   }
-  // Why: touch and pen do not always produce the compatibility mousedown this
-  // arms for, which would leave the verdict to be spent on a later real click.
+  // Why: touch/pen may never emit the compat mousedown, leaving the arm for a later real click.
   if (input.pointerType !== 'mouse' || !input.isPrimaryPointer) {
     return false
   }
-  // Why: middle-click paste and the context menu are routed by button, and
-  // shift/modifier clicks are the documented way to reach past mouse tracking.
+  // Why: middle/right buttons and modifier clicks are deliberate (paste, menu, force-selection).
   return input.button === 0 && !input.modifierHeld
 }

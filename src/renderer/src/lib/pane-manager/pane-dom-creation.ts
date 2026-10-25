@@ -30,8 +30,7 @@ export function createPaneDOM(
   dragState: DragReorderState,
   dragCallbacks: DragReorderCallbacks,
   onPointerDown: (id: number, options?: { focusTerminal?: boolean }) => void,
-  onMouseEnter: (id: number, event: MouseEvent) => void,
-  isPaneActive: (id: number) => boolean
+  onMouseEnter: (id: number, event: MouseEvent) => void
 ): ManagedPaneInternal {
   const container = document.createElement('div')
   container.className = 'pane'
@@ -118,7 +117,7 @@ export function createPaneDOM(
   const panePointerDownHandler = (event: PointerEvent): void => {
     const focusTerminal = shouldFocusTerminalFromPanePointerDown(event.target)
     swallowNextMouseDown = shouldSwallowFocusClick({
-      paneWasActive: isPaneActive(id),
+      terminalHadFocus: document.activeElement === terminal.textarea,
       focusesTerminal: focusTerminal,
       mouseTrackingMode: terminal.modes.mouseTrackingMode,
       pointerType: event.pointerType,
@@ -128,8 +127,7 @@ export function createPaneDOM(
     })
     onPointerDown(id, { focusTerminal })
   }
-  // Why disarm here: mousedown precedes pointerup for a mouse, so anything left
-  // armed belongs to a gesture that never produced one and must not outlive it.
+  // Why: a mouse emits mousedown before pointerup, so a still-armed flag belongs to a gesture without one.
   const paneFocusClickDisarmHandler = (): void => {
     swallowNextMouseDown = false
   }
@@ -138,9 +136,8 @@ export function createPaneDOM(
       return
     }
     swallowNextMouseDown = false
-    // Why stopPropagation rather than preventDefault: the mouse report is built
-    // by xterm's own listener, not by a browser default action, so not reaching
-    // that listener is all it takes.
+    // Why: xterm's listener builds the report; preventDefault mirrors xterm so focus stays put.
+    event.preventDefault()
     event.stopPropagation()
   }
   const paneMouseEnterHandler = (event: MouseEvent): void => onMouseEnter(id, event)

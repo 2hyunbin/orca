@@ -73,8 +73,7 @@ describe('createPaneDOM link tooltips', () => {
       { active: null } as never,
       {} as never,
       vi.fn(),
-      vi.fn(),
-      () => false
+      vi.fn()
     )
 
     // Why: corner offsets live in .pane-link-tooltip (terminal.css); JS only
@@ -97,8 +96,7 @@ describe('createPaneDOM link tooltips', () => {
       { active: null } as never,
       {} as never,
       vi.fn(),
-      vi.fn(),
-      () => false
+      vi.fn()
     )
 
     webLinksAddonMock.options?.hover?.({} as MouseEvent, 'http://localhost:5180/')
@@ -122,8 +120,7 @@ describe('createPaneDOM link tooltips', () => {
       { active: null } as never,
       {} as never,
       vi.fn(),
-      vi.fn(),
-      () => false
+      vi.fn()
     )
 
     webLinksAddonMock.options?.hover?.({} as MouseEvent, 'http://localhost:5180/')

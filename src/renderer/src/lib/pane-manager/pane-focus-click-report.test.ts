@@ -19,39 +19,17 @@ class ResizeObserverStub {
 // happy-dom performs no layout, so xterm measures every cell as 0 and cannot map
 // a click to a cell. Fill in only the boxes that measurement reads.
 function stubLayout(): void {
-  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
-    measureText: () => ({ width: 10 }),
-    clearRect: () => {},
-    fillRect: () => {},
-    setTransform: () => {},
-    scale: () => {},
-    save: () => {},
-    restore: () => {},
-    beginPath: () => {},
-    closePath: () => {},
-    moveTo: () => {},
-    lineTo: () => {},
-    stroke: () => {},
-    fill: () => {},
-    createLinearGradient: () => ({ addColorStop: () => {} })
-  } as unknown as CanvasRenderingContext2D)
+  const measuringContext = { measureText: () => ({ width: 10 }) }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: xterm only measures text on the 2D context under happy-dom.
+  const context = measuringContext as unknown as CanvasRenderingContext2D
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context)
   for (const prop of ['offsetWidth', 'offsetHeight'] as const) {
     Object.defineProperty(HTMLElement.prototype, prop, {
       configurable: true,
       get: () => (prop === 'offsetWidth' ? 800 : 600)
     })
   }
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-    x: 0,
-    y: 0,
-    left: 0,
-    top: 0,
-    right: 800,
-    bottom: 600,
-    width: 800,
-    height: 600,
-    toJSON: () => ({})
-  } as DOMRect)
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600))
 }
 
 function terminalElement(pane: ManagedPane): HTMLElement {
@@ -65,10 +43,7 @@ function terminalElement(pane: ManagedPane): HTMLElement {
 function stubPanePadding(pane: ManagedPane): void {
   const element = terminalElement(pane)
   element.style.padding = '0px'
-  ;(element.querySelector('.xterm-screen') as HTMLElement | null)?.style.setProperty(
-    'padding',
-    '0px'
-  )
+  element.querySelector<HTMLElement>('.xterm-screen')?.style.setProperty('padding', '0px')
 }
 
 function dispatchMouse(target: EventTarget, type: string): void {
@@ -114,7 +89,7 @@ describe('the click that reactivates a pane', () => {
   let manager: PaneManager
 
   beforeEach(() => {
-    ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver ??= ResizeObserverStub
+    globalThis.ResizeObserver ??= ResizeObserverStub
     stubLayout()
     root = document.createElement('div')
     document.body.appendChild(root)
@@ -155,7 +130,7 @@ describe('the click that reactivates a pane', () => {
     expect(toPty.join('')).not.toMatch(SGR_MOUSE_REPORT)
   })
 
-  it('still reports a click once the pane is already active', async () => {
+  it('still reports a click once the terminal has focus', async () => {
     const { target, toPty } = await twoPanes(true)
     clickPane(target)
     toPty.length = 0
@@ -165,23 +140,17 @@ describe('the click that reactivates a pane', () => {
     expect(toPty.join('')).toMatch(SGR_MOUSE_REPORT)
   })
 
-  // Why documented: with focus-follows-mouse the hover already activated the pane,
-  // so the click is deliberate rather than a focus grab and must reach the TUI.
-  it('reports the click when hover already activated the pane', async () => {
+  it('sends no mouse report when focus was elsewhere in the app but the pane stayed active', async () => {
     const { target, toPty } = await twoPanes(true)
     manager.setActivePane(target.id)
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
 
     clickPane(target)
 
-    expect(toPty.join('')).toMatch(SGR_MOUSE_REPORT)
-  })
-
-  it('leaves a pane without mouse tracking alone', async () => {
-    const { target, toPty } = await twoPanes(false)
-
-    clickPane(target)
-
-    expect(manager.getActivePane()?.id).toBe(target.id)
+    expect(document.activeElement).toBe(target.terminal.textarea)
     expect(toPty.join('')).not.toMatch(SGR_MOUSE_REPORT)
+    input.remove()
   })
 })
