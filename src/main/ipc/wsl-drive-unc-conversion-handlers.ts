@@ -64,8 +64,9 @@ export function registerWslDriveUncConversionHandlers(
             return readProfileProjectTransferState(activeProfileId, getProfileUserDataPath()).state
           },
           pause: (scope) => pauseWslMoveScope(createWslMoveDriverDeps(store, runtime), scope),
-          // No wslDistro: this runs the host's Git, in the drive path.
-          runWindowsGit: async (gitArgs, cwd) => (await gitExecFileAsync(gitArgs, { cwd })).stdout,
+          // Host Git on purpose: Git for Windows must be able to own the converted project.
+          runWindowsGit: async (gitArgs, cwd) =>
+            (await gitExecFileAsync(gitArgs, { cwd, hostGit: true })).stdout,
           readWorktreeLinks,
           restart: () => {
             if (!event.sender.isDestroyed()) {
