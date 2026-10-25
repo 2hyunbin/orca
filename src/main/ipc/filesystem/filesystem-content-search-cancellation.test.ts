@@ -43,7 +43,7 @@ vi.mock('../../wsl', () => ({
   toWindowsWslPath: toWindowsWslPathMock
 }))
 
-vi.mock('../filesystem-auth', () => ({
+vi.mock('./filesystem-auth', () => ({
   authorizeExternalPath: vi.fn(async (value: string) => value),
   resolveAuthorizedPath: resolveAuthorizedPathMock
 }))
@@ -53,7 +53,7 @@ vi.mock('../local-file-access-resolution', () => ({
   resolveLocalFileRequestPath: resolveAuthorizedPathMock
 }))
 
-vi.mock('../filesystem-path-containment', () => ({
+vi.mock('./filesystem-path-containment', () => ({
   isENOENT: vi.fn(() => false),
   validateGitRelativeFilePath: vi.fn((value: string) => value)
 }))
@@ -62,7 +62,7 @@ vi.mock('../registered-worktree-roots-cache', () => ({
   resolveRegisteredWorktreePath: vi.fn(async (value: string) => value)
 }))
 
-vi.mock('../filesystem-list-files', () => ({
+vi.mock('./filesystem-list-files', () => ({
   listQuickOpenFiles: vi.fn()
 }))
 

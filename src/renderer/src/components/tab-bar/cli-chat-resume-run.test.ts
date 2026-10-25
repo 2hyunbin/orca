@@ -132,7 +132,7 @@ import {
   readStructuredAgentLaunchRecord,
   writeStructuredAgentLaunchRecord,
   resetStructuredAgentLaunchPersistenceForTests
-} from '@/lib/structured-agent-session-launch-persistence'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-persistence'
 import {
   reserveStructuredLaunchSlot,
   restoreStructuredLaunchSurfaces,
@@ -154,7 +154,7 @@ import { switchIntoOwner } from './cli-chat-resume-feedback'
 import {
   resetStructuredAgentLaunchRegistryForTests,
   structuredLaunchStates
-} from '@/lib/structured-agent-session-launch-registry'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
 import { isEmptyWorkspaceDefaultSurfacePending } from '@/lib/empty-workspace-default-surface-claims'
 import {
   clearWebSessionFocusIntent,

@@ -6,7 +6,7 @@ import { TerminalKittyKeyboardModeTracker } from '../../../../../shared/terminal
 import type { PtyConnectionDeps } from '../pty-connection-types'
 import { registerTerminalPaneRecoveryInstance } from '../terminal-pane-recovery'
 import { captureTabRecoveryGeneration } from '@/store/terminals/terminal-tab-recovery-ledger'
-import { RESET_TERMINAL_CURSOR_STYLE } from '../../../../../shared/terminal-mode-reset-profiles'
+import { TerminalIdleCursorReset } from '../terminal-idle-cursor-reset'
 import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
 import { createTerminalStructuralReplayCoordinator } from '@/lib/pane-manager/terminal-structural-replay-coordinator'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
@@ -117,13 +117,17 @@ export function connectPanePty(
       agentType && agentType !== 'unknown' ? agentType === 'codex' : titleAgentType === 'codex'
   }
   // Idle callbacks precede deferred setup; switch from the shared scheduler to the PTY writer to preserve hidden-byte ordering and recovery.
+  session.idleCursorReset = new TerminalIdleCursorReset()
   session.queueAgentIdleTerminalModeReset = (): void => {
     if (session.disposed) {
       return
     }
-    writeTerminalOutput(session.pane.terminal, RESET_TERMINAL_CURSOR_STYLE, {
-      foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
-    })
+    const reset = session.idleCursorReset.request()
+    if (reset) {
+      writeTerminalOutput(session.pane.terminal, reset, {
+        foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
+      })
+    }
   }
   // Dispose actively unsubscribes and resolves passphrase waits; disconnected stores may never emit to release them.
   session.waitTeardowns = []
