@@ -146,7 +146,8 @@ export function getManagedLifecycleHook(
     return {
       type: 'command',
       command: nativeHookPath,
-      args: [getWindowsNativeHookAgent(scriptPath)],
+      // The exe ignores argv[2]; the script path lets builds without exec-form support replace this entry.
+      args: [getWindowsNativeHookAgent(scriptPath), scriptPath],
       timeout: MANAGED_HOOK_TIMEOUT_SECONDS
     }
   }

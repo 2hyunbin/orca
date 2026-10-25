@@ -106,9 +106,10 @@ describe('getManagedLifecycleHook native executable gate', () => {
     expect(hook).toEqual({
       type: 'command',
       command: SPACED_EXE_PATH,
-      args: ['claude'],
+      args: ['claude', SCRIPT_PATH],
       timeout: 10
     })
+    // Builds since v1.4.183 match managed args, so an older Orca replaces this entry instead of duplicating it.
     const definitions = [{ hooks: [hook] }]
     expect(
       removeManagedCommands(definitions, createManagedCommandMatcher('claude-hook.cmd'))
@@ -203,7 +204,12 @@ describe.skipIf(process.platform !== 'win32')('ClaudeHookService native hook ins
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(service.install(CURRENT_CLAUDE).state).toBe('installed')
       expect(managedHooks(settingsPath, 'Stop')).toEqual([
-        { type: 'command', command: join(hooksDir, EXE), args: ['claude'], timeout: 10 }
+        {
+          type: 'command',
+          command: join(hooksDir, EXE),
+          args: ['claude', join(hooksDir, 'claude-hook.cmd')],
+          timeout: 10
+        }
       ])
     }
     expect(service.getStatus().state).toBe('installed')
