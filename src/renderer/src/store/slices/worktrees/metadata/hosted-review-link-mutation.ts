@@ -5,6 +5,7 @@ import { applyWorktreeUpdates } from '../../worktree-helpers'
 import {
   clearTwinCopyReviewLinks,
   deleteTwinCopyTombstones,
+  moveTwinCopyTombstones,
   reviewClearTombstoneKey,
   worktreeCopyOwnerKey
 } from './worktree-twin-copy'
@@ -121,9 +122,15 @@ export function migrateHostedReviewLinkMutationGeneration(
   newWorktreeId: string
 ): void {
   const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(oldWorktreeId)
+  const movedTwinTombstones = moveTwinCopyTombstones(
+    hostedReviewLinkClearTombstonesByWorktreeId,
+    oldWorktreeId,
+    newWorktreeId
+  )
+  const hasTombstone = tombstone !== undefined || movedTwinTombstones
   for (const [alias, target] of hostedReviewLinkWorktreeIdAliases) {
     if (target === oldWorktreeId) {
-      if (tombstone) {
+      if (hasTombstone) {
         hostedReviewLinkWorktreeIdAliases.set(alias, newWorktreeId)
       } else {
         hostedReviewLinkWorktreeIdAliases.delete(alias)
@@ -131,7 +138,7 @@ export function migrateHostedReviewLinkMutationGeneration(
     }
   }
   const hasGeneration = hostedReviewLinkMutationGenerationByWorktreeId.has(oldWorktreeId)
-  if (tombstone) {
+  if (hasTombstone) {
     hostedReviewLinkWorktreeIdAliases.set(oldWorktreeId, newWorktreeId)
   }
   if (hasGeneration) {

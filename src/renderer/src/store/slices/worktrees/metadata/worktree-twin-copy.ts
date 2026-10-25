@@ -47,3 +47,21 @@ export function deleteTwinCopyTombstones(
     }
   }
 }
+
+/** Re-keys every twin copy's tombstone after a rename; true when any moved. */
+export function moveTwinCopyTombstones<T>(
+  tombstones: Map<string, T>,
+  oldWorktreeId: string,
+  newWorktreeId: string
+): boolean {
+  const prefix = `${oldWorktreeId}\0`
+  let moved = false
+  for (const [key, tombstone] of Array.from(tombstones)) {
+    if (key.startsWith(prefix)) {
+      tombstones.set(`${newWorktreeId}\0${key.slice(prefix.length)}`, tombstone)
+      tombstones.delete(key)
+      moved = true
+    }
+  }
+  return moved
+}

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { resetHostedReviewLinkMutationGenerationForTests } from './worktrees'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
-import { sanitizeHostedReviewLinksForBranchClears } from './worktrees/metadata/hosted-review-link-mutation'
+import {
+  migrateHostedReviewLinkMutationGeneration,
+  sanitizeHostedReviewLinksForBranchClears
+} from './worktrees/metadata/hosted-review-link-mutation'
 import {
   createTestStore,
   mockApi,
@@ -132,6 +135,30 @@ describe('twin review-clear tombstones when both copies switch', () => {
     ])
 
     expect(first).toMatchObject({ branch: 'refs/heads/a2', linkedPR: null })
+  })
+})
+
+describe('a twin review-clear tombstone across a rename', () => {
+  it('still guards the renamed copy', () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/a1' },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/b1', linkedPR: 2 }
+    )
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/b2' }, 'ssh:box-b')
+    const renamed = 'repo1::/srv/ai-tools-renamed'
+    migrateHostedReviewLinkMutationGeneration(id, renamed)
+
+    const [stale] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({
+        id: renamed,
+        repoId: 'repo1',
+        hostId: 'ssh:box-b',
+        branch: 'refs/heads/b1',
+        linkedPR: 2
+      })
+    ])
+
+    expect(stale).toMatchObject({ branch: 'refs/heads/b2', linkedPR: null })
   })
 })
 
