@@ -5,7 +5,7 @@ import { stampRuntimeSourceEnv } from '../../../shared/runtime-source-env'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { isAgentStatusHooksEnabled } from '../../agent-hooks/managed-agent-hook-controls'
-import { awaitExplicitPiOmpGuestReadiness } from '../../agent-hooks/wsl-pi-omp-guest-readiness'
+import { awaitExplicitAgentPluginGuestReadiness } from '../../agent-hooks/wsl-agent-plugin-readiness'
 import { ensureCodexStateDbBackfillRecoveryStarted } from '../../codex/codex-state-db-backfill-recovery'
 import type { CodexSessionResumePreparation } from '../../codex/codex-session-resume-home'
 import type { CodexAccountSelectionTarget } from '../../codex-accounts/runtime-selection'
@@ -199,7 +199,8 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchAgent: args.launchAgent,
       launchCommand
     })
-    await awaitExplicitPiOmpGuestReadiness({
+    await awaitExplicitAgentPluginGuestReadiness({
+      claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
       isWsl,
       distro: wslDistro,
       codexHomePath: selectedCodexHomePath,
@@ -219,6 +220,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       isWsl,
       wslDistro,
       agentStatusHooksEnabled: isAgentStatusHooksEnabled(ptySettings),
+      claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
       terminalInlineImages: ptySettings?.terminalInlineImages,
       disabledTuiAgents: ptySettings?.disabledTuiAgents,
       networkProxySettings: ptySettings,

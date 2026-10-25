@@ -44,10 +44,13 @@ let viewRevision = 0
       if (!identity || identity.sessionId !== sessionId) {
         identity = { paneKey, sessionId, instanceId: String(await $.clock.now()) + '-' + String(Math.random()) }
       }
+      const session = identity
+      const keybindings = await $.fs.read(configDir + '/keybindings.json')
+      if (identity !== session || endedSessionId === sessionId) return {}
       return await post($, 'register', {
-        keybindings: await $.fs.read(configDir + '/keybindings.json'),
+        keybindings,
         ...(observedView?.sessionId === sessionId ? { view: observedView.view } : {})
-      })
+      }, session)
     } catch {
       try { await post($, 'end') } catch {}
       return {}
@@ -56,54 +59,60 @@ let viewRevision = 0
 
 export function register(on) {
   on('ui.render', { component: 'AbovePrompt' }, async ($, event, next) => {
+    if (!paneKey) return next(event)
+    const result = await next(event)
     if (event.surface === 'terminal' && event.props.view) {
       const sessionId = await $.session.id()
       const agentId = event.props.view.agentId
       if (observedView?.sessionId !== sessionId || observedView.view.agentId !== agentId) {
         observedView = { sessionId, view: { ...(agentId ? { agentId } : {}), revision: ++viewRevision } }
         if (identity?.sessionId === sessionId) {
-          try { await post($, 'observe', { view: observedView.view }) } catch {}
+          void post($, 'observe', { view: observedView.view }).catch(() => {})
         }
       }
     }
-    return next(event)
+    return result
   })
 
   on('session.start', async ($, event, next) => {
+    const result = await next(event)
     const targetPane = await $.env.get('ORCA_PANE_KEY')
-    if (!event.isInteractive || event.surface !== 'terminal' || !targetPane) return next(event)
+    if (!event.isInteractive || event.surface !== 'terminal' || !targetPane) return result
     paneKey = targetPane
-    const home = await $.env.get('HOME') || await $.env.get('USERPROFILE')
-    configDir = await $.env.get('CLAUDE_CONFIG_DIR') || (home ? home + '/.claude' : undefined)
-    if (!configDir) return next(event)
+    configDir = await $.env.get('CLAUDE_CONFIG_DIR') || await $.env.get('ORCA_CLAUDE_CONFIG_DIR')
+    if (!configDir) return result
     endedSessionId = undefined
     await $.command.register({ name: 'orca-agent-view', description: 'Open the agent selected in Orca', immediate: true })
-    await announce($)
+    void announce($)
     $.clock.every(5000, () => announce($))
-    return next(event)
+    return result
   })
 
   on('command.run', { command: 'orca-agent-view' }, async ($) => {
-    const session = identity
-    if (!session || session.sessionId !== await $.session.id()) return {}
-    const request = await post($, 'take', {}, session)
-    if (!request.requestId || request.expiresAt < await $.clock.now()) return {}
-    if (identity !== session || session.sessionId !== await $.session.id()) return {}
-    let deny
     try {
-      const result = await $.ui.view(request.agentId ? { agentId: request.agentId } : {})
-      deny = result.deny
-    } catch { deny = 'Claude could not switch the agent view' }
-    await post($, 'ack', { requestId: request.requestId, ...(deny ? { deny } : {}) }, session)
+      const session = identity
+      if (!session || session.sessionId !== await $.session.id()) return {}
+      const request = await post($, 'take', {}, session)
+      if (!request.requestId || request.expiresAt < await $.clock.now()) return {}
+      if (identity !== session || session.sessionId !== await $.session.id()) return {}
+      let deny
+      try {
+        const result = await $.ui.view(request.agentId ? { agentId: request.agentId } : {})
+        deny = result.deny
+      } catch { deny = 'Claude could not switch the agent view' }
+      await post($, 'ack', { requestId: request.requestId, ...(deny ? { deny } : {}) }, session)
+    } catch {}
     return {}
   })
 
   on('session.end', async ($, event, next) => {
-    try { await post($, 'end') } catch {}
+    const session = identity
+    const result = await next(event)
+    void post($, 'end', {}, session).catch(() => {})
     endedSessionId = event.sessionId
     identity = undefined
     if (event.reason !== 'clear' && event.reason !== 'resume') paneKey = undefined
-    return next(event)
+    return result
   })
 }
 `.trimStart()

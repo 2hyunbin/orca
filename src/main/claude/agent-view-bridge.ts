@@ -199,7 +199,14 @@ export class ClaudeAgentViewBridge {
     if (args.signal?.aborted) {
       return { status: 'unavailable' }
     }
+    if (!session.view) {
+      return { status: 'unavailable' }
+    }
     session.pending?.finish({ status: 'busy' })
+    session.pending = undefined
+    if (session.view.agentId === args.agentId) {
+      return { status: 'viewed' }
+    }
     let finish: (result: ClaudeAgentViewResult) => void = () => {}
     const answer = new Promise<ClaudeAgentViewResult>((resolve) => {
       finish = resolve
@@ -215,6 +222,8 @@ export class ClaudeAgentViewBridge {
     const isCurrent = () =>
       !args.signal?.aborted &&
       this.sessions.get(args.paneKey) === session &&
+      session.view !== undefined &&
+      session.view.agentId !== args.agentId &&
       session.chord === shortcut.chord &&
       session.pending === pending &&
       pending.expiresAt >= Date.now() &&

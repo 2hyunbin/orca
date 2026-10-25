@@ -38,6 +38,7 @@ it.each(['permission', 'new-session', 'new-mod', 'new-pty', 'mobile-lock'] as co
     agentHookServer.claudeAgentViews.receive({
       ...identity,
       action: 'register',
+      view: { revision: 1 },
       keybindings: JSON.stringify({
         bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } }]
       })
@@ -73,6 +74,7 @@ it.each(['permission', 'new-session', 'new-mod', 'new-pty', 'mobile-lock'] as co
             ...identity,
             instanceId: 'replacement',
             action: 'register',
+            view: { revision: 1 },
             keybindings: JSON.stringify({
               bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+h': 'command:orca-agent-view' } }]
             })

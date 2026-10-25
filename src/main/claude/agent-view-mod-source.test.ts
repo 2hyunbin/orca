@@ -50,7 +50,8 @@ it.each(['{}', '', 'not-json', 'null'])(
             ORCA_PANE_KEY: 'tab:11111111-1111-4111-8111-111111111111',
             ORCA_AGENT_HOOK_PORT: '1234',
             ORCA_AGENT_HOOK_TOKEN: 'test-token',
-            HOME: '/test'
+            ORCA_CLAUDE_CONFIG_DIR: '/test/.claude',
+            CLAUDE_CONFIG_DIR: '/test/actual-claude-config'
           })[key]
       },
       fs: {
@@ -108,18 +109,26 @@ it.each(['{}', '', 'not-json', 'null'])(
       }
       return handler(api, event, async () => ({}))
     }
-    await invoke('session.start', { isInteractive: true, surface: 'terminal' })
-    expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
+    const read = vi.spyOn(api.fs, 'read')
     await invoke('ui.render', { surface: 'terminal', props: { view: {} } })
-    expect(posts.at(-1)).toMatchObject({ action: 'observe', view: { revision: 1 } })
+    expect(posts).toHaveLength(0)
+    await invoke('session.start', { isInteractive: true, surface: 'terminal' })
+    await vi.waitFor(() => expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId }))
+    expect(read).toHaveBeenCalledWith('/test/actual-claude-config/keybindings.json')
+    await invoke('ui.render', { surface: 'terminal', props: { view: {} } })
+    await vi.waitFor(() =>
+      expect(posts.at(-1)).toMatchObject({ action: 'observe', view: { revision: 1 } })
+    )
     await invoke('ui.render', {
       surface: 'terminal',
       props: { view: { agentId: 'keyboard-child' } }
     })
-    expect(posts.at(-1)).toMatchObject({
-      action: 'observe',
-      view: { agentId: 'keyboard-child', revision: 2 }
-    })
+    await vi.waitFor(() =>
+      expect(posts.at(-1)).toMatchObject({
+        action: 'observe',
+        view: { agentId: 'keyboard-child', revision: 2 }
+      })
+    )
     const count = posts.length
     await invoke('ui.render', {
       surface: 'terminal',
@@ -151,11 +160,22 @@ it.each(['{}', '', 'not-json', 'null'])(
     expect(posts.filter(({ action }) => action === 'ack')).toHaveLength(0)
     sessionId = 'session-after-clear'
     await heartbeat?.()
-    expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId })
+    await vi.waitFor(() => expect(posts.at(-1)).toMatchObject({ action: 'register', sessionId }))
     expect(posts.at(-1)?.instanceId).not.toBe(firstInstance)
     expect(posts.at(-1)?.view).toBeUndefined()
     await invoke('command.run')
     expect(view).toHaveBeenCalledWith({ agentId: 'child' })
     expect(posts.at(-1)).toMatchObject({ action: 'ack', sessionId })
+    api.http.fetch = async () => {
+      throw new Error('Orca is unavailable')
+    }
+    await expect(invoke('command.run')).resolves.toEqual({})
+    api.http.fetch = async () => new Promise(() => {})
+    await expect(
+      invoke('ui.render', { surface: 'terminal', props: { view: { agentId: 'another-child' } } })
+    ).resolves.toEqual({})
+    await expect(
+      invoke('session.start', { isInteractive: true, surface: 'terminal' })
+    ).resolves.toEqual({})
   }
 )

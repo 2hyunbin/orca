@@ -63,6 +63,7 @@ export class RuntimeClientSettingsController {
       agentDefaultArgs: launchProfile.agentDefaultArgs,
       agentDefaultEnv: launchProfile.agentDefaultEnv,
       agentStatusHooksEnabled: settings.agentStatusHooksEnabled !== false,
+      claudeSubagentNavigationEnabled: settings.claudeSubagentNavigationEnabled === true,
       // Mobile honors this Copy option; absence from older hosts means on (#19770).
       terminalCopyTrimsGutter: settings.terminalCopyTrimsGutter !== false,
       defaultTaskSource: settings.defaultTaskSource ?? 'github',

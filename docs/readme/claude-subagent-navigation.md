@@ -10,28 +10,45 @@ child's name; the compact group summary keeps the focused agent's indicator.
 
 ## Setup
 
-Enable Orca's agent status hooks and use Claude Code 2.1.300 or newer. Orca's
-managed hook installer writes an owned mod to
-`<Claude config>/skills/orca-agent-view/`. Restart Claude after the first install.
-The selected config includes custom `CLAUDE_CONFIG_DIR` profiles.
+Enable **Settings → Agents → Claude subagent navigation**, keep agent status
+hooks enabled, and launch Claude Code 2.1.300 or newer in Orca. This setting is
+off by default. It permits Orca to add a shortcut to the selected Claude
+config's `keybindings.json`, including account profiles and `CLAUDE_CONFIG_DIR`.
 
-The installer preserves installed plugins, other skills, `enabledPlugins`, and
-`CLAUDE_CODE_PLUGIN_DIRS`. It adds an unused `command:orca-agent-view` binding to
-`keybindings.json`, trying Ctrl+Alt+G, H, then V. Existing bindings and JSONC
-comments are preserved. An unowned folder with the same name, malformed
-bindings, or all three occupied shortcuts causes installation to be skipped.
-Removing Orca's hooks removes its owned mod and only the binding recorded as
-added by Orca. Reused user bindings and bindings from older installations without
-ownership metadata stay intact. Optional mod installation failures leave the
-status hooks installed. Managed-script refresh updates owned mods in the default
-config and installed account profiles.
+Mod code lives under Orca's userData directory, in a folder named by its content
+hash. Different builds cannot rewrite a running session's mod. Orca appends this
+folder to the pane's `CLAUDE_CODE_PLUGIN_DIRS` and adds a session-only
+`--plugin-dir` argument to recognized Claude launch commands. Existing plugin
+paths and `enabledPlugins` stay intact. Claude 2.1.309's user-settings `env` block
+overrides the process plugin-path variable; the CLI argument preserves the
+settings-provided plugins while adding Orca's mod. A manually typed Claude or
+an opaque custom wrapper needs `--plugin-dir` explicitly when user settings
+override the environment.
+
+Orca tries unused Ctrl+Alt+G, H, then V bindings for `command:orca-agent-view`.
+JSONC comments and existing shortcuts are preserved. A per-config
+`orca-agent-view.json` ownership record remembers setup: deleting or editing
+the shortcut does not cause Orca to add it again. To restore navigation after
+removing it, manually bind one of those chords to `command:orca-agent-view`.
+Turning the setting off stops mod loading in new panes. Removing status hooks
+also removes the recorded owned shortcut from the default config and account
+profiles; reused user bindings remain untouched.
+
+The previous owned `skills/orca-agent-view` installation is retired from the
+default config and account profiles during asynchronous refresh. SSH/WSL hook
+setup retires the owned remote installation too, moving it out of `skills`.
+Unowned folders remain untouched. Malformed keybindings are preserved, the
+global mod is retired, and its binding cleanup is retried after the JSONC is
+repaired. WSL loads a versioned guest-resident mod from relay storage; it never
+receives a Windows plugin path. Updated paired runtime hosts use their own
+storage and opt-in setting. Older hosts safely decline navigation.
 
 ## Delivery
 
 The mod registers its pane, Claude session and module instance with Orca's
-existing authenticated loopback hook listener. A sidebar click creates one
-request and sends the configured command shortcut through the guarded terminal
-input path. The command consumes the request, calls `$.ui.view({ agentId })`
+existing authenticated loopback hook listener. A click creates one
+request only when a live observation reports a different viewed agent. It sends
+the configured command shortcut through the guarded terminal input path. The command consumes the request, calls `$.ui.view({ agentId })`
 or `$.ui.view({})`, and acknowledges the result. No slash command or Enter is
 sent to the composer.
 
@@ -44,16 +61,19 @@ restarts. Updated remote runtime hosts serve the same RPC; the WSL hook relay
 forwards mod requests and replies. An older host without the method or a pane
 without a live mod registration receives no shortcut.
 
-A newer click supersedes a pending selection, so returning to the parent does
-not get lost while a child opens. The mod reports Claude's `AbovePrompt` view
+A newer click supersedes a pending selection. Parent clicks while already on
+main and clicks on the currently viewed child send no input. Without a current
+observation, navigation fails closed. The mod reports Claude's `AbovePrompt` view
 through the authenticated bridge. One host stream carries these observations
 to desktop rows; ended, expired or disconnected sessions lose their marker
-until fresh evidence arrives. Older hosts without observation support retain
-navigation without a view indicator.
+until fresh evidence arrives. Hosts without observation support receive no shortcut.
 
 ## Limits and validation
 
 Claude's mod API is early access; version alone does not guarantee availability.
+The indicator tooltip warns that **Esc stops the viewed subagent**; use the
+parent row to return. Enter sends the preserved draft to the viewed subagent.
+
 Rollout, safe mode or customization policy can prevent loading. Completed
 agents can disappear from Claude's retained task roster and become unavailable.
 Mobile child rows retain their existing parent-pane navigation.

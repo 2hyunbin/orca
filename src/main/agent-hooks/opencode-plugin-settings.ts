@@ -7,7 +7,7 @@ function enabled(settings: ManagedHookDetectionSettings, agent: 'opencode' | 'op
 }
 
 export function openCodePluginSettingsKey(settings: ManagedHookDetectionSettings): string {
-  return `${enabled(settings, 'opencode')}:${enabled(settings, 'opencode2')}`
+  return `${enabled(settings, 'opencode')}:${enabled(settings, 'opencode2')}:${isAgentStatusHooksEnabledForAgent(settings, 'claude') && settings?.claudeSubagentNavigationEnabled === true}`
 }
 
 export function selectOpenCodePluginSources(
@@ -17,6 +17,11 @@ export function selectOpenCodePluginSources(
   // Older relays retain omitted sources; an empty string replaces the cache and cannot write a plugin.
   return {
     ...sources,
+    claudeAgentViewSource:
+      isAgentStatusHooksEnabledForAgent(settings, 'claude') &&
+      settings?.claudeSubagentNavigationEnabled === true
+        ? sources.claudeAgentViewSource
+        : '',
     opencodePluginSource: enabled(settings, 'opencode') ? sources.opencodePluginSource : '',
     opencode2PluginSource: enabled(settings, 'opencode2') ? sources.opencode2PluginSource : ''
   }

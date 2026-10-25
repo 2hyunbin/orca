@@ -125,6 +125,12 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
     keywords: getAgentStatusHooksSearchKeywords()
   },
   {
+    id: 'claude-subagent-navigation',
+    title: 'Claude subagent navigation',
+    description: 'Opt in to the sidebar mod and Claude keyboard shortcut',
+    keywords: ['claude', 'subagent', 'navigation', 'plugin', 'mod', 'shortcut']
+  },
+  {
     title: getAgentWorkspaceTrustTitle(),
     id: AGENT_WORKSPACE_TRUST_SEARCH_ENTRY_ID,
     description: getAgentWorkspaceTrustDescription(),

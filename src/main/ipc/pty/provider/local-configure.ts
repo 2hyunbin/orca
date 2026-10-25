@@ -23,7 +23,7 @@ import { localProvider } from './registry'
 import { clearProviderPtyState } from './state-cleanup'
 import { visibleRendererPtys } from '../delivery/visibility-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { awaitExplicitPiOmpGuestReadiness } from '../../../agent-hooks/wsl-pi-omp-guest-readiness'
+import { awaitExplicitAgentPluginGuestReadiness } from '../../../agent-hooks/wsl-agent-plugin-readiness'
 import { prepareAntigravityAccountForLaunch } from '../../../antigravity/native-account-launch'
 
 export function configureLocalPtyProvider(args: {
@@ -71,7 +71,8 @@ export function configureLocalPtyProvider(args: {
         launchAgent: ctx?.launchAgent,
         launchCommand: ctx?.command
       })
-      await awaitExplicitPiOmpGuestReadiness({
+      await awaitExplicitAgentPluginGuestReadiness({
+        claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
         isWsl: ctx?.isWsl === true,
         distro: ctx?.wslDistro,
         codexHomePath: selectedCodexHomePath,
@@ -96,6 +97,7 @@ export function configureLocalPtyProvider(args: {
         isWsl: ctx?.isWsl,
         wslDistro: ctx?.wslDistro ?? null,
         agentStatusHooksEnabled: isAgentStatusHooksEnabled(ptySettings),
+        claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
         terminalInlineImages: ptySettings?.terminalInlineImages,
         disabledTuiAgents: ptySettings?.disabledTuiAgents,
         networkProxySettings: ptySettings,

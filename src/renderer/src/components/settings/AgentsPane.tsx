@@ -81,6 +81,17 @@ export function AgentsPane({
           wslCapabilitiesLoading={wslCapabilitiesLoading}
         />
         <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
+        <SettingsSwitchRow
+          label="Claude subagent navigation"
+          description="Open Claude subagents from the sidebar. Adds a shortcut to Claude’s keybindings.json and loads an Orca mod in new Orca panes. Requires Claude 2.1.300+ and status hooks. Removed shortcuts stay removed."
+          checked={settings.claudeSubagentNavigationEnabled === true}
+          onChange={() =>
+            updateSettings({
+              claudeSubagentNavigationEnabled: settings.claudeSubagentNavigationEnabled !== true
+            })
+          }
+          ariaLabel="Claude subagent navigation"
+        />
         {!isPairedWebClientWindow() ? (
           <>
             <AgentWorkspaceTrustSetting settings={settings} updateSettings={updateSettings} />

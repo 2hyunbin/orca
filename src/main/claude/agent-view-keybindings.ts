@@ -58,29 +58,49 @@ export function serializeClaudeAgentViewBindings(
     return applyEdits(original, modify(original, ['bindings'], next.bindings, options))
   }
   let text = original
-  for (let index = 0; index < next.bindings.length; index++) {
-    if (index >= previous.bindings.length) {
-      text = applyEdits(text, modify(text, ['bindings', -1], next.bindings[index], options))
-      continue
-    }
+  let afterIndex = 0
+  const removed: number[] = []
+  for (let index = 0; index < previous.bindings.length; index++) {
     const before = previous.bindings[index]
-    const after = next.bindings[index]
+    const after = next.bindings[afterIndex]
     if (
-      !isPlainObject(before) ||
-      !isPlainObject(before.bindings) ||
-      !isPlainObject(after) ||
-      !isPlainObject(after.bindings)
+      isPlainObject(before) &&
+      isPlainObject(before.bindings) &&
+      Object.keys(before).every((key) => key === 'context' || key === 'bindings') &&
+      JSON.stringify(before) !== JSON.stringify(after) &&
+      previous.bindings.length > next.bindings.length &&
+      (!isPlainObject(after) ||
+        before.context !== after.context ||
+        Object.keys(before.bindings).every(
+          (key) => !isPlainObject(after.bindings) || !(key in after.bindings)
+        ))
     ) {
+      removed.push(index)
       continue
     }
-    for (const key of Object.keys(before.bindings)) {
-      if (!(key in after.bindings)) {
-        text = applyEdits(
-          text,
-          modify(text, ['bindings', index, 'bindings', key], undefined, options)
-        )
+    if (
+      isPlainObject(before) &&
+      isPlainObject(before.bindings) &&
+      isPlainObject(after) &&
+      isPlainObject(after.bindings)
+    ) {
+      for (const key of Object.keys(before.bindings)) {
+        if (!(key in after.bindings)) {
+          text = applyEdits(
+            text,
+            modify(text, ['bindings', index, 'bindings', key], undefined, options)
+          )
+        }
       }
     }
+    afterIndex++
+  }
+  for (let at = removed.length - 1; at >= 0; at--) {
+    const index = removed[at]
+    text = applyEdits(text, modify(text, ['bindings', index], undefined, options))
+  }
+  for (let index = afterIndex; index < next.bindings.length; index++) {
+    text = applyEdits(text, modify(text, ['bindings', -1], next.bindings[index], options))
   }
   return text
 }

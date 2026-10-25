@@ -40,3 +40,5 @@ export type ClaudeAgentViewResult = {
   status: 'viewed' | 'unsupported' | 'busy' | 'permission' | 'unavailable' | 'denied' | 'timeout'
   reason?: string
 }
+
+export type ClaudeAgentViewSettings = { claudeSubagentNavigationEnabled?: boolean }

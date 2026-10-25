@@ -1,6 +1,9 @@
 import { rmSync } from 'node:fs'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { listClaudeProfileHomesAsync } from '../claude-accounts/claude-profile-homes'
+import {
+  listClaudeProfileHomes,
+  listClaudeProfileHomesAsync
+} from '../claude-accounts/claude-profile-homes'
 import type { AgentHookSource } from '../../shared/agent-hook-relay'
 import type { SFTPWrapper } from 'ssh2'
 import type { AgentHookInstallState, AgentHookInstallStatus } from '../../shared/agent-hook-types'
@@ -18,12 +21,10 @@ import {
 import { refreshManagedScriptIfPresent } from '../agent-hooks/managed-hook-script-refresh'
 import { getManagedScript } from './hook-script'
 import {
-  installClaudeAgentView,
-  installClaudeAgentViewRemote,
+  removeClaudeAgentViewRemote,
   refreshClaudeAgentView,
   removeClaudeAgentView
 } from './agent-view-install'
-import { claudeVersionReaches } from './claude-hook-event-versions'
 import {
   getWindowsClaudeHookExecutablePath,
   getWindowsClaudeHookFileStatus,
@@ -221,13 +222,6 @@ export class ClaudeHookService {
       nextConfig = retireClaudeManagedStatusLine(nextConfig, this.options.settings)
     }
     writeHooksJson(configPath, nextConfig)
-    if (this.options.agent === 'claude' && claudeVersionReaches(options.claudeVersion, '2.1.300')) {
-      try {
-        installClaudeAgentView(configPath)
-      } catch (error) {
-        console.warn('[agent-hooks] Claude agent view install failed', error)
-      }
-    }
     return this.getStatus(options)
   }
 
@@ -265,12 +259,9 @@ export class ClaudeHookService {
       await writeManagedScriptRemote(sftp, remoteScriptPath, this.managedScript('posix'))
       // Remote relays lack the statusline route, and remote account usage cannot be attributed locally.
       await writeHooksJsonRemote(sftp, remoteConfigPath, nextConfig)
-      if (
-        this.options.agent === 'claude' &&
-        claudeVersionReaches(options.claudeVersion, '2.1.300')
-      ) {
-        await installClaudeAgentViewRemote(sftp, remoteConfigPath).catch((error: unknown) => {
-          console.warn('[agent-hooks] Remote Claude agent view install failed', error)
+      if (this.options.agent === 'claude') {
+        await removeClaudeAgentViewRemote(sftp, remoteConfigPath).catch((error: unknown) => {
+          console.warn('[agent-hooks] Remote Claude agent view migration failed', error)
         })
       }
 
@@ -316,7 +307,12 @@ export class ClaudeHookService {
       writeHooksJson(configPath, nextConfig)
     }
     if (this.options.agent === 'claude') {
-      removeClaudeAgentView(configPath)
+      for (const configDir of [
+        undefined,
+        ...listClaudeProfileHomes(getAppEnvironment().getPath('userData'))
+      ]) {
+        removeClaudeAgentView(getConfigPath(this.options.settings, configDir))
+      }
       try {
         // Explicit uninstall resets opt-out memory for a future re-enable.
         rmSync(getStatusLineInstallMarkerPath(this.options.settings), { force: true })

@@ -150,6 +150,9 @@ process.stdin.resume()
     path: testInfo.outputPath('before-agent-navigation.png'),
     animations: 'disabled'
   })
+  await parent.click()
+  await expect(parent).toHaveAttribute('aria-current', 'true')
+  expect(events().filter((event) => event.view)).toEqual([])
   await child.click()
   await expect
     .poll(() => events().find((event) => event.view === CHILD))
@@ -157,6 +160,9 @@ process.stdin.resume()
   await waitForTerminalOutput(orcaPage, `Viewing ${CHILD} draft=ORCA_KEEP_DRAFT`)
   await expect(child).toHaveAttribute('aria-current', 'true')
   await expect(parent).not.toHaveAttribute('aria-current')
+  await child.click()
+  await expect(child).toHaveAttribute('aria-current', 'true')
+  expect(events().filter((event) => event.view)).toHaveLength(1)
   await orcaPage.screenshot({
     path: testInfo.outputPath('after-child-navigation.png'),
     animations: 'disabled'

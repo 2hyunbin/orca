@@ -37,7 +37,6 @@ vi.mock('node:os', async (importOriginal) => {
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-user-data' } }))
 
 import { MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS } from './managed-agent-hook-registry'
-import { installClaudeAgentView } from '../claude/agent-view-install'
 
 function syncCallsUnderHome(): string[] {
   return state.syncCalls
@@ -69,7 +68,13 @@ describe('managed hook script refresh stays off the main thread', () => {
     )
     await mkdir(hooksDir, { recursive: true })
     await writeFile(claudeScript, 'stale', 'utf-8')
-    installClaudeAgentView(join(state.home, '.claude', 'settings.json'))
+    const legacyRoot = join(state.home, '.claude', 'skills', 'orca-agent-view')
+    await mkdir(join(legacyRoot, '.claude-plugin'), { recursive: true })
+    await mkdir(join(legacyRoot, 'hooks'))
+    await writeFile(
+      join(legacyRoot, '.claude-plugin', 'orca-managed.json'),
+      '{"owner":"stablyai/orca/claude-agent-view"}'
+    )
     const modScript = join(
       state.home,
       '.claude',
@@ -83,7 +88,13 @@ describe('managed hook script refresh stays off the main thread', () => {
     const profileMods: string[] = []
     for (const id of ['first', 'second']) {
       const home = join(profileRoot, id, 'home')
-      installClaudeAgentView(join(home, 'settings.json'))
+      const legacyRoot = join(home, 'skills', 'orca-agent-view')
+      await mkdir(join(legacyRoot, '.claude-plugin'), { recursive: true })
+      await mkdir(join(legacyRoot, 'hooks'))
+      await writeFile(
+        join(legacyRoot, '.claude-plugin', 'orca-managed.json'),
+        '{"owner":"stablyai/orca/claude-agent-view"}'
+      )
       const mod = join(home, 'skills', 'orca-agent-view', 'hooks', 'register.js')
       await writeFile(mod, 'stale', 'utf8')
       profileMods.push(mod)
@@ -105,9 +116,9 @@ describe('managed hook script refresh stays off the main thread', () => {
     const refreshed = await readFile(claudeScript, 'utf8')
     expect(refreshed).not.toBe('stale')
     expect(refreshed).toContain(process.platform === 'win32' ? 'echo {}' : 'printf "{}\\n"')
-    expect(await readFile(modScript, 'utf8')).toContain('$.ui.view(')
+    await expect(readFile(modScript, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     for (const mod of profileMods) {
-      expect(await readFile(mod, 'utf8')).toContain('$.ui.view(')
+      await expect(readFile(mod, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
     }
     expect(await readFile(join(unowned, 'hooks', 'register.js'), 'utf8')).toBe('user-owned')
     await expect(

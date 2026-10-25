@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 import { Eye } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import type { DashboardAgentRow } from './dashboard/useDashboardData'
@@ -24,14 +25,28 @@ export function ClaudeAgentViewIndicator({
         { name: view.label }
       )
   return (
-    <span
-      className="inline-flex shrink-0 items-center gap-1 text-3xs text-foreground"
-      title={label}
-      aria-label={label}
-    >
-      <Eye className="size-3" aria-hidden="true" />
-      {(!view.current || showName) && <span className="max-w-24 truncate">{view.label}</span>}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className="inline-flex shrink-0 items-center gap-1 text-3xs text-foreground"
+          aria-label={label}
+        >
+          <Eye className="size-3" aria-hidden="true" />
+          {(!view.current || showName) && <span className="max-w-24 truncate">{view.label}</span>}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {label}
+        {view.agentId && (
+          <p>
+            {translate(
+              'auto.components.ClaudeAgentViewIndicator.returnHint',
+              'Click the parent row to return. Esc stops this subagent. Enter sends your draft to this subagent.'
+            )}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 

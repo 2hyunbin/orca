@@ -14,7 +14,7 @@ import {
 } from './remote-managed-hook-installers'
 import { WslHookRelayManager } from './wsl-hook-relay-manager'
 import { CLAUDE_AGENT_VIEW_RELAY_METHOD } from '../../shared/claude-agent-view'
-import { awaitExplicitPiOmpGuestReadiness } from './wsl-pi-omp-guest-readiness'
+import { awaitExplicitAgentPluginGuestReadiness } from './wsl-agent-plugin-readiness'
 import { FAILURE_COOLDOWN_BASE_MS, type WslHookRelayManagerDeps } from './wsl-hook-relay-deps'
 import {
   AGENT_HOOK_INSTALL_PLUGINS_METHOD,
@@ -330,7 +330,7 @@ describe('WslHookRelayManager', () => {
   it('waits for guest materialization when an explicit Pi or OMP launch needs it', async () => {
     const { manager } = createManager({})
     await expect(
-      awaitExplicitPiOmpGuestReadiness({
+      awaitExplicitAgentPluginGuestReadiness({
         isWsl: true,
         distro: 'Ubuntu',
         codexHomePath: codexHome,
@@ -350,7 +350,7 @@ describe('WslHookRelayManager', () => {
     const { manager } = createManager({
       installHooks: vi.fn(async () => installGate.then(() => []))
     })
-    const readiness = awaitExplicitPiOmpGuestReadiness({
+    const readiness = awaitExplicitAgentPluginGuestReadiness({
       isWsl: true,
       distro: 'Ubuntu',
       launchAgent: 'pi',
@@ -370,7 +370,7 @@ describe('WslHookRelayManager', () => {
       })
     })
     await expect(
-      awaitExplicitPiOmpGuestReadiness({
+      awaitExplicitAgentPluginGuestReadiness({
         isWsl: true,
         distro: 'Ubuntu',
         launchAgent: 'omp',
@@ -386,7 +386,7 @@ describe('WslHookRelayManager', () => {
       waitForSentinel: vi.fn(() => new Promise<MultiplexerTransport>(() => {}))
     })
     await expect(
-      awaitExplicitPiOmpGuestReadiness({
+      awaitExplicitAgentPluginGuestReadiness({
         isWsl: true,
         distro: 'Ubuntu',
         launchAgent: 'pi',
@@ -400,7 +400,7 @@ describe('WslHookRelayManager', () => {
   it('does not wait or start a relay for a bare shell', async () => {
     const { manager } = createManager({})
     await expect(
-      awaitExplicitPiOmpGuestReadiness({
+      awaitExplicitAgentPluginGuestReadiness({
         isWsl: true,
         distro: 'Ubuntu',
         launchCommand: 'bash',

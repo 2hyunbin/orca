@@ -1,3 +1,4 @@
+import { CLAUDE_AGENT_VIEW_MOD_SOURCE } from '../claude/agent-view-mod-source'
 import { bindRemoteClaudeInterruptReconciliation } from '../ssh/ssh-agent-hook-interrupt-reconciliation'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -113,6 +114,7 @@ export const defaultWslHookRelayDeps: WslHookRelayManagerDeps = {
     }),
   managedHookSettings: () => null,
   pluginSources: () => ({
+    claudeAgentViewSource: CLAUDE_AGENT_VIEW_MOD_SOURCE,
     opencodePluginSource: getOpenCodePluginSource(),
     opencode2PluginSource: getOpenCode2PluginSource(),
     piExtensionSource: getPiAgentStatusExtensionSource('pi'),
