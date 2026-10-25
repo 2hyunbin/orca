@@ -70,6 +70,20 @@ describe('FontAutocomplete', () => {
     })
   }
 
+  async function pressInputKey(
+    input: HTMLInputElement,
+    key: string,
+    options?: { isComposing?: boolean }
+  ): Promise<void> {
+    await act(async () => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true })
+      if (options?.isComposing !== undefined) {
+        Object.defineProperty(event, 'isComposing', { value: options.isComposing })
+      }
+      input.dispatchEvent(event)
+    })
+  }
+
   it('arrow keys move through the full list when the input shows the committed font', async () => {
     function Harness(): ReactNode {
       const [value, setValue] = useState('Geist')
@@ -299,6 +313,32 @@ describe('FontAutocomplete', () => {
       getInput().blur()
     })
     expect(change.mock.calls).toEqual([['My Custom Font']])
+  })
+
+  it.each([
+    { query: 'Geor', description: 'a highlighted suggestion' },
+    { query: 'My Custom Font', description: 'a manual font name' }
+  ])('does not commit $description when Enter confirms IME composition', async ({ query }) => {
+    const change = vi.fn()
+    await act(async () => {
+      root.render(
+        <FontAutocomplete
+          value="Geist"
+          suggestions={['Geist', 'Georgia']}
+          onChange={change}
+          commitMode="blur"
+        />
+      )
+    })
+    const input = getInput()
+    await act(async () => input.focus())
+    await typeIntoInput(input, query)
+
+    await pressInputKey(input, 'Enter', { isComposing: true })
+
+    expect(input.value).toBe(query)
+    expect(change).not.toHaveBeenCalled()
+    expect(input.getAttribute('aria-expanded')).toBe('true')
   })
 
   it('commits typed names on blur and offers an explicit inherited-font choice', async () => {

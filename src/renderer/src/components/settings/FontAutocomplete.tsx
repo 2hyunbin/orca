@@ -235,6 +235,10 @@ export function FontAutocomplete({
                   return
                 }
 
+                if (e.key === 'Enter' && e.nativeEvent.isComposing) {
+                  return
+                }
+
                 if (e.key === 'Enter' && open && highlightedIndex >= 0) {
                   const highlightedFont = visibleSuggestions[highlightedIndex]
                   if (highlightedFont !== undefined) {
