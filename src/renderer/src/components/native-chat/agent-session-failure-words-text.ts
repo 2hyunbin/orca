@@ -149,6 +149,11 @@ const PIECES: Record<AgentSessionFailureCopyId, (values: AgentSessionFailureCopy
         COPY.runtimeNotInstalled,
         values
       ),
+    conversationOpenInBackgroundServer: () =>
+      translate(
+        'components.native-chat.failureWords.conversationOpenInBackgroundServer',
+        COPY.conversationOpenInBackgroundServer
+      ),
     conversationOpenElsewhere: () =>
       translate(
         'components.native-chat.failureWords.conversationOpenElsewhere',

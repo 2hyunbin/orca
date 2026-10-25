@@ -1,3 +1,4 @@
+import { sayAgentSessionFailureTranslated } from '../native-chat/agent-session-failure-words-text'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
@@ -15,6 +16,13 @@ export async function reportCliChatResumeFailure(
   target: RuntimeClientTarget
 ): Promise<void> {
   const refusal = structuredLaunchFailure(error)
+  if (
+    refusal?.code === 'agent_session_operation_invalid' &&
+    refusal.details?.reason === 'conversationOpenInBackgroundServer'
+  ) {
+    toast.error(sayAgentSessionFailureTranslated('conversationOpenInBackgroundServer'))
+    return
+  }
   if (
     refusal?.code === 'agent_session_conflict' ||
     refusal?.code === 'agent_session_ownership_unknown'

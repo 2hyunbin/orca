@@ -128,6 +128,33 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+it('retains the saved OpenCode refusal and no-effects proof before attach', async () => {
+  const words =
+    'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
+  const result = await create({
+    resolveStructuredAgentSessionCreateIntent: async () => {
+      throw agentSessionRefusalError(
+        'agent_session_operation_invalid',
+        { reason: 'conversationOpenInBackgroundServer' },
+        words
+      )
+    }
+  })
+  expect(result).toMatchObject({
+    ok: true,
+    result: {
+      ok: false,
+      refusal: {
+        code: 'agent_session_operation_invalid',
+        details: { reason: 'conversationOpenInBackgroundServer' },
+        message: words,
+        createAttemptRefusedBeforeCommit: true
+      }
+    }
+  })
+  expect(attach).not.toHaveBeenCalled()
+})
+
 describe('a create refused before it commits', () => {
   it('answers an ownership refusal before commit as a definite failed attempt', async () => {
     const code = 'agent_session_conflict'

@@ -5,7 +5,11 @@ import {
   chatAgentsShareConversations,
   CLI_CONVERSATION_ADOPTING_AGENTS
 } from '../../shared/structured-agent-cli-conversation-adoption'
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
+import {
+  agentSessionRefusalError,
+  isAgentSessionRefusalError
+} from '../../shared/agent-session-wire-refusals'
+import { AGENT_SESSION_FAILURE_COPY } from '../../shared/agent-session-failure-copy'
 import type { CliWriterObservation } from '../agent-hooks/server/cli-writer-observation'
 import { getFreshShellForegroundSnapshot } from '../../shared/process-table-snapshot-reader'
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
@@ -97,7 +101,7 @@ export async function assertCliConversationWritersExited(
   }
   try {
     if (source) {
-      await censusPane(() => host.terminal(source), source.worktreeId, false)
+      await censusPane(() => host.terminal(source), source.worktreeId, true)
     }
     const savedCandidates = () =>
       host
@@ -143,12 +147,7 @@ export async function assertCliConversationWritersExited(
         record.providerSession.id === row.providerSession?.id
       const matching = saved.filter(matches)
       const observed = host.observation(row)
-      if (
-        !observed ||
-        !observed.current() ||
-        observed.topology !== 'pane-owned' ||
-        host.sleeping(row.worktreeId ?? '')
-      ) {
+      if (!observed || !observed.current()) {
         throw refuse()
       }
       const pane = paneOf(row)
@@ -157,9 +156,22 @@ export async function assertCliConversationWritersExited(
         !observed.current() ||
         presence === 'live' ||
         presence === 'unverifiable' ||
-        (pane && paneOf(row)?.identity !== pane.identity) ||
-        host.sleeping(row.worktreeId ?? '')
+        (pane && paneOf(row)?.identity !== pane.identity)
       ) {
+        throw refuse()
+      }
+      if (!host.terminal(row)) {
+        if (row.agentType !== 'opencode' && row.agentType !== 'opencode2') {
+          for (const record of matching) {
+            covered.set(
+              record,
+              () => savedCurrent(record) && observed.current() && !host.terminal(row)
+            )
+          }
+        }
+        continue
+      }
+      if (observed.topology !== 'pane-owned' || host.sleeping(row.worktreeId ?? '')) {
         throw refuse()
       }
       if (presence === 'exited' && matching.length === 0) {
@@ -210,10 +222,19 @@ export async function assertCliConversationWritersExited(
       }
       const [paneKey, worktreeId, , savedAgent] = identity
       if (savedAgent === 'opencode' || savedAgent === 'opencode2') {
-        throw refuse()
+        throw agentSessionRefusalError(
+          'agent_session_operation_invalid',
+          { reason: 'conversationOpenInBackgroundServer' },
+          AGENT_SESSION_FAILURE_COPY.conversationOpenInBackgroundServer
+        )
       }
       const coordinates = { paneKey, worktreeId }
-      const pane = paneOf(coordinates)
+      const terminal = host.terminal(coordinates)
+      if (!terminal) {
+        covered.set(record, () => savedCurrent(record) && !host.terminal(coordinates))
+        continue
+      }
+      const pane = terminal.pane
       if (!pane) {
         throw refuse()
       }
@@ -234,7 +255,13 @@ export async function assertCliConversationWritersExited(
     ) {
       throw refuse()
     }
-  } catch {
+  } catch (error) {
+    if (
+      isAgentSessionRefusalError(error) &&
+      error.refusal.details?.reason === 'conversationOpenInBackgroundServer'
+    ) {
+      throw error
+    }
     throw refuse()
   }
 }

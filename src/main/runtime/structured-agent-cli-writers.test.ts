@@ -67,6 +67,14 @@ function inspection(verdict: AgentProcessVerdict | null = null) {
     run: () => assertCliConversationWritersExited(host, 'codex', 'conversation')
   }
 }
+const backgroundRefusal = {
+  refusal: {
+    message:
+      'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.',
+    code: 'agent_session_operation_invalid',
+    details: { reason: 'conversationOpenInBackgroundServer' }
+  }
+}
 const refusal = {
   refusal: { code: 'agent_session_conflict', details: { reason: 'conversationHeldElsewhere' } }
 }
@@ -132,6 +140,141 @@ describe('execution-host conversation writer inspection', () => {
     }
   })
 
+  it.each(['claude', 'codex', 'pi', 'opencode', 'opencode2'] as const)(
+    'classifies the saved %s note separately from a physical terminal',
+    async (agent) => {
+      const check = inspection()
+      const record: SleepingAgentSessionRecord = {
+        paneKey: 'source',
+        worktreeId: 'workspace',
+        agent,
+        providerSession: { key: 'session_id', id: 'conversation' },
+        prompt: '',
+        state: 'done',
+        origin: 'worktree-sleep',
+        capturedAt: 1,
+        updatedAt: 1
+      }
+      check.host.saved = () => [record]
+      check.host.rows = () => []
+      check.host.sleeping = () => true
+      check.host.terminal = () => null
+      const run = () =>
+        assertCliConversationWritersExited(
+          check.host,
+          agent === 'opencode2' ? 'opencode' : agent,
+          'conversation',
+          { paneKey: record.paneKey, worktreeId: record.worktreeId }
+        )
+      await (agent === 'opencode' || agent === 'opencode2'
+        ? expect(run()).rejects.toMatchObject(backgroundRefusal)
+        : expect(run()).resolves.toBeUndefined())
+      check.host.terminal = () => ({ pane: null })
+      await expect(run()).rejects.toMatchObject(refusal)
+      expect(check.host.shellAlone).not.toHaveBeenCalled()
+    }
+  )
+
+  it('uses normal physical proof for conclusively pane-owned OpenCode, not background-server copy', async () => {
+    const check = inspection()
+    check.host.rows = () => [{ ...row, agentType: 'opencode' }]
+    const saved: SleepingAgentSessionRecord = {
+      paneKey: row.paneKey,
+      worktreeId: 'workspace',
+      agent: 'opencode',
+      providerSession: { key: 'session_id', id: 'conversation' },
+      prompt: '',
+      state: 'done',
+      origin: 'live',
+      capturedAt: 1,
+      updatedAt: 1
+    }
+    check.host.saved = () => [saved]
+    const run = () => assertCliConversationWritersExited(check.host, 'opencode', 'conversation')
+    await expect(run()).resolves.toBeUndefined()
+    check.observation.presence = async () => 'live'
+    await expect(run()).rejects.toMatchObject(refusal)
+  })
+
+  it('probes a current row before admitting physical absence, even for a sleeping identity', async () => {
+    for (const verdict of [null, 'exited', 'live', 'unverifiable'] as const) {
+      const check = inspection(verdict)
+      check.host.terminal = () => null
+      check.host.sleeping = () => true
+      check.observation.topology = 'unverifiable'
+      const result = expect(check.run())
+      await (verdict === null || verdict === 'exited'
+        ? result.resolves.toBeUndefined()
+        : result.rejects.toMatchObject(refusal))
+      expect(check.observation.presence).toHaveBeenCalledOnce()
+    }
+    const replaced = inspection()
+    replaced.host.terminal = () => null
+    replaced.observation.presence = async () => {
+      replaced.replaceRow()
+      return null
+    }
+    await expect(replaced.run()).rejects.toMatchObject(refusal)
+  })
+
+  it('rechecks an absent saved pane and captured identity after another candidate awaits', async () => {
+    for (const changed of ['terminal', 'capture'] as const) {
+      const check = inspection()
+      const record: SleepingAgentSessionRecord = {
+        paneKey: 'absent',
+        worktreeId: 'workspace',
+        agent: 'codex',
+        providerSession: { key: 'session_id', id: 'conversation' },
+        prompt: '',
+        state: 'done',
+        origin: 'worktree-sleep',
+        capturedAt: 1,
+        updatedAt: 1
+      }
+      const other = { ...record, paneKey: 'other' }
+      check.host.saved = () => [record, other]
+      check.host.rows = () => []
+      const terminal = check.host.terminal
+      let appeared = false
+      check.host.terminal = (coordinates) =>
+        coordinates.paneKey === 'absent' && !appeared ? null : terminal(coordinates)
+      check.host.shellAlone = async () => {
+        if (changed === 'terminal') {
+          appeared = true
+        } else {
+          record.updatedAt += 1
+        }
+        return true
+      }
+      await expect(check.run()).rejects.toMatchObject(refusal)
+    }
+  })
+
+  it('retains a matching absent row observation across another saved candidate await', async () => {
+    const check = inspection()
+    const record: SleepingAgentSessionRecord = {
+      paneKey: row.paneKey,
+      worktreeId: 'workspace',
+      agent: 'codex',
+      providerSession: { key: 'session_id', id: 'conversation' },
+      prompt: '',
+      state: 'done',
+      origin: 'worktree-sleep',
+      capturedAt: 1,
+      updatedAt: 1
+    }
+    const other = { ...record, paneKey: 'other' }
+    check.host.saved = () => [record, other]
+    const terminal = check.host.terminal
+    check.host.terminal = (coordinates) =>
+      coordinates.paneKey === row.paneKey ? null : terminal(coordinates)
+    check.host.shellAlone = async () => {
+      check.replaceRow()
+      return true
+    }
+    await expect(check.run()).rejects.toMatchObject(refusal)
+  })
+
   it('requires current owned shell proof for saved resumes, including done checkpoints', async () => {
     const record: SleepingAgentSessionRecord = {
       paneKey: 'source',
@@ -162,7 +305,7 @@ describe('execution-host conversation writer inspection', () => {
         'opencode',
         'conversation'
       )
-    ).rejects.toMatchObject(refusal)
+    ).rejects.toMatchObject(backgroundRefusal)
     saved = [{ ...record, connectionId: 'ssh-A' }]
     await expect(check.run()).resolves.toBeUndefined()
     saved = [record]

@@ -158,63 +158,66 @@ function storedRecord(fixture: Fixture) {
 }
 
 describe('resumeAgentSessionInWorkspace', () => {
-  it('releases a saved resume claim when actual admission creates a plain shell', async () => {
-    const fixture = makeSleptWorkspace()
-    const saved = storedRecord(fixture)
-    if (!saved) {
-      throw new Error('missing saved conversation')
-    }
-    saved.origin = 'live'
-    const chat = agentSessionRecordFixture(
-      agentSessionLeaseFixture({
-        claimStatus: 'released',
-        ownerProcess: null,
-        reservedSpawnToken: null,
-        deathEvidence: { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
-      })
-    )
-    chat.providerHandleChain[0]!.handle.nativeId = SESSION.id
-    let nativeOpen = true
-    const store: AgentSessionRecordStore = Object.create(AgentSessionRecordStore.prototype)
-    store.listRecords = () => [chat]
-    store.getVisibleSessionTabIndex = () => ({
-      present: true,
-      sessionIds: nativeOpen ? [chat.sessionId] : []
-    })
-    const effectiveCommands: (string | undefined)[] = []
-    const { runtime, spawn, openOldPane, resume } = makeRuntime(fixture, {
-      spawn: async (args) => {
-        const admission = await chooseSavedResumeFreshLaunch(
-          { openAgentSessionRecordStore: async () => store },
-          args,
-          null,
-          args
-        )
-        effectiveCommands.push(args.command)
-        return {
-          id: effectiveCommands.length === 1 ? 'refused-shell' : 'resumed-C',
-          launchAgent: args.launchAgent,
-          launchConfig: args.launchConfig,
-          ...savedResumeResult(admission)
-        }
+  it.each(['live', 'worktree-sleep'] as const)(
+    'releases a %s saved resume claim when actual admission creates a plain shell',
+    async (origin) => {
+      const fixture = makeSleptWorkspace()
+      const saved = storedRecord(fixture)
+      if (!saved) {
+        throw new Error('missing saved conversation')
       }
-    })
-    await openOldPane()
-    expect(runtime.getTerminalLaunchResult('refused-shell')).toMatchObject({
-      agentResumeRefused: 'chat-home',
-      savedResumeDecision: { agent: 'claude', providerSession: SESSION, verdict: 'chat-home' }
-    })
-    expect(runtime.getTerminalLaunchResult('refused-shell')?.launchAgent).toBeUndefined()
-    expect(effectiveCommands).toEqual([undefined])
-    nativeOpen = false
-    await expect(resume({ mutationId: 'after-native-close' })).resolves.toMatchObject({
-      ok: true,
-      ptyId: 'resumed-C'
-    })
-    expect(effectiveCommands[1]).toContain(SESSION.id)
-    expect(spawn).toHaveBeenCalledTimes(2)
-    expect(runtime.getTerminalLaunchResult('refused-shell')).toBeDefined()
-  })
+      saved.origin = origin
+      const chat = agentSessionRecordFixture(
+        agentSessionLeaseFixture({
+          claimStatus: 'released',
+          ownerProcess: null,
+          reservedSpawnToken: null,
+          deathEvidence: { kind: 'exit-observed', detail: 'closed', observedAt: 1 }
+        })
+      )
+      chat.providerHandleChain[0]!.handle.nativeId = SESSION.id
+      let nativeOpen = true
+      const store: AgentSessionRecordStore = Object.create(AgentSessionRecordStore.prototype)
+      store.listRecords = () => [chat]
+      store.getVisibleSessionTabIndex = () => ({
+        present: true,
+        sessionIds: nativeOpen ? [chat.sessionId] : []
+      })
+      const effectiveCommands: (string | undefined)[] = []
+      const { runtime, spawn, openOldPane, resume } = makeRuntime(fixture, {
+        spawn: async (args) => {
+          const admission = await chooseSavedResumeFreshLaunch(
+            { openAgentSessionRecordStore: async () => store },
+            args,
+            null,
+            args
+          )
+          effectiveCommands.push(args.command)
+          return {
+            id: effectiveCommands.length === 1 ? 'refused-shell' : 'resumed-C',
+            launchAgent: args.launchAgent,
+            launchConfig: args.launchConfig,
+            ...savedResumeResult(admission)
+          }
+        }
+      })
+      await openOldPane()
+      expect(runtime.getTerminalLaunchResult('refused-shell')).toMatchObject({
+        agentResumeRefused: 'chat-home',
+        savedResumeDecision: { agent: 'claude', providerSession: SESSION, verdict: 'chat-home' }
+      })
+      expect(runtime.getTerminalLaunchResult('refused-shell')?.launchAgent).toBeUndefined()
+      expect(effectiveCommands).toEqual([undefined])
+      nativeOpen = false
+      await expect(resume({ mutationId: 'after-native-close' })).resolves.toMatchObject({
+        ok: true,
+        ptyId: 'resumed-C'
+      })
+      expect(effectiveCommands[1]).toContain(SESSION.id)
+      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(runtime.getTerminalLaunchResult('refused-shell')).toBeDefined()
+    }
+  )
 
   it('settles only fresh matching saved results and binds unproven or observed results until exit', async () => {
     for (const kind of [

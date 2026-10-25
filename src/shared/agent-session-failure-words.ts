@@ -189,6 +189,8 @@ const FAILURE_SENTENCES = {
   agentCommandNotRunnable: namingAgent('agentCommandNotRunnable'),
   runtimeNotInstalled: namingAgent('runtimeNotInstalled'),
   conversationOpenInTerminal: namingAgent('conversationOpenInTerminal'),
+  conversationOpenInBackgroundServer: (_context, _fact, _surface, say) =>
+    say('conversationOpenInBackgroundServer'),
   conversationOpenElsewhere: (_context, _fact, _surface, say) => say('conversationOpenElsewhere'),
   managedAccountUnsupported: (context, _fact, _surface, say) =>
     joinSentences([

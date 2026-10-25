@@ -23,7 +23,10 @@ import {
   openTestJournalHostDatabase
 } from '../agent-session-journal/journal-host-database-test-support'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import {
+  NO_STRUCTURED_AGENTS,
+  structuredAgentsDeclaringNothing
+} from './structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
   HOST_TEST_NOW as NOW,
@@ -34,6 +37,8 @@ import {
   hostTestOperationId,
   resetHostTestOperationIds
 } from './structured-agent-session-host-test-data'
+import { structuredAgentRuntimeRegistration } from '../../runtime/structured-agent-runtime-registrations'
+import { attachFingerprintFields } from './structured-agent-session-attach'
 import { createStructuredAgentSessionLogger } from './structured-agent-session-logger'
 
 let root: string
@@ -73,9 +78,16 @@ beforeEach(async () => {
       })
     }
   })
+  const openCode = structuredAgentRuntimeRegistration('opencode')
+  if (!openCode) {
+    throw new Error('OpenCode is not registered')
+  }
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
-    agents: NO_STRUCTURED_AGENTS,
+    agents: structuredAgentsDeclaringNothing([
+      ...NO_STRUCTURED_AGENTS.definitions(),
+      openCode.definition
+    ]),
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
@@ -106,15 +118,15 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
-async function send(text: string): Promise<string> {
+async function send(text: string, sessionId = SESSION): Promise<string> {
   const body = hostTestMessage(text)
   const envelope = {
-    sessionId: SESSION,
+    sessionId,
     clientOperationId: hostTestOperationId(),
     expectedRuntimeFence: 1,
     payloadFingerprint: computeAgentSessionPayloadFingerprint({
       method: 'agentSession.send',
-      sessionId: SESSION,
+      sessionId,
       fields: { body }
     })
   }
@@ -122,16 +134,16 @@ async function send(text: string): Promise<string> {
   return envelope.clientOperationId
 }
 
-async function rejection(id: string) {
+async function rejection(id: string, sessionId = SESSION) {
   await vi.waitFor(
     async () =>
       expect(
-        (await host.journalSnapshot(SESSION)).submissions.find((s) => s.clientMessageId === id)
+        (await host.journalSnapshot(sessionId)).submissions.find((s) => s.clientMessageId === id)
           ?.dispatchState
       ).toBe('rejected'),
     { timeout: 10_000 }
   )
-  return (await host.journalSnapshot(SESSION)).submissions.find((s) => s.clientMessageId === id)
+  return (await host.journalSnapshot(sessionId)).submissions.find((s) => s.clientMessageId === id)
 }
 
 // H10: a chat reopened while its conversation runs in a terminal starts no second writer.
@@ -144,7 +156,9 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
 
   const first = await rejection(await send('first'))
   expect(first?.rejection).toMatchObject({ kind: 'conversationOpenInTerminal' })
-  expect(first?.reason).toContain('has exited in its terminal')
+  expect(first?.reason).toBe(
+    'Codex is already running this conversation in another terminal. Quit Codex there or close that terminal to continue here.'
+  )
   expect(acquire.mock.calls.length).toBe(spawnsBefore)
   expect(store.getRecord(SESSION)?.lease.reservedSpawnToken).toBeNull()
 
@@ -157,6 +171,122 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
   await vi.waitFor(() => expect(acquire.mock.calls.length).toBe(spawnsBefore + 1), {
     timeout: 10_000
   })
+})
+
+it('acquires when only a saved Sleep note remains, but refuses an existing unknown terminal', async () => {
+  const saved: SleepingAgentSessionRecord = {
+    paneKey: 'slept',
+    worktreeId: 'workspace-1',
+    agent: 'codex',
+    providerSession: { key: 'session_id', id: THREAD },
+    prompt: '',
+    state: 'done',
+    origin: 'worktree-sleep',
+    capturedAt: 1,
+    updatedAt: 1
+  }
+  let terminalExists = true
+  assertNoTerminalWriter.mockImplementation((record) =>
+    assertCliConversationWritersExited(
+      {
+        saved: () => [saved],
+        rows: () => [],
+        links: () => [],
+        observation: () => null,
+        sleeping: () => true,
+        terminal: () => (terminalExists ? { pane: null } : null),
+        shellAlone: vi.fn(async () => false)
+      },
+      record.provider,
+      record.providerHandleChain.at(-1)?.handle.nativeId ?? ''
+    )
+  )
+  await host.close(SESSION, 'evict')
+  await host.revealSession(SESSION)
+  const before = acquire.mock.calls.length
+  expect((await rejection(await send('unknown physical terminal')))?.rejection).toMatchObject({
+    kind: 'conversationOpenInTerminal'
+  })
+  expect(acquire).toHaveBeenCalledTimes(before)
+  terminalExists = false
+  const id = await send('saved note only')
+  await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(before + 1))
+  await vi.waitFor(async () =>
+    expect(
+      (await host.journalSnapshot(SESSION)).submissions.find((s) => s.clientMessageId === id)
+        ?.dispatchState
+    ).toBe('accepted')
+  )
+})
+
+it('preserves actual saved OpenCode background refusal through acquisition and the recorded send', async () => {
+  const sessionId = `${SESSION}-opencode`
+  const definition = structuredAgentRuntimeRegistration('opencode')?.definition
+  if (!definition) {
+    throw new Error('OpenCode is not registered')
+  }
+  const handle = { transport: definition.handleTransport, agent: 'opencode', nativeId: THREAD }
+  acquire.mockImplementationOnce(async ({ fence, spawnToken }) => ({
+    process: { hostId: 'local', pid: 4243, processStartTimeMs: NOW, spawnToken },
+    acquisitionGeneration: `generation-${fence}`,
+    link: {
+      linkId: `link-${fence}`,
+      handle,
+      origin: 'created',
+      mintedAtFence: fence,
+      observedAt: NOW
+    }
+  }))
+  const params = hostTestAttachParams(null, {
+    provider: 'opencode',
+    agent: 'opencode',
+    accountHome: { kind: 'opencode', locator: { kind: 'unmanaged' } },
+    providerHandle: undefined
+  })
+  params.envelope.sessionId = sessionId
+  params.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
+    method: 'agentSession.attach',
+    sessionId,
+    fields: attachFingerprintFields(params)
+  })
+  const attached = await host.attach(CALLER, params)
+  expect(attached).toMatchObject({ ok: true })
+  await host.close(sessionId, 'evict')
+  const saved: SleepingAgentSessionRecord = {
+    paneKey: 'slept',
+    worktreeId: 'workspace-1',
+    agent: 'opencode',
+    providerSession: { key: 'session_id', id: THREAD },
+    prompt: '',
+    state: 'done',
+    origin: 'worktree-sleep',
+    capturedAt: 1,
+    updatedAt: 1
+  }
+  assertNoTerminalWriter.mockImplementation((record) =>
+    assertCliConversationWritersExited(
+      {
+        saved: () => [saved],
+        rows: () => [],
+        links: () => [],
+        observation: () => null,
+        sleeping: () => true,
+        terminal: () => null,
+        shellAlone: vi.fn(async () => false)
+      },
+      record.provider,
+      record.providerHandleChain.at(-1)?.handle.nativeId ?? ''
+    )
+  )
+  await host.revealSession(sessionId)
+  const before = acquire.mock.calls.length
+  const rejected = await rejection(await send('resume saved OpenCode', sessionId), sessionId)
+  expect(rejected?.rejection).toMatchObject({ kind: 'conversationOpenInBackgroundServer' })
+  expect(rejected?.reason).toBe(
+    'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
+  )
+  expect(acquire).toHaveBeenCalledTimes(before)
+  expect(store.getRecord(sessionId)?.lease.reservedSpawnToken).toBeNull()
 })
 
 it.each([10, 100])(

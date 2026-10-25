@@ -1,3 +1,4 @@
+import { sayAgentSessionFailureTranslated } from '../native-chat/agent-session-failure-words-text'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -135,6 +136,13 @@ function notifyAiVaultSessionResumeInChatFailure(
   rowAgent: CliConversationRowAgent
 ): void {
   const failure = structuredLaunchFailure(error)
+  if (
+    failure?.code === 'agent_session_operation_invalid' &&
+    failure.details?.reason === 'conversationOpenInBackgroundServer'
+  ) {
+    toast.error(sayAgentSessionFailureTranslated('conversationOpenInBackgroundServer'))
+    return
+  }
   if (
     hasRuntimeRpcErrorCode(error, 'agent_session_conflict') ||
     failure?.code === 'agent_session_conflict'

@@ -10,6 +10,8 @@ export function isAgentSessionCreateAdmissionRefusal(
     ((refusal.code === 'agent_session_conflict' ||
       refusal.code === 'agent_session_ownership_unknown') &&
       refusal.details?.reason === 'conversationHeldElsewhere') ||
+    (refusal.code === 'agent_session_operation_invalid' &&
+      refusal.details?.reason === 'conversationOpenInBackgroundServer') ||
     (refusal.code === 'agent_session_identity_required' &&
       (refusal.details?.reason === 'transcriptNotFound' ||
         refusal.details?.reason === 'transcriptUnreadable'))

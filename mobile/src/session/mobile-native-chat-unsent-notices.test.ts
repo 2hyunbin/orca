@@ -64,6 +64,23 @@ describe("the phone's line under a not-sent message", () => {
     )
   })
 
+  it('keeps the background-server cause in the phone recorded-message notice', () => {
+    const notices = mobileNativeChatUnsentNotices(
+      {
+        items: [],
+        submissions: [
+          submission('held', {
+            rejection: { kind: 'conversationOpenInBackgroundServer' }
+          })
+        ]
+      },
+      'opencode'
+    )
+    expect(notices.get(agentJournalSubmissionKey('held'))).toBe(
+      'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
+    )
+  })
+
   it("words each rejected message as the desktop does, naming the chat's agent", () => {
     const notices = mobileNativeChatUnsentNotices(
       {
