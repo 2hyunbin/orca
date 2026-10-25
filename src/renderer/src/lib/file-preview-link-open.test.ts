@@ -105,7 +105,7 @@ it.each([
     )
     expect(outcome).toMatchObject({
       status: 'opened',
-      result: { worktreeId: WORKSPACE, executionHostId: host, groupId: 'b' }
+      result: { worktreeId: WORKSPACE, executionHostId: host }
     })
     if (outcome.status !== 'opened') {
       throw new Error('Expected a detected-only workspace preview')
@@ -126,7 +126,7 @@ it.each([
             }
           }
     )
-    expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('b')
+    expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe(outcome.result.groupId)
     expect(
       store.getState().groupsByWorktree[WORKSPACE]?.find((group) => group.id === 'a')?.activeTabId
     ).toBe('source')
@@ -166,7 +166,7 @@ it('refuses a detected preview whose owner changed despite a retained active hos
   expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
 })
 
-it('SSH documents duplicate only the source page and retain independent grants without a website-browser capability', async () => {
+it('SSH document links reuse the source page and its grant without a website-browser capability', async () => {
   const host = 'ssh:ssh-test'
   store.setState((state) => ({
     repos: state.repos.map((repo) => ({
@@ -214,27 +214,24 @@ it('SSH documents duplicate only the source page and retain independent grants w
   expect(plan?.status).toBe('doc-preview')
   expect(outcome).toMatchObject({
     status: 'opened',
-    result: { groupId: 'b', executionHostId: host }
+    result: { groupId: 'a', executionHostId: host }
   })
   if (outcome?.status !== 'opened' || !original.activePageId) {
     throw new Error('Expected preview pages')
   }
-  const duplicate = outcome.result
-  expect(duplicate.browserPageId).not.toBe(original.activePageId)
+  expect(outcome.result.browserPageId).toBe(original.activePageId)
   const location = buildDocPreviewGrantRequest(store.getState(), WORKSPACE, docLocation.filePath)
   if (!location) {
     throw new Error('Expected grant owner')
   }
-  const ids = [original.activePageId, duplicate.browserPageId]
-  grants.push(...ids)
-  const [first, second] = await Promise.all(ids.map((id) => ensureDocPreviewGrant(id, location)))
-  expect(first.grantId).not.toBe(second.grantId)
+  grants.push(original.activePageId)
+  const first = await ensureDocPreviewGrant(original.activePageId, location)
+  expect(await ensureDocPreviewGrant(outcome.result.browserPageId, location)).toBe(first)
+  expect(mocks.mint).toHaveBeenCalledTimes(1)
   store.getState().closeBrowserTab(original.id)
   await Promise.resolve()
   await Promise.resolve()
   expect(mocks.revoke).toHaveBeenCalledExactlyOnceWith(first.grantId)
-  expect(await ensureDocPreviewGrant(duplicate.browserPageId, location)).toBe(second)
-  expect(mocks.mint).toHaveBeenCalledTimes(2)
 })
 
 it('a folder workspace uses its own layout and activates its browser without Git metadata', async () => {
@@ -272,17 +269,25 @@ it('a folder workspace uses its own layout and activates its browser without Git
       [folder]: [
         makeUnifiedTab({
           id: 'chat',
-          contentType: 'agent-session',
+          contentType: 'terminal',
+          entityId: 'chat-terminal',
           worktreeId: folder,
           groupId: 'left',
           executionHostId: 'local'
         }),
         makeUnifiedTab({
           id: 'terminal',
+          entityId: 'other-terminal',
           worktreeId: folder,
           groupId: 'right',
           executionHostId: 'local'
         })
+      ]
+    },
+    tabsByWorktree: {
+      [folder]: [
+        terminalTabFixture('chat-terminal', folder),
+        terminalTabFixture('other-terminal', folder)
       ]
     },
     activeGroupIdByWorktree: { [folder]: 'left' },
@@ -311,10 +316,13 @@ it('a folder workspace uses its own layout and activates its browser without Git
   expect(outcome).toHaveBeenCalledWith(
     expect.objectContaining({
       status: 'opened',
-      result: expect.objectContaining({ worktreeId: folder, groupId: 'right' })
+      result: expect.objectContaining({ worktreeId: folder })
     })
   )
-  expect(store.getState().activeGroupIdByWorktree[folder]).toBe('right')
+  expect(['left', 'right']).not.toContain(store.getState().activeGroupIdByWorktree[folder])
+  expect(store.getState().layoutByWorktree[folder]).toMatchObject({
+    first: { type: 'split', first: { groupId: 'left' } }
+  })
 })
 
 it.each([false, true])(

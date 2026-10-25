@@ -92,7 +92,11 @@ describe('browser destination scope', () => {
           }),
           captureLinkOpenIntent(state, workspaceId, 'source')
         )
-      ).toMatchObject({ status: 'ready', groupId: 'b', match: null })
+      ).toMatchObject({
+        status: 'ready',
+        split: { sourceGroupId: 'a', splitDirection: 'right' },
+        match: null
+      })
     }
   )
 
@@ -127,7 +131,7 @@ describe('browser destination scope', () => {
     store.setState({ browserTabsByWorktree: {} })
     expect(selectBrowserLinkDestination(store.getState(), destination, intent)).toMatchObject({
       status: 'ready',
-      groupId: 'b',
+      split: { sourceGroupId: 'a', splitDirection: 'right' },
       match: null
     })
   })
@@ -184,7 +188,7 @@ describe('browser destination scope', () => {
           destination,
           captureLinkOpenIntent(state, WORKSPACE, 'source')
         )
-      ).toMatchObject({ status: 'ready', groupId: 'c', match: null })
+      ).toMatchObject({ status: 'ready', split: { sourceGroupId: 'c' }, match: null })
       expect(
         browserOpenResultForPage(state, destination, existing.id, existing.activePageId!)
       ).toBeNull()
@@ -314,7 +318,7 @@ describe('browser destination scope', () => {
     const intent = captureLinkOpenIntent(store.getState(), WORKSPACE, 'source')
     expect(
       selectBrowserLinkDestination(store.getState(), browserLinkTestDestination(), intent)
-    ).toMatchObject({ groupId: 'b', match: null })
+    ).toMatchObject({ split: { sourceGroupId: 'a' }, match: null })
     store.setState({
       unifiedTabsByWorktree: {
         [WORKSPACE]: [
@@ -332,10 +336,10 @@ describe('browser destination scope', () => {
     })
     expect(
       selectBrowserLinkDestination(store.getState(), browserLinkTestDestination(), intent)
-    ).toMatchObject({ groupId: 'b', match: null })
+    ).toMatchObject({ split: { sourceGroupId: 'a' }, match: null })
   })
 
-  it('prefers a neighboring selected browser surface, while an inactive browser earns no surface preference', () => {
+  it('uses a visible browser and splits beside the source when that browser becomes hidden', () => {
     const existing = store.getState().createBrowserTab(WORKSPACE, 'https://unrelated.example/', {
       targetGroupId: 'a',
       executionHostId: 'local',
@@ -362,7 +366,7 @@ describe('browser destination scope', () => {
     }))
     expect(
       selectBrowserLinkDestination(store.getState(), browserLinkTestDestination(), intent)
-    ).toMatchObject({ groupId: 'c', match: null })
+    ).toMatchObject({ split: { sourceGroupId: 'b' }, match: null })
     expect(
       store
         .getState()

@@ -112,7 +112,6 @@ it.each([
 ] as const)(
   'waits for main to draw a %s link before reporting and activating its exact page (explicit: %s)',
   async (surface, explicit) => {
-    const targetGroupId = explicit ? 'a' : 'b'
     const reported = vi.fn()
     const opening = open(surface, explicit).then((outcome) => {
       reported(outcome)
@@ -124,6 +123,13 @@ it.each([
     expect(store.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('c')
     expect(requestBrowserFocus).not.toHaveBeenCalled()
 
+    const pending = layoutApplyTestTransport.sentOfType('openBrowserTab')[0]!
+    const targetGroupId = pending.groupId
+    if (explicit) {
+      expect(targetGroupId).toBe('a')
+    } else {
+      expect(pending.split).toMatchObject({ besideGroupId: 'a', direction: 'right' })
+    }
     layoutApplyTestTransport.answerWith('apply')
     layoutApplyTestTransport.answerPending()
     await main.settle()

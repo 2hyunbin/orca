@@ -21,11 +21,9 @@ import {
   type BrowserLinkSelectionSubscriber
 } from './browser-link-reveal'
 import {
-  focusHttpLinkPage,
   isHttpLinkBackgroundOpen,
   openLocalHttpLinkTab,
   prepareRemoteHttpLinkTab,
-  resolveHttpLinkBrowserPlacement,
   type HttpLinkBrowserRequestFields,
   type HttpLinkBrowserTabState
 } from './http-link-browser-placement'
@@ -232,28 +230,30 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
   ) {
     if (workspaceHttpLinkBrowserOpener && state) {
       const fields = prepareRemoteHttpLinkTab(state, worktreeId)
+      const reveal = captureBrowserLinkReveal(
+        () => storeAccessor?.() ?? state,
+        storeSubscriber,
+        opts.linkContext?.canReveal
+      )
       void workspaceHttpLinkBrowserOpener({
         workspaceId: worktreeId,
         url,
         intent: { kind: 'url' },
         ...fields,
-        ...(opts.linkContext ? { linkContext: opts.linkContext } : {}),
+        linkContext: { linkIntent: null, ...opts.linkContext, canReveal: reveal.canReveal },
         ...(effectiveSourceOwner?.kind === 'runtime'
           ? { expectedRuntimeEnvironmentId: effectiveSourceOwner.runtimeEnvironmentId }
           : effectiveSourceOwner?.kind === 'ssh'
             ? { expectedSshConnectionId: effectiveSourceOwner.connectionId }
             : {})
-      }).then((pageId) => {
-        if (!opts.linkContext && fields.focusOnCreate !== false) {
-          focusHttpLinkPage(pageId ?? null)
-        }
-      }, reportHttpLinkBrowserOpenFailure)
+      })
+        .catch(reportHttpLinkBrowserOpenFailure)
+        .finally(reveal.dispose)
     }
     return
   }
 
   if (wantsOrca && sourceIsLocal && worktreeId && state) {
-    const placement = resolveHttpLinkBrowserPlacement(state, worktreeId)
     const getState = () => storeAccessor?.() ?? state
     const reveal = captureBrowserLinkReveal(getState, storeSubscriber, opts.linkContext?.canReveal)
     const openLocal = (chosenUrl: string): void => {
@@ -261,12 +261,12 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
         reveal.dispose()
         return
       }
-      if (opts.linkContext && workspaceHttpLinkBrowserOpener) {
+      if (workspaceHttpLinkBrowserOpener) {
         void workspaceHttpLinkBrowserOpener({
           workspaceId: worktreeId,
           url: chosenUrl,
           intent: { kind: 'url' },
-          linkContext: { ...opts.linkContext, canReveal: reveal.canReveal },
+          linkContext: { linkIntent: null, ...opts.linkContext, canReveal: reveal.canReveal },
           ...(isHttpLinkBackgroundOpen(state)
             ? { focusOnCreate: false, selectWorktree: false }
             : {})
@@ -280,7 +280,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
       if (activate && !isFloatingWorkspaceId(worktreeId)) {
         reselectWorkspaceKeepingHost(state, worktreeId)
       }
-      openLocalHttpLinkTab(getState(), worktreeId, chosenUrl, placement, activate)
+      openLocalHttpLinkTab(getState(), worktreeId, chosenUrl, undefined, activate)
     }
     const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
     if (!localhostRoute) {

@@ -146,7 +146,7 @@ it.each([
     registration.resolve({ url: labeledUrl })
     const outcome = await completed
 
-    expect(outcome).toMatchObject({ status: 'opened', result: { groupId: 'b' } })
+    expect(outcome).toMatchObject({ status: 'opened' })
     if (outcome.status !== 'opened') {
       throw new Error('Expected the registered browser tab to be retained')
     }
@@ -155,9 +155,15 @@ it.each([
       labeledUrl
     )
     expect(state.browserTabsByWorktree[WORKSPACE]).toHaveLength(1)
+    expect(state.groupsByWorktree[WORKSPACE]?.find((group) => group.id === 'a')?.activeTabId).toBe(
+      'source'
+    )
+    expect(state.groupsByWorktree[WORKSPACE]?.find((group) => group.id === 'b')?.activeTabId).toBe(
+      'terminal-b'
+    )
     if (navigation === 'unchanged') {
       expect(state.activeView).toBe('terminal')
-      expect(state.activeGroupIdByWorktree[WORKSPACE]).toBe('b')
+      expect(state.activeGroupIdByWorktree[WORKSPACE]).toBe(outcome.result.groupId)
       expect(requestBrowserFocus).toHaveBeenCalledExactlyOnceWith({
         pageId: outcome.result.browserPageId,
         target: 'webview'
@@ -208,6 +214,7 @@ it.each(['workspace', 'view'] as const)(
   'retains a legacy localhost tab in the background after navigating to another %s',
   async (navigation) => {
     const { registration, register } = deferLocalhostRegistration()
+    const completed = observeBrowserLinkOpen()
     openHttpLink('http://localhost:5180/', {
       worktreeId: WORKSPACE,
       sourceOwner: { kind: 'local' }
@@ -221,7 +228,7 @@ it.each(['workspace', 'view'] as const)(
     const selected = useAppStore.getState()
     const labeledUrl = 'http://main.orca.localhost:60016/'
     registration.resolve({ url: labeledUrl })
-    await registration.promise
+    await completed
 
     const state = useAppStore.getState()
     expect(state.browserTabsByWorktree[WORKSPACE]).toHaveLength(1)
@@ -261,9 +268,12 @@ it.each([false, true])(
     await vi.waitFor(() => expect(opening).toHaveBeenCalledOnce())
     const outcome = await opening.mock.results[0]!.value
 
-    expect(outcome).toMatchObject({ status: 'opened', result: { groupId: 'b' } })
+    expect(outcome).toMatchObject({ status: 'opened' })
+    if (outcome.status !== 'opened') {
+      throw new Error('Expected opened link')
+    }
     expect(useAppStore.getState().activeView).toBe('terminal')
-    expect(useAppStore.getState().activeGroupIdByWorktree[WORKSPACE]).toBe('b')
+    expect(useAppStore.getState().activeGroupIdByWorktree[WORKSPACE]).toBe(outcome.result.groupId)
     expect(useAppStore.getState().browserTabsByWorktree[WORKSPACE]).toHaveLength(1)
   }
 )
@@ -326,5 +336,21 @@ it('keeps the main view and workspace selected when revealing a floating HTTP li
   expect(await opening.mock.results[0]!.value).toMatchObject({ status: 'opened' })
   expect(useAppStore.getState().activeView).toBe('activity')
   expect(useAppStore.getState().activeWorktreeId).toBe(WORKSPACE)
-  expect(useAppStore.getState().activeGroupIdByWorktree[floating]).toBe('b')
+  expect(['a', 'b', 'c']).not.toContain(useAppStore.getState().activeGroupIdByWorktree[floating])
+})
+
+it('reuses an exact page for an HTTP link without source context', async () => {
+  const browser = useAppStore.getState().createBrowserTab(WORKSPACE, URL_TO_OPEN, {
+    targetGroupId: 'b',
+    browserRuntimeEnvironmentId: null,
+    sessionProfileId: null,
+    activate: false
+  })
+  const completed = observeBrowserLinkOpen()
+  openHttpLink(URL_TO_OPEN, { worktreeId: WORKSPACE, sourceOwner: { kind: 'local' } })
+  expect(await completed).toMatchObject({
+    status: 'opened',
+    result: { browserWorkspaceId: browser.id, browserPageId: browser.activePageId }
+  })
+  expect(useAppStore.getState().browserTabsByWorktree[WORKSPACE]).toHaveLength(1)
 })

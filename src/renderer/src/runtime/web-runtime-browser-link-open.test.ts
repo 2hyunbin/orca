@@ -1,6 +1,7 @@
 import type * as BrowserFocusModule from '@/components/browser-pane/host-guest/browser-focus'
 import { requestBrowserFocus } from '@/components/browser-pane/host-guest/browser-focus'
 import type { BrowserSessionProfile } from '../../../shared/browser-workspace-types'
+import { makeUnifiedTab } from '../store/slices/store-test-helpers'
 import { getDefaultSettings } from '../../../shared/constants'
 import { SESSION_TABS_SPLIT_GROUP_PLACEMENT_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import {
@@ -124,7 +125,7 @@ describe('runtime link opens through staging and materialization', () => {
     expect(requestBrowserFocus).not.toHaveBeenCalled()
   })
 
-  it('stages in the adjacent group and returns the reconciled host page identity', async () => {
+  it('stages in the visible browser group and returns the reconciled host page identity', async () => {
     const creating = open()
     expect(pendingCreates).toHaveLength(1)
     const provisional = pendingCreates[0]!.params.page
@@ -143,6 +144,44 @@ describe('runtime link opens through staging and materialization', () => {
     expect(
       useAppStore.getState().remoteBrowserPageHandlesByPageId[outcome.result.browserPageId]
     ).toMatchObject({ remotePageId: 'actual-host-page', environmentId: ENV })
+  })
+
+  it('creates a client split beside the source when no browser is visible', async () => {
+    useAppStore.setState((state) => ({
+      groupsByWorktree: {
+        [WT]: state.groupsByWorktree[WT]!.map((group) => ({
+          ...group,
+          activeTabId: `terminal-${group.id}`,
+          tabOrder: [...group.tabOrder, `terminal-${group.id}`]
+        }))
+      },
+      unifiedTabsByWorktree: {
+        [WT]: [
+          ...state.unifiedTabsByWorktree[WT]!,
+          ...[G1, G2].map((groupId) =>
+            makeUnifiedTab({
+              id: `terminal-${groupId}`,
+              entityId: `terminal-${groupId}`,
+              worktreeId: WT,
+              groupId,
+              contentType: 'terminal',
+              executionHostId: HOST
+            })
+          )
+        ]
+      }
+    }))
+    const creating = open()
+    expect(pendingCreates).toHaveLength(1)
+    const provisional = pendingCreates[0]!.params.page!
+    const staged = wrapperForRemotePage(provisional)!
+    expect([G1, G2]).not.toContain(staged.groupId)
+    expect(useAppStore.getState().layoutByWorktree[WT]).toMatchObject({
+      first: { type: 'split', first: { groupId: G1 }, second: { groupId: staged.groupId } }
+    })
+    pendingCreates[0]!.resolve('split-host-page')
+    expect(await creating).toMatchObject({ status: 'opened', result: { groupId: staged.groupId } })
+    expect(wrapperForRemotePage('split-host-page')?.groupId).toBe(staged.groupId)
   })
 
   it('refuses new explicit creation before staging when strict peer placement is unproven', async () => {

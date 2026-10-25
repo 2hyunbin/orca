@@ -10,7 +10,8 @@ import type {
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { normalizeBrowserNavigationUrl, redactKagiSessionToken } from '../../../shared/browser-url'
 import { browserPageDocLocationsEqual } from '../../../shared/browser-page-doc-location'
-import { pickAdjacentLinkOpenGroupId } from './adjacent-link-open-group'
+import { findVisibleBrowserLinkTarget } from './visible-browser-link-target'
+import type { TabSplitTarget } from '@/store/slices/tabs/tabs-slice-contract'
 import { isLiveLinkOpenGroup, liveLinkOpenGroupIds, type LinkOpenIntent } from './link-open-intent'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from './worktree-runtime-owner'
 
@@ -189,7 +190,9 @@ export function selectBrowserLinkDestination(
   state: AppState,
   destination: BrowserLinkDestination,
   intent: LinkOpenIntent | null
-): { status: 'ready'; groupId?: string; match: BrowserOpenResult | null } | { status: 'refused' } {
+):
+  | { status: 'ready'; groupId?: string; split?: TabSplitTarget; match: BrowserOpenResult | null }
+  | { status: 'refused' } {
   const { worktreeId, executionHostId } = destination
   const groups = state.groupsByWorktree[worktreeId] ?? []
   const matchesHost = createBrowserLinkHostMatcher(state, worktreeId, executionHostId)
@@ -255,36 +258,43 @@ export function selectBrowserLinkDestination(
     matchingGroups.add(tab.groupId)
   }
   let groupId = intent?.targetGroupId
-  const layout = state.layoutByWorktree[worktreeId]
-  const source =
-    intent?.workspaceId === worktreeId && matchesHost(intent.hostId)
-      ? tabsById.get(intent.sourceTabId)
-      : undefined
-  if (!groupId && layout && source && (source.executionHostId ?? null) === intent?.hostId) {
-    const facts = new Map(
-      groups.map((group) => {
-        const active = group.activeTabId ? tabsById.get(group.activeTabId) : undefined
-        return [
-          group.id,
-          {
-            hasMatchingDestination: matchingGroups.has(group.id),
-            showsDestinationSurface:
-              active?.groupId === group.id &&
-              active.contentType === 'browser' &&
-              workspaces.has(active.entityId)
-          }
-        ]
-      })
-    )
+  const focusedGroupId = state.activeGroupIdByWorktree[worktreeId]
+  if (!groupId && matchesByTab.size > 0) {
     groupId =
-      pickAdjacentLinkOpenGroupId({ layout, groups, sourceGroupId: source.groupId, facts }) ??
-      undefined
+      findVisibleBrowserLinkTarget(state, worktreeId, (tab) => matchesByTab.has(tab.id))
+        ?.targetGroupId ??
+      (focusedGroupId && matchingGroups.has(focusedGroupId) ? focusedGroupId : undefined) ??
+      [...liveGroups].find((id) => matchingGroups.has(id))
   }
   if (!groupId) {
-    const active = state.activeGroupIdByWorktree[worktreeId]
-    groupId =
-      groups.find((group) => group.id === active && liveGroups.has(group.id))?.id ??
-      groups.find((group) => liveGroups.has(group.id))?.id
+    groupId = findVisibleBrowserLinkTarget(
+      state,
+      worktreeId,
+      (tab) =>
+        matchesHost(tab.executionHostId) && workspaces.has(tabsById.get(tab.id)?.entityId ?? '')
+    )?.targetGroupId
+  }
+  if (!groupId) {
+    const source =
+      intent?.workspaceId === worktreeId && matchesHost(intent.hostId)
+        ? tabsById.get(intent.sourceTabId)
+        : undefined
+    const sourceGroupId =
+      source &&
+      (source.executionHostId ?? null) === intent?.hostId &&
+      liveGroups.has(source.groupId)
+        ? source.groupId
+        : focusedGroupId && liveGroups.has(focusedGroupId)
+          ? focusedGroupId
+          : [...liveGroups][0]
+    if (sourceGroupId && groups.find((group) => group.id === sourceGroupId)?.activeTabId) {
+      return {
+        status: 'ready',
+        split: { sourceGroupId, splitDirection: 'right', activate: false },
+        match: null
+      }
+    }
+    groupId = sourceGroupId
   }
   const group = groups.find((item) => item.id === groupId)
   const ids = group ? [group.activeTabId, ...group.tabOrder] : []

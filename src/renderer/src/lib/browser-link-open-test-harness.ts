@@ -70,6 +70,20 @@ export function seedBrowserLinkTestStore(store: BrowserLinkTestStore): void {
       }
     }
   })
+  store.setState((state) => ({
+    tabsByWorktree: {
+      [WORKSPACE]: state.unifiedTabsByWorktree[WORKSPACE]!.map((tab) => ({
+        id: tab.entityId,
+        ptyId: null,
+        worktreeId: WORKSPACE,
+        title: 'Terminal',
+        customTitle: null,
+        color: null,
+        sortOrder: tab.sortOrder,
+        createdAt: tab.createdAt
+      }))
+    }
+  }))
 }
 
 export function browserLinkTestDestination(
