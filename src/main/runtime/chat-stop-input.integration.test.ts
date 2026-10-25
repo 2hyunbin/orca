@@ -1,6 +1,11 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { TERMINAL_SEND_METHODS } from './rpc/methods/terminal/terminal-send-method'
+import type { IpcMainInvokeEvent } from 'electron'
+import { installPtyWriteIpcHandlers } from '../ipc/pty/ipc/write'
+import { setPtyHostBindings, type PtyIpcSurface } from '../ipc/pty/pty-host-bindings'
+import type { PtyRendererDelivery } from '../ipc/pty/session'
+import { PtyWriteUnavailableError } from '../providers/pty-write-unavailable-error'
 import { createPtyWriteInput } from '../ipc/pty/ipc/write-input'
 import { writePtyFromRuntimeController } from '../ipc/pty/runtime/operations'
 import * as providers from '../ipc/pty/provider/registry'
@@ -35,6 +40,7 @@ const PTY_ID = 'pty-ask'
 
 describe('explicit Stop through execution-host input seams', () => {
   afterEach(() => {
+    setPtyHostBindings({})
     vi.restoreAllMocks()
     vi.useRealTimers()
     ptyOwnership.delete(PTY_ID)
@@ -194,6 +200,59 @@ describe('explicit Stop through execution-host input seams', () => {
       await vi.advanceTimersByTimeAsync(500)
       expect(t.physical).toHaveBeenCalledTimes(2)
       expect(t.row()?.state).toBe('working')
+    } finally {
+      t.wiring.statusStore.stop()
+    }
+  })
+
+  it('preserves the same recovery notification for tagged and untagged ordinary Escape throws', async () => {
+    const t = await setup()
+    vi.spyOn(LocalPtyProvider.prototype, 'hasPty').mockReturnValue(true)
+    const strictWrite = vi.spyOn(LocalPtyProvider.prototype, 'writeWithSettlement')
+    const infer = vi.spyOn(t.wiring.statusStore, 'inferInterrupt')
+    const send = vi.fn()
+    const handle = vi.fn<PtyIpcSurface['handle']>()
+    const mainWindow: PtyRendererDelivery = {
+      isDestroyed: () => false,
+      isFocused: () => true,
+      isVisible: () => true,
+      isMinimized: () => false,
+      webContents: { id: 1, isDestroyed: () => false, send, on: vi.fn(), removeListener: vi.fn() }
+    }
+    setPtyHostBindings({
+      ipc: { handle, on: vi.fn(), removeHandler: vi.fn(), removeAllListeners: vi.fn() }
+    })
+    installPtyWriteIpcHandlers({ runtime: t.runtime, mainWindow })
+    const invoke = handle.mock.calls.find(([channel]) => channel === 'pty:writeAccepted')?.[1]
+    if (!invoke) {
+      throw new Error('writeAccepted handler missing')
+    }
+    try {
+      t.physical.mockImplementation(() => {
+        throw new PtyWriteUnavailableError('awaiting recovery')
+      })
+      for (const tagged of [false, true]) {
+        // SAFETY: this authorized IPC fixture reads only sender from the invoke event.
+        const event = { sender: mainWindow.webContents } as IpcMainInvokeEvent
+        expect(
+          await invoke(event, {
+            id: PTY_ID,
+            data: '\x1b',
+            inputKind: 'driving',
+            ...(tagged ? { chatStop: { id: 'stop', index: 1 } } : {})
+          })
+        ).toBe(false)
+      }
+      await vi.advanceTimersByTimeAsync(500)
+      expect(t.physical).toHaveBeenCalledTimes(2)
+      expect(t.physical.mock.calls.map(([id, data]) => [id, data])).toEqual([
+        [PTY_ID, '\x1b'],
+        [PTY_ID, '\x1b']
+      ])
+      expect(send.mock.calls).toEqual(Array(2).fill(['pty:writeUnavailable', { id: PTY_ID }]))
+      expect(t.row()?.state).toBe('working')
+      expect(infer).not.toHaveBeenCalled()
+      expect(strictWrite).not.toHaveBeenCalled()
     } finally {
       t.wiring.statusStore.stop()
     }

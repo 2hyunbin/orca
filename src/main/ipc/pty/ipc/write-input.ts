@@ -254,8 +254,8 @@ export function createPtyWriteInput(deps: {
     try {
       noteRendererPtyInput(args)
       return writeAndObserveInput(provider, args)
-    } catch {
-      return false
+    } catch (error) {
+      return failedWrite(args.id, error, false)
     }
   }
 

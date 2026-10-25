@@ -206,17 +206,49 @@ describe('NativeChatResolvedView turn status', () => {
   })
 
   // A remounted pane must use the host’s recorded end and duration instead of drawing an unfinished turn.
-  it('shows the host-ended latest turn with its host duration after a remount', () => {
-    retained.session = transcript('ready', false, [userTurn, stepCall])
-    setStatus({ state: 'done' })
-    const now = Date.now()
-    patchStatus({ stateStartedAt: now - 10_000, turnStartedAt: now - 100_000 })
-
-    renderPane()
-
-    expect(screen.getByText('Worked for 1m 30s')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Toggle turn details' })).toBeInTheDocument()
-  })
+  it.each([
+    ['cancellation', 'Interrupted after'],
+    ['superseded', 'Interrupted after'],
+    ['failure', 'Failed after'],
+    ['success', 'Worked for'],
+    ['interruption', 'Worked for'],
+    ['unconfirmed', 'Worked for'],
+    [undefined, 'Worked for']
+  ] as const)(
+    'renders canonical %s on only the latest host-ended turn, including remount',
+    (outcome, label) => {
+      retained.session = transcript('ready', false, [
+        { ...userTurn, id: 'earlier', timestamp: 1_000 },
+        { ...stepCall, id: 'earlier-step', timestamp: 46_000 },
+        { ...userTurn, timestamp: 100_000 },
+        { ...stepCall, timestamp: 110_000 }
+      ])
+      setStatus({ state: 'done' })
+      const now = Date.now()
+      patchStatus({
+        stateStartedAt: now - 10_000,
+        turnStartedAt: now - 100_000,
+        mainAgent: { state: 'done', stateStartedAt: now - 10_000, outcome }
+      })
+      renderPane()
+      expect(screen.getByText(`${label} 1m 30s`)).toBeInTheDocument()
+      expect(screen.getByText('Worked for 45s')).toBeInTheDocument()
+      cleanup()
+      patchStatus({ updatedAt: now - 31 * 60_000 })
+      renderPane()
+      expect(screen.getByText(`${label} 1m 30s`)).toBeInTheDocument()
+      act(() => {
+        retained.session = transcript('working', false, [
+          ...retained.session!.messages,
+          { ...userTurn, id: 'next', timestamp: now }
+        ])
+        setStatus({ state: 'working' })
+        patchStatus({ turnStartedAt: now, mainAgent: { state: 'working', stateStartedAt: now } })
+      })
+      expect(screen.getByText('Working for 0s')).toBeInTheDocument()
+      expect(screen.queryByText(`${label} 1m 30s`)).toBeNull()
+    }
+  )
 
   // Store staleness alone cannot prove an unanswered turn ended.
   it('does not settle a turn the host went quiet on', () => {
