@@ -164,17 +164,20 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
     const worktree = `id:${context.worktreeId}`
     let tabId = ''
     await expect
-      .poll(async () => {
-        const listed = await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
-          worktree
-        })
-        tabId =
-          listed.tabs.find(
+      .poll(
+        async () => {
+          const listed = await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
+            worktree
+          })
+          const tab = listed.tabs.find(
             (entry) => entry.type === 'markdown' && entry.sourceFilePath === untitledPath
-          )?.id ?? ''
-        return tabId
-      })
-      .not.toBe('')
+          )
+          tabId = tab?.id ?? ''
+          return tab?.type === 'markdown' && tab.isDirty
+        },
+        { timeout: 30_000, message: 'the desktop never listed its dirty untitled Markdown tab' }
+      )
+      .toBe(true)
 
     // Poll through the debounced desktop session write that makes the tab discoverable.
     let read: RuntimeMarkdownReadTabResult | null = null
