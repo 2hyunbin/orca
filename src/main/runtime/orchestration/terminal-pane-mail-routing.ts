@@ -135,7 +135,8 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
         foregroundProcess = await this.ptyController.confirmForegroundProcess(ptyId)
         agent = recognizeAgentProcess(foregroundProcess)?.agent
       }
-      if (agent !== 'claude' && agent !== 'codex') {
+      // Why every agent: unframed keystrokes can open Pi's `#` completion or answer a trust menu; Dispatch already frames them all.
+      if (agent === undefined) {
         return false
       }
       const presence = { retryForegroundWrappers: false, foregroundProcess }
