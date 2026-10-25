@@ -479,6 +479,65 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     expect(chat.turns).toHaveLength(1)
     expect(chat.steers).toHaveLength(1)
   })
+
+  it('wakes a coordinator holding an unacked batch once, at turn end, for mail that came mid-turn', async () => {
+    const chat = await openChat(COORDINATOR)
+    const { runId, taskId } = await coordinatorRunAndTask()
+    await finishWorker(taskId)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    await settleTurn(COORDINATOR, 0)
+    const held = await call('orchestration.check', { run: runId }, { sessionId: COORDINATOR })
+    const heldId = String(held.deliveryId)
+
+    expect(await sendUserMessage(COORDINATOR, 'keep working')).toMatchObject({ ok: true })
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+    const notify = (method: string, params: unknown) =>
+      chat.handlers.onNotification?.(method, params)
+    notify('turn/started', { turn: { id: 'turn-2' } })
+    notify('item/completed', {
+      item: {
+        type: 'userMessage',
+        id: 'echo-2',
+        clientId: chat.turns[1]!.clientUserMessageId,
+        content: [{ type: 'text', text: 'keep working' }]
+      }
+    })
+    await host.flushStreamedEvents(COORDINATOR)
+    const task2 = await call('orchestration.taskCreate', { spec: 'b' }, { sessionId: COORDINATOR })
+    await finishWorker(idOf(task2.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+
+    notify('turn/completed', { turn: { id: 'turn-2' } })
+    await host.flushStreamedEvents(COORDINATOR)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(3), WAIT)
+    // Held until the turn ended: an ack inside that turn would have handed over the new mail itself.
+    expect(chat.steers).toHaveLength(0)
+    expect(turnText(chat.turns[2]!)).toContain(
+      `You have 1 new orchestration message; you still hold delivery ${heldId}. Finish it, then run \`${localOrchestrationCliCommand()} orchestration check --run ${runId} --ack ${heldId}\`.`
+    )
+
+    // Ending that turn without acking stays quiet: nothing newer arrived.
+    await settleTurn(COORDINATOR, 2)
+    runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
+    // ast-grep-ignore: test-no-real-time-wait -- asserting no further turn needs a settle window
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(chat.turns).toHaveLength(3)
+    expect(chat.steers).toHaveLength(0)
+
+    // Newer mail reaching the idle chat wakes it once more, still naming the held batch.
+    const task3 = await call('orchestration.taskCreate', { spec: 'c' }, { sessionId: COORDINATOR })
+    await finishWorker(idOf(task3.task), { handle: 'term_worker_2', paneKey: WORKER_2_PANE })
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(4), WAIT)
+    expect(turnText(chat.turns[3]!)).toContain(
+      `You have 1 new orchestration message; you still hold delivery ${heldId}.`
+    )
+
+    const next = await call(
+      'orchestration.check',
+      { run: runId, ack: heldId },
+      { sessionId: COORDINATOR }
+    )
+    expect(next).toMatchObject({ acknowledged: heldId, count: 2 })
+  })
 })
 
 describe('a /clear keeps the chat its orchestration address', () => {

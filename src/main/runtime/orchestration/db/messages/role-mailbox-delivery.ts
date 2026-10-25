@@ -184,6 +184,21 @@ export function hasOutstandingMailboxDelivery(
   )
 }
 
+export function getOutstandingMailboxDelivery(
+  this: OrchestrationDb,
+  mailboxHandle: string
+): { id: string; messageIds: string[] } | undefined {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: id is the generated TEXT primary key and message_ids is NOT NULL TEXT.
+  const row = this.db
+    .prepare('SELECT id, message_ids FROM outstanding_deliveries WHERE mailbox_handle = ? LIMIT 1')
+    .get(mailboxHandle) as Pick<DeliveryRow, 'id' | 'message_ids'> | undefined
+  if (!row) {
+    return undefined
+  }
+  const messageIds: string[] = JSON.parse(row.message_ids)
+  return { id: row.id, messageIds }
+}
+
 export function fenceUnacknowledgedMailboxDeliveries(
   this: OrchestrationDb,
   mailboxHandle: string
@@ -201,6 +216,7 @@ export type RoleMailboxDeliveryMethods = {
   getOrCreateMailboxDelivery: typeof getOrCreateMailboxDelivery
   acknowledgeMailboxDelivery: typeof acknowledgeMailboxDelivery
   hasOutstandingMailboxDelivery: typeof hasOutstandingMailboxDelivery
+  getOutstandingMailboxDelivery: typeof getOutstandingMailboxDelivery
   fenceUnacknowledgedMailboxDeliveries: typeof fenceUnacknowledgedMailboxDeliveries
 }
 
@@ -211,6 +227,7 @@ export function attachRoleMailboxDelivery(ctor: { prototype: object }): void {
     getOrCreateMailboxDelivery,
     acknowledgeMailboxDelivery,
     hasOutstandingMailboxDelivery,
+    getOutstandingMailboxDelivery,
     fenceUnacknowledgedMailboxDeliveries
   })
 }

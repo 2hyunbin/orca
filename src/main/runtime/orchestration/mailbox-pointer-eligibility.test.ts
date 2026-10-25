@@ -36,7 +36,7 @@ describe('selectOrchestrationPointerBatch', () => {
         waiters: waiters(['question']),
         reservedTypes: undefined
       })
-      expect(batch.map((m) => m.type)).toEqual(['status', 'status'])
+      expect(batch.messages.map((m) => m.type)).toEqual(['status', 'status'])
     } finally {
       db.close()
     }
@@ -51,7 +51,7 @@ describe('selectOrchestrationPointerBatch', () => {
         waiters: undefined,
         reservedTypes: new Set(['status'])
       })
-      expect(batch.map((m) => m.type)).toEqual(['question'])
+      expect(batch.messages.map((m) => m.type)).toEqual(['question'])
     } finally {
       db.close()
     }
@@ -66,7 +66,7 @@ describe('selectOrchestrationPointerBatch', () => {
           mailboxHandle: MAILBOX,
           waiters: waiters(['question']),
           reservedTypes: new Set(['status'])
-        })
+        }).messages
       ).toEqual([])
     } finally {
       db.close()
@@ -83,7 +83,7 @@ describe('selectOrchestrationPointerBatch', () => {
           mailboxHandle: MAILBOX,
           waiters: waiters(['question'], undefined),
           reservedTypes: undefined
-        })
+        }).messages
       ).toEqual([])
     } finally {
       db.close()

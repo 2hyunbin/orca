@@ -80,6 +80,10 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
       return getStructuredAgentSessionHost()?.currentWork(sessionId)?.hasActionablePrompt() ?? null
     },
 
+    isWorkingNow(sessionId) {
+      return getStructuredAgentSessionHost()?.currentWork(sessionId)?.working() ?? false
+    },
+
     currentFence(sessionId) {
       return (
         getStructuredAgentSessionHost()?.deps.store.getRecord(sessionId)?.lease.runtimeFence ?? null

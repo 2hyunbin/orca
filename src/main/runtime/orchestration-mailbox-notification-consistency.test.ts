@@ -32,6 +32,7 @@ import {
   WORKTREE_ID
 } from './orchestration-mailbox-notification-test-harness'
 import { RpcDispatcher } from './rpc/dispatcher'
+import { localOrchestrationCliCommand } from './orchestration/cli-command'
 import { ORCHESTRATION_METHODS } from './rpc/methods/orchestration'
 import { MAILBOX_POINTER_WRITE_ATTEMPTED } from './orchestration/db/messages/mailbox-pointer-enter-state'
 
@@ -835,7 +836,7 @@ describe('orchestration notification mailbox consistency', () => {
     db.close()
   })
 
-  it('does not point newer Run mail behind an outstanding Delivery', async () => {
+  it('points newer Run mail behind an unacked Delivery once, naming the Delivery', async () => {
     vi.useFakeTimers()
     const db = new OrchestrationDb(':memory:')
     const harness = createRuntime(db)
@@ -855,12 +856,23 @@ describe('orchestration notification mailbox consistency', () => {
     })
 
     await driveToLiveIdle(harness.runtime)
-    const replayed = await checkBoundMailbox(harness.runtime)
+    await vi.advanceTimersByTimeAsync(500)
+    const pointers = harness.write.mock.calls.filter(([, payload]) => isMailboxPointer(payload))
+    expect(pointers).toHaveLength(1)
+    expect(String(pointers[0]![1])).toContain(
+      `you still hold delivery ${firstDelivery.deliveryId}. Finish it, then run \`${localOrchestrationCliCommand()} orchestration check --run ${run.id} --ack ${firstDelivery.deliveryId}\``
+    )
+    expect(db.getMessageById(newerMessage.id)?.delivered_at).toEqual(expect.any(String))
 
-    expect(pointerCount(harness.write)).toBe(0)
+    harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 3)
+    harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 4)
+    await harness.runtime.serializeMainTerminalBuffer(PTY_ID)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(pointerCount(harness.write)).toBe(1)
+
+    const replayed = await checkBoundMailbox(harness.runtime)
     expect(replayed.messages).toEqual([expect.objectContaining({ id: firstMessage.id })])
     expect(replayed.deliveryId).toBe(firstDelivery.deliveryId)
-
     const next = await checkBoundMailbox(harness.runtime, { ack: firstDelivery.deliveryId! })
     expect(next.messages).toEqual([expect.objectContaining({ id: newerMessage.id })])
     expect(next.deliveryId).not.toBe(firstDelivery.deliveryId)

@@ -111,11 +111,15 @@ export function formatMessagesForInjection(messages: MessageRow[]): string {
 export function formatMessagePointer(
   count: number,
   mailboxHandle?: string,
-  cliCommand: OrchestrationCliCommand = 'orca'
+  cliCommand: OrchestrationCliCommand = 'orca',
+  heldDeliveryId?: string
 ): string {
   const noun = count === 1 ? 'message' : 'messages'
   const runFlag = mailboxHandle?.startsWith('run:')
     ? ` --run ${mailboxHandle.slice('run:'.length)}`
     : ''
+  if (heldDeliveryId) {
+    return `\nYou have ${count} new orchestration ${noun}; you still hold delivery ${heldDeliveryId}. Finish it, then run \`${cliCommand} orchestration check${runFlag} --ack ${heldDeliveryId}\`.\n`
+  }
   return `\nYou have ${count} orchestration ${noun}. Run \`${cliCommand} orchestration check${runFlag}\`.\n`
 }

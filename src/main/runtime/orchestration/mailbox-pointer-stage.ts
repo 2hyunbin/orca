@@ -22,6 +22,7 @@ type StagePointerArgs<TWaiter extends OrchestrationMessageWaiter> = {
   leaf: OrchestrationMailboxLeaf
   mailboxHandle: string
   messages: readonly OrchestrationMailboxPointerMessage[]
+  heldDeliveryId?: string
   newestSequence: number
   enterDelayMs: number
   leafKey: string
@@ -97,7 +98,8 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
       formatMessagePointer(
         args.messages.length,
         args.mailboxHandle,
-        args.deps.getCliCommand(expectedTarget.terminalHandle)
+        args.deps.getCliCommand(expectedTarget.terminalHandle),
+        args.heldDeliveryId
       )
     )
     if (isSettledWrite(writeResult)) {
