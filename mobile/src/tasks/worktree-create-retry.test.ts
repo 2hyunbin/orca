@@ -49,7 +49,9 @@ function scriptedClient(
   outcomes: Array<
     | { id: string; displayName?: string; warning?: string }
     | { errorMessage: string }
-    // Model detection latency separately from reconnect time; half-open sockets can consume the dedupe window before failure surfaces.
+    // takesMs models how long the ambiguity took to SURFACE — a clean close is
+    // instant, a half-open socket waits out the liveness watchdog or the timeout.
+    // reconnectsAfterMs brings the transport back so the next replay can run.
     | { throws: unknown; dropsConnection?: boolean; takesMs?: number; reconnectsAfterMs?: number }
   >,
   attempts: Attempt[],
