@@ -1,7 +1,9 @@
 import { spawnProcess } from '@orca/process-host'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { relayBundleCandidates } from '../ssh/relay-bundle-paths'
+import { orcadPosixNodeRuntimeGlobs } from '../managed-server/install/orcad-node-runtime-globs'
 import {
   WSL_BROWSER_NETWORK_RELAY_BUNDLE_NAME,
   WSL_BROWSER_NETWORK_RELAY_DIR,
@@ -33,10 +35,20 @@ export function resolveWslBrowserNetworkRelayBundle(): WslBrowserNetworkRelayBun
     }
     const version = readFileSync(versionPath, 'utf8').trim()
     if (/^[A-Za-z0-9+.-]+$/.test(version)) {
-      return { jsPath, version }
+      return { jsPath, version: `${version}.${guestLauncherRevision()}` }
     }
   }
   return null
+}
+
+let launcherRevision: string | undefined
+// The bundle hash alone misses launcher edits; a new guest dir forces one reinstall of launch.sh.
+function guestLauncherRevision(): string {
+  launcherRevision ??= createHash('sha256')
+    .update(buildWslBrowserNetworkGuestLaunchScript('0'))
+    .digest('hex')
+    .slice(0, 8)
+  return launcherRevision
 }
 
 function guestRelayDir(version: string): string {
@@ -48,13 +60,15 @@ function guestRelayDir(version: string): string {
 
 export function buildWslBrowserNetworkGuestLaunchScript(version: string): string {
   const dir = guestRelayDir(version)
+  // A WSL host distro may have no system node but usually has orcad's pinned runtime.
+  const [orcadRuntime, orcadMachineRuntimes] = orcadPosixNodeRuntimeGlobs()
   return [
     '#!/bin/sh',
     `d="${dir}"`,
     `v="$(cat "$d/${WSL_BROWSER_NETWORK_RELAY_VERSION_FILE}" 2>/dev/null || true)"`,
     `[ "$v" = '${version}' ] || exit ${WSL_BROWSER_NETWORK_RELAY_STALE_EXIT_CODE}`,
     'n=""',
-    'for c in "$(command -v node 2>/dev/null || true)" "$HOME/.nvm/versions/node"/*/bin/node /usr/local/bin/node /usr/bin/node "$HOME/.local/bin/node"; do',
+    `for c in "$(command -v node 2>/dev/null || true)" "$HOME/.nvm/versions/node"/*/bin/node /usr/local/bin/node /usr/bin/node "$HOME/.local/bin/node" ${orcadRuntime} ${orcadMachineRuntimes}; do`,
     '  [ -n "$c" ] && [ -x "$c" ] || continue',
     `  if "$c" -e 'process.exit(Number(process.versions.node.split(".")[0])>=18?0:1)' 2>/dev/null; then`,
     '    n="$c"',

@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import {
-  isLocalWindowsConptyPaneForCtrlArrow,
-  type TerminalCtrlArrowConptyState
-} from './terminal-ctrl-arrow-conpty'
+  isTerminalPaneLocalWindowsConpty,
+  type TerminalPaneConptyState
+} from './terminal-pane-local-windows-conpty'
 import type { PtyTransport } from './pty-transport-types'
 
 const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 
-function state(
-  overrides: Partial<TerminalCtrlArrowConptyState> = {}
-): TerminalCtrlArrowConptyState {
+function state(overrides: Partial<TerminalPaneConptyState> = {}): TerminalPaneConptyState {
   return {
     repos: [],
     worktreesByRepo: {},
@@ -43,10 +41,10 @@ function remoteRuntimeTransport(): Pick<
   }
 }
 
-describe('isLocalWindowsConptyPaneForCtrlArrow', () => {
+describe('isTerminalPaneLocalWindowsConpty', () => {
   it('uses live local session metadata for synthetic floating terminals with no repo record', () => {
     expect(
-      isLocalWindowsConptyPaneForCtrlArrow({
+      isTerminalPaneLocalWindowsConpty({
         isWindows: true,
         userAgent: WINDOWS_UA,
         state: state({
@@ -67,7 +65,7 @@ describe('isLocalWindowsConptyPaneForCtrlArrow', () => {
   it('keeps an already-launched local PowerShell pane local after store ownership changes', () => {
     const worktreeId = 'repo-1::C:\\repo'
     expect(
-      isLocalWindowsConptyPaneForCtrlArrow({
+      isTerminalPaneLocalWindowsConpty({
         isWindows: true,
         userAgent: WINDOWS_UA,
         state: state({
@@ -88,7 +86,7 @@ describe('isLocalWindowsConptyPaneForCtrlArrow', () => {
 
   it('does not treat a live remote-runtime terminal as local ConPTY', () => {
     expect(
-      isLocalWindowsConptyPaneForCtrlArrow({
+      isTerminalPaneLocalWindowsConpty({
         isWindows: true,
         userAgent: WINDOWS_UA,
         state: state(),
@@ -104,7 +102,7 @@ describe('isLocalWindowsConptyPaneForCtrlArrow', () => {
 
   it('stays conservative for unresolved repo-backed panes before a live session exists', () => {
     expect(
-      isLocalWindowsConptyPaneForCtrlArrow({
+      isTerminalPaneLocalWindowsConpty({
         isWindows: true,
         userAgent: WINDOWS_UA,
         state: state(),

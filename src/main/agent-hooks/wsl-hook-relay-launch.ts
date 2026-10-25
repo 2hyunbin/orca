@@ -61,7 +61,7 @@ function guestLauncherRevision(): string {
 /** Probe candidate Node versions: noninteractive sh may miss a newer nvm installation. */
 export function buildGuestLaunchScript(version: string): string {
   const dir = guestRelayDirExpr(version)
-  // A WSL host distro may have no system node but always has orcad's pinned runtime.
+  // A WSL host distro may have no system node but usually has orcad's pinned runtime.
   const [orcadRuntime, orcadMachineRuntimes] = orcadPosixNodeRuntimeGlobs()
   return [
     '#!/bin/sh',

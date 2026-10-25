@@ -16,12 +16,12 @@ function resolveUserDataRoot(userDataPath?: string | null): string {
   return join(tmpdir(), 'orca-rate-limit-pty')
 }
 
-export function resolveHiddenRateLimitPtyCwd(options?: { userDataPath?: string | null }): string {
+export function resolveHiddenProbeCwd(options?: { userDataPath?: string | null }): string {
   const cwd = join(resolveUserDataRoot(options?.userDataPath), HIDDEN_RATE_LIMIT_PTY_CWD_DIR)
   mkdirSync(cwd, { recursive: true })
   const realCwd = realpathSync(cwd)
   if (isRootLikePath(realCwd) || !statSync(realCwd).isDirectory()) {
-    throw new Error(`Hidden rate-limit PTY cwd is not a safe directory: ${realCwd}`)
+    throw new Error(`Hidden probe cwd is not a safe directory: ${realCwd}`)
   }
   return realCwd
 }

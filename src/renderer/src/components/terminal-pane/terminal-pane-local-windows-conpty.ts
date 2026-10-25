@@ -15,28 +15,28 @@ type TerminalTabShellState = {
   >
 }
 
-export type TerminalCtrlArrowConptyState = Parameters<typeof getConnectionIdFromState>[0] &
+export type TerminalPaneConptyState = Parameters<typeof getConnectionIdFromState>[0] &
   WorktreeRuntimeOwnerState &
   TerminalTabShellState
 
-type TerminalCtrlArrowConptyTransport = Pick<
+type TerminalPaneConptyTransport = Pick<
   PtyTransport,
   'getPtyId' | 'getConnectionId' | 'getLocalSessionMetadata'
 >
 
-type TerminalCtrlArrowConptyArgs = {
+type TerminalPaneConptyArgs = {
   isWindows: boolean
   userAgent: string
-  state: TerminalCtrlArrowConptyState
+  state: TerminalPaneConptyState
   worktreeId: string
   tabId: string
   paneId: number
   paneCwd: PaneCwdMap
   fallbackCwd: string
-  transport: TerminalCtrlArrowConptyTransport | null
+  transport: TerminalPaneConptyTransport | null
 }
 
-export function isLocalWindowsConptyPaneForCtrlArrow({
+export function isTerminalPaneLocalWindowsConpty({
   isWindows,
   userAgent,
   state,
@@ -46,7 +46,7 @@ export function isLocalWindowsConptyPaneForCtrlArrow({
   paneCwd,
   fallbackCwd,
   transport
-}: TerminalCtrlArrowConptyArgs): boolean {
+}: TerminalPaneConptyArgs): boolean {
   if (!isWindows) {
     return false
   }
