@@ -174,6 +174,15 @@ export abstract class OrcaRuntimeWithVisibleSnapshotPreview extends OrcaRuntimeW
     return state ? projectTerminalVisibleLines(state.emulator).lines : null
   }
 
+  /** The painted grid once it has applied every PTY chunk; null leaves blocked-text checks on the retained tail. */
+  protected readCaughtUpTerminalScreenText(ptyId: string): string | null {
+    if (this.headlessTerminals.get(ptyId)?.outputSequence !== this.getPtyOutputSequence(ptyId)) {
+      return null
+    }
+    const lines = this.readRuledScreen(ptyId)?.lines
+    return lines && lines.length > 0 ? lines.join('\n') : null
+  }
+
   /** The grid a screen-ruled agent's rule reads: as painted, and only on the PTY's own size. */
   protected readRuledScreen(ptyId: string | null | undefined): RuledScreen | null {
     const state = this.readWholeScreenModel(ptyId)

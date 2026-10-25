@@ -218,6 +218,42 @@ describe('agent prompt submission runtime', () => {
     expect(writes).toEqual([])
   })
 
+  it('judges a caught-up screen, not a dialog the line tail kept after Codex erased it', async () => {
+    const { runtime, handle, writes } = await createPromptRuntime((runtime, data) => {
+      if (data === '\r') {
+        runtime.onPtyData('pty-prompt', '\x1b]0;Codex working\x07', Date.now())
+      }
+    }, 'codex')
+    vi.spyOn(runtime, 'getTerminalSize').mockReturnValue({ cols: 80, rows: 24 })
+    // Codex 0.154's exec approval, then its in-place repaint once approved (no OSC 7501, Stop hook failed).
+    runtime.onPtyData(
+      'pty-prompt',
+      '\x1b[14;3HWould you like to run the following command?\x1b[16;3H$ touch made.txt' +
+        '\x1b[18;1H› 1. Yes, proceed (y)\x1b[19;3H3. No, and tell Codex what to do differently (esc)' +
+        '\x1b[21;3HPress enter to confirm or esc to cancel',
+      Date.now()
+    )
+    await runtime.readTerminal(handle, { screen: true })
+    await expect(
+      runtime.sendTerminalAgentPrompt(handle, 'review this', { inputKind: 'driving' })
+    ).rejects.toThrow('agent_prompt_blocked')
+
+    runtime.onPtyData(
+      'pty-prompt',
+      '\x1b[12;1H\x1b[J• done\x1b[22;1H› Ask Codex to do anything',
+      Date.now()
+    )
+    await runtime.readTerminal(handle, { screen: true })
+    vi.useFakeTimers()
+    const submission = runtime.sendTerminalAgentPrompt(handle, 'review this', {
+      inputKind: 'driving'
+    })
+    await vi.runAllTimersAsync()
+
+    await expect(submission).resolves.toMatchObject({ accepted: true })
+    expect(writes.filter((data) => data === '\r')).toHaveLength(1)
+  })
+
   it('does not block on permission text restored only as history', async () => {
     vi.useFakeTimers()
     const { runtime, handle, writes } = await createPromptRuntime((runtime, data) => {

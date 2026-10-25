@@ -45,6 +45,7 @@ type Dependencies = {
   getTitleDisplayClear(ptyId: string): TitleDisplayClear | null
   /** Stamps blocked text the PTY's throttled scan has not yet judged. */
   flushPendingBlockedStamp(ptyId: string): void
+  readCaughtUpScreenText(ptyId: string): string | null
 }
 
 export class RuntimeTerminalAgentStatusQuery {
@@ -194,11 +195,10 @@ export class RuntimeTerminalAgentStatusQuery {
           { title: pty.pty.title, updatedAt: pty.pty.titleUpdatedAt },
           { title: pty.pty.lastOscTitle, updatedAt: pty.pty.lastOscTitleAt }
         )
-      const waitText = buildTerminalWaitText(
-        pty.pty.tailBuffer,
-        pty.pty.tailPartialLine,
-        pty.pty.preview
-      )
+      // Why the screen first: the line tail keeps a dialog the TUI has since erased in place (#24187).
+      const waitText =
+        this.deps.readCaughtUpScreenText(expectedPtyId) ??
+        buildTerminalWaitText(pty.pty.tailBuffer, pty.pty.tailPartialLine, pty.pty.preview)
       return {
         waitText,
         waitBlockedAt: pty.pty.waitBlockedAt,
@@ -226,7 +226,9 @@ export class RuntimeTerminalAgentStatusQuery {
       { title: this.deps.getTabTitle(leaf.tabId), updatedAt: 0 }
     )
     return {
-      waitText: buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview),
+      waitText:
+        this.deps.readCaughtUpScreenText(expectedPtyId) ??
+        buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview),
       waitBlockedAt: leaf.waitBlockedAt,
       title: title?.title ?? null,
       titleStatus: title ? detectAgentStatusFromTitle(title.title) : leaf.lastAgentStatus,
