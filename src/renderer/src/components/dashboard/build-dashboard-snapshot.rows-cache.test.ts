@@ -104,6 +104,14 @@ describe('buildDashboardSnapshot rows cache', () => {
       const cache = createWorktreeAgentRowsCache()
       const state = {
         ...baseState(),
+        runtimeStatusByEnvironmentId: new Map(),
+        folderWorkspaces: [],
+        detectedWorktreesByRepo: {},
+        projectGroups: [],
+        restoredRuntimeHostIdByWorkspaceSessionKey: {},
+        runtimeEnvironments: [],
+        runtimeEnvironmentCatalogHydrated: false,
+        removedRuntimeEnvironmentIds: new Set(),
         activeRepoId: 'r1',
         activeWorkspaceExecutionHostId: 'local',
         activeWorktreeId: 'w1',
