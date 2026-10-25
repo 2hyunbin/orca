@@ -72,6 +72,7 @@ export function createUpdateWorktreeGitIdentity(
   return (worktreeId, identity, ownerHostId) => {
     let shouldPersistHostedReviewClear = false
     let clearedBranch: string | null = null
+    let twinClearHostId: ExecutionHostId | null | undefined
     let clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
     const repoId = getRepoIdFromWorktreeId(worktreeId)
     const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
@@ -95,7 +96,7 @@ export function createUpdateWorktreeGitIdentity(
       let changed = false
       const targets = gitIdentityTargets(s, worktreeId, ownerHostId)
       // Why: review-clear tombstones are keyed by bare id, so a twin's copy would clear its sibling's link.
-      const reviewClearAllowed = !targets.isTwin
+      const reviewTombstonesAllowed = !targets.isTwin
       const next = current.map((worktree) => {
         if (!targets.rows.has(worktree)) {
           return worktree
@@ -110,15 +111,16 @@ export function createUpdateWorktreeGitIdentity(
           canonicalHostedReviewBranchIdentity(nextBranch) !==
           canonicalHostedReviewBranchIdentity(worktree.branch)
         const shouldClearHostedReviewContext =
-          reviewClearAllowed &&
-          hostedReviewBranchChanged &&
-          hasBranchScopedHostedReviewContext(worktree)
-        if (shouldClearHostedReviewContext) {
+          hostedReviewBranchChanged && hasBranchScopedHostedReviewContext(worktree)
+        if (shouldClearHostedReviewContext && !reviewTombstonesAllowed) {
+          // A stale push target would send this branch's commits to the old review branch.
+          twinClearHostId = worktree.hostId ?? null
+        } else if (shouldClearHostedReviewContext) {
           shouldPersistHostedReviewClear = true
           clearedBranch = nextBranch
           clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
           rememberHostedReviewLinkClear(worktreeId, nextBranch, clearGeneration, nextHead)
-        } else if (reviewClearAllowed) {
+        } else if (reviewTombstonesAllowed) {
           const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(worktreeId)
           if (tombstone) {
             const nextBranchIdentity = canonicalHostedReviewBranchIdentity(nextBranch)
@@ -175,6 +177,20 @@ export function createUpdateWorktreeGitIdentity(
         sortEpoch: s.sortEpoch + 1
       }
     })
+    if (twinClearHostId !== undefined && ownerHostId) {
+      // Why direct: the id-keyed retry below would read and write the sibling copy.
+      void Promise.resolve()
+        .then(() =>
+          persistWorktreeMeta(
+            runtimeTargetForWorktreeOwner(get(), worktreeId, ownerHostId),
+            worktreeId,
+            CLEARED_HOSTED_REVIEW_LINK_UPDATES,
+            twinClearHostId ?? undefined
+          )
+        )
+        .catch((err) => console.error('Failed to persist a twin review link clear:', err))
+      return
+    }
     if (!shouldPersistHostedReviewClear || clearedBranch === null) {
       return
     }
