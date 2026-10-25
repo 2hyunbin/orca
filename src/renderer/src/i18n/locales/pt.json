@@ -1272,6 +1272,7 @@
         "folderWorkspaceCreateFailedTitle": "Falha ao criar o espaço de trabalho de pasta",
         "folderWorkspaceCreateFailedMessage": "Não foi possível criar o espaço de trabalho de pasta. Verifique os detalhes do erro acima e tente novamente.",
         "setupAgentStartupPolicySaveFailed": "Falha ao salvar o comportamento de inicialização da configuração.",
+        "handoffNotStarted": "O worktree não foi criado. Abra Criar worktree para tentar novamente.",
         "5f3d2c8a1b": "Falha ao resolver a base do MR.",
         "dropPartiallyAttached": "{{failureCount}} de {{count}} itens não puderam ser anexados.",
         "dropPartiallyAttached_one": "{{failureCount}} de {{count}} item não pôde ser anexado.",

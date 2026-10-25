@@ -1330,6 +1330,7 @@
         "folderWorkspaceCreateFailedTitle": "Échec de la création de l'espace de travail de dossier",
         "folderWorkspaceCreateFailedMessage": "L'espace de travail de dossier n'a pas pu être créé. Vérifiez les détails de l'erreur ci-dessus, puis réessayez.",
         "setupAgentStartupPolicySaveFailed": "Échec de l'enregistrement du comportement de démarrage de la configuration.",
+        "handoffNotStarted": "Le worktree n'a pas été créé. Ouvrez Créer un worktree pour réessayer.",
         "5f3d2c8a1b": "Échec de la résolution de la base de la MR.",
         "dropPartiallyAttached": "Impossible de joindre {{failureCount}} des {{count}} éléments.",
         "dropPartiallyAttached_one": "Impossible de joindre l'élément {{failureCount}} de {{count}}.",

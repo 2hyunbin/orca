@@ -11,6 +11,8 @@ import {
   getWorkspaceCreateErrorToastMessage
 } from '@/lib/workspace-create-error-format'
 import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
+import { scheduleComposerCreateHandoff } from '@/lib/composer-create-handoff'
 
 import type { ComposerModel } from './composer-model'
 
@@ -131,6 +133,25 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
       setCreateError(null)
 
       setCreating(true)
+      const handoff = scheduleComposerCreateHandoff({
+        stagingRequest: {
+          repoId,
+          workspaceRunContext,
+          name: workspaceNameSeed,
+          ...(parsedLinkedIssueNumber != null ? { linkedIssue: parsedLinkedIssueNumber } : {}),
+          ...(effectiveLinkedPR != null ? { linkedPR: effectiveLinkedPR } : {}),
+          setupDecision: setupDecision ?? 'inherit',
+          agent: requestedAgent,
+          pendingFirstAgentMessageRename: false,
+          note: '',
+          startupPlan: null,
+          quickPrompt: '',
+          quickTelemetry: null
+        },
+        onHandOff: () => onCreated?.(),
+        isCancelled: isSubmissionCancelled
+      })
+      let failed = false
       try {
         const smartGitHubSettlement = await settleComposerSubmit(
           resolvePendingSmartGitHubSubmit(),
@@ -145,16 +166,26 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
           workspaceNameSeed,
           workspaceRunContext,
           repoId,
-          options
+          options,
+          handoff
         )
       } catch (error) {
         if (isSubmissionCancelled()) {
           return
         }
+        failed = true
         const formattedError = formatWorkspaceCreateError(error)
         setCreateError(formattedError)
         toast.error(getWorkspaceCreateErrorToastMessage(formattedError))
       } finally {
+        if (handoff.dispose() && !failed) {
+          toast.error(
+            translate(
+              'auto.hooks.useComposerState.handoffNotStarted',
+              'Worktree was not created. Open Create worktree to try again.'
+            )
+          )
+        }
         setCreating(false)
       }
     },

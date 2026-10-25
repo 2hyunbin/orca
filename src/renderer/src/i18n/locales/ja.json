@@ -1190,6 +1190,7 @@
         "folderWorkspaceCreateFailedTitle": "フォルダーワークスペースを作成できませんでした",
         "folderWorkspaceCreateFailedMessage": "フォルダーワークスペースを作成できませんでした。上のエラー詳細を確認して、もう一度お試しください。",
         "setupAgentStartupPolicySaveFailed": "セットアップ時の起動設定を保存できませんでした。",
+        "handoffNotStarted": "ワークツリーは作成されませんでした。「ワークツリーを作成」を開いてもう一度お試しください。",
         "5f3d2c8a1b": "MR のベースブランチを特定できませんでした。",
         "dropPartiallyAttached": "{{count}} 個のアイテムのうち {{failureCount}} 個を接続できませんでした。",
         "dropPartiallyAttached_one": "{{count}} アイテムの {{failureCount}} を接続できませんでした。",

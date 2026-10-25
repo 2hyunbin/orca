@@ -1190,6 +1190,7 @@
         "folderWorkspaceCreateFailedTitle": "No se pudo crear el espacio de trabajo de carpeta",
         "folderWorkspaceCreateFailedMessage": "No se pudo crear el espacio de trabajo de carpeta. Revisa los detalles del error de arriba e inténtalo de nuevo.",
         "setupAgentStartupPolicySaveFailed": "Error al guardar el comportamiento de inicio",
+        "handoffNotStarted": "No se creó el worktree. Abre Crear worktree para intentarlo de nuevo.",
         "5f3d2c8a1b": "Error al resolver la base del MR",
         "dropPartiallyAttached": "No se pudieron adjuntar {{failureCount}} de {{count}} elementos.",
         "dropPartiallyAttached_one": "No se pudo adjuntar {{failureCount}} de {{count}} elemento.",

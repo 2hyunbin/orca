@@ -1433,6 +1433,7 @@
         "folderWorkspaceCreateFailedTitle": "Folder workspace creation failed",
         "folderWorkspaceCreateFailedMessage": "The folder workspace could not be created. Check the error details above, then try again.",
         "setupAgentStartupPolicySaveFailed": "Failed to save setup startup behavior.",
+        "handoffNotStarted": "Worktree was not created. Open Create worktree to try again.",
         "5f3d2c8a1b": "Failed to resolve MR base.",
         "dropPartiallyAttached": "{{failureCount}} of {{count}} items could not be attached.",
         "dropPartiallyAttached_one": "{{failureCount}} of {{count}} item could not be attached.",
