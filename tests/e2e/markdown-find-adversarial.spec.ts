@@ -121,6 +121,7 @@ test('Find preserves Shift-click, double-click, and multi-paragraph copy selecti
   await orcaPage.mouse.click(end.x, end.y)
   await orcaPage.keyboard.up('Shift')
   expect(await selectedText(orcaPage)).toBe(`${FIRST.slice(6)}\n\n${SECOND.slice(0, 11)}`)
+  await expect.poll(() => editor.evaluate((element) => Reflect.get(element, 'editor').state.selection.empty)).toBe(false)
   const copied = await editor.evaluate((element) => {
     const clipboard = new DataTransfer()
     element.dispatchEvent(
