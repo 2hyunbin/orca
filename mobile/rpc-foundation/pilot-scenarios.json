@@ -21122,7 +21122,8 @@
             "limit": 40,
             "subscriptionId": "claude:session-1:00000000-0000-4000-8000-000000000001",
             "capabilities": {
-              "transcriptPending": 1
+              "transcriptPending": 1,
+              "transcriptSourceOrder": 1
             },
             "transcriptPath": "/work/feature/.claude/session-1.jsonl"
           },
@@ -21178,6 +21179,9 @@
             "agent": "claude",
             "sessionId": "session-1",
             "limit": 60,
+            "capabilities": {
+              "transcriptSourceOrder": 1
+            },
             "beforeOffset": 1200,
             "transcriptPath": "/work/feature/.claude/session-1.jsonl"
           },
@@ -21233,7 +21237,8 @@
             "limit": 40,
             "subscriptionId": "claude:session-1:00000000-0000-4000-8000-000000000001",
             "capabilities": {
-              "transcriptPending": 1
+              "transcriptPending": 1,
+              "transcriptSourceOrder": 1
             },
             "transcriptPath": "/work/feature/.claude/session-1.jsonl"
           },
