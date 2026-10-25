@@ -9,10 +9,19 @@ const { Worker, isMainThread, workerData } = require('node:worker_threads')
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
 
-// Bundle current parcel-watcher-process.ts on demand to exercise working source.
+// The real host client, bundled on demand so the harness always exercises the
+// current src/main/ipc/filesystem/watcher-process/parcel-watcher-process.ts.
 const bundlePath = path.join(__dirname, 'parcel-watcher-process.bundle.cjs')
 if (isMainThread) {
-  const clientSrc = path.join(REPO_ROOT, 'src', 'main', 'ipc', 'parcel-watcher-process.ts')
+  const clientSrc = path.join(
+    REPO_ROOT,
+    'src',
+    'main',
+    'ipc',
+    'filesystem',
+    'watcher-process',
+    'parcel-watcher-process.ts'
+  )
   require('esbuild').buildSync({
     entryPoints: [clientSrc],
     bundle: true,

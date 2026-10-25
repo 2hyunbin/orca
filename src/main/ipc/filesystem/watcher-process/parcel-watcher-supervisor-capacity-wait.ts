@@ -1,9 +1,9 @@
 import {
   onWatcherChildCapacityAvailable,
   WatcherChildCapacityError
-} from './filesystem/watcher-process/parcel-watcher-child-registry'
+} from './parcel-watcher-child-registry'
 import { watcherHostFailure, WatcherProcessFailure } from './parcel-watcher-process-failure'
-import { PromiseSettlementWaiters } from '../../shared/promise-settlement-waiters'
+import { PromiseSettlementWaiters } from '../../../../shared/promise-settlement-waiters'
 
 type CapacityWaitState = {
   waiters: PromiseSettlementWaiters<void>

@@ -1,7 +1,7 @@
 import type { FsChangeEvent } from '../../../../shared/filesystem-entry-types'
 import { PhysicalExitTracker } from '../../../../shared/physical-exit-tracker'
 import { watch as watchFs } from 'node:fs'
-import { WatcherProcessFailure } from '../../../ipc/parcel-watcher-process-failure'
+import { WatcherProcessFailure } from '../../../ipc/filesystem/watcher-process/parcel-watcher-process-failure'
 import { watchBatchFlushDelayMs } from '../../../../shared/filesystem-watch-batch-window'
 
 // Whole-tree refreshes need a slower pace than precise batches.
