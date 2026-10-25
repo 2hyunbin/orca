@@ -51,6 +51,7 @@ export function resolveAgentStatusIdentity(args: {
   existing?: ExistingAgentIdentity
   incoming?: AgentType
   incomingProcess?: AgentProcessIdentity
+  incomingSession?: string
   now: number
   staleAfterMs?: number
 }): AgentIdentityResolution {
@@ -82,8 +83,14 @@ export function resolveAgentStatusIdentity(args: {
     }
   }
   const owner = args.existing.agentPresence
-  if (owner && !owner.ended && owner.agent === incomingAgentType && !otherProcessOwner) {
-    // Why: a nested agent that posted while the owner idled must not silence the owner's own hooks.
+  if (
+    owner?.session &&
+    !owner.ended &&
+    owner.agent === incomingAgentType &&
+    owner.session === args.incomingSession &&
+    !otherProcessOwner
+  ) {
+    // Why: a child that posted while the owner idled must not silence the owner's own session.
     return { agentType: incomingAgentType, inheritedFromActivePane: false }
   }
   const canonical = resolveCanonicalPaneAgentIdentity({

@@ -87,7 +87,9 @@ export function installMainWindowAgentStatusListeners(options: MainWindowAgentSt
         ...(orchestration ? { orchestration } : {}),
         ...(programStatus ? { programStatus } : {}),
         ...(programStatusOnly === true ? { programStatusOnly: true } : {}),
-        ...(agentPresence && !agentPresence.ended ? { paneOwnerAgent: agentPresence.agent } : {}),
+        ...(agentPresence?.session && !agentPresence.ended
+          ? { paneOwner: { agent: agentPresence.agent, session: agentPresence.session } }
+          : {}),
         // Mark reconnect replays so cached completions do not notify again.
         ...(isReplay === true ? { isReplay: true } : {})
       }

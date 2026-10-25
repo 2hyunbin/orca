@@ -69,8 +69,8 @@ export type AgentStatusIpcPayload = ParsedAgentStatusPayload & {
   programStatusOnly?: true
   /** See AgentStatusEntry.restoredUnconfirmed — hydrated nonterminal provenance. */
   restoredUnconfirmed?: boolean
-  /** The pane's owning agent on its execution host; absent from older hosts. */
-  paneOwnerAgent?: AgentType
+  /** The pane's owning agent session on its execution host; absent from older hosts. */
+  paneOwner?: { agent: AgentType; session: string }
   /** A re-send of a cached row (reconnect or listener replay), not a new transition. */
   isReplay?: boolean
   /** Present on rows the structured session host projects; `owned` keeps them fresh past the

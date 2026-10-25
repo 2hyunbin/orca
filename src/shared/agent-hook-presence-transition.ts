@@ -47,8 +47,14 @@ export function transitionHookPresence(
   if (!agent || agent === 'unknown') {
     return incoming.agentPresence ? { ...incoming, agentPresence: undefined } : incoming
   }
+  const session = incoming.agentPresence?.session ?? incoming.providerSession?.id
   return {
     ...incoming,
-    agentPresence: { ...incoming.agentPresence, agent, ...(sender ? { process: sender } : {}) }
+    agentPresence: {
+      ...incoming.agentPresence,
+      agent,
+      ...(sender ? { process: sender } : {}),
+      ...(session ? { session } : {})
+    }
   }
 }

@@ -248,4 +248,42 @@ describe('nested agent hooks preserve the owning pane', () => {
       server.stop()
     }
   })
+
+  it('keeps a stale owner type from letting a nested codex exec take the pane over the relay', async () => {
+    const server = new AgentHookServer()
+    const dir = mkdtempSync(join(tmpdir(), 'orca-stale-owner-'))
+    const relay = new RelayAgentHookServer({
+      endpointDir: dir,
+      forward: (event) => server.ingestRemote(event, 'conn-1')
+    })
+    await relay.start()
+    const post = (source: AgentHookSource, payload: Record<string, unknown>) =>
+      fetch(`http://127.0.0.1:${relay.getCoordinates().port}/hook/${source}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Orca-Agent-Hook-Token': relay.getCoordinates().token
+        },
+        body: JSON.stringify(buildBody(payload))
+      })
+    try {
+      await post('codex', { hook_event_name: 'UserPromptSubmit', session_id: 'old', prompt: 'Old' })
+      await post('codex', { hook_event_name: 'Stop', session_id: 'old' })
+      await post('claude', { hook_event_name: 'UserPromptSubmit', session_id: 'c', prompt: 'Now' })
+      await post('codex', {
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 'exec',
+        prompt: 'Review'
+      })
+
+      expect(server.getStatusSnapshot()[0]).toMatchObject({
+        agentType: 'claude',
+        prompt: 'Now',
+        providerSession: { id: 'c' }
+      })
+    } finally {
+      relay.stop()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

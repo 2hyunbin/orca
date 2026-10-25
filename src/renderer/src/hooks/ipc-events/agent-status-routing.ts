@@ -152,11 +152,9 @@ export function isInheritedFromActivePane(
   return (
     sameTerminal &&
     resolveAgentStatusIdentity({
-      existing: {
-        ...existing,
-        agentPresence: data.paneOwnerAgent ? { agent: data.paneOwnerAgent } : undefined
-      },
+      existing: { ...existing, agentPresence: data.paneOwner },
       incoming,
+      incomingSession: data.providerSession?.id,
       now: data.receivedAt
     }).inheritedFromActivePane
   )
