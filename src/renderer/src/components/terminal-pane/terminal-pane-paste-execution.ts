@@ -103,6 +103,27 @@ export function createTerminalPanePasteExecution(
     }
   }
 
+  // Why: resolved per pane and PTY host; split siblings and remote hosts can need
+  // different multiline paste protocols (Windows Codex needs input-record newlines).
+  const resolvePaneProtectedMultilinePasteOptions = (
+    pane: ManagedPane
+  ): TerminalPasteTextOptions | undefined => {
+    const state = useAppStore.getState()
+    return resolveProtectedMultilinePasteOptionsForPane({
+      isWindowsClient: forceBracketedMultilineTextPaste,
+      hostPlatform: resolveTerminalInputHostPlatform({
+        clientPlatform: shortcutPlatform,
+        state,
+        worktreeId,
+        transport: paneTransportsRef.current.get(pane.id) ?? null
+      }),
+      agentStatusByPaneKey: state.agentStatusByPaneKey,
+      paneForegroundAgentByPaneKey: state.paneForegroundAgentByPaneKey,
+      tabId,
+      leafId: pane.leafId
+    })
+  }
+
   const pasteFromClipboard = (
     pane: ManagedPane,
     source: Extract<TerminalPasteSource, 'keyboard' | 'paste-event'>,
@@ -110,12 +131,10 @@ export function createTerminalPanePasteExecution(
       .readClipboardText
   ): void => {
     const connectionId = getConnectionId(worktreeId) ?? null
-    const state = useAppStore.getState()
-    const transport = paneTransportsRef.current.get(pane.id)
     const runtimeEnvironmentId = resolveTerminalPasteRuntimeEnvironmentId(
-      state,
+      useAppStore.getState(),
       worktreeId,
-      transport
+      paneTransportsRef.current.get(pane.id)
     )
     const activeElementAtDispatch = document.activeElement
     void pasteTerminalClipboard({
@@ -123,22 +142,7 @@ export function createTerminalPanePasteExecution(
       saveClipboardImageAsTempFile: window.api.ui.saveClipboardImageAsTempFile,
       connectionId,
       runtimeEnvironmentId,
-      // Why: match terminal-pane-menu-paste.ts's right-click path so Ctrl+V/Shift+Insert
-      // also get the pane's agent-aware Windows input-record newline encoding, not just
-      // the generic bracketed-paste fallback (orca#30470).
-      protectedMultilineTextPasteOptions: resolveProtectedMultilinePasteOptionsForPane({
-        isWindowsClient: forceBracketedMultilineTextPaste,
-        hostPlatform: resolveTerminalInputHostPlatform({
-          clientPlatform: shortcutPlatform,
-          state,
-          worktreeId,
-          transport: transport ?? null
-        }),
-        agentStatusByPaneKey: state.agentStatusByPaneKey,
-        paneForegroundAgentByPaneKey: state.paneForegroundAgentByPaneKey,
-        tabId,
-        leafId: pane.leafId
-      }),
+      protectedMultilineTextPasteOptions: resolvePaneProtectedMultilinePasteOptions(pane),
       pasteText: (text, options) =>
         executePanePasteText(pane, source, activeElementAtDispatch, text, options),
       onTextPasteError: () =>
@@ -149,5 +153,5 @@ export function createTerminalPanePasteExecution(
     })
   }
 
-  return { executePanePasteText, pasteFromClipboard }
+  return { executePanePasteText, pasteFromClipboard, resolvePaneProtectedMultilinePasteOptions }
 }
