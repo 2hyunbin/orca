@@ -26,7 +26,9 @@ describePostgres('dead-man trip slots on PostgreSQL', () => {
 
   afterAll(async () => {
     for (const table of TABLES) {
-      for (const cellId of cells) await database.query(`DELETE FROM ${table} WHERE cell_id = ?`, [cellId])
+      for (const cellId of cells) {
+        await database.query(`DELETE FROM ${table} WHERE cell_id = ?`, [cellId])
+      }
     }
     await database.close()
   })
@@ -66,7 +68,9 @@ describePostgres('dead-man trip slots on PostgreSQL', () => {
     for (let round = 0; round < 5; round += 1) {
       await Promise.all(
         waiting.map(async (cellId) => {
-          if (!second.has(cellId) && (await claim(cellId, 2))) second.add(cellId)
+          if (!second.has(cellId) && (await claim(cellId, 2))) {
+            second.add(cellId)
+          }
         })
       )
     }

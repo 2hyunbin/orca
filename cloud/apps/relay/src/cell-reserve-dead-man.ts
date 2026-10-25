@@ -98,6 +98,8 @@ export class ReserveDeadMan {
 
   // The claim landed. Ignored once contact or a new switch write has ended that silence.
   permit(generation: number): void {
-    if (this.pending?.generation === generation) this.permittedGeneration = generation
+    if (this.pending?.generation === generation) {
+      this.permittedGeneration = generation
+    }
   }
 }

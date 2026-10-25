@@ -14,7 +14,9 @@ import { startReserveModeCell } from './test-fixtures/reserve-mode-cell.js'
 async function until(check: () => Promise<boolean> | boolean, timeoutMs = 10_000): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (!(await check())) {
-    if (Date.now() > deadline) throw new Error('condition not reached')
+    if (Date.now() > deadline) {
+      throw new Error('condition not reached')
+    }
     await new Promise((resolve) => setTimeout(resolve, 50))
   }
 }
@@ -43,10 +45,12 @@ async function trippedPeer(database: RelayDatabase, cellId: string, at: number) 
 }
 
 describe('dead-man trip slots', () => {
-  const cleanup: Array<() => Promise<void> | void> = []
+  const cleanup: (() => Promise<void> | void)[] = []
 
   afterEach(async () => {
-    for (const close of cleanup.splice(0).reverse()) await close()
+    for (const close of cleanup.splice(0).toReversed()) {
+      await close()
+    }
     vi.restoreAllMocks()
   })
 

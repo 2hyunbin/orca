@@ -7,7 +7,7 @@ import {
 
 function setup(options: { fail?: boolean; busy?: boolean; slotFree?: () => boolean } = {}) {
   const clock = { value: 1_000 }
-  const writes: Array<'db' | 'reserve' | 'claim'> = []
+  const writes: ('db' | 'reserve' | 'claim')[] = []
   const pending: Array<() => void> = []
   const logs: string[] = []
   const writer = new CellAdmitEffectiveWriter({

@@ -43,12 +43,16 @@ export class CellAdmitEffectiveWriter {
       return
     }
     const at = this.input.now()
-    if (this.inFlight || this.input.databaseBusy()) return
+    if (this.inFlight || this.input.databaseBusy()) {
+      return
+    }
     const claimTrip = this.input.claimTrip
     if (switchReserve && trip && claimTrip && at - this.claimedAt >= DEAD_MAN_SLOT_CLAIM_RETRY_MS) {
       this.claimedAt = at
       this.settle('db', at, switchReserve, claimTrip(trip.slots).then((claimed) => {
-        if (claimed) trip.permit()
+        if (claimed) {
+          trip.permit()
+        }
         return claimed
       }))
       return
@@ -58,7 +62,9 @@ export class CellAdmitEffectiveWriter {
       this.written === null ||
       this.written.mode !== mode ||
       at - this.written.at >= CELL_ADMIT_EFFECTIVE_REFRESH_MS
-    if (due) this.settle(mode, at, switchReserve, this.input.write(mode).then(() => true))
+    if (due) {
+      this.settle(mode, at, switchReserve, this.input.write(mode).then(() => true))
+    }
   }
 
   // `write` resolves false when it wrote nothing (a claim with every slot taken).
@@ -66,9 +72,13 @@ export class CellAdmitEffectiveWriter {
     this.inFlight = true
     void write
       .then((wrote) => {
-        if (!wrote) return
+        if (!wrote) {
+          return
+        }
         this.written = { mode, at }
-        if (!switchReserve) this.owed = false
+        if (!switchReserve) {
+          this.owed = false
+        }
       })
       .catch((error: unknown) => {
         if (at - this.failureLoggedAt < CELL_ADMIT_EFFECTIVE_FAILURE_LOG_MS) return

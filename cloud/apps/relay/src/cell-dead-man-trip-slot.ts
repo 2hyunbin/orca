@@ -20,7 +20,9 @@ export async function claimDeadManTripSlot(
       const [lock] = await transaction.query(
         `SELECT pg_try_advisory_xact_lock(hashtext('orca-relay'), hashtext('dead-man-trip-slots')) AS locked`
       )
-      if (lock?.locked !== true) return false
+      if (lock?.locked !== true) {
+        return false
+      }
     }
     return await commitWithFinalWrite(
       transaction,
