@@ -46,6 +46,10 @@ If setup exceeds that budget, subsequent panes can use navigation once setup
 finishes. Disabled cleanup visits known config directories and any config directory
 already cached from the login environment, without starting or waiting for a shell
 probe.
+The login-environment cache lasts only for the current process. If Orca starts with
+navigation off before a config directory from shell startup files is cached,
+cleanup can miss its old shortcut. Filling that cache later does not trigger
+another cleanup.
 With navigation off, Orca leaves `CLAUDE_CODE_PLUGIN_DIRS` untouched unless it
 must strip a previously inherited Orca plugin path.
 
