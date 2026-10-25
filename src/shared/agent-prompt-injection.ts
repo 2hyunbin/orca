@@ -80,7 +80,7 @@ const WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR = 3
 export function getAgentPromptHeldSubmitBudgetMs(
   platform: NodeJS.Platform,
   agent: TerminalAgent | null | undefined,
-  charCount: number
+  pastePayload: string
 ): number {
   if (
     platform !== 'win32' ||
@@ -89,18 +89,29 @@ export function getAgentPromptHeldSubmitBudgetMs(
   ) {
     return 0
   }
-  // Why capped: the wait sits inside the dispatch and worker-start RPC budgets.
-  return Math.min(
-    Math.max(0, charCount) * WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR,
-    AGENT_PROMPT_EFFECT_TIMEOUT_MS
-  )
+  // Why the cap: with the render gate (<= 8 s + ingest), ingest itself and this wait, delivery
+  // stays <= 38 s, inside worker-start's 50 s grace once observation is shortened by delivery time.
+  const capMs =
+    AGENT_PROMPT_EFFECT_TIMEOUT_MS -
+    2 * getTerminalPasteIngestMs(platform, Buffer.byteLength(pastePayload, 'utf8'))
+  return Math.max(0, Math.min(pastePayload.length * WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR, capMs))
 }
 
-const PASTED_CONTENT_PLACEHOLDER = /\[Pasted Content (\d+) chars\]/g
+// Codex dedupes a repeated placeholder label as `[Pasted Content N chars] #2`.
+const PASTED_CONTENT_PLACEHOLDER = /\[Pasted Content (\d+) chars\](?: #\d+)?/g
+// Why: a held 10,312-char prompt with 142 LFs read as 10,597 on Windows Codex 0.162.1, i.e. 2 more
+// per LF plus 1 per Enter the burst absorbed; the slack absorbs small counting drift.
+const HELD_PROMPT_EXTRA_CHARS_PER_LINE_FEED = 2
+const HELD_PROMPT_COUNT_SLACK_CHARS = 8
 const HELD_PROMPT_TEXT_MIN_CHARS = 32
 
-/** Whether a composer draft is `prompt` still held, as Codex's paste placeholders or as text. */
-export function isHeldAgentPromptDraft(draft: string | undefined, prompt: string): boolean {
+/** Whether a composer draft is `prompt` still held, as Codex's paste placeholders or as text;
+ *  `absorbedEnters` is how many Enters may have joined the paste as newlines. */
+export function isHeldAgentPromptDraft(
+  draft: string | undefined,
+  prompt: string,
+  absorbedEnters: number
+): boolean {
   if (!draft) {
     return false
   }
@@ -111,8 +122,21 @@ export function isHeldAgentPromptDraft(draft: string | undefined, prompt: string
     return ''
   })
   if (pastedChars > 0) {
+    // Why nothing beside the placeholders: text the user typed or pasted in must not be submitted.
+    if (literal.trim()) {
+      return false
+    }
+    const expectedChars = [...expected].length
+    const lineFeeds = expected.split('\n').length - 1
     // Why a sum: a burst read with a pause flushes as several placeholders.
-    return pastedChars + [...literal].length >= [...expected].length
+    return (
+      pastedChars >= expectedChars &&
+      pastedChars <=
+        expectedChars +
+          lineFeeds * HELD_PROMPT_EXTRA_CHARS_PER_LINE_FEED +
+          absorbedEnters +
+          HELD_PROMPT_COUNT_SLACK_CHARS
+    )
   }
   const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim()
   const shown = collapse(draft)

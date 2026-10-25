@@ -182,7 +182,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
           heldBudgetMs: getAgentPromptHeldSubmitBudgetMs(
             writeHostPlatform,
             this.getPtyAgent(ptyId),
-            pastePayload.length
+            pastePayload
           )
         }))
     const effectTimeoutMs = resolveAgentPromptEffectTimeoutMs(this.getPtyAgent(ptyId))

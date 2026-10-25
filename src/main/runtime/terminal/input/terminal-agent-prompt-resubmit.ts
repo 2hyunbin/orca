@@ -50,14 +50,14 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
         this.assertAgentPromptGeneration(ptyId, generation)
         // Why our prompt only: a rotating placeholder, a question overlay or the user's own text
         // also reads as a draft, and Enter would submit or answer it.
-        const holdsPrompt =
-          blind ||
-          (prompt !== undefined &&
-            isHeldAgentPromptDraft(
-              (await this.readCurrentTerminalWaitScreen(ptyId))?.draft,
-              prompt
-            ))
-        if (!holdsPrompt) {
+        const holdsPrompt = async (): Promise<boolean> =>
+          prompt !== undefined &&
+          isHeldAgentPromptDraft(
+            (await this.readCurrentTerminalWaitScreen(ptyId))?.draft,
+            prompt,
+            1 + resubmits
+          )
+        if (!blind && !(await holdsPrompt())) {
           // Gone after a gated retry means it was taken; before one, the burst may still be read.
           if (gatedResubmits > 0) {
             return resubmits
@@ -65,8 +65,12 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
           continue
         }
         await options.beforeWrite?.(ptyId)
-        // Why again: the guard can yield while the agent takes the prompt or opens an approval.
+        // Why again: the guard can yield while the agent takes the prompt, opens an approval or
+        // the user types, so the decision is remade right before the write.
         if (await agentPromptSettledWithin(held, 0, options.signal)) {
+          return resubmits
+        }
+        if (!blind && (Date.now() >= deadline || !(await holdsPrompt()))) {
           return resubmits
         }
         if (!this.ptyController?.write(ptyId, AGENT_PROMPT_SUBMIT, options.inputKind)) {
