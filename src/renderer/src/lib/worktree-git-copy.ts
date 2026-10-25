@@ -109,9 +109,11 @@ export function worktreeCopyPushTarget(
   if (placed) {
     return placed.pushTarget
   }
-  // Why the lone-copy fallback: the host index files an unstamped row only under `local`.
+  // Why the lone-copy fallback: the host index files an unstamped row only under `local`. A row
+  // stamped for another host is never this copy, so a named host accepts only an unstamped one.
   const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
     (row) => row.id === worktreeId
   )
-  return new Set(rows.map(worktreeCopyOwnerKey)).size === 1 ? rows[0].pushTarget : undefined
+  const lone = new Set(rows.map(worktreeCopyOwnerKey)).size === 1 ? rows[0] : undefined
+  return lone && (!hostId || lone.hostId === undefined) ? lone.pushTarget : undefined
 }

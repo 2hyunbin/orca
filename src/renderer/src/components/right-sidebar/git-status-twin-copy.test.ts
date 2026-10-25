@@ -133,7 +133,11 @@ describe('push target for a same-path twin', () => {
       remoteName: 'fork',
       branchName: 'remote-review'
     })
-    // An unplaced host must not fall back to either twin.
+    // An unplaced host must not fall back to either twin, nor to a lone copy stamped elsewhere.
     expect(worktreeCopyPushTarget(useAppStore.getState(), id, 'ssh:other')).toBeUndefined()
+    useAppStore.setState({
+      worktreesByRepo: { repo1: [useAppStore.getState().worktreesByRepo.repo1[0]] }
+    })
+    expect(worktreeCopyPushTarget(useAppStore.getState(), id, 'ssh:box-b')).toBeUndefined()
   })
 })
