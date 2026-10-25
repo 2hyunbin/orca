@@ -96,6 +96,7 @@ describe('a federated worker through the launch executor', () => {
       createdWithAgent: 'claude',
       startupAgent: 'claude',
       startupLaunchSource: 'orchestration',
+      startupSuppressUpdatePrompt: true,
       startupLaunchPreferences: { model: 'opus' },
       activate: false,
       lineage: { noParent: true }
@@ -165,6 +166,7 @@ describe('a federated worker through the launch executor', () => {
     expect(f.runtime.createTerminal).toHaveBeenCalledWith('id:folder:remote', {
       startupAgent: 'claude',
       launchSource: 'orchestration',
+      suppressStartupUpdatePrompt: true,
       launchPreferences: { model: 'opus' },
       title: 'worker-task_remote',
       presentation: 'background'

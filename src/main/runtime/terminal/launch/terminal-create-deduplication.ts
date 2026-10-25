@@ -160,6 +160,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
       title?: string
       extraAgentArgs?: string
       sequenceTerminalCommand?: AgentLaunchTerminalSequence
+      suppressStartupUpdatePrompt?: boolean
     }
   ): Promise<RuntimeTerminalCreate> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
@@ -175,6 +176,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
     }
     const startup = this.buildStartupForAgent(repo, opts.agent, opts.prompt, undefined, {
       ...(opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : {}),
+      ...(opts.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {}),
       launchScope: await this.resolveTerminalWorkspaceLaunchScope(`id:${worktree.id}`)
     })
     if (startup.launchRuntime instanceof Error) {

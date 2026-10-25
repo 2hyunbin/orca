@@ -99,6 +99,7 @@ export async function createWorkerWorktree(args: {
       ? {
           startupAgent: args.agent,
           startupLaunchSource: 'orchestration',
+          startupSuppressUpdatePrompt: true,
           ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {})
         }
       : {}),

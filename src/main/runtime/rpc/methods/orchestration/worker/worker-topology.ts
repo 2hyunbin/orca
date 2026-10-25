@@ -75,6 +75,7 @@ export async function createExistingWorktreeWorkerTerminal(args: {
       ? { sequenceTerminalCommand: args.sequenceTerminalCommand }
       : {}),
     launchSource: 'orchestration',
+    suppressStartupUpdatePrompt: true,
     ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
     title: `worker-${args.taskId}`,
     // Why: dispatching a worker is background work; it must not pull the sidebar

@@ -82,7 +82,8 @@ describe('headless automation dispatch', () => {
     expect(runtime.launchAgentTerminal).toHaveBeenCalledWith('id:wt-1', {
       agent: 'goose',
       prompt: '',
-      title: 'Nightly'
+      title: 'Nightly',
+      suppressStartupUpdatePrompt: true
     })
     expect(runtime.waitForTerminal).not.toHaveBeenCalled()
     const observer = capturedOption('terminalObserver')
@@ -137,6 +138,7 @@ describe('headless automation dispatch with extra agent args', () => {
       agent: 'claude',
       prompt: 'go',
       title: 'Nightly',
+      suppressStartupUpdatePrompt: true,
       extraAgentArgs: '--model opus'
     })
   })

@@ -93,6 +93,7 @@ export async function launchFederatedWorkerAgent(args: {
           createdWithAgent: agent,
           startupAgent: agent,
           startupLaunchSource: 'orchestration',
+          startupSuppressUpdatePrompt: true,
           ...(args.launchPreferences ? { startupLaunchPreferences: args.launchPreferences } : {}),
           activate: false,
           lineage: { noParent: true }
@@ -136,6 +137,7 @@ export async function launchFederatedWorkerAgent(args: {
           startupAgent: agent,
           ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
           launchSource: 'orchestration',
+          suppressStartupUpdatePrompt: true,
           ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
           title: `worker-${params.taskId}`,
           presentation: 'background'

@@ -129,6 +129,7 @@ export async function launchHeadlessAutomationAgent(
           ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
           prompt: startupPrompt ?? '',
           title: run.title,
+          suppressStartupUpdatePrompt: true,
           ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {})
         })
         terminal = launched
