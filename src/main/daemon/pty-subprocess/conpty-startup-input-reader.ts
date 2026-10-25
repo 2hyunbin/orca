@@ -1,5 +1,5 @@
 import type * as pty from 'node-pty'
-import { closePseudoConsoleNow, terminatePtyJob } from '../../windows/windows-pty-job'
+import { killConptyNow, terminatePtyJob } from '../../windows/windows-pty-job'
 
 // Bundled ConPTY queries DA1 (or CPR when inheriting the cursor) right after it starts reading
 // input, and before relaying any client output. A pane without it never reads keyboard input.
@@ -119,7 +119,7 @@ function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>)
       // Already gone.
     }
   }
-  closePseudoConsoleNow(proc)
+  killConptyNow(proc)
   proc.kill()
 }
 

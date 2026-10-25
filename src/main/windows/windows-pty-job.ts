@@ -33,8 +33,6 @@ type ConptyNative = {
   assignCurrentProcessToJob: () => boolean
   /** Absent on builds that predate the terminal process ceiling. */
   setActiveProcessLimit?: (limit: number) => boolean
-  /** Closes the pseudoconsole; the patch makes a repeat call a no-op. */
-  kill?: (id: number, useConptyDll: boolean) => void
 }
 
 type SelfOwnedPty = IPty & {
@@ -258,19 +256,18 @@ export function __setConptyJobNativeForTests(loader?: () => ConptyNative | null)
   hostJobAssigned = null
 }
 
+type UnreadyWindowsPty = IPty & { _agent?: { kill?: () => void } }
+
 /**
- * Closes a ConPTY's pseudoconsole now. node-pty defers its own kill() until the pane's first
- * output, so a pane discarded before printing would otherwise keep its console host forever.
+ * Tears a ConPTY pane down now. node-pty defers its own kill() until the pane's first output, so
+ * a pane discarded before printing would keep its console host, input pipe and output worker.
+ * The agent's kill closes all three; node-pty's later deferred kill finds nothing left to close.
  */
-export function closePseudoConsoleNow(proc: IPty): void {
-  const target = ptyJobTarget(proc)
-  const native = nativeLoader()
-  if (!target || typeof native?.kill !== 'function') {
-    return
-  }
+export function killConptyNow(proc: IPty): void {
+  const pane: UnreadyWindowsPty = proc
   try {
-    native.kill(target.id, true)
+    pane._agent?.kill?.()
   } catch {
-    // Teardown is best effort; the host job still reaps the console host with the daemon.
+    // Best effort; the host job still reaps the console host with the daemon.
   }
 }

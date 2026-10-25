@@ -5,7 +5,7 @@ vi.mock('node-pty', () => nodePty)
 const ptyJob = vi.hoisted(() => ({
   assignHostProcessToKillOnCloseJob: vi.fn(),
   terminatePtyJob: vi.fn(),
-  closePseudoConsoleNow: vi.fn()
+  killConptyNow: vi.fn()
 }))
 vi.mock('../../windows/windows-pty-job', () => ptyJob)
 
@@ -186,7 +186,7 @@ describe('Windows shell fallback over node-pty ConPTY', () => {
     await expect(spawned).rejects.toThrow('spawn canceled')
     expect(ptyJob.terminatePtyJob).toHaveBeenCalledWith(silent)
     // node-pty defers kill() until first output, which a silent pane never produces.
-    expect(ptyJob.closePseudoConsoleNow).toHaveBeenCalledWith(silent)
+    expect(ptyJob.killConptyNow).toHaveBeenCalledWith(silent)
     expect(silent.kill).toHaveBeenCalledOnce()
     expect(nodePty.spawn).toHaveBeenCalledOnce()
   })

@@ -6,6 +6,7 @@ import type { IPty } from 'node-pty'
 import { runProcess } from '@orca/process-host'
 import {
   isPtyJobOwnershipAvailable,
+  killConptyNow,
   listPtyJobProcessIds,
   terminatePtyJob
 } from './windows-pty-job'
@@ -115,6 +116,21 @@ describeOnWindows('ConPTY job ownership', () => {
     const startup = watchConptyStartup(proc)
     expect(await startup.verdict).toBe('input-reader')
     startup.claim()
+  }, 30_000)
+
+  it('tears down a pane discarded before its first output', async () => {
+    // node-pty's own kill() would wait for output that a discarded pane never sends.
+    const nodePty = await import('node-pty')
+    const proc = nodePty.spawn('cmd.exe', ['/d', '/q'], {
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      useConptyDll: true
+    })
+    spawned.push(proc)
+    killConptyNow(proc)
+    await waitUntilDead(proc.pid)
+    expect(isAlive(proc.pid)).toBe(false)
   }, 30_000)
 
   it('reports this build as able to own pty trees', () => {
