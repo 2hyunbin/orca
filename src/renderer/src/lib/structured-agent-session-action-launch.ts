@@ -3,11 +3,11 @@ import { translate } from '@/i18n/i18n'
 import {
   getStructuredLaunchStateBySessionId,
   notifyStructuredLaunchListeners
-} from './structured-agent-session-launch-registry'
+} from './agent-session/launch/structured-agent-session-launch-registry'
 import { focusTerminalTabSurface } from './focus-terminal-tab-surface'
 import type { Tab } from '../../../shared/tab-types'
 import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-launch-settlement'
-import type { ProvisionalLaunchArgs } from './structured-agent-session-provisional-tab'
+import type { ProvisionalLaunchArgs } from './agent-session/structured-agent-session-provisional-tab'
 import { insertUnifiedTabAfterAnchor } from './unified-tab-anchor-insertion'
 import { useAppStore } from '@/store'
 import type { OpenedAgentSessionTab } from './structured-agent-session-tab-open-through-layout-owner'

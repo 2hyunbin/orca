@@ -81,8 +81,7 @@ export function launchAgentInNewTabWithOutcome(
   // Why: a followup-path agent gets its prompt pasted unsubmitted after start, so route it as a draft.
   const routePromptDelivery =
     hasPrompt && isFollowupPath && promptDelivery === 'auto-submit' ? 'draft' : promptDelivery
-  // Why first: a structured chat is created on whichever runtime owns the workspace, a paired
-  // server included, so only a non-structured route falls through to the host-published terminal.
+  // Resolve structured ownership first; only terminal routes plan CLI arguments.
   const route = routeNewTabLaunch(store, args, {
     agent,
     requestedSurface: args.requestedSurface,
@@ -178,8 +177,7 @@ export function launchAgentInNewTabWithOutcome(
       pastePromptAfterReady: pasteDraftAfterLaunch,
       submitPastedPrompt,
       agentArgs,
-      // Why: omission means terminal locally, but would let a paired host apply
-      // its own default; send the client's resolved terminal choice explicitly.
+      // Send the resolved terminal choice explicitly or a paired host could substitute its own chat default.
       viewMode: 'terminal',
       ...(activate === false ? { activate } : {}),
       onPromptDelivered
@@ -210,7 +208,6 @@ export function launchAgentInNewTabWithOutcome(
       ...(agentArgs !== undefined ? { agentArgs } : {}),
       ...(terminalOptions.sessionOptions ? { sessionOptions: terminalOptions.sessionOptions } : {}),
       ...(initialCwd?.trim() ? { cwd: initialCwd } : {}),
-      // The same source main's window stamps on its own launches.
       launchSource: launchSource ?? 'tab_bar_quick_launch',
       quickCommandLabel,
       ...(pendingActivationSpawn ? { pendingActivationSpawn: true } : {}),
@@ -254,11 +251,9 @@ export function launchAgentInNewTabWithOutcome(
     // Why: queue before mount so local, WSL, and SSH continuations preserve their subdirectory.
     store.queueTabInitialCwd(tab.id, initialCwd)
   }
-  // Why: fire-and-forget the paste-after-ready delivery so callers keep the synchronous { tabId, startupPlan } signature.
-  // Why: safe to call unconditionally — the helper short-circuits (no paste) for native-prefill agents already holding the draft.
+  // Safe for native-prefill agents: delivery skips paste when their draft already arrived at launch.
   if (hasPrompt && promptDelivery === 'draft' && pasteDraftAfterLaunch === null) {
-    // Why: the draft rode in on argv (Claude --prefill etc.), so no paste runs
-    // and deliverLaunchPromptToAgentTab never seeds. Mirror it into chat here.
+    // Native argv prefill skips the paste callback, so seed the chat composer here.
     seedNativeChatLaunchDraftForAgentTab({ tabId: tab.id, agent, text: trimmedPrompt })
   }
   if (pasteDraftAfterLaunch !== null) {
@@ -283,13 +278,12 @@ export function launchAgentInNewTabWithOutcome(
     onPromptDelivered?.()
   }
 
-  // Why: without setActiveTabType('terminal') an activated launch can stay hidden behind an editor.
-  // Scoped to the launch's worktree so a floating launch leaves the main window's tab alone.
+  // Reveal Terminal within the launch workspace; otherwise an editor can hide it, while floating launches must leave main selection alone.
   if (activate !== false) {
     store.setActiveTabType('terminal', worktreeId)
   }
 
-  // Why: persist tab-bar order so reconcileTabOrder doesn't fall back to terminals-first and jump the new tab to index 0.
+  // Persist tab order or terminals-first reconciliation would jump the new tab to index 0.
   persistAgentLaunchTabOrder(worktreeId, tab.id)
 
   return {

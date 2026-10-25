@@ -43,7 +43,6 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
   const newLaunch = launch?.kind === 'new'
   const launchSeedOptions = launch?.seedOptions
   const held = launch?.heldOptions ?? NO_HELD_OPTIONS
-  // Published but not attached: the launch no longer holds picks and there is no fence to send one.
   const optionCatalog = useMemo(() => structuredAgentSessionSeedCatalog(agent), [agent])
   const {
     optionView,
@@ -71,8 +70,7 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
     providerVisible,
     providerStarting,
     hostOptionStamp: args.hostOptionStamp ?? '',
-    // A new chat's host knows nothing of its model before the provider starts; a resumed one's
-    // holds the model it ran, so only the former waits rather than show the host's guess.
+    // Before start only resumed chats have recorded model evidence; new chats must wait instead of showing a guess.
     readsBeforeStart: launch?.kind !== 'new',
     turnId,
     unloadedTurnRevisions: args.unloadedTurnRevisions
@@ -120,7 +118,7 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
       const isCurrent = (): boolean =>
         sameRecord() && optionMutationGeneration.current === mutationGeneration
       const currentPick = (): boolean => isCurrent() || pendingOptionsRef.current[id] === encoded
-      // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
+      // Show record-only picks immediately while their writes wait behind provider startup.
       const shownAtOnce = providerStarting || id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
       if (shownAtOnce) {
         updateOptionState((current) =>
@@ -251,7 +249,7 @@ export function useStructuredAgentSessionOptions(args: StructuredAgentSessionOpt
   const setOption = useCallback(
     async (id: string, value: string | boolean) => {
       await setStructuredOption(id, value)
-      // Read, not rendered: a pick the launch just took is not in this render's props yet.
+      // Read held picks directly; an accepted launch pick may precede this render’s props.
       const currentHeld = getStructuredAgentSessionLaunchSelection(sessionId)?.held
       return {
         snapshot: lockSnapshotRef.current(

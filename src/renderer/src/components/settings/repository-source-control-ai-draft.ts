@@ -188,7 +188,6 @@ export function readActionRecipeTextDraft(
   return { commandInputTemplate: recipe?.commandInputTemplate, agentArgs: recipe?.agentArgs }
 }
 
-/** Overlay the in-flight custom-command and per-action text drafts onto the optimistic value for display. */
 export function composeDisplayRepoAi(
   immediate: RepoSourceControlAiOverrides,
   customCommandDraft: string | null,
@@ -217,7 +216,6 @@ export function composeDisplayRepoAi(
   return next
 }
 
-/** Per-action dirty flags: does the text draft (or optimistic override) differ from the persisted recipe? */
 export function computeActionDirtyById(
   immediate: RepoSourceControlAiOverrides,
   persisted: RepoSourceControlAiOverrides,
@@ -242,7 +240,6 @@ export function computeActionDirtyById(
   ) as Record<SourceControlActionId, boolean>
 }
 
-/** Keep only action text drafts that still diverge from the latest persisted recipes. */
 export function retainDivergentActionTextDrafts(
   current: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>,
   persisted: RepoSourceControlAiOverrides
@@ -264,7 +261,6 @@ export function retainDivergentActionTextDrafts(
   return next
 }
 
-/** Keep a custom-command draft only while it still diverges from the persisted value. */
 export function retainCustomCommandDraft(
   current: string | null,
   persistedCustomCommand: string | undefined

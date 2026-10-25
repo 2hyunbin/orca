@@ -1,6 +1,6 @@
+import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import { planAgentCliArgsSuffix } from '@/lib/tui-agent-startup'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { CLIENT_PLATFORM, getWorkspaceIntentName, getWorkspaceSeedName } from '@/lib/new-workspace'
 import {
@@ -43,18 +43,7 @@ import {
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { loadProjectLaunchContext } from '@/lib/agent-detection-target-inventory'
 
-/**
- * "Use" flow: create the workspace, activate it, launch the default agent,
- * and paste the work item context into the agent. Most callers leave it as a draft;
- * fix-check launches can opt into submitting the prompt after the TUI is ready.
- * Falls back to `openModalFallback()` when:
- *   - the repo's `setupRunPolicy` is `'ask'` (the user must pick per-workspace)
- *   - the repo can't be resolved from `repoId`
- *   - no compatible agent is detected on PATH
- *
- * Best-effort: after workspace activation, paste failures only toast a notice — the user still
- * has a usable workspace and can paste the work item context themselves.
- */
+/** Create/activate a workspace and deliver work-item context to its agent. Setup decisions, unresolved repos or unavailable agents fall back to the modal; paste failures retain the usable workspace and surface a notice. */
 export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Promise<boolean> {
   const {
     item,
@@ -141,8 +130,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
   let resolvedCompareBaseRef: string | undefined
   if (!resolvedBaseBranch && itemType === 'pr' && itemNumber) {
     try {
-      // Why: direct "Use PR" launches bypass the Start-from picker, so they
-      // must still resolve the PR head before `git worktree add`.
+      // Direct Use PR bypasses the picker but still needs its resolved head before git worktree add.
       const result = await resolveDirectPrStartPoint(repoId, itemNumber, repoOwnerTarget, item)
       resolvedBaseBranch = result.baseBranch
       resolvedPushTarget = result.pushTarget
@@ -299,8 +287,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
     }
     const activation = activationHolder.value
     if (!activation) {
-      // Worktree vanished between create and activate — extremely unlikely but
-      // worth handling explicitly rather than silently dropping the draft.
+      // Report a workspace disappearing between create and activation rather than silently drop its draft.
       toast.error(workspaceActivationErrorMessage())
       return false
     }

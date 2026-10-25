@@ -149,8 +149,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(onLaunchAborted).not.toHaveBeenCalled()
   })
 
-  // Why: onLaunchAccepted only parks launch-scoped state; firing it twice or on a dead
-  // launch would leave a caller believing an agent is running.
+  // Acceptance parks launch state; duplicate or dead-launch callbacks would falsely imply an agent is running.
   it('fires onLaunchAccepted exactly once and only when a tab was created', async () => {
     const onLaunchAccepted = vi.fn()
     mocks.launchAgentInNewTab.mockReturnValue({
@@ -174,8 +173,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(onLaunchAccepted).not.toHaveBeenCalled()
   })
 
-  // Why: irreversible host writes (fixing replies, thread resolves) hang off onLaunched, so a
-  // launch whose prompt never landed must report the abort and never reach onLaunched.
+  // Failed delivery must abort before onLaunched can post irreversible host replies/resolutions.
   it('aborts an accepted launch when deferred prompt delivery fails', async () => {
     const onLaunchAccepted = vi.fn()
     const onLaunchAborted = vi.fn()
@@ -329,7 +327,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(mocks.onClose).toHaveBeenCalledTimes(1)
   })
 
-  // Why: the onStart branch never awaits a delivery result, so acceptance is terminal there.
+  // onStart awaits no delivery result, so acceptance is terminal for that route.
   it('accepts an onStart launch and never aborts it', async () => {
     const onLaunchAccepted = vi.fn()
     const onLaunchAborted = vi.fn()
@@ -373,8 +371,7 @@ describe('runSourceControlAgentActionStart', () => {
     expect(onLaunchAborted).not.toHaveBeenCalled()
   })
 
-  // Why: a rejected recipe save after acceptance would otherwise strand the caller with
-  // neither onLaunched nor onLaunchAborted, permanently disabling the action.
+  // Recipe-save rejection after acceptance must still settle callbacks or the action stays disabled indefinitely.
   it('completes the launch when saving the agent default rejects', async () => {
     const onLaunchAborted = vi.fn()
     const originalConsole = console
@@ -408,8 +405,7 @@ describe('runSourceControlAgentActionStart CLI arguments applicability', () => {
     vi.clearAllMocks()
   })
 
-  // Why: `undefined` is what reaches the global Agents arguments; an empty string would beat
-  // that fallback and launch the agent with no arguments at all.
+  // Undefined selects global agent arguments; empty string would suppress that fallback.
   it('omits the per-action arguments so a terminal launch resolves the global setting', async () => {
     mocks.launchAgentInNewTab.mockReturnValue({
       surface: { kind: 'local-terminal', tabId: 'tab-1' }
@@ -440,7 +436,7 @@ describe('runSourceControlAgentActionStart CLI arguments applicability', () => {
     })
   })
 
-  // Why: the field being absent must not rewrite a value the user saved for terminal launches.
+  // Omitting a field must not overwrite saved terminal arguments.
   it('still saves the recipe with the arguments the user had stored', async () => {
     mocks.launchAgentInNewTab.mockReturnValue({
       surface: { kind: 'local-terminal', tabId: 'tab-1' }

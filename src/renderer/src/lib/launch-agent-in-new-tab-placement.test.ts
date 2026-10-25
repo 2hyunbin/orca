@@ -1,6 +1,3 @@
-// Caller-owned placement coverage for launchAgentInNewTab, split from
-// launch-agent-in-new-tab.test.ts to keep both files within the lines budget.
-
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLocalRuntimeCapabilitiesForTests } from '@/runtime/local-runtime-capabilities'
 import { adoptAgentSessionLaunchVerdict } from './agent-session-launch-plan'
@@ -10,7 +7,6 @@ import type { SourceControlActionRecipe } from '../../../shared/source-control-a
 import { sourceControlActionLaunchOptions } from '../../../shared/source-control-action-launch-preferences'
 
 const mockCreateTab = vi.fn()
-/** Startup commands published with the created tabs, in creation order. */
 function queuedStartups() {
   return mockCreateTab.mock.calls.flatMap((call) => call[3]?.pendingStartup ?? [])
 }
@@ -99,7 +95,6 @@ vi.mock('@/lib/launch-agent-in-new-tab-structured-route', () => ({
 describe('launchAgentInNewTab terminal tab activation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // The local runtime has answered (without structured support), so no launch waits on it.
     setLocalRuntimeCapabilitiesForTests([])
     store.settings = placementSettings()
     mockCreateTab.mockReturnValue({ id: 'tab-1' })
@@ -123,8 +118,7 @@ describe('launchAgentInNewTab terminal tab activation', () => {
     expect(mockCreateTab).not.toHaveBeenCalled()
   })
 
-  // Why: the store scopes activation to the launch's own workspace, so the floating panel launches
-  // like every other caller and cannot move the main window's selection.
+  // Store activation is scoped to the launch workspace, so floating launches cannot move main-window selection.
   it.each(['wt-1', FLOATING_TERMINAL_WORKTREE_ID])(
     'selects the new tab within %s only',
     async (worktreeId) => {
