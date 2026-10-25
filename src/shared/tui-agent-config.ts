@@ -25,7 +25,10 @@ const TUI_AGENT_CONFIG_SOURCE: Record<TuiAgent, TuiAgentConfigSource> = {
     pasteNeedsTypedRequest: true,
     // Native --prefill avoids paste-after-ready races (https://github.com/stablyai/orca/pull/926).
     draftPromptFlag: '--prefill',
-    preflightTrust: 'claude'
+    preflightTrust: 'claude',
+    // Why: CLAUDE_CODE_DISABLE_TERMINAL_TITLE drops the `✳` title tui-idle waits on (#22655).
+    draftPasteReadySignal: 'claude-composer-prompt',
+    workerStartReadsComposerMarker: true
   },
   'claude-agent-teams': {
     // This launch mode uses Orca’s CLI wrapper rather than a separate agent binary.
@@ -43,7 +46,9 @@ const TUI_AGENT_CONFIG_SOURCE: Record<TuiAgent, TuiAgentConfigSource> = {
     expectedProcess: 'claude',
     promptInjectionMode: 'stdin-after-start',
     pasteNeedsTypedRequest: true,
-    preflightTrust: 'claude'
+    preflightTrust: 'claude',
+    draftPasteReadySignal: 'claude-composer-prompt',
+    workerStartReadsComposerMarker: true
   },
   codebuddy: {
     detectCmd: 'codebuddy',

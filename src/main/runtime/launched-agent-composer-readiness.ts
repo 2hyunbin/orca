@@ -73,13 +73,18 @@ export async function waitForWorkerStartComposer(
   }
 }
 
-/** Marker evidence can beat bare-name quiescence, e.g. Grok's composer precedes ten seconds of logo animation. */
+/**
+ * An agent whose composer draws a marker, and whose only rest signal is its bare name (which a
+ * launch holds to quiet output) or a title the user can turn off: that marker answers first. Grok
+ * draws its glyph at 0.6 s, then animates its logo for ten; Claude without its title never settles.
+ */
 export function workerStartReadsComposerMarker(agent: TuiAgent): boolean {
-  const signal = TUI_AGENT_CONFIG[agent].draftPasteReadySignal
+  const config = TUI_AGENT_CONFIG[agent]
+  const signal = config.draftPasteReadySignal
   return (
     signal !== undefined &&
     draftPasteReadySignalHasMarker(signal) &&
-    !nameOnlyIdleNeedsCorroboration(agent)
+    (config.workerStartReadsComposerMarker === true || !nameOnlyIdleNeedsCorroboration(agent))
   )
 }
 
