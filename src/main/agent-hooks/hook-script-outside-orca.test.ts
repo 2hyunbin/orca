@@ -28,8 +28,7 @@ afterEach(() => {
   }
 })
 
-/** Managed hooks are installed into the user's agent config, so they also run when the
- *  agent is launched from a plain terminal. There they must be inert and silent. */
+/** User-global hooks also run outside Orca, where they must stay inert and silent. */
 function runHook(dir: string, extraEnv: NodeJS.ProcessEnv = {}) {
   const script = join(dir, 'codex-hook.sh')
   writeFileSync(script, getManagedScript('posix'))

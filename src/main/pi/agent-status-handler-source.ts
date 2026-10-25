@@ -5,6 +5,7 @@ import type { PiAgentKind } from '../../shared/pi-agent-kind'
 import { getOmpSessionOwnerHandlerSourceLines } from './omp-session-status-owner-source'
 import { getOmpPlanReviewHandlerSourceLines } from './omp-plan-review-source'
 import { getPiAgentStatusUiPromptHandlerSourceLines } from './agent-status-ui-prompt-source'
+import { getPiAgentStatusCompactionHandlerSourceLines } from './agent-status-compaction-source'
 import {
   getPiSubagentRosterEventSourceLines,
   getPiSubagentRosterSetupSourceLines
@@ -29,6 +30,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           "    post('session_start')",
           ...(kind === 'pi'
             ? [
+                '    replyFinishedAt = undefined',
                 '    restoreParkedSubagents()',
                 // Why: the host reads session_start as an idle session; children still hold this one.
                 "    if (lifecycleState.waiting) post('agent_start')"
@@ -161,7 +163,13 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '    lifecycleState.runGeneration += 1',
     // Why: a turn cannot begin under a dialog holding input focus, so this is the one
     // boundary that can recover a modal whose close never arrived.
-    ...(kind === 'pi' ? ['    piUiState.depth = 0', '    piUiState.turnInFlight = true'] : []),
+    ...(kind === 'pi'
+      ? [
+          '    piUiState.depth = 0',
+          '    piUiState.turnInFlight = true',
+          '    replyFinishedAt = undefined'
+        ]
+      : []),
     "    post('agent_start')",
     '  })',
     '',
@@ -191,6 +199,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     ...approvalHandlers,
     ...(kind === 'prime-agent' ? [] : getOmpPlanReviewHandlerSourceLines()),
     ...getPiAgentStatusUiPromptHandlerSourceLines(kind),
+    ...getPiAgentStatusCompactionHandlerSourceLines(kind),
     ...modelSelectHandler,
     "  // Why: capture the assistant's final text on each completed message",
     '  // so the dashboard preview reflects the most recent reply even before',
@@ -243,7 +252,12 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     // and so starts clean on a pane that has not run a turn yet — that pane is idle, not busy.
     ...(kind === 'pi' ? ['    piUiState.turnInFlight = false'] : []),
     // Why: a run that ends because its session did has not completed; the host records it quietly.
-    "    post('agent_end', final ? { session_boundary: true } : {}, final)",
+    ...(kind === 'pi'
+      ? [
+          '    const replyFields = takeCompletedReplyFields()',
+          "    post('agent_end', final ? { session_boundary: true } : replyFields, final)"
+        ]
+      : ["    post('agent_end', final ? { session_boundary: true } : {}, final)"]),
     '    return true',
     '  }',
     '',
@@ -284,6 +298,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '      return',
     '    }',
     '    lifecycleState.endedRunGeneration = lifecycleState.runGeneration',
+    ...(kind === 'pi' ? ['    recordReplyFinish(event)'] : []),
     '    if (isOmpRuntime()) {',
     '      postAgentEndOnce()',
     '      return',

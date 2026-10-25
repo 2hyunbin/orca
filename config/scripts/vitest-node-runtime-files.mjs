@@ -29,6 +29,8 @@ const NODE_RUNTIME_INCLUDE = [
   'src/renderer/src/lib/react-commit-cascade-observer.test.ts',
   'src/renderer/src/lib/react-commit-cascade-telemetry.test.ts',
   // These reach Node SQLite through a shared helper or a dynamic import, which the scan skips.
+  'src/main/claude/claude-transcript-catch-up.test.ts',
+  'src/main/claude/claude-transcript-duration.test.ts',
   'tests/e2e/native-chat-startup-option-pickers.unit.test.ts',
   'src/main/ai-vault/session-document-consumer-replacement.test.ts',
   'src/main/ai-vault-search/session-search-dependent-transcripts.test.ts',
@@ -121,7 +123,11 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault-search/session-search-fts5-contract.test.ts',
   'src/main/foreign-sqlite-readers/**/*.test.ts',
   'src/main/browser/*cookie*.test.ts',
+  'src/main/browser/cookies/*cookie*.test.ts',
   'src/main/browser/cookies/sources/browser-cookie-validation.test.ts',
+  'src/main/browser/cookies/sources/browser-cookie-decryption.test.ts',
+  'src/main/browser/cookies/sources/browser-cookie-import-undecryptable.test.ts',
+  'src/main/browser/cookies/sources/browser-cookie-source-partition.test.ts',
   // Playwright's CDP transport needs Node's WebSocket implementation.
   'src/main/browser/browser-popup-adapter-compatibility.electron.test.ts',
   'src/main/browser/popup-origin-chrome.electron.test.ts',
@@ -162,10 +168,10 @@ const NODE_RUNTIME_INCLUDE = [
   // Bun resolves 'ws' to its built-in client, which bypasses the patched package.
   'src/main/runtime/rpc/ws-empty-payload-frame-write.test.ts',
   'src/shared/remote-runtime-client.test.ts',
-  'src/shared/remote-runtime-connect-bound.test.ts',
+  'src/shared/remote-runtime/remote-runtime-connect-bound.test.ts',
   // Bun's built-in ws client ignores maxPayload; the product opener only runs on Node.
-  'src/shared/remote-runtime-request-websocket.test.ts',
-  'src/shared/remote-runtime-subscription-connect-bound.test.ts',
+  'src/shared/remote-runtime/requests/remote-runtime-request-websocket.test.ts',
+  'src/shared/remote-runtime/requests/remote-runtime-subscription-connect-bound.test.ts',
   'src/main/codex/codex-shared-server-probe.test.ts',
   'src/main/opencode/opencode-launch-model-context-supervision.test.ts',
   'src/main/hermes/hermes-config-remote-adapter.test.ts',
@@ -175,7 +181,7 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/ipc/renderer-shutdown-checkpoint-sleep-records.test.ts',
   'src/main/runtime/structured-agent-session-startup-tab-restore.test.ts',
   'src/main/runtime/structured-agent-session-windowless-layout-host.test.ts',
-  'src/shared/remote-runtime-shared-control-connection.test.ts',
+  'src/shared/remote-runtime/control/remote-runtime-shared-control-connection.test.ts',
   'src/main/runtime/mobile-cloud-relay/relay-control-client.test.ts',
   'src/main/ipc/filesystem-watcher-ignore-real.test.ts',
   'src/main/ipc/runtime-environments/runtime-environment-preference.test.ts',
