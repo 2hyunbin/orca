@@ -5,17 +5,20 @@
  */
 import type { SpawnIntent } from '../../shared/host-spawn-admission'
 
-// Caller frames captured where a spawn enters the daemon router, before any await drops them.
+// Caller frames captured where a spawn enters the daemon client, before any await drops them.
 const callersBySessionId = new Map<string, string[]>()
+const CALLER_FRAME_LIMIT = 40
 
 /** Records who asked for this session's spawn; the async spawn path keeps no caller frames. */
-export function rememberSpawnCaller(sessionId: string | undefined): void {
-  if (!sessionId) {
-    return
-  }
-  const frames = (new Error('wsl spawn caller').stack ?? '')
+export function rememberSpawnCaller(sessionId: string): void {
+  // Why raised: the default 10 frames end inside IPC plumbing, before the async caller frames.
+  const limit = Error.stackTraceLimit
+  Error.stackTraceLimit = CALLER_FRAME_LIMIT
+  const stack = new Error('wsl spawn caller').stack ?? ''
+  Error.stackTraceLimit = limit
+  const frames = stack
     .split('\n')
-    .slice(2, 10)
+    .slice(2)
     .map((frame) => frame.trim())
   callersBySessionId.set(sessionId, frames)
   if (callersBySessionId.size > 64) {
