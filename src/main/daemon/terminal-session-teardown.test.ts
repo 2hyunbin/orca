@@ -19,7 +19,6 @@ function createPlainShellSession(overrides: Partial<Session> = {}): Session {
     isAlive: true,
     forceKillAndWaitForExit: vi.fn(async () => {}),
     beginTermination: vi.fn(() => true),
-    kill: vi.fn(),
     terminateOwnedTree: vi.fn(() => 'terminated' as const),
     scheduleForceDisposeFallback: vi.fn(),
     signalTerminationRoot: vi.fn(),
@@ -173,16 +172,24 @@ describe('TerminalSessionTeardown plain-shell teardown', () => {
     expect(settled).toBe(true)
   })
 
-  it('non-immediate (graceful) kill uses the plain kill path without a sweep', async () => {
-    setPlatform('win32')
+  it('graceful close captures descendants before signalling a shell without launch metadata', async () => {
+    // An agent typed into the shell has no launchAgent; its detached MCP tools outlive the shell's SIGHUP (#16714).
+    setPlatform('linux')
     const session = createPlainShellSession()
     const teardown = new TerminalSessionTeardown(new Map([['s1', session]]))
 
     await teardown.killSession('s1', session, false)
 
-    expect(killWithDescendantSweepMock).not.toHaveBeenCalled()
+    expect(killWithDescendantSweepMock).toHaveBeenCalledWith(
+      4242,
+      expect.any(Function),
+      expect.objectContaining({ ownsRoot: expect.any(Function) })
+    )
+    expect(session.signalTerminationRoot).not.toHaveBeenCalled()
+    const killRoot = killWithDescendantSweepMock.mock.calls[0][1] as () => void
+    killRoot()
+    expect(session.signalTerminationRoot).toHaveBeenCalled()
     expect(session.forceKillAndWaitForExit).not.toHaveBeenCalled()
-    expect(session.kill).toHaveBeenCalled()
   })
 })
 

@@ -68,16 +68,14 @@ export class TerminalSessionTeardown {
   }
 
   killSession(sessionId: string, session: Session, immediate: boolean): void | Promise<void> {
-    if (session.launchAgent) {
-      return this.killAgentSession(sessionId, session, immediate)
+    // Hand-typed agents carry no launch metadata, yet their detached tools outlive the shell's SIGHUP.
+    if (session.launchAgent || !immediate) {
+      return this.killAfterDescendantSnapshot(sessionId, session, immediate)
     }
-    if (immediate) {
-      // Track the async probe so a concurrent create waits instead of treating the terminating ID as absent (#18046).
-      return this.track(sessionId, session, immediate, () =>
-        this.forceKillPlainShellSession(sessionId, session)
-      )
-    }
-    session.kill()
+    // Track the async probe so a concurrent create waits instead of treating the terminating ID as absent (#18046).
+    return this.track(sessionId, session, immediate, () =>
+      this.forceKillPlainShellSession(sessionId, session)
+    )
   }
 
   private track(
@@ -122,7 +120,7 @@ export class TerminalSessionTeardown {
     await session.forceKillAndWaitForExit()
   }
 
-  private killAgentSession(
+  private killAfterDescendantSnapshot(
     sessionId: string,
     session: Session,
     immediate: boolean

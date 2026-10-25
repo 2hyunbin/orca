@@ -62,7 +62,6 @@ export class Session {
     this.termination = new SessionTerminationController({
       sessionId: this.sessionId,
       subprocess: this.subprocess,
-      launchAgent: this.launchAgent,
       isExited: () => this._state === 'exited',
       releaseProducerPause: (pauseOpts) => this.producerPause.release(pauseOpts)
     })
@@ -167,10 +166,6 @@ export class Session {
 
   resumeProducer(source?: 'stream'): void {
     this.producerPause.resumeClient(source)
-  }
-
-  kill(): void {
-    this.termination.kill()
   }
 
   /** Signal the root only after its descendant snapshot has completed. */
