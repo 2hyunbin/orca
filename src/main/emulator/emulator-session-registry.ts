@@ -1,5 +1,9 @@
 import type { EmulatorBackendKind, EmulatorSessionInfo } from './emulator-types'
 import type { EmulatorSessionState } from './emulator-bridge-types'
+import type { EmulatorBackend } from './backends/emulator-backend'
+import { withTimeout } from '../../shared/promise-timeout-fallback'
+
+const DEVICE_LISTING_BUDGET_MS = 5_000
 
 export class EmulatorSessionRegistry {
   private readonly activeByWorktree = new Map<string, string>()
@@ -69,6 +73,32 @@ export class EmulatorSessionRegistry {
         this.activeByWorktree.delete(worktreeId)
       }
     }
+  }
+
+  /** Drop managed records whose device stopped outside Orca; true while any managed device still runs. */
+  async pruneGoneManagedSessions(
+    backendForKind: (kind: EmulatorBackendKind) => Pick<EmulatorBackend, 'listDevices'> | null
+  ): Promise<boolean> {
+    const managed = this.listSessions().filter((session) => session.managed)
+    let live = false
+    for (const kind of new Set(managed.map((session) => session.backend))) {
+      const backend = backendForKind(kind)
+      const devices = backend
+        ? await withTimeout(backend.listDevices(), DEVICE_LISTING_BUDGET_MS, null)
+        : []
+      for (const session of managed.filter((candidate) => candidate.backend === kind)) {
+        // An unanswered listing proves nothing; keep the record rather than strand a running device.
+        const running =
+          devices === null ||
+          devices.some((device) => device.id === session.deviceUdid && device.state !== 'shutdown')
+        if (running) {
+          live = true
+        } else {
+          this.clearSessionAndWorktrees(session.deviceUdid)
+        }
+      }
+    }
+    return live
   }
 
   clear(): void {

@@ -32,7 +32,7 @@ type OrcadIdleExitRuntimePorts = {
   agentStates: () => readonly { state: string }[]
   hasStagedMigration: () => boolean
   automationsBusy: () => boolean
-  emulatorsBusy: () => boolean
+  emulatorsBusy: () => Promise<boolean>
   /** Stop the monitor before recording signal-driven shutdown. */
   registerCleanup: (cleanup: () => void) => void
 }

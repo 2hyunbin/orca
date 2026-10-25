@@ -254,8 +254,8 @@ export class EmulatorBridge {
     return udid
   }
 
-  hasManagedSessions(): boolean {
-    return this.sessionRegistry.listSessions().some((session) => session.managed)
+  hasLiveManagedSessions(): Promise<boolean> {
+    return this.sessionRegistry.pruneGoneManagedSessions((kind) => this.backendForKind(kind))
   }
 
   async destroyAllSessions(): Promise<void> {

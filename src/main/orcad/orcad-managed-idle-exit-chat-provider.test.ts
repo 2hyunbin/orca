@@ -44,7 +44,7 @@ function idleMonitor() {
         agentStates: () => [{ state: 'blocked' }],
         hasStagedMigration: () => false,
         automationsBusy: () => false,
-        emulatorsBusy: () => false,
+        emulatorsBusy: async () => false,
         activationFenceExists: async () => false
       }
     )
