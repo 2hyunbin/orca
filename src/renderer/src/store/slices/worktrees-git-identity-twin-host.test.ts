@@ -285,6 +285,17 @@ describe('review-clear tombstones are always keyed by the copy', () => {
     expect(stale).toMatchObject({ branch: 'refs/heads/a2', linkedPR: null })
   })
 
+  it('still guard a legacy local row after discovery stamps it local', () => {
+    const store = storeWith({ branch: 'refs/heads/a1', linkedPR: 1 })
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'local')
+
+    const [stale] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({ id, repoId: 'repo1', hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 })
+    ])
+
+    expect(stale).toMatchObject({ branch: 'refs/heads/a2', linkedPR: null })
+  })
+
   it("keep a paired server's provenance when its SSH host answers", () => {
     const paired = { hostId: 'ssh:x' as const, runtimeOwnerEnvironmentId: 'hub' }
     const store = storeWith({ ...paired, branch: 'refs/heads/a1', linkedPR: 1 })

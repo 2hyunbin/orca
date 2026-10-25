@@ -1,5 +1,8 @@
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../../../../../shared/execution-host'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
 import { CLEARED_HOSTED_REVIEW_LINK_UPDATES } from '../../../../../../shared/worktree/hosted-review-links'
 import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
@@ -14,7 +17,9 @@ import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 export function worktreeCopyOwnerKey(
   row: Partial<Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>>
 ): string {
-  return `${row.hostId ?? ''}\0${row.runtimeOwnerEnvironmentId ?? ''}`
+  // Why local folds into unstamped: discovery backfills `hostId: 'local'` on the same checkout.
+  const hostId = row.hostId === LOCAL_EXECUTION_HOST_ID ? undefined : row.hostId
+  return `${hostId ?? ''}\0${row.runtimeOwnerEnvironmentId ?? ''}`
 }
 
 /** The copy a review clear is for. */
