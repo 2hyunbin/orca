@@ -1,9 +1,4 @@
-/**
- * E2E tests for the browser tab: creating browser tabs and state retention.
- *
- * User Prompt:
- * - Browser works and also retains state when switching tabs etc.
- */
+// Cover browser-tab creation and state retention across tab switches.
 
 import { test, expect } from './helpers/orca-app'
 import { createServer, type Server } from 'node:http'

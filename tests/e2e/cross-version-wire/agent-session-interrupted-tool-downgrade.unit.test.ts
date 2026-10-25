@@ -11,8 +11,7 @@ import { createTrackedJournalOpener } from '../../../src/main/native-chat/agent-
 import type { JournalRow } from '../../../src/main/native-chat/agent-session-journal/journal-row-schema'
 import { importReleaseCheckoutModule, materializeReleaseCheckout } from './release-checkout'
 
-// A release that predates a tool call's `endedAs`. Pinned, not the newest tag: what it must do is
-// read the cut-short call as failed, which no later release will contradict.
+// Pin a release predating endedAs to prove cut-short tool calls still read as failed.
 const BASELINE_REF = 'v1.4.218'
 
 const SESSION = 'session-interrupted-tool'
