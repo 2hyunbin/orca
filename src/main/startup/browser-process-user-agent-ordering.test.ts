@@ -148,7 +148,13 @@ vi.mock('../network/http-client')
 vi.mock('../host/electron-speech-services')
 vi.mock('../speech/speech-runtime-service')
 vi.mock('../ipc/worktree-watcher-removal')
-vi.mock('../ipc/filesystem/watchers/filesystem-watcher')
+vi.mock('../ipc/filesystem/watchers/filesystem-watcher', () => ({
+  desktopWorktreeWatcherRemoval: {
+    closeLocal: vi.fn(),
+    restoreLocal: vi.fn(),
+    forgetLocal: vi.fn()
+  }
+}))
 vi.mock('../network/proxy-settings')
 vi.mock('../persistence', () => ({
   initDataPath: () => mocks.events.push('init-data-path'),
