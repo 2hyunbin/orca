@@ -219,7 +219,7 @@ it('acquires when only a saved Sleep note remains, but refuses an existing unkno
   )
 })
 
-it('preserves actual saved OpenCode background refusal through acquisition and the recorded send', async () => {
+it('preserves the saved OpenCode guard through acquisition and the recorded send', async () => {
   const sessionId = `${SESSION}-opencode`
   const definition = structuredAgentRuntimeRegistration('opencode')?.definition
   if (!definition) {
@@ -281,9 +281,9 @@ it('preserves actual saved OpenCode background refusal through acquisition and t
   await host.revealSession(sessionId)
   const before = acquire.mock.calls.length
   const rejected = await rejection(await send('resume saved OpenCode', sessionId), sessionId)
-  expect(rejected?.rejection).toMatchObject({ kind: 'conversationOpenInBackgroundServer' })
+  expect(rejected?.rejection).toMatchObject({ kind: 'conversationOpenInTerminal' })
   expect(rejected?.reason).toBe(
-    'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
+    'OpenCode is already running this conversation in another terminal. Quit OpenCode there or close that terminal to continue here.'
   )
   expect(acquire).toHaveBeenCalledTimes(before)
   expect(store.getRecord(sessionId)?.lease.reservedSpawnToken).toBeNull()

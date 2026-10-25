@@ -264,30 +264,21 @@ describe('CLI identity resume through the existing launch owner', () => {
     }
   })
 
-  it.each([
-    [
-      'agent_session_conflict',
-      'conversationHeldElsewhere',
-      'Claude is already running this conversation in another terminal. Quit Claude there or close that terminal, then open this conversation from Session History.'
-    ],
-    [
-      'agent_session_operation_invalid',
-      'conversationOpenInBackgroundServer',
-      'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
-    ]
-  ])('keeps the terminal and words the actual %s refusal', async (code, reason, words) => {
+  it('keeps the terminal and directs a refused terminal writer to Session History', async () => {
     mocks.call.mockResolvedValue({
       ok: false,
       refusal: {
-        code,
+        code: 'agent_session_conflict',
         message: 'private host evidence',
-        details: { reason },
+        details: { reason: 'conversationHeldElsewhere' },
         createAttemptRefusedBeforeCommit: true
       }
     })
     await runCliChatResume(SOURCE, true)
     expect(mocks.toast).toHaveBeenCalledTimes(1)
-    expect(mocks.toast.mock.calls[0]?.[0]).toBe(words)
+    expect(mocks.toast.mock.calls[0]?.[0]).toBe(
+      'Claude is already running this conversation in another terminal. Quit Claude there or close that terminal, then open this conversation from Session History.'
+    )
     expect(mocks.activate).not.toHaveBeenCalled()
     expect(tabs()).toEqual([])
     expect([...structuredLaunchStates()]).toEqual([])

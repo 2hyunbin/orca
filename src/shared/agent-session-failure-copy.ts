@@ -78,8 +78,6 @@ export const AGENT_SESSION_FAILURE_COPY = {
     "{{agent}}'s Command in Settings → Agents must be a program path or name Orca can find, with no arguments or variables. Change it or reset it.",
   runtimeNotInstalled:
     "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
-  conversationOpenInBackgroundServer:
-    'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.',
   conversationOpenElsewhere:
     'Codex is still holding this conversation open. Try again in a moment, or close other Codex terminals.',
   conversationOpenInTerminal:

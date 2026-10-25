@@ -5,11 +5,7 @@ import {
   chatAgentsShareConversations,
   CLI_CONVERSATION_ADOPTING_AGENTS
 } from '../../shared/structured-agent-cli-conversation-adoption'
-import {
-  agentSessionRefusalError,
-  isAgentSessionRefusalError
-} from '../../shared/agent-session-wire-refusals'
-import { AGENT_SESSION_FAILURE_COPY } from '../../shared/agent-session-failure-copy'
+import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import type { CliWriterObservation } from '../agent-hooks/server/cli-writer-observation'
 import { getFreshShellForegroundSnapshot } from '../../shared/process-table-snapshot-reader'
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
@@ -78,6 +74,7 @@ export async function assertCliConversationWritersExited(
       chatAgentsShareConversations(rowChat, agent)
     ) &&
     id === providerSessionId
+  const proofs: (() => boolean)[] = []
   const paneOf = (coordinates: CliWriterCoordinates) => host.terminal(coordinates)?.pane ?? null
   // The pane's PTY itself, not a recorded pid: a wrapper pid can read exited beside a paused agent.
   const censusPane = async (
@@ -87,6 +84,7 @@ export async function assertCliConversationWritersExited(
   ) => {
     const terminal = read()
     if (!terminal && absentAdmits) {
+      proofs.push(() => !read())
       return
     }
     const pane = terminal?.pane
@@ -98,6 +96,7 @@ export async function assertCliConversationWritersExited(
     ) {
       throw refuse()
     }
+    proofs.push(() => !host.sleeping(worktreeId ?? '') && read()?.pane?.identity === pane.identity)
   }
   try {
     if (source) {
@@ -150,6 +149,7 @@ export async function assertCliConversationWritersExited(
       if (!observed || !observed.current()) {
         throw refuse()
       }
+      proofs.push(() => observed.current())
       const pane = paneOf(row)
       const presence = await observed.presence()
       if (
@@ -161,6 +161,7 @@ export async function assertCliConversationWritersExited(
         throw refuse()
       }
       if (!host.terminal(row)) {
+        proofs.push(() => !host.terminal(row))
         if (row.agentType !== 'opencode' && row.agentType !== 'opencode2') {
           for (const record of matching) {
             covered.set(
@@ -191,16 +192,11 @@ export async function assertCliConversationWritersExited(
       ) {
         throw refuse()
       }
+      const current = () =>
+        paneOf(row)?.identity === pane.identity && !host.sleeping(row.worktreeId ?? '')
+      proofs.push(current)
       for (const record of matching) {
-        covered.set(
-          record,
-          () =>
-            observed.current() &&
-            paneOf(row)?.identity === pane.identity &&
-            !host.sleeping(row.worktreeId ?? '') &&
-            matches(record) &&
-            host.saved().includes(record)
-        )
+        covered.set(record, () => current() && savedCurrent(record) && matches(record))
       }
     }
     for (const link of host.links()) {
@@ -222,11 +218,7 @@ export async function assertCliConversationWritersExited(
       }
       const [paneKey, worktreeId, , savedAgent] = identity
       if (savedAgent === 'opencode' || savedAgent === 'opencode2') {
-        throw agentSessionRefusalError(
-          'agent_session_operation_invalid',
-          { reason: 'conversationOpenInBackgroundServer' },
-          AGENT_SESSION_FAILURE_COPY.conversationOpenInBackgroundServer
-        )
+        throw refuse()
       }
       const coordinates = { paneKey, worktreeId }
       const terminal = host.terminal(coordinates)
@@ -249,19 +241,14 @@ export async function assertCliConversationWritersExited(
       covered.set(record, current)
     }
     if (
+      proofs.some((current) => !current()) ||
       [...saved, ...savedCandidates()].some(
         (record) => !savedCurrent(record) || !covered.get(record)?.()
       )
     ) {
       throw refuse()
     }
-  } catch (error) {
-    if (
-      isAgentSessionRefusalError(error) &&
-      error.refusal.details?.reason === 'conversationOpenInBackgroundServer'
-    ) {
-      throw error
-    }
+  } catch {
     throw refuse()
   }
 }

@@ -1,5 +1,4 @@
 import { isDeepStrictEqual } from 'node:util'
-import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { abortSignalReason } from '../../../shared/abort-signal-reason'
 import type {
   AgentSessionProcessIdentity,
@@ -49,11 +48,7 @@ export async function acquireOwner(
     } catch (error) {
       // Not a code: a code message would travel as the census's own conflict, not this reason.
       throw new AgentSessionPreSpawnError(error, {
-        reason:
-          isAgentSessionRefusalError(error) &&
-          error.refusal.details?.reason === 'conversationOpenInBackgroundServer'
-            ? 'conversationOpenInBackgroundServer'
-            : 'conversationOpenInTerminal',
+        reason: 'conversationOpenInTerminal',
         message: 'a terminal may still be writing this conversation'
       })
     }

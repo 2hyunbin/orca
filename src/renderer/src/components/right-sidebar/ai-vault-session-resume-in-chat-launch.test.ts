@@ -169,11 +169,6 @@ describe('resumeAiVaultSessionInNewChat', () => {
   )
 
   it.each([
-    [
-      'agent_session_operation_invalid',
-      'conversationOpenInBackgroundServer',
-      'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
-    ],
     ['agent_session_conflict', undefined, 'Another chat is already holding this conversation.'],
     [
       'agent_session_conflict',

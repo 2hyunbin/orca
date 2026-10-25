@@ -138,39 +138,6 @@ describe('desktop words for a failure fact', () => {
     ).toBe(`${row}. ${retry}`)
   })
 
-  it('projects the exact background-server refusal without replacing host text for unknown facts', () => {
-    const words =
-      'OpenCode may still be running this conversation in its background server. Stop that OpenCode server, then try again.'
-    expect(
-      agentSessionWriteNoticeText(
-        agentSessionWriteNoticeParts(
-          agentSessionRefusalFailure({
-            code: 'agent_session_operation_invalid',
-            details: { reason: 'conversationOpenInBackgroundServer' }
-          }),
-          'composer-send'
-        )
-      )
-    ).toBe(`Your message was not sent. ${words}`)
-    const unknown = {
-      kind: 'fromTheFuture',
-      refusal: {
-        code: 'agent_session_operation_invalid',
-        details: { reason: 'conversationOpenInBackgroundServer' }
-      }
-    }
-    expect(readWholeAgentSessionFailureFact(unknown)).toBeUndefined()
-    expect(
-      agentSessionWriteNoticeText(
-        structuredAgentSessionRejectionParts(
-          words,
-          'send',
-          readWholeAgentSessionFailureFact(unknown)
-        )
-      )
-    ).toBe(words)
-  })
-
   it('has a key for every piece, whose English default is the shared sentence', () => {
     for (const id of IDS) {
       expect([id, sayAgentSessionFailureTranslated(id, VALUES)]).toEqual([
