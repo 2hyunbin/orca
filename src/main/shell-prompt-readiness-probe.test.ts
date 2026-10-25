@@ -1,16 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const lineEditorProbe = vi.hoisted(() => vi.fn())
+const relayedLineEditorProbe = vi.hoisted(() => vi.fn())
+const listChildPids = vi.hoisted(() => vi.fn())
 const processReadinessProbe = vi.hoisted(() => vi.fn())
 const resolveExecutablePath = vi.hoisted(() => vi.fn((value: string) => Promise.resolve(value)))
 const resolveInstalledExecutablePaths = vi.hoisted(() =>
   vi.fn((): Promise<string[]> => Promise.resolve([]))
 )
 vi.mock('../shared/pty-slave-line-discipline-echo', () => ({
-  createPtySlaveLineEditorProbe: () => lineEditorProbe
+  createPtySlaveLineEditorProbe: (ttyPath: string) =>
+    ttyPath === '/dev/ttys099' ? relayedLineEditorProbe : lineEditorProbe
 }))
 vi.mock('../shared/shell-process-readiness', () => ({
   readShellProcessReadiness: processReadinessProbe,
+  listChildProcessIds: listChildPids,
   resolveShellExecutablePath: resolveExecutablePath,
   resolveInstalledShellExecutablePaths: resolveInstalledExecutablePaths
 }))
@@ -21,6 +25,8 @@ describe('shell prompt readiness probe', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     lineEditorProbe.mockReset()
+    relayedLineEditorProbe.mockReset()
+    listChildPids.mockReset().mockResolvedValue([])
     processReadinessProbe.mockReset()
     resolveExecutablePath.mockClear()
     resolveInstalledExecutablePaths.mockClear()
@@ -47,6 +53,7 @@ describe('shell prompt readiness probe', () => {
     await vi.advanceTimersByTimeAsync(10)
 
     expect(onPromptReady).toHaveBeenCalledOnce()
+    expect(onPromptReady).toHaveBeenCalledWith('/bin/zsh')
   })
 
   it('preserves an unset child PATH for executable resolution', async () => {
@@ -97,9 +104,42 @@ describe('shell prompt readiness probe', () => {
 
     expect(onPromptReady).not.toHaveBeenCalled()
     if (terminalState === 'other') {
-      expect(processReadinessProbe).not.toHaveBeenCalled()
+      expect(listChildPids).not.toHaveBeenCalled()
     }
   })
+
+  it.each([
+    ['accepts', 'line-editor', true],
+    ['rejects', 'other', false]
+  ])(
+    '%s a relayed shell whose inner pty is in %s mode (#25586)',
+    async (_verb, innerState, expected) => {
+      lineEditorProbe.mockResolvedValue('other')
+      relayedLineEditorProbe.mockResolvedValue(innerState)
+      listChildPids.mockResolvedValue([43])
+      processReadinessProbe.mockImplementation((pid: number) =>
+        Promise.resolve(
+          pid === 42
+            ? { executablePath: '/usr/local/bin/kiro-cli-term', foreground: true, ttyPath: null }
+            : { executablePath: '/bin/zsh', foreground: true, ttyPath: '/dev/ttys099' }
+        )
+      )
+      const onPromptReady = vi.fn()
+      const probe = createShellPromptReadinessProbe({
+        slavePath: '/dev/ttys048',
+        shellPath: '/bin/zsh',
+        getShellPid: () => 42,
+        onPromptReady,
+        settleMs: 10
+      })
+
+      probe?.notifyOutput('\x1b[?2004h')
+      await vi.advanceTimersByTimeAsync(10)
+
+      expect(onPromptReady).toHaveBeenCalledTimes(expected ? 1 : 0)
+      expect(onPromptReady.mock.calls).toEqual(expected ? [['/bin/zsh']] : [])
+    }
+  )
 
   it('accepts a second installation of the same shell that the pane PATH resolves', async () => {
     lineEditorProbe.mockResolvedValue('line-editor')
@@ -128,6 +168,7 @@ describe('shell prompt readiness probe', () => {
       '/opt/homebrew/bin:/usr/bin:/bin'
     )
     expect(onPromptReady).toHaveBeenCalledOnce()
+    expect(onPromptReady).toHaveBeenCalledWith('/opt/homebrew/bin/bash')
   })
 
   it('rejects a replacement with the shell basename that the pane PATH cannot reach', async () => {

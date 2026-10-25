@@ -1,5 +1,6 @@
 import { createPtySlaveLineEditorProbe } from '../shared/pty-slave-line-discipline-echo'
 import {
+  listChildProcessIds,
   readShellProcessReadiness,
   resolveInstalledShellExecutablePaths,
   resolveShellExecutablePath
@@ -32,6 +33,7 @@ export function createShellPromptReadinessProbe(options: {
     return null
   }
   const settleMs = options.settleMs ?? SHELL_PROMPT_PROBE_SETTLE_MS
+  const expectedShellName = options.shellPath ? basename(options.shellPath).toLowerCase() : null
   const shellCwd = options.shellCwd ?? process.cwd()
   const outputScanState = createLineEditorReadyOutputScanState()
   let disposed = false
@@ -39,24 +41,78 @@ export function createShellPromptReadinessProbe(options: {
   let generation = 0
   let probesStarted = 0
 
+  const isStale = (scheduledGeneration: number): boolean =>
+    disposed || scheduledGeneration !== generation
+
+  const isExpectedShell = async (executablePath: string): Promise<boolean> => {
+    if (!expectedShellName || basename(executablePath).toLowerCase() !== expectedShellName) {
+      return false
+    }
+    const expectedPath = options.shellPath
+      ? await resolveShellExecutablePath(options.shellPath, shellCwd, options.shellPathEnv)
+      : null
+    if (!expectedPath) {
+      return false
+    }
+    if (executablePath === expectedPath) {
+      return true
+    }
+    // Profiles can exec another installed shell; accept only replacements found on this pane's PATH.
+    const installedPaths = await resolveInstalledShellExecutablePaths(
+      expectedShellName,
+      shellCwd,
+      options.shellPathEnv
+    )
+    return installedPaths.includes(executablePath)
+  }
+
+  // A pty relay exec'd over the shell (kiro-cli-term, #25586) runs it as a child on an inner pty.
+  const readRelayedPromptShellExecutable = async (
+    relayPid: number,
+    scheduledGeneration: number
+  ): Promise<string | null> => {
+    for (const childPid of await listChildProcessIds(relayPid)) {
+      const child = await readShellProcessReadiness(childPid).catch(() => null)
+      if (isStale(scheduledGeneration)) {
+        return null
+      }
+      if (
+        !child?.foreground ||
+        !child.ttyPath ||
+        child.ttyPath === options.slavePath ||
+        !(await isExpectedShell(child.executablePath))
+      ) {
+        continue
+      }
+      if ((await createPtySlaveLineEditorProbe(child.ttyPath)?.()) === 'line-editor') {
+        return child.executablePath
+      }
+    }
+    return null
+  }
+
   const probe = async (scheduledGeneration: number): Promise<void> => {
-    if (disposed || scheduledGeneration !== generation) {
+    if (isStale(scheduledGeneration)) {
       return
     }
     const shellPid = options.getShellPid()
-    if (!shellPid || (await lineEditorProbe()) !== 'line-editor') {
+    if (!shellPid) {
       return
     }
-    if (disposed || scheduledGeneration !== generation) {
+    const outerState = await lineEditorProbe()
+    if (isStale(scheduledGeneration)) {
       return
     }
-    const executablePath = await readMatchingPromptShellExecutable({
-      shellPid,
-      shellPath: options.shellPath,
-      shellCwd,
-      shellPathEnv: options.shellPathEnv
-    })
-    if (disposed || scheduledGeneration !== generation || !executablePath) {
+    const shell = await readShellProcessReadiness(shellPid)
+    if (isStale(scheduledGeneration) || !shell?.foreground) {
+      return
+    }
+    const executablePath = (await isExpectedShell(shell.executablePath))
+      ? outerState === 'line-editor'
+        ? shell.executablePath
+        : null
+      : await readRelayedPromptShellExecutable(shellPid, scheduledGeneration)
+    if (!executablePath || isStale(scheduledGeneration)) {
       return
     }
     disposed = true
