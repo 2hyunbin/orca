@@ -139,7 +139,8 @@ function mergedModels(
   return (newer?.models ?? []).map((model) => {
     const listed = discovered?.models.find((entry) => entry.id === model.id)
     const reported = live?.models.find((entry) => entry.id === model.id)
-    const olderEfforts = older?.models.find((entry) => entry.id === model.id)?.efforts ?? []
+    const olderModel = older?.models.find((entry) => entry.id === model.id)
+    const olderEfforts = olderModel?.efforts ?? []
     const runsConfigured =
       configured?.modelId === model.id || configured?.sameModelIds?.includes(model.id) === true
     const configuredEffort = runsConfigured ? configured?.effort : undefined
@@ -155,8 +156,10 @@ function mergedModels(
     const { defaultEffort: _own, effortsKnown, ...rest } = model
     return {
       ...rest,
-      // A menu borrowed from the other listing makes the efforts known again.
-      ...(effortsKnown === false && efforts.length === 0 ? { effortsKnown } : {}),
+      // Efforts stay unknown only when neither listing knows this model's menu.
+      ...(effortsKnown === false && (!olderModel || olderModel.effortsKnown === false)
+        ? { effortsKnown }
+        : {}),
       // Without discovery/configuration, live flags are the only available default evidence.
       isDefault: configured
         ? model.id === configured.modelId

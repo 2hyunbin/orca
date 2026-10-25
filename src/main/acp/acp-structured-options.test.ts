@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { AcpStructuredOptions } from './acp-structured-options'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
+import { OMP_ACP_DIALECT } from './acp-dialects/omp-dialect'
+import { OPENCODE_ACP_DIALECT } from './acp-dialects/opencode-dialect'
 
 const configOptions = [
   {
@@ -30,13 +32,13 @@ const configOptions = [
 
 describe('ACP session options', () => {
   it('keeps the session’s picks out of the catalog facts', () => {
-    const options = new AcpStructuredOptions()
+    // OpenCode refuses an effort the selected model lacks, so another model's empty menu stays strict.
+    const options = new AcpStructuredOptions(OPENCODE_ACP_DIALECT)
     options.adoptSession({ configOptions })
     const { models, current } = options.read()
     // Current values supply an effort menu, never a catalog default.
     expect(models).toEqual([
-      // The session's effort menu belongs to model-b; model-a's menu is unknown, not empty.
-      { id: 'model-a', label: 'Model A', isDefault: false, efforts: [], effortsKnown: false },
+      { id: 'model-a', label: 'Model A', isDefault: false, efforts: [] },
       {
         id: 'model-b',
         label: 'Model B',
@@ -48,6 +50,18 @@ describe('ACP session options', () => {
       }
     ])
     expect(current).toEqual({ model: 'model-b', effort: 'high', confirmed: ['model', 'effort'] })
+  })
+
+  it('leaves another model’s menu unknown for an agent that clamps unlisted efforts', () => {
+    const options = new AcpStructuredOptions(OMP_ACP_DIALECT)
+    options.adoptSession({ configOptions })
+    expect(options.read().models[0]).toEqual({
+      id: 'model-a',
+      label: 'Model A',
+      isDefault: false,
+      efforts: [],
+      effortsKnown: false
+    })
   })
 
   it('reads each model’s own menu where the agent advertises one', () => {
