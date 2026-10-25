@@ -249,8 +249,9 @@ async function isHistoryCutByShallowClone(
   try {
     await git.exec(['merge-base', localOid, remoteOid], repoPath)
     return false
-  } catch {
-    return true
+  } catch (error) {
+    // merge-base reports no common ancestor like show-ref reports no ref: exit 1, silent stderr.
+    return isShowRefNoMatchError(error)
   }
 }
 

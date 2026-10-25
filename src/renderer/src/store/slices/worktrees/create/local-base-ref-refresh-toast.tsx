@@ -6,6 +6,7 @@ import { getKeepLocalMainUpToDateTitle } from '@/components/settings/keep-local-
 import { translate } from '@/i18n/i18n'
 import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
 import type { AppState } from '@/store/types'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { LocalBaseRefRefreshResult } from '../../../../../../shared/worktree/base-ref-drift-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 
@@ -42,13 +43,29 @@ export function localBaseRefRefreshFailureDetail(result: LocalBaseRefRefreshResu
   }
 }
 
-/** `origin/main` → `git fetch --unshallow origin`; omits the remote when the base doesn't name one. */
-function unshallowCommand(result: LocalBaseRefRefreshResult): string {
+// Why an allowlist, not quoting: the tab's shell may be bash, PowerShell, cmd, or WSL, and Git allows `;` in remote names.
+const SHELL_SAFE_REMOTE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+
+/** `origin/main` → `origin`; undefined when the base does not end in the local branch name. */
+function remoteNameForBaseRef(result: LocalBaseRefRefreshResult): string | undefined {
   const shortBaseRef = result.baseRef.replace(/^refs\/remotes\//, '')
   const suffix = `/${result.localBranch}`
   return shortBaseRef.endsWith(suffix) && shortBaseRef.length > suffix.length
-    ? `git fetch --unshallow ${shortBaseRef.slice(0, -suffix.length)}`
-    : 'git fetch --unshallow'
+    ? shortBaseRef.slice(0, -suffix.length)
+    : undefined
+}
+
+function unshallowCommand(result: LocalBaseRefRefreshResult): string {
+  const remote = remoteNameForBaseRef(result)
+  return remote ? `git fetch --unshallow ${remote}` : 'git fetch --unshallow'
+}
+
+/** The command only when every interpolated part is inert in any shell. */
+function runnableUnshallowCommand(result: LocalBaseRefRefreshResult): string | undefined {
+  const remote = remoteNameForBaseRef(result)
+  return remote === undefined || SHELL_SAFE_REMOTE_NAME.test(remote)
+    ? unshallowCommand(result)
+    : undefined
 }
 
 function refreshFailureTitle(result: LocalBaseRefRefreshResult, worktreeName: string): string {
@@ -148,11 +165,67 @@ function stopRefreshingLocalBaseRef(
     })
 }
 
+function showUnshallowLaunchFailure(command: string): void {
+  toast.error(
+    translate(
+      'auto.store.slices.worktrees.localBaseRefUnshallowFailed',
+      'Could not open a terminal for this workspace'
+    ),
+    {
+      description: translate(
+        'auto.store.slices.worktrees.localBaseRefUnshallowFailedDescription',
+        'Run {{value0}} in a terminal in this repository instead.',
+        { value0: command }
+      )
+    }
+  )
+}
+
+const unshallowLaunchesInFlight = new Set<string>()
+
+function runUnshallowInNewTerminalTab(
+  toastId: string,
+  worktreeId: string,
+  executionHostId: ExecutionHostId | undefined,
+  command: string
+): void {
+  // Why: a second click would race the first fetch for Git's shallow lock.
+  if (unshallowLaunchesInFlight.has(toastId)) {
+    return
+  }
+  unshallowLaunchesInFlight.add(toastId)
+  const settle = (started: boolean): void => {
+    unshallowLaunchesInFlight.delete(toastId)
+    if (started) {
+      toast.dismiss(toastId)
+    } else {
+      showUnshallowLaunchFailure(command)
+    }
+  }
+  // Why lazy: the terminal launchers import the store, which imports this slice.
+  void Promise.all([
+    import('@/lib/worktree-activation'),
+    import('@/components/terminal/terminal-tab-create')
+  ]).then(
+    ([{ activateAndRevealWorktree }, { createNewTerminalTab }]) => {
+      if (
+        !activateAndRevealWorktree(worktreeId, executionHostId ? { executionHostId } : undefined)
+      ) {
+        settle(false)
+        return
+      }
+      createNewTerminalTab(worktreeId, undefined, { command, onSettled: settle })
+    },
+    () => settle(false)
+  )
+}
+
 export function showLocalBaseRefRefreshToast(
   result: LocalBaseRefRefreshResult | undefined,
   createdWorktree: Pick<Worktree, 'id' | 'repoId' | 'displayName' | 'branch' | 'path'> | undefined,
-  updateSettings: AppState['updateSettings']
+  deps: { updateSettings: AppState['updateSettings']; executionHostId?: ExecutionHostId }
 ): void {
+  const { updateSettings, executionHostId } = deps
   if (!result || result.status === 'updated') {
     return
   }
@@ -160,6 +233,7 @@ export function showLocalBaseRefRefreshToast(
   const worktreeName = createdWorktree ? resolveWorktreeDisplayName(createdWorktree).trim() : ''
   // Why: one id per repo and branch because creates toward one target share a run, so its result is one fact, not one per create.
   const id = `local-base-ref-refresh-failed:${createdWorktree?.repoId ?? 'unknown'}:${result.localBranch}`
+  const runnableCommand = result.shallowHistory ? runnableUnshallowCommand(result) : undefined
 
   // Why a custom body: sonner's native action slot pinches beside a multi-line description.
   // Infinity so create-time failures aren't buried; the opt-out lives here since the setting is opt-in.
@@ -199,19 +273,17 @@ export function showLocalBaseRefRefreshToast(
           >
             {translate('auto.store.slices.worktrees.localBaseRefRefreshTurnOff', 'Disable Check')}
           </Button>
-          {result.shallowHistory && createdWorktree ? (
+          {result.shallowHistory && createdWorktree && runnableCommand ? (
             <Button
               size="sm"
-              onClick={() => {
-                // Why lazy: the terminal launcher imports the store, which imports this slice.
-                void import('@/lib/run-command-in-new-terminal-tab').then(
-                  ({ runCommandInNewTerminalTab }) => {
-                    if (runCommandInNewTerminalTab(createdWorktree.id, unshallowCommand(result))) {
-                      toast.dismiss(id)
-                    }
-                  }
+              onClick={() =>
+                runUnshallowInNewTerminalTab(
+                  id,
+                  createdWorktree.id,
+                  executionHostId,
+                  runnableCommand
                 )
-              }}
+              }
             >
               {translate('auto.store.slices.worktrees.localBaseRefUnshallow', 'Unshallow')}
             </Button>

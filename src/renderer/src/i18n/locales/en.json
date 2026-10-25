@@ -821,6 +821,8 @@
           "localBaseRefRefreshTurnOffHelp": "What Disable Check does",
           "localBaseRefRefreshTurnOffTooltip": "Turns off the Orca setting {{value0}}. Orca will stop updating local {{value1}} when you create a workspace, and this warning will stop appearing. New workspaces are unaffected. Turn it back on anytime in Settings › Git.",
           "localBaseRefUnshallow": "Unshallow",
+          "localBaseRefUnshallowFailed": "Could not open a terminal for this workspace",
+          "localBaseRefUnshallowFailedDescription": "Run {{value0}} in a terminal in this repository instead.",
           "localBaseRefRefreshTurnedOff": "Orca will no longer update local {{value0}}",
           "localBaseRefRefreshTurnedOffDescription": "Turn it back on in Settings › {{value0}}.",
           "localBaseRefRefreshTurnOffFailed": "Could not turn off {{value0}}",

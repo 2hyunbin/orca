@@ -255,11 +255,10 @@ export function createCreateWorktree(
             holdCreatedSidebarWorkspace({ worktree: created })
           }
           const { result } = outcome
-          showLocalBaseRefRefreshToast(
-            result.localBaseRefRefresh,
-            result.worktree,
-            get().updateSettings
-          )
+          showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree, {
+            updateSettings: get().updateSettings,
+            executionHostId: creationHostId
+          })
           if (result.baseFallback) {
             requestWorktreeBaseFallbackNotice(result.baseFallback)
           }

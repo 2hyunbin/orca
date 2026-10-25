@@ -445,6 +445,29 @@ describe('createWorktree base status merge', () => {
     expect(description).toContain('Unshallow')
   })
 
+  it('offers no Unshallow button when the remote name could inject shell syntax', async () => {
+    const store = createRepoTestStore()
+    mockApi.worktrees.create.mockResolvedValue({
+      worktree: makeWorktree({
+        id: 'repo1::/path/wt1',
+        repoId: 'repo1',
+        displayName: 'feature-wt'
+      }),
+      localBaseRefRefresh: {
+        status: 'skipped_not_fast_forward',
+        baseRef: 'x;touch pwned/main',
+        localBranch: 'main',
+        shallowHistory: true
+      }
+    })
+
+    await store.getState().createWorktree('repo1', 'feature', 'x;touch pwned/main')
+
+    const description = lastWarningDescriptionText()
+    expect(description).toContain('git fetch --unshallow x;touch pwned')
+    expect(description).not.toContain('Unshallow<')
+  })
+
   it('falls back to the generic dirty detail when ownerWorktreePath is missing', async () => {
     const store = createRepoTestStore()
     const wt = makeWorktree({
