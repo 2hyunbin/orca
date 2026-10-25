@@ -249,7 +249,6 @@ describe('useVirtualizedScrollAnchor with marks + restoreSignal', () => {
     const virtualizer = virtualizerWithRow1()
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getItemElementKey: (element: FakeRowElement) => element.key,
@@ -283,7 +282,6 @@ describe('useVirtualizedScrollAnchor with marks + restoreSignal', () => {
     const virtualizer = virtualizerWithRow1()
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getItemElementKey: (element: FakeRowElement) => element.key,
@@ -309,7 +307,6 @@ describe('useVirtualizedScrollAnchor with marks + restoreSignal', () => {
     const anchorRef = { current: null }
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getRowKey: (row: string) => row,
@@ -461,7 +458,6 @@ describe('useVirtualizedScrollAnchor with marks + restoreSignal', () => {
     const scrollOffsetRef = { current: 4_000 }
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getRowKey: (row: string) => row,
@@ -496,7 +492,6 @@ describe('useVirtualizedScrollAnchor with marks + restoreSignal', () => {
     const anchorRef = { current: null }
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getRowKey: (row: string) => row,

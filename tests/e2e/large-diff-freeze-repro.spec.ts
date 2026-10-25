@@ -240,7 +240,10 @@ test.describe('Large diff freeze repro', () => {
           }
 
           // Open staged-snapshot entries as unstaged to reproduce the stale combined diff.
-          const staleUnstagedEntries = entries.map((entry) => ({ ...entry, area: 'unstaged' }))
+          const staleUnstagedEntries = entries.map((entry) => ({
+            ...entry,
+            area: 'unstaged' as const
+          }))
           const intervalMs = 50
           const samples: number[] = []
           let last = performance.now()

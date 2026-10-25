@@ -83,8 +83,7 @@ async function desktopRuntime(
     )
   session.tabsByWorktree[TEST_WORKTREE_ID]![0]!.launchAgent = 'claude'
   const fixture = makeRuntimeStoreWithWorkspaceSession(session)
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new StatusRuntime(fixture.runtimeStore as never, undefined, {
+  const runtime = new StatusRuntime(fixture.runtimeStore, undefined, {
     getDesktopWindowStatus: () => 'openable'
   })
   const started = deferred<{ id: string }>()
@@ -100,8 +99,7 @@ async function desktopRuntime(
   runtime.syncWindowGraph(0, { tabs: [], leaves: [] })
   runtime.attachWindow(TEST_WINDOW_ID)
   runtime.markGraphReady(TEST_WINDOW_ID)
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only isDestroyed from the window mock.
-  electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
+  electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false })
   if (opts.activate !== false) {
     await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
       notifyClients: false,

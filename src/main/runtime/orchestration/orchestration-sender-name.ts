@@ -1,5 +1,5 @@
-import type { AgentMessageSender } from '../../../shared/agent-session-message-source'
-import { defaultAgentChatLabel } from '../../../shared/agent-session-chat-label'
+import type { AgentMessageSender } from '../../../shared/agent-session/agent-session-message-source'
+import { defaultAgentChatLabel } from '../../../shared/agent-session/agent-session-chat-label'
 import {
   getAgentRowConversationName,
   type ConversationNameTab

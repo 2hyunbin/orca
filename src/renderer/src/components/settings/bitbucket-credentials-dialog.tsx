@@ -1,4 +1,4 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffectEvent, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ExternalLink, LoaderCircle, Lock } from 'lucide-react'
 import type { BitbucketAuthMode } from '../../../../shared/bitbucket-credentials'
 import { useAppStore } from '@/store'
@@ -68,10 +68,8 @@ export function BitbucketCredentialsDialog({
   const baselineRef = useRef({ email: '', baseUrl: '' })
 
   // Reseed stored metadata on each opening; secrets always start empty because main never returns them.
-  useLayoutEffect(() => {
-    if (!open) {
-      return
-    }
+  // Why an event: keyed on `open` alone, so a status refresh mid-edit must not overwrite typing.
+  const seedFromStoredMetadata = useEffectEvent(() => {
     const seedEmail = initialEmail ?? ''
     const seedBaseUrl = initialBaseUrl ?? ''
     baselineRef.current = { email: seedEmail, baseUrl: seedBaseUrl }
@@ -82,7 +80,11 @@ export function BitbucketCredentialsDialog({
     setAccessToken('')
     setConnectState('idle')
     setConnectError(null)
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- keyed on `open` alone: a status refresh mid-edit must not overwrite what the user is typing.
+  })
+  useLayoutEffect(() => {
+    if (open) {
+      seedFromStoredMetadata()
+    }
   }, [open])
 
   const remoteRuntime = hasRemoteProviderRuntime(settings)

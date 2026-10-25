@@ -146,7 +146,7 @@ describe('required members', () => {
         { path: 'c.ts' }
       ]
     })
-    expect(compare.entries.map((entry) => entry.path)).toEqual(['a.ts'])
+    expect(compare.entries?.map((entry) => entry.path)).toEqual(['a.ts'])
   })
 
   it('requires the three members a markdown tab publishes into its ready state', () => {
@@ -328,7 +328,7 @@ describe('closed arm sets drop rather than default', () => {
         { path: 'b.ts', status: 'teleported' }
       ]
     })
-    expect(projection.entries.map((entry) => entry.path)).toEqual(['a.ts'])
+    expect(projection.entries?.map((entry) => entry.path)).toEqual(['a.ts'])
   })
 
   it('refuses a diff whose kind names no arm the screen can render', () => {
@@ -386,7 +386,7 @@ describe('tri-state flags keep an explicit null', () => {
   it('keeps a null autoMergeAllowed and mergeQueueRequired on the PR and drops a non-boolean', () => {
     const readsPr = (value: unknown) => {
       const found = reads(githubPrForBranchSchema, { kind: 'found', pr: value })
-      return found.kind === 'found' ? found.pr : null
+      return found?.kind === 'found' ? found.pr : null
     }
     const nulled = readsPr({ ...pr, autoMergeAllowed: null, mergeQueueRequired: null })
     expect(nulled?.autoMergeAllowed).toBeNull()

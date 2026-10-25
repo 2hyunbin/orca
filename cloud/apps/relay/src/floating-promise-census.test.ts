@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 // Unhandled database rejections can kill a cell and drop every host; consume/catch all promises. Only self-settling functions keyed file#name are exempt.
 const NEVER_REJECTS = new Map([
   ['relay-background-operation.ts#runRelayBackgroundOperation', 'catches and logs every failure'],
+  ['cloud-run-instance-zone.ts#readCloudRunInstanceZone', 'one try/catch; resolves undefined on any failure'],
   ['assignment-cleanup-steps.ts#runAssignmentCleanup', 'runs each step through the above'],
   ['cell-heartbeat-client.ts#send', 'one try/catch around the whole send'],
   ['cell-reserve-client.ts#send', 'one try/catch around the request; resolves every item'],

@@ -44,9 +44,14 @@ test.describe('worktree visibility with a remote runtime active', () => {
     await expect(worktreeRow(controlId)).toBeVisible({ timeout: 15_000 })
 
     await orcaPage.evaluate(() => {
-      window.__store?.setState((current) => ({
-        settings: { ...current.settings, activeRuntimeEnvironmentId: 'e2e-fake-runtime' }
-      }))
+      window.__store?.setState((current) => {
+        if (!current.settings) {
+          throw new Error('Settings are not hydrated')
+        }
+        return {
+          settings: { ...current.settings, activeRuntimeEnvironmentId: 'e2e-fake-runtime' }
+        }
+      })
     })
 
     const targetId = await createViaCli(`wt-runtime-active-${Date.now()}`)

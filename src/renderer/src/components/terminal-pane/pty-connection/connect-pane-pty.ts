@@ -33,6 +33,7 @@ import { installTitleSpawnBell } from './title-spawn-bell'
 import { installAgentTaskCompleteNotify } from './agent-task-complete-notify'
 import { installPaneHostCapabilityFlags } from './pane-host-capability-flags'
 import { installPtyInputRecovery } from './pty-input-recovery'
+import { installAgentPreReadyTypedDraft } from './agent-pre-ready-typed-draft'
 import { installPtyInputForward } from './pty-input-forward'
 import { installPtyResizeGeometry } from './pty-resize-geometry'
 import { installSessionReconcileDispose } from './session-reconcile-dispose'
@@ -162,6 +163,7 @@ export function connectPanePty(
   installAgentTaskCompleteNotify(session)
   installPaneHostCapabilityFlags(session)
   installPtyInputRecovery(session)
+  installAgentPreReadyTypedDraft(session)
   // Async callbacks may outlive PaneManager; use durable leaf identity and require current transport ownership.
   const isCurrentPaneTransport = (): boolean =>
     !session.disposed &&

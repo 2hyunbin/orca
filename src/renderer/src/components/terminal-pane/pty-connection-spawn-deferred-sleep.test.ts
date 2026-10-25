@@ -16,6 +16,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 const {
   resetAndRefreshAllTerminalWebglAtlases,
@@ -243,8 +244,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -292,8 +292,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -318,7 +317,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     binding.dispose()
   })
 
-  it('stops the background retry when the pane is opened or closed', async () => {
+  it('stops the background retry when the pane is disposed', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const transport = deferringTransport()
     transportFactoryQueue.push(transport)
@@ -333,8 +332,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -363,8 +361,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
 
     const pane = createPane(1)
     const paneKey = makePaneKey('tab-1', pane.leafId)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -394,8 +391,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -449,8 +445,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -491,8 +486,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))
@@ -526,8 +520,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       }
     })
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
-    const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
+    const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
     await flushAsyncTicks(20)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       await expectRestoreAskedMainNotDeferred(transport, makePaneKey('tab-1', pane.leafId))

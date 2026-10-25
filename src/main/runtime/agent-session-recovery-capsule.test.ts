@@ -250,13 +250,12 @@ describe('durable restart offers', () => {
       NOW
     )
     await fileFailure()
-    const before = await readFile(filePath)
-
     expect(await capsule.dismiss([SESSION, 'second', 'missing'], NOW)).toBe(2)
     expect(await capsule.list(NOW)).toEqual([marker({ sessionId: 'third' })])
     expect(await capsule.listFailed(NOW)).toEqual([])
+    const publish = vi.spyOn(durable, 'renameDurable')
     expect(await capsule.dismiss(['missing'], NOW)).toBe(0)
-    expect(await readFile(filePath)).not.toEqual(before)
+    expect(publish).not.toHaveBeenCalled()
     await capsule.record([marker()], NOW)
     expect(await capsule.list(NOW)).toEqual([marker({ sessionId: 'third' }), marker()])
   })

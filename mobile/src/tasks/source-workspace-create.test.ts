@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
+import { createFakeRpcClient } from '../mobile-web-shell/bridge-host-test-fakes'
+import type { AgentLaunchResult } from '../../../src/shared/agent-launch-intent'
 import { createWorkspaceFromComposerSource } from './source-workspace-create'
 import type { MobileComposerCreateSelection } from './mobile-composer-source-types'
 import { WORKTREE_CREATE_DEDUPE_TTL_LEGACY_HOST_MS } from './worktree-create-idempotency-policy'
@@ -8,8 +10,15 @@ type Call = { method: string; params: Record<string, unknown> }
 
 function fakeClient(handle: (method: string, call: number) => unknown, calls: Call[]): RpcClient {
   return {
+    ...createFakeRpcClient(),
     sendRequest: async (method: string, params?: unknown) => {
-      calls.push({ method, params: (params ?? {}) as Record<string, unknown> })
+      if (
+        params !== undefined &&
+        (typeof params !== 'object' || params === null || Array.isArray(params))
+      ) {
+        throw new Error('Expected object request params')
+      }
+      calls.push({ method, params: Object.fromEntries(Object.entries(params ?? {})) })
       const result = handle(method, calls.length)
       if (result instanceof Error) {
         return {
@@ -21,7 +30,7 @@ function fakeClient(handle: (method: string, call: number) => unknown, calls: Ca
       }
       return { id: '1', ok: true, result, _meta: { runtimeId: 'r' } }
     }
-  } as unknown as RpcClient
+  }
 }
 
 const agent = { choice: 'blank' as const }
@@ -36,7 +45,7 @@ const baseArgs = {
   workspaceName: undefined,
   note: undefined,
   worktreeCreateIdempotency: IDEMPOTENT_CREATE_SUPPORT,
-  agentLaunchSupported: false
+  agentLaunchSupported: false as const
 }
 
 describe('createWorkspaceFromComposerSource', () => {
@@ -301,7 +310,17 @@ describe('createWorkspaceFromComposerSource', () => {
   it('routes a branch selection with an agent through agent.launch', async () => {
     const calls: Call[] = []
     const client = fakeClient(
-      () => ({ worktreeId: 'wt-branch-launch', outcome: { kind: 'structured' } }),
+      () =>
+        ({
+          worktreeId: 'wt-branch-launch',
+          outcome: { kind: 'structured', sessionId: 'session-1', handle: 'structured-1' },
+          receipt: {
+            mode: 'structured',
+            preferred: 'structured',
+            reason: 'user_default',
+            detail: 'Structured default'
+          }
+        }) satisfies AgentLaunchResult,
       calls
     )
     const selection: MobileComposerCreateSelection = {
@@ -355,7 +374,17 @@ describe('createWorkspaceFromComposerSource', () => {
   it('routes a new-branch selection with an agent through agent.launch', async () => {
     const calls: Call[] = []
     const client = fakeClient(
-      () => ({ worktreeId: 'wt-new-branch-launch', outcome: { kind: 'terminal', handle: 't' } }),
+      () =>
+        ({
+          worktreeId: 'wt-new-branch-launch',
+          outcome: { kind: 'terminal', handle: 't' },
+          receipt: {
+            mode: 'terminal',
+            preferred: 'terminal',
+            reason: 'user_default',
+            detail: 'Terminal default'
+          }
+        }) satisfies AgentLaunchResult,
       calls
     )
     const selection: MobileComposerCreateSelection = { kind: 'new-branch', branchName: 'topic' }
@@ -375,8 +404,7 @@ describe('createWorkspaceFromComposerSource', () => {
     expect(calls[0]?.params).not.toHaveProperty(['target', 'create', 'startupAgent'])
   })
 
-  it('keeps a work-item create on worktree.create so its unsent draft survives', async () => {
-    // Linked work items seed an unsent URL draft; structured sessions cannot hold it yet and would submit it as a turn.
+  it('sends the work-item URL as startupDraft through worktree.create', async () => {
     const calls: Call[] = []
     const client = fakeClient(() => ({ worktree: { id: 'wt-draft' } }), calls)
     const selection: MobileComposerCreateSelection = {

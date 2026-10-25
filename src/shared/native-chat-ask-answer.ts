@@ -40,9 +40,12 @@ const ASK_NEXT_TAB = '\x1b[C'
 const ASK_PREVIOUS_ROW = '\x1b[A'
 const ASK_NEXT_ROW = '\x1b[B'
 const ASK_NOTES = '\t'
+const ASK_PREVIEW_NOTES = 'n'
 
-/** Spaced PTY groups for Claude: single-select digits commit/auto-advance; free text selects Type something then text/Enter;
- * multi-select digits toggle and require next-tab. Multi-question or lone multi-select ends with Submit Enter. Tool caps keep option numbers single-digit. */
+/** Pace selector groups so each step renders before the next. Single-select digits commit/advance;
+ * free text uses Type something + Enter; multi-select digits toggle before the next/Submit tab.
+ * Preview picks focus a row, attach optional notes, then commit with Enter. Multi-question/lone
+ * multi-select prompts end with Submit confirmation; tool caps keep all row numbers single-digit. */
 export function buildAskAnswerKeys(
   prompt: AskPrompt,
   selections: AskAnswerSelection[]
@@ -56,7 +59,19 @@ export function buildAskAnswerKeys(
     const other = (sel?.other ?? '').trim()
     const typeSomething = String(q.options.length + 1)
 
-    if (q.multiSelect) {
+    if (q.hasPreviews && (other || (sel?.indices.length ?? 0) > 0)) {
+      const index = sel?.indices[0]
+      if (index === 0 && other && q.options.length > 1) {
+        // Why: a note commits its row only once focus has moved, and row 1 starts focused.
+        groups.push({ raw: '2' }, { raw: '1' })
+      } else if (index !== undefined) {
+        groups.push({ raw: String(index + 1) })
+      }
+      if (other) {
+        groups.push({ raw: ASK_PREVIEW_NOTES }, { text: other })
+      }
+      groups.push({ raw: ASK_ENTER })
+    } else if (q.multiSelect) {
       for (const i of sel?.indices ?? []) {
         groups.push({ raw: String(i + 1) })
       }

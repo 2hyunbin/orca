@@ -158,7 +158,6 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
   // Initial/reconnect/scope loads reuse host’s 15s cache; only explicit refresh bypasses it.
   useEffect(() => {
     void loadSessions({ scope, force: false })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- scope handled by onSelectScope
   }, [loadSessions])
 
   const onSelectScope = useCallback(

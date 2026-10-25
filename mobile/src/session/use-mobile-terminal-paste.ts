@@ -102,7 +102,6 @@ export function useMobileTerminalPaste({
       const wrappedBytes = new TextEncoder().encode(payload).byteLength
       if (wrappedBytes > 256 * 1024) {
         onError()
-        // eslint-disable-next-line no-console
         console.warn('[mobile-clip] paste oversized', { wrappedBytes })
         showToast('Paste too large (max 256 KiB)', 1500)
         return
@@ -145,7 +144,6 @@ export function useMobileTerminalPaste({
       onError()
       const err = e as { name?: string; message?: string }
       const isDisconnected = connState !== 'connected'
-      // eslint-disable-next-line no-console
       console.warn('[mobile-clip] paste failed', { name: err.name, message: err.message })
       if (isDisconnected) {
         showToast('Paste failed (disconnected)', 1500)

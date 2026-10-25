@@ -68,6 +68,7 @@ export async function createExistingWorktreeWorkerTerminal(args: {
     // Resolve ids through agent config; cursor alone opens the desktop app, its CLI is cursor-agent.
     startupAgent: args.agent,
     launchSource: 'orchestration',
+    suppressStartupUpdatePrompt: true,
     ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
     title: `worker-${args.taskId}`,
     // Worker creation is background work and must not pull the sidebar away.

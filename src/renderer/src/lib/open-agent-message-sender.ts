@@ -1,7 +1,7 @@
 // Open the sender through chat or terminal-handle routes; choose feedback from the answering host’s evidence, never the sender’s address shape.
 
 import { toast } from 'sonner'
-import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
+import type { AgentMessageSource } from '../../../shared/agent-session/agent-session-message-source'
 import { agentSessionWriteNoticeText } from '@/components/native-chat/agent-session-write-notice-text'
 import type {
   OrchestrationPartyLocation,

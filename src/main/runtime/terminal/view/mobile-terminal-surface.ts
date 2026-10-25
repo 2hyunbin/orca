@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-useless-spread */
 import { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal } from '../launch/mobile-terminal-owned-create'
 import type { OrcaRuntimeWithResolveTerminalSplitSourceAuthority } from '../launch/terminal-split-source-authority'
 import type {
@@ -218,7 +217,7 @@ export abstract class OrcaRuntimeWithWaitForMobileTerminalSurface extends OrcaRu
       ...(pending.viewMode ? { viewMode: pending.viewMode } : {})
     })
     // Main-side publication must wake graph callbacks too or pending waits miss the new surface.
-    for (const cb of [...this.graphSyncCallbacks]) {
+    for (const cb of Array.from(this.graphSyncCallbacks)) {
       cb()
     }
     return this.findMobileTerminalSurface(worktreeId, tabId)

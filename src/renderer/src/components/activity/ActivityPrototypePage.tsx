@@ -218,7 +218,6 @@ export default function ActivityPrototypePage(): React.JSX.Element {
   ])
 
   // Publish before paint to prevent stale-target flashes. Clear only on unmount; per-change null transitions flash the workspace pane.
-  // oxlint-disable-next-line react-doctor/no-derived-state-effect -- Why: this publishes portal descriptors to Terminal's external portal store before paint.
   useLayoutEffect(() => {
     setActivityTerminalPortals(portalDescriptors)
   }, [portalDescriptors])

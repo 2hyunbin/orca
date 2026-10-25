@@ -4,6 +4,7 @@ import type { DeviceEntry } from './device-registry'
 import { parseMobilePushRegistration } from '../../shared/mobile-push-contract'
 import { isDevicePublicKeyB64 } from '../../shared/device-key-proof'
 import { RUNTIME_DEVICE_GRANTS, type RuntimeDeviceGrant } from './rpc/rpc-method-permission'
+import { isRecord } from '../../shared/agent-status-child-work-value-guards'
 
 const GRANTABLE: ReadonlySet<string> = new Set(RUNTIME_DEVICE_GRANTS)
 
@@ -23,27 +24,46 @@ export function validRelayBinding(
   value: unknown,
   deviceId: string
 ): RelayDeviceBinding | undefined {
-  if (!value || typeof value !== 'object') {
+  if (!isRecord(value)) {
     return undefined
   }
-  const binding = value as Partial<RelayDeviceBinding>
-  return binding.relayDeviceId === deviceId &&
-    typeof binding.relayHostId === 'string' &&
-    typeof binding.ownerIdentityKey === 'string'
+  return value.relayDeviceId === deviceId &&
+    typeof value.relayHostId === 'string' &&
+    typeof value.ownerIdentityKey === 'string'
     ? {
-        relayHostId: binding.relayHostId,
-        relayDeviceId: binding.relayDeviceId,
-        ownerIdentityKey: binding.ownerIdentityKey,
-        ...(typeof binding.inviteExpiresAt === 'number' && Number.isFinite(binding.inviteExpiresAt)
-          ? { inviteExpiresAt: binding.inviteExpiresAt }
+        relayHostId: value.relayHostId,
+        relayDeviceId: deviceId,
+        ownerIdentityKey: value.ownerIdentityKey,
+        ...(typeof value.inviteExpiresAt === 'number' && Number.isFinite(value.inviteExpiresAt)
+          ? { inviteExpiresAt: value.inviteExpiresAt }
           : {})
       }
     : undefined
 }
 
-export function normalizeLoadedDeviceRow(device: DeviceEntry): DeviceEntry {
+function isTimestamp(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+/** Null for a row without a usable identity; the caller must treat the registry as doubtful. */
+export function normalizeLoadedDeviceRow(device: unknown): DeviceEntry | null {
+  if (
+    !isRecord(device) ||
+    typeof device.deviceId !== 'string' ||
+    !device.deviceId ||
+    !isTimestamp(device.pairedAt) ||
+    !isTimestamp(device.lastSeenAt)
+  ) {
+    return null
+  }
   return {
     ...device,
+    deviceId: device.deviceId,
+    name: typeof device.name === 'string' ? device.name : '',
+    // Why: a non-string bearer can never match, so the row stays listed but inert.
+    token: typeof device.token === 'string' ? device.token : undefined,
+    pairedAt: device.pairedAt,
+    lastSeenAt: device.lastSeenAt,
     // Legacy registries held phones only; missing scope must not grant CLI powers.
     scope: device.scope === 'runtime' ? 'runtime' : 'mobile',
     grants: validGrants(device.grants, device.scope === 'runtime' ? 'runtime' : 'mobile'),
@@ -72,7 +92,7 @@ export function normalizeLoadedDeviceRow(device: DeviceEntry): DeviceEntry {
 
 // Malformed keyed rows stay keyed and unauthenticatable; never fall back to bearer auth.
 function validDeviceKeyFields(
-  device: DeviceEntry
+  device: Record<string, unknown>
 ): Pick<DeviceEntry, 'credentialKind' | 'devicePublicKeyB64' | 'forkedFrom' | 'ephemeral'> {
   if (device.credentialKind !== 'device-key') {
     return {

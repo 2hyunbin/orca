@@ -108,13 +108,18 @@ export const WORKSPACE_START_LAUNCH_CASES: WindowLaunchCase[] = [
     { shellOverride: 'powershell.exe', terminalWindowsWslDistro: null },
     { terminalWindowsShell: 'wsl.exe' }
   ),
-  // Fix-checks prompts paste after readiness; promptless Codex starts do not wait for shell readiness.
+  // Fix waits until ready, then pastes; prompt-less Codex launches type immediately, so skip Update now only for the typed command.
   start(
     'work item, submit after ready',
     'darwin',
     repo(POSIX_PATH),
     { kind: 'work-item', agent: 'codex', delivery: 'submit-after-ready', text: BOB },
-    { command: POSIX_CODEX, agentCommand: POSIX_CODEX, shellReady: false },
+    {
+      command:
+        "codex '-c' 'check_for_update_on_startup=false' '--dangerously-bypass-approvals-and-sandbox'",
+      agentCommand: POSIX_CODEX,
+      shellReady: false
+    },
     ZSH
   ),
   // The composer's note is an auto-submitted prompt on argv.

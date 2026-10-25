@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // Preserve side-effect order: mocks, lifecycle, fixtures.
 const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
@@ -20,6 +21,14 @@ const SESSION_ID = 'slept-provider-session'
 
 type Verdict = 'exited' | 'unverifiable' | null
 
+/** A hook store row as the agent hook server records it. */
+function hookRow(
+  fields: Partial<AgentStatusIpcPayload> &
+    Pick<AgentStatusIpcPayload, 'paneKey' | 'agentType' | 'prompt' | 'receivedAt'>
+): AgentStatusIpcPayload {
+  return { state: 'done', stateStartedAt: fields.receivedAt, connectionId: null, ...fields }
+}
+
 function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
   let verdict = initialVerdict
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
@@ -32,8 +41,7 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
     live.add(id)
     return { id }
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook row reads only the fields the sleep capture uses.
-  const row = {
+  const row = hookRow({
     paneKey: PANE_KEY,
     agentType: 'claude',
     providerSession: { key: 'session_id', id: SESSION_ID },
@@ -42,10 +50,9 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
     receivedAt: 1,
     stateStartedAt: 1,
     connectionId: null
-  } as AgentStatusIpcPayload
+  })
   let rows: AgentStatusIpcPayload[] = []
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+  const runtime = new OrcaRuntimeService(partialRuntimeStore(runtimeStore), undefined, {
     getAgentProviderSessionSnapshot: () => rows,
     checkHookAgentPresence: async (paneKey: string) =>
       paneKey === HOLDER_PANE_KEY ? holderVerdict : verdict
@@ -171,14 +178,13 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     ['codex', false]
   ] as const)('keeps a %s-launched PTY recipe: %s', async (launchAgent, kept) => {
     const config = { agentCommand: '/opt/claude-custom', agentArgs: '--x', agentEnv: {} }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
-    const launchedRow = {
+    const launchedRow = hookRow({
       paneKey: PANE_KEY,
       agentType: 'claude',
       providerSession: { key: 'session_id', id: SESSION_ID },
       prompt: '',
       receivedAt: 1
-    } as AgentStatusIpcPayload
+    })
     const capture = await captureWorktreeSleepResumeRecords({
       worktreeId: TEST_WORKTREE_ID,
       paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
@@ -191,13 +197,12 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
   })
 
   it('retires an older capture when the hook store names a non-resumable agent in the pane', async () => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
-    const row = {
+    const row = hookRow({
       paneKey: PANE_KEY,
       agentType: 'amp',
       prompt: '',
       receivedAt: 1
-    } as AgentStatusIpcPayload
+    })
     const capture = await captureWorktreeSleepResumeRecords({
       worktreeId: TEST_WORKTREE_ID,
       paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),
@@ -214,15 +219,14 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     ['wsl:Ubuntu', null],
     ['ssh-target', 'ssh-target']
   ] as const)('stamps hook connection %s as host %s', async (rowConnectionId, stamped) => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the capture reads only these row fields.
-    const row = {
+    const row = hookRow({
       paneKey: PANE_KEY,
       agentType: 'claude',
       providerSession: { key: 'session_id', id: SESSION_ID },
       prompt: '',
       receivedAt: 1,
       connectionId: rowConnectionId
-    } as AgentStatusIpcPayload
+    })
     const capture = await captureWorktreeSleepResumeRecords({
       worktreeId: TEST_WORKTREE_ID,
       paneKeysByPtyId: new Map([['pty', [PANE_KEY]]]),

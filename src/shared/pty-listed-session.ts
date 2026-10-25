@@ -32,6 +32,8 @@ export type PtyListedSession = {
   cwd: string
   title: string
   worktreeId?: string
+  /** Pane key the PTY was spawned with; reattaching from another pane never changes it. */
+  paneKey?: string
   /** Destructive actions treat unknown as live work; only proven absent is safe (#8459’s live-session force kills). */
   agentOwnership: AgentOwnershipEvidence
   /** Still live, but its host is terminating it after an accepted kill: never adopt or restore it. */

@@ -92,7 +92,7 @@ export function useAgentBucketCounts(): AgentBucketCounts {
   cacheRef.current ??= createDashboardBucketCountsCache()
   return useMemo(() => {
     // Freshness follows agentStatusEpoch in state; read the clock when that generation invalidates the memo, not as a dependency.
+    // oxlint-disable-next-line react/purity -- wall time is sampled per epoch tick, as explained above.
     return buildDashboardBucketCounts(state, Date.now(), cacheRef.current, state.agentStatusEpoch)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state])
 }

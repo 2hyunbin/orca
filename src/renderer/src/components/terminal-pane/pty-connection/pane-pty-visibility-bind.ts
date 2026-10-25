@@ -121,6 +121,7 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
     // Sync again at concrete binding because the frame-level sync may have run before async spawn/attach resolved.
     scheduleRuntimeGraphSync()
     session.agentCompletionCoordinator.startProcessTracking()
+    session.onAgentPreReadyDraftPtyBound?.(ptyId, session.spawnedFreshPtyId === ptyId)
     // Seed command confirmation on fresh no-OSC agent launches: its retry ladder spans boot without latching a slow-start shell and poisoning recovery (#7620, #9703). Real OSC 133;C supersedes it.
     if (options.sampleVisibleForegroundAgent === true) {
       session.sampleVisiblePaneForegroundAgent()

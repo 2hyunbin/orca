@@ -22,6 +22,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionSessionLivenessTests(): void {
   let mockStoreState: StoreState
@@ -101,7 +102,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         })
         const hasPty = vi.fn(async () => false)
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         capturedDataCallback.current?.('shell prompt')
 
         binding.reconcileIfSessionMissing(hasPty)
@@ -126,7 +127,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
 
         binding.reconcileIfSessionMissing(vi.fn(async () => true))
         binding.reconcileIfSessionMissing(vi.fn(async () => null))
@@ -155,7 +156,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         binding.reconcileIfSessionMissing(hasPty)
         transport.getPtyId.mockReturnValue('pty-pane-2-reattached')
         resolveHasPty(false)
@@ -183,7 +184,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         // Why: clear the freshly-split early-return guard so the only remaining protection is the freshness guard under test.
         capturedDataCallback.current?.('shell prompt')
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
@@ -220,7 +221,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         // Why: clear the freshly-split early-return guard so onExit reaches close.
         capturedDataCallback.current?.('shell prompt')
         const onPtySpawn = createdTransportOptions[0]?.onPtySpawn as
@@ -249,7 +250,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         const manager = createManager(1)
         const deps = createDeps()
 
-        const binding = connectPanePty(createPane(1) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(1), manager, deps))
 
         // The last pane reattaches to the tab's persisted ptyId ('tab-pty'); let that bind first.
         await flushAsyncTicks()
@@ -272,7 +273,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -292,7 +293,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -312,7 +313,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
 
         binding.reconcileIfSessionMissing(async () => false)
         await flushAsyncTicks()
@@ -345,7 +346,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        connectPanePty(createPane(2) as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -383,7 +384,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -422,7 +423,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
 
-        const binding = connectPanePty(createPane(2) as never, manager as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(createPane(2), manager, deps))
         capturedDataCallback.current?.('shell prompt')
         const onPtyExit = createdTransportOptions[0]?.onPtyExit as
           | ((ptyId: string) => void)
@@ -452,7 +453,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       transportFactoryQueue.push(transport)
       const deps = seedUnverifiableRestoredPane()
 
-      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(createPane(2), createManager(2), deps))
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -474,7 +475,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
       transportFactoryQueue.push(transport)
       const deps = seedUnverifiableRestoredPane()
 
-      connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(createPane(2), createManager(2), deps))
       await flushAsyncTicks()
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -501,7 +502,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
         const cleared = vi.fn()
         deps.onPtyErrorClearedRef = { current: cleared }
 
-        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(createPane(2), createManager(2), deps))
         await flushAsyncTicks()
 
         expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -552,14 +553,7 @@ export function registerPtyConnectionSessionLivenessTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
         const pane = createPane(2)
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
-        ) as unknown as {
-          noteVisibilityResume: () => void
-        }
+        const binding = connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         return {
           binding,
           transport,

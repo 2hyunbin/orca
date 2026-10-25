@@ -34,7 +34,6 @@ type CrashProbe = {
 }
 
 declare global {
-  // eslint-disable-next-line no-var -- main-process global probe for this spec
   var __crashProbe: CrashProbe | undefined
 }
 

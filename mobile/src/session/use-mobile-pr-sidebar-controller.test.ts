@@ -42,7 +42,12 @@ const CHECKS: PRCheckDetail[] = [
   { name: 'ci', status: 'completed', conclusion: 'success', url: null }
 ]
 
-const RESULT_ABSENT_REPLY: RpcResponse = { id: 'x', ok: true, _meta: { runtimeId: 'r' } }
+const RESULT_ABSENT_REPLY: RpcResponse = {
+  id: 'x',
+  ok: true,
+  result: undefined,
+  _meta: { runtimeId: 'r' }
+}
 
 function ghInfo(over: Partial<HostedReviewInfo> = {}): HostedReviewInfo {
   return {
@@ -301,11 +306,8 @@ describe('isPrSidebarDetailsPlaceholder / prSidebarDetailsNeedFetch', () => {
 })
 
 describe('buildMobilePrSidebarIdentity', () => {
-  it('keys identity on worktree + branch, not head SHA', () => {
+  it('keys identity on worktree and branch', () => {
     expect(buildMobilePrSidebarIdentity({ worktreeId: 'w1', branch: 'feat' })).toBe('w1\u0000feat')
-    expect(buildMobilePrSidebarIdentity({ worktreeId: 'w1', branch: 'feat' })).toBe(
-      buildMobilePrSidebarIdentity({ worktreeId: 'w1', branch: 'feat' })
-    )
   })
 
   it('is null without a branch and changes when branch or worktree changes', () => {

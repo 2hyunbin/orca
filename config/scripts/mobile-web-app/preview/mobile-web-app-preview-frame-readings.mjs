@@ -1,12 +1,26 @@
 // Read settled arm; opaque-frame evaluation failures return null, so dependent cases must require a matching positive reading.
 import { PNG } from 'pngjs'
 import { reportedDirectives } from './mobile-web-app-preview-csp-reports.mjs'
-import { previewFrame } from './mobile-web-app-preview-frame-readiness.mjs'
+import { POLL_MS, abandonAfter, previewFrame } from './mobile-web-app-preview-frame-readiness.mjs'
 
 // Pixel paint oracle works even when engine refuses opaque-frame DOM evaluation.
 export async function probePreviewPixel(page, clip) {
   const png = PNG.sync.read(await page.screenshot({ clip }))
   return `${png.data[0]},${png.data[1]},${png.data[2]}`
+}
+
+/** Long enough for a loaded runner to composite a parsed frame; a frame that never paints still reds. */
+const PAINT_MS = 10_000
+
+/** Chromium composites sandbox-process surfaces after document completion; wait for the expected pixel. */
+export async function waitForPaintedPreview(page, clip, expected, signal) {
+  const started = Date.now()
+  let pixel = await probePreviewPixel(page, clip)
+  while (pixel !== expected && !signal?.aborted && Date.now() - started < PAINT_MS) {
+    await abandonAfter(POLL_MS)
+    pixel = await probePreviewPixel(page, clip)
+  }
+  return pixel
 }
 
 // Read emitted aria state: RN-Web forwards aria-* but drops accessibilityState that appears valid in test renderer.

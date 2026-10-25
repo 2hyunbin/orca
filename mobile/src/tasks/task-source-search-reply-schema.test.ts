@@ -32,12 +32,12 @@ const linearRow = {
 }
 
 describe('the provider lists require items, and a row requires its labels', () => {
-  it('reads the recorded GitHub search row whole', () => {
+  it('reads the representative GitHub search row whole', () => {
     const parsed = taskGitHubWorkItemListSchema.safeParse({ items: [githubRow] })
     expect(parsed.success && parsed.data).toMatchObject({ items: [githubRow] })
   })
 
-  it('reads the recorded GitLab row whole', () => {
+  it('reads the representative GitLab row whole', () => {
     const row = { ...githubRow, id: 'issue:2', number: 2, title: 'two', state: 'opened' }
     const parsed = taskGitLabWorkItemListSchema.safeParse({ items: [row] })
     expect(parsed.success && parsed.data).toMatchObject({ items: [row] })
@@ -68,7 +68,7 @@ describe('the provider lists require items, and a row requires its labels', () =
     expect(parsed.success && parsed.data).toMatchObject({ items: [{ labels: ['bug'] }] })
   })
 
-  it('keeps items alongside an in-band provider error, as the recorded reply does', () => {
+  it('keeps items alongside an in-band provider error, as the representative reply does', () => {
     const parsed = taskGitLabWorkItemListSchema.safeParse({
       items: [githubRow],
       error: { type: 'not_found', message: 'missing' }
@@ -156,7 +156,7 @@ describe('the Linear issue list takes both shapes the picker has always accepted
     expect(taskLinearIssueListSchema.safeParse([noPriority])).toMatchObject({ data: [] })
   })
 
-  it.each(['identifier', 'title', 'url', 'updatedAt', 'labels'])(
+  it.each(['identifier', 'title', 'url', 'updatedAt', 'labels'] as const)(
     'drops an issue with no %s, which the host type declares non-optional',
     (member) => {
       const { [member]: _dropped, ...without } = linearRow

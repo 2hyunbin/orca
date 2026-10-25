@@ -16,6 +16,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
   const { resetAndRefreshAllTerminalWebglAtlases, scheduleTerminalWebglAtlasRecovery } =
@@ -34,17 +35,6 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
     // Why: the removed output path requested recovery 200ms before its global reset ran.
     expect(scheduleTerminalWebglAtlasRecovery).not.toHaveBeenCalled()
     expect(resetAndRefreshAllTerminalWebglAtlases).not.toHaveBeenCalled()
-  }
-
-  // Centralize widening of structural pane/manager/dependency fakes at this fixture boundary.
-  function connectFakePane(
-    connect: (pane: never, manager: never, deps: never) => { dispose: () => void },
-    pane: unknown,
-    manager: unknown,
-    deps: Parameters<typeof createDeps>[0]
-  ): { dispose: () => void } {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the three values are this suite's structural fakes for pane/manager/deps; connectPanePty only reads the fields they define.
-    return connect(pane as never, manager as never, createDeps(deps) as never)
   }
 
   describe('connectPanePty', () => {
@@ -87,11 +77,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: false }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -133,11 +125,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: false }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -175,11 +169,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const { parseCallbacks } = captureCallbackTerminalWrites(pane)
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: false }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -215,11 +211,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const { parseCallbacks } = captureCallbackTerminalWrites(pane)
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: false }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -252,11 +250,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const { writes, parseCallbacks } = captureCallbackTerminalWrites(pane)
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef: { current: false }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -300,11 +300,13 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const isVisibleRef = { current: false }
 
       connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        createDeps({
-          isVisibleRef
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          createManager(1),
+          createDeps({
+            isVisibleRef
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -353,7 +355,7 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
         isVisibleRef: { current: true }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -388,7 +390,7 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
         isVisibleRef: { current: true }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -423,7 +425,7 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
         isVisibleRef: { current: true }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -454,19 +456,21 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: {
-            command: 'wrapped-agent',
-            telemetry: {
-              agent_kind: 'codex',
-              launch_source: 'tab_bar_quick_launch',
-              request_kind: 'new'
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: {
+              command: 'wrapped-agent',
+              telemetry: {
+                agent_kind: 'codex',
+                launch_source: 'tab_bar_quick_launch',
+                request_kind: 'new'
+              }
             }
-          }
-        }) as never
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -496,18 +500,24 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       )
       transportFactoryQueue.push(transport)
 
-      const binding = connectFakePane(connectPanePty, createPane(1), createManager(1), {
-        isVisibleRef: { current: false },
-        startup: {
-          command: 'jcode',
-          launchAgent: 'jcode',
-          telemetry: {
-            agent_kind: 'jcode',
-            launch_source: 'tab_bar_quick_launch',
-            request_kind: 'new'
-          }
-        }
-      })
+      const binding = connectPanePty(
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: {
+              command: 'jcode',
+              launchAgent: 'jcode',
+              telemetry: {
+                agent_kind: 'jcode',
+                launch_source: 'tab_bar_quick_launch',
+                request_kind: 'new'
+              }
+            }
+          })
+        )
+      )
       await flushAsyncTicks(6)
 
       expect(capturedDataCallback.current).not.toBeNull()
@@ -536,19 +546,21 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: {
-            command: 'wrapped-agent',
-            telemetry: {
-              agent_kind: 'grok',
-              launch_source: 'tab_bar_quick_launch',
-              request_kind: 'new'
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: {
+              command: 'wrapped-agent',
+              telemetry: {
+                agent_kind: 'grok',
+                launch_source: 'tab_bar_quick_launch',
+                request_kind: 'new'
+              }
             }
-          }
-        }) as never
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -581,12 +593,14 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'codex' }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'codex' }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -619,12 +633,14 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: '/Users/me/.grok/bin/grok --permission-mode bypassPermissions' }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: '/Users/me/.grok/bin/grok --permission-mode bypassPermissions' }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -657,12 +673,14 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          isVisibleRef: { current: false },
-          startup: { command: 'printf noisy startup' }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            isVisibleRef: { current: false },
+            startup: { command: 'printf noisy startup' }
+          })
+        )
       )
       await flushAsyncTicks(6)
 
@@ -697,9 +715,7 @@ export function registerPtyConnectionHiddenAtlasRecoveryTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       const binding = connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(pane, manager, createDeps({ isVisibleRef: { current: false } }))
       )
       await flushAsyncTicks(6)
 

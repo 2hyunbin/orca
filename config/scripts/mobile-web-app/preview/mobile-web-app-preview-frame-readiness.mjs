@@ -4,14 +4,14 @@
 import { describePreviewFrame, untilAborted } from './mobile-web-app-preview-frame-diagnosis.mjs'
 import { pollReportsUntil } from './mobile-web-app-preview-csp-reports.mjs'
 
-const POLL_MS = 25
+export const POLL_MS = 25
 const EVALUATE_MS = 1000
 
 export function previewFrame(page) {
   return page.frames().find((one) => one !== page.mainFrame()) ?? null
 }
 
-const abandonAfter = (ms) =>
+export const abandonAfter = (ms) =>
   new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), ms)
     timer.unref?.()
@@ -100,6 +100,30 @@ export async function waitForLoadedFrame(
     )
   }
   return previewFrame(page)
+}
+
+/** How long a painted frame may go on handing its input to the embedder before the arm gives up. */
+const INPUT_ROUTING_MS = 10_000
+
+/** Chromium may paint before its out-of-process iframe hit-test region arrives, sending clicks to the embedder.
+ * Alternate pointer positions until embedder iframe events stop; repeated identical moves may emit nothing.
+ * In-process engines route correctly on the first move. */
+export async function waitForFrameInputRouting(page, clip, signal, arm) {
+  const started = Date.now()
+  const embedderSaw = async () => await page.evaluate(() => window.__embedderFramePointer ?? 0)
+  for (let step = 0; !signal?.aborted; step += 1) {
+    const before = await embedderSaw()
+    await page.mouse.move(clip.x + (step % 2), clip.y)
+    if ((await embedderSaw()) === before) {
+      return
+    }
+    if (Date.now() - started > INPUT_ROUTING_MS) {
+      throw new Error(
+        `[html-preview-render] ${arm} still handed its pointer input to the embedder after ${String(Date.now() - started)}ms`
+      )
+    }
+    await abandonAfter(POLL_MS)
+  }
 }
 
 const ADMITTED_IMAGE_PATHS = ['/css-bg.png', '/img.png']

@@ -138,7 +138,7 @@ describe('adopted conversation ownership', () => {
     ).not.toThrow()
   })
 
-  it('exempts the requesting session so a committed create can be re-run', () => {
+  it('preserves the adopted chain and launch pin when retrying an existing reservation', () => {
     // Pin self-exemption directly; create-by-intent has null expectedFence and rejects existing ids before this can act as replay.
     const link = adoptedLink()
     const committed: AgentSessionRecord = {

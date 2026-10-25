@@ -1,6 +1,6 @@
 // Name another agent from host records when sending on its behalf.
 
-import type { AgentMessageSender } from '../../shared/agent-session-message-source'
+import type { AgentMessageSender } from '../../shared/agent-session/agent-session-message-source'
 import type { ConversationNameTab } from '../../shared/agent-row-conversation-name'
 import type { AgentStatusIpcPayload, AgentType } from '../../shared/agent-status-types'
 import { parsePaneKey } from '../../shared/stable-pane-id'

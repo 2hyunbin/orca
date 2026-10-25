@@ -5,8 +5,10 @@ import {
   worktreeHostedBaseSchema
 } from './workspace-create-reply-schema'
 
+// Preserve receipt fields and keep empty ids and soft-error messages reachable.
+
 describe('the worktree create receipt', () => {
-  it('reads every recorded create', () => {
+  it('reads every representative create', () => {
     for (const result of [
       { worktree: { id: 'wt-1', displayName: 'ORC-1 Recorded issue' } },
       { worktree: { id: 'wt-2' }, warning: 'shallow clone' },
@@ -37,7 +39,7 @@ describe('the worktree create receipt', () => {
 })
 
 describe('the agent.launch receipt', () => {
-  it('reads the recorded structured receipt whole', () => {
+  it('reads the representative structured receipt whole', () => {
     const result = {
       outcome: { kind: 'structured', sessionId: 'sess-1', handle: 't-1' },
       worktreeId: 'repo-1::/w',
@@ -67,7 +69,7 @@ describe('the agent.launch receipt', () => {
 })
 
 describe('the hosted base resolvers', () => {
-  it('reads both recorded successes', () => {
+  it('reads both representative successes', () => {
     expect(worktreeHostedBaseSchema.safeParse({ baseBranch: 'main' }).success).toBe(true)
     expect(
       worktreeHostedBaseSchema.safeParse({ baseBranch: 'main', compareBaseRef: 'origin/main' })
@@ -75,7 +77,7 @@ describe('the hosted base resolvers', () => {
     ).toBe(true)
   })
 
-  it('takes the error arm first, so a soft failure is never read as a base branch', () => {
+  it('preserves a soft error beside a base branch', () => {
     const parsed = worktreeHostedBaseSchema.safeParse({
       error: 'pull request not found',
       baseBranch: 'main'
@@ -91,12 +93,12 @@ describe('the hosted base resolvers', () => {
   it('forwards the rest of a start point the create spreads into its params', () => {
     const parsed = worktreeHostedBaseSchema.safeParse({
       baseBranch: 'main',
-      pushTarget: { kind: 'fork', remote: 'origin' },
+      pushTarget: { remoteName: 'origin', branchName: 'feature' },
       branchNameOverride: 'pr-12',
       maintainerCanModify: false
     })
     expect(parsed.success && parsed.data).toMatchObject({
-      pushTarget: { kind: 'fork', remote: 'origin' },
+      pushTarget: { remoteName: 'origin', branchName: 'feature' },
       branchNameOverride: 'pr-12',
       maintainerCanModify: false
     })

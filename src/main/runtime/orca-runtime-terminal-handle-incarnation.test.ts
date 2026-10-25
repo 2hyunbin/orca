@@ -3,6 +3,7 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { registerBoundPty } from './bind-first-pane.test-fixture'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 const PTY_ID = 'ssh:target@@relay-pty'
 const WORKTREE_ID = 'repo::/worktree'
@@ -15,9 +16,8 @@ function makeRuntime(opts: { paneLayout?: boolean } = {}): {
 } {
   const writes: string[] = []
   // Main-owned pane lookup requires a layout store.
-  const store = opts.paneLayout && ORCA_LAYOUT_OWNER_IS_MAIN ? {} : null
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resolve path reads only the session bindPaneFirst adds to this store.
-  const runtime = new OrcaRuntimeService(store as never)
+  const store = opts.paneLayout && ORCA_LAYOUT_OWNER_IS_MAIN ? partialRuntimeStore() : null
+  const runtime = new OrcaRuntimeService(store)
   runtime.setPtyController({
     write: (_ptyId, data) => {
       writes.push(data)
@@ -76,7 +76,6 @@ describe('runtime terminal handle incarnation fencing', () => {
     })
     expect(runtime.markRendererReloading(1)).not.toBeNull()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     expect((runtime as unknown as { handles: Map<string, unknown> }).handles.has(handle)).toBe(
       false
     )
@@ -100,8 +99,6 @@ describe('runtime terminal handle incarnation fencing', () => {
     })
   })
 
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
   it('treats a null-to-known incarnation as the same un-fenced PTY', async () => {
     const { runtime } = makeRuntime()
     const handle = runtime.preAllocateHandleForPty(PTY_ID)
@@ -143,8 +140,6 @@ describe('runtime terminal handle incarnation fencing', () => {
     const [listed] = (await runtime.listTerminals()).terminals
 
     // Rotate the record directly so reconcile is the only fence exercised.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test reaches the runtime's protected pty record map to bypass the registerPty fence.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     const internals = runtime as unknown as {
       ptysById: Map<string, { incarnationId: string | null }>
@@ -231,7 +226,6 @@ describe('runtime terminal handle incarnation fencing', () => {
     runtime.registerPreAllocatedHandleForPty(PTY_ID, replacementHandle)
     syncGraph(runtime)
 
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Test fixture crosses a private/runtime boundary with a verified shape.
     const internals = runtime as unknown as {
       handles: Map<string, unknown>

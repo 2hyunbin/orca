@@ -162,7 +162,9 @@ test.describe('Native chat transcript anchoring', () => {
         .poll(() => transcriptWindow.locator(':scope > [data-index]').count())
         .toBeGreaterThan(3)
 
-      const initialTotalSize = await transcriptWindow.evaluate((element) => element.offsetHeight)
+      const initialTotalSize = await transcriptWindow.evaluate(
+        (element: HTMLElement) => element.offsetHeight
+      )
       const anchor = await scroll.evaluate(async (element) => {
         element.scrollTop = element.scrollHeight * 0.55
         element.dispatchEvent(new Event('scroll', { bubbles: true }))
@@ -206,7 +208,7 @@ test.describe('Native chat transcript anchoring', () => {
       // Invoke the off-screen button directly so Playwright cannot scroll the reader to the head before paging.
       await loadEarlier.evaluate((button: HTMLButtonElement) => button.click())
       await expect
-        .poll(() => transcriptWindow.evaluate((element) => element.offsetHeight))
+        .poll(() => transcriptWindow.evaluate((element: HTMLElement) => element.offsetHeight))
         .toBeGreaterThan(initialTotalSize)
       await expect(loadEarlier).toBeAttached({ timeout: 30_000 })
 

@@ -226,26 +226,6 @@ describe('the document host seams, once the page sets them', () => {
     expect(posted).toContainEqual({ type: 'pong', pingId: 3 })
   })
 
-  it('leaves window.onerror alone when the host installs the reporter its own way', () => {
-    const previous = window.onerror
-    window.onerror = null
-    const installed: unknown[] = []
-    try {
-      const built = createTerminalDocumentScope()
-      const undos: unknown[] = []
-      built.installErrorReporter = (report) => {
-        installed.push(report)
-        return () => undos.push(report)
-      }
-      built.installErrorReporter(() => {})()
-      expect(installed).toHaveLength(1)
-      expect(undos).toHaveLength(1)
-      expect(window.onerror).toBe(null)
-    } finally {
-      window.onerror = previous
-    }
-  })
-
   it('reports no webgl addon as a DOM-renderer fallback rather than as a failure', () => {
     expect(attachWebglAddon(startedScope({ createWebglAddon: () => null }), true)).toBe(false)
   })

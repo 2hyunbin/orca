@@ -64,7 +64,6 @@ function delay(ms) {
 }
 
 // Strip VT escapes interleaved by ConPTY so executed-marker matching sees plain output.
-// eslint-disable-next-line no-control-regex -- ANSI escapes are control chars by definition
 const ANSI_ESCAPE = /\[[0-9;?]*[ -/]*[@-~]|\][^]*?|[@-Z\\-_]/g
 
 function stripAnsi(text) {

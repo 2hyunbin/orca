@@ -17,7 +17,7 @@ import {
 import {
   isAgentSessionConversationCommandResult,
   type AgentSessionConversationCommandResult
-} from './agent-session-conversation-command'
+} from './agent-session/agent-session-conversation-command'
 
 export type AgentSessionOperationOutcome =
   | { status: 'pending' }

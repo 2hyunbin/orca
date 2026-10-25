@@ -338,10 +338,7 @@ describe('resumeAiVaultSessionInTerminal', () => {
           agentEnv: { ANTHROPIC_BASE_URL: 'http://localhost:3000' }
         },
         launchAgent: 'claude',
-        clientMutationId: 'resume-1',
-        activate: false,
-        select: true,
-        navigation: 'caller'
+        clientMutationId: 'resume-1'
       })
     ).resolves.toMatchObject({ id: 'tab-1', terminal: 'pty-1' })
     expect(sendRequest).toHaveBeenNthCalledWith(

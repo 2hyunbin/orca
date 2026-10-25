@@ -7,7 +7,6 @@ import {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } from './orca-runtime-test-fixtures.spec'
-import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
 
 const REMOUNTS = 20
@@ -16,8 +15,7 @@ async function setup() {
   const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture implements RuntimeStore; its annotation erases the Vitest mock call signatures.
-  const runtime = new OrcaRuntimeService(runtimeStore as RuntimeStore)
+  const runtime = new OrcaRuntimeService(runtimeStore)
   await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
   const published: unknown[] = []
   runtime.onMobileSessionTabsChanged((snapshot) => published.push(snapshot))

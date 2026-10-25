@@ -114,11 +114,9 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     this.store = store
     this.machineName.start()
     this.prepareClaudeAuth = deps?.prepareClaudeAuth
-    // oxlint-disable-next-line typescript/no-this-alias -- SAFETY: Preserve the constructor receiver captured by callbacks.
-    const runtime: this = this
-    installRuntimeFileCommandSurface(runtime, this.fileCommands)
-    installRuntimeGitCommandSurface(runtime, this.gitCommands)
-    installRuntimeRepositoryCommandSurface(runtime, {
+    installRuntimeFileCommandSurface(this, this.fileCommands)
+    installRuntimeGitCommandSurface(this, this.gitCommands)
+    installRuntimeRepositoryCommandSurface(this, {
       projectHostSetups: this.projectHostSetups,
       projectGroups: this.projectGroups,
       nestedRepoImport: this.nestedRepoImport,
@@ -133,7 +131,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       repositoryHooks: this.repositoryHooks,
       repositoryIssueCommand: this.repositoryIssueCommand
     })
-    installRuntimeReviewCommandSurface(runtime, {
+    installRuntimeReviewCommandSurface(this, {
       gitLabQueries: this.gitLabQueryCommands,
       gitLabMutations: this.gitLabMutationCommands,
       gitHubReviewQueries: this.gitHubReviewQueries,
@@ -141,7 +139,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       gitHubIssueComments: this.gitHubIssueComments,
       gitHubProjects: this.gitHubProjectCommands
     })
-    installRuntimeServiceCommandSurface(runtime, {
+    installRuntimeServiceCommandSurface(this, {
       aiVault: this.aiVault,
       sessionSearchSettings: new RuntimeSessionSearchSettingsController(
         store,
@@ -181,13 +179,13 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
         }
       )
     })
-    installRuntimeSkillCommandSurface(runtime, this.skillCommands)
+    installRuntimeSkillCommandSurface(this, this.skillCommands)
     Object.assign(this, this.edgeCommands.surface)
     this.clientSettings = new RuntimeClientSettingsController(store, () =>
       this.notifyReposChanged()
     )
     this.automation = new RuntimeAutomationController(store, {
-      showRepo: (selector) => runtime.showRepo(selector),
+      showRepo: (selector) => this.showRepo(selector),
       showManagedWorktree: (selector) => this.showManagedWorktree(selector)
     })
     const persistedClientTabSelections = store?.getMobileClientTabSelections?.()
@@ -200,7 +198,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     this.orchestrationEnvironmentTransport = deps?.orchestrationEnvironmentTransport ?? null
     this.workspaceSleepPlatform = deps?.workspaceSleepPlatform ?? null
     this.orchestrationFederation = new RuntimeOrchestrationFederation(
-      runtime,
+      this,
       this.orchestrationEnvironmentTransport
     )
     if (stats) {

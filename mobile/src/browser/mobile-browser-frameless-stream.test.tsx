@@ -9,6 +9,7 @@ import {
 import type { RpcClient } from '../transport/rpc-client'
 import { MobileBrowserPane, type MobileBrowserTab } from './MobileBrowserPane'
 import { useBrowserBinaryScreencastGrant } from './use-browser-binary-screencast-grant'
+import { findAllByHostType } from '../test-support/react-test-renderer-host-nodes'
 
 // Mock binary-lane negotiation: native always supports it, but older shells may have no encoder behind requested lane (ruling 5).
 vi.mock('./use-browser-binary-screencast-grant', () => ({
@@ -62,7 +63,7 @@ function makeFrame(): BrowserScreencastFrame {
 }
 
 function spinnerCount(renderer: ReactTestRenderer): number {
-  return renderer.root.findAllByType('ActivityIndicator').length
+  return findAllByHostType(renderer.root, 'ActivityIndicator').length
 }
 
 async function renderPane(): Promise<{
@@ -98,9 +99,9 @@ async function renderPane(): Promise<{
     isActive: true
   }
 
-  let renderer: ReactTestRenderer
+  const rendered: { renderer?: ReactTestRenderer } = {}
   await act(async () => {
-    renderer = create(
+    rendered.renderer = create(
       createElement(MobileBrowserPane, {
         client,
         // Why: unique worktree id keeps each test on a cold module-level frame cache.
@@ -115,10 +116,13 @@ async function renderPane(): Promise<{
     )
     await Promise.resolve()
   })
-  const mounted: ReactTestRenderer = renderer
-  const viewport = mounted.root
-    .findAllByType('View')
-    .find((node) => typeof node.props.onLayout === 'function')
+  const mounted = rendered.renderer
+  if (!mounted) {
+    throw new Error('MobileBrowserPane did not mount')
+  }
+  const viewport = findAllByHostType(mounted.root, 'View').find(
+    (node) => typeof node.props.onLayout === 'function'
+  )
   if (!viewport) {
     throw new Error('Viewport with onLayout not found')
   }
@@ -140,9 +144,9 @@ async function renderStreamingPane(): Promise<{
 }
 
 function errorMessages(renderer: ReactTestRenderer): string[] {
-  return renderer.root
-    .findAllByType('Text')
-    .flatMap((node) => (typeof node.props.children === 'string' ? [node.props.children] : []))
+  return findAllByHostType(renderer.root, 'Text').flatMap((node) =>
+    typeof node.props.children === 'string' ? [node.props.children] : []
+  )
 }
 
 describe('MobileBrowserPane with a stream that reports ready but sends no frames', () => {
@@ -171,8 +175,7 @@ describe('MobileBrowserPane with a stream that reports ready but sends no frames
     expect(errorMessages(renderer)).not.toContain(
       'Update the Orca app to stream browser tabs here.'
     )
-    const source = renderer.root
-      .findAllByType('Image')
+    const source = findAllByHostType(renderer.root, 'Image')
       .map((image) => (image.props.source as { uri?: string } | null)?.uri)
       .find((uri) => typeof uri === 'string')
     expect(source).toContain(Buffer.from(makeFrame().image).toString('base64'))

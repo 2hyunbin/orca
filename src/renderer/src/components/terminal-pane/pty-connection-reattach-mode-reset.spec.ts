@@ -43,6 +43,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionReattachModeResetTests(): void {
   let mockStoreState: StoreState
@@ -115,7 +116,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           pane.terminal.buffer.active.viewportY = pane.terminal.buffer.active.baseY
         })
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      connectPanePty(...mockPanePtyArgs(pane, createManager(1), createDeps()))
       await flushAsyncTicks()
       expect(pane.terminal.buffer.active.viewportY).toBe(40)
       expect(renderListener.current).not.toBeNull()
@@ -156,7 +157,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(20)
 
       const tailWriteCall = pane.terminal.write.mock.invocationCallOrder.find(
@@ -178,10 +179,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         'pty-live': { previousAccountLabel: 'A', nextAccountLabel: 'B' }
       }
       const pane = createPane(1)
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures implement the connection's pane, manager and dependency contract.
-      const args = [pane, createManager(1), createDeps()] as unknown as Parameters<
-        typeof connectPanePty
-      >
+      const args = mockPanePtyArgs(pane, createManager(1), createDeps())
       const binding = connectPanePty(...args)
       transport.getPtyId.mockReturnValue('pty-live')
       mockStoreState.codexRestartNoticeByPtyId = {
@@ -204,7 +202,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks()
 
       // xterm answers CSI 6n natively with a CPR via onData; it must take the immediate path (skips the remote 8ms debounce that corrupted it).
@@ -265,7 +263,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const manager = createManager(1, 1)
       const deps = createDeps()
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(20)
       expect(replayCallback.current).toBeTypeOf('function')
 
@@ -306,7 +304,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput).toHaveBeenCalledWith('\x1b[I', 'query-reply')
@@ -342,12 +340,14 @@ export function registerPtyConnectionReattachModeResetTests(): void {
       const pane = createPane(1)
       const manager = createManager(1)
       connectPanePty(
-        pane as never,
-        manager as never,
-        createDeps({
-          restoredLeafId: LEAF_1,
-          restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
-        }) as never
+        ...mockPanePtyArgs(
+          pane,
+          manager,
+          createDeps({
+            restoredLeafId: LEAF_1,
+            restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
+          })
+        )
       )
       await flushAsyncTicks(20)
 
@@ -389,7 +389,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         const writes = (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls.map(
@@ -450,7 +450,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           })
         }
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(30)
 
         expect(transport.connect).toHaveBeenCalledTimes(2)
@@ -504,7 +504,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(pane.terminal.write).toHaveBeenCalledWith(
@@ -537,7 +537,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -573,7 +573,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -607,7 +607,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredLeafId: LEAF_1,
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
         return (pane.terminal.write as ReturnType<typeof vi.fn>).mock.calls
           .map((call) => String(call[0]))
@@ -657,7 +657,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -695,7 +695,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -736,7 +736,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
           restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
         })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
 
         expect(transport.sendInput.mock.calls.map(([data]) => data)).not.toContain('\x1b[I')
@@ -791,8 +791,7 @@ export function registerPtyConnectionReattachModeResetTests(): void {
         restoredPtyIdByLeafId: { [LEAF_1]: 'tab-pty' }
       })
 
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixtures implement the connection's pane, manager and dependency contract.
-      const args = [pane, manager, deps] as unknown as Parameters<typeof connectPanePty>
+      const args = mockPanePtyArgs(pane, manager, deps)
       const binding = connectPanePty(...args)
       await flushAsyncTicks(20)
 

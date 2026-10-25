@@ -28,6 +28,7 @@ export type HostAgentLaunchArgs = {
   /** The launch seeds a workspace being opened, so its spawn must not reshuffle Recent. */
   pendingActivationSpawn?: boolean
   viewMode?: Tab['viewMode']
+  suppressStartupUpdatePrompt?: boolean
 }
 
 function stringSessionOptions(options: Record<string, SessionOptionValue> | undefined): {
@@ -76,7 +77,10 @@ export function launchAgentThroughHost(args: HostAgentLaunchArgs): {
     pendingStartup: {
       command: '',
       launchAgent: args.agent,
-      agentLaunch: { launch: launchParams(args) }
+      agentLaunch: {
+        launch: launchParams(args),
+        ...(args.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {})
+      }
     }
   })
   if (args.cwd?.trim()) {

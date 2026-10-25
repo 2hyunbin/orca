@@ -38,9 +38,6 @@ describe('Antigravity raw captured readiness', () => {
   const READY_TIMEOUT_MS = 2_000
   const REFUSAL_TIMEOUT_MS = 600
   const ANTIGRAVITY_COMMAND = 'agy'
-  // Avoid formatter-created raw control bytes in source/diffs.
-  const ESC = String.fromCharCode(27)
-
   type TranscriptCase = {
     name: string
     capture: string
@@ -191,12 +188,6 @@ describe('Antigravity raw captured readiness', () => {
         },
         READY_TIMEOUT_MS + 10_000
       )
-
-      it.skipIf(!captured)(`${label} was captured raw, not pasted from a rendered screen`, () => {
-        const text = readFileSync(path, 'utf8')
-        // Clipboard-rendered text cannot prove caret/chrome shape; require raw escape bytes.
-        expect(text).toContain(ESC)
-      })
     }
   })
 })

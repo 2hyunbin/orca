@@ -1,4 +1,5 @@
 import type { AgentType } from './agent-status-types'
+import { askOptionsHavePreview } from './native-chat-ask'
 
 /** Main revalidates the renderer's submit snapshot against cached status so racing real hooks outrank inference. */
 export type AgentQuestionAnsweredInferenceRequest = {
@@ -45,7 +46,8 @@ function readSingleSelectOptionCount(interactivePrompt: string | undefined): num
     if (!question || question.multiSelect === true || !Array.isArray(question.options)) {
       return -1
     }
-    return question.options.length
+    // Why: Claude's preview selector only moves focus on a digit; Enter commits.
+    return askOptionsHavePreview(question.options) ? 0 : question.options.length
   } catch {
     // Why: malformed JSON can be a length-capped multi-question payload. It is
     // not equivalent to an older hook omitting tool input, so fail closed.

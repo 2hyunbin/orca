@@ -5,6 +5,7 @@ import { OrcaRuntimeService } from './orca-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 import { spawnedPtyEnv } from './spawned-pty-env-fixtures'
 import { committingSpawn } from './bind-first-pane.test-fixture'
+import { partialRuntimeStore } from './runtime-store-partial-fixture'
 
 // #10923: OMP user bubbles emit OSC 133 B C D;0; treating it as shell completion retires live hook/session authority.
 const OMP_TRANSCRIPT = readFileSync(
@@ -32,8 +33,7 @@ async function launchOmpPane(): Promise<{
     id: 'pty-omp',
     incarnationId: 'incarnation-1'
   }))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore serves the repo reads terminal creation makes; the rest of Store is unreached.
-  const runtime = new OrcaRuntimeService(makeStore() as never, undefined, {
+  const runtime = new OrcaRuntimeService(partialRuntimeStore(makeStore()), undefined, {
     attestAgentHookCompatibilityAuthority: (candidate) => ({
       paneKey: candidate.paneKey,
       source: 'current_hook' as const

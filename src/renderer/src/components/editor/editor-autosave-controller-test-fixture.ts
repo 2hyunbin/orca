@@ -96,7 +96,7 @@ export function stubEditorWindow(): ReturnType<typeof vi.fn> {
 
 export function createEditorStore(): StoreApi<AppState> {
   // Use the app’s record middleware so views of one file share a buffer.
-  // oxlint-disable-next-line typescript/no-explicit-any, typescript/consistent-type-assertions -- SAFETY: a partial store; tests read only the slices it builds.
+  // oxlint-disable-next-line typescript/no-explicit-any -- a partial store; tests read only the slices it builds.
   const create = withEditorBufferRecords<any>(
     (...args: any[]) => ({
       ...emptyTabLayoutState(),

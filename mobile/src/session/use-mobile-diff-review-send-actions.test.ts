@@ -28,6 +28,7 @@ function requestPortRpcClient(sendRequest: RpcClient['sendRequest']): RpcClient 
 }
 
 type SendActions = ReturnType<typeof useMobileDiffReviewSendActions>
+type SendActionArgs = Parameters<typeof useMobileDiffReviewSendActions>[0]
 
 vi.mock('../platform/haptics', () => ({ triggerSuccess: vi.fn() }))
 // Return the pasteboard’s real success boolean; undefined would exercise only refusal unnoticed.
@@ -95,9 +96,15 @@ function launchClient(
   return { client: requestPortRpcClient(sendRequest), sendRequest }
 }
 
-const READY: ReviewScreenState = {
+const READY: Extract<ReviewScreenState, { kind: 'ready' }> = {
   kind: 'ready',
-  status: { entries: [], conflictOperation: 'none' },
+  status: {
+    entries: [],
+    conflictOperation: 'unknown',
+    branch: undefined,
+    head: undefined,
+    upstreamStatus: undefined
+  },
   branchCompare: null,
   comments: [COMMENT],
   reviewState: { version: 1, files: {} }
@@ -107,13 +114,13 @@ describe('useMobileDiffReviewSendActions', () => {
   let renderer: ReactTestRenderer | null = null
   let actions: SendActions | null = null
   let mountedClient: RpcClient | null = null
-  let setActionError: ReturnType<typeof vi.fn>
+  let setActionError: Mock<SendActionArgs['setActionError']>
   let sheets: {
     openSheet: Mock<ReviewSheetIntents['openSheet']>
     closeSheet: Mock<ReviewSheetIntents['closeSheet']>
     updateSendSheet: Mock<ReviewSheetIntents['updateSendSheet']>
   }
-  let saveCommentsAndReviewState: ReturnType<typeof vi.fn>
+  let saveCommentsAndReviewState: Mock<SendActionArgs['saveCommentsAndReviewState']>
   let screenState: ReviewScreenState = READY
 
   beforeEach(() => {

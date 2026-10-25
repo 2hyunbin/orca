@@ -109,7 +109,7 @@ describe('connectPanePty', () => {
     })
 
     const pane = createPane(1)
-    captureCallbackTerminalWrites(pane)
+    const { writes } = captureCallbackTerminalWrites(pane)
 
     // Count visibility getter reads to measure finally re-arms deterministically without timing or memory heuristics.
     let visibilityReads = 0
@@ -137,11 +137,16 @@ describe('connectPanePty', () => {
     })
     await flushAsyncTicks(20)
 
+    expect(getMainBufferSnapshot).toHaveBeenCalledTimes(1)
+    expect(writes).toContain('snapshot-state\r\n')
     disposable.dispose()
     const readsAtDispose = visibilityReads
-    await flushAsyncTicks(200)
-
-    // A terminated chain settles in a few turns; the faulty loop grows once per microtask.
-    expect(visibilityReads - readsAtDispose).toBeLessThan(50)
+    try {
+      await flushAsyncTicks(200)
+      expect(visibilityReads - readsAtDispose).toBeLessThan(50)
+    } finally {
+      // Stop a regressed re-arm loop after measuring it so failures can finish.
+      visible = false
+    }
   })
 })

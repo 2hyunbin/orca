@@ -28,6 +28,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionCommandFinishedCleanupTests(): void {
   let mockStoreState: StoreState
@@ -83,9 +84,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         transportFactoryQueue.push(transport)
 
         connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({ tabId, isVisibleRef: { current: false } }) as never
+          ...mockPanePtyArgs(
+            pane,
+            createManager(1),
+            createDeps({ tabId, isVisibleRef: { current: false } })
+          )
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
@@ -133,9 +136,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         transportFactoryQueue.push(transport)
 
         connectPanePty(
-          pane as never,
-          createManager(1) as never,
-          createDeps({ tabId, isVisibleRef: { current: false } }) as never
+          ...mockPanePtyArgs(
+            pane,
+            createManager(1),
+            createDeps({ tabId, isVisibleRef: { current: false } })
+          )
         )
         await vi.advanceTimersByTimeAsync(20)
         await flushAsyncTicks()
@@ -169,9 +174,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -220,9 +227,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -267,9 +276,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -325,9 +336,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -376,9 +389,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -420,9 +435,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey('tab-1', LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -463,12 +480,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-        deps as never
-      )
+      connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -515,12 +527,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-        deps as never
-      )
+      connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -567,12 +574,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const { writes } = captureCallbackTerminalWrites(pane)
       const deps = createDeps({ isVisibleRef: { current: false } })
 
-      connectPanePty(
-        pane as never,
-        createManager(1) as never,
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture types intentionally model the production connection boundary.
-        deps as never
-      )
+      connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
       mockStoreState.agentLaunchConfigByPaneKey[paneKey] = {
@@ -608,9 +610,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       const paneKey = makePaneKey(tabId, LEAF_1)
 
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ tabId, isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ tabId, isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -650,9 +654,11 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       connectPanePty(
-        createPane(1) as never,
-        createManager(1) as never,
-        createDeps({ isVisibleRef: { current: false } }) as never
+        ...mockPanePtyArgs(
+          createPane(1),
+          createManager(1),
+          createDeps({ isVisibleRef: { current: false } })
+        )
       )
       await vi.advanceTimersByTimeAsync(20)
       await flushAsyncTicks()
@@ -742,7 +748,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
           return { dispose: vi.fn() }
         }) as typeof pane.terminal.onData)
 
-        connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+        connectPanePty(...mockPanePtyArgs(pane, createManager(1), createDeps()))
         vi.advanceTimersByTime(1_000)
         await flushAsyncTicks()
         expect(capturedDataCallback.current).not.toBeNull()
@@ -818,7 +824,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         return { dispose: vi.fn() }
       }) as typeof pane.terminal.onData)
 
-      connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
+      connectPanePty(...mockPanePtyArgs(pane, createManager(1), createDeps()))
       vi.advanceTimersByTime(1_000)
       await flushAsyncTicks()
       if (!onDataHandler) {

@@ -1,6 +1,6 @@
 // Share one read-only host status stream per target. Retain latest summaries across disconnect and merge fresh snapshots; tab maps own visibility, so this feed never retracts summaries.
 
-import { AGENT_SESSION_WORKSPACE_SLEEP_MARK_RUNTIME_CAPABILITY } from '../../../shared/agent-session-workspace-sleep'
+import { AGENT_SESSION_WORKSPACE_SLEEP_MARK_RUNTIME_CAPABILITY } from '../../../shared/agent-session/agent-session-workspace-sleep'
 import type { AgentSessionStatusEvent } from '../../../shared/agent-session-wire'
 import {
   foldAgentSessionStatusEvent,

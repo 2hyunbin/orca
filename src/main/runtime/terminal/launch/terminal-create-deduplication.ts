@@ -150,7 +150,13 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
 
   async launchAgentTerminal(
     worktreeSelector: string,
-    opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string }
+    opts: {
+      agent: TuiAgent
+      prompt: string
+      title?: string
+      extraAgentArgs?: string
+      suppressStartupUpdatePrompt?: boolean
+    }
   ): Promise<RuntimeTerminalCreate> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
     // Repo ids are host-blind; resolve against the worktree owner before quoting its launch (#11163).
@@ -164,6 +170,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
     }
     const startup = this.buildStartupForAgent(repo, opts.agent, opts.prompt, undefined, {
       ...(opts.extraAgentArgs ? { extraAgentArgs: opts.extraAgentArgs } : {}),
+      ...(opts.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {}),
       launchScope: await this.resolveTerminalWorkspaceLaunchScope(`id:${worktree.id}`)
     })
     if (startup.launchRuntime instanceof Error) {

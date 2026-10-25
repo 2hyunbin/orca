@@ -126,7 +126,10 @@ describe('createBlankWorkspace', () => {
     // startupAgent forces a PTY and bypasses the user’s structured-chat default.
     const calls: Call[] = []
     const client = fakeClient(
-      () => ({ worktreeId: 'wt-9', outcome: { kind: 'structured' } }),
+      () => ({
+        worktreeId: 'wt-9',
+        outcome: { kind: 'structured', sessionId: 'session-9', handle: 'agent-session:session-9' }
+      }),
       calls
     )
 

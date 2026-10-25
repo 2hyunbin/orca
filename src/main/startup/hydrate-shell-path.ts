@@ -1,6 +1,7 @@
 import type { SpawnedProcess } from '@orca/process-host/process-spec'
 import { delimiter, win32 as pathWin32 } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
+import { stripAnsiEscapeSequences } from '../../shared/ansi-escape-sequences'
 import type { ShellHydrationFailureReason } from '../../shared/shell-path-hydration-types'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 import { SHELL_PATH_DELIMITER as DELIMITER, shellPathProbe } from './shell-path-probe'
@@ -10,9 +11,6 @@ import { WindowsShellPathOwnership, createWindowsPathKey } from './windows-shell
 
 // Loaded profiles measured 6-7s, exceeding 5s. Ten seconds extends Windows terminal/Git gating only for already-slow profiles; POSIX startup remains fire-and-forget.
 const SPAWN_TIMEOUT_MS = 10_000
-
-// Strip ANSI banners/prompts before parsing PATH.
-const ANSI_RE = /\x1b\[[0-9;?]*[A-Za-z]/g // eslint-disable-line no-control-regex
 
 // Share the telemetry failure taxonomy so resolve sites and schema cannot drift.
 export type HydrationResult =
@@ -70,7 +68,8 @@ export const resolveProfileLoadingFallbackShell = (): string | null =>
   configuredWindowsFallbackShell
 
 function parseCapturedPath(stdout: string, pathDelimiter: string = delimiter): string[] {
-  const cleaned = stdout.replace(ANSI_RE, '')
+  // Why: rc-file banners and colored prompts can leak escapes into the captured output.
+  const cleaned = stripAnsiEscapeSequences(stdout)
   const first = cleaned.indexOf(DELIMITER)
   if (first === -1) {
     return []
@@ -192,7 +191,9 @@ function spawnShellAndReadPath(shell: string): Promise<HydrationResult> {
       // Bound slow rc setup so agent discovery can fall back rather than wait forever.
       try {
         child.kill('SIGKILL')
-      } catch {}
+      } catch {
+        // ignore
+      }
       finish({ segments: [], ok: false, failureReason: 'timeout' })
     }, SPAWN_TIMEOUT_MS)
 

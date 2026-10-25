@@ -35,7 +35,6 @@ import {
   getOrcaProfileIndexPath,
   getOrcaProfileStateDatabaseFile
 } from '../orca-profiles/profile-storage-paths'
-import type { SshConnection } from '../ssh/connection/ssh-connection'
 import {
   emptyOrcadActivationRecord,
   orcadGcPinnedDirNames
@@ -60,6 +59,7 @@ import {
   hostServerTarget,
   locatePinnedNodeForTests
 } from './orcad-node-slot-fixture'
+import { unusedSshConnection } from '../ssh/unused-host-transport.test-fixture'
 
 const { execMock } = vi.hoisted(() => ({ execMock: vi.fn() }))
 vi.mock('../ssh/remote-exec/remote-exec-command', async (importOriginal) => ({
@@ -431,8 +431,7 @@ worker.on('error', (error) => { console.error(error); process.exitCode = 1 })
         const record = { ...emptyOrcadActivationRecord(), active: incoming.version }
         expect(orcadGcPinnedDirNames(record)).not.toContain(`orcad-${outgoing.version}`)
         await gcOldOrcadVersions({
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: execCommand is replaced by a local shell for every connection access.
-          conn: {} as SshConnection,
+          conn: unusedSshConnection(),
           host,
           remoteHome: caseRoot,
           currentDirAbsPath: incoming.dir,

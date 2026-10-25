@@ -348,7 +348,7 @@ function getLargestBackwardScrollJump(samples: readonly ScrollProbeSample[]): nu
 
 async function clickVisibleDiffLine(page: Page): Promise<void> {
   // After tab switch, wait for asynchronously painted Monaco lines rather than treating a transient empty view as failure.
-  let linePoint: { x: number; y: number } | null = null
+  let linePoint: { x: number; y: number } | null | undefined
   await expect
     .poll(
       async () => {

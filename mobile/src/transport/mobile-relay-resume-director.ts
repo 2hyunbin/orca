@@ -34,7 +34,7 @@ const ResolveResponseSchema = z
 export async function resolveMobileRelayEndpoint(args: {
   relay: MobileRelayEndpoint
   resumeToken: string
-  fetchImpl?: typeof fetch
+  fetchImpl?: (url: string, init: RequestInit) => Promise<Response>
   timeoutMs?: number
 }): Promise<MobileRelayEndpoint> {
   const controller = new AbortController()

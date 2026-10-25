@@ -14,6 +14,7 @@ import {
   parkUntilHostMirrorHandleLands,
   resetHostMirrorHandleGapWaitsForTests
 } from './host-mirror-handle-gap-wait'
+import { makeTerminalTab } from '../store/slices/worktrees-slice-test-fixtures'
 
 // Teardown must evict removed environments that will never record another verdict; recording-time pruning cannot reach them.
 
@@ -27,11 +28,13 @@ function parkAndExpire(environmentId: string, tabId: string): void {
   // Accumulate live rows so tab-death pruning cannot hide the teardown-only retention case.
   const state = useAppStore.getState()
   const published = state.tabsByWorktree[WORKTREE_ID] ?? []
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
   useAppStore.setState({
     ptyIdsByTabId: {},
     tabsByWorktree: {
-      [WORKTREE_ID]: [...published.filter((tab) => tab.id !== tabId), { id: tabId, title: tabId }]
+      [WORKTREE_ID]: [
+        ...published.filter((tab) => tab.id !== tabId),
+        makeTerminalTab({ id: tabId, worktreeId: WORKTREE_ID, title: tabId })
+      ]
     },
     // Bind each pane to its own environment or fixtures record empty identity and cannot answer verdict queries.
     terminalLayoutsByTabId: {
@@ -43,7 +46,7 @@ function parkAndExpire(environmentId: string, tabId: string): void {
         ptyIdsByLeafId: { [`leaf-${tabId}`]: `remote:${environmentId}@@term_${tabId}` }
       }
     }
-  } as never)
+  })
   parkUntilHostMirrorHandleLands(environmentId, WORKTREE_ID, tabId, () => {})
   vi.advanceTimersByTime(HOST_MIRROR_HANDLE_GAP_DEADLINE_MS)
 }
@@ -79,11 +82,14 @@ describe('host-mirror handle-gap verdicts across environment teardown', () => {
   // As with clearHostSessionMirrorHydration, re-pair replaces evidence without canceling recovery; bounded waiters must survive and replay.
   it('leaves a parked waiter alone, cancelling only the verdicts', () => {
     const replay = vi.fn()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
     useAppStore.setState({
       ptyIdsByTabId: {},
-      tabsByWorktree: { [WORKTREE_ID]: [{ id: 'web-terminal-host-tab-9', title: 'nine' }] }
-    } as never)
+      tabsByWorktree: {
+        [WORKTREE_ID]: [
+          makeTerminalTab({ id: 'web-terminal-host-tab-9', worktreeId: WORKTREE_ID, title: 'nine' })
+        ]
+      }
+    })
     parkUntilHostMirrorHandleLands(ENVIRONMENT_ID, WORKTREE_ID, 'web-terminal-host-tab-9', replay)
 
     clearHostMirrorHandleGapVerdictsForEnvironment(ENVIRONMENT_ID)

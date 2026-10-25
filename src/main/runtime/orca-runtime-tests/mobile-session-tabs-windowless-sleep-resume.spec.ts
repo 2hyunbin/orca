@@ -10,6 +10,7 @@ import {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../orca-runtime-test-fixtures.spec'
+import type { RuntimeStore } from '../runtime-store-contract'
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 // Pane-owned captures must not be resumed twice (#11598).
@@ -53,13 +54,12 @@ function withClaudeLaunchedTab(fixture: ReturnType<typeof makeWorkingSleepStore>
 }
 
 function openPane(
-  runtimeStore: unknown,
+  runtimeStore: RuntimeStore,
   windowStatus: 'blocked' | 'openable',
   opts: { spawn?: () => Promise<{ id: string }>; withWindow?: boolean; tap?: boolean } = {}
 ) {
   const spawn = vi.fn(opts.spawn ?? (() => Promise.resolve({ id: 'persisted-pty' })))
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+  const runtime = new OrcaRuntimeService(runtimeStore, undefined, {
     getDesktopWindowStatus: () => windowStatus
   })
   runtime.setPtyController({
@@ -75,8 +75,7 @@ function openPane(
     if (opts.withWindow) {
       runtime.attachWindow(TEST_WINDOW_ID)
       runtime.markGraphReady(TEST_WINDOW_ID)
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only isDestroyed from the window mock.
-      electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
+      electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false })
       await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
         notifyClients: false,
         clientKind: 'runtime'

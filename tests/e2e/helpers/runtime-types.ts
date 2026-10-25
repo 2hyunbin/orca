@@ -41,6 +41,8 @@ export type PaneManagerLike = {
   hasWebglRenderer(paneId: number): boolean
   getNumericIdForLeaf(leafId: string): number | null
   getLeafId(paneId: number): string | null
+  scheduleRevealRepaint(): void
+  scheduleRevealPresent(): void
 }
 
 export type ExplorerFileSummary = Pick<OpenFile, 'id' | 'filePath' | 'relativePath'>

@@ -95,7 +95,7 @@ describe('stage-all over the outbound frame cap', () => {
     )
   })
 
-  it('puts a readable message on the panel’s error surface, and stops being busy', async () => {
+  it('reports the oversized action and suggests fewer files, then stops being busy', async () => {
     const pair = createFakeBridgePortPair()
     await pair.flush()
     const setActionError = vi.fn()
@@ -140,6 +140,7 @@ describe('stage-all over the outbound frame cap', () => {
     expect(message).toBeTruthy()
     expect(message).toMatch(/[a-z]{4}/)
     expect(message).not.toMatch(/^bridge_/)
+    expect(message).toContain('fewer files')
     expect(setBusyAction.mock.calls.map(([value]) => value)).toEqual(['stage-all', null])
   })
 })

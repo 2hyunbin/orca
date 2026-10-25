@@ -39,8 +39,8 @@ test.describe('Tab Rename (Inline)', () => {
     const tabs = await getWorktreeTabs(page, worktreeId)
     const tab = tabs.find((entry) => entry.id === activeId)
     expect(tab).toBeDefined()
-    // Locate the visible customTitle ?? title value.
-    return tab!.customTitle ?? tab!.title ?? ''
+    // Why: getWorktreeTabs already folds customTitle into title, matching what the UI renders.
+    return tab!.title ?? ''
   }
 
   function tabLocatorByTitle(
@@ -302,8 +302,7 @@ test.describe('Tab Rename (Inline)', () => {
     const before = await Promise.all(
       tabs.map((tab) => tab.evaluate((element) => element.getBoundingClientRect().width))
     )
-    // Why: at the 88px shrink floor widths are stable for the wrong reason, and being above it is
-    // also what proves the definite tab width applied — so this fails first on a regression.
+    // Require width above the 88px shrink floor; otherwise stable widths can mask a failed definite tab width.
     expect(
       Math.min(...before),
       'tabs must be above the 88px shrink floor for the stability check to mean anything'

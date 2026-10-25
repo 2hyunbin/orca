@@ -99,7 +99,6 @@ describe('useVirtualizedScrollAnchor listener effect dependencies', () => {
     }
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getRowKey: (row) => row,
@@ -149,7 +148,6 @@ describe('useVirtualizedScrollAnchor listener effect dependencies', () => {
     }
 
     harness.beginRender()
-    // oxlint-disable-next-line react-hooks/rules-of-hooks -- test harness mocks React's hook dispatcher directly.
     useVirtualizedScrollAnchor({
       anchorRef,
       getRowKey: (row) => row,

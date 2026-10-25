@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import VoiceSettingsScreen from './voice-settings-screen'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
+import { findAllByHostType } from '../test-support/react-test-renderer-host-nodes'
 
 // Use the real focus-gated poller to verify rejected saves trigger a load; the sibling state test stubs it.
 vi.mock('react-native', () => ({
@@ -82,7 +83,7 @@ describe('voice settings poller integration', () => {
     })
     // Unfocused polling cannot start a read; initial state must prevent an error-card flash.
     expect(operations.load).not.toHaveBeenCalled()
-    expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(1)
+    expect(findAllByHostType(renderer.root, 'ActivityIndicator')).toHaveLength(1)
     expect(JSON.stringify(renderer.toJSON())).not.toContain('Failed to load voice settings')
   })
 
@@ -101,7 +102,7 @@ describe('voice settings poller integration', () => {
       renderer = create(createElement(VoiceSettingsScreen, { operations, focused: true, onBack }))
     })
     expect(JSON.stringify(renderer.toJSON())).toContain('Desktop unavailable')
-    expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(0)
+    expect(findAllByHostType(renderer.root, 'ActivityIndicator')).toHaveLength(0)
 
     await act(async () => {
       renderer.update(createElement(VoiceSettingsScreen, { operations, focused: false, onBack }))
@@ -111,7 +112,7 @@ describe('voice settings poller integration', () => {
     })
     expect((operations.load as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2)
     // Re-entry retry must replace the stale error with a spinner.
-    expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(1)
+    expect(findAllByHostType(renderer.root, 'ActivityIndicator')).toHaveLength(1)
     expect(JSON.stringify(renderer.toJSON())).not.toContain('Desktop unavailable')
   })
 

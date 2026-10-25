@@ -15,6 +15,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 // Without a recovered host image, idle differential TUIs need a real one-row resize then restoration; same-size SIGWINCH does not force Node repaint (#26887).
 
@@ -98,8 +99,7 @@ async function connectVisibleRemotePane(
   const deps = buildPaneConnectionDeps(() => mockStoreState, {
     isVisibleRef: { current: opts.visible ?? true }
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocks stub only the members connectPanePty reaches; a missing one fails the test.
-  const disposable = connectPanePty(pane as never, createManager(1) as never, deps as never)
+  const disposable = connectPanePty(...mockPanePtyArgs(pane, createManager(1), deps))
   await flushAsyncTicks(6)
   expect(onStreamRecovered).not.toBeNull()
   transport.resize.mockClear()

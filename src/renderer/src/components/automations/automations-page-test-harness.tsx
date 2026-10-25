@@ -1,6 +1,3 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for the 10 AutomationsPage specs, not shipped code, and it falls outside
-   the *.test / *.spec / tests glob set. Inlining these 13 stubs would duplicate them into all 10 specs and push the largest
-   past the max-lines ratchet. */
 /** Record child props to test page orchestration rather than presentation. Import this harness first so shared vi.mock registrations precede AutomationsPage loading. */
 
 import { act, createElement, StrictMode, type ReactNode } from 'react'

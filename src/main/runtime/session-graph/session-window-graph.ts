@@ -1,4 +1,3 @@
-/* eslint-disable unicorn/no-useless-spread */
 import { OrcaRuntimeWithAttachWindow } from './session-graph-promotion'
 import type {
   RuntimeRendererSyncWindowGraph,
@@ -317,7 +316,7 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     }
 
     // createTerminal waits for graph sync; drain callbacks only after updating leaves.
-    for (const cb of [...this.graphSyncCallbacks]) {
+    for (const cb of Array.from(this.graphSyncCallbacks)) {
       cb()
     }
 

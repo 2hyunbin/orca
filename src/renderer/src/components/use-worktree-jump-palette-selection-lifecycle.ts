@@ -121,15 +121,29 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
       activeGroupSnapshotRef.current = null
     }
     wasVisibleRef.current = visible
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs and state setters are stable.
   }, [
     activeBrowserTabId,
+    activeGroupSnapshotRef,
     activeTabType,
     activeWorktreeId,
     browserTabsByWorktree,
     createLookupGuard,
+    latestQueryRef,
+    listRef,
+    preserveCreateLookupOnCloseRef,
+    previousActiveTabTypeRef,
+    previousBrowserFocusTargetRef,
+    previousBrowserPageIdRef,
+    previousFocusElementRef,
+    previousWorktreeIdRef,
     recordFeatureInteraction,
-    visible
+    selectionMovedByUserRef,
+    setExpandedSectionCaps,
+    setQuery,
+    setSelectedItemId,
+    skipRestoreFocusRef,
+    visible,
+    wasVisibleRef
   ])
   const commandSelectedItemId =
     selectedItemId === CREATE_WORKTREE_ITEM_ID &&
@@ -179,8 +193,7 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
       setExpandedSectionCaps({})
       listRef.current?.scrollTo(0, 0)
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs and setters preserve their original stable identities.
-    []
+    [latestQueryRef, listRef, setExpandedSectionCaps, setQuery, setSelectedItemId]
   )
   const cancelFallbackFocusFrames = useCallback((): void => {
     if (fallbackFocusOuterFrameRef.current !== null) {
@@ -191,8 +204,7 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
       cancelAnimationFrame(fallbackFocusInnerFrameRef.current)
       fallbackFocusInnerFrameRef.current = null
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs preserve their original stable identities.
-  }, [])
+  }, [fallbackFocusInnerFrameRef, fallbackFocusOuterFrameRef])
   useEffect(() => cancelFallbackFocusFrames, [cancelFallbackFocusFrames])
   const focusFallbackSurface = useCallback(
     (preferredTarget?: HTMLElement | null) => {
@@ -205,8 +217,7 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
         })
       })
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs preserve their original stable identities.
-    [cancelFallbackFocusFrames]
+    [cancelFallbackFocusFrames, fallbackFocusInnerFrameRef, fallbackFocusOuterFrameRef]
   )
   const requestBrowserFocus = useCallback(
     (detail: { pageId: string; target: 'webview' | 'address-bar' }) => {
@@ -235,8 +246,17 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
         focusFallbackSurface(previousFocusElementRef.current)
       }
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs preserve their original stable identities.
-    [closeModal, focusFallbackSurface, requestBrowserFocus]
+    [
+      closeModal,
+      focusFallbackSurface,
+      previousActiveTabTypeRef,
+      previousBrowserFocusTargetRef,
+      previousBrowserPageIdRef,
+      previousFocusElementRef,
+      previousWorktreeIdRef,
+      requestBrowserFocus,
+      skipRestoreFocusRef
+    ]
   )
   return {
     hasAnyWorktrees,

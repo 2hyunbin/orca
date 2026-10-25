@@ -120,15 +120,9 @@ function instrumentFrames() {
   }
 }
 
-function centreOf(label) {
-  const leaf = [...document.querySelectorAll('*')].find(
-    (element) => element.childElementCount === 0 && element.textContent === label
-  )
-  if (!leaf) {
-    return null
-  }
-  const box = leaf.getBoundingClientRect()
-  return { x: Math.round(box.x + box.width / 2), y: Math.round(box.y + box.height / 2) }
+/** The header's Workspace options chip, by its own label. */
+function workspaceOptionsChip(page) {
+  return page.getByText('Workspace options', { exact: true })
 }
 
 describeDrawer('the bottom drawer on the page', () => {
@@ -161,29 +155,30 @@ describeDrawer('the bottom drawer on the page', () => {
         ).toBe(false)
         await page.waitForFunction(
           () => document.documentElement.dataset.orcaWebEntry === 'mounted',
+          undefined,
           { timeout: 30_000, polling: 250 }
         )
         // Use header’s Workspace options sheet; same drawer implementation without row-layout prerequisites.
-        const chip = await page.waitForFunction(centreOf, 'Workspace options', {
-          timeout: 30_000,
-          polling: 250
-        })
-        const at = await chip.jsonValue()
+        const chip = workspaceOptionsChip(page)
+        // Wait for actionability before resetting counters; CI WebKit dropped clicks sent as soon as the label existed.
+        await chip.click({ trial: true, timeout: 30_000 })
         // Reset counters at click so boot work cannot count as enter-animation activity.
         await page.evaluate(() => {
           globalThis.__rafAtClick = globalThis.__raf
           globalThis.__sheetWrites = 0
         })
-        await page.mouse.click(at.x, at.y)
+        await chip.click({ timeout: 10_000 })
         const opened = await page
           .waitForFunction(
             () => {
               const handle = document.querySelector('[aria-label="Dismiss drawer"]')
               return handle ? true : null
             },
+            undefined,
             { timeout: 10_000, polling: 100 }
           )
           .then(() => true)
+          .catch(() => false)
         expect(opened, errors.join(' | ')).toBe(true)
 
         // Wait for actual animation progress, not a fixed delay that labels a loaded healthy runner as parked; retain diagnostics on timeout.
@@ -195,6 +190,7 @@ describeDrawer('the bottom drawer on the page', () => {
                 ? true
                 : null
             },
+            undefined,
             { timeout: 15_000, polling: 50 }
           )
           .catch(() => null)
@@ -257,18 +253,16 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
       await page.goto(`${origin}/`, { waitUntil: 'load' })
       await page.waitForFunction(
         () => document.documentElement.dataset.orcaWebEntry === 'mounted',
+        undefined,
         { timeout: 30_000, polling: 250 }
       )
       // Closed sheet claims nothing; shell retains its existing pop fallback.
       expect(await page.evaluate(notifyNames)).not.toContain(backNames.claim)
 
-      const chip = await page.waitForFunction(centreOf, 'Workspace options', {
-        timeout: 30_000,
-        polling: 250
-      })
-      await page.mouse.click(...Object.values(await chip.jsonValue()))
+      await workspaceOptionsChip(page).click({ timeout: 30_000 })
       await page.waitForFunction(
         () => document.querySelector('[aria-label="Dismiss drawer"]') !== null,
+        undefined,
         { timeout: 10_000, polling: 100 }
       )
       const claimed = await page.waitForFunction(
@@ -285,10 +279,11 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
         globalThis.__orcaRenderCheckSendBack()
       })
       const closed = await page
-        .waitForFunction(() => document.querySelector('[aria-label="Dismiss drawer"]') === null, {
-          timeout: 10_000,
-          polling: 100
-        })
+        .waitForFunction(
+          () => document.querySelector('[aria-label="Dismiss drawer"]') === null,
+          undefined,
+          { timeout: 10_000, polling: 100 }
+        )
         .then(() => true)
         .catch(() => false)
       expect(

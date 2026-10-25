@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ExternalLink, FolderPlus, GitBranchPlus, Star, X } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAppStore } from '../store'
@@ -67,7 +67,7 @@ function GitHubStarButton({
     if (state !== 'not-starred') {
       return
     }
-    setState('starred') // optimistic
+    setState('starred')
     const ok = await window.api.gh.starOrca('landing')
     if (!ok) {
       if (mountedRef.current) {
@@ -138,6 +138,14 @@ function GitHubStarButton({
   )
 }
 
+function dismissedPreflightIssueIds(issues: PreflightIssue[], repos: readonly Repo[]): Set<string> {
+  return new Set(
+    issues
+      .filter((issue) => issue.dismissible && isPreflightIssueDismissed(issue.id, repos))
+      .map((issue) => issue.id)
+  )
+}
+
 function PreflightBanner({
   issues,
   repos
@@ -147,25 +155,16 @@ function PreflightBanner({
 }): React.JSX.Element | null {
   // Recheck dismissals when the GitHub project set changes so expired nudges can reappear.
   const githubKey = githubProjectKeys(repos).join('|')
-  const [dismissed, setDismissed] = useState<Set<string>>(
-    () =>
-      new Set(
-        issues
-          .filter((issue) => issue.dismissible && isPreflightIssueDismissed(issue.id, repos))
-          .map((issue) => issue.id)
-      )
+  const [dismissed, setDismissed] = useState<Set<string>>(() =>
+    dismissedPreflightIssueIds(issues, repos)
   )
 
+  // Reseed only when GitHub projects change; issues identity is stable and would reset transient dismissals each render.
+  const reseedDismissed = useEffectEvent(() =>
+    setDismissed(dismissedPreflightIssueIds(issues, repos))
+  )
   useEffect(() => {
-    setDismissed(
-      new Set(
-        issues
-          .filter((issue) => issue.dismissible && isPreflightIssueDismissed(issue.id, repos))
-          .map((issue) => issue.id)
-      )
-    )
-    // Reset only for project-set changes; render-stable issue data must not erase transient dismissal.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    reseedDismissed()
   }, [githubKey])
 
   const visibleIssues = issues.filter((issue) => !dismissed.has(issue.id))

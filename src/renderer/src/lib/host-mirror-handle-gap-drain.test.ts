@@ -8,6 +8,7 @@ import {
   parkUntilHostMirrorHandleLands,
   resetHostMirrorHandleGapWaitsForTests
 } from './host-mirror-handle-gap-wait'
+import { makeTerminalTab } from '../store/slices/worktrees-slice-test-fixtures'
 
 // Cover store-drain and deadline replays directly: one pane’s throw must not escape to mirror apply, sibling waiters or later subscribers; re-entry must not replay or release stale snapshots.
 
@@ -19,16 +20,13 @@ const SECOND_TAB_ID = 'web-terminal-host-tab-2'
 const initialAppStoreState = useAppStore.getState()
 
 function seedRows(): void {
-  // Layout bindings are seeded because a verdict names the PANE by the environment-minted PTY it
-  // held at park time. A pane with no binding never reaches the park path in production, and its
-  // verdict deliberately refuses to answer, so a fixture without one models nothing real.
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
+  // Seed the PTY binding held at park time: production cannot park an unbound pane, whose verdict refuses to answer.
   useAppStore.setState({
     ptyIdsByTabId: {},
     tabsByWorktree: {
       [WORKTREE_ID]: [
-        { id: FIRST_TAB_ID, title: 'one' },
-        { id: SECOND_TAB_ID, title: 'two' }
+        makeTerminalTab({ id: FIRST_TAB_ID, worktreeId: WORKTREE_ID, title: 'one' }),
+        makeTerminalTab({ id: SECOND_TAB_ID, worktreeId: WORKTREE_ID, title: 'two' })
       ]
     },
     terminalLayoutsByTabId: {
@@ -45,18 +43,17 @@ function seedRows(): void {
         ptyIdsByLeafId: { 'leaf-2': `remote:${ENVIRONMENT_ID}@@term_2` }
       }
     }
-  } as never)
+  })
 }
 
 /** The host publishes both panes' PTY handles on one frame: both waiters come due together. */
 function publishBothHandles(): void {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
   useAppStore.setState({
     ptyIdsByTabId: {
       [FIRST_TAB_ID]: [`remote:${ENVIRONMENT_ID}@@term_1`],
       [SECOND_TAB_ID]: [`remote:${ENVIRONMENT_ID}@@term_2`]
     }
-  } as never)
+  })
 }
 
 describe('host-mirror handle-gap drain', () => {
@@ -126,15 +123,14 @@ describe('host-mirror handle-gap drain', () => {
   it('does not release on retraction evidence a mid-drain adoption has already made stale', () => {
     const adoptedReplay = vi.fn()
     const ADOPTING_WORKTREE_ID = 'repo-1::/workspace/adopted'
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
     useAppStore.setState({
       tabsByWorktree: {
         [ADOPTING_WORKTREE_ID]: [
-          { id: FIRST_TAB_ID, title: 'one' },
-          { id: SECOND_TAB_ID, title: 'two' }
+          makeTerminalTab({ id: FIRST_TAB_ID, worktreeId: ADOPTING_WORKTREE_ID, title: 'one' }),
+          makeTerminalTab({ id: SECOND_TAB_ID, worktreeId: ADOPTING_WORKTREE_ID, title: 'two' })
         ]
       }
-    } as never)
+    })
     // Map order makes adoption invalidate the next waiter’s snapshot before release; reversing order must fail the case.
     parkUntilHostMirrorHandleLands(ENVIRONMENT_ID, ADOPTING_WORKTREE_ID, FIRST_TAB_ID, () => {
       // The adopting workspace re-parks its newly owned pane without any launch/store write.
@@ -147,13 +143,10 @@ describe('host-mirror handle-gap drain', () => {
     })
     parkUntilHostMirrorHandleLands(ENVIRONMENT_ID, WORKTREE_ID, SECOND_TAB_ID, adoptedReplay)
 
-    // The frame that starts the drain. The second tab is absent from the worktree its waiter is
-    // filed under, so the snapshot reads retraction — evidence the adoption above makes obsolete
-    // before the release loop reaches it.
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the seeded slice names only the store fields this suite drives; the rest of AppState keeps its defaults.
+    // The absent second tab reads as retracted; adoption above invalidates that snapshot before release.
     useAppStore.setState({
       ptyIdsByTabId: { [FIRST_TAB_ID]: [`remote:${ENVIRONMENT_ID}@@term_1`] }
-    } as never)
+    })
 
     expect(adoptedReplay).not.toHaveBeenCalled()
     expect(countParkedHostMirrorHandleGapPanesForTests()).toBe(1)

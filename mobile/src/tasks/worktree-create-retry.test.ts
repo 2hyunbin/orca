@@ -9,7 +9,6 @@ import {
   type WorktreeCreateIdempotencySupport
 } from './worktree-create-idempotency-policy'
 import { createWorktreeWithNameRetry } from './worktree-create-retry'
-import { AMBIGUOUS_RECONNECT_WAIT_MS } from './replay-on-ambiguous-delivery'
 import { WORKTREE_CREATE_TIMEOUT_MS } from './workspace-create-timeout'
 
 type Attempt = { method: string; params: Record<string, unknown> }
@@ -17,7 +16,7 @@ type Attempt = { method: string; params: Record<string, unknown> }
 const IDEMPOTENT_CREATE_SUPPORT = {
   dedupeTtlMs: WORKTREE_CREATE_DEDUPE_TTL_LEGACY_HOST_MS
 }
-const LEGACY_HOST_REPLAY_WINDOW_MS = getWorktreeCreateReplayWindowMs(IDEMPOTENT_CREATE_SUPPORT)
+const LEGACY_HOST_REPLAY_WINDOW_MS = 50_000
 
 // Model both pending-frame rejection and leaving connected; replay waits on transport recovery.
 function connectionController(): {
@@ -435,7 +434,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('surfaces the original ambiguity when the transport never comes back', async () => {
@@ -468,7 +467,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('stops replaying when the host-advertised dedupe record has expired', async () => {
@@ -542,7 +541,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('clamps a later reconnect wait to what is left of the replay window', async () => {
@@ -589,7 +588,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('refuses a replay when the ambiguity surfaced long after the last inbound frame', async () => {
@@ -627,7 +626,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('still replays a long-running create whose socket stayed live until it dropped', async () => {
@@ -667,7 +666,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('does not extend the replay window when the replacement session reports fresher inbound activity', async () => {
@@ -717,7 +716,7 @@ describe('createWorktreeWithNameRetry', () => {
     } finally {
       vi.useRealTimers()
     }
-    // Allow real macrotask yields during fake-time advances on loaded runners.
+    // Fake-timer advances yield real macrotasks; loaded runners can exceed Vitest’s 5s wall-clock budget.
   }, 30_000)
 
   it('does not replay a dropped transport error that was never marked delivery-unknown', async () => {
@@ -780,9 +779,8 @@ describe('createWorktreeWithNameRetry', () => {
 
   it('keeps the replay window strictly inside the host dedupe TTL', () => {
     // Reserve transit time inside the dedupe TTL so the last replay cannot arrive after expiry.
-    expect(LEGACY_HOST_REPLAY_WINDOW_MS).toBeGreaterThan(0)
-    expect(LEGACY_HOST_REPLAY_WINDOW_MS).toBeLessThan(WORKTREE_CREATE_DEDUPE_TTL_LEGACY_HOST_MS)
+    expect(getWorktreeCreateReplayWindowMs({ dedupeTtlMs: 60_000 })).toBe(50_000)
     const shortReplayWindowMs = getWorktreeCreateReplayWindowMs({ dedupeTtlMs: 20_000 })
-    expect(Math.min(AMBIGUOUS_RECONNECT_WAIT_MS, shortReplayWindowMs)).toBe(10_000)
+    expect(shortReplayWindowMs).toBe(10_000)
   })
 })

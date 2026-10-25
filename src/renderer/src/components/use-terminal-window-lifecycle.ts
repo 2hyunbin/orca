@@ -55,8 +55,7 @@ export function useTerminalWindowLifecycle(controller: TerminalActivationControl
       proceedToNativeWindowClose(isQuitting)
     })
     return () => setWindowCloseRequestHandler(null)
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- controller refs preserve their original stable identities.
-  }, [proceedToNativeWindowClose, queueEditorCloseRequests])
+  }, [proceedToNativeWindowClose, queueEditorCloseRequests, windowCloseAfterDirtyRef])
 
   // Initialize lazily: eager useRef arguments walk every browser page/tab again on every render.
   const prevBrowserWebviewIdsRef = useRef<Set<string>>(undefined!)

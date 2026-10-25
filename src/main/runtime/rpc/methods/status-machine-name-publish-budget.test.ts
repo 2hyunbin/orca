@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { normalizeMachineName } from '../../../../shared/machine-name'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { MACHINE_NAME_PUBLISH_WAIT_MS } from '../../runtime-machine-name'
-import type { RuntimeStore } from '../../runtime-store-contract'
 import { STATUS_METHODS } from './status'
+import { partialRuntimeStore } from '../../runtime-store-partial-fixture'
 
 // Use a fresh process before its memoized scutil lookup completes; control completion to exercise the publish deadline.
 const runProcessMock = vi.hoisted(() => vi.fn())
@@ -36,8 +36,7 @@ describe('status.get publish budget', () => {
           finishLookup = resolve
         })
     )
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only `getSettings` off the store during construction and status.
-    const runtime = new OrcaRuntimeService({ getSettings: () => ({}) } as RuntimeStore)
+    const runtime = new OrcaRuntimeService(partialRuntimeStore({ getSettings: () => ({}) }))
     expect(finishLookup).toBeTypeOf('function')
     const hostname = normalizeMachineName(os.hostname())
 

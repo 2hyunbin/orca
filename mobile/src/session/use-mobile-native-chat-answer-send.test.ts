@@ -22,6 +22,7 @@ import {
 } from './mobile-native-chat-terminal-write-lock'
 import { useMobileNativeChatAnswerSend } from './use-mobile-native-chat-answer-send'
 import { useNativeChatAcceptedAction } from './use-native-chat-action-outcomes'
+import { stubRpcClient } from '../transport/rpc-client-test-stub'
 
 type AnswerSend = ReturnType<typeof useMobileNativeChatAnswerSend>
 
@@ -109,8 +110,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     '%s single-select: sends the picked option number without a trailing Enter',
     async (agent) => {
       const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture exercises only the scripted sendRequest port.
-      await mount({ sendRequest } as unknown as RpcClient, vi.fn(), agent)
+      await mount(stubRpcClient({ sendRequest }), vi.fn(), agent)
 
       // Spaces is option 2 — the STA-1860 case where label text committed Tabs.
       await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
@@ -123,8 +123,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     '%s multi-select: toggles option numbers and confirms in paced steps',
     async (agent) => {
       const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This fixture exercises only the scripted sendRequest port.
-      await mount({ sendRequest } as unknown as RpcClient, vi.fn(), agent)
+      await mount(stubRpcClient({ sendRequest }), vi.fn(), agent)
 
       const prompt: AskPrompt = {
         questions: [
@@ -160,7 +159,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('multi-question: option numbers auto-advance, one final submit Enter', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     const prompt: AskPrompt = {
       questions: [
@@ -191,7 +190,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       vi.advanceTimersByTime(6_000)
       return acceptedResponse()
     })
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     const prompt: AskPrompt = {
       questions: [
@@ -217,7 +216,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('free text: opens "Type something", types the sanitized answer, then Enter', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     let result: Promise<boolean> | undefined
     await act(async () => {
@@ -237,7 +236,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('answers OpenClaude asks with Claude selector keystrokes', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'openclaude')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'openclaude')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
     expect(sendRequest).toHaveBeenCalledTimes(1)
@@ -246,7 +245,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('submits a Codex answer by option-number keystroke like Claude', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'codex')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'codex')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
     // Codex's request_user_input card ignores pasted labels; the digit selects AND commits.
@@ -256,7 +255,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('does not send a trailing Enter after Codex submits a multi-question answer', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'codex')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'codex')
     const prompt: AskPrompt = {
       questions: [
         { question: 'q1', multiSelect: false, options: [{ label: 'A' }, { label: 'B' }] },
@@ -281,7 +280,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('sends a Codex async answer as one ordinary message, not selector keystrokes', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'codex')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'codex')
     const prompt: AskPrompt = {
       replyAsMessage: true,
       questions: [{ question: 'Which color?', multiSelect: false, options: [{ label: 'Red' }] }]
@@ -295,7 +294,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('submits a non-selector answer as pasted label text with a single Enter', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'grok')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'grok')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
     expect(sendRequest).toHaveBeenCalledTimes(1)
@@ -304,7 +303,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('clears an orphaned image paste before an answer that commits with Enter (#10228)', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'grok')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'grok')
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
@@ -317,7 +316,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('keeps the marker for a selector answer, which cannot submit the composer', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'claude')
+    await mount(stubRpcClient({ sendRequest }), vi.fn(), 'claude')
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
@@ -335,7 +334,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       result: { send: { accepted: false } },
       _meta: { runtimeId: 'runtime' }
     })
-    await mount({ sendRequest } as unknown as RpcClient, onSendError, 'grok')
+    await mount(stubRpcClient({ sendRequest }), onSendError, 'grok')
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
@@ -353,7 +352,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       result: { send: { accepted: false } },
       _meta: { runtimeId: 'runtime' }
     })
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
     expect(sendRequest).toHaveBeenCalledTimes(1)
@@ -367,7 +366,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       vi.advanceTimersByTime(16_000)
       return acceptedResponse()
     })
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     const prompt: AskPrompt = {
       questions: [
@@ -393,7 +392,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     const sendRequest = vi
       .fn()
       .mockRejectedValue(markRpcDeliveryUnknown(new Error('Connection closed')))
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
     expect(onSendError).toHaveBeenCalledWith('Answer unconfirmed — check chat before retrying')
@@ -401,7 +400,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('rejects an empty selection without writing anything', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [] }])).resolves.toBe(false)
     expect(sendRequest).not.toHaveBeenCalled()
@@ -409,7 +408,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('cancels delayed keystrokes when the acknowledged input lease is lost', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     const prompt: AskPrompt = {
       questions: [
@@ -435,7 +434,7 @@ describe('useMobileNativeChatAnswerSend', () => {
   it('rejects an answer while another composed write holds the terminal', async () => {
     const onSendError = vi.fn()
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     expect(acquireMobileNativeChatTerminalWrite('terminal')).toBe(true)
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
@@ -449,7 +448,7 @@ describe('useMobileNativeChatAnswerSend', () => {
   it('answers again on the same handle after an earlier answer already landed', async () => {
     const onSendError = vi.fn()
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [0] }])).resolves.toBe(true)
     // A completed chain must vacate its turn slot or all later answers stay fenced.
@@ -460,7 +459,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
   it('fences a superseding answer after the cancelled chain moved the selector', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     const prompt: AskPrompt = {
       questions: [
@@ -499,7 +498,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           })
       )
       .mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     const prompt: AskPrompt = {
       questions: [
@@ -539,7 +538,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           })
       )
       .mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -576,7 +575,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           })
       )
       .mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -609,7 +608,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -644,7 +643,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -685,7 +684,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -719,7 +718,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError, 'grok')
+    await mount(stubRpcClient({ sendRequest }), onSendError, 'grok')
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -752,7 +751,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     let first: Promise<boolean> | undefined
     await act(async () => {
@@ -780,7 +779,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError, 'grok')
+    await mount(stubRpcClient({ sendRequest }), onSendError, 'grok')
 
     let first: Promise<boolean> | undefined
     await act(async () => {
@@ -808,7 +807,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, onSendError)
+    await mount(stubRpcClient({ sendRequest }), onSendError)
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined
@@ -848,7 +847,7 @@ describe('useMobileNativeChatAnswerSend', () => {
           settle.push(resolve)
         })
     )
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
+    await mount(stubRpcClient({ sendRequest }), vi.fn())
 
     let first: Promise<boolean> | undefined
     let second: Promise<boolean> | undefined

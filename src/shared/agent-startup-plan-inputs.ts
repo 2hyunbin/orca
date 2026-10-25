@@ -30,6 +30,7 @@ export type AgentStartupPlanInputs = {
   isRemote: boolean
   sessionOptions?: Record<string, SessionOptionValue>
   sessionOptionsOverrideAgentArgs: boolean
+  suppressStartupUpdatePrompt?: boolean
 }
 
 /** Share settings-to-launch mapping so hosts cannot omit precedence flags and let configured args override explicit model picks. Keep host, actual PTY shell and launch overrides as parameters. */
@@ -45,6 +46,8 @@ export function resolveAgentStartupPlanInputs(args: {
   /** Pass the actual PTY shell; omission is valid only when the Settings shell is what the PTY receives. */
   shell: AgentStartupShell | undefined
   sessionOptions?: Record<string, SessionOptionValue> | undefined
+  /** Orca types into this launch after start (worker, automation, handoff), not a user. */
+  suppressStartupUpdatePrompt?: boolean
 }): AgentStartupPlanInputs {
   const { agent, settings, platform, isRemote, sessionOptions } = args
   // Test absence: launch overrides win and null explicitly means no arguments.
@@ -79,6 +82,7 @@ export function resolveAgentStartupPlanInputs(args: {
     isRemote,
     ...(sessionOptions ? { sessionOptions } : {}),
     // Explicit session picks outrank configured args; duplicate flag spellings would otherwise let argv order decide.
-    sessionOptionsOverrideAgentArgs: Boolean(sessionOptions)
+    sessionOptionsOverrideAgentArgs: Boolean(sessionOptions),
+    ...(args.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {})
   }
 }

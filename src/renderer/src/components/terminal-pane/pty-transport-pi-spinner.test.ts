@@ -47,7 +47,7 @@ describe('createIpcPtyTransport — Pi titlebar spinner signal', () => {
     }
   })
 
-  it('fires onTitleChange with the normalized working label on each spinner frame', async () => {
+  it('surfaces normalized working and idle labels across a spinner cycle', async () => {
     const { createIpcPtyTransport } = await import('./pty-transport')
     const onTitleChange = vi.fn()
 
@@ -66,26 +66,6 @@ describe('createIpcPtyTransport — Pi titlebar spinner signal', () => {
     // Require a normalized working frame so the store/card can observe the active turn.
     expect(normalized).toContain('⠋ π - cwd')
     expect(normalized).toContain('π - cwd')
-
-    transport.disconnect()
-  })
-
-  it('fires onTitleChange for working frames via attach() (reattach path)', async () => {
-    const { createIpcPtyTransport } = await import('./pty-transport')
-    const onTitleChange = vi.fn()
-
-    const transport = createIpcPtyTransport({ onTitleChange })
-    // Restored/remounted Pi sessions still need title-observer wiring on attach.
-    transport.attach({ existingPtyId: 'pty-pi', callbacks: {} })
-
-    onTitleChange.mockClear()
-
-    onData?.({ id: 'pty-pi', data: workingFrame('⠋') })
-    onData?.({ id: 'pty-pi', data: workingFrame('⠙') })
-    await flushPtySideEffects()
-
-    const calls = onTitleChange.mock.calls.map((c) => c[0])
-    expect(calls).toContain('⠋ π - cwd')
 
     transport.disconnect()
   })

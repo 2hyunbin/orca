@@ -56,7 +56,7 @@ function createStartHarness(options: StartHarnessOptions = {}) {
 
 describe('startMobileDictationDesktopSession', () => {
   it('cancels a start a newer one superseded while the desktop session opened', async () => {
-    let setNewerStart = () => undefined
+    let setNewerStart: () => void = () => {}
     const harness = createStartHarness({
       sendRequest: async (method) => {
         if (method === 'speech.dictation.start') {
@@ -78,7 +78,7 @@ describe('startMobileDictationDesktopSession', () => {
   })
 
   it('returns to idle when a disable makes the start stale', async () => {
-    let setDisabled = () => undefined
+    let setDisabled: () => void = () => {}
     const harness = createStartHarness({
       sendRequest: async (method) => {
         if (method === 'speech.dictation.start') {
@@ -118,7 +118,7 @@ describe('startMobileDictationDesktopSession', () => {
   })
 
   it('leaves the capture alone when the failure is no longer the current start', async () => {
-    let setNewerStart = () => undefined
+    let setNewerStart: () => void = () => {}
     const harness = createStartHarness({
       sendRequest: async (method) => {
         if (method === 'speech.dictation.start') {

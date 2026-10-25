@@ -179,7 +179,7 @@ describe('remote runtime outage: toast flood and stuck reconnect (issue3)', () =
     stubRuntimeEnvironmentBridge({ call: runtimeCall, subscribe: runtimeSubscribe })
   })
 
-  it('sanity: the exact reported timeout+funnel toast text classifies as recoverable, so flood text must come from unclassified surfaces', async () => {
+  it('classifies the reported timeout with its Tailscale hint as recoverable', async () => {
     const { isRecoverableRemoteRuntimeConnectionError, toRemoteRuntimeClientErrorLike } =
       await import('../../../../shared/remote-runtime/remote-runtime-client-error-classification')
     const rendererSide = toRemoteRuntimeClientErrorLike(
@@ -196,7 +196,7 @@ describe('remote runtime outage: toast flood and stuck reconnect (issue3)', () =
     expect(isRecoverableRemoteRuntimeConnectionError(overload)).toBe(true)
   })
 
-  it('FLOOD: repeated identical outage-shaped send failures surface at most one red toast per pane', async () => {
+  it('suppresses repeated queue-overload send errors and backs off recovery', async () => {
     // Black-hole stream subscribe so typing falls back to one-shot RPCs rejected by main’s saturated queue.
     runtimeSubscribe.mockImplementation(async () => new Promise(() => {}))
     let sendRejections = 0
@@ -243,7 +243,7 @@ describe('remote runtime outage: toast flood and stuck reconnect (issue3)', () =
     transport.destroy?.()
   })
 
-  it('STUCK (cancel dead-end): a fatal resubscribe error leaves no recovery path after connectivity returns', async () => {
+  it('keeps manual recovery available after a fatal resubscribe error', async () => {
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const { retryAllRemoteRuntimePtyRecoveriesNow } =
       await import('./remote-runtime-pty-recovery-state')
@@ -311,7 +311,7 @@ describe('remote runtime outage: toast flood and stuck reconnect (issue3)', () =
     transport.destroy?.()
   })
 
-  it('STUCK (STA-3002 shape): reconnect never re-materializes a host surface demoted to pending-handle, even via online trigger and Reconnect', async () => {
+  it('re-materializes a pending host surface on online and manual recovery', async () => {
     vi.useFakeTimers()
     try {
       const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')

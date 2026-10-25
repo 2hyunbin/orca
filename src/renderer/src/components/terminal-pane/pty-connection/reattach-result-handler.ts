@@ -33,6 +33,7 @@ type ReattachResultSession = ReattachPayloadSession &
     ConnectPanePtySession,
     | 'agentCompletionCoordinator'
     | 'buildColdRestoreAgentResumeStartup'
+    | 'discardAgentPreReadyDraft'
     | 'mainStartAttach'
     | 'runtimeEnvironmentId'
     | 'activePanePtyBinding'
@@ -196,6 +197,8 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
     // Commit session identity before replay can admit queued spawn callbacks.
     session.activePanePtyBinding = ptyId
     session.activePanePtyBindingBoundAt = performance.now()
+    // Why discard: a cold restore can reach a bare shell that `--resume` is typed into next.
+    session.discardAgentPreReadyDraft?.()
     session.reportPanePtyVisibility(ptyId, session.deps.isVisibleRef.current)
     session.registerSideEffectFactConsumerForPty(ptyId)
     session.syncHiddenRendererPtyDelivery()

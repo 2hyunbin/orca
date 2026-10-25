@@ -3,7 +3,6 @@ import type { z } from 'zod'
 import {
   assignableUserListSchema,
   detailCheckListSchema,
-  DETAIL_FILE_STATUS,
   detailCommentListSchema,
   detailFileListSchema,
   reviewSummaryListSchema,
@@ -152,7 +151,15 @@ describe('a check row and a file row', () => {
   })
 
   it('carries every file status the host will accept back and drops one it would refuse', () => {
-    for (const status of DETAIL_FILE_STATUS) {
+    for (const status of [
+      'added',
+      'modified',
+      'removed',
+      'renamed',
+      'copied',
+      'changed',
+      'unchanged'
+    ]) {
       expect(reads(detailFileListSchema, [{ path: 'a', status }])[0]?.status).toBe(status)
     }
     // Absent status uses modified; forwarding an unknown arm would fail the host’s params validation.

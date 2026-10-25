@@ -37,6 +37,8 @@ type StartupEnvironment = {
   agentArgs?: string | null
   /** An automation's saved extras, merged over the launch's arguments. */
   extraAgentArgs?: string
+  /** Orca, not a user, types into this agent once it starts. */
+  suppressStartupUpdatePrompt?: boolean
   /** Caller-supplied telemetry attribution, validated leniently at the host boundary. */
   launchSource?: string
 }
@@ -166,6 +168,7 @@ export function buildWorktreeStartupForAgent(
     isRemote: repoIsRemote(repo),
     ...(environment.agentArgs !== undefined ? { agentArgs: environment.agentArgs } : {}),
     ...(environment.extraAgentArgs ? { extraAgentArgs: environment.extraAgentArgs } : {}),
+    ...(environment.suppressStartupUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {}),
     sessionOptions: environment.toSessionOptions(environment.launchPreferences)
   })
   const prompt = environment.prompt ?? ''
@@ -225,6 +228,7 @@ export function resolveWorktreeCreateAgentStartup(
     inputs: {
       agentArgs?: string | null
       extraAgentArgs?: string
+      suppressStartupUpdatePrompt?: boolean
       launchSource?: string
       onPromptCarry?: (carried: boolean) => void
     }
@@ -241,6 +245,7 @@ export function resolveWorktreeCreateAgentStartup(
   const built = build(args.startupAgent, args.startupPrompt, args.startupLaunchPreferences, {
     ...(args.startupAgentArgs !== undefined ? { agentArgs: args.startupAgentArgs } : {}),
     ...(args.startupExtraAgentArgs ? { extraAgentArgs: args.startupExtraAgentArgs } : {}),
+    ...(args.startupSuppressUpdatePrompt ? { suppressStartupUpdatePrompt: true } : {}),
     ...(args.startupLaunchSource ? { launchSource: args.startupLaunchSource } : {}),
     ...(args.onStartupPromptCarry ? { onPromptCarry: args.onStartupPromptCarry } : {})
   })

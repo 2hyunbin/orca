@@ -1,7 +1,7 @@
 // Fetch outlines only for visible panes with unloaded history and host support; key stale requests by epoch to avoid streaming churn, retry with backoff and fall back to loaded rows.
 
 import { useEffect, useState } from 'react'
-import type { AgentSessionConversationOutline } from '../../../../shared/agent-session-conversation-outline'
+import type { AgentSessionConversationOutline } from '../../../../shared/agent-session/agent-session-conversation-outline'
 import type { AgentJournalCursor } from '../../../../shared/agent-session-journal-types'
 import { agentSessionContextFloorSequence } from '../../../../shared/agent-session-context-clear'
 import type { StructuredAgentSessionState } from '../../../../shared/structured-agent-session-reducer'

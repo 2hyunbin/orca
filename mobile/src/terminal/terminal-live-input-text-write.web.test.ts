@@ -18,13 +18,7 @@ function mountInput(): HTMLInputElement {
   return input
 }
 
-describe('the native live-input write against an RN Web ref', () => {
-  it('throws, because a DOM node has no setNativeProps', () => {
-    expect(() => writeTerminalLiveInputText(refTo(mountInput()), 'typed')).toThrow(
-      /setNativeProps is not a function/
-    )
-  })
-
+describe('the native live-input write with an unmounted ref', () => {
   // The no-terminal route never reaches this write, so its render check alone could miss the native-method defect.
   it('writes nothing at all when the field has not mounted', () => {
     expect(() => writeTerminalLiveInputText(refTo(null), '')).not.toThrow()

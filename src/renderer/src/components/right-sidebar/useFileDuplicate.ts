@@ -65,7 +65,6 @@ export function useFileDuplicate({
         // Another process can claim the name after pathExists; retry exclusive-copy EEXIST failures with a bounded new-name search.
         const MAX_RETRIES = 10
         let retries = 0
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           try {
             operationGuard.assertCurrent()

@@ -21,7 +21,6 @@ import {
   type DirectoryCache,
   type FileExplorerRow
 } from './file-tree'
-import type { RpcFailure } from '../transport/types'
 import { colors, spacing } from '../theme/mobile-theme'
 import {
   beginDirectoryLoad,
@@ -114,8 +113,7 @@ export function MobileFileExplorerPanel(props: {
         })
         const directory = fileDirectoryRead.interpret(response)
         if (!directory.accepted) {
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this policy skips only a refusal, so an unaccepted reply is a failure envelope.
-          const refusal = (response as RpcFailure).error
+          const refusal = response.ok ? undefined : response.error
           // Older desktops lack readDir in the mobile allowlist; fall back to capped files.list.
           if (rootLoad && isMobileMethodUnavailableError(refusal?.code, refusal?.message)) {
             const legacyReply = await legacyFileListRead.request(client, {
@@ -139,8 +137,7 @@ export function MobileFileExplorerPanel(props: {
               return
             }
             throw new Error(
-              // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this policy skips only a refusal, so an unaccepted reply is a failure envelope.
-              (legacyReply as RpcFailure).error?.message ||
+              (legacyReply.ok ? undefined : legacyReply.error)?.message ||
                 refusal?.message ||
                 'Unable to load files'
             )
