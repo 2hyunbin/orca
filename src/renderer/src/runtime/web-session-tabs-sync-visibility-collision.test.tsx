@@ -409,7 +409,7 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
     hook.unmount()
   })
 
-  it('waits for a newer surviving-host frame before repairing shared state', async () => {
+  it("retires an omitted host's rows without waiting for a survivor's pending frame", async () => {
     const hook = renderHook(() => useWebSessionTabsSync())
     await act(settle)
     await publish(findGlobalSubscription(ENV_A), {
@@ -441,7 +441,7 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
     })
     const tabId = toWebTerminalSurfaceTabId('host-tab-b')
     expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([tabId])
-    expect(_getWebSessionTabsTrackingCountsForTest().freshness).toBe(2)
+    expect(_getWebSessionTabsTrackingCountsForTest().freshness).toBe(1)
 
     newerRecovery.resolve(makeTerminalSnapshot('-b', 2))
     await act(settle)
@@ -488,26 +488,28 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
       snapshots: [unrelatedSnapshot],
       authoritative: true
     })
+    const hostATabId = toWebTerminalSurfaceTabId('host-tab-a')
     const hostBTabId = toWebTerminalSurfaceTabId('host-tab-b')
-    expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([
-      hostBTabId
-    ])
+    const terminalTabIds = (): string[] | undefined =>
+      useAppStore
+        .getState()
+        .tabsByWorktree[WORKTREE]?.map((tab) => tab.id)
+        .sort()
+    // Each host's rows are its own, so A's stay until its omission is recorded.
+    expect(terminalTabIds()).toEqual([hostATabId, hostBTabId])
 
     staleRecovery.resolve(makeTerminalSnapshot('-a', 2))
     await act(settle)
-    expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([
-      hostBTabId
-    ])
+    expect(terminalTabIds()).toEqual([hostATabId, hostBTabId])
 
     slowInventoryRecovery.resolve(unrelatedSnapshot)
     await act(settle)
+    expect(terminalTabIds()).toEqual([hostBTabId])
     await publish(findGlobalSubscription(ENV_A, 1), {
       type: 'updated',
       ...makeTerminalSnapshot('-a', 3)
     })
-    expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([
-      toWebTerminalSurfaceTabId('host-tab-a')
-    ])
+    expect(terminalTabIds()).toEqual([hostATabId, hostBTabId])
     hook.unmount()
   })
 

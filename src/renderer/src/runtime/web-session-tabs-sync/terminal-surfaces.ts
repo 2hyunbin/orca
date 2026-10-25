@@ -277,7 +277,10 @@ export function shouldReplaceTerminalTab(
   }
   if (isMirroredTerminalSurfaceId(tab.id)) {
     // Why: host snapshots are authoritative for their own mirrored tabs; replace them even when the next surface still awaits a stream handle, else parity drifts.
-    return !isMirroredTerminalTabOfAnotherEnvironment(tab, environmentId, persistedLeafPtyIds)
+    return (
+      nextMirroredTerminalIds.has(tab.id) ||
+      !isMirroredTerminalTabOfAnotherEnvironment(tab, environmentId, persistedLeafPtyIds)
+    )
   }
   if (tab.pendingActivationSpawn && tab.ptyId === null && nextRemotePtyIds.size > 0) {
     // Why: a fresh placeholder has no identity, so the host's first terminal takes it over. A

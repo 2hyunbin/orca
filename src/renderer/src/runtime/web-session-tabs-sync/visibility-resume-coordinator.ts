@@ -159,7 +159,6 @@ export class VisibilityResumeCoordinator {
     for (const worktreeId of new Set(worktreeIds)) {
       const pendingMissing = batch.pendingMissingByWorktree.get(worktreeId)
       if (!pendingMissing) {
-        batch.deferredRepairWorktrees.delete(worktreeId)
         continue
       }
       for (const [environmentId, missing] of pendingMissing) {
@@ -171,7 +170,6 @@ export class VisibilityResumeCoordinator {
       }
       if (pendingMissing.size === 0) {
         batch.pendingMissingByWorktree.delete(worktreeId)
-        batch.deferredRepairWorktrees.delete(worktreeId)
         continue
       }
       const missingEnvironmentIds = new Set(pendingMissing.keys())
@@ -180,25 +178,21 @@ export class VisibilityResumeCoordinator {
         snapshot: RuntimeMobileSessionTabsResult
         runtimeId?: string
       }[] = []
-      let canRepair = true
+      // A tombstone retires only its own host's rows (#31983), so it need not wait for a survivor
+      // whose recovery is still pending; survivors that have a frame are replayed beside it.
       for (const environmentId of sessionTabsEnvironmentsByWorktree.get(worktreeId) ?? []) {
         if (missingEnvironmentIds.has(environmentId)) {
           continue
         }
         const entry = this.replayableEntry(batch, environmentId, worktreeId)
         if (!entry) {
-          canRepair = false
-          break
+          continue
         }
         survivingSnapshots.push({
           environmentId,
           snapshot: entry.snapshot,
           ...(entry.runtimeId ? { runtimeId: entry.runtimeId } : {})
         })
-      }
-      if (!canRepair) {
-        batch.deferredRepairWorktrees.add(worktreeId)
-        continue
       }
       for (const missing of pendingMissing.values()) {
         operations.push({
@@ -215,7 +209,6 @@ export class VisibilityResumeCoordinator {
         batch.environments.get(environmentId)?.pendingMissingWorktrees.delete(worktreeId)
       }
       batch.pendingMissingByWorktree.delete(worktreeId)
-      batch.deferredRepairWorktrees.delete(worktreeId)
     }
     applyVisibilityResumeRepairs(batch, operations)
     this.finishIfIdle(batch)
@@ -237,9 +230,7 @@ export class VisibilityResumeCoordinator {
     const key = sessionTabsFreshnessKey(environmentId, snapshot.worktree)
     const existing = this.replayableSnapshot(batch, environmentId, snapshot.worktree)
     const freshness = latestSessionTabsSnapshotByWorktree.get(key)
-    const crossHost =
-      (sessionTabsEnvironmentsByWorktree.get(snapshot.worktree)?.size ?? 0) > 1 ||
-      batch.deferredRepairWorktrees.has(snapshot.worktree)
+    const crossHost = (sessionTabsEnvironmentsByWorktree.get(snapshot.worktree)?.size ?? 0) > 1
     if (
       (snapshot as { removed?: unknown }).removed === true ||
       snapshot.tabs.length === 0 ||

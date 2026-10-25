@@ -34,7 +34,6 @@ export type VisibilityResumeBatch = {
   environments: Map<string, VisibilityResumeEnvironment>
   pendingInventoryCount: number
   pendingMissingByWorktree: Map<string, Map<string, VisibilityResumeMissing>>
-  deferredRepairWorktrees: Set<string>
   trackedWorktreeIds: ReadonlySet<string>
   reapplyableSnapshotsByKey: Map<
     string,
