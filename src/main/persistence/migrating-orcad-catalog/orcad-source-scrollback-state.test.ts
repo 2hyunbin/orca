@@ -7,7 +7,6 @@ import type { OrcadMigrationTerminalScrollbackSnapshot } from '../../../shared/o
 import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
 import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import {
-  getTerminalScrollbackSnapshotPath,
   makeTerminalScrollbackSnapshotRef,
   type TerminalScrollbackSnapshotStorage
 } from '../../terminal-scrollback-snapshots'
@@ -29,27 +28,32 @@ let storage: TerminalScrollbackSnapshotStorage
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'orcad-source-scrollback-'))
-  storage = { snapshotRoot: join(root, 'terminal-scrollback') }
-  mkdirSync(storage.snapshotRoot!, { recursive: true })
+  storage = { snapshotRoot: join(root, 'primary'), fallbackSnapshotRoot: join(root, 'fallback') }
+  mkdirSync(join(root, 'primary'))
+  mkdirSync(join(root, 'fallback'))
 })
 
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 function project(layout: Partial<TerminalLayoutSnapshot>) {
-  const session = {
-    ...getDefaultWorkspaceSession(),
-    terminalLayoutsByTabId: {
-      'tab-1': { root: null, activeLeafId: null, expandedLeafId: null, ...layout }
-    }
-  }
-  return projectOrcadMigrationSessionScrollback(session, storage)
+  return projectOrcadMigrationSessionScrollback(
+    {
+      ...getDefaultWorkspaceSession(),
+      terminalLayoutsByTabId: {
+        'tab-1': { root: null, activeLeafId: null, expandedLeafId: null, ...layout }
+      }
+    },
+    storage
+  )
 }
 
-function storedRef(leafId: string, size: number): string {
+function storeSnapshot(leafId: string, contents: string | number, dir = 'primary'): string {
   const ref = makeTerminalScrollbackSnapshotRef('tab-1', leafId)
-  const path = getTerminalScrollbackSnapshotPath(ref, storage)!
-  writeFileSync(path, '')
-  truncateSync(path, size)
+  const path = join(root, dir, `${ref}.bin`)
+  writeFileSync(path, typeof contents === 'string' ? contents : '')
+  if (typeof contents === 'number') {
+    truncateSync(path, contents)
+  }
   return ref
 }
 
@@ -59,7 +63,7 @@ describe('orcad source scrollback projection', () => {
       buffersByLeafId: { 'leaf-empty': '' },
       scrollbackRefsByLeafId: {
         'leaf-deleted': makeTerminalScrollbackSnapshotRef('tab-1', 'leaf-deleted'),
-        'leaf-zero': storedRef('leaf-zero', 0)
+        'leaf-zero': storeSnapshot('leaf-zero', 0)
       }
     })
 
@@ -68,10 +72,26 @@ describe('orcad source scrollback projection', () => {
     expect(projected.session.terminalLayoutsByTabId['tab-1'].scrollbackRefsByLeafId).toBeUndefined()
   })
 
+  it('carries history from the fallback root when the primary copy is empty or missing', () => {
+    const zeroRef = storeSnapshot('leaf-zero', 0)
+    storeSnapshot('leaf-zero', 'zero', 'fallback')
+    const missingRef = storeSnapshot('leaf-missing', 'missing', 'fallback')
+
+    const projected = project({
+      scrollbackRefsByLeafId: { 'leaf-zero': zeroRef, 'leaf-missing': missingRef }
+    })
+
+    expect(projected.blockedItems).toEqual([])
+    expect(projected.snapshots.map((snapshot) => [snapshot.leafId, snapshot.byteLength])).toEqual([
+      ['leaf-missing', 7],
+      ['leaf-zero', 4]
+    ])
+  })
+
   it('still blocks the move on saved history it cannot read', () => {
     const projected = project({
       scrollbackRefsByLeafId: {
-        'leaf-big': storedRef('leaf-big', TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT + 1)
+        'leaf-big': storeSnapshot('leaf-big', TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT + 1)
       }
     })
 

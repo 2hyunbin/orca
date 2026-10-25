@@ -19,7 +19,6 @@ import {
   TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT
 } from '../shared/terminal-scrollback-limits'
 import { errorMessage } from '../shared/error-message'
-import { isMissingPathError } from './window/owned-temp-staging-root'
 
 const SNAPSHOT_DIR_NAME = 'terminal-scrollback'
 const REF_PREFIX = 'v1'
@@ -93,17 +92,16 @@ export function readTerminalScrollbackStoredSnapshotSync(
   let unreadable = paths.length === 0
   for (const path of paths) {
     try {
-      const size = statSync(path).size
-      if (size <= 0) {
-        return unreadable ? null : 'absent'
-      }
-      if (size > TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT) {
+      if (statSync(path).size > TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT) {
         return null
       }
-      return readFileSync(path)
+      const bytes = readFileSync(path)
+      // An empty file holds no history, but another root may.
+      if (bytes.length > 0) {
+        return bytes
+      }
     } catch (error) {
-      // Try the next snapshot root when this read fails.
-      unreadable ||= !isMissingPathError(error)
+      unreadable ||= !(error instanceof Error && 'code' in error && error.code === 'ENOENT')
     }
   }
   return unreadable ? null : 'absent'
