@@ -184,8 +184,8 @@ describeDrawer('the bottom drawer on the page', () => {
         // The Workspace options sheet, not the row's action sheet: both are the same MountedBottomDrawer, and
         // this one opens from the header, which needs nothing of the list's own layout.
         const chip = workspaceOptionsChip(page)
-        // Actionability first, without the click: CI's WebKit dropped a coordinate click sent the
-        // moment the label existed (1 in 41), so the click waits until the chip is stable and hit.
+        // Not redundant with the click below: it waits out actionability (CI's WebKit dropped a click
+        // sent the moment the label existed) so the counter reset runs right before the input.
         await chip.click({ trial: true, timeout: 30_000 })
         // Both counters start at the click, so what they measure is the enter animation's window
         // and not everything the page did while it was booting.
@@ -204,6 +204,7 @@ describeDrawer('the bottom drawer on the page', () => {
             { timeout: 10_000, polling: 100 }
           )
           .then(() => true)
+          .catch(() => false)
         expect(opened, errors.join(' | ')).toBe(true)
 
         // Wait for the animation to arrive rather than for a clock. A fixed pause makes the pin
