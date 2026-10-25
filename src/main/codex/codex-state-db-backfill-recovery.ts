@@ -217,7 +217,7 @@ function settleRecoveryEntry(
     coordinatorFailureCounts.delete(key)
     gaveUpRecoveryKeys.add(key)
     console.warn(
-      `[codex-state-db-backfill] Codex never indexed ${key}; a codex wrapper on PATH that sets CODEX_HOME can cause this`
+      `[codex-state-db-backfill] Codex session index rebuild gave up for ${key}; a codex wrapper on PATH that sets CODEX_HOME can cause this`
     )
     return
   }
