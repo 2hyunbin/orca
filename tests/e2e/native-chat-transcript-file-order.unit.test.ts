@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { NativeChatMessage } from '../../src/shared/native-chat-types'
 import { projectNativeChatTranscriptMessages } from '../../src/shared/native-chat-transcript-projection'
+import { createNativeChatMerger, replaceList } from '../../src/shared/native-chat-merge'
 import { readNativeChatTranscript } from '../../src/main/native-chat/transcript-reader'
 import {
   readNativeChatTranscriptTail,
@@ -166,6 +167,48 @@ describe('canonical source positions', () => {
     }
     return result
   }
+
+  it('retains reader-produced tied image pages through prepend, append and reconnect into bubbles', async () => {
+    const { applyMobileNativeChatStreamFrame } =
+      await import('../../mobile/src/session/mobile-native-chat-stream-frame')
+    const { foldMobileNativeChatMessages } =
+      await import('../../mobile/src/session/mobile-native-chat-render-data')
+    const filePath = await transcriptFile(
+      lines(
+        ...[
+          ['z-source', '[Image: source: /tmp/first.png]'],
+          ['z-prompt', 'first [Image #1]'],
+          ['a-source', '[Image: source: /tmp/second.png]'],
+          ['a-prompt', 'second [Image #1]']
+        ].map(([id, text]) => record(id, '2026-06-01T10:00:00Z', text, 'user'))
+      )
+    )
+    const tail = await read(filePath, 1)
+    const older = await read(filePath, 3, tail.beforeOffset)
+    const merger = createNativeChatMerger()
+    const frame = (
+      type: 'snapshot' | 'appended',
+      messages: NativeChatMessage[],
+      replaceSnapshot = false
+    ) =>
+      applyMobileNativeChatStreamFrame({
+        merger,
+        frame: { type, messages, hasMore: true },
+        limit: 100,
+        replaceSnapshot
+      })
+    frame('snapshot', tail.messages, true)
+    replaceList(merger, [...older.messages, ...merger.list])
+    frame('appended', tail.messages)
+    frame('snapshot', tail.messages)
+    const bubbles = foldMobileNativeChatMessages(merger.list, 'claude')
+    expect(bubbles.map((row) => row.id)).toEqual(['z-prompt', 'a-prompt'])
+    expect(
+      bubbles.map((row) =>
+        row.blocks.filter((block) => block.type === 'image-ref').map((block) => block.path)
+      )
+    ).toEqual([['/tmp/first.png'], ['/tmp/second.png']])
+  })
 
   it.each(['tied', 'backward', 'null'] as const)(
     'keeps absolute UTF8/CRLF positions across full, older and partial append reads (%s)',

@@ -5,49 +5,29 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 
-// Separate transports per owner make host changes observable.
-const { transportFactory, getMockTransport, resetMockTransports } = vi.hoisted(() => {
-  type MockTransport = {
-    readSession: ReturnType<typeof vi.fn>
-    subscribe: ReturnType<typeof vi.fn>
-    unsubscribe: ReturnType<typeof vi.fn>
-    emit: (frame: unknown) => void
-  }
-  const transports = new Map<string | null, MockTransport>()
-  // Disable autoSnapshot for an unflushed transcript with a silent resolve poll; only readSession can settle it (#8401).
-  const getMockTransport = (
-    ownerId: string | null,
-    opts?: { autoSnapshot?: boolean }
-  ): MockTransport => {
-    let transport = transports.get(ownerId)
-    if (!transport) {
-      const unsubscribe = vi.fn()
-      let listener: (frame: unknown) => void = () => {}
-      transport = {
-        unsubscribe,
-        readSession: vi.fn().mockResolvedValue({ messages: [] }),
-        subscribe: vi.fn((_args, onFrame) => {
-          listener = onFrame
-          if (opts?.autoSnapshot !== false) {
-            onFrame({ type: 'snapshot', messages: [], hasMore: false })
-          }
-          return unsubscribe
-        }),
-        emit: (frame) => listener(frame)
-      }
-      transports.set(ownerId, transport)
-    }
-    return transport
+const { transport, resetTransport } = vi.hoisted(() => {
+  let listener: (frame: unknown) => void = () => {}
+  const unsubscribe = vi.fn()
+  const transport = {
+    unsubscribe,
+    readSession: vi.fn(),
+    subscribe: vi.fn((_args, onFrame) => {
+      listener = onFrame
+      return unsubscribe
+    }),
+    emit: (frame: unknown) => listener(frame)
   }
   return {
-    getMockTransport,
-    resetMockTransports: () => transports.clear(),
-    transportFactory: vi.fn((ownerId: string | null) => getMockTransport(ownerId))
+    transport,
+    resetTransport: () => {
+      listener = () => {}
+      transport.readSession.mockReset()
+    }
   }
 })
 
 vi.mock('../../src/renderer/src/components/native-chat/native-chat-session-transport', () => ({
-  getNativeChatSessionTransport: transportFactory
+  getNativeChatSessionTransport: () => transport
 }))
 
 import {
@@ -96,7 +76,7 @@ describe('useNativeChatLiveSession — file watcher pagination composition', () 
     }
     latest = null
     vi.clearAllMocks()
-    resetMockTransports()
+    resetTransport()
   })
 
   it('keeps the original watcher append after a real 300-to-500 loadEarlier', async () => {
@@ -117,7 +97,6 @@ describe('useNativeChatLiveSession — file watcher pagination composition', () 
         message: { role: 'assistant', content: `reply ${n}` }
       })}\n`
     await writeFile(filePath, Array.from({ length: 500 }, (_, i) => line(i + 1)).join(''))
-    const transport = getMockTransport('env-history', { autoSnapshot: false })
     transport.readSession.mockImplementation((_agent, _session, limit) =>
       readNativeChatTranscriptTail({
         agent: AGENT,
