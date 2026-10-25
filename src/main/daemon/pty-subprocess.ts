@@ -85,7 +85,9 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
       cols: size.cols,
       rows: size.rows,
       windowsFallbackAttempts: launch.windowsFallbackAttempts,
-      startupCommandInShellArgs: launch.startupCommandDeliveredInShellArgs,
+      // User-configured shell args can carry a command (`pwsh -Command ...`); never respawn those.
+      primaryArgsRespawnSafe:
+        !launch.startupCommandDeliveredInShellArgs && !opts.terminalShellArgs?.length,
       onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy,
       ...(opts.cancelSignal ? { signal: opts.cancelSignal } : {})
     })

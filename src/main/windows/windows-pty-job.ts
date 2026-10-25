@@ -33,6 +33,8 @@ type ConptyNative = {
   assignCurrentProcessToJob: () => boolean
   /** Absent on builds that predate the terminal process ceiling. */
   setActiveProcessLimit?: (limit: number) => boolean
+  /** Closes the pseudoconsole; the patch makes a repeat call a no-op. */
+  kill?: (id: number, useConptyDll: boolean) => void
 }
 
 type SelfOwnedPty = IPty & {
@@ -254,4 +256,21 @@ export function __setConptyJobNativeForTests(loader?: () => ConptyNative | null)
   nativeLoader = loader ?? loadConptyNative
   cachedNative = undefined
   hostJobAssigned = null
+}
+
+/**
+ * Closes a ConPTY's pseudoconsole now. node-pty defers its own kill() until the pane's first
+ * output, so a pane discarded before printing would otherwise keep its console host forever.
+ */
+export function closePseudoConsoleNow(proc: IPty): void {
+  const target = ptyJobTarget(proc)
+  const native = nativeLoader()
+  if (!target || typeof native?.kill !== 'function') {
+    return
+  }
+  try {
+    native.kill(target.id, true)
+  } catch {
+    // Teardown is best effort; the host job still reaps the console host with the daemon.
+  }
 }

@@ -32,8 +32,8 @@ export async function spawnNativeDaemonPty(args: {
   cols: number
   rows: number
   windowsFallbackAttempts: WindowsShellSpawnAttempt[]
-  /** The primary shell's argv carries the startup command. */
-  startupCommandInShellArgs?: boolean
+  /** The primary shell's argv is Orca's interactive default, so a respawn cannot repeat a command. */
+  primaryArgsRespawnSafe?: boolean
   signal?: AbortSignal
   onMacosTccSpawnStrategy?: (strategy: 'wrapped' | 'direct') => void
 }): Promise<SpawnedDaemonPty> {
@@ -68,14 +68,14 @@ export async function spawnNativeDaemonPty(args: {
     shellPath: string,
     shellArgs: string[],
     cwd: string,
-    commandInShellArgs: boolean
+    respawnSafe: boolean
   ): Promise<SpawnedNativePty> => {
     if (process.platform !== 'win32') {
       return { proc: await spawnOnce(shellPath, shellArgs, cwd) }
     }
     return spawnConptyWithInputReader(() => spawnOnce(shellPath, shellArgs, cwd), {
       label: shellPath,
-      commandInShellArgs,
+      respawnSafe,
       ...(args.signal ? { signal: args.signal } : {})
     })
   }
@@ -85,7 +85,7 @@ export async function spawnNativeDaemonPty(args: {
       args.shellPath,
       args.shellArgs,
       args.spawnCwd,
-      args.startupCommandInShellArgs === true
+      args.primaryArgsRespawnSafe === true
     )
     return {
       process: spawned.proc,
@@ -105,7 +105,7 @@ export async function spawnNativeDaemonPty(args: {
           attempt.shellPath,
           attempt.shellArgs,
           attempt.effectiveCwd,
-          attempt.startupCommandDeliveredInShellArgs === true
+          args.primaryArgsRespawnSafe === true && !attempt.startupCommandDeliveredInShellArgs
         )
         const message = primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
         console.warn(

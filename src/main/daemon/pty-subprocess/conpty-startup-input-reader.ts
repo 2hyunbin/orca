@@ -1,5 +1,5 @@
 import type * as pty from 'node-pty'
-import { terminatePtyJob } from '../../windows/windows-pty-job'
+import { closePseudoConsoleNow, terminatePtyJob } from '../../windows/windows-pty-job'
 
 // Bundled ConPTY queries DA1 (or CPR when inheriting the cursor) right after it starts reading
 // input, and before relaying any client output. A pane without it never reads keyboard input.
@@ -111,8 +111,15 @@ async function decideConptyStartup(
 
 function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>): void {
   watch.claim()
-  // The job reaps anything the shell already started; kill closes the pseudoconsole and its host.
-  terminatePtyJob(proc)
+  // The job reaps anything the shell already started; without one, the shell is all there is.
+  if (terminatePtyJob(proc) !== 'terminated') {
+    try {
+      process.kill(proc.pid)
+    } catch {
+      // Already gone.
+    }
+  }
+  closePseudoConsoleNow(proc)
   proc.kill()
 }
 
@@ -120,12 +127,8 @@ function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>)
 // it, a missing one may mean a newer build changed its startup, not that input is dead.
 let announcementObserved = false
 let announcementUntrusted = false
+// Logged with each respawn so a misfiring check shows up as a climbing count in the daemon log.
 let respawnCount = 0
-
-/** Respawns since daemon start; a sudden rise means the announcement check misfires. */
-export function conptyNoInputReaderRespawnCount(): number {
-  return respawnCount
-}
 
 /** Test seam: reset the process-wide trust in the announcement. */
 export function _resetConptyStartupTrustForTest(): void {
@@ -150,8 +153,9 @@ export async function spawnConptyWithInputReader(
   opts: {
     label: string
     signal?: AbortSignal
-    /** The shell already received its command in argv; a respawn would run it twice. */
-    commandInShellArgs: boolean
+    /** Respawn only shells started with Orca's own interactive argv: any other argv may run a
+     *  command (`pwsh -Command`, `cmd /c`, a startup command), and a respawn would run it twice. */
+    respawnSafe: boolean
   }
 ): Promise<{ proc: pty.IPty; claimStartupEvents: () => ConptyStartupEvents }> {
   const first = await spawn()
@@ -165,7 +169,7 @@ export async function spawnConptyWithInputReader(
   if (firstStartup.outcome !== 'no-input-reader') {
     return { proc: first, claimStartupEvents: firstStartup.claim }
   }
-  if (opts.commandInShellArgs) {
+  if (!opts.respawnSafe) {
     console.warn(`[daemon/pty] ConPTY for "${opts.label}" started without an input reader`)
     const claim = firstStartup.claim
     return { proc: first, claimStartupEvents: announcementObserved ? withNotice(claim) : claim }
@@ -190,6 +194,6 @@ export async function spawnConptyWithInputReader(
     return { proc: retry, claimStartupEvents: retryStartup.claim }
   }
   console.warn(`[daemon/pty] ConPTY for "${opts.label}" again started without an input reader`)
-  // Once only: a second dead pane says so on screen instead of silently ignoring keystrokes.
+  // After one respawn, show the failure on screen instead of silently ignoring keystrokes.
   return { proc: retry, claimStartupEvents: withNotice(retryStartup.claim) }
 }

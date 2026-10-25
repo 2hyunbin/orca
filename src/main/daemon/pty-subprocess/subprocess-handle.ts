@@ -105,6 +105,10 @@ export function createDaemonPtySubprocessHandle(args: {
     }
   })
   nativeProc.on?.('close', retireMaster)
+  // node-pty may have retired its master while Windows startup was confirmed, before these listeners.
+  if (args.startupEvents && nativeProc._writable === false) {
+    retireMaster()
+  }
   const acceptExit = ({ exitCode, signal }: { exitCode: number; signal?: number }): void => {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true
