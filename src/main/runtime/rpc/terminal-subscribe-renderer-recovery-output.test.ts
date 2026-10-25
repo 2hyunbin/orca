@@ -100,7 +100,11 @@ describe('terminal subscribe renderer recovery output ordering', () => {
       .map((frame) => decodeTerminalStreamText(frame!.payload))
       .join('')
     expect(snapshot).toBe('restored history')
-    expect(rendererSerializeCalls).toBe(2)
+    // The third read seeds main's model at desktop depth.
+    expect(rendererSerializeCalls).toBe(3)
+    expect(runtime.serializeRendererTerminalBuffer).toHaveBeenLastCalledWith('pty-output-race', {
+      scrollbackRows: 5000
+    })
 
     runtime.cleanupSubscription('terminal-output-race:phone-output-race')
     await dispatchPromise

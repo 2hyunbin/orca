@@ -14,6 +14,7 @@ import type {
   TerminalSubscribeBinaryState,
   TerminalSubscriptionArgs
 } from './terminal-subscribe-types'
+import { desktopDepthModelSeed } from './desktop-depth-model-snapshot'
 
 const MOBILE_RENDERER_MOUNT_READY_TIMEOUT_MS = 3_000
 
@@ -140,6 +141,10 @@ export async function publishTerminalSubscribeBinarySnapshot(
       (typeof stableRendererSnapshot.seq === 'number' || state.pendingOutput.length === 0)
     ) {
       serialized = stableRendererSnapshot
+      const modelSeed = await desktopDepthModelSeed(runtime, ptyId, stableRendererSnapshot)
+      if (state.closed) {
+        return
+      }
       const trailingOutput = state.pendingOutput.flatMap((item) => {
         const output = getOutputAfterSnapshotSeq(item, stableRendererSnapshot.seq)
         const seq = item.meta?.seq
@@ -147,7 +152,7 @@ export async function publishTerminalSubscribeBinarySnapshot(
       })
       runtime.replaceHeadlessTerminalFromRendererSnapshotForRecovery(
         ptyId,
-        stableRendererSnapshot,
+        modelSeed,
         trailingOutput
       )
     }

@@ -7,6 +7,7 @@ import {
   MOBILE_SNAPSHOT_BYTE_BUDGET,
   MOBILE_SUBSCRIBE_SCROLLBACK_ROWS
 } from '../../../scrollback-limits'
+import { DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT } from '../../../../../shared/terminal-scrollback-policy'
 import { terminalStreamByteLengthExceeds } from '../../terminal-stream-byte-length'
 import {
   iterateTerminalStreamTextPayloads,
@@ -19,6 +20,19 @@ import {
 import type { SerializedSnapshot, SnapshotFrameOptions } from './terminal-stream-types'
 
 const REQUESTED_SNAPSHOT_BYTE_BUDGET = 2 * 1024 * 1024
+
+export type SnapshotDepth = { rows: number; bytes: number }
+
+const PHONE_SNAPSHOT_DEPTH: SnapshotDepth = {
+  rows: MOBILE_SUBSCRIBE_SCROLLBACK_ROWS,
+  bytes: MOBILE_SNAPSHOT_BYTE_BUDGET
+}
+
+/** Paired desktop panes keep desktop scrollback; reveal snapshots already allow this depth and budget. */
+export const DESKTOP_PAIRED_SNAPSHOT_DEPTH: SnapshotDepth = {
+  rows: DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT,
+  bytes: REQUESTED_SNAPSHOT_BYTE_BUDGET
+}
 
 /** E2E-only: simulate unavailable retained state, which a parked client cannot distinguish from slow hydration. */
 export function isTerminalSnapshotForcedUnavailable(): boolean {
@@ -165,10 +179,11 @@ function budgetedPublication(
 function overMobileSnapshotBudget(
   data: string,
   serialized: SnapshotVariableMeta & { cols: number; rows: number },
-  budget: MobileSnapshotByteBudget | undefined
+  budget: MobileSnapshotByteBudget | undefined,
+  rawTextBytes = MOBILE_SNAPSHOT_BYTE_BUDGET
 ): boolean {
   return budget === undefined
-    ? terminalStreamByteLengthExceeds(data, MOBILE_SNAPSHOT_BYTE_BUDGET)
+    ? terminalStreamByteLengthExceeds(data, rawTextBytes)
     : terminalSnapshotPayloadJsonBytes(
         budgetedPublication(data, serialized, budget),
         budget.streamId
@@ -182,35 +197,51 @@ function publishedCandidate<T extends SnapshotVariableMeta & { cols: number; row
   data: string,
   rows: number,
   overByteBudget: boolean,
-  budget: MobileSnapshotByteBudget | undefined
+  budget: MobileSnapshotByteBudget | undefined,
+  requestedRows = MOBILE_SUBSCRIBE_SCROLLBACK_ROWS
 ) {
   return {
     ...serialized,
     data: overByteBudget && budget !== undefined ? '' : data,
     scrollbackRows: rows,
-    truncatedByByteBudget: rows < MOBILE_SUBSCRIBE_SCROLLBACK_ROWS || overByteBudget
+    truncatedByByteBudget: rows < requestedRows || overByteBudget
   }
 }
 
 export async function serializeBudgetedMobileSnapshot(
   runtime: TerminalBufferSource,
   ptyId: string,
-  snapshotByteBudget?: MobileSnapshotByteBudget
+  snapshotByteBudget?: MobileSnapshotByteBudget,
+  depth: SnapshotDepth = PHONE_SNAPSHOT_DEPTH
 ): Promise<SerializedSnapshot> {
   if (isTerminalSnapshotForcedUnavailable()) {
     return null
   }
   // Include history for desktop too; screen-only snapshots lost it on remount/reconnect (#20158).
-  const candidates = [MOBILE_SUBSCRIBE_SCROLLBACK_ROWS, 500, 250, 100, 25, 0]
+  const candidates = [
+    ...new Set([depth.rows, MOBILE_SUBSCRIBE_SCROLLBACK_ROWS, 500, 250, 100, 25, 0])
+  ]
   for (const rows of candidates) {
     const serialized = await runtime.serializeTerminalBuffer(ptyId, { scrollbackRows: rows })
     if (!serialized) {
       return null
     }
     const data = (serialized.scrollbackAnsi ?? '') + serialized.data
-    const overByteBudget = overMobileSnapshotBudget(data, serialized, snapshotByteBudget)
+    const overByteBudget = overMobileSnapshotBudget(
+      data,
+      serialized,
+      snapshotByteBudget,
+      depth.bytes
+    )
     if (!overByteBudget || rows === 0) {
-      return publishedCandidate(serialized, data, rows, overByteBudget, snapshotByteBudget)
+      return publishedCandidate(
+        serialized,
+        data,
+        rows,
+        overByteBudget,
+        snapshotByteBudget,
+        depth.rows
+      )
     }
   }
   return null

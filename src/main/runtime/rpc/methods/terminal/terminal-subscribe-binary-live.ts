@@ -13,6 +13,7 @@ import type {
   TerminalSubscribeBinaryState,
   TerminalSubscriptionArgs
 } from './terminal-subscribe-types'
+import { desktopDepthModelSeed } from './desktop-depth-model-snapshot'
 
 export function activateTerminalSubscribeBinaryLive(
   args: TerminalSubscriptionArgs,
@@ -41,11 +42,15 @@ export function activateTerminalSubscribeBinaryLive(
         if (!recovery?.data.length) {
           return
         }
+        const modelSeed = await desktopDepthModelSeed(runtime, ptyId, recovery)
+        if (state.closed) {
+          return
+        }
         // Without buffered-output gating, only exact renderer high-water can reset the client without erasing live bytes.
         if (recovery.seq !== runtime.getPtyOutputSequence(ptyId)) {
           return
         }
-        runtime.replaceHeadlessTerminalFromRendererSnapshotForRecovery(ptyId, recovery)
+        runtime.replaceHeadlessTerminalFromRendererSnapshotForRecovery(ptyId, modelSeed)
         // Shipped clients apply resized snapshots in place, recovering blank xterm without resubscribe.
         const recoveryStats = sendSnapshotFrames(state.sendFrame, {
           ...recoveryFrame,
