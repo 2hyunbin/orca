@@ -41,6 +41,7 @@ function pointerDeps(
       processIncarnation: 'inc-1'
     }),
     isLeafPtyProvenAbsent: async () => false,
+    isPtyAwaitingUserInput: () => false,
     redriveMailbox: vi.fn(),
     writePty
   }
