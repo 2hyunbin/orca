@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  restore: vi.fn(async () => {}),
+  restore: vi.fn(async (_targetId: string) => {}),
   removeAllForwards: vi.fn(async () => {}),
   closeManagedTunnels: vi.fn(async () => {}),
   disconnect: vi.fn(async () => {}),
