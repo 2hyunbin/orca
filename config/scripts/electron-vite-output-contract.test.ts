@@ -140,8 +140,7 @@ describe('Electron Vite output contract', () => {
   })
 
   it('emits hidden main source maps that packaging strips from app.asar', () => {
-    // Hidden maps decode minified crash traces without the bundle referencing
-    // files that the packaged app never ships.
+    // Hidden maps decode minified crashes without referencing maps omitted from the package.
     expect(electronViteConfig.main?.build?.sourcemap).toBe('hidden')
     expect(electronBuilderConfig.files).toContain('!out/**/*.map')
   })
@@ -358,8 +357,7 @@ describe('Electron Vite output contract', () => {
   })
 
   it('gives the dev terminal daemon helper the TCC identity watched by Orca', () => {
-    // Asserted on the values rather than the source text: the ids moved into
-    // dev-electron-bundle-identity.mjs so every dev bundle signs to one cdhash.
+    // Assert computed values; bundle identity module now owns branch-invariant signing patches.
     expect(DEV_HELPER_BUNDLE_ID).toBe(`${DEV_BUNDLE_ID}.helper`)
     expect(getDevHelperPlistPatches()).toEqual([
       { key: 'CFBundleIdentifier', value: DEV_HELPER_BUNDLE_ID }
