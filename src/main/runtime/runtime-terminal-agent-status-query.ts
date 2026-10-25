@@ -45,7 +45,8 @@ type Dependencies = {
   getTitleDisplayClear(ptyId: string): TitleDisplayClear | null
   /** Stamps blocked text the PTY's throttled scan has not yet judged. */
   flushPendingBlockedStamp(ptyId: string): void
-  readCaughtUpScreenText(ptyId: string): string | null
+  /** The settled screen when it proves blocked tail text was erased; null keeps the tail. */
+  readScreenClearingBlockedTail(ptyId: string, lastOutputAt: number | null): string | null
 }
 
 export class RuntimeTerminalAgentStatusQuery {
@@ -195,12 +196,8 @@ export class RuntimeTerminalAgentStatusQuery {
           { title: pty.pty.title, updatedAt: pty.pty.titleUpdatedAt },
           { title: pty.pty.lastOscTitle, updatedAt: pty.pty.lastOscTitleAt }
         )
-      // Why the screen first: the line tail keeps a dialog the TUI has since erased in place (#24187).
-      const waitText =
-        this.deps.readCaughtUpScreenText(expectedPtyId) ??
-        buildTerminalWaitText(pty.pty.tailBuffer, pty.pty.tailPartialLine, pty.pty.preview)
       return {
-        waitText,
+        waitText: this.readWaitText(expectedPtyId, pty.pty),
         waitBlockedAt: pty.pty.waitBlockedAt,
         title: ptyTitle?.title ?? null,
         titleStatus: ptyTitle
@@ -226,14 +223,28 @@ export class RuntimeTerminalAgentStatusQuery {
       { title: this.deps.getTabTitle(leaf.tabId), updatedAt: 0 }
     )
     return {
-      waitText:
-        this.deps.readCaughtUpScreenText(expectedPtyId) ??
-        buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview),
+      waitText: this.readWaitText(expectedPtyId, leaf),
       waitBlockedAt: leaf.waitBlockedAt,
       title: title?.title ?? null,
       titleStatus: title ? detectAgentStatusFromTitle(title.title) : leaf.lastAgentStatus,
       titleStatusIsLive: (title?.updatedAt ?? 0) > 0
     }
+  }
+
+  // Why the screen may only clear: the line tail keeps a dialog the TUI erased in place (#24187).
+  private readWaitText(
+    ptyId: string,
+    record: Pick<RuntimeLeafRecord, 'tailBuffer' | 'tailPartialLine' | 'preview' | 'lastOutputAt'>
+  ): string {
+    const tailText = buildTerminalWaitText(
+      record.tailBuffer,
+      record.tailPartialLine,
+      record.preview
+    )
+    if (detectTerminalWaitBlockedReason(tailText) === null) {
+      return tailText
+    }
+    return this.deps.readScreenClearingBlockedTail(ptyId, record.lastOutputAt) ?? tailText
   }
 
   private async terminalHasShellForegroundProcess(handle: string, ptyId: string): Promise<boolean> {

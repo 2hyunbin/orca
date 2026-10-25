@@ -35,8 +35,14 @@ export const terminalWaitBlockedSentinelRe = compiledFromActiveAgentStateRules(
 // update, exec approval) are 4-8 lines; the slack covers a wrapped command or a longer hook list.
 const LIVE_PROMPT_TAIL_LINES = 12
 
-export function findTerminalWaitBlockedSignal(fullTail: string): BlockedTextSignal | null {
-  const windowStart = startOfLastNonBlankLines(fullTail, LIVE_PROMPT_TAIL_LINES)
+/** `wholeText` scans every line: a grid holds only what is painted, and a tall dialog's keyword sits above the window. */
+export function findTerminalWaitBlockedSignal(
+  fullTail: string,
+  options: { wholeText?: boolean } = {}
+): BlockedTextSignal | null {
+  const windowStart = options.wholeText
+    ? 0
+    : startOfLastNonBlankLines(fullTail, LIVE_PROMPT_TAIL_LINES)
   const normalized = windowStart === 0 ? fullTail : fullTail.slice(windowStart)
   // Why: one combined negative scan avoids a dozen searches when no prompt can match.
   if (!terminalWaitBlockedSentinelRe().test(normalized)) {

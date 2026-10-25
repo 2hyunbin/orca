@@ -42,6 +42,8 @@ import { RuntimeTerminalStreamConsumers } from '../runtime-terminal-stream-consu
 import type { RecentPtyOutputBuffer } from '../recent-pty-output-buffer'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { mainListsEveryPane } from '../terminal/surface/main-terminal-surfaces'
+import { TUI_IDLE_QUIESCENCE_MS } from '../orca-runtime-postlude'
+import { screenClearsBlockedTail } from '../blocked-tail-screen-clear'
 
 export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
   protected readonly stopRequestedPtyIds = new Set<string>()
@@ -210,7 +212,16 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     isRunning: (handle) => this.isTerminalRunningAgent(handle),
     getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
     flushPendingBlockedStamp: (ptyId) => this.flushPendingWaitBlockedCheck(ptyId),
-    readCaughtUpScreenText: (ptyId) => this.readCaughtUpTerminalScreenText(ptyId)
+    readScreenClearingBlockedTail: (ptyId, lastOutputAt) => {
+      // Why quiet: a frame caught mid-paint can drop a dialog row the next chunk restores.
+      if (lastOutputAt !== null && Date.now() - lastOutputAt < TUI_IDLE_QUIESCENCE_MS) {
+        return null
+      }
+      const screen = this.readCaughtUpRuledScreen(ptyId)
+      return screen && screenClearsBlockedTail(this.getPaneAgentForTuiIdle(ptyId), screen.lines)
+        ? screen.lines.join('\n')
+        : null
+    }
   })
 
   protected _orchestrationDb: OrchestrationDb | null = null

@@ -5,6 +5,7 @@ import {
   createAgentPromptSubmissionRuntime
 } from './agent-prompt-submission-runtime-test-fixture'
 import { OrcaRuntimeService } from './orca-runtime'
+import { TUI_IDLE_QUIESCENCE_MS } from './orca-runtime-postlude'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 import { settledWriteStub } from '../providers/settled-pty-write-stub'
 import type { RuntimeTerminalWriter } from './runtime-terminal-writer'
@@ -218,7 +219,15 @@ describe('agent prompt submission runtime', () => {
     expect(writes).toEqual([])
   })
 
-  it('judges a caught-up screen, not a dialog the line tail kept after Codex erased it', async () => {
+  // Why real timers until the send: the emulator drains on timers, and the screen may clear only once quiet.
+  async function settleScreen(runtime: OrcaRuntimeService, handle: string): Promise<void> {
+    const outputAt = Date.now()
+    vi.useRealTimers()
+    await runtime.readTerminal(handle, { screen: true })
+    vi.useFakeTimers({ now: Math.max(outputAt, Date.now()) + TUI_IDLE_QUIESCENCE_MS })
+  }
+
+  it('sends to a ready Codex composer whose erased dialog the line tail still holds', async () => {
     const { runtime, handle, writes } = await createPromptRuntime((runtime, data) => {
       if (data === '\r') {
         runtime.onPtyData('pty-prompt', '\x1b]0;Codex working\x07', Date.now())
@@ -233,7 +242,7 @@ describe('agent prompt submission runtime', () => {
         '\x1b[21;3HPress enter to confirm or esc to cancel',
       Date.now()
     )
-    await runtime.readTerminal(handle, { screen: true })
+    await settleScreen(runtime, handle)
     await expect(
       runtime.sendTerminalAgentPrompt(handle, 'review this', { inputKind: 'driving' })
     ).rejects.toThrow('agent_prompt_blocked')
@@ -243,8 +252,7 @@ describe('agent prompt submission runtime', () => {
       '\x1b[12;1H\x1b[J• done\x1b[22;1H› Ask Codex to do anything',
       Date.now()
     )
-    await runtime.readTerminal(handle, { screen: true })
-    vi.useFakeTimers()
+    await settleScreen(runtime, handle)
     const submission = runtime.sendTerminalAgentPrompt(handle, 'review this', {
       inputKind: 'driving'
     })
@@ -252,6 +260,30 @@ describe('agent prompt submission runtime', () => {
 
     await expect(submission).resolves.toMatchObject({ accepted: true })
     expect(writes.filter((data) => data === '\r')).toHaveLength(1)
+  })
+
+  it('refuses a settled dialog taller than the live window, as OpenCode 2 paints its permission prompt', async () => {
+    const { runtime, handle, writes } = await createPromptRuntime(() => undefined, 'opencode')
+    vi.spyOn(runtime, 'getTerminalSize').mockReturnValue({ cols: 80, rows: 24 })
+    // Why every row drawn: permission.tsx gives the dialog a ┃ left border and maxHeight 15.
+    const rows = [
+      '┃',
+      '┃  △ Permission required',
+      ...Array.from({ length: 11 }, (_, index) => `┃    $ ./step-${index}.sh`),
+      '┃',
+      '┃  Allow once  Reject                         ctrl+f fullscreen'
+    ]
+    runtime.onPtyData(
+      'pty-prompt',
+      rows.map((row, index) => `\x1b[${index + 8};1H${row}`).join(''),
+      Date.now()
+    )
+    await settleScreen(runtime, handle)
+
+    await expect(
+      runtime.sendTerminalAgentPrompt(handle, 'review this', { inputKind: 'driving' })
+    ).rejects.toThrow('agent_prompt_blocked')
+    expect(writes).toEqual([])
   })
 
   it('does not block on permission text restored only as history', async () => {

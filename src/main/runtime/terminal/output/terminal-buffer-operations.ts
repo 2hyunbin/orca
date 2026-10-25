@@ -200,7 +200,7 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
     }
     const dims = size ?? this.getTerminalSize(ptyId) ?? { cols: 80, rows: 24 }
     const state = this.createPtyHeadlessTerminalState(ptyId, dims)
-    state.outputSequence = this.getPtyOutputSequence(ptyId)
+    const seededSequence = this.getPtyOutputSequence(ptyId)
     this.headlessTerminals.set(ptyId, state)
     this.recordOsc7MetadataForPty(ptyId, data)
     this.recordRecentPtyOutputForPathProvenance(ptyId, data)
@@ -215,6 +215,8 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
         if (this.headlessTerminals.get(ptyId) !== state) {
           return
         }
+        // Why only now: a reader comparing sequences must not take the unseeded grid as current.
+        state.outputSequence = seededSequence
         // Why AFTER the seed write: the snapshot payload cannot carry kitty
         // pushes (rehydrateSequences deliberately omits them), but ordering
         // behind it keeps the parse deterministic. Unflagged like the seed —
