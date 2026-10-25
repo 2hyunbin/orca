@@ -10,6 +10,7 @@ function fakeClient(
 ): { client: RpcClient; set: (next: ConnectionState) => void; listenerCount: () => number } {
   let state = initial
   const listeners = new Set<(next: ConnectionState) => void>()
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The wait owner only reads getState and registers onStateChange on this fixture.
   const client = {
     getState: () => state,
     onStateChange: (listener: (next: ConnectionState) => void) => {
@@ -20,7 +21,6 @@ function fakeClient(
       }
       return () => listeners.delete(listener)
     }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The wait owner only reads getState and registers onStateChange on this fixture.
   } as unknown as RpcClient
   return {
     client,
