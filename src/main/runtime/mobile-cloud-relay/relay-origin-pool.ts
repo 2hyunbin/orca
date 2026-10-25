@@ -169,7 +169,9 @@ export class RelayOriginPool {
     }
     if (this.rotationPromise) {
       // The running resolution may activate this origin; adopt the drain once it settles.
-      this.queuedDrain = { origin, message }
+      if (this.queuedDrain?.origin !== this.activeOrigin || origin === this.activeOrigin) {
+        this.queuedDrain = { origin, message }
+      }
       return
     }
     if (!this.retirement.adopt(origin, message)) {
@@ -181,8 +183,10 @@ export class RelayOriginPool {
         this.rotationPromise = null
         const queued = this.queuedDrain
         this.queuedDrain = null
-        // Backed off: a cell that re-sends its drain to a director-kept origin must not loop.
-        if (queued && this.isCurrent() && this.retirement.adopt(queued.origin, queued.message)) {
+        if (queued && !queued.origin.hasLiveControl()) {
+          this.handleDrain(queued.origin, queued.message)
+        } else if (queued && this.retirement.adopt(queued.origin, queued.message)) {
+          // Backed off: a cell that re-sends its drain to a director-kept origin must not loop.
           this.options.onStatus('draining')
           this.drainRetry.schedule(0, () => this.handleDrain(queued.origin, queued.message))
         }
@@ -241,7 +245,7 @@ export class RelayOriginPool {
         ? this.reattachSameCell(origin, assignment, this.relayJwt, message.graceMs)
         : this.activateTarget(origin, assignment, this.relayJwt, message.graceMs))
       this.options.onStatus('registered')
-      if (!this.queuedDrain) {
+      if (!this.queuedDrain?.origin.hasLiveControl()) {
         this.drainRetry.reset()
       }
       this.rotation.schedule()
@@ -260,10 +264,8 @@ export class RelayOriginPool {
 
   private heldAssignmentTarget(): RelayLastCellTarget | null {
     const { assignment, relayJwt } = this
-    if (!this.isCurrent() || this.deferredAssignment || !assignment || !relayJwt) {
-      return null
-    }
-    return { assignment, relayJwt }
+    const usable = this.isCurrent() && !this.deferredAssignment && assignment && relayJwt
+    return usable ? { assignment, relayJwt } : null
   }
 
   private async reattachSameCell(

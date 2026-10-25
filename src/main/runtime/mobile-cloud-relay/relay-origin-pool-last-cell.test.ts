@@ -378,6 +378,26 @@ describe('RelayOriginPool last-cell reattach', () => {
     pool.closeNow()
   })
 
+  it('recovers at once when the reattached control drops before its resolution settles', async () => {
+    let dropOnRegister = false
+    const onStatus = vi.fn((status: string) => {
+      if (status === 'registered' && dropOnRegister) {
+        dropOnRegister = false
+        fakes.controls[1]!.options.onClose(1006)
+      }
+    })
+    const pool = await openPool(onStatus)
+    dropOnRegister = true
+
+    fakes.controls[0]!.options.onClose(1006)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(fakes.controls).toHaveLength(2)
+
+    // Immediate director call, not the backoff's 500 ms.
+    expect(fakes.assign).toHaveBeenCalledTimes(2)
+    pool.closeNow()
+  })
+
   it('does no work after the pool closes during the reattach wait', async () => {
     const pool = await openPool()
     fakes.controls[0]!.options.onClose(1006)
