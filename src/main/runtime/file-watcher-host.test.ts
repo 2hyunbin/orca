@@ -4,12 +4,12 @@ import type {
   WatcherProcessCallback,
   WatcherProcessHooks,
   WatcherProcessSubscription
-} from '../ipc/parcel-watcher-process-subscription'
-import { WatcherProcessFailure } from '../ipc/parcel-watcher-process-failure'
+} from '../ipc/filesystem/watcher-process/parcel-watcher-process-subscription'
+import { WatcherProcessFailure } from '../ipc/filesystem/watcher-process/parcel-watcher-process-failure'
 import {
   WATCHER_IGNORE_DIRS,
   buildParcelWatcherIgnoreOptions
-} from '../ipc/filesystem-watcher-ignore'
+} from '../ipc/filesystem/watchers/filesystem-watcher-ignore'
 
 const {
   forgetRuntimeWatcherProcessRootMock,
@@ -21,7 +21,7 @@ const {
   subscribeViaRuntimeWatcherProcessMock: vi.fn()
 }))
 
-vi.mock('../ipc/parcel-watcher-process', () => ({
+vi.mock('../ipc/filesystem/watcher-process/parcel-watcher-process', () => ({
   forgetRuntimeWatcherProcessRoot: forgetRuntimeWatcherProcessRootMock,
   resetRuntimeWatcherProcessForTest: resetRuntimeWatcherProcessForTestMock,
   subscribeViaRuntimeWatcherProcess: subscribeViaRuntimeWatcherProcessMock
