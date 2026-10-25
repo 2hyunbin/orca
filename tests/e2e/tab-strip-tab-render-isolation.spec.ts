@@ -56,6 +56,7 @@ test.describe('Tab strip tab render isolation', () => {
     await startRecordingTabRenders(orcaPage)
 
     await waitForQuietStrip(orcaPage)
+    await orcaPage.evaluate(() => Reflect.set(window, '__triageTabRenderComponents', []))
     await orcaPage.evaluate(
       (tabId) => window.__store!.getState().updateTabTitle(tabId, 'retitled in background'),
       tabIds[5]
@@ -65,6 +66,7 @@ test.describe('Tab strip tab render isolation', () => {
     // Control: the recorder sees the one tab that did change.
     expect(backgroundRetitle.length).toBeGreaterThan(0)
     console.log('TRIAGE tab renders', JSON.stringify(await orcaPage.evaluate(() => Reflect.get(window, '__triageTabRenderIds'))), 'retitled', tabIds[5])
+    console.log('TRIAGE component attribution', JSON.stringify(await orcaPage.evaluate(() => Reflect.get(window, '__triageTabRenderComponents'))))
     expect(Math.max(...backgroundRetitle)).toBe(1)
 
     await waitForQuietStrip(orcaPage)

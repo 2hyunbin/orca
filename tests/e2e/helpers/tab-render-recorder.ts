@@ -56,6 +56,10 @@ export async function startRecordingTabRenders(page: Page): Promise<void> {
               : undefined
           if (tabId) {
             renderedTabIds.add(tabId)
+            const components = Reflect.get(window, '__triageTabRenderComponents') ?? []
+            const component = Reflect.get(fiber, 'type')
+            components.push({ tabId, name: typeof component === 'function' ? component.name : component?.displayName ?? component?.render?.name ?? String(component) })
+            Reflect.set(window, '__triageTabRenderComponents', components)
           }
         }
         if (fiber.sibling) {
