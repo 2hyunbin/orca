@@ -50,7 +50,7 @@ it.skipIf(!process.env.ORCA_PI_TEST_PACKAGE)(
         manager.appendMessage({
           role: 'assistant',
           content: [{ type: 'text', text: 'saved reply' }],
-          timestamp: Date.now()
+          timestamp: 1700000000000
         })
       const lead = SessionManager.create(directory, join(directory, 'lead'))
       append(lead)
