@@ -12288,7 +12288,9 @@
         },
         "PluginThemeUseNow": {
           "label": "Utiliser maintenant :",
-          "useName": "Utiliser maintenant : {{value0}}"
+          "useName": "Utiliser maintenant : {{value0}}",
+          "useForLight": "Utiliser en clair :",
+          "useForDark": "Utiliser en sombre :"
         },
         "PluginContributionActionCommand": {
           "run": "Exécuter",
@@ -12331,7 +12333,9 @@
         },
         "pluginThemeApply": {
           "nowUsing": "{{value0}} est maintenant utilisé",
-          "switchBack": "Revenir"
+          "switchBack": "Revenir",
+          "setAsLight": "{{value0}} est maintenant votre thème clair",
+          "setAsDark": "{{value0}} est maintenant votre thème sombre"
         },
         "pluginError": {
           "installManifestMissing": "Aucun orca-plugin.json lisible trouvé. Choisissez le dossier racine du plugin.",
@@ -13296,6 +13300,11 @@
             "title": "Thème d’icônes",
             "description": "Icônes de fichiers et dossiers d’un plugin activé.",
             "builtIn": "Intégré"
+          },
+          "lightTheme": "Thème clair",
+          "darkTheme": "Thème sombre",
+          "themeSlot": {
+            "description": "Couleurs de l’app pour ce mode."
           }
         },
         "PluginAddMenu": {
