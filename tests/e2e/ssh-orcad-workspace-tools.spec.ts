@@ -127,6 +127,7 @@ for (const across of ['', 'reconnect', 'restart without an SSH connect'] as cons
 
 test('a saved forward whose local port is taken after a restart shows why, and can be removed', async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
 {}, testInfo) => {
+  // Deploys a managed server, then quits and relaunches the app once.
   test.setTimeout(10 * 60_000)
   const reservation = await reserveLocalPort()
   const localPort = reservation.port
