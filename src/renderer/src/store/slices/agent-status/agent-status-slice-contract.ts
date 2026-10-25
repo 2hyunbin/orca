@@ -9,10 +9,7 @@ import type {
   AgentStatusMetadata,
   AgentStatusPayload,
   AgentStatusRouting,
-  AgentStatusTiming
-} from './agent-status-contract'
-import type { AgentProviderSessionMetadata } from '../../../../../shared/agent-session-resume'
-import type {
+  AgentStatusTiming,
   DropAgentStatusByTabPrefixOptions,
   DropAgentStatusByWorktreeOptions,
   DropAgentStatusOptions,
@@ -26,6 +23,7 @@ import type {
 } from '../../../../../shared/agent-status-types'
 import type { MigrationUnsupportedPtyEntry } from '../../../../../shared/agent-status-ipc-payload'
 import type {
+  AgentProviderSessionMetadata,
   ResumableTuiAgent,
   SleepingAgentLaunchConfig,
   SleepingAgentSessionRecord
