@@ -81,6 +81,11 @@ export function resolveAgentStatusIdentity(args: {
       inheritedFromActivePane: otherProcessOwner
     }
   }
+  const owner = args.existing.agentPresence
+  if (owner && !owner.ended && owner.agent === incomingAgentType && !otherProcessOwner) {
+    // Why: a nested agent that posted while the owner idled must not silence the owner's own hooks.
+    return { agentType: incomingAgentType, inheritedFromActivePane: false }
+  }
   const canonical = resolveCanonicalPaneAgentIdentity({
     hookAgent: incomingAgentType as TuiAgent,
     hookIsLive: true,

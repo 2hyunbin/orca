@@ -203,4 +203,49 @@ describe('nested agent hooks preserve the owning pane', () => {
     expect(pushed).not.toHaveBeenCalled()
     server.stop()
   })
+
+  // #30589: a background child that posts while the owner idles must not then silence the owner.
+  it("returns the pane to its owner when the owner's next hook follows a nested agent", async () => {
+    const server = new AgentHookServer()
+    await server.start({ env: 'production' })
+    const nestedClaude = {
+      agentProcess: JSON.stringify({ pid: 4242, platform: 'darwin', startTime: 'nested' })
+    }
+    const post = (source: AgentHookSource, payload: Record<string, unknown>, overrides = {}) =>
+      postHookEvent(server, buildBody(payload, overrides), `/hook/${source}`)
+    try {
+      await post('codex', {
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 'owner',
+        prompt: 'Start job'
+      })
+      await post('codex', { hook_event_name: 'Stop', session_id: 'owner' })
+      await post(
+        'claude',
+        { hook_event_name: 'UserPromptSubmit', session_id: 'child', prompt: 'Background job' },
+        nestedClaude
+      )
+      expect(server.getStatusSnapshot()[0]).toMatchObject({ agentType: 'claude', state: 'working' })
+
+      await post('codex', {
+        hook_event_name: 'UserPromptSubmit',
+        session_id: 'owner',
+        prompt: 'Next task'
+      })
+      await post(
+        'claude',
+        { hook_event_name: 'PreToolUse', session_id: 'child', tool_name: 'Bash' },
+        nestedClaude
+      )
+
+      expect(server.getStatusSnapshot()[0]).toMatchObject({
+        agentType: 'codex',
+        state: 'working',
+        prompt: 'Next task',
+        providerSession: { id: 'owner' }
+      })
+    } finally {
+      server.stop()
+    }
+  })
 })

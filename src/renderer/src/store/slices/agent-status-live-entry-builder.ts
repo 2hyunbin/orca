@@ -97,7 +97,10 @@ export function buildAgentStatusLiveEntry(
           worktreeId: routing?.worktreeId ?? existing.worktreeId
         }
       )
-        ? existing
+        ? {
+            ...existing,
+            agentPresence: metadata?.paneOwnerAgent ? { agent: metadata.paneOwnerAgent } : undefined
+          }
         : undefined,
     incoming: payload.agentType,
     now: updatedAt
