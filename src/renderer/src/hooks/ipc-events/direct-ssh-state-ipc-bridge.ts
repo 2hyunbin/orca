@@ -34,9 +34,13 @@ export function registerDirectSshStateIpcBridge(unsubs: (() => void)[]): () => v
     pendingPortHydrationByTargetId.set(targetId, pendingPortHydration)
     const isHydrationAuthorityCurrent = (): boolean =>
       !isStopped() && directSshAuthoritiesEqual(currentAuthority(targetId), authority)
-    const forwardHydration = window.api.ssh.listPortForwards({ targetId }).then((forwards) => {
+    const forwardHydration = Promise.all([
+      window.api.ssh.listPortForwards({ targetId }),
+      window.api.ssh.listUnrestoredPortForwards({ targetId })
+    ]).then(([forwards, unrestored]) => {
       if (isHydrationAuthorityCurrent() && !pendingPortHydration.receivedForwardPush) {
         useAppStore.getState().setPortForwards(targetId, forwards)
+        useAppStore.getState().setUnrestoredPortForwards(targetId, unrestored)
       }
     })
     const detectedHydration = window.api.ssh.listDetectedPorts({ targetId }).then((detected) => {
@@ -75,12 +79,13 @@ export function registerDirectSshStateIpcBridge(unsubs: (() => void)[]): () => v
   )
 
   unsubs.push(
-    window.api.ssh.onPortForwardsChanged(({ targetId, forwards }) => {
+    window.api.ssh.onPortForwardsChanged(({ targetId, forwards, unrestored }) => {
       const pendingPortHydration = pendingPortHydrationByTargetId.get(targetId)
       if (pendingPortHydration) {
         pendingPortHydration.receivedForwardPush = true
       }
       useAppStore.getState().setPortForwards(targetId, forwards)
+      useAppStore.getState().setUnrestoredPortForwards(targetId, unrestored ?? [])
     })
   )
 

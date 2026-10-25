@@ -73,7 +73,7 @@ vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
 }))
 
 import { persistPortForwards, restorePortForwards } from './ssh-port-forward-persistence'
-import { forgetForwardFailures } from './ssh-port-forward-unrestored'
+import { forgetForwardFailures, listUnrestoredPortForwards } from './ssh-port-forward-unrestored'
 import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import { connectInFlight } from './ssh-connect-attempt-registry'
 import { getSshProviderAuthority } from '../../ssh/ssh-provider-authority'
@@ -239,11 +239,12 @@ describe('saved port forward restore', () => {
     }
   })
 
-  it('backs off a forward that keeps failing', async () => {
+  it('backs off a forward that keeps failing, and lists it with why', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       h.portForwardManager.addForward.mockRejectedValue(new Error('port in use'))
       await restoreManagedHostPortForwards('t1')
+      expect(listUnrestoredPortForwards('t1')).toEqual([{ ...FORWARD, error: 'port in use' }])
       vi.setSystemTime(Date.now() + 30_000)
       await restoreManagedHostPortForwards('t1')
       expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)

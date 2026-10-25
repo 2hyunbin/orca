@@ -81,9 +81,11 @@ describe('SSH IPC handlers', () => {
         }
       ]
     })
+    // The closed forward stays saved and is listed as not open, so the user can see and remove it.
     expect(mockWindow.webContents.send).toHaveBeenCalledWith('ssh:port-forwards-changed', {
       targetId: 'ssh-1',
-      forwards: []
+      forwards: [],
+      unrestored: [{ localPort: 4100, remoteHost: '127.0.0.1', remotePort: 3000, label: 'app' }]
     })
   })
 

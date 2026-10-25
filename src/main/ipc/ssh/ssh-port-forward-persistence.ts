@@ -97,7 +97,7 @@ export async function restorePortForwards(
       ) {
         return
       }
-      recordForwardFailure(targetId, saved)
+      recordForwardFailure(targetId, saved, err)
       console.warn(
         `[ssh] Failed to restore forward :${saved.localPort} → ${saved.remoteHost}:${saved.remotePort}: ${err instanceof Error ? err.message : String(err)}`
       )

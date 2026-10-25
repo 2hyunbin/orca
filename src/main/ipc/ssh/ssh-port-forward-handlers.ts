@@ -11,6 +11,7 @@ import {
 } from './ssh-ipc-context'
 import { persistPortForwards } from './ssh-port-forward-persistence'
 import { serializePortForwardChange } from './ssh-managed-port-forward-restore'
+import { clearForwardFailure, listUnrestoredPortForwards } from './ssh-port-forward-unrestored'
 import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import { broadcastPortForwards, enrichDetected } from './ssh-renderer-broadcast'
 
@@ -114,6 +115,25 @@ export function registerSshPortForwardHandlers(): void {
       return removed
     })
   })
+
+  ipcMain.handle('ssh:listUnrestoredPortForwards', (_event, args: { targetId: string }) =>
+    listUnrestoredPortForwards(args.targetId)
+  )
+
+  // A saved forward that never started has no live id, so it is removed by its mapping.
+  ipcMain.handle(
+    'ssh:removeSavedPortForward',
+    (
+      _event,
+      args: { targetId: string; localPort: number; remoteHost: string; remotePort: number }
+    ) =>
+      serializePortForwardChange(args.targetId, async () => {
+        const { targetId, ...mapping } = args
+        persistPortForwards(targetId, mapping)
+        clearForwardFailure(targetId, mapping)
+        broadcastPortForwards(getCurrentMainWindow, targetId)
+      })
+  )
 
   ipcMain.handle('ssh:listPortForwards', (_event, args?: { targetId?: string }) => {
     const all = portForwardManager!.listForwards(args?.targetId)
