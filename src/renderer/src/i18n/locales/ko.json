@@ -209,7 +209,8 @@
           "microphone": "마이크",
           "location": "위치",
           "notifications": "알림",
-          "clipboard": "클립보드"
+          "clipboard": "클립보드",
+          "localNetwork": "로컬 네트워크"
         },
         "title": "사이트 권한",
         "profile": "브라우저 프로필",
@@ -310,6 +311,7 @@
     "view": "보기",
     "reload": "새로고침",
     "forceReload": "강제 새로고침",
+    "toggleDevTools": "개발자 도구 전환",
     "resetSize": "크기 재설정",
     "zoomIn": "확대",
     "zoomOut": "축소",
@@ -4221,10 +4223,6 @@
               "waiting": {
                 "label": "Claude 실행 시 업데이트됨",
                 "message": "Claude 사용량은 다음에 Claude를 실행할 때 업데이트됩니다."
-              },
-              "expired": {
-                "label": "로그인 만료",
-                "message": "Claude 사용량이 만료되었습니다. 이 계정에서 Claude를 시작하면 사용량이 갱신됩니다."
               }
             },
             "remoteOwnerNotConfigured": "{{server}}에 구성되지 않음",
@@ -16938,7 +16936,12 @@
             "copyImage": "이미지 복사",
             "copyImageAddress": "이미지 주소 복사",
             "searchSelection": "{{value0}}에서 “{{value1}}” 검색",
-            "inspect": "검사"
+            "inspect": "검사",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "오른쪽에 도킹",
+            "devToolsDockBottom": "아래쪽에 도킹",
+            "devToolsUndock": "별도 창에서 열기",
+            "devToolsClose": "DevTools 닫기"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "취소",
@@ -18365,6 +18368,7 @@
             "clipboard": "클립보드",
             "windowManagement": "창 관리",
             "idleDetection": "장치 사용",
+            "localNetwork": "로컬 네트워크",
             "midi": "MIDI 장치"
           },
           "allow": "허용",
@@ -18375,6 +18379,7 @@
             "location": "위치 정보 확인",
             "microphone": "마이크 사용",
             "idleDetection": "이 장치의 사용 여부 감지",
+            "localNetwork": "이 장치의 앱과 로컬 네트워크의 장치에 액세스",
             "clipboard": "클립보드에 복사된 텍스트 및 이미지 보기",
             "windowManagement": "모든 디스플레이의 창 관리",
             "midi": "MIDI 장치 사용"

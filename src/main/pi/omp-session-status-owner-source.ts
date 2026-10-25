@@ -42,7 +42,7 @@ export function getSessionSelectionSourceLines(previousOwner = 'ownerPid'): stri
   ]
 }
 
-// OMP loads the same extension in each in-process task session.
+// OMP task sessions and Pi subagents load the same extension in-process with their own SessionManager.
 export function getOmpSessionOwnerHandlerSourceLines(kind: PiAgentKind): string[] {
   if (kind === 'prime-agent') {
     return [

@@ -209,7 +209,8 @@
           "microphone": "micrófono",
           "location": "ubicación",
           "notifications": "notificaciones",
-          "clipboard": "portapapeles"
+          "clipboard": "portapapeles",
+          "localNetwork": "red local"
         },
         "profile": "Perfil del navegador",
         "ask": "Preguntar de nuevo",
@@ -310,6 +311,7 @@
     "view": "Vista",
     "reload": "Recargar",
     "forceReload": "Forzar recarga",
+    "toggleDevTools": "Alternar herramientas para desarrolladores",
     "resetSize": "Restablecer tamaño",
     "zoomIn": "Acercar",
     "zoomOut": "Alejar",
@@ -4236,10 +4238,6 @@
               "waiting": {
                 "label": "Se actualiza cuando Claude se ejecuta",
                 "message": "El uso de Claude se actualizará la próxima vez que ejecutes Claude."
-              },
-              "expired": {
-                "label": "Inicio de sesión caducado",
-                "message": "El uso de Claude ha caducado. Inicia Claude en esta cuenta para actualizarlo."
               }
             },
             "remoteOwnerNotConfigured": "No configurado en {{server}}",
@@ -16869,6 +16867,11 @@
             "copyImageAddress": "Copiar dirección de la imagen",
             "searchSelection": "Buscar “{{value1}}” en {{value0}}",
             "inspect": "Inspeccionar",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "Acoplar a la derecha",
+            "devToolsDockBottom": "Acoplar abajo",
+            "devToolsUndock": "Abrir en una ventana aparte",
+            "devToolsClose": "Cerrar DevTools",
             "1ded0d3168": "Copiar captura de pantalla",
             "f30d2d35a7": "Captura de pantalla",
             "fa6ea61de3": "Cancelar",
@@ -18377,7 +18380,8 @@
             "clipboard": "Portapapeles",
             "midi": "Dispositivos MIDI",
             "windowManagement": "Gestión de ventanas",
-            "idleDetection": "Uso del dispositivo"
+            "idleDetection": "Uso del dispositivo",
+            "localNetwork": "Red local"
           },
           "allow": "Permitir",
           "block": "Bloquear",
@@ -18389,7 +18393,8 @@
             "camera": "Usar la cámara",
             "midi": "Usar tus dispositivos MIDI",
             "windowManagement": "Gestionar ventanas en todas tus pantallas",
-            "idleDetection": "Detectar cuándo estás usando este dispositivo"
+            "idleDetection": "Detectar cuándo estás usando este dispositivo",
+            "localNetwork": "Acceder a las apps de este dispositivo y a los dispositivos de tu red local"
           },
           "localFiles": "Archivos locales",
           "title": "{{site}} solicita permiso para",

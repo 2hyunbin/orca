@@ -441,7 +441,8 @@
           "microphone": "microphone",
           "location": "location",
           "notifications": "notifications",
-          "clipboard": "clipboard"
+          "clipboard": "clipboard",
+          "localNetwork": "local network"
         }
       },
       "profileScope": {
@@ -553,6 +554,7 @@
     "view": "View",
     "reload": "Reload",
     "forceReload": "Force Reload",
+    "toggleDevTools": "Toggle Developer Tools",
     "resetSize": "Reset Size",
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out",
@@ -4559,10 +4561,6 @@
               "waiting": {
                 "label": "Updates when Claude runs",
                 "message": "Claude usage updates the next time Claude runs."
-              },
-              "expired": {
-                "label": "Sign-in expired",
-                "message": "Claude usage has expired. Start Claude in this account to refresh it."
               }
             }
           },
@@ -17282,7 +17280,12 @@
             "copyImage": "Copy Image",
             "copyImageAddress": "Copy Image Address",
             "searchSelection": "Search {{value0}} for “{{value1}}”",
-            "inspect": "Inspect"
+            "inspect": "Inspect",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "Dock to right",
+            "devToolsDockBottom": "Dock to bottom",
+            "devToolsUndock": "Open in separate window",
+            "devToolsClose": "Close DevTools"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "Cancel",
@@ -18661,7 +18664,8 @@
             "clipboard": "Clipboard",
             "midi": "MIDI devices",
             "windowManagement": "Window management",
-            "idleDetection": "Device use"
+            "idleDetection": "Device use",
+            "localNetwork": "Local network"
           },
           "ask": {
             "camera": "Use your camera",
@@ -18671,7 +18675,8 @@
             "clipboard": "See text and images copied to the clipboard",
             "midi": "Use your MIDI devices",
             "windowManagement": "Manage windows on all your displays",
-            "idleDetection": "Know when you are actively using this device"
+            "idleDetection": "Know when you are actively using this device",
+            "localNetwork": "Access apps on this device and devices on your local network"
           },
           "title": "{{site}} wants to",
           "allow": "Allow",
