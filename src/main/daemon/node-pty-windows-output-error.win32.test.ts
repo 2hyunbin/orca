@@ -18,7 +18,7 @@ describe.skipIf(process.platform !== 'win32')('node-pty Windows output pipe erro
 
     let terminal: IPty | undefined
     try {
-      // Warmup and spawn-health PTYs attach no 'error' listener of their own.
+      // Warmup and spawn-health PTYs attach no 'error' listener; upstream rethrew when fewer than two.
       terminal = spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/q'], {
         cwd: process.cwd(),
         env: process.env,
@@ -28,7 +28,7 @@ describe.skipIf(process.platform !== 'win32')('node-pty Windows output pipe erro
         throw new Error('node-pty WindowsTerminal internals changed')
       }
       const output = terminal._socket
-      expect(output.listenerCount('error')).toBe(1)
+      expect(output.listenerCount('error')).toBeLessThan(2)
       // libuv reports Win32 errors it cannot map (#33350) as UNKNOWN.
       expect(() =>
         output.emit('error', Object.assign(new Error('write UNKNOWN'), { code: 'UNKNOWN' }))

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 type ConoutConnection = {
   onReady(listener: () => void): void
+  onFailed(listener: () => void): void
   connectSocket(socket: Socket): void
   dispose(): void
 }
@@ -93,15 +94,31 @@ describe('node-pty ConPTY output relay worker', () => {
     reader.destroy()
 
     // ConPTY's final flush must still be consumed, or ClosePseudoConsole can block on a full pipe.
-    const drained = new Promise<void>((resolve) => peer.write(chunk, () => resolve()))
+    // The callback also runs on failure: a crashed worker surfaces here as EPIPE, not as drained.
+    const drained = new Promise<string>((resolve) =>
+      peer.write(chunk, (error) => resolve(error ? `write failed: ${error.message}` : 'drained'))
+    )
     let drainTimer: ReturnType<typeof setTimeout> | undefined
-    const timedOut = new Promise<'timeout'>((resolve) => {
+    const timedOut = new Promise<string>((resolve) => {
       drainTimer = setTimeout(() => resolve('timeout'), DRAIN_TIMEOUT_MS)
     })
-    const outcome = await Promise.race([drained.then(() => 'drained' as const), timedOut])
+    const outcome = await Promise.race([drained, timedOut])
     clearTimeout(drainTimer)
 
     expect(uncaught).toEqual([])
     expect(outcome).toBe('drained')
+  }, 15_000)
+
+  it('reports a relay that cannot reach ConPTY instead of crashing or hanging its terminal', async () => {
+    const uncaught = trackUncaught()
+    const connection = new ConoutConnectionImpl(conoutPipeName(), true)
+    let ready = false
+    connection.onReady(() => {
+      ready = true
+    })
+    await new Promise<void>((resolve) => connection.onFailed(resolve))
+
+    expect(ready).toBe(false)
+    expect(uncaught).toEqual([])
   }, 15_000)
 })
