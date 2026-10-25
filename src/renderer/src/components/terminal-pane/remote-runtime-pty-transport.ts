@@ -51,6 +51,7 @@ import {
 import type {
   IpcPtyTransportOptions,
   PtyConnectResult,
+  PtyRecoveryCause,
   PtyTransport,
   PtyTransportRecoveryState
 } from './pty-transport-types'
@@ -421,6 +422,7 @@ export function createRemoteRuntimePtyTransport(
       settleSignInConnectWait()
     }
     if (recovery.currentPhase === 'idle') {
+      recoveryCause = null
       autoRecoveryWindowSpent = false
       // Why before the reset: input that outlived the grace must not release into the recovered pane.
       discardExpiredDisconnectedInput()
@@ -436,6 +438,7 @@ export function createRemoteRuntimePtyTransport(
     emitRecoveryState()
   })
   let lastRecoveryStateKey = ''
+  let recoveryCause: PtyRecoveryCause | null = null
   let pendingViewportClaim = false
   // Why: recovery holds viewport sends, so the intent must survive to the stream that releases typing.
   let recoveryDeferredViewport: 'claim' | 'resize' | null = null
@@ -662,6 +665,8 @@ export function createRemoteRuntimePtyTransport(
       phase,
       epoch: recovery.currentEpoch,
       attempt: recovery.attemptCount,
+      ...(recoveryCause && recovery.currentPhase !== 'idle' ? { cause: recoveryCause } : {}),
+      ...(recovery.awaitingExternalTrigger ? { waiting: true as const } : {}),
       ...(ownership
         ? { reason: 'ownership' as const }
         : awaitingSignIn
@@ -672,7 +677,7 @@ export function createRemoteRuntimePtyTransport(
 
   function emitRecoveryState(force = false): void {
     const state = getRecoveryState()
-    const key = `${state.phase}:${state.epoch}:${state.attempt}:${state.reason ?? ''}`
+    const key = `${state.phase}:${state.epoch}:${state.attempt}:${state.reason ?? ''}:${state.cause ?? ''}:${state.waiting ?? ''}`
     if (!force && key === lastRecoveryStateKey) {
       return
     }
@@ -2578,6 +2583,7 @@ export function createRemoteRuntimePtyTransport(
         // Why: reconnect can re-mint a pane handle while its host coordinates live; keep xterm state mounted while re-resolving.
         const refusedHandle = handle
         closeMultiplexedStream()
+        recoveryCause = 'stream-ended'
         scheduleResubscribeAfterTransportClose('require-replacement')
         if (refusedHandle) {
           retireIfHostRecordsExit(refusedHandle, remotePtyId)
@@ -3095,6 +3101,7 @@ export function createRemoteRuntimePtyTransport(
             multiplexedStream = null
             multiplexedStreamHandle = null
             clearPendingViewportClaim()
+            recoveryCause = 'stream-ended'
             // Why: a legacy bare end or waiter failure proves only attachment loss; reuse the same handle, pacing flaps.
             const flapDelayMs = sameHandleEndFlapDelayMs(subscribedHandle)
             if (flapDelayMs === null) {
@@ -3161,12 +3168,14 @@ export function createRemoteRuntimePtyTransport(
             inputJournal.acknowledge(appliedSeq, kind)
           }
         },
-        onTransportClose: ({ recoverable, retryWithBackoff }) => {
+        onTransportClose: ({ recoverable, retryWithBackoff, stalled }) => {
           const current = isCurrentSubscription()
           transportClosed = true
           if (!current) {
             return
           }
+          // Why no cause for a backoff: a capacity refusal arrives over a healthy connection.
+          recoveryCause = stalled ? 'stream-stalled' : retryWithBackoff ? null : 'connection'
           multiplexedStream = null
           multiplexedStreamHandle = null
           setAttachmentReady(false)

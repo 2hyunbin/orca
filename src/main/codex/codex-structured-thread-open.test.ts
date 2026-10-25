@@ -1,11 +1,9 @@
 import { providerStartupFailureFact } from '../native-chat/agent-session-wire/structured-agent-session-failure-text'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  CodexAppServerFrameSizeError,
-  CodexAppServerRequestError,
-  openCodexAppServerConnection,
-  type CodexAppServerConnection
-} from './codex-app-server-connection'
+import { CodexAppServerFrameSizeError } from './app-server/codex-app-server-frame-size-error'
+import { CodexAppServerRequestError } from './app-server/codex-app-server-request-error'
+import { openCodexAppServerConnection } from './codex-app-server-connection'
+import type { CodexAppServerConnection } from './app-server/codex-app-server-connection-types'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 import { openCodexThread } from './codex-structured-thread-open'
 
