@@ -1,7 +1,7 @@
 import type { AgentType } from './agent-status-types'
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
-  isAgentChatPermissionMode,
+  isAgentChatPermissionChoice,
   newChatPermissionModeForSettings,
   type NewChatPermissionSettings
 } from './agent-chat-permission-mode'
@@ -100,7 +100,7 @@ export function parseStructuredLaunchSeedOptions(
     }
   }
   const permissionMode = entries.get(AGENT_CHAT_PERMISSION_MODE_OPTION_ID)
-  if (isAgentChatPermissionMode(permissionMode)) {
+  if (isAgentChatPermissionChoice(permissionMode)) {
     parsed[AGENT_CHAT_PERMISSION_MODE_OPTION_ID] = permissionMode
   }
   return Object.keys(parsed).length > 0 ? parsed : undefined
@@ -117,10 +117,7 @@ export function resolveStructuredLaunchSeedOptions(
 /** A new chat's seed: the saved selection plus the permission default narrowed to the agent. */
 export function structuredLaunchSeedOptions(
   settings:
-    | (Pick<
-        GlobalSettings,
-        'nativeChatSessionOptions' | 'nativeChatPermissionMode' | 'agentNativeChatPermissionModes'
-      > &
+    | (Pick<GlobalSettings, 'nativeChatSessionOptions' | 'nativeChatPermissionMode'> &
         NewChatPermissionSettings)
     | null
     | undefined,
@@ -252,4 +249,11 @@ export function structuredLaunchCompatibleOptions(
   return effort?.kind.type === 'select' && effort.kind.defaultValue
     ? { ...requested, effort: effort.kind.defaultValue }
     : requested
+}
+
+export function seededPermissionMode(
+  options: Readonly<Record<string, string>> | undefined
+): Record<string, string> {
+  const mode = options?.[AGENT_CHAT_PERMISSION_MODE_OPTION_ID]
+  return mode ? { [AGENT_CHAT_PERMISSION_MODE_OPTION_ID]: mode } : {}
 }
