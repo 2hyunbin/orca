@@ -401,6 +401,7 @@ describe('createWorktree base status merge', () => {
     )
     const description = lastWarningDescriptionText()
     expect(description).toContain(expectedReason)
+    expect(description).not.toContain('Unshallow')
     expect(description).toContain('feature-wt')
     // Create already succeeded — guidance must push manual recovery, not "try again".
     expect(description).toMatch(/manually/i)
@@ -439,6 +440,7 @@ describe('createWorktree base status merge', () => {
     const description = lastWarningDescriptionText()
     expect(description).toContain('git fetch --unshallow origin')
     expect(description).not.toContain('local-only commits')
+    expect(description).toContain('Unshallow')
   })
 
   it('falls back to the generic dirty detail when ownerWorktreePath is missing', async () => {

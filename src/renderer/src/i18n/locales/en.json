@@ -818,6 +818,7 @@
           "localBaseRefShallowHistoryNamed": "\"{{value0}}\" was created from {{value1}} and is unaffected. Orca could not also update your local {{value2}} branch because this clone only has recent history, so Git cannot confirm local {{value2}} is just behind. To fix this for every new workspace, run once:",
           "localBaseRefShallowHistory": "Your workspace was created from {{value0}} and is unaffected. Orca could not also update your local {{value1}} branch because this clone only has recent history, so Git cannot confirm local {{value1}} is just behind. To fix this for every new workspace, run once:",
           "localBaseRefRefreshTurnOff": "Stop updating local {{value0}}",
+          "localBaseRefUnshallow": "Unshallow",
           "localBaseRefRefreshTurnedOff": "Orca will no longer update local {{value0}}",
           "localBaseRefRefreshTurnedOffDescription": "Turn it back on in Settings › {{value0}}.",
           "localBaseRefRefreshTurnOffFailed": "Could not turn off {{value0}}",

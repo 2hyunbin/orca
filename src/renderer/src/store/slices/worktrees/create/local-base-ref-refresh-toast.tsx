@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { getKeepLocalMainUpToDateTitle } from '@/components/settings/keep-local-main-up-to-date-setting'
 import { translate } from '@/i18n/i18n'
 import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
+import { runCommandInNewTerminalTab } from '@/lib/run-command-in-new-terminal-tab'
 import type { AppState } from '@/store/types'
 import type { LocalBaseRefRefreshResult } from '../../../../../../shared/worktree/base-ref-drift-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
@@ -168,7 +169,7 @@ export function showLocalBaseRefRefreshToast(
         <p className="text-sm leading-5 text-popover-foreground/80">
           {refreshFailureDescription(result, worktreeName)}
         </p>
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -180,6 +181,18 @@ export function showLocalBaseRefRefreshToast(
               { value0: result.localBranch }
             )}
           </Button>
+          {result.shallowHistory && createdWorktree ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                if (runCommandInNewTerminalTab(createdWorktree.id, unshallowCommand(result))) {
+                  toast.dismiss(id)
+                }
+              }}
+            >
+              {translate('auto.store.slices.worktrees.localBaseRefUnshallow', 'Unshallow')}
+            </Button>
+          ) : null}
         </div>
       </div>
     ),
