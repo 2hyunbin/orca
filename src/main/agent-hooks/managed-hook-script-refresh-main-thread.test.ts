@@ -36,6 +36,7 @@ vi.mock('node:os', async (importOriginal) => {
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-user-data' } }))
 
 import { MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS } from './managed-agent-hook-registry'
+import { installClaudeAgentView } from '../claude/agent-view-install'
 
 function syncCallsUnderHome(): string[] {
   return state.syncCalls
@@ -66,6 +67,16 @@ describe('managed hook script refresh stays off the main thread', () => {
     )
     await mkdir(hooksDir, { recursive: true })
     await writeFile(claudeScript, 'stale', 'utf-8')
+    installClaudeAgentView(join(state.home, '.claude', 'settings.json'))
+    const modScript = join(
+      state.home,
+      '.claude',
+      'skills',
+      'orca-agent-view',
+      'hooks',
+      'register.js'
+    )
+    await writeFile(modScript, 'stale', 'utf8')
     state.syncCalls = []
 
     for (const [, refresh] of MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS) {
@@ -76,6 +87,7 @@ describe('managed hook script refresh stays off the main thread', () => {
     const refreshed = await readFile(claudeScript, 'utf8')
     expect(refreshed).not.toBe('stale')
     expect(refreshed).toContain(process.platform === 'win32' ? 'echo {}' : 'printf "{}\\n"')
+    expect(await readFile(modScript, 'utf8')).toContain('$.ui.view(')
   })
 
   it('keeps the Windows Claude entry and payload refresh off the main thread', async () => {

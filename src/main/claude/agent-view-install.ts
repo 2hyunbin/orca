@@ -1,5 +1,6 @@
 import { dirname, join, posix } from 'node:path'
 import { existsSync, rmSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import type { SFTPWrapper } from 'ssh2'
 import {
   readHooksJson,
@@ -8,7 +9,8 @@ import {
   type HooksConfig,
   isPlainObject
 } from '../agent-hooks/installer-utils'
-import { readHooksJsonWithRaw } from '../agent-hooks/hooks-json-read'
+import { parseHooksJsonText, readHooksJsonWithRaw } from '../agent-hooks/hooks-json-read'
+import { restoreManagedScript } from '../agent-hooks/managed-hook-script-refresh'
 import {
   parseClaudeAgentViewBindings,
   serializeClaudeAgentViewBindings
@@ -130,10 +132,18 @@ export async function installClaudeAgentViewRemote(
   })
 }
 
-export function refreshClaudeAgentView(configPath: string): void {
+export async function refreshClaudeAgentView(configPath: string): Promise<void> {
   const root = join(dirname(configPath), 'skills', CLAUDE_AGENT_VIEW_PLUGIN)
-  if (readHooksJson(join(root, '.claude-plugin', 'orca-managed.json'))?.owner === ownership.owner) {
-    writeManagedScript(join(root, 'hooks', 'register.js'), CLAUDE_AGENT_VIEW_MOD_SOURCE)
+  let marker: HooksConfig | null
+  try {
+    marker = parseHooksJsonText(
+      await readFile(join(root, '.claude-plugin', 'orca-managed.json'), 'utf8')
+    )
+  } catch {
+    return
+  }
+  if (marker?.owner === ownership.owner) {
+    await restoreManagedScript(join(root, 'hooks', 'register.js'), CLAUDE_AGENT_VIEW_MOD_SOURCE)
   }
 }
 

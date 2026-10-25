@@ -157,7 +157,7 @@ export class ClaudeHookService {
 
   async refreshManagedScripts(): Promise<void> {
     if (this.options.agent === 'claude') {
-      refreshClaudeAgentView(getConfigPath(this.options.settings))
+      await refreshClaudeAgentView(getConfigPath(this.options.settings))
     }
     const scriptPath = getManagedScriptPath(this.options.settings)
     const payload = this.managedScript()
