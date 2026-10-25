@@ -1287,6 +1287,11 @@
         "openInChat": "Cette conversation {{value0}} est ouverte dans un chat. Actualisez l'historique des sessions pour l'ouvrir.",
         "ownershipUnknown": "Orca n'a pas pu confirmer à qui appartient cette conversation {{value0}}. Actualisez l'historique des sessions et réessayez."
       },
+      "composerCreateHandoff": {
+        "reopen": "Rouvrir",
+        "preparationTimedOut": "La préparation du worktree a expiré.",
+        "needsInput": "Le worktree n'a pas été créé, car des informations supplémentaires sont requises."
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "Extraction des fichiers… {{percent}}%",
         "provisioningVm": "Provisionnement de la VM…",
