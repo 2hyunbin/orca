@@ -193,7 +193,8 @@ test("a phone reads the desktop's unsaved untitled Markdown tab read-only and ne
             tabId
           })
           read = response.ok ? response.result : null
-          return response.ok ? 'read' : `${response.error.code}: ${response.error.message}`
+          console.log('TRIAGE untitled read', JSON.stringify(response))
+          return response.ok ? (response.result.isDirty ? 'read' : 'awaiting-dirty-publication') : `${response.error.code}: ${response.error.message}`
         },
         { timeout: 30_000 }
       )
