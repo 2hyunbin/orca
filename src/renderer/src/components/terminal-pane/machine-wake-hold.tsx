@@ -28,7 +28,8 @@ export function MachineWakeHold({
       style={background ? { backgroundColor: background } : undefined}
     >
       <TerminalRemoteRuntimeReconnectBanner
-        phase={wake.failure ? 'disconnected' : 'recovering'}
+        recovery={{ phase: wake.failure ? 'disconnected' : 'recovering' }}
+        serverName={wake.machineName}
         wakingMachineName={wake.machineName}
         wakeFailure={wake.failure}
         onReconnect={() => void wakeMachineForHost(wake.hostId, worktreeId)}
