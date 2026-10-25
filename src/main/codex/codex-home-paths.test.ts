@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   readlinkSync,
   rmSync,
   symlinkSync,
@@ -247,20 +248,26 @@ describe('syncSystemCodexResourcesIntoManagedHome', () => {
     mkdirSync(perAccountRulesPath, { recursive: true })
     writeFileSync(join(systemRulesPath, 'default.rules'), 'global\n')
     writeFileSync(join(perAccountRulesPath, 'default.rules'), 'account approval\n')
+    writeFileSync(join(perAccountRulesPath, 'orca-global-default.rules'), 'legacy copy\n')
 
     syncSystemCodexResourcesIntoManagedHome(dirname(perAccountRulesPath))
 
+    // Codex loads sorted paths and later network/host_executable rules win, so account files must sort last.
+    expect(readdirSync(perAccountRulesPath).sort()).toEqual([
+      '_orca-global-default.rules',
+      'default.rules'
+    ])
     expect(readFileSync(join(perAccountRulesPath, 'default.rules'), 'utf-8')).toBe(
       'account approval\n'
     )
-    expect(readFileSync(join(perAccountRulesPath, 'orca-global-default.rules'), 'utf-8')).toBe(
+    expect(readFileSync(join(perAccountRulesPath, '_orca-global-default.rules'), 'utf-8')).toBe(
       'global\n'
     )
 
     rmSync(join(systemRulesPath, 'default.rules'))
     syncSystemCodexResourcesIntoManagedHome(dirname(perAccountRulesPath))
 
-    expect(existsSync(join(perAccountRulesPath, 'orca-global-default.rules'))).toBe(false)
+    expect(existsSync(join(perAccountRulesPath, '_orca-global-default.rules'))).toBe(false)
     expect(readFileSync(join(perAccountRulesPath, 'default.rules'), 'utf-8')).toBe(
       'account approval\n'
     )
@@ -279,7 +286,7 @@ describe('syncSystemCodexResourcesIntoManagedHome', () => {
 
     syncSystemCodexResourcesIntoManagedHome()
 
-    expect(existsSync(join(systemRulesPath, 'orca-global-default.rules'))).toBe(false)
+    expect(existsSync(join(systemRulesPath, '_orca-global-default.rules'))).toBe(false)
   })
 
   it('refreshes owned fallback copies when symlinks are unavailable', () => {
