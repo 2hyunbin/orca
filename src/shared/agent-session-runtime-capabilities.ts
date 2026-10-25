@@ -28,34 +28,21 @@ export const AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY =
 // Early acceptance requires clients to display later rejection. Hold legacy replies until handover/rejection; remove only after supported desktop/mobile clients render rejected messages in place.
 export const AGENT_SESSION_ACCEPTED_SEND_RUNTIME_CAPABILITY =
   'agent-session.accepted-send.v1' as const
-// Why: a host advertising this answers a resent send id from its record before anything else may
-// refuse it, so a refusal `agentSession.send` RETURNS is proof; a thrown error never is, a thrown
-// refusal included (host not installed, journal database won't open, host disabled). Reading a
-// returned `ok: false`: `agent_session_operation_unknown` with `outcomeUnknown` or `resultLost` —
-// the host cannot tell yet, resend the same id; with `rewindUnconfirmed` — settled, nothing was
-// written. `agent_session_operation_expired` — only the transcript can tell. An
-// `agent_session_operation_conflict` or `messageIdReused` — the id holds a different payload,
-// which proves nothing about this message; nor does `sessionNotAttached` (the chat's record is
-// gone or unreadable on this host). Any other — the chat holds no message under that id and none
-// is in flight, but a resend of that id may still run as a new send, so a client that hands the
-// text back must not resend the old id. An older host may refuse an id it recorded: none of this
-// holds there.
+// Capable hosts answer resend IDs from the record before other refusals; only returned answers
+// prove anything, never throws (even refusals). operation_unknown + outcomeUnknown/resultLost
+// means retry the same ID; rewindUnconfirmed means settled with no write. operation_expired needs
+// transcript inspection; operation_conflict/messageIdReused/sessionNotAttached prove no outcome.
+// Other refusals prove no recorded/in-flight message, but resending that ID could still run it:
+// after returning text to the user, never resend the old ID. Older hosts provide none of these guarantees.
 export const AGENT_SESSION_SEND_ANSWERS_PROOF_RUNTIME_CAPABILITY =
   'agent-session.send-answers-proof.v1' as const
-// Why: `agentSession.send`'s params are strict, so an older host rejects `delivery`; and only a
-// capable client can render the `queued` result arm. It gates `delivery: 'queue-if-active'` and
-// the client's queueing setting and chord, never the published draft list or its card actions: a
-// host without it still publishes a message it kept unsent across a restart or a close, and both
-// clients show that card and call its actions. DARK ON PURPOSE — not in
-// AGENT_SESSION_RUNTIME_CAPABILITIES: advertising still requires the integrated Codex steer matrix (#21062) in the shipped host.
-// v1 includes `submission.queuedMessageId` on every draft hand-off: a client reads that link and
-// never compares a draft id with a submission id. It also publishes the queue's pause once, as
-// `queuePause` beside the list, lifted by `agentSession.queuedMessagesResume` or any turn sent
-// after it starting; while it is set every waiting card waits. `nextQueuedMessageId` beside the list
-// names the card the queue sends next once nothing runs, null while anything holds it; absent (an
-// older host) reads as null. A card carries a hold of its own when its conversion failed
-// (`send_failed`) or the host kept it unsent (`kept`). The host mechanism lands first; the constant
-// gates the rollout.
+// Older hosts reject delivery; older clients cannot render queued replies. Gate queue-if-active,
+// its setting and chord, but never kept-draft lists/actions. DARK until the shipped host passes
+// the integrated Codex steer matrix (#21062); keep out of AGENT_SESSION_RUNTIME_CAPABILITIES.
+// v1 links hand-offs via submission.queuedMessageId, never equal draft/submission IDs. queuePause
+// holds every card until queuedMessagesResume or a later turn starts. nextQueuedMessageId names
+// the next eligible card; null/missing means none. Per-card holds: send_failed conversion or kept.
+// Host mechanisms land first; this capability gates rollout.
 export const AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY =
   'agent-session.queued-messages.v1' as const
 // Advertise in-place update/edit holds separately from mid-turn queueing: kept/mail cards remain editable while queueing is off. Never fall back to copy/delete.

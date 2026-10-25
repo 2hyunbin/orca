@@ -1,15 +1,8 @@
 import type { AgentJournalTurnScope } from './agent-session-journal-turn-scope'
 export type { AgentJournalTurnScope } from './agent-session-journal-turn-scope'
 import type { AgentSessionProviderContextBoundary } from './agent-session-provider-context'
-// ─── Canonical agent-session journal: cross-process wire shapes ─────────────
-// The host-owned timeline for a structured agent session. Everything here must
-// be plain JSON: rows are persisted verbatim and later republished to clients,
-// so no class instances, Maps, or Dates.
-//
-// Rows are append-only. `schemaVersion` is upcast at read time and never
-// rewritten in place, so a host that cannot read a row (a newer version, or a
-// newer kind) refuses to write the journal rather than skipping or compacting
-// past it.
+// Persist/republish plain JSON only. Append-only rows are upcast on read, never rewritten;
+// unreadable versions/kinds must refuse writes rather than be skipped or compacted away.
 
 import type { UnreadAgentSessionFailureFact } from './agent-session-failure'
 import type { AgentSessionFailureRowWords } from './agent-session-failure-words'
@@ -66,10 +59,7 @@ export type AgentSessionJournalIdentity = {
   providerHandle: AgentSessionProviderHandle | null
 }
 
-// ─── Item identity ──────────────────────────────────────────────────────────
-// Reconciliation keys, settled by the provider spikes. Codex renumbers items
-// positionally on resume, so a persisted item id is never an identity. Claude
-// copies the original uuids on fork, so the uuid is.
+// Codex renumbers items on resume, so persisted item IDs are not identity; Claude preserves UUIDs on fork.
 
 export type AgentJournalItemIdentity =
   | { provider: 'codex'; threadId: string; turnId: string; ordinal: number }

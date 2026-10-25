@@ -1,8 +1,5 @@
 // @vitest-environment happy-dom
-// Exercises the in-WebView touch dispatcher end-to-end: a surface tap on a
-// printed http(s) URL must post an `open-url` message (which RN routes to the
-// in-app/phone browser). Regression guard for taps that jitter a few pixels —
-// those were being swallowed because the tap shared the long-press slop gate.
+// URL taps with slight jitter once hit the long-press slop gate and never reached the native browser bridge.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TERMINAL_DOCUMENT_SCRIPT } from './terminal-webview-document-script.generated'
 import { TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'

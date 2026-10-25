@@ -89,11 +89,8 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
       }
     }
     const repos = useAppStore.getState().repos
-    // Why before the commit: the panes are still mounted in this flush, so this is the last moment
-    // a remote-runtime pane's xterm — the only client-side copy of its scrollback — can be
-    // serialized. The paired-parking capability that licenses the unmount says nothing about
-    // whether the host retained this pty's buffer, so the park must not leave the client with
-    // nothing to fall back on. Force-parks capture below with their eviction-exempt carve-out.
+    // Capture before unmount while xterm still owns client scrollback; paired-parking capability
+    // does not guarantee host buffer retention. Force-parks capture below under their eviction exemption.
     // Why localOnly: the ordinary park is the every-hide cadence; its bytes stay off the upload.
     for (const worktreeId of pass.nextParkedTerminalWorktreeIds) {
       if (capturedParked.has(worktreeId)) {

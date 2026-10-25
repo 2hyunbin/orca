@@ -449,31 +449,12 @@ const CELL_RESERVATION_UPDATE = `UPDATE relay_cells SET reserved_requests =
 // About one release round trip from Asia, with margin; see assignStickyOnce.
 const STICKY_ASSIGNMENT_ROW_WAIT_MS = 1_000
 
-// THE ROW LOCK ORDER. Every transaction that takes more than one of these
-// takes them in this order, whichever role it runs on:
-//
-//   1. relay_assignments               (the host's row)
-//   2. relay_assignment_migrations
-//      relay_assignment_activity_leases
-//   3. relay_control_connection_reservations   (lockControlConnectionReservations)
-//   4. relay_cells                     (lockCellInventory / lockCellRows / the
-//                                       conditional reservation UPDATE)
-//
-// relay_cells is last because it is the only row shared by every host on a
-// cell: a transaction that takes it early holds it across every round trip
-// that follows, and on a cell far from PostgreSQL that is what turns accepts
-// into a queue. Everything above it is per-host, so holding it longer costs
-// only that host. Paths that read the inventory to make a placement decision
-// cannot defer relay_cells, so they lock the host's rows from tiers 1-3 up
-// front instead, before the inventory, and re-check what they read afterwards.
-// Tier 1 is what serialises two transactions on the same host; the tiers below
-// it keep transactions on *different* hosts from cycling through relay_cells.
-// Why: one global FOR UPDATE over a 23-row table serialises every director and
-// cell. At the 1s pool lock_timeout each blocked waiter also holds a pooled
-// client for a full second, so the queue converts contention into pool
-// exhaustion. The lock is held to COMMIT and the assignment path runs many
-// statements after taking it, and no hold-time telemetry existed before this
-// change, so 500ms is a first value to tune once cellInventoryHoldMsMax lands.
+// Lock order across all roles: relay_assignments → relay_assignment_migrations/activity_leases →
+// relay_control_connection_reservations → relay_cells (including conditional reservation UPDATE).
+// Per-host locks precede the cell shared by all hosts to prevent cross-host deadlocks and shorten
+// cell hold time across distant-Postgres round trips. Inventory-first paths acquire tiers 1–3
+// before inventory and recheck afterward. Global FOR UPDATE queues also exhaust pooled clients;
+// tune the 500ms request wait using cellInventoryHoldMsMax.
 export const CELL_INVENTORY_LOCK_TIMEOUT_MS = 500
 
 // The same inventory lock is taken by live requests and by background sweeps,

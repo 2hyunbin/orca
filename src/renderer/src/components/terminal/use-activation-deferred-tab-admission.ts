@@ -63,10 +63,7 @@ export function useActivationDeferredTabAdmission(
       })
       setBackgroundMountRevision((revision) => revision + 1)
     })
-    // Why activationDeferralPlanRevision is a dep: a startup-gate-open pass can
-    // install a plan for the already-active worktree by mutating only refs —
-    // neither other dep changes, and without this revision the tabs stay
-    // unmounted until the user switches workspaces and back.
+    // Opening the startup gate can install a refs-only plan for the active workspace; its revision must trigger mounting.
   }, [
     activationDeferralPlanRevision,
     activationDeferredMountTabIdsByWorktreeRef,
