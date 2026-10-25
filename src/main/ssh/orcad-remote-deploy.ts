@@ -2,6 +2,7 @@
 import { logOrcadActivationOutcome } from '../managed-server/activation/orcad-activation-outcome-log'
 import { join } from 'node:path'
 import type { OrcadHostTransport } from './orcad-host-transport'
+import type { OrcadUpdateForce } from './orcad-update-plan'
 import { ORCAD_INSTALL_MODEL } from '../managed-server/install/remote-install-model'
 import {
   computeRemoteInstallDir,
@@ -53,7 +54,7 @@ export type OrcadDeployOptions = {
   recountCensus: () => Promise<OrcadTerminalCensus>
   /** Best-effort reopen when incumbent keeps serving; admission also expires server-side. */
   releaseIncumbentAdmission: () => Promise<void>
-  force?: boolean
+  force?: OrcadUpdateForce
   /** The Orca app version activating, recorded so an older client never downgrades the host. */
   appVersion?: string
   /** Reapply version policy under lock because peer activation/stop may land during upload. */

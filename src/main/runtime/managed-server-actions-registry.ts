@@ -1,5 +1,6 @@
 /** Desktop main publishes managed-server actions for runtime RPC; headless hosts without a registry advertise none. */
 import type {
+  OrcadManagedPastLiveTerminals,
   OrcadManagedCancelStopResult,
   OrcadManagedDeployResult,
   OrcadManagedForgetResult,
@@ -11,7 +12,11 @@ import type {
 
 export type ManagedServerActions = {
   status: (selector: string) => Promise<OrcadManagedRuntimeStatus>
-  update: (selector: string, force: boolean) => Promise<OrcadManagedDeployResult>
+  update: (
+    selector: string,
+    force: boolean,
+    pastLiveTerminals?: OrcadManagedPastLiveTerminals
+  ) => Promise<OrcadManagedDeployResult>
   rollback: (selector: string) => Promise<OrcadManagedRollbackResult>
   /** `acceptChangedState` restores the snapshot over state a rejected build changed. */
   recover: (selector: string, acceptChangedState?: boolean) => Promise<OrcadManagedRecoveryResult>
