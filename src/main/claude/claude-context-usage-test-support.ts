@@ -9,26 +9,13 @@ import type {
   StructuredAgentSessionEventSink,
   StructuredAgentSessionRevisionJournal
 } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import { createJournalReducerState } from '../native-chat/agent-session-journal/journal-reducer'
-import { personStopDecidesTurn } from '../native-chat/agent-session-journal/journal-stop-turn-end'
 import type { ClaudeContextReportTarget } from './claude-context-facts'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import { claudeTurnLifecycleIdentity } from './claude-turn-lifecycle-item'
 
-export function journal({ deferred = false } = {}) {
-  const queued: (() => void)[] = []
-  const run = (write: () => void): void => {
-    if (deferred) {
-      queued.push(write)
-    } else {
-      write()
-    }
-  }
-  const flush = (): void => {
-    while (queued.length) {
-      queued.shift()!()
-    }
-  }
+/** A journal in miniature: the latest revision per row, its creation clock
+ *  pinned, and revisions resolved against it as a bound sink would. */
+export function journal() {
   const clock = { now: 0 }
   const appends: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] = []
   const rows = new Map<string, AgentJournalRenderItem>()
@@ -41,8 +28,6 @@ export function journal({ deferred = false } = {}) {
       revision: (existing?.revision ?? 0) + 1,
       sequence: existing?.sequence ?? rows.size + 1,
       observedAt: existing?.observedAt ?? options?.observedAt ?? clock.now,
-      ...options,
-      turnScope: existing?.turnScope ?? options.turnScope,
       body
     })
   }
@@ -58,30 +43,19 @@ export function journal({ deferred = false } = {}) {
     },
     itemBody: (itemId) => rows.get(itemId)?.body ?? null
   }
-  const revise: NonNullable<StructuredAgentSessionEventSink['tryReviseResolvedItemAndPublish']> = (
+  const revise: NonNullable<StructuredAgentSessionEventSink['tryReviseResolvedItem']> = (
     _reservedBytes,
     resolve,
     options
   ) => {
-    run(() => {
-      const resolved = resolve(bound)
-      if (resolved) {
-        appendItem(resolved.identity, resolved.body, options)
-      }
-    })
+    const resolved = resolve(bound)
+    if (resolved) {
+      appendItem(resolved.identity, resolved.body, options)
+    }
     return { accepted: true }
   }
-  const stopState = createJournalReducerState('orca-session', 'test')
-  const queueStop = (turnId: string, at: number): void =>
-    run(() => {
-      stopState.queuePauseMarks.latestStop = {
-        sequence: rows.size + 1,
-        event: { reason: 'user-stop', turnId, at }
-      }
-    })
   const sink: StructuredAgentSessionEventSink = {
-    journalStopDecidesTurn: (turnId, at) => personStopDecidesTurn(stopState, turnId, at),
-    appendItem: (...args) => run(() => appendItem(...args)),
+    appendItem,
     tryReviseResolvedItem: revise,
     tryReviseResolvedItemAndPublish: revise,
     appendTombstone: () => {},
@@ -90,7 +64,7 @@ export function journal({ deferred = false } = {}) {
   const turnRow = (turnId: string) =>
     rows.get(agentJournalItemKey(claudeTurnLifecycleIdentity('claude-session', turnId)))
   const items = () => [...rows.values()].sort((left, right) => left.sequence - right.sequence)
-  return { sink, clock, appends, rows, turnRow, items, scans, flush, queueStop }
+  return { sink, clock, appends, rows, turnRow, items, scans }
 }
 
 export function frame(message: Record<string, unknown>, observedAt: number, startsTurn = false) {
@@ -170,11 +144,9 @@ export const compactBoundary = (at: number) =>
 export const turnIdentity = (turnId: string) =>
   claudeTurnLifecycleIdentity('claude-session', turnId)
 
-export function setup({
-  init = 'claude-fable-5-1[1m]',
-  deferred = false
-}: { init?: string | null; deferred?: boolean } = {}) {
-  const state = journal({ deferred })
+/** Every turn the CLI runs opens with an init naming the main model as `modelUsage` keys it. */
+export function setup({ init = 'claude-fable-5-1[1m]' }: { init?: string | null } = {}) {
+  const state = journal()
   const translator = createClaudeJournalTranslator({ sink: state.sink, coalesceMs: 0 })
   const requests: ClaudeContextReportTarget[] = []
   translator.subscribeContextUsageRequests((target) => requests.push(target))

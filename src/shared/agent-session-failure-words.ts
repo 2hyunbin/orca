@@ -26,10 +26,6 @@ import {
 } from './agent-session-failure-copy'
 import { START_REFUSAL_RESUMABLE } from './agent-session-start-refusal-resumable'
 import { providerRetryWords, withRetryCause } from './agent-session-provider-retry-words'
-import {
-  usageLimitWords,
-  type AgentSessionUsageLimitResetWords
-} from './agent-session-usage-limit-words'
 import { commandRefusedByReason } from './agent-session-command-refusal-words'
 import { attachmentProblemSentence } from './agent-session-attachment-failure-words'
 import { joinSentences } from './sentence-joining'
@@ -76,8 +72,6 @@ export type AgentSessionFailureWordsContext = {
   retryControl?: boolean
   /** A direct create has no submitted message to send again. */
   messageSubmitted?: boolean
-  /** How this reader says a usage limit's reset; without it the words name no time. */
-  usageLimitReset?: AgentSessionUsageLimitResetWords
 }
 
 /** Person-facing provider text is quoted, but bounded so the sentence stays one. */
@@ -283,11 +277,6 @@ const FAILURE_SENTENCES = {
           retry?.cause
         )
       : providerRetryWords(say, agent(say, context), retry),
-  usageLimitReached: (context, { usageLimit }, _surface, say) =>
-    usageLimitWords(say, agent(say, context), usageLimit, {
-      resetWords: context.usageLimitReset,
-      continueControl: context.retryControl
-    }),
   previousExitUnverifiable: namingAgent('previousExitUnverifiable'),
   sessionNotRestored: namingAgent('sessionNotRestored')
 } satisfies Record<AgentSessionFailureKind, Sentence>

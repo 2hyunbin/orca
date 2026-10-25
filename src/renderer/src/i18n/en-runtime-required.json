@@ -3176,14 +3176,6 @@
         "stopRefusedQuoted": "{{agent}} didn't stop: {{detail}}.",
         "theAgent": "The agent",
         "thenSendAgain": "Then send your message again.",
-        "usageLimitReached": "{{agent}} hit its usage limit.",
-        "usageLimitReachedNamed": "{{agent}} hit its {{window}} limit.",
-        "usageLimitResetsAt": "It resets at {{when}}.",
-        "usageLimitSendAfterReset": "Send a message once it resets to continue.",
-        "usageLimitWindowCredits": "extra usage",
-        "usageLimitWindowSession": "session",
-        "usageLimitWindowWeekly": "weekly",
-        "usageLimitWindowWeeklyModel": "weekly model",
         "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent."
       },
       "notices": {
@@ -3301,7 +3293,6 @@
         "compactAfterAnswer": "Answer the agent's question or approval, then run /compact.",
         "compactAfterRetry": "Retry your earlier message, then run /compact.",
         "compactAfterSending": "Your earlier message is still being sent. Run /compact once it has gone.",
-        "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "conversationCleared": "This conversation has been cleared.",
         "goalsUnsupported": "This agent doesn't support goals.",
         "historyUnavailable": "Orca couldn't open this chat's history right now.",

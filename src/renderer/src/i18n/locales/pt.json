@@ -19644,14 +19644,6 @@
         "providerRetryNumber": "Tentativa {{attempt}}.",
         "providerRetryNumberOf": "Tentativa {{attempt}} de {{maxRetries}}.",
         "providerRetryLastError": "Último erro: {{detail}}.",
-        "usageLimitReached": "{{agent}} atingiu seu limite de uso.",
-        "usageLimitReachedNamed": "{{agent}} atingiu seu limite de {{window}}.",
-        "usageLimitWindowSession": "sessão",
-        "usageLimitWindowWeekly": "uso semanal",
-        "usageLimitWindowWeeklyModel": "uso semanal do modelo",
-        "usageLimitWindowCredits": "uso extra",
-        "usageLimitResetsAt": "Ele será redefinido em {{when}}.",
-        "usageLimitSendAfterReset": "Envie uma mensagem após a redefinição para continuar.",
         "previousExitUnverifiable": "Não foi possível parar a instância anterior de {{agent}}.",
         "sessionNotRestored": "{{agent}} não conseguiu reabrir sua sessão anterior, por isso este chat continua em uma nova sessão. {{agent}} não se lembra das mensagens anteriores.",
         "argumentsUnsupportedOption": "Os Argumentos salvos contêm uma opção não aceita ({{option}}).",
@@ -19684,7 +19676,6 @@
         "capacity": "O Orca no computador que executa este chat atingiu um limite de requisições. Atualize o Orca lá e tente novamente.",
         "outcomeUnknown": "O Orca não conseguiu confirmar o que aconteceu. Verifique o chat.",
         "sendOutcomeLost": "O Orca não conseguiu confirmar que sua mensagem chegou ao agente. Verifique o chat e envie-a novamente, se necessário.",
-        "continuationSuperseded": "Este chat avançou. Confira as mensagens mais recentes antes de continuar.",
         "questionChanged": "Esta pergunta já foi respondida ou mudou.",
         "cancelNotSaved": "Não foi possível cancelar esta pergunta ou pedido de aprovação.",
         "historyUnreadable": "O Orca não conseguiu ler o histórico salvo deste chat.",
@@ -19899,9 +19890,7 @@
       "interruptedContinue": {
         "continue": "Continuar",
         "failed": "Não foi possível continuar este chat. Tente novamente ou envie uma mensagem.",
-        "explanation": "Ao continuar, o agente verifica primeiro se a última etapa foi concluída.",
-        "unconfirmed": "Não foi possível confirmar se o {{agent}} recebeu Continuar. Confira o chat antes de tentar novamente.",
-        "usageLimitExplanation": "Pede ao agente para continuar de onde parou. Use quando o limite for restabelecido."
+        "explanation": "Ao continuar, o agente verifica primeiro se a última etapa foi concluída."
       },
       "antigravitySignIn": {
         "sentence": "Você não está conectado ao Antigravity. Entre em <settings>Configurações → Contas → Antigravity</settings>. Depois envie sua mensagem novamente."

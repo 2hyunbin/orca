@@ -15,7 +15,6 @@ import { structuredAgentSessionPayloadFingerprint } from './structured-agent-ses
 export type StructuredAgentSessionSendControl = {
   delivery?: 'queue-if-active'
   options?: Readonly<Record<string, string>>
-  usageLimitContinuationOfTurnItemId?: string
 }
 
 export type StructuredAgentSessionSendMutation = StructuredAgentSessionSendControl & {
@@ -29,10 +28,7 @@ export function agentSessionSendControlFields(
 ): StructuredAgentSessionSendControl {
   return {
     ...(send.delivery ? { delivery: send.delivery } : {}),
-    ...(send.options ? { options: send.options } : {}),
-    ...(send.usageLimitContinuationOfTurnItemId
-      ? { usageLimitContinuationOfTurnItemId: send.usageLimitContinuationOfTurnItemId }
-      : {})
+    ...(send.options ? { options: send.options } : {})
   }
 }
 

@@ -271,7 +271,7 @@ it('captures every failed request before latest-only publication, despite owed w
           kind: 'status',
           tone: 'warning',
           ...agentSessionFailureWords(
-            { kind: 'usageLimitReached' },
+            { kind: 'providerRejected' },
             { surface: 'row', agentName: 'Codex' }
           )
         },
@@ -288,7 +288,7 @@ it('captures every failed request before latest-only publication, despite owed w
   await tick()
   expect(r.mail().map((m) => JSON.parse(m.payload ?? '{}').error)).toEqual([
     'capacity A',
-    agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row', agentName: 'Codex' })
+    agentSessionFailureWords({ kind: 'providerRejected' }, { surface: 'row', agentName: 'Codex' })
       .text,
     'quota D'
   ])

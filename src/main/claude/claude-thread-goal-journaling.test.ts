@@ -6,7 +6,6 @@ import type {
 } from '../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
-import { journal } from './claude-context-usage-test-support'
 import { ClaudeBackgroundTaskTracker } from './claude-background-task-tracker'
 import { MOVED_TO_BACKGROUND } from './claude-captured-task-frames.test-fixture'
 
@@ -15,15 +14,13 @@ const OBJECTIVE = 'reply with exactly the word done'
 
 function goalSink(
   journalGoal: AgentJournalThreadGoal | null = null,
-  journalRow?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody },
-  deferred = false
+  journalRow?: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }
 ) {
-  const state = journal({ deferred })
-  const rows = state.appends
+  const rows: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] = []
   let stopped = false
   const backgroundTasks = new ClaudeBackgroundTaskTracker()
   const sink: StructuredAgentSessionEventSink = {
-    ...state.sink,
+    appendItem: (identity, body) => rows.push({ identity, body }),
     appendTombstone: vi.fn(),
     publish: vi.fn(),
     journalStopDecidesTurn: () => stopped,
@@ -48,7 +45,6 @@ function goalSink(
   let at = 1_000
   const frame = (message: Record<string, unknown>, elapsedMs = 1_000) => {
     at += elapsedMs
-    state.clock.now = at
     backgroundTasks.observe(message)
     translator.handle({
       type: 'message',
@@ -76,69 +72,60 @@ function goalSink(
   const pressStop = () => {
     stopped = true
   }
-  return { frame, reply, result, goals, savedGoal, pressStop, flush: state.flush }
+  return { frame, reply, result, goals, savedGoal, pressStop }
 }
 
 describe('Claude /goal journaling', () => {
-  it.each([false, true])(
-    'journals the goal and its completion before adjacent idle (deferred %s)',
-    (deferred) => {
-      const { frame, reply, result, goals, flush } = goalSink(null, undefined, deferred)
-      reply('goal-set', '<synthetic>', `Goal set: ${OBJECTIVE}`)
-      reply('work-1', 'claude-haiku-4-5', 'Working on it.')
-      result(
-        'result-1',
-        { subtype: 'error_max_turns', is_error: true, terminal_reason: 'max_turns' },
-        5_000
-      )
-      frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
-      reply('work-2', 'claude-haiku-4-5', 'done')
-      result(
-        'result-2',
-        { subtype: 'success', is_error: false, terminal_reason: 'completed' },
-        3_000
-      )
-      frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
-      flush()
+  it('journals the goal Claude reports, its time, and its completion when Claude ends on its own', () => {
+    const { reply, result, goals } = goalSink()
+    reply('goal-set', '<synthetic>', `Goal set: ${OBJECTIVE}`)
+    reply('work-1', 'claude-haiku-4-5', 'Working on it.')
+    // A turn cap stops Claude before the goal passes: the goal stays open and gains the time.
+    result(
+      'result-1',
+      { subtype: 'error_max_turns', is_error: true, terminal_reason: 'max_turns' },
+      5_000
+    )
+    reply('work-2', 'claude-haiku-4-5', 'done')
+    result('result-2', { subtype: 'success', is_error: false, terminal_reason: 'completed' }, 3_000)
 
-      expect(goals()).toEqual([
-        {
-          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
-          body: expect.objectContaining({
-            text: `Goal set: ${OBJECTIVE}`,
-            threadGoal: {
-              state: 'set',
-              goal: expect.objectContaining({
-                objective: OBJECTIVE,
-                status: 'active',
-                timeUsedSeconds: 0
-              })
-            }
-          })
-        },
-        {
-          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
-          body: expect.objectContaining({
-            text: `Goal set: ${OBJECTIVE}`,
-            threadGoal: {
-              state: 'set',
-              goal: expect.objectContaining({ status: 'active', timeUsedSeconds: 6 })
-            }
-          })
-        },
-        {
-          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'result-2:goal' },
-          body: expect.objectContaining({
-            text: `Goal complete: ${OBJECTIVE}`,
-            threadGoal: {
-              state: 'set',
-              goal: expect.objectContaining({ status: 'complete', timeUsedSeconds: 10 })
-            }
-          })
-        }
-      ])
-    }
-  )
+    expect(goals()).toEqual([
+      {
+        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
+        body: expect.objectContaining({
+          text: `Goal set: ${OBJECTIVE}`,
+          threadGoal: {
+            state: 'set',
+            goal: expect.objectContaining({
+              objective: OBJECTIVE,
+              status: 'active',
+              timeUsedSeconds: 0
+            })
+          }
+        })
+      },
+      {
+        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
+        body: expect.objectContaining({
+          text: `Goal set: ${OBJECTIVE}`,
+          threadGoal: {
+            state: 'set',
+            goal: expect.objectContaining({ status: 'active', timeUsedSeconds: 6 })
+          }
+        })
+      },
+      {
+        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'result-2:goal' },
+        body: expect.objectContaining({
+          text: `Goal complete: ${OBJECTIVE}`,
+          threadGoal: {
+            state: 'set',
+            goal: expect.objectContaining({ status: 'complete', timeUsedSeconds: 10 })
+          }
+        })
+      }
+    ])
+  })
 
   // Captured Stop during the goal check returned success.
   it('keeps the goal open when a person stops the turn, even on a clean result', () => {

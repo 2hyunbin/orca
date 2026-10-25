@@ -62,12 +62,8 @@ describe('OpenCode over ACP', () => {
     expect(statuses.map((row) => row.body)).toEqual([
       expect.objectContaining({
         kind: 'status',
-        tone: 'warning',
-        failure: {
-          kind: 'usageLimitReached',
-          detail: { text: message, audience: 'person' },
-          ...('retryAfterMs' in data ? { usageLimit: { resetsAt: 61_001 } } : {})
-        }
+        tone: 'error',
+        text: message
       })
     ])
     expect((await rig.turns())[0]?.outcome).toBe('failure')

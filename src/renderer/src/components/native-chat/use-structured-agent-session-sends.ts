@@ -115,10 +115,6 @@ export function useStructuredAgentSessionSends(args: {
         target,
         text,
         attachments,
-        ...(request?.callerKeepsText ? { callerKeepsText: request.callerKeepsText } : {}),
-        ...(request?.usageLimitContinuationOfTurnItemId
-          ? { usageLimitContinuationOfTurnItemId: request.usageLimitContinuationOfTurnItemId }
-          : {}),
         ...(delivery ? { delivery } : {}),
         ...(options ? { options } : {}),
         ...(takesSkills && request?.skills?.length ? { skills: request.skills } : {}),
@@ -127,9 +123,6 @@ export function useStructuredAgentSessionSends(args: {
       // Refused while the chat's send is out: the text stays in the box.
       if (!sent) {
         return false
-      }
-      if (request?.onSettled) {
-        void sent.outcome.then(request.onSettled)
       }
       // The same projection that draws the transcript decides it.
       const admitted = getStructuredAgentSessionPendingSends(sessionId).filter(

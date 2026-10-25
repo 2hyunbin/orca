@@ -25,7 +25,6 @@ import {
 import type { CodexRowAttribution } from './codex-subagent-linkage'
 import { codexAuthenticationFailure } from './codex-authentication-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
-import { CodexUsageLimits } from './codex-usage-limits'
 
 const OVERFLOW_BUCKET = '__codex-generic-overflow__'
 type TurnRows = { drawn: number; wordless: number }
@@ -69,7 +68,6 @@ export class CodexJournalGenericFrames {
   private bookkeepingBytes = 0
   private fallbackSequence = 0
   private cancelSuppressionFlush: (() => void) | null = null
-  private readonly usageLimits = new CodexUsageLimits()
 
   constructor(
     private readonly deps: Pick<
@@ -89,23 +87,20 @@ export class CodexJournalGenericFrames {
     payload: unknown,
     threadId: string
   ): CodexJournalTranslationAdmission {
-    if (this.usageLimits.observe(kind, payload)) {
-      return CODEX_JOURNAL_ADMITTED
-    }
     const translated = unhandledProviderFrameJournalItem('codex', kind, payload)
-    // Declined frames count as success; rejection would force-close the provider.
-    const ended = kind === 'notification:error' && !readCodexErrorWillRetry(payload)
-    const usageLimit = ended ? this.usageLimits.failure(payload) : null
-    const failure =
-      usageLimit ?? (ended ? codexAuthenticationFailure(payload, this.deps.account?.()) : null)
+    // A frame the classifier declines is deliberately not journaled, which is success.
+    // Failing admission here force-closes the provider through the retry queue.
+    const auth =
+      kind === 'notification:error' && !readCodexErrorWillRetry(payload)
+        ? codexAuthenticationFailure(payload, this.deps.account?.())
+        : null
     return translated
       ? this.appendFrameRow(threadId, payload, {
           ...translated,
-          body: failure
+          body: auth
             ? {
                 ...translated.body,
-                ...(usageLimit ? { tone: 'warning' } : {}),
-                ...agentSessionFailureWords(failure, {
+                ...agentSessionFailureWords(auth, {
                   provider: 'codex',
                   agentName: 'Codex',
                   surface: 'row'
@@ -153,10 +148,7 @@ export class CodexJournalGenericFrames {
     this.fallbackSequence += 1
     const identity = {
       provider: 'orca' as const,
-      clientMessageId:
-        translated.body.failure?.kind === 'usageLimitReached' && frameTurnId
-          ? `terminal-failure:codex:${JSON.stringify([threadId, frameTurnId])}`
-          : `provider-frame:codex:${this.deps.acquisitionId ?? 'acquisition'}:${this.fallbackSequence}`
+      clientMessageId: `provider-frame:codex:${this.deps.acquisitionId ?? 'acquisition'}:${this.fallbackSequence}`
     }
     const attribution = this.deps.attributionFor(threadId, frameTurnId)
     attribution.turnScope = translated.turnScope ?? attribution.turnScope

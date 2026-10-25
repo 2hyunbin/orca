@@ -18675,14 +18675,6 @@
         "providerRetryNumber": "Reintento {{attempt}}.",
         "providerRetryNumberOf": "Reintento {{attempt}} de {{maxRetries}}.",
         "providerRetryLastError": "Último error: {{detail}}.",
-        "usageLimitReached": "{{agent}} alcanzó su límite de uso.",
-        "usageLimitReachedNamed": "{{agent}} alcanzó su límite {{window}}.",
-        "usageLimitWindowSession": "de sesión",
-        "usageLimitWindowWeekly": "semanal",
-        "usageLimitWindowWeeklyModel": "semanal del modelo",
-        "usageLimitWindowCredits": "de uso adicional",
-        "usageLimitResetsAt": "Se restablece a las {{when}}.",
-        "usageLimitSendAfterReset": "Envía un mensaje cuando se restablezca para continuar.",
         "previousExitUnverifiable": "No se pudo detener la ejecución anterior de {{agent}}.",
         "sessionNotRestored": "{{agent}} no pudo reabrir su sesión anterior, así que este chat continúa en una nueva. {{agent}} no recuerda los mensajes anteriores.",
         "agentCommandNotSignedIn": "Inicia sesión en {{agent}} con `{{loginCommand}}` en el equipo donde se ejecuta este chat.",
@@ -18709,7 +18701,6 @@
         "capacity": "Orca en el equipo que ejecuta este chat alcanzó un límite de solicitudes. Actualice Orca en ese equipo y vuelva a intentarlo.",
         "outcomeUnknown": "Orca no pudo confirmar qué pasó. Revise el chat.",
         "sendOutcomeLost": "Orca no pudo confirmar que su mensaje llegó al agente. Revise el chat y vuelva a enviarlo si es necesario.",
-        "continuationSuperseded": "Este chat ya ha avanzado. Revisa los últimos mensajes antes de continuar.",
         "questionChanged": "Esta pregunta ya se respondió o ha cambiado.",
         "cancelNotSaved": "No se pudo cancelar esta pregunta o aprobación.",
         "historyUnreadable": "Orca no pudo leer el historial guardado de este chat.",
@@ -19312,9 +19303,7 @@
       "interruptedContinue": {
         "continue": "Continuar",
         "failed": "No se pudo continuar este chat. Inténtalo de nuevo o envía un mensaje.",
-        "explanation": "Continúa y el agente comprobará primero si su último paso terminó.",
-        "unconfirmed": "No se pudo confirmar si {{agent}} recibió Continuar. Revisa el chat antes de volver a intentarlo.",
-        "usageLimitExplanation": "Pide al agente que continúe donde lo dejó. Úsalo cuando se restablezca el límite."
+        "explanation": "Continúa y el agente comprobará primero si su último paso terminó."
       },
       "rewind": {
         "unsupported": "Este chat no puede volver a un mensaje anterior.",

@@ -5,7 +5,6 @@ import {
 } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import { BoundedMap } from '../../shared/bounded-map'
-import type { AgentSessionUsageLimit } from '../../shared/agent-session-usage-limit'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import type { AcpDialect } from './acp-dialects/acp-dialect'
 import { AcpAgentError, AcpAuthRequiredError, AcpSignInPromptError } from './acp-errors'
@@ -53,15 +52,8 @@ export function acpSignInRequiredFailure(
 
 /** Deduplicate failure rows by turn, accepting later reasons when earlier reports lacked one. */
 export class AcpTurnFailures {
-  private readonly rows = new BoundedMap<
-    string,
-    {
-      text: string
-      notSignedIn: boolean
-      usageLimited: boolean
-      usageLimit?: AgentSessionUsageLimit
-    }
-  >({
+  /** The reason each failed turn's row holds; '' for none yet. */
+  private readonly rows = new BoundedMap<string, { text: string; notSignedIn: boolean }>({
     maxEntries: 128
   })
 
@@ -79,63 +71,45 @@ export class AcpTurnFailures {
     turn: string,
     stopReason: string,
     text: string | undefined,
-    notSignedIn = false,
-    usageLimit?: AgentSessionUsageLimit
+    notSignedIn = false
   ): ProviderTimelineEvent[] {
-    return acpStopReasonFailed(stopReason)
-      ? this.row(turn, text, stopReason, notSignedIn, usageLimit)
-      : []
+    return acpStopReasonFailed(stopReason) ? this.row(turn, text, stopReason, notSignedIn) : []
   }
 
   row(
     turn: string,
     text: string | undefined,
     stopReason = 'error',
-    notSignedIn = false,
-    usageLimit?: AgentSessionUsageLimit
+    notSignedIn = false
   ): ProviderTimelineEvent[] {
     const written = this.rows.peek(turn)
     const detail = text === undefined ? undefined : providerDiagnostic(text, 'person')
-    const diagnostic =
-      (written?.text ? providerDiagnostic(written.text, 'person') : undefined) ?? detail
-    const authenticationRequired = notSignedIn || written?.notSignedIn === true
-    // Preserve rate-limit classification when a later prompt error omits the stop reason.
-    const usageLimited =
-      !authenticationRequired && (stopReason === 'rate_limit' || written?.usageLimited === true)
-    const limit = usageLimit ?? written?.usageLimit
     if (
-      written &&
-      written.text === (diagnostic?.text ?? '') &&
-      written.notSignedIn === authenticationRequired &&
-      written.usageLimited === usageLimited &&
-      written.usageLimit?.resetsAt === limit?.resetsAt &&
-      written.usageLimit?.window === limit?.window
+      written !== undefined &&
+      (written.text !== '' || !detail) &&
+      (!notSignedIn || written.notSignedIn)
     ) {
       return []
     }
+    const diagnostic =
+      detail ?? (written?.text ? providerDiagnostic(written.text, 'person') : undefined)
+    const authenticationRequired = notSignedIn || written?.notSignedIn === true
     this.rows.set(turn, {
       text: diagnostic?.text ?? '',
-      notSignedIn: authenticationRequired,
-      usageLimited,
-      usageLimit: limit
+      notSignedIn: authenticationRequired
     })
-    const failure = authenticationRequired
-      ? agentSessionFailureFact('notSignedIn', { detail: diagnostic })
-      : usageLimited
-        ? agentSessionFailureFact('usageLimitReached', {
-            detail: diagnostic,
-            usageLimit: limit
-          })
-        : null
     return [
       {
         type: 'item.update',
         item: `turn-failure:${turn}`,
         body: {
           kind: 'status',
-          tone: usageLimited ? 'warning' : 'error',
-          ...(failure
-            ? agentSessionFailureWords(failure, { agentName: this.agentName, surface: 'row' })
+          tone: 'error',
+          ...(authenticationRequired
+            ? agentSessionFailureWords(
+                agentSessionFailureFact('notSignedIn', { detail: diagnostic }),
+                { agentName: this.agentName, surface: 'row' }
+              )
             : {
                 text:
                   diagnostic?.text ??

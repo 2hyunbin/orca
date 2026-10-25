@@ -5,7 +5,8 @@ import { MAX_SKILL_REFS } from '../../../../shared/rpc-contract/structured-agent
 import { SkillRefLimitError } from '../../../../shared/structured-agent-session-send-mutation'
 import { promptSkillRefs } from './native-chat-prompt-document'
 import { useCallback } from 'react'
-import { completeNativeChatStructuredUserAction } from './native-chat-structured-user-action'
+import { emitNativeChatMessageSent } from '@/lib/native-chat-telemetry'
+import { reportStructuredSessionUserInput } from '@/lib/worker-terminal-takeover-report'
 import {
   isStructuredAgentSessionComposerCommand,
   isStructuredAgentSessionGoalCommand,
@@ -122,10 +123,16 @@ export function useNativeChatStructuredComposerSend({
           if (!accepted) {
             return
           }
-          completeNativeChatStructuredUserAction(
-            agent,
-            structuredTransport,
-            revealsTranscript && (!hostCommand || isCurrent())
+          emitNativeChatMessageSent({ agent, runtime: structuredTransport.runtime })
+          if (revealsTranscript && (!hostCommand || isCurrent())) {
+            structuredTransport.onSubmitted?.()
+          }
+          // A real user send is a takeover, exactly as typing into a worker's pane is. Only past
+          // `accepted`, and only from this hook: orchestration's own pointer nudges never reach
+          // the composer at all.
+          reportStructuredSessionUserInput(
+            structuredTransport.sessionId,
+            structuredTransport.runtimeEnvironmentId
           )
           // Why: the send settles after a round trip, while this or another composer of the same
           // conversation may have changed the draft; only what was sent leaves it.

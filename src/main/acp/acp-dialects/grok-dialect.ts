@@ -224,5 +224,8 @@ export const GROK_ACP_DIALECT: AcpDialect = {
   modelEfforts: grokModelEfforts,
   hookBlock,
   promptErrorDetail: (error) => promptErrorDataSchema.safeParse(error.data).data?.message,
-  failedTurnText: () => 'Grok ended this turn with an error.'
+  failedTurnText: (stopReason) =>
+    stopReason === 'rate_limit'
+      ? 'Grok usage limit reached.'
+      : 'Grok ended this turn with an error.'
 }

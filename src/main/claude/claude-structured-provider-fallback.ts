@@ -1,8 +1,4 @@
-import type {
-  AgentJournalStatusItem,
-  AgentJournalTurnScope
-} from '../../shared/agent-session-journal-types'
-import type { AgentSessionFailureRowWords } from '../../shared/agent-session-failure-words'
+import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { PROVIDER_FRAME_PAYLOAD_LIMITS } from '../native-chat/agent-session-journal/journal-payload-bounds'
 import { CLAUDE_STREAM_JSON_FRAME_KINDS } from '../native-chat/agent-session-wire/claude-stream-json-frame-schema'
@@ -113,11 +109,11 @@ export function createClaudeProviderFrameFallback(
   /** The frame's turn — the open one once `beforeAppend` ran — or the conversation. */
   turnScope: () => AgentJournalTurnScope
 ): {
-  /** Override visible wording; a status body also supplies tone and failure facts. */
+  /** Override visible wording when the frame does not name the sentence. */
   append: (
     kind: string,
     payload: unknown,
-    display?: string | null | (AgentSessionFailureRowWords & { tone: string }),
+    displayText?: string | null,
     /** Open a turn only if a row will be written. */
     beforeAppend?: () => void,
     options?: UnhandledProviderFrameJournalItemOptions,
@@ -128,7 +124,7 @@ export function createClaudeProviderFrameFallback(
   let sequence = 0
   const retryRun = createClaudeApiRetryRuns()
   return {
-    append: (kind, payload, display, beforeAppend, options, stamp) => {
+    append: (kind, payload, displayText, beforeAppend, options, stamp) => {
       sequence += 1
       const retrying = kind === CLAUDE_API_RETRY_FRAME_KIND ? claudeRecord(payload) : null
       if (retrying) {
@@ -172,12 +168,7 @@ export function createClaudeProviderFrameFallback(
         provider: 'orca',
         clientMessageId: `provider-frame:claude:${acquisitionId}:${sequence}`
       } as const
-      const body: AgentJournalStatusItem =
-        display && typeof display === 'object'
-          ? { ...translated.body, ...display }
-          : typeof display === 'string' && display
-            ? { ...translated.body, text: display }
-            : translated.body
+      const body = displayText ? { ...translated.body, text: displayText } : translated.body
       sink.appendItem(identity, body, stamp?.(identity, body) ?? { turnScope: turnScope() })
       sink.publish()
       return true

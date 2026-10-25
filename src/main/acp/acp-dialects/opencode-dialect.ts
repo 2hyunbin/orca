@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { usageLimitResetsAt } from '../../../shared/agent-session-usage-limit'
 import type { AcpAgentError } from '../acp-errors'
 import type { ToolCallUpdate } from '../generated/acp-protocol.generated'
 import type { AcpDialect } from './acp-dialect'
@@ -30,7 +29,7 @@ const NON_RESET_QUOTA_FAILURES = [
   /\byour current subscription plan does not yet include access to\b/i
 ]
 
-function promptFailure(error: AcpAgentError, at: number) {
+function promptFailure(error: AcpAgentError) {
   const parsed = promptFailureDataSchema.safeParse(error.data)
   if (
     !parsed.success ||
@@ -39,15 +38,7 @@ function promptFailure(error: AcpAgentError, at: number) {
   ) {
     return undefined
   }
-  const { resetsAt, retryAfterMs } = parsed.data
-  const reset = usageLimitResetsAt(
-    resetsAt ?? (retryAfterMs === undefined ? undefined : at + retryAfterMs),
-    at
-  )
-  return {
-    stopReason: 'rate_limit',
-    ...(reset === undefined ? {} : { usageLimit: { resetsAt: reset } })
-  }
+  return { stopReason: 'rate_limit' }
 }
 
 function normalizeToolUpdate(update: ToolCallUpdate): ToolCallUpdate {

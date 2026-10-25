@@ -29,7 +29,6 @@ import { readWholeAgentSessionFailureFact } from '../../../../shared/agent-sessi
 import { agentSessionFailureSentence } from '../../../../shared/agent-session-failure-words'
 import { sayAgentSessionFailureTranslated } from './agent-session-failure-words-text'
 import { nativeChatAntigravitySignInContent } from './native-chat-antigravity-settings'
-import { formatUsageLimitResetClock } from '../../../../shared/agent-session-usage-limit'
 
 const HOST_STATUS_WORDS: Record<AgentSessionHostStatusPresentation, () => string> = {
   'history-repaired': () =>
@@ -146,9 +145,6 @@ export function NativeChatNoticeRow({
     orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
   const antigravitySignInContent = nativeChatAntigravitySignInContent(failure?.kind, agentName)
-  const usageLimitContinue =
-    block.usageLimitTurnItemId !== undefined &&
-    block.usageLimitTurnItemId === orcaStopView.usageLimitTurnItemId
   // Only reword auth text fully described by its fact; host text may also carry command advice.
   const authSurface =
     failure?.kind === 'notSignedIn'
@@ -158,29 +154,14 @@ export function NativeChatNoticeRow({
       : undefined
   const text = named
     ? nativeChatOrcaStopRowText(orcaStop.cause, machine, { continueAvailable, remoteHost })
-    : failure?.kind === 'usageLimitReached'
+    : failure && authSurface
       ? agentSessionFailureSentence(
           failure,
-          'row',
-          {
-            agentName,
-            retryControl: usageLimitContinue,
-            usageLimitReset: formatUsageLimitResetClock
-          },
+          authSurface,
+          { agentName },
           sayAgentSessionFailureTranslated
         )
-      : failure && authSurface
-        ? agentSessionFailureSentence(
-            failure,
-            authSurface,
-            { agentName },
-            sayAgentSessionFailureTranslated
-          )
-        : block.text
-  const detail =
-    failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
-      ? failure.detail.text
-      : undefined
+      : block.text
   const tone = named ? 'notice' : look.kind === 'line' ? look.tone : null
   const Icon =
     tone === 'warning'
@@ -207,15 +188,6 @@ export function NativeChatNoticeRow({
         </p>
         {continueOffered ? (
           <NativeChatInterruptedContinueButton onContinue={orcaStopView.continueNow} />
-        ) : usageLimitContinue ? (
-          <NativeChatInterruptedContinueButton
-            onContinue={orcaStopView.continueUsageLimit}
-            disabled={orcaStopView.usageLimitContinueDisabled}
-            explanation={translate(
-              'components.native-chat.interruptedContinue.usageLimitExplanation',
-              'Asks the agent to continue where it left off. Use it once the limit resets.'
-            )}
-          />
         ) : null}
       </div>
       {claudeSignIn && isClaudeSignInFailureKind(block.failure?.kind) ? (
@@ -229,10 +201,9 @@ export function NativeChatNoticeRow({
           {nativeChatClaudeSignInLabel(claudeSignIn)}
         </Button>
       ) : null}
-      {block.providerFrame || detail ? (
+      {block.providerFrame ? (
         <ProviderFrameRow
           block={block}
-          detail={detail}
           summary={translate('components.native-chat.notices.details', 'Details')}
         />
       ) : null}
