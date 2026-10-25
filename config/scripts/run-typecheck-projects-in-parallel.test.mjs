@@ -13,10 +13,12 @@ import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  MOBILE_TYPECHECK_PROJECTS,
   TYPECHECK_PROJECTS,
   admissibleHeapGib,
   planTypecheckBatches,
   resolveProjectCompiler,
+  resolveTsrsCheckers,
   parseTypecheckOptions,
   selectTypecheckCompiler,
   typecheckBatches,
@@ -182,6 +184,25 @@ describe('local and CI compiler selection', () => {
     }
   })
 
+  it.each([
+    [{ load: 0, projectsInFlight: 2 }, 8],
+    [{ load: 10, projectsInFlight: 2 }, 4],
+    [{ load: 35, projectsInFlight: 2 }, 4],
+    [{ load: 0, projectsInFlight: 1 }, 16],
+    [{ load: 0, projectsInFlight: 1, env: { ORCA_TYPECHECK_CHECKERS: '2' } }, 2],
+    [{ load: 35, projectsInFlight: 2, env: { ORCA_TYPECHECK_CHECKERS: '12' } }, 12]
+  ])('splits idle cores between concurrent tsrs checks: %o', (options, checkers) => {
+    expect(resolveTsrsCheckers({ env: {}, cores: 16, ...options })).toBe(checkers)
+  })
+
+  it('rejects a checker pin tsrs would misread', () => {
+    for (const pinned of ['0', '-1', '2.5', 'many']) {
+      expect(() =>
+        resolveTsrsCheckers({ env: { ORCA_TYPECHECK_CHECKERS: pinned }, cores: 16, load: 0 })
+      ).toThrow('ORCA_TYPECHECK_CHECKERS')
+    }
+  })
+
   it('pins the Bun devDependency to config/.bun-version', () => {
     const manifest = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'))
     expect(manifest.devDependencies.bun).toBe(
@@ -194,6 +215,10 @@ describe('local and CI compiler selection', () => {
       TYPECHECK_PROJECTS[0]
     ])
     expect(parseTypecheckOptions([]).projects).toEqual(TYPECHECK_PROJECTS)
+    expect(parseTypecheckOptions(['--project=mobile/tsconfig.test.json']).projects).toEqual([
+      MOBILE_TYPECHECK_PROJECTS[1]
+    ])
+    expect(TYPECHECK_PROJECTS).not.toContainEqual(MOBILE_TYPECHECK_PROJECTS[0])
     expect(() => parseTypecheckOptions(['--project=config/tsconfig.json'])).toThrow()
   })
 
