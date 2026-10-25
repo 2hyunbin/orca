@@ -31,7 +31,7 @@ test('shows one delayed-save notice, restores it after reload, and clears on rec
   await expect(notice).toHaveCount(1)
   await expect(notice).toBeVisible()
   await expect(notice).toContainText('Further saves may be delayed while this operation finishes.')
-  await expect(notice.getByRole('button')).toHaveCount(0)
+  await expect(notice.getByRole('button', { name: 'Close toast' })).toBeVisible()
   await expect(notice).toHaveCSS('opacity', '1')
   const screenshot = testInfo.outputPath('delayed-save-notice.png')
   await orcaPage.screenshot({ path: screenshot })
