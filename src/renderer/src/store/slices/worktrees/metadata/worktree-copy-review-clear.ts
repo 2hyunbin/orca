@@ -6,7 +6,10 @@ import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
 // Why this module: worktree ids repeat across hosts (`repoId::path`), so branch-switch review
 // clears are keyed by id plus the copy's owner and never by the bare id.
 
-/** One copy's owner: its host plus the paired server that published it (two can share an `ssh:` id). */
+/**
+ * One copy's owner: its host plus the paired server that published it (two can share an `ssh:` id).
+ * Listing paths must stamp rows (`withRepoHostOwnership`) before comparing this key.
+ */
 export function worktreeCopyOwnerKey(
   row: Partial<Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>>
 ): string {

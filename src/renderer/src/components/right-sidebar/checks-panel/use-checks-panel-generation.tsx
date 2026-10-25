@@ -106,7 +106,7 @@ export function useChecksPanelGeneration(model: ChecksPanelGenerationInput) {
         requestId,
         repoId: repo.id,
         branch,
-        runtimeTarget: ownerTarget
+        runtimeTarget: copy?.transport ?? ownerTarget
       }
       const seed = { ...fields }
       const previousRequiresPushBeforeCreate =

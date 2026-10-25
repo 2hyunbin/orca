@@ -47,9 +47,12 @@ export function resolveWorktreeGitCopy(
   }
   // Why the copy lookup: the bare-id one answers undefined for a twin, which a caller would
   // otherwise turn into a local `git status` of the SSH copy's path.
+  // A resolved null (local) is an answer; only "unknown" falls through to the copy lookup.
+  const bareConnectionId = getConnectionIdFromState(state, worktreeId)
   const connectionId =
-    getConnectionIdFromState(state, worktreeId) ??
-    (copyHostId ? getConnectionIdForWorktreeCopy(state, worktreeId, copyHostId) : undefined)
+    bareConnectionId === undefined && copyHostId
+      ? getConnectionIdForWorktreeCopy(state, worktreeId, copyHostId)
+      : bareConnectionId
   return {
     worktreeId,
     hostId: copyHostId,

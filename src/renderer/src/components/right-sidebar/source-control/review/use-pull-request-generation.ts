@@ -124,7 +124,7 @@ export function useSourceControlPullRequestGeneration({
         requestId,
         repoId: activeRepo.id,
         branch: branchName,
-        runtimeTarget: activeRepoTarget
+        runtimeTarget: copy?.transport ?? activeRepoTarget
       }
       const seed = { ...fields }
       // Why: SourceControl can unmount on tab switches; the persisted record lets the PR composer resume on return.

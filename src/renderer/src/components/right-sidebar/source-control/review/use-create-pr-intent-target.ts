@@ -47,24 +47,53 @@ export function useSourceControlCreatePrIntentTarget({
   ])
 
   const getCreatePrIntentOperationTarget = useCallback(
-    (token: CreatePrIntentRunToken): SourceControlOperationTarget => {
-      // Why: Create PR intent continues after navigation; pin git commands to the worktree copy that started it.
-      const copy = token.ownerHostId
-        ? resolveWorktreeGitCopyNow(token.worktreeId, token.ownerHostId)
-        : null
-      return {
-        target: copy?.transport ?? activeRepoTarget,
-        worktreeId: token.worktreeId,
-        worktreePath: token.worktreePath,
-        connectionId: copy ? copy.connectionId : (getConnectionId(token.worktreeId) ?? undefined),
-        ownerHostId: token.ownerHostId ?? null,
-        pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget
-      }
-    },
+    (token: CreatePrIntentRunToken): SourceControlOperationTarget =>
+      createPrIntentOperationTarget(token, {
+        activeRepoTarget,
+        pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget,
+        resolveCopy: resolveWorktreeGitCopyNow,
+        bareConnectionId: getConnectionId
+      }),
     [activeRepoTarget, worktreeMap]
   )
 
   return { getCreatePrIntentOperationTarget }
+}
+
+/**
+ * Pins a Create PR run's git calls to the copy it started on. A run that named a host and can no
+ * longer resolve that copy gets no transport, so the call refuses instead of committing or pushing
+ * on a same-path twin's checkout.
+ */
+export function createPrIntentOperationTarget(
+  token: CreatePrIntentRunToken,
+  deps: {
+    activeRepoTarget: SourceControlWorktreeContext['activeRepoTarget']
+    pushTarget: SourceControlOperationTarget['pushTarget']
+    resolveCopy: typeof resolveWorktreeGitCopyNow
+    bareConnectionId: (worktreeId: string) => string | null | undefined
+  }
+): SourceControlOperationTarget {
+  const base = {
+    worktreeId: token.worktreeId,
+    worktreePath: token.worktreePath,
+    pushTarget: deps.pushTarget
+  }
+  if (!token.ownerHostId) {
+    return {
+      ...base,
+      target: deps.activeRepoTarget,
+      connectionId: deps.bareConnectionId(token.worktreeId) ?? undefined,
+      ownerHostId: null
+    }
+  }
+  const copy = deps.resolveCopy(token.worktreeId, token.ownerHostId)
+  return {
+    ...base,
+    target: copy?.transport ?? null,
+    connectionId: copy?.connectionId,
+    ownerHostId: token.ownerHostId
+  }
 }
 
 export type SourceControlCreatePrIntentTarget = ReturnType<
