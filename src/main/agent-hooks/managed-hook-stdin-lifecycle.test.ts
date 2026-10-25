@@ -183,6 +183,8 @@ type HookRun = {
   stdout: string
 }
 
+let hookDiagnosticSequence = 0
+
 function runHookProcess(
   executable: string,
   args: string[],
@@ -190,6 +192,53 @@ function runHookProcess(
   // An open, unwritten pipe exposes read-to-EOF hangs outside an Orca pane.
   stdin: 'close' | 'abandon' = 'close'
 ): Promise<HookRun> {
+  const started = performance.now()
+  const sequence = ++hookDiagnosticSequence
+  const caller = new Error('hook diagnostic callsite').stack?.match(
+    /managed-hook-stdin-lifecycle\.test\.ts:(\d+):(\d+)/g
+  )
+  const callsite = caller?.[1] ?? 'unknown'
+  const executableName = executable.replace(/^.*[\\/]/, '').toLowerCase()
+  const shell = ['cmd.exe', 'powershell.exe', 'bash.exe', 'bash', 'sh'].includes(executableName)
+    ? executableName
+    : 'other'
+  const phase = args.some((arg) => arg.includes('-EncodedCommand'))
+    ? 'encoded-powershell'
+    : args.includes('-File')
+      ? 'powershell-file'
+      : args.includes('-lc')
+        ? 'login-shell-command'
+        : 'script-or-shell-command'
+  const scriptName = args.at(-1)?.replace(/^.*[\\/]/, '')
+  const script =
+    LOCAL_INSTALLERS.flatMap(({ agent }) =>
+      ['cmd', 'ps1', 'sh'].map((extension) => `${agent}-hook.${extension}`)
+    ).find((name) => name === scriptName) ?? null
+  const timings: Record<
+    | 'spawnReturned'
+    | 'spawn'
+    | 'exit'
+    | 'close'
+    | 'stdinEndRequested'
+    | 'stdinFinish'
+    | 'stdinClose'
+    | 'stdinError'
+    | 'stdoutFirst'
+    | 'stderrFirst',
+    number | null
+  > = {
+    spawnReturned: null,
+    spawn: null,
+    exit: null,
+    close: null,
+    stdinEndRequested: null,
+    stdinFinish: null,
+    stdinClose: null,
+    stdinError: null,
+    stdoutFirst: null,
+    stderrFirst: null
+  }
+  const elapsed = (): number => Math.round(performance.now() - started)
   return new Promise((resolve, reject) => {
     const child = spawnProcess({
       program: executable,
@@ -197,30 +246,93 @@ function runHookProcess(
       env,
       stdio: 'pipe'
     })
+    timings.spawnReturned = elapsed()
     const stdinErrors: NodeJS.ErrnoException[] = []
     let stderr = ''
     let stdout = ''
+    let stdoutBytes = 0
+    let stderrBytes = 0
+    let timedOut = false
+    const watchdogStarted = performance.now()
+    const diagnostic = () => ({
+      sequence,
+      callsite,
+      shell,
+      phase,
+      script,
+      stdin,
+      paneContext: Boolean(
+        env.ORCA_AGENT_HOOK_PORT && env.ORCA_AGENT_HOOK_TOKEN && env.ORCA_PANE_KEY
+      ),
+      elapsedMs: elapsed(),
+      watchdogMs: 10_000,
+      watchdogElapsedMs: Math.round(performance.now() - watchdogStarted),
+      timingsMs: { ...timings },
+      stdinDestroyed: child.stdin.destroyed,
+      stdinWritableFinished: child.stdin.writableFinished,
+      stdinWritableLength: child.stdin.writableLength,
+      stdinErrorCodes: stdinErrors.map((error) =>
+        error.code && /^[A-Z0-9_]{1,32}$/.test(error.code) ? error.code : 'other'
+      ),
+      stdoutBytes,
+      stderrBytes,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode
+    })
     const timeout = setTimeout(() => {
+      timedOut = true
+      const snapshot = diagnostic()
       child.stdin.destroy()
       child.kill('SIGKILL')
-      reject(new Error(`hook did not finish with stdin ${stdin}d`))
+      reject(
+        new Error(
+          `hook did not finish with stdin ${stdin}d; HOOK_DIAGNOSTIC ${JSON.stringify(snapshot)}`
+        )
+      )
     }, 10_000)
+    child.once('spawn', () => {
+      timings.spawn = elapsed()
+    })
+    child.once('exit', () => {
+      timings.exit = elapsed()
+      if (timedOut) {
+        console.error('HOOK_DIAGNOSTIC_EXIT', JSON.stringify(diagnostic()))
+      }
+    })
     child.on('error', (error) => {
       clearTimeout(timeout)
       reject(error)
     })
     child.stdout.on('data', (chunk: Buffer) => {
+      timings.stdoutFirst ??= elapsed()
+      stdoutBytes += chunk.length
       stdout += chunk.toString()
     })
     child.stderr.on('data', (chunk: Buffer) => {
+      timings.stderrFirst ??= elapsed()
+      stderrBytes += chunk.length
       stderr += chunk.toString()
     })
-    child.stdin.on('error', (error: NodeJS.ErrnoException) => stdinErrors.push(error))
+    child.stdin.once('finish', () => {
+      timings.stdinFinish = elapsed()
+    })
+    child.stdin.once('close', () => {
+      timings.stdinClose = elapsed()
+    })
+    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      timings.stdinError ??= elapsed()
+      stdinErrors.push(error)
+    })
     child.on('close', (exitCode) => {
+      timings.close = elapsed()
+      if (timedOut) {
+        console.error('HOOK_DIAGNOSTIC_CLOSE', JSON.stringify(diagnostic()))
+      }
       clearTimeout(timeout)
       resolve({ exitCode, stdinErrors, stderr, stdout })
     })
     if (stdin === 'close') {
+      timings.stdinEndRequested = elapsed()
       child.stdin.end(LARGE_PAYLOAD)
     }
   })
