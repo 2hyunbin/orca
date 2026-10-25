@@ -182,9 +182,36 @@ function detectTerminalComposer(
   return null
 }
 
+// Why: dsh-tui 0.17 boxes its single-line launchpad composer (`│ ❯ draft │`) under a `╭─╮` top.
+const BOXED_COMPOSER_TOP = /^\s*╭─{8,}╮\s*$/
+const BOXED_COMPOSER_ROW = /^\s*│ ❯ /
+
+function detectBoxedComposerDraft(context: TerminalCursorContext): TerminalComposerDraft | null {
+  const cursorIndex = context.rows.length - 1
+  if (
+    context.cursorHidden ||
+    !BOXED_COMPOSER_ROW.test(context.rows[cursorIndex] ?? '') ||
+    !BOXED_COMPOSER_TOP.test(context.rows[cursorIndex - 1] ?? '')
+  ) {
+    return null
+  }
+  // Why left of the cursor: the empty launchpad paints its placeholder, undimmed, right of it.
+  const typed = context.beforeCursor.replace(BOXED_COMPOSER_ROW, '')
+  if (!typed.trim()) {
+    return null
+  }
+  const text = `${typed}${context.afterCursor.replace(/│\s*$/, '')}`.trim()
+  const row = context.cursorViewportRow
+  return { text, promptRow: row, cursorRow: row, endRow: row, promptGlyph: '❯' }
+}
+
 export function detectTerminalComposerDraft(
   context: TerminalCursorContext | null | undefined
 ): TerminalComposerDraft | null {
+  const boxed = context ? detectBoxedComposerDraft(context) : null
+  if (boxed) {
+    return boxed
+  }
   const match = detectTerminalComposer(context)
   if (!match || match.placeholder) {
     return null

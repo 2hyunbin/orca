@@ -21,9 +21,9 @@ type HeldAgentPrompt = {
 export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission {
   /**
    * Presses Enter again for agents that can drop the first one (`submitRetryDelayMs`): once blind
-   * into a launch composer drawn before Enter is live, and on Windows while the composer still
-   * shows this prompt, which an input-record paste burst kept as a newline. Best effort: it never
-   * fails a prompt the first Enter submitted.
+   * into a launch composer drawn before Enter is live, and while the composer still shows this
+   * prompt: on Windows, which an input-record paste burst kept as a newline, or on a dsh launchpad
+   * whose session has not opened. Best effort: it never fails a prompt the first Enter submitted.
    */
   protected async resubmitHeldAgentPrompt(
     ptyId: string,
@@ -35,7 +35,9 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
     const retryDelayMs = agent ? TUI_AGENT_CONFIG[agent]?.submitRetryDelayMs : undefined
     const prompt = held.prompt
     const gated = held.heldBudgetMs > 0 && prompt !== undefined
-    let blind = options.composerReady === true
+    // Why: the draft reader knows dsh's launchpad, which its first-run guide covers once ready.
+    const readsLaunchDraft = agent === 'dsh'
+    let blind = options.composerReady === true && !readsLaunchDraft
     if (retryDelayMs === undefined || (!blind && !gated)) {
       return 0
     }
@@ -60,7 +62,8 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
           )
         if (!blind && !(await holdsPrompt())) {
           // Gone after a gated retry means it was taken; before one, the burst may still be read.
-          if (gatedResubmits > 0) {
+          // dsh paints its draft at once, so gone means it was taken or the guide covers it.
+          if (gatedResubmits > 0 || readsLaunchDraft) {
             return resubmits
           }
           continue
