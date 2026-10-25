@@ -1269,11 +1269,23 @@ index 7b286d3d64..5239ba4e40 100644
    return exports;
  };
  
+diff --git a/lib/windowsConoutConnection.js b/lib/windowsConoutConnection.js
+--- a/lib/windowsConoutConnection.js
++++ b/lib/windowsConoutConnection.js
+@@ -74,6 +74,9 @@
+         };
+         var scriptPath = __dirname.replace('node_modules.asar', 'node_modules.asar.unpacked');
+         this._worker = new worker_threads_1.Worker(path_1.join(scriptPath, 'worker/conoutSocketWorker.js'), { workerData: workerData });
++        // Orca: without a listener a dead worker's error is rethrown process-wide; its pipe closing
++        // still ends this terminal.
++        this._worker.on('error', function () { });
+         this._worker.on('message', function (message) {
+             switch (message) {
+                 case 1 /* READY */:
 diff --git a/lib/windowsPtyAgent.js b/lib/windowsPtyAgent.js
-index a358ffb177357e177661033c1b092f9c9d0e5f5a..26c2a4c58799ce649f5113131e4c52f7ed2d87ad 100644
 --- a/lib/windowsPtyAgent.js
 +++ b/lib/windowsPtyAgent.js
-@@ -136,6 +136,9 @@ var WindowsPtyAgent = /** @class */ (function () {
+@@ -136,6 +136,9 @@
          if (this._useConpty) {
              if (!this._useConptyDll) {
                  this._inSocket.readable = false;
@@ -1283,7 +1295,7 @@ index a358ffb177357e177661033c1b092f9c9d0e5f5a..26c2a4c58799ce649f5113131e4c52f7
                  this._outSocket.readable = false;
                  this._getConsoleProcessList().then(function (consoleProcessList) {
                      consoleProcessList.forEach(function (pid) {
-@@ -154,9 +157,10 @@ var WindowsPtyAgent = /** @class */ (function () {
+@@ -154,9 +157,10 @@
                  // Close the input write handle to signal the end of session.
                  this._inSocket.destroy();
                  this._ptyNative.kill(this._pty, this._useConptyDll);
@@ -1297,39 +1309,35 @@ index a358ffb177357e177661033c1b092f9c9d0e5f5a..26c2a4c58799ce649f5113131e4c52f7
              }
          }
          else {
+@@ -182,6 +186,11 @@
+         var _this = this;
+         return new Promise(function (resolve) {
+             var agent = child_process_1.fork(path.join(__dirname, 'conpty_console_list_agent'), [_this._innerPid.toString()]);
++            // Orca: an unhandled fork or IPC error would be rethrown process-wide.
++            agent.on('error', function () {
++                clearTimeout(timeout);
++                resolve([_this._innerPid]);
++            });
+             agent.on('message', function (message) {
+                 clearTimeout(timeout);
+                 resolve(message.consoleProcessList);
 diff --git a/lib/windowsTerminal.js b/lib/windowsTerminal.js
-index 3c38f89..e20b3e6 100644
 --- a/lib/windowsTerminal.js
 +++ b/lib/windowsTerminal.js
-@@ -50,6 +50,27 @@ var WindowsTerminal = /** @class */ (function (_super) {
+@@ -50,6 +50,12 @@
          // Create new termal.
          _this._agent = new windowsPtyAgent_1.WindowsPtyAgent(file, args, parsedEnv, cwd, _this._cols, _this._rows, false, opt.useConpty, opt.useConptyDll, opt.conptyInheritCursor);
          _this._socket = _this._agent.outSocket;
 +        // Attach before readiness so a broken ConPTY output pipe cannot be unhandled.
-+        _this._socket.on('error', function (err) {
-+            var code = err && err.code;
-+            // PTY output can report EPIPE before `_close()` wins the race.
++        _this._socket.on('error', function () {
++            // Orca: retire only this terminal. Rethrowing an unlisted code (write UNKNOWN, ECONNRESET)
++            // killed every PTY in the process; consumer listeners still receive the error.
 +            _this._close();
-+            if (code === 'EPIPE' || code === 'ERR_STREAM_PUSH_AFTER_EOF' || code === 'ERR_STREAM_DESTROYED') {
-+                return;
-+            }
-+            // EIO, happens when someone closes our child process: the only process
-+            // in the terminal.
-+            // node < 0.6.14: errno 5
-+            // node >= 0.6.14: read EIO
-+            if (typeof code === 'string') {
-+                if (~code.indexOf('errno 5') || ~code.indexOf('EIO'))
-+                    return;
-+            }
-+            // Throw anything else.
-+            if (_this.listeners('error').length < 2) {
-+                throw err;
-+            }
 +        });
          // Not available until `ready` event emitted.
          _this._pid = _this._agent.innerPid;
          _this._fd = _this._agent.fd;
-@@ -76,23 +99,6 @@ var WindowsTerminal = /** @class */ (function (_super) {
+@@ -76,23 +82,6 @@
                      _this._deferreds = [];
                  }
              });
@@ -1353,7 +1361,7 @@ index 3c38f89..e20b3e6 100644
              // Cleanup after the socket is closed.
              _this._socket.on('close', function () {
                  _this.emit('exit', _this._agent.exitCode);
-@@ -103,6 +109,20 @@ var WindowsTerminal = /** @class */ (function (_super) {
+@@ -103,6 +92,20 @@
          _this._name = name;
          _this._readable = true;
          _this._writable = true;
@@ -1374,18 +1382,63 @@ index 3c38f89..e20b3e6 100644
          _this._forwardEvents();
          return _this;
      }
-@@ -196,4 +216,4 @@ var WindowsTerminal = /** @class */ (function (_super) {
+@@ -196,4 +199,4 @@
      return WindowsTerminal;
  }(terminal_1.Terminal));
  exports.WindowsTerminal = WindowsTerminal;
 -//# sourceMappingURL=windowsTerminal.js.map
 \ No newline at end of file
 +//# sourceMappingURL=windowsTerminal.js.map
+diff --git a/lib/worker/conoutSocketWorker.js b/lib/worker/conoutSocketWorker.js
+--- a/lib/worker/conoutSocketWorker.js
++++ b/lib/worker/conoutSocketWorker.js
+@@ -9,10 +9,29 @@
+ var conoutPipeName = worker_threads_1.workerData.conoutPipeName;
+ var conoutSocket = new net_1.Socket();
+ conoutSocket.setEncoding('utf8');
++// Orca: an unhandled stream error crashes this worker, and Node rethrows it on the main thread as
++// an uncaughtException that kills every PTY in the process (write EPIPE/UNKNOWN once the reader
++// closed: #26877, #33350). Contain errors per terminal and keep draining ConPTY output.
++var workerSockets = new Set();
++var drainConout = function () {
++    conoutSocket.resume();
++};
++conoutSocket.on('error', function () {
++    // Closing the reader ends this terminal instead of leaving it waiting for output.
++    workerSockets.forEach(function (workerSocket) { return workerSocket.destroy(); });
++});
+ conoutSocket.connect(conoutPipeName, function () {
+     var server = net_1.createServer(function (workerSocket) {
++        workerSockets.add(workerSocket);
++        workerSocket.on('error', function () { });
+         conoutSocket.pipe(workerSocket);
++        // After pipe() so its unpipe-and-pause runs first; an undrained conout can block ClosePseudoConsole.
++        workerSocket.on('close', function () {
++            workerSockets.delete(workerSocket);
++            drainConout();
++        });
+     });
++    server.on('error', drainConout);
+     server.listen(conout_1.getWorkerPipeName(conoutPipeName));
+     if (!worker_threads_1.parentPort) {
+         throw new Error('worker_threads parentPort is null');
+diff --git a/src/windowsConoutConnection.ts b/src/windowsConoutConnection.ts
+--- a/src/windowsConoutConnection.ts
++++ b/src/windowsConoutConnection.ts
+@@ -45,6 +45,9 @@
+     };
+     const scriptPath = __dirname.replace('node_modules.asar', 'node_modules.asar.unpacked');
+     this._worker = new Worker(join(scriptPath, 'worker/conoutSocketWorker.js'), { workerData });
++    // Orca: without a listener a dead worker's error is rethrown process-wide; its pipe closing
++    // still ends this terminal.
++    this._worker.on('error', () => {});
+     this._worker.on('message', (message: ConoutWorkerMessage) => {
+       switch (message) {
+         case ConoutWorkerMessage.READY:
 diff --git a/src/windowsPtyAgent.ts b/src/windowsPtyAgent.ts
-index d7054449516f0c9a62af351c2caa17331206d530..0c28a32e2e1db2b3f208ddde8443cd4e67bb1ad6 100644
 --- a/src/windowsPtyAgent.ts
 +++ b/src/windowsPtyAgent.ts
-@@ -143,6 +143,9 @@ export class WindowsPtyAgent {
+@@ -143,6 +143,9 @@
      if (this._useConpty) {
        if (!this._useConptyDll) {
          this._inSocket.readable = false;
@@ -1395,7 +1448,7 @@ index d7054449516f0c9a62af351c2caa17331206d530..0c28a32e2e1db2b3f208ddde8443cd4e
          this._outSocket.readable = false;
          this._getConsoleProcessList().then(consoleProcessList => {
            consoleProcessList.forEach((pid: number) => {
-@@ -159,9 +162,10 @@ export class WindowsPtyAgent {
+@@ -159,9 +162,10 @@
          // Close the input write handle to signal the end of session.
          this._inSocket.destroy();
          (this._ptyNative as IConptyNative).kill(this._pty, this._useConptyDll);
@@ -1409,47 +1462,39 @@ index d7054449516f0c9a62af351c2caa17331206d530..0c28a32e2e1db2b3f208ddde8443cd4e
        }
      } else {
        // Because pty.kill closes the handle, it will kill most processes by itself.
+@@ -185,6 +189,11 @@
+   private _getConsoleProcessList(): Promise<number[]> {
+     return new Promise<number[]>(resolve => {
+       const agent = fork(path.join(__dirname, 'conpty_console_list_agent'), [ this._innerPid.toString() ]);
++      // Orca: an unhandled fork or IPC error would be rethrown process-wide.
++      agent.on('error', () => {
++        clearTimeout(timeout);
++        resolve([ this._innerPid ]);
++      });
+       agent.on('message', message => {
+         clearTimeout(timeout);
+         resolve(message.consoleProcessList);
 diff --git a/src/windowsTerminal.ts b/src/windowsTerminal.ts
-index 13f6c6d..eda63c8 100644
 --- a/src/windowsTerminal.ts
 +++ b/src/windowsTerminal.ts
-@@ -51,6 +51,30 @@ export class WindowsTerminal extends Terminal {
+@@ -51,6 +51,13 @@
      this._agent = new WindowsPtyAgent(file, args, parsedEnv, cwd, this._cols, this._rows, false, opt.useConpty, opt.useConptyDll, opt.conptyInheritCursor);
      this._socket = this._agent.outSocket;
--
-+
+ 
 +    // Attach before readiness so a broken ConPTY output pipe cannot be unhandled.
-+    this._socket.on('error', err => {
-+      const code = (<any>err).code;
-+
-+      // PTY output can report EPIPE before `_close()` wins the race.
++    this._socket.on('error', () => {
++      // Orca: retire only this terminal. Rethrowing an unlisted code (write UNKNOWN, ECONNRESET)
++      // killed every PTY in the process; consumer listeners still receive the error.
 +      this._close();
-+      if (code === 'EPIPE' || code === 'ERR_STREAM_PUSH_AFTER_EOF' || code === 'ERR_STREAM_DESTROYED') {
-+        return;
-+      }
-+
-+      // EIO, happens when someone closes our child process: the only process
-+      // in the terminal.
-+      // node < 0.6.14: errno 5
-+      // node >= 0.6.14: read EIO
-+      if (typeof code === 'string') {
-+        if (~code.indexOf('errno 5') || ~code.indexOf('EIO')) return;
-+      }
-+
-+      // Throw anything else.
-+      if (this.listeners('error').length < 2) {
-+        throw err;
-+      }
 +    });
 +
      // Not available until `ready` event emitted.
      this._pid = this._agent.innerPid;
      this._fd = this._agent.fd;
-@@ -82,25 +108,6 @@ export class WindowsTerminal extends Terminal {
+@@ -82,25 +89,6 @@
          }
        });
--
-+
+ 
 -      // Shutdown if `error` event is emitted.
 -      this._socket.on('error', err => {
 -        // Close terminal session.
@@ -1472,9 +1517,8 @@ index 13f6c6d..eda63c8 100644
        // Cleanup after the socket is closed.
        this._socket.on('close', () => {
          this.emit('exit', this._agent.exitCode);
-@@ -114,6 +121,19 @@ export class WindowsTerminal extends Terminal {
--
-+
+@@ -114,6 +102,19 @@
+ 
      this._readable = true;
      this._writable = true;
 +    // A ConPTY input-pipe error must retire only this terminal. Without a listener, Node promotes
@@ -1490,7 +1534,39 @@ index 13f6c6d..eda63c8 100644
 +        // The failing pipe may have raced process exit; the terminal is already unwritable.
 +      }
 +    });
--
-+
+ 
      this._forwardEvents();
    }
+diff --git a/src/worker/conoutSocketWorker.ts b/src/worker/conoutSocketWorker.ts
+--- a/src/worker/conoutSocketWorker.ts
++++ b/src/worker/conoutSocketWorker.ts
+@@ -10,10 +10,29 @@
+ 
+ const conoutSocket = new Socket();
+ conoutSocket.setEncoding('utf8');
++// Orca: an unhandled stream error crashes this worker, and Node rethrows it on the main thread as
++// an uncaughtException that kills every PTY in the process (write EPIPE/UNKNOWN once the reader
++// closed: #26877, #33350). Contain errors per terminal and keep draining ConPTY output.
++const workerSockets = new Set<Socket>();
++const drainConout = (): void => {
++  conoutSocket.resume();
++};
++conoutSocket.on('error', () => {
++  // Closing the reader ends this terminal instead of leaving it waiting for output.
++  workerSockets.forEach(workerSocket => workerSocket.destroy());
++});
+ conoutSocket.connect(conoutPipeName, () => {
+   const server = createServer(workerSocket => {
++    workerSockets.add(workerSocket);
++    workerSocket.on('error', () => {});
+     conoutSocket.pipe(workerSocket);
++    // After pipe() so its unpipe-and-pause runs first; an undrained conout can block ClosePseudoConsole.
++    workerSocket.on('close', () => {
++      workerSockets.delete(workerSocket);
++      drainConout();
++    });
+   });
++  server.on('error', drainConout);
+   server.listen(getWorkerPipeName(conoutPipeName));
+   if (!parentPort) {
+     throw new Error('worker_threads parentPort is null');
