@@ -61,8 +61,7 @@ describe('repo slice runtime routing', () => {
   })
 
   it('keeps the repos array identity across a refetch that changes nothing', async () => {
-    // Why: main rebuilds nested records (hookSettings et al) per list and IPC clones them, so a
-    // production-shaped repo — not a scalar-only fixture — is what proves reconciliation works.
+    // IPC clones nested records; scalar-only fixtures cannot prove production reconciliation.
     const hydrated = (): Repo => ({
       ...localRepo,
       kind: 'git',
@@ -82,7 +81,7 @@ describe('repo slice runtime routing', () => {
 
     await store.getState().fetchRepos({ runtimeEnvironmentId: null })
 
-    // Why: identity-keyed renderer memos (repo lookup index, selectors) rebuild on a new array.
+    // New array identity rebuilds repo lookup memos and selectors.
     expect(store.getState().repos).toBe(reposRef)
     expect(store.getState().repos[0]).toBe(reposRef[0])
   })

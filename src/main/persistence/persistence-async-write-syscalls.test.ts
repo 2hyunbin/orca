@@ -165,7 +165,7 @@ describe('worker persistence avoids synchronous profile filesystem calls', () =>
     void pending.then(() => {
       complete = true
     })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await new Promise<void>((resolve) => setImmediate(resolve))
     expect(complete).toBe(false)
     expect(fsCalls.sync).toEqual([])
     gate.release()
