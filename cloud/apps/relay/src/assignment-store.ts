@@ -1444,17 +1444,18 @@ export class RelayAssignmentStore {
           strandedReassignment ||
           !this.requireLiveCells ||
           (await this.cellIsLive(transaction, current.cellId, now))
-        // Isolated cells stay live and gain headroom during draining, so bypass pin retention; unreachable cells still need fencing to prove sockets stopped.
+        // Drain headroom must not retain an isolated pin; unreachable cells need fencing unless a post-roll restart proves old sockets gone.
         if (
           !strandedReassignment &&
-          currentIsLive &&
           (await this.incumbentCellIsolatedForRoll(
             transaction,
             identity,
             existing,
             now,
             admission
-          ))
+          )) &&
+          (currentIsLive ||
+            (await this.isolatedCellRestartedSinceRoll(transaction, current.cellId, now)))
         ) {
           isolatedTarget =
             (await this.leastLoadedCell(transaction, lockedCells, current.region, 'require')) ??
@@ -1532,7 +1533,8 @@ export class RelayAssignmentStore {
           }
           connectionHeadroomReassignment = true
         }
-        // Live isolated cells verify epochs and reject old attaches with 4409, so no fence is needed; cells that stop heartbeating still require the dead-cell path.
+        // Live isolated cells verify epochs (4409); a post-roll process restart proves the old sockets gone.
+        // Without either proof, the dead-cell path still requires fencing.
         if (!strandedReassignment && !connectionHeadroomReassignment && !isolatedIncumbent) {
           const fence = await this.deadCellFenceRequirement(
             transaction,
@@ -8084,14 +8086,21 @@ export class RelayAssignmentStore {
     if (await this.assignmentStrandedOnUnservedCell(database, identity, existing, now, pinned?.state)) {
       return false
     }
-    if (this.requireLiveCells && !(await this.cellIsLive(database, cellId, now))) return false
-    return await this.incumbentCellIsolatedForRoll(
-      database,
-      identity,
-      existing,
-      now,
-      undefined,
-      pinned
+    if (
+      !(await this.incumbentCellIsolatedForRoll(
+        database,
+        identity,
+        existing,
+        now,
+        undefined,
+        pinned
+      ))
+    ) {
+      return false
+    }
+    return (
+      (await this.cellIsLive(database, cellId, now)) ||
+      (await this.isolatedCellRestartedSinceRoll(database, cellId, now))
     )
   }
 
@@ -8365,6 +8374,42 @@ export class RelayAssignmentStore {
       [cellId, 1, now - this.heartbeatTtlMs]
     )
     return rows.length === 1
+  }
+
+  // Why: one relay container per VM, and a MIG that deletes before it creates, so a process
+  // started after the stamp is not the drained one. Fresh and (capped) empty: it holds nothing.
+  private async isolatedCellRestartedSinceRoll(
+    database: RelayDatabase,
+    cellId: string,
+    now: number
+  ): Promise<boolean> {
+    const row = (
+      await database.query(
+        `SELECT runtime.started_at, runtime.last_heartbeat_at, admission.roll_isolated_at,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM relay_cell_connection_limits limits WHERE limits.cell_id = runtime.cell_id
+           ) THEN 1 ELSE 0 END AS capped,
+           CASE WHEN connections.cell_incarnation = runtime.cell_incarnation
+             AND connections.total_connections = 0 AND connections.in_flight_connections = 0
+           THEN 1 ELSE 0 END AS holds_nothing
+         FROM relay_cell_runtime runtime
+         JOIN relay_cell_admission admission ON admission.cell_id = runtime.cell_id
+         LEFT JOIN relay_cell_connection_runtime connections
+           ON connections.cell_id = runtime.cell_id
+         WHERE runtime.cell_id = ?`,
+        [cellId]
+      )
+    )[0]
+    if (!row) {
+      return false
+    }
+    const rollIsolatedAt = optionalInteger(row, 'roll_isolated_at')
+    return (
+      rollIsolatedAt !== undefined &&
+      integer(row, 'started_at') > rollIsolatedAt &&
+      integer(row, 'last_heartbeat_at') > now - this.heartbeatTtlMs &&
+      (integer(row, 'capped') === 0 || integer(row, 'holds_nothing') === 1)
+    )
   }
 
   // Roll-isolated cells heartbeat ready but reject attaches with 4503, so cellIsLive misses retry loops. Require a roll stamp: migration-only also durably holds evacuation/Asia rollback/failed-wave/new-cell hosts that must stay pinned.
