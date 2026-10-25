@@ -69,6 +69,14 @@ export class TerminalSessionTeardown {
   }
 
   killSession(sessionId: string, session: Session, immediate: boolean): void | Promise<void> {
+    if (!session.launchAgent && !immediate && process.platform === 'win32') {
+      // The PTY job would also end `start /b` and GUI children, which a graceful close leaves running.
+      if (session.beginTermination()) {
+        session.signalTerminationRoot()
+        session.scheduleForceDisposeFallback()
+      }
+      return
+    }
     // Hand-typed agents carry no launch metadata, yet their detached tools outlive the shell's SIGHUP.
     if (session.launchAgent || !immediate) {
       return this.killAfterDescendantSnapshot(sessionId, session, immediate)
@@ -168,7 +176,7 @@ export class TerminalSessionTeardown {
               entry.descendantVerification = terminateShutdownDescendants(
                 session.launchAgent || entry.immediate
                   ? snapshot
-                  : excludeShellBackgroundJobs(snapshot)
+                  : excludeShellBackgroundJobs(snapshot, session.shellIsRootChild)
               )
               return entry.descendantVerification
             },

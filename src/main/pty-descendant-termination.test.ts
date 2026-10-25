@@ -118,8 +118,31 @@ describe('collectDescendantRows', () => {
     ]
     const snapshot = collectDescendantRows(10, table, CAPTURED_AT_MS)
     expect(snapshot.descendants.map((r) => r.pid)).toEqual([20, 30, 21, 22, 23, 31])
-    expect(excludeShellBackgroundJobs(snapshot).descendants.map((r) => r.pid)).toEqual([
+    expect(excludeShellBackgroundJobs(snapshot, false).descendants.map((r) => r.pid)).toEqual([
       20, 21, 22, 23
+    ])
+  })
+
+  it('finds the job-control shell under the macOS login(1) wrapper', () => {
+    const tty = (pid: number, ppid: number, pgid: number, tpgid: number) => ({
+      ...row(pid, ppid, pgid),
+      tpgid
+    })
+    // login 5 -> shell 10 (own group) -> nohup job 30, foreground agent 20 -> NewGroup MCP 23.
+    const table = [
+      tty(5, 1, 5, 20),
+      tty(10, 5, 10, 20),
+      tty(20, 10, 20, 20),
+      tty(23, 20, 23, 20),
+      tty(30, 10, 30, 20)
+    ]
+    const snapshot = collectDescendantRows(5, table, CAPTURED_AT_MS)
+    expect(excludeShellBackgroundJobs(snapshot, true).descendants.map((r) => r.pid)).toEqual([
+      10, 20, 23
+    ])
+    // Treating login as the shell would spare the shell's own group and sweep the nohup job.
+    expect(excludeShellBackgroundJobs(snapshot, false).descendants.map((r) => r.pid)).toEqual([
+      20, 30, 23
     ])
   })
 

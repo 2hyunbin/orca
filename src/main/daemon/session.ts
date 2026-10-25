@@ -27,6 +27,7 @@ export class Session {
   readonly launchAgent: TuiAgent | null
   readonly wslDistro: string | null
   readonly processNameIsSpawnFile: boolean
+  readonly shellIsRootChild: boolean
   private _state: SessionState = 'running'
   private _exitCode: number | null = null
   private _disposed = false
@@ -46,6 +47,7 @@ export class Session {
     this.wslDistro = opts.wslDistro ?? null
     this.subprocess = opts.subprocess
     this.processNameIsSpawnFile = opts.subprocess.processNameIsSpawnFile === true
+    this.shellIsRootChild = opts.subprocess.shellIsRootChild === true
     this.onSessionExit = opts.onExit
     const pipeline = createSessionOutputPipeline({
       cols: opts.cols,

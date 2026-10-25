@@ -173,6 +173,19 @@ describe('TerminalSessionTeardown plain-shell teardown', () => {
     expect(settled).toBe(true)
   })
 
+  it('win32 graceful close of a plain shell signals only the root, leaving `start /b` jobs', async () => {
+    setPlatform('win32')
+    const session = createPlainShellSession()
+    const teardown = new TerminalSessionTeardown(new Map([['s1', session]]))
+
+    await teardown.killSession('s1', session, false)
+
+    expect(killWithDescendantSweepMock).not.toHaveBeenCalled()
+    expect(session.terminateOwnedTree).not.toHaveBeenCalled()
+    expect(session.signalTerminationRoot).toHaveBeenCalled()
+    expect(session.scheduleForceDisposeFallback).toHaveBeenCalled()
+  })
+
   it('graceful close captures descendants before signalling a shell without launch metadata', async () => {
     // An agent typed into the shell has no launchAgent; its detached MCP tools outlive the shell's SIGHUP (#16714).
     setPlatform('linux')
@@ -195,6 +208,7 @@ describe('TerminalSessionTeardown plain-shell teardown', () => {
 })
 
 describe('graceful close preserves shell jobs only for plain shells', () => {
+  let platformDescriptor: PropertyDescriptor | undefined
   // Shell 10 with nohup job 30 in its own background group on the tty.
   const snapshot: DescendantSnapshot = {
     root: { pid: 10, startedAt: 'Tue Jul 14 12:00:00 2026' },
@@ -218,6 +232,14 @@ describe('graceful close preserves shell jobs only for plain shells', () => {
       }
     )
     terminateShutdownDescendantsMock.mockReset()
+    platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
+  })
+
+  afterEach(() => {
+    if (platformDescriptor) {
+      Object.defineProperty(process, 'platform', platformDescriptor)
+    }
   })
 
   const cases: [string, TuiAgent | null, number[]][] = [
