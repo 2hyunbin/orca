@@ -98,7 +98,9 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         `${RESET_GRAPHIC_RENDITION}snapshot-payload`,
         expect.any(Function)
       )
-      expect(pane.terminal.write).not.toHaveBeenCalledWith('replay-payload', expect.any(Function))
+      expect(
+        pane.terminal.write.mock.calls.map(([data]) => terminalWriteText(data)).join('')
+      ).not.toContain('replay-payload')
     })
 
     it('paints only relay replay when reattach result has replay and coldRestore but no snapshot', async () => {
@@ -136,7 +138,9 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
         `${RESET_GRAPHIC_RENDITION}replay-payload`,
         expect.any(Function)
       )
-      expect(pane.terminal.write).not.toHaveBeenCalledWith('cold-payload', expect.any(Function))
+      expect(
+        pane.terminal.write.mock.calls.map(([data]) => terminalWriteText(data)).join('')
+      ).not.toContain('cold-payload')
       // Replay still owes a cold-restore ack to prevent redelivery; identify the painted pane so main releases only its current terminal.
       expect(window.api.pty.ackColdRestore).toHaveBeenCalledWith(
         'tab-pty',
