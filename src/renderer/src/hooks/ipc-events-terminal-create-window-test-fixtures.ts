@@ -184,6 +184,7 @@ export function buildTerminalCreateWindow(args: {
       ssh: {
         listTargets: () => Promise.resolve([]),
         listPortForwards: () => Promise.resolve([]),
+        listUnrestoredPortForwards: () => Promise.resolve([]),
         listDetectedPorts: () => Promise.resolve([]),
         getState: () => Promise.resolve(null),
         onStateChanged: () => () => {},

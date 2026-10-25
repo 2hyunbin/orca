@@ -7,7 +7,9 @@ const HYDRATION_FANOUT = 4
 export async function hydrateDirectSshInitialState(
   isStopped: () => boolean,
   watermarkByTargetId: ReadonlyMap<string, number>,
-  applySshConnectionStateChange: (targetId: string, state: SshConnectionState) => void
+  applySshConnectionStateChange: (targetId: string, state: SshConnectionState) => void,
+  /** Every saved target, including ones that never publish a state. */
+  onTargetsListed?: (targetIds: string[]) => void
 ): Promise<void> {
   try {
     const targets = await window.api.ssh.listTargets()
@@ -16,6 +18,7 @@ export async function hydrateDirectSshInitialState(
     }
     // Keep loaded target evidence independent of best-effort tombstone RPC; merge concurrent writes after its await (#9911).
     useAppStore.getState().setSshTargetsMetadata(targets)
+    onTargetsListed?.(targets.map((target) => target.id))
     const hydrateRemovedLabels = async (): Promise<void> => {
       try {
         const removedLabels = await window.api.ssh.listRemovedTargetLabels()

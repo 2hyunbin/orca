@@ -3,6 +3,7 @@ import type { AppState } from '../types'
 import type {
   SshConnectionState,
   PortForwardEntry,
+  UnrestoredPortForward,
   EnrichedDetectedPort,
   SshTargetSummary
 } from '../../../../shared/ssh-types'
@@ -40,6 +41,8 @@ export type SshSlice = {
   sshConnectedGeneration: number
   /** Use immutable Record updates for Zustand selector identity; per-connection forwards arrive via main push events. */
   portForwardsByConnection: Record<string, PortForwardEntry[]>
+  /** Saved forwards that aren't open, keyed by connection ID, so one that can't start stays removable. */
+  unrestoredPortForwardsByConnection: Record<string, UnrestoredPortForward[]>
   /** Remote listening ports enriched by main, from SSH snapshots/push events. */
   detectedPortsByConnection: Record<string, EnrichedDetectedPort[]>
   setSshConnectionState: (targetId: string, state: SshConnectionState) => void
@@ -50,6 +53,7 @@ export type SshSlice = {
   enqueueSshCredentialRequest: (req: SshCredentialRequest) => void
   removeSshCredentialRequest: (requestId: string) => void
   setPortForwards: (targetId: string, forwards: PortForwardEntry[]) => void
+  setUnrestoredPortForwards: (targetId: string, forwards: UnrestoredPortForward[]) => void
   clearPortForwards: (targetId: string) => void
   setDetectedPorts: (targetId: string, ports: EnrichedDetectedPort[]) => void
 }
@@ -69,6 +73,7 @@ export const createSshSlice: StateCreator<AppState, [], [], SshSlice> = (set) =>
   sshCredentialQueue: [],
   sshConnectedGeneration: 0,
   portForwardsByConnection: {},
+  unrestoredPortForwardsByConnection: {},
   detectedPortsByConnection: {},
 
   setSshConnectionState: (targetId, state) =>
@@ -134,6 +139,19 @@ export const createSshSlice: StateCreator<AppState, [], [], SshSlice> = (set) =>
         delete next[targetId]
       }
       return { portForwardsByConnection: next }
+    }),
+
+  setUnrestoredPortForwards: (targetId, forwards) =>
+    set((s) => {
+      const next = { ...s.unrestoredPortForwardsByConnection }
+      if (forwards.length > 0) {
+        next[targetId] = forwards
+      } else if (targetId in next) {
+        delete next[targetId]
+      } else {
+        return s
+      }
+      return { unrestoredPortForwardsByConnection: next }
     }),
 
   clearPortForwards: (targetId) =>

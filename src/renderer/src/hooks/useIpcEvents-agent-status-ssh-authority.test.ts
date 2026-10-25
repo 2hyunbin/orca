@@ -277,6 +277,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
         sshConnectionStates.set(nextTargetId, state)
       },
       setPortForwards,
+      setUnrestoredPortForwards: vi.fn(),
       setDetectedPorts,
       setSshTargetsMetadata: vi.fn(),
       setRemovedSshTargetLabels: vi.fn(),
@@ -317,6 +318,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
             )
           },
           listPortForwards,
+          listUnrestoredPortForwards: () => Promise.resolve([]),
           listDetectedPorts,
           onPortForwardsChanged: (
             listener: (data: { targetId: string; forwards: (typeof liveForward)[] }) => void
