@@ -15,6 +15,8 @@ const FORK_HEAD_SCAN_BYTES = 256 * 1024
 const MAX_CONTINUATION_HOPS = 8
 const MAX_REMEMBERED_ENTRIES = 256
 // Claude Code accepts only this shape for continuedInSessionId; it also keeps ids out of path joins.
+// Claude Code skips tagged text (commands, reminders) and interrupt markers when finding prompts.
+const NOT_A_PROMPT = /^\s*<[a-z][\w-]*[\s>]|^\[Request interrupted by user/
 const CLAUDE_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
@@ -133,7 +135,7 @@ function parseRecord(line: string): Record<string, unknown> | undefined {
 }
 
 /** The newest pointer out of `sessionId`, or null when a later turn continued this session
- *  instead (mirrors Claude Code's own reader); undefined when the scan saw neither. */
+ *  instead (close to Claude Code's own reader); undefined when the scan saw neither. */
 function readContinuationPointer(
   transcriptPath: string,
   sessionId: string,
@@ -184,13 +186,15 @@ function isCompletedTurn(record: Record<string, unknown>): boolean {
     return false
   }
   const content: unknown = fields.content
-  if (typeof content === 'string') {
-    return content.trim() !== ''
+  const texts: unknown[] = typeof content === 'string' ? [content] : []
+  if (Array.isArray(content)) {
+    if (content.some((block) => block?.type === 'tool_result')) {
+      return false
+    }
+    texts.push(...content.filter((block) => block?.type === 'text').map((block) => block.text))
   }
-  return (
-    Array.isArray(content) &&
-    !content.some((block) => block?.type === 'tool_result') &&
-    content.some((block) => block?.type === 'text' && typeof block.text === 'string')
+  return texts.some(
+    (text) => typeof text === 'string' && text.trim() !== '' && !NOT_A_PROMPT.test(text)
   )
 }
 
@@ -303,9 +307,6 @@ function forkHeadNamesSession(forkedPath: string, sessionId: string): boolean {
   } catch {
     return false
   }
-  // Why drop the last line: the read may have cut it mid-record.
-  return head
-    .split('\n')
-    .slice(0, -1)
-    .some((line) => parseRecord(line.trim())?.sessionId === sessionId)
+  // Why a substring: a huge first record would not parse inside the head window.
+  return head.includes(`"sessionId":"${sessionId}"`)
 }

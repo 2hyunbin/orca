@@ -140,13 +140,18 @@ describe('ClaudeSessionContinuationTracker', () => {
     expect(new ClaudeSessionContinuationTracker().resolve(session(OLD, oldPath))).toBeNull()
   })
 
-  it('still follows a pointer after a tool result or an errored reply', () => {
+  it('still follows a pointer after a tool result, an errored reply, a command or an interrupt', () => {
     const { projectDir } = makeProject()
+    const userText = (content: unknown) =>
+      line({ type: 'user', sessionId: OLD, message: { content } })
     const oldPath = writeTranscript(
       projectDir,
       OLD,
       turn(OLD, 'u1') +
         pointer(OLD, FORK) +
+        userText('<command-name>/clear</command-name>') +
+        userText([{ type: 'text', text: '[Request interrupted by user]' }]) +
+        userText([{ type: 'text', text: '<system-reminder>x</system-reminder>' }]) +
         line({ type: 'user', sessionId: OLD, message: { content: [{ type: 'tool_result' }] } }) +
         line({
           type: 'assistant',
@@ -156,6 +161,17 @@ describe('ClaudeSessionContinuationTracker', () => {
         })
     )
     const forkPath = writeTranscript(projectDir, FORK, turn(FORK, 'u1'))
+
+    expect(new ClaudeSessionContinuationTracker().resolve(session(OLD, oldPath))).toEqual(
+      session(FORK, forkPath)
+    )
+  })
+
+  it('follows a fork whose first record is larger than the head it reads', () => {
+    const { projectDir } = makeProject()
+    const oldPath = writeTranscript(projectDir, OLD, turn(OLD, 'u1') + pointer(OLD, FORK))
+    const huge = line({ type: 'user', sessionId: FORK, message: { content: 'x'.repeat(300_000) } })
+    const forkPath = writeTranscript(projectDir, FORK, huge)
 
     expect(new ClaudeSessionContinuationTracker().resolve(session(OLD, oldPath))).toEqual(
       session(FORK, forkPath)
