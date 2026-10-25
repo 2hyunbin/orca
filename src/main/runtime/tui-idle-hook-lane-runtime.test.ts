@@ -375,9 +375,8 @@ describe('Canonical hook status readiness', () => {
     // decides; a working row leaves its title and screen rules to decide.
     it('settles Codex on its done, and leaves a working row to its screen rules', async () => {
       const codex = { launchAgent: 'codex' as const, data: CODEX_BUSY_SCREEN }
-      expect(await waitOutcome({ ...codex, rows: () => [row({ agentType: 'codex' })] })).toBe(
-        'ready'
-      )
+      const done = row({ agentType: 'codex', receivedAt: Date.now() - 1000 })
+      expect(await waitOutcome({ ...codex, rows: () => [done] })).toBe('ready')
       expect(
         await waitOutcome({ ...codex, rows: () => [row({ agentType: 'codex', state: 'working' })] })
       ).toBe('timeout')

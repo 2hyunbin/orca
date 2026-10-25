@@ -16,7 +16,12 @@ export type TuiIdleHookTurn = {
   state: HookTurnState
   blockedReason: RuntimeTerminalWaitBlockedReason | null
   taskWakeupPending?: true
+  /** When a fresh `done`'s turn has had time to paint its last frame. */
+  finalFrameAt?: number
 }
+
+// Why: Codex runs its Stop hook before it paints the turn's last frame, which can be its plan menu.
+const TURN_END_FINAL_FRAME_MS = 750
 
 /**
  * Reads the main agent's turn off its row. Why the main agent's own state: the row's combined
@@ -94,9 +99,13 @@ export function readTuiIdleHookTurn(read: TuiIdleHookTurnRead): TuiIdleHookTurn 
     row.providerSession?.key === 'session_id' &&
     terminalHostConnectionMatches(row.connectionId, read.connectionId ?? null, read.wslDistro) &&
     (!read.launchToken || row.launchToken === read.launchToken)
+  const finalFrameAt = row.receivedAt + TURN_END_FINAL_FRAME_MS
+  const finalFramePending =
+    state === 'done' && hookAuthority(read.agent) === 'turn-end' && Date.now() < finalFrameAt
   return {
     state,
     ...(taskWakeupPending ? { taskWakeupPending: true as const } : {}),
+    ...(finalFramePending ? { finalFrameAt } : {}),
     blockedReason:
       blockedReason ??
       (state === 'permission' && !predatesInput ? 'agent-interactive-prompt' : null)
@@ -108,7 +117,7 @@ export type TuiIdleHookVerdict =
   | { kind: 'ready-strong' }
   | { kind: 'working' }
   | { kind: 'blocked'; reason: RuntimeTerminalWaitBlockedReason }
-  | { kind: 'pending'; quietForeground: 'closed' }
+  | { kind: 'pending'; quietForeground: 'closed'; recheckAt?: number }
 
 /**
  * Tier 0 of tui-idle-evidence.ts for an agent whose hooks are trusted (`profile.hooks`). Why ahead
@@ -146,7 +155,9 @@ export function evaluateHookTurn(
     case undefined:
       return null
     case 'done':
-      return { kind: 'ready-strong' }
+      return turn.finalFrameAt
+        ? { kind: 'pending', quietForeground: 'closed', recheckAt: turn.finalFrameAt }
+        : { kind: 'ready-strong' }
     case 'working':
       return { kind: 'working' }
     case 'permission':

@@ -99,6 +99,20 @@ describe('Codex plan menu painted after its Stop hook', () => {
     expect(await waitOutcome(runtime, handle, QUIESCENCE_MS * 3)).toBe('ready')
   })
 
+  it('blocks a wait issued between the done and the menu it paints', async () => {
+    let rows: AgentStatusIpcPayload[] = []
+    const { runtime, handle } = await codexPane(() => rows)
+    paint(runtime, FIXTURE.slice(0, MENU_START))
+    await vi.advanceTimersByTimeAsync(1000)
+    rows = [doneRow(Date.now())]
+    const waiting = runtime.waitForTerminal(handle, { condition: 'tui-idle', timeoutMs: 1000 })
+    await vi.advanceTimersByTimeAsync(100)
+    paint(runtime, FIXTURE.slice(MENU_START, MENU_END))
+    await vi.advanceTimersByTimeAsync(900)
+
+    expect((await waiting).blockedReason).toBe('agent-interactive-prompt')
+  })
+
   it('settles on a done that follows output quoting the menu', async () => {
     let rows: AgentStatusIpcPayload[] = []
     const { runtime, handle } = await codexPane(() => rows)
@@ -106,6 +120,7 @@ describe('Codex plan menu painted after its Stop hook', () => {
     await vi.advanceTimersByTimeAsync(100)
     rows = [doneRow(Date.now())]
 
-    expect(await waitOutcome(runtime, handle, 150)).toBe('ready')
+    // Held for the turn's last frame, then settled before the next poll sweep.
+    expect(await waitOutcome(runtime, handle, 1000)).toBe('ready')
   })
 })
