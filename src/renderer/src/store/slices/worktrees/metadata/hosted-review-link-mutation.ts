@@ -6,10 +6,10 @@ import {
   deleteCopyTombstones,
   moveCopyTombstones,
   reviewClearTombstoneKey,
+  type WorktreeCopyClear,
   worktreeCopyOwnerKey
 } from './worktree-copy-review-clear'
 import type { Worktree } from '../../../../../../shared/worktree/types'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
 import { applyDetectedWorktreeUpdates } from '../listing/detected-worktree-meta'
@@ -278,11 +278,11 @@ export function sanitizeHostedReviewLinksForBranchClears<
 export function applyHostedReviewLinkClear(
   set: Parameters<StateCreator<AppState, [], [], WorktreeSlice>>[0],
   worktreeId: string,
-  copy: { owner: string; hostId: ExecutionHostId | undefined }
+  copy: WorktreeCopyClear
 ): void {
   set((s) => {
     const byRepo = s.worktreesByRepo
-    const nextWorktrees = clearCopyReviewLinks(byRepo, worktreeId, copy.owner)
+    const nextWorktrees = clearCopyReviewLinks(byRepo, worktreeId, copy)
     const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
       s.detectedWorktreesByRepo,
       worktreeId,

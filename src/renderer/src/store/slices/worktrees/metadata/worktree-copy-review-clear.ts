@@ -1,4 +1,5 @@
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
 import { CLEARED_HOSTED_REVIEW_LINK_UPDATES } from '../../../../../../shared/worktree/hosted-review-links'
 import { getRepoIdFromWorktreeId } from '../../../../../../shared/worktree/id'
@@ -16,16 +17,26 @@ export function worktreeCopyOwnerKey(
   return `${row.hostId ?? ''}\0${row.runtimeOwnerEnvironmentId ?? ''}`
 }
 
-/** Clears branch-scoped review context on the one copy `owner` names. */
+/** The copy a review clear is for. */
+export type WorktreeCopyClear = {
+  /** The owner key of the row once stamped; tombstones use it. */
+  owner: string
+  /** The row's own key at clear time, which differs only while a legacy row is unstamped. */
+  rowOwner: string
+  hostId: ExecutionHostId | undefined
+}
+
+/** Clears branch-scoped review context on the one copy `copy` names, stamped or not. */
 export function clearCopyReviewLinks(
   byRepo: Record<string, Worktree[]>,
   worktreeId: string,
-  owner: string
+  copy: Pick<WorktreeCopyClear, 'owner' | 'rowOwner'>
 ): Record<string, Worktree[]> {
   const repoId = getRepoIdFromWorktreeId(worktreeId)
   let changed = false
   const next = byRepo[repoId]?.map((row) => {
-    if (row.id !== worktreeId || worktreeCopyOwnerKey(row) !== owner) {
+    const rowOwner = worktreeCopyOwnerKey(row)
+    if (row.id !== worktreeId || (rowOwner !== copy.owner && rowOwner !== copy.rowOwner)) {
       return row
     }
     changed = true

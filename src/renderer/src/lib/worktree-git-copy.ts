@@ -3,6 +3,7 @@ import type { AppState } from '@/store/types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { parseRoutableExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { getKnownExecutionHostIdForWorktree } from './worktree-runtime-owner'
+import { getActiveWorkspaceExecutionHostId } from './active-workspace-host'
 import { runtimeTargetForWorkspaceOwner } from './resolve-owner'
 import {
   getConnectionIdForWorktreeCopy,
@@ -22,7 +23,18 @@ export type WorktreeGitCopy = {
   readonly transport: RuntimeClientTarget
 }
 
+/**
+ * The selected copy's host, else the owner's when the unqualified owner resolves. An ambiguous twin
+ * with no selection stays unplaced, so its git calls refuse instead of guessing a copy.
+ */
 function placedHostId(state: AppState, worktreeId: string): ExecutionHostId | null {
+  const selected = getActiveWorkspaceExecutionHostId(state, worktreeId)
+  if (selected) {
+    return parseRoutableExecutionHostId(selected)?.id ?? null
+  }
+  if (!runtimeTargetForWorkspaceOwner(state, { workspaceId: worktreeId })) {
+    return null
+  }
   return (
     parseRoutableExecutionHostId(getKnownExecutionHostIdForWorktree(state, worktreeId))?.id ?? null
   )

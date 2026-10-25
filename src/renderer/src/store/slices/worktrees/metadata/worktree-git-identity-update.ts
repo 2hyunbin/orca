@@ -18,8 +18,13 @@ import {
   rememberHostedReviewLinkClear,
   resolveHostedReviewLinkWorktreeId
 } from './hosted-review-link-mutation'
-import { reviewClearTombstoneKey, worktreeCopyOwnerKey } from './worktree-copy-review-clear'
+import {
+  reviewClearTombstoneKey,
+  worktreeCopyOwnerKey,
+  type WorktreeCopyClear
+} from './worktree-copy-review-clear'
 import { persistWorktreeMeta } from './worktree-meta-persist'
+import { repoHostId, withRepoHostOwnership } from '../listing/worktree-host-ownership'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
@@ -71,7 +76,7 @@ export function createUpdateWorktreeGitIdentity(
   return (worktreeId, identity, ownerHostId) => {
     let shouldPersistHostedReviewClear = false
     let clearedBranch: string | null = null
-    let clearedCopy: { owner: string; hostId: ExecutionHostId | undefined } | undefined
+    let clearedCopy: WorktreeCopyClear | undefined
     let clearedOnTwin = false
     let clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
     const repoId = getRepoIdFromWorktreeId(worktreeId)
@@ -111,7 +116,15 @@ export function createUpdateWorktreeGitIdentity(
         const shouldClearHostedReviewContext =
           hostedReviewBranchChanged && hasBranchScopedHostedReviewContext(worktree)
         // Why the copy: a same-path twin shares the id, so every guard and clear names this row.
-        const copy = { owner: worktreeCopyOwnerKey(worktree), hostId: worktree.hostId }
+        // An unstamped legacy row is keyed by the stamp its next listing gives it.
+        const stamped = worktree.hostId
+          ? worktree
+          : withRepoHostOwnership(worktree, ownerHostId ?? repoHostId(s, worktree.repoId))
+        const copy = {
+          owner: worktreeCopyOwnerKey(stamped),
+          rowOwner: worktreeCopyOwnerKey(worktree),
+          hostId: worktree.hostId
+        }
         if (shouldClearHostedReviewContext) {
           shouldPersistHostedReviewClear = true
           clearedBranch = nextBranch

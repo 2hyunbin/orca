@@ -239,6 +239,17 @@ describe('updateWorktreeGitIdentity host matching', () => {
 })
 
 describe('review-clear tombstones are always keyed by the copy', () => {
+  it('still guard a legacy unstamped row after its listing stamps it', () => {
+    const store = storeWith({ branch: 'refs/heads/a1', linkedPR: 1 })
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'ssh:box')
+
+    const [stale] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({ id, repoId: 'repo1', hostId: 'ssh:box', branch: 'refs/heads/a1', linkedPR: 1 })
+    ])
+
+    expect(stale).toMatchObject({ branch: 'refs/heads/a2', linkedPR: null })
+  })
+
   it('never rewrite a same-path twin that arrives after a lone copy cleared', () => {
     const store = storeWith({ hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 })
     store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'local')

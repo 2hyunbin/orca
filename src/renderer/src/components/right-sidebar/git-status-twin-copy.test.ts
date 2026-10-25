@@ -82,6 +82,12 @@ afterEach(() => {
 })
 
 describe('git status poll for a same-path twin', () => {
+  it('refuses an unselected twin instead of guessing a copy', () => {
+    useAppStore.setState({ activeWorktreeId: null, activeWorkspaceExecutionHostId: null })
+
+    expect(resolveWorktreeGitCopyNow(id)).toBeNull()
+  })
+
   it("asks the selected SSH copy's host and patches only that copy", async () => {
     const target = resolveWorktreeGitCopyNow(id)
     expect(target).toMatchObject({ hostId: 'ssh:box-b', connectionId: 'box-b' })
