@@ -227,6 +227,15 @@ describe('managed server row', () => {
     })
   })
 
+  it('replaces the Update anyway confirmation when the user picks Stop', async () => {
+    const offered = { ...status, migration: null, deferredUpdate: null, availableUpdate: '0.1.0+b' }
+    const { container } = await render(offered, async () => offered)
+    await act(async () => button(container, 'Update')?.click())
+    await act(async () => button(container, 'Stop…')?.click())
+    expect(button(container, 'Update anyway')).toBeUndefined()
+    expect(button(container, 'Stop and remove server')).toBeDefined()
+  })
+
   it('drops the Update anyway confirmation once the host runs another build', async () => {
     let current = {
       ...status,

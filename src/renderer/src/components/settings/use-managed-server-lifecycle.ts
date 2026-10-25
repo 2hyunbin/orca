@@ -72,11 +72,26 @@ export function useManagedServerLifecycle({
   const [status, setStatus] = useState<OrcadManagedRuntimeStatus | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
   const [busy, setBusy] = useState<ManagedServerAction | 'status' | null>(null)
-  const [confirmingStop, setConfirmingStop] = useState(false)
-  const [confirmingForget, setConfirmingForget] = useState(false)
-  const [confirmingRestore, setConfirmingRestore] = useState(false)
-  const [forceUpdateRequest, setConfirmingForceUpdate] =
+  const [confirmingStop, setStopConfirmation] = useState(false)
+  const [confirmingForget, setForgetConfirmation] = useState(false)
+  const [confirmingRestore, setRestoreConfirmation] = useState(false)
+  const [forceUpdateRequest, setForceUpdateRequest] =
     useState<OrcadManagedPastLiveTerminals | null>(null)
+  // Why one choke point: the row shows one confirmation, so opening any closes the rest.
+  const openConfirmation = (
+    open: 'stop' | 'forget' | 'restore' | 'forceUpdate' | null,
+    forceUpdate: OrcadManagedPastLiveTerminals | null = null
+  ): void => {
+    setStopConfirmation(open === 'stop')
+    setForgetConfirmation(open === 'forget')
+    setRestoreConfirmation(open === 'restore')
+    setForceUpdateRequest(open === 'forceUpdate' ? forceUpdate : null)
+  }
+  const setConfirmingStop = (value: boolean): void => openConfirmation(value ? 'stop' : null)
+  const setConfirmingForget = (value: boolean): void => openConfirmation(value ? 'forget' : null)
+  const setConfirmingRestore = (value: boolean): void => openConfirmation(value ? 'restore' : null)
+  const setConfirmingForceUpdate = (value: OrcadManagedPastLiveTerminals | null): void =>
+    openConfirmation(value ? 'forceUpdate' : null, value)
   // Why derived: another desktop's activation, a stop or a migration voids the confirmation.
   const confirmingForceUpdate =
     forceUpdateRequest &&
@@ -138,7 +153,11 @@ export function useManagedServerLifecycle({
       const forceable = action === 'update' && isLiveTerminalsDeferral(result)
       const message = forceable ? null : outcomeMessage(result)
       if (mountedRef.current) {
-        setConfirmingForceUpdate(forceable ? { incumbentVersion } : null)
+        if (forceable) {
+          setConfirmingForceUpdate({ incumbentVersion })
+        } else if (action === 'update' || action === 'forceUpdate') {
+          setConfirmingForceUpdate(null)
+        }
       }
       if (message) {
         toast.message(message)
