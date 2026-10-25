@@ -40,9 +40,16 @@ export const OPENCODE_TRANSCRIPT_IMPORT: StructuredAgentTranscriptImport = {
     ])
     return expected && actual && expected.path === actual.path ? actual.path : null
   },
+  // History lists every registered account, so resume must find conversations in each of them.
   accountHomeCandidates: ({ selectedAccountHome }) => [
     selectedAccountHome,
-    { kind: 'opencode', locator: { kind: 'unmanaged' } }
+    { kind: 'opencode', locator: { kind: 'unmanaged' } },
+    ...getManagedDataAccountService()
+      .list('opencode')
+      .accounts.map((account) => ({
+        kind: 'opencode' as const,
+        locator: { kind: 'managed' as const, managedProfileId: account.id }
+      }))
   ],
   findTranscript: async ({ providerSessionId, store: dbPath }) => {
     try {

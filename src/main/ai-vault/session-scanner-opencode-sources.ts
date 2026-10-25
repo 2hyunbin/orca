@@ -20,7 +20,7 @@ export function opencodeDiscoveries(
   issues: AiVaultScanIssue[]
 ): Promise<SessionFileDiscovery>[] {
   return opencodeStorageDirs(options, wslHomeDirs).flatMap((storageDir, index) => {
-    const paths = opencodeDbPathsForSource(options, wslHomeDirs, storageDir, index, issues)
+    const paths = opencodeDbPathsForSource(options, storageDir, index, issues)
     return [
       paths.then((dbPaths) =>
         discoverOpenCodeSessions({
@@ -44,25 +44,18 @@ function opencodeStorageDirs(
   options: AiVaultScanOptions,
   wslHomeDirs: readonly string[]
 ): string[] {
+  // An account folder can also be the app's own data folder; scan it once.
   return [
-    options.opencodeStorageDir ?? resolveOpenCodeStorageDirectory(),
-    ...opencodeExtraDataDirs(options, wslHomeDirs).map((dataDir) => join(dataDir, 'storage'))
-  ]
-}
-
-function opencodeExtraDataDirs(
-  options: AiVaultScanOptions,
-  wslHomeDirs: readonly string[]
-): string[] {
-  return [
-    ...wslHomeDirs.map((homeDir) => join(homeDir, '.local', 'share', 'opencode')),
-    ...(options.opencodeAccountDataDirs ?? [])
+    ...new Set([
+      options.opencodeStorageDir ?? resolveOpenCodeStorageDirectory(),
+      ...wslHomeDirs.map((homeDir) => join(homeDir, '.local', 'share', 'opencode', 'storage')),
+      ...(options.opencodeAccountDataDirs ?? []).map((dataDir) => join(dataDir, 'storage'))
+    ])
   ]
 }
 
 async function opencodeDbPathsForSource(
   options: AiVaultScanOptions,
-  wslHomeDirs: readonly string[],
   storageDir: string,
   sourceIndex: number,
   issues: AiVaultScanIssue[]
@@ -73,15 +66,11 @@ async function opencodeDbPathsForSource(
   const onRefusal = (path: string, error: WslTranscriptFsError): void => {
     recordSessionScanIssue(issues, { agent: 'opencode', path, message: error.message })
   }
-  // Custom storage roots still place SQLite databases in the parent data directory.
-  if (sourceIndex === 0 && options.opencodeStorageDir) {
-    return listOpenCodeDatabasesInDirectory(dirname(storageDir), onRefusal, options.signal)
-  }
-  if (sourceIndex === 0) {
+  if (sourceIndex === 0 && !options.opencodeStorageDir) {
     return listOpenCodeDatabases(onRefusal, undefined, options.signal)
   }
-  const dataDir = opencodeExtraDataDirs(options, wslHomeDirs)[sourceIndex - 1]
-  return dataDir ? listOpenCodeDatabasesInDirectory(dataDir, onRefusal, options.signal) : []
+  // Storage roots place SQLite databases in the parent data directory.
+  return listOpenCodeDatabasesInDirectory(dirname(storageDir), onRefusal, options.signal)
 }
 
 async function discoverOpenCode2Sessions(
