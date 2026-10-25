@@ -104,13 +104,15 @@ import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent
 import { refreshLocalStructuredSessionTabs } from '@/runtime/local-structured-session-tabs-sync/inventory-refresh'
 import { runSourceControlAgentActionStart } from '@/components/right-sidebar/runSourceControlAgentActionStart'
 import { getStructuredAgentLaunchStatus } from '../../structured-agent-session-launch-status'
-import { getStructuredAgentSessionLaunchLifecycle } from './structured-agent-session-launch-registry'
+import {
+  getStructuredAgentSessionLaunchLifecycle,
+  resetStructuredAgentLaunchRegistryForTests
+} from './structured-agent-session-launch-registry'
 import {
   retryStructuredAgentSessionLaunch,
   startStructuredAgentLaunch
 } from '../../structured-agent-session-launch'
 import { resetStructuredAgentLaunchPersistenceForTests } from './structured-agent-session-launch-persistence'
-import { resetStructuredAgentLaunchRegistryForTests } from './structured-agent-session-launch-registry'
 
 const WORKTREE_ID = 'wt-unconfirmed-or-retried'
 
