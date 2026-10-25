@@ -30,6 +30,10 @@ const ZCODE_COMPOSER_BOX_CORNER = '╭'
 // Why: Claude Code's prompt-input mode indicator is `figures.pointer` + NBSP; its startup menus
 // (trust, theme) draw the same pointer followed by a cursor move, so the NBSP means the composer.
 const CLAUDE_COMPOSER_PROMPT = '❯\u00a0'
+// Why: Claude 2.1.280-2.1.310 turn on palette-change reports with bracketed paste and drop both on
+// exit; shells never send it, so a p10k/starship `❯` + NBSP prompt cannot arm Claude's marker.
+const DECSET_COLOR_PALETTE_UPDATES = '\x1b[?2031h'
+const DECRST_COLOR_PALETTE_UPDATES = '\x1b[?2031l'
 const DECSET_ALT_SCREEN = '\x1b[?1049h'
 const DECRST_ALT_SCREEN = '\x1b[?1049l'
 
@@ -91,11 +95,11 @@ const DRAFT_PASTE_READY_SIGNALS: Record<SingleSignal, DraftPasteReadySignalSpec>
     marker: GROK_COMPOSER_PROMPT,
     quietAnchor: DECSET_BRACKETED_PASTE
   },
-  // Why: Claude renders inline (no alt screen), so it anchors on bracketed paste as opencode does;
-  // the quiet window keeps the old delivery where the glyph differs (Windows `figures` fallback).
+  // Why: Claude renders inline (no alt screen); the quiet window keeps the old delivery where the
+  // glyph differs (Windows `figures` fallback).
   'claude-composer-prompt': {
-    markerAnchor: DECSET_BRACKETED_PASTE,
-    markerAnchorEnd: DECRST_BRACKETED_PASTE,
+    markerAnchor: DECSET_COLOR_PALETTE_UPDATES,
+    markerAnchorEnd: DECRST_COLOR_PALETTE_UPDATES,
     marker: CLAUDE_COMPOSER_PROMPT,
     quietAnchor: DECSET_BRACKETED_PASTE
   },

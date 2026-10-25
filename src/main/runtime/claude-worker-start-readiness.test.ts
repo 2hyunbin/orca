@@ -69,4 +69,24 @@ describe('the Claude composer marker', () => {
   it('fires once that menu is answered and the composer mounts', () => {
     expect(firesOn('claude-dialog-trust-workspace-answered')).toBe(true)
   })
+
+  // A powerlevel10k/starship prompt draws the same `❯` + NBSP after the shell's own DECSET 2004.
+  const SHELL_PROMPT = '\x1b[?2004h~/repo \x1b[32m❯ \x1b[0m'
+
+  it('does not fire on a shell prompt that draws the same glyph', () => {
+    // Presence precondition: the shell turns bracketed paste on just as Claude does.
+    expect(readRuntimeFixture('zsh-prompt-runs-command')).toContain('\x1b[?2004h')
+    const scanner = createDraftPasteReadyScanner('claude-composer-prompt')
+    expect(scanner.observe(readRuntimeFixture('zsh-prompt-runs-command')).ready).toBe(false)
+    expect(scanner.observe(SHELL_PROMPT).ready).toBe(false)
+  })
+
+  it('does not fire on the shell prompt drawn after Claude exits', () => {
+    const scanner = createDraftPasteReadyScanner('claude-composer-prompt')
+    const boot = readRuntimeFixture('claude-dialog-trust-workspace')
+    expect(scanner.observe(boot).ready).toBe(false)
+    // Claude drops its modes on exit, as the answered-trust capture shows mid-boot.
+    expect(scanner.observe('\x1b[?1004l\x1b[?2031l\x1b[?2004l\r\n').ready).toBe(false)
+    expect(scanner.observe(SHELL_PROMPT).ready).toBe(false)
+  })
 })
