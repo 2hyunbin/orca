@@ -32,6 +32,7 @@ import type * as HistorySeedProtocol from './terminal-history-seed-transfer-prot
 import type * as PtyOwnerQueryProtocol from './daemon-pty-owner-query-protocol'
 export type { TerminalModes } from './terminal-modes'
 import type { TerminalSnapshot } from './terminal-snapshot'
+import type { SessionOptions } from './session-options'
 export type { TerminalSnapshot } from './terminal-snapshot'
 export {
   AGENT_SESSION_CLAIM_DAEMON_PROTOCOL_VERSION,
@@ -321,15 +322,14 @@ export type SystemResolverHealthResult = {
   health: SystemResolverHealth
 }
 
-export type SessionInfo = {
+/** `terminalHandle` and `envPaneKey` are what the session's spawn env exported. */
+export type SessionInfo = Pick<SessionOptions, 'terminalHandle' | 'envPaneKey'> & {
   foregroundProcess?: string
   sessionId: string
   incarnationId?: string
   state: SessionState
   shellState: ShellReadyState
   isAlive: boolean
-  terminalHandle?: string
-  envPaneKey?: string
   wslDistro?: string | null
   pid: number | null
   cwd: string | null
