@@ -11,6 +11,7 @@ type LiveForward = {
 const h = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
   updateForward: vi.fn(),
+  addForward: vi.fn(),
   previous: {
     id: 'pf-1',
     connectionId: 't1',
@@ -36,6 +37,7 @@ vi.mock('./ssh-ipc-context', () => ({
   persistedStore: null,
   portForwardManager: {
     updateForward: h.updateForward,
+    addForward: h.addForward,
     listForwards: () => h.live,
     removeForwardAndWait: h.removeForwardAndWait
   }
@@ -48,6 +50,7 @@ vi.mock('./ssh-renderer-broadcast', () => ({
 
 const { registerSshPortForwardHandlers } = await import('./ssh-port-forward-handlers')
 const { PortForwardTornDownError } = await import('../../ssh/port-forwarding/ssh-port-forward')
+const { isForwardBackingOff, recordForwardFailure } = await import('./ssh-port-forward-unrestored')
 
 const edit = {
   id: 'pf-1',
@@ -98,6 +101,14 @@ describe('ssh:updatePortForward', () => {
       { targetId: 't1', localPort: 4100, remoteHost: '127.0.0.1', remotePort: 80 }
     )
     expect(h.removeForwardAndWait).toHaveBeenCalledWith('pf-1')
+  })
+
+  it('starts a re-added forward on a fresh backoff', async () => {
+    const mapping = { localPort: 4100, remoteHost: '127.0.0.1', remotePort: 80 }
+    recordForwardFailure('t1', mapping, new Error('port in use'))
+    h.addForward.mockResolvedValue({ id: 'pf-3', connectionId: 't1', ...mapping })
+    await h.handlers.get('ssh:addPortForward')!({}, { targetId: 't1', ...mapping })
+    expect(isForwardBackingOff('t1', mapping)).toBe(false)
   })
 
   it('drops only the edited-away forward from the saved list', async () => {

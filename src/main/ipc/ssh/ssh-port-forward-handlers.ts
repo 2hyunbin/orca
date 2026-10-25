@@ -41,6 +41,8 @@ export function registerSshPortForwardHandlers(): void {
           args.remotePort,
           args.label
         )
+        // A forward the user adds again starts a fresh backoff.
+        clearForwardFailure(args.targetId, entry)
         persistPortForwards(args.targetId)
         broadcastPortForwards(getCurrentMainWindow, args.targetId)
         return entry
@@ -77,6 +79,10 @@ export function registerSshPortForwardHandlers(): void {
             args.remotePort,
             args.label
           )
+          clearForwardFailure(entry.connectionId, entry)
+          if (previous) {
+            clearForwardFailure(entry.connectionId, previous)
+          }
           persistPortForwards(entry.connectionId, previous)
           broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
           return entry
@@ -109,6 +115,7 @@ export function registerSshPortForwardHandlers(): void {
       }
       const removed = await portForwardManager!.removeForwardAndWait(args.id)
       if (removed) {
+        clearForwardFailure(removed.connectionId, removed)
         persistPortForwards(removed.connectionId, removed)
         broadcastPortForwards(getCurrentMainWindow, removed.connectionId)
       }

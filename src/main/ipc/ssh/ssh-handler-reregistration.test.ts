@@ -92,7 +92,8 @@ describe('SSH IPC handlers', () => {
           remoteHost: '127.0.0.1',
           remotePort: 3000,
           label: 'app',
-          error: 'exited unexpectedly'
+          error: 'exited unexpectedly',
+          stopped: true
         }
       ]
     })

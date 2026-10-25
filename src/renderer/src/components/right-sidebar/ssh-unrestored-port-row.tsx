@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react'
 import { Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import type { UnrestoredPortForward } from '../../../../shared/ssh-types'
@@ -29,8 +30,8 @@ export function SshUnrestoredPortRow({
           remoteHost: forward.remoteHost,
           remotePort: forward.remotePort
         })
-      } catch {
-        // broadcast will update state
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
       }
       if (mountedRef.current) {
         setRemoving(false)
@@ -63,11 +64,17 @@ export function SshUnrestoredPortRow({
           title={forward.error}
         >
           {forward.error
-            ? translate(
-                'auto.components.right.sidebar.ssh.unrestored.port.row.04adb5f5e7',
-                "Couldn't start: {{value0}}",
-                { value0: forward.error }
-              )
+            ? forward.stopped
+              ? translate(
+                  'auto.components.right.sidebar.ssh.unrestored.port.row.b817a96fcf',
+                  'Stopped: {{value0}}',
+                  { value0: forward.error }
+                )
+              : translate(
+                  'auto.components.right.sidebar.ssh.unrestored.port.row.04adb5f5e7',
+                  "Couldn't start: {{value0}}",
+                  { value0: forward.error }
+                )
             : translate(
                 'auto.components.right.sidebar.ssh.unrestored.port.row.4c119f5e2a',
                 'Not started yet'
@@ -82,10 +89,7 @@ export function SshUnrestoredPortRow({
         )}
         onClick={(event) => void handleRemove(event)}
         disabled={removing}
-        title={translate(
-          'auto.components.right.sidebar.ssh.unrestored.port.row.63e5258a24',
-          'Remove'
-        )}
+        title={translate('auto.components.right.sidebar.PortsPanel.e740075063', 'Remove')}
       >
         <Trash2 size={13} />
       </button>

@@ -4,7 +4,14 @@ import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry
 import { portForwardManager } from './ssh-ipc-context'
 
 type ForwardMapping = Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
-type ForwardFailure = { message: string; attempts: number; retryAt: number; startedAt?: number }
+type ForwardFailure = {
+  message: string
+  /** 'exit': it ran, then its process died; 'start': it never came up. */
+  kind: 'start' | 'exit'
+  attempts: number
+  retryAt: number
+  startedAt?: number
+}
 
 const FORWARD_RETRY_BASE_MS = 30_000
 const FORWARD_RETRY_MAX_MS = 10 * 60_000
@@ -25,7 +32,8 @@ export function isForwardBackingOff(targetId: string, forward: ForwardMapping): 
 export function recordForwardFailure(
   targetId: string,
   forward: ForwardMapping,
-  error: unknown
+  error: unknown,
+  kind: ForwardFailure['kind'] = 'start'
 ): void {
   let failures = failuresByTarget.get(targetId)
   if (!failures) {
@@ -38,6 +46,7 @@ export function recordForwardFailure(
   const attempts = (recovered ? 0 : (previous?.attempts ?? 0)) + 1
   failures.set(forwardKey(forward), {
     message: error instanceof Error ? error.message : String(error),
+    kind,
     attempts,
     retryAt:
       Date.now() + Math.min(FORWARD_RETRY_BASE_MS * 2 ** (attempts - 1), FORWARD_RETRY_MAX_MS)
@@ -68,7 +77,11 @@ export function listUnrestoredPortForwards(targetId: string): UnrestoredPortForw
   return saved
     .filter((forward) => !live.has(forwardKey(forward)))
     .map((forward) => {
-      const error = failures?.get(forwardKey(forward))?.message
-      return { ...forward, ...(error ? { error } : {}) }
+      const failure = failures?.get(forwardKey(forward))
+      return {
+        ...forward,
+        ...(failure ? { error: failure.message } : {}),
+        ...(failure?.kind === 'exit' ? { stopped: true as const } : {})
+      }
     })
 }

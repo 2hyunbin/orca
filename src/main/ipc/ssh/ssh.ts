@@ -130,7 +130,12 @@ export function registerSshHandlers(
           }`
         )
         // An ssh that starts and later dies backs off like one that never started.
-        recordForwardFailure(entry.connectionId, entry, reason.detail ?? 'exited unexpectedly')
+        recordForwardFailure(
+          entry.connectionId,
+          entry,
+          reason.detail ?? 'exited unexpectedly',
+          'exit'
+        )
       }
       persistPortForwards(entry.connectionId)
       broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
