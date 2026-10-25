@@ -140,7 +140,7 @@ describe('InlineUsageBars', () => {
       session: null,
       weekly: null,
       monthly: { usedPercent: 80, windowMinutes: 43_200, resetsAt: null, resetDescription: null },
-      updatedAt: Date.now(),
+      updatedAt: 0,
       error: null,
       status: 'ok'
     }
