@@ -6,7 +6,10 @@ import {
   detectAgentStatusFromTitle,
   isClaudeManagementTitle
 } from '../../../shared/agent-detection'
-import { recognizeAgentProcess } from '../../../shared/agent-process-recognition'
+import {
+  GENERIC_PROCESS_NAME_AGENTS,
+  recognizeAgentProcess
+} from '../../../shared/agent-process-recognition'
 import {
   resolveStructuredWorkerAuthority,
   resolveStructuredWorkerIdentityForSession
@@ -136,11 +139,10 @@ export abstract class OrcaRuntimeWithGetPtyRecordForPaneKey extends OrcaRuntimeW
         agent = recognizeAgentProcess(foregroundProcess)?.agent
       }
       // Why every agent: unframed keystrokes can open Pi's `#` completion or answer a trust menu; Dispatch already frames them all.
-      if (agent === undefined) {
-        return false
-      }
-      const presence = { retryForegroundWrappers: false, foregroundProcess }
-      if (!(await this.isTerminalRunningAgent(handle, presence))) {
+      // A generic process name alone could be an ordinary tool, so those agents need title or hook evidence.
+      const proof = agent && GENERIC_PROCESS_NAME_AGENTS.has(agent) ? null : foregroundProcess
+      const presence = { retryForegroundWrappers: false, foregroundProcess: proof }
+      if (agent === undefined || !(await this.isTerminalRunningAgent(handle, presence))) {
         return false
       }
       trackedPty.foregroundAgent = agent

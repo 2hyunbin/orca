@@ -320,6 +320,24 @@ describe('OrcaRuntimeService', () => {
     }
   )
 
+  it.each(['orca', 'acli', 'cn', 'vibe'])(
+    'keeps direct input for a bare %s foreground that may be an ordinary tool',
+    async (processName) => {
+      const runtime = new OrcaRuntimeService(store)
+      runtime.setPtyController({
+        write: () => true,
+        kill: () => true,
+        getForegroundProcess: async () => processName
+      })
+      syncSinglePty(runtime, 'pty-1', { paneTitle: 'bash' })
+      const [terminal] = (await runtime.listTerminals()).terminals
+
+      await expect(runtime.isTerminalRunningSettledPromptAgent(terminal.handle)).resolves.toBe(
+        false
+      )
+    }
+  )
+
   it('keeps stale Codex launch identity on legacy delivery after the shell returns', async () => {
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
