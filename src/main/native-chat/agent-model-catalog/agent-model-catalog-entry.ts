@@ -152,9 +152,11 @@ function mergedModels(
     const defaultEffort = [configuredEffort, listed?.defaultEffort, reported?.defaultEffort].find(
       (effort) => effort !== undefined && efforts.some((choice) => choice.value === effort)
     )
-    const { defaultEffort: _own, ...rest } = model
+    const { defaultEffort: _own, effortsKnown, ...rest } = model
     return {
       ...rest,
+      // A menu borrowed from the other listing makes the efforts known again.
+      ...(effortsKnown === false && efforts.length === 0 ? { effortsKnown } : {}),
       // Without discovery/configuration, live flags are the only available default evidence.
       isDefault: configured
         ? model.id === configured.modelId

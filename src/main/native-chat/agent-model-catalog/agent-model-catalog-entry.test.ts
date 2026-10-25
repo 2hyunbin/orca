@@ -39,3 +39,16 @@ describe('the effort menu of a model whose configured effort one listing lacks',
     expect(merged).not.toHaveProperty('defaultEffort')
   })
 })
+
+it('treats a model’s efforts as known once the other listing supplies its menu', () => {
+  const probe = listing('probe', 1, menu('off', 'high'))
+  const chat: AgentModelCatalogListing = {
+    ...listing('live-session', 2, []),
+    models: [
+      { id: 'openai/gpt-6', label: 'GPT-6', isDefault: false, efforts: [], effortsKnown: false }
+    ]
+  }
+  const merged = model(probe, chat)
+  expect(merged?.efforts).toEqual(menu('off', 'high'))
+  expect(merged).not.toHaveProperty('effortsKnown')
+})
