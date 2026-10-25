@@ -43,11 +43,11 @@ export class JournalPopulationMeter {
     this.restores.push(instrumentPopulationStaging(recordCOW, (state) => this.label(state)))
     const NativeMap = Map
     const NativeSet = Set
-    // SAFETY: these are the native collection size getters, invoked on their original owners.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This descriptor is the native Map size getter; reflection erases its numeric return/receiver types, and clear forwards the captured Map owner.
     const mapSize = Object.getOwnPropertyDescriptor(NativeMap.prototype, 'size')!.get as (
       this: PopulationCollection
     ) => number
-    // SAFETY: this is the native Set size getter, with the same receiver contract.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This descriptor is the native Set size getter; reflection erases its numeric return/receiver types, and clear forwards the captured Set owner.
     const setSize = Object.getOwnPropertyDescriptor(NativeSet.prototype, 'size')!.get as (
       this: PopulationCollection
     ) => number
@@ -87,7 +87,7 @@ export class JournalPopulationMeter {
         if (typeof callback !== 'function') {
           throw new Error('invalid collection callback')
         }
-        // SAFETY: native Map/Set forEach both pass exactly value, key and the actual collection.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The checked native forEach callback receives its original value/key/collection tuple and thisArg; combining Map/Set prototypes loses that correlation.
         const invoke = callback as (
           this: unknown,
           value: unknown,

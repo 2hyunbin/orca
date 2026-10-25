@@ -162,7 +162,7 @@ class StructuralMap<K, V, Stored = V> extends Map<K, V> {
       }
       after = row.id
       const value = deserialize(Buffer.from(row.value))
-      // SAFETY: the namespace owner writes K and the reversible key codec preserves that domain.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This namespace stores only keys written as K by its owner; the reversible scratch codec restores that key domain but returns unknown.
       const key = decodeStructuralScratchKey(row.key) as K
       yield [key, this.codec ? this.codec.decode(value) : value]
     }

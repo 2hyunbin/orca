@@ -11,7 +11,7 @@ const port = parentPort
 if (!port) {
   throw new Error('legacy replay requires a worker port')
 }
-// SAFETY: workerData is supplied only by this binary's private typed worker factory.
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The same-binary factory sends its string stateDirectory and shared Int32Array control; Node's workerData declaration erases that private payload type.
 const { directory, control } = workerData as { directory: string; control: Int32Array }
 let db: ReturnType<typeof openLegacyRestReader> | undefined
 let replay: LegacyRestReplay | undefined

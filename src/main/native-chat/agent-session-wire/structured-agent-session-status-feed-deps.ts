@@ -28,7 +28,8 @@ export type StatusFeedSession = {
 }
 
 export type StructuredAgentSessionStatusFeedDeps = {
-  sessions: ReadonlyMap<string, StatusFeedSession>
+  sessions: Pick<ReadonlyMap<string, StatusFeedSession>, 'get' | 'has'> &
+    Iterable<readonly [string, StatusFeedSession]>
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** Absent means no replaced runtime. */
   replacedRuntime?: (sessionId: string) => { fence: number } | undefined

@@ -26,7 +26,7 @@ export function populationMethodWrapper(restores: (() => void)[]): PopulationWra
     if (typeof original !== 'function') {
       throw new Error(`missing measured method ${String(property)}`)
     }
-    // SAFETY: MethodKey selects this checked method; only its original receiver/tuple are forwarded.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: MethodKey selects the runtime-checked method; the generic indexed type loses its callable tuple, which is forwarded with the original receiver.
     const invoke = original as (
       this: Owner,
       ...args: Parameters<SelectedMethod>

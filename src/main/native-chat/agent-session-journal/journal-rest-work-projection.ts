@@ -110,19 +110,16 @@ export abstract class JournalRestWorkProjection extends JournalRestObservation {
               0)
       }
       const attached = !turn && this.selection.groups.has(`turns:${sourceKey}`)
+      const workSubmission = submission || source
       const work = item
         ? {
             fact,
-            item:
-              submission || source
-                ? // SAFETY: the branch requires one of these two submission records to be present.
-                  {
-                    ...item,
-                    sequence:
-                      ((submission || source) as AgentJournalSubmission).submittedSequence ??
-                      item.sequence
-                  }
-                : item
+            item: workSubmission
+              ? {
+                  ...item,
+                  sequence: workSubmission.submittedSequence ?? item.sequence
+                }
+              : item
           }
         : undefined
       this.active.update(

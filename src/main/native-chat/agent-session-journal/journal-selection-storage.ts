@@ -19,7 +19,7 @@ export class JournalSelectionStorage {
       rows = inherited ? new JournalMutationMap(inherited) : new Map()
       this.spaces.set(name, rows)
     }
-    // SAFETY: each concrete namespace has one key/value type at its sole owning endpoint.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Each named namespace has one key/value type fixed by its owning endpoint; the heterogeneous cache erases that association on retrieval.
     return rows as Map<K, V>
   }
 

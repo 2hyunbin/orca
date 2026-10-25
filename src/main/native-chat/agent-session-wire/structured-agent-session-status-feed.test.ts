@@ -96,7 +96,7 @@ export function feedFor(
           yield [sessionId, indexed(session)] as const
         }
       }
-    } as unknown as ReadonlyMap<string, ReturnType<typeof indexed>>,
+    },
     getRecord: () => (record ? { ...agentSessionRecordFixture(), ...record } : null),
     now: () => (now += 1)
   })
