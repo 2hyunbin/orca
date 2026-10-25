@@ -129,10 +129,9 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
     if (pty) {
       pty.waitBlockedAt = null
     }
+    // The screen is the whole PTY's evidence, so leaves with a diverged tail clear too.
     for (const leaf of this.getLeavesForPty(ptyId)) {
-      if (!pty || leaf.tailBuffer === pty.tailBuffer) {
-        leaf.waitBlockedAt = null
-      }
+      leaf.waitBlockedAt = null
     }
   }
 
