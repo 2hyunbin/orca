@@ -83,12 +83,18 @@ export function isMobilePublishableOpenFile(file: AppState['openFiles'][number])
     return false
   }
   // Combined diff tabs use display labels as paths and need the desktop renderer.
-  return !(
+  if (
     file.diffSource === 'combined-all' ||
     file.diffSource === 'combined-uncommitted' ||
     file.diffSource === 'combined-branch' ||
     file.diffSource === 'combined-commit'
-  )
+  ) {
+    return false
+  }
+  // Why: phones read plain file tabs by workspace-relative path, which a file outside the
+  // workspace lacks; Markdown tabs are read through the desktop's tab, so they still publish.
+  const isMarkdown = file.language === 'markdown' || file.mode === 'markdown-preview'
+  return isMarkdown || file.relativePath !== file.filePath
 }
 
 /**
