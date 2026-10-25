@@ -4,11 +4,14 @@ import { createHydrationRuntime, PTY_ID } from './headless-hydration-ownership-t
 
 const HISTORY = Array.from({ length: 60 }, (_, i) => `H${i}`).join('\r\n')
 
-async function scrollbackAfterShrinkAndGrow(platform: NodeJS.Platform): Promise<number> {
+async function scrollbackAfterShrinkAndGrow(
+  platform: NodeJS.Platform,
+  ptyId = PTY_ID
+): Promise<number> {
   return withPlatform(platform, async () => {
     const runtime = createHydrationRuntime()
-    runtime.onPtyData(PTY_ID, HISTORY, 1)
-    const model = runtime.model()
+    runtime.onPtyData(ptyId, HISTORY, 1)
+    const model = runtime.modelFor(ptyId)
     await model.writeChain
     const before = model.emulator.getSnapshot().scrollbackLines
     model.emulator.resize(80, 2)
@@ -26,5 +29,12 @@ describe("main's copy of a local pane", () => {
 
   it('keeps the Unix grow model elsewhere', async () => {
     expect(await scrollbackAfterShrinkAndGrow('darwin')).toBeLessThanOrEqual(0)
+  })
+
+  // A restored or adopted relay PTY can stream before its record exists; its id still names SSH.
+  it('keeps the Unix model for an SSH relay PTY with no record yet', async () => {
+    expect(
+      await scrollbackAfterShrinkAndGrow('win32', 'ssh:target-1@@relay-pty-9')
+    ).toBeLessThanOrEqual(0)
   })
 })
