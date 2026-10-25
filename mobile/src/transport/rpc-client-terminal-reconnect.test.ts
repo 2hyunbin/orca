@@ -70,7 +70,7 @@ function authenticate(socket: MockWebSocket): void {
   socket.receive('encrypted:{"type":"e2ee_authenticated"}')
 }
 
-function sentRequests(socket: MockWebSocket, method: string): Array<{ id: string }> {
+function sentRequests(socket: MockWebSocket, method: string): { id: string }[] {
   return socket.sent.flatMap((payload) => {
     const value: unknown = JSON.parse(payload.replace(/^encrypted:/, ''))
     return value &&
