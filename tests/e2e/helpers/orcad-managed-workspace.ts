@@ -14,6 +14,7 @@ import { waitForSessionReady, waitForStartupWorktreeRefresh } from './store'
 import { dismissTransientAnnouncement } from './ssh-config-host-picker'
 import { focusActiveTerminalInput } from './terminal'
 import { toRuntimeExecutionHostId } from '../../../src/shared/execution-host'
+import { getManagedOrcadSshTargetId } from '../../../src/shared/managed-orcad-execution-host'
 
 export const ORCAD_TEMPLATE = process.env.ORCA_E2E_ORCAD_CONVERT_TEMPLATE
 
@@ -35,10 +36,12 @@ export type ManagedHostFixture = {
 /** A fresh Docker SSH host and profile for `body`, torn down whatever it throws. */
 export async function withManagedHost(
   testInfo: TestInfo,
-  body: (fixture: ManagedHostFixture) => Promise<void>
+  body: (fixture: ManagedHostFixture) => Promise<void>,
+  /** A writable template copy, for a spec that rebuilds it as an app update would. */
+  templatePath: string = ORCAD_TEMPLATE!
 ): Promise<void> {
   const host = startOrcadConvertHost('docker', testInfo)
-  const session = createRestartSession(testInfo, { ORCA_ORCAD_TEMPLATE_PATH: ORCAD_TEMPLATE! })
+  const session = createRestartSession(testInfo, { ORCA_ORCAD_TEMPLATE_PATH: templatePath })
   const fixture: ManagedHostFixture = { host, session, app: null }
   try {
     await body(fixture)
@@ -136,7 +139,7 @@ export async function relaunchManagedApp(
 
 export async function managedEnvironmentId(page: Page, targetId: string): Promise<string> {
   const environment = (await page.evaluate(() => window.api.runtimeEnvironments.list())).find(
-    (entry) => entry.orcadDeployment?.sshTargetId === targetId
+    (entry) => getManagedOrcadSshTargetId(entry) === targetId
   )
   if (!environment) {
     throw new Error(`No managed server registered for ${targetId}`)
