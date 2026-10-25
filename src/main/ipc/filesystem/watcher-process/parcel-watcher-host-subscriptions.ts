@@ -2,14 +2,14 @@ import type { ChildProcess } from 'node:child_process'
 import {
   resetPendingSubscribeAttempt,
   takePendingSubscribe
-} from './filesystem/watcher-process/parcel-watcher-pending-subscribe'
+} from './parcel-watcher-pending-subscribe'
 import { isWatcherProcessFailure, WatcherProcessFailure } from './parcel-watcher-process-failure'
 import type { HostToWatcherMessage, WatcherToHostMessage } from './parcel-watcher-process-protocol'
 import type {
   WatcherProcessSubscription,
   WatcherProcessSubscriptionRecord
 } from './parcel-watcher-process-subscription'
-import { RUNTIME_FILE_WATCH_CANCEL_TIMEOUT_MS } from '../../shared/runtime-file-watch-limits'
+import { RUNTIME_FILE_WATCH_CANCEL_TIMEOUT_MS } from '../../../../shared/runtime-file-watch-limits'
 
 export type PendingWatcherUnsubscribe = (error?: Error) => void
 

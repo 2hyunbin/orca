@@ -3,7 +3,7 @@ import {
   getForkedChildEntryPath,
   resolveForkedChildEntryPath,
   resolveForkedChildEntryPathWithoutApp
-} from '../forked-child-entry-path'
+} from '../../../forked-child-entry-path'
 
 const WATCHER_ENTRY_FILENAME = 'parcel-watcher-process-entry.js'
 
