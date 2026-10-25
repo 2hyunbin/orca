@@ -21,21 +21,33 @@ import {
 import { persistWorktreeMeta } from './worktree-meta-persist'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
-import { worktreeRowMatchesMetaHost } from '../listing/worktree-meta-host-match'
+import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
+import {
+  selectWorkspaceByHostTarget,
+  selectWorktreesByRepo,
+  type WorkspaceRecordState
+} from '../../../workspace-record-selectors'
 
 /**
- * The rows one host's git answer for `worktreeId` describes. Ids are `repoId::path`, so a same-path
+ * The row one host's git answer for `worktreeId` describes. Ids are `repoId::path`, so a same-path
  * twin on another host shares it; with no host named, a twin pair is ambiguous and gets nothing.
  */
 function gitIdentityTargetRows(
-  worktrees: readonly Worktree[],
+  state: WorkspaceRecordState,
   worktreeId: string,
   ownerHostId: ExecutionHostId | null
 ): Set<Worktree> {
-  const rows = worktrees.filter((worktree) => worktree.id === worktreeId)
   if (ownerHostId) {
-    return new Set(rows.filter((worktree) => worktreeRowMatchesMetaHost(worktree, ownerHostId)))
+    // Why the host target: it also places a paired server's SSH checkout under its `runtime:` alias.
+    const row = selectWorkspaceByHostTarget(
+      state,
+      hostWorktreeTarget({ id: worktreeId, hostId: ownerHostId })
+    )
+    return new Set(row ? [row] : [])
   }
+  const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
+    (worktree) => worktree.id === worktreeId
+  )
   return new Set(new Set(rows.map((worktree) => worktree.hostId)).size > 1 ? [] : rows)
 }
 
@@ -51,11 +63,7 @@ export function createUpdateWorktreeGitIdentity(
     const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
     const nextBranchFor = (worktree: Worktree): string =>
       identity.branch === null ? '' : (identity.branch ?? worktree.branch)
-    const initialTargets = gitIdentityTargetRows(
-      get().worktreesByRepo[repoId] ?? [],
-      worktreeId,
-      ownerHostId
-    )
+    const initialTargets = gitIdentityTargetRows(get(), worktreeId, ownerHostId)
     const anyTargetChanges = [...initialTargets].some(
       (worktree) =>
         nextHeadFor(worktree) !== worktree.head || nextBranchFor(worktree) !== worktree.branch
@@ -71,7 +79,7 @@ export function createUpdateWorktreeGitIdentity(
       }
 
       let changed = false
-      const targets = gitIdentityTargetRows(current, worktreeId, ownerHostId)
+      const targets = gitIdentityTargetRows(s, worktreeId, ownerHostId)
       const next = current.map((worktree) => {
         if (!targets.has(worktree)) {
           return worktree
@@ -153,6 +161,8 @@ export function createUpdateWorktreeGitIdentity(
       return
     }
 
+    // Why: the deferred clear must read, clear and persist the copy this answer patched, not its twin.
+    const readTargetRow = (id: string) => get().getKnownWorktreeById(id, ownerHostId ?? undefined)
     void Promise.resolve()
       .then(async () => {
         let currentWorktreeId = resolveHostedReviewLinkWorktreeId(worktreeId)
@@ -163,7 +173,7 @@ export function createUpdateWorktreeGitIdentity(
             return
           }
           persistedWorktreeIds.add(currentWorktreeId)
-          let current = get().getKnownWorktreeById(currentWorktreeId)
+          let current = readTargetRow(currentWorktreeId)
           if (
             !current ||
             current.branch !== clearedBranch ||
@@ -173,14 +183,18 @@ export function createUpdateWorktreeGitIdentity(
           }
           if (!hostedReviewLinksAreCleared(current as Worktree)) {
             // Why: a refetch can rehydrate stale linked-review metadata before this async clear starts; clear it again.
-            applyHostedReviewLinkClear(set, currentWorktreeId)
-            current = get().getKnownWorktreeById(currentWorktreeId)
+            applyHostedReviewLinkClear(
+              set,
+              currentWorktreeId,
+              readTargetRow(currentWorktreeId)?.hostId
+            )
+            current = readTargetRow(currentWorktreeId)
             if (!current || current.branch !== clearedBranch) {
               return
             }
           }
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId),
+            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, ownerHostId ?? undefined),
             currentWorktreeId,
             CLEARED_HOSTED_REVIEW_LINK_UPDATES
           )
@@ -191,7 +205,7 @@ export function createUpdateWorktreeGitIdentity(
           // Why: worktree creation can migrate ids mid-IPC; persist the clear under the new durable id too.
           currentWorktreeId = migratedWorktreeId
         }
-        const latest = get().getKnownWorktreeById(currentWorktreeId)
+        const latest = readTargetRow(currentWorktreeId)
         if (
           !latest ||
           latest.branch !== clearedBranch ||
@@ -202,14 +216,14 @@ export function createUpdateWorktreeGitIdentity(
         if (getHostedReviewLinkMutationGeneration(currentWorktreeId) !== clearGeneration) {
           // Why: a delayed branch-switch clear must not win over a newer manual relink.
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId),
+            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, ownerHostId ?? undefined),
             currentWorktreeId,
             getHostedReviewLinkUpdates(latest as Worktree)
           )
           return
         }
         // Why: a refetch can rehydrate old metadata before the branch-switch clear reaches disk; don't write the stale link back.
-        applyHostedReviewLinkClear(set, currentWorktreeId)
+        applyHostedReviewLinkClear(set, currentWorktreeId, readTargetRow(currentWorktreeId)?.hostId)
       })
       .catch((err) => {
         if (isRuntimeSelectorNotFoundError(err)) {

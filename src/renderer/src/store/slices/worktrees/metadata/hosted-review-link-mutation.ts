@@ -3,6 +3,7 @@ import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import { applyWorktreeUpdates } from '../../worktree-helpers'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
 import { applyDetectedWorktreeUpdates } from '../listing/detected-worktree-meta'
@@ -230,13 +231,16 @@ export function sanitizeHostedReviewLinksForBranchClears<
 
 export function applyHostedReviewLinkClear(
   set: Parameters<StateCreator<AppState, [], [], WorktreeSlice>>[0],
-  worktreeId: string
+  worktreeId: string,
+  /** The physical host of the copy to clear; omitted clears every row with the id. */
+  executionHostId?: ExecutionHostId
 ): void {
   set((s) => {
     const nextWorktrees = applyWorktreeUpdates(
       s.worktreesByRepo,
       worktreeId,
-      CLEARED_HOSTED_REVIEW_LINK_UPDATES
+      CLEARED_HOSTED_REVIEW_LINK_UPDATES,
+      executionHostId
     )
     const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
       s.detectedWorktreesByRepo,

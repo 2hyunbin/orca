@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '../types'
+import type { Worktree } from '../../../../shared/worktree/types'
 import { resetHostedReviewLinkMutationGenerationForTests } from './worktrees'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
 import {
   createTestStore,
+  mockApi,
   resetRemoteRuntimeMocks,
   resetWorktreeSliceModuleMemory
 } from './worktrees-slice-test-harness'
@@ -13,40 +14,34 @@ vi.mock('sonner', () => ({
 }))
 
 beforeEach(() => {
+  vi.clearAllMocks()
   resetWorktreeSliceModuleMemory()
   resetRemoteRuntimeMocks()
   resetHostedReviewLinkMutationGenerationForTests()
 })
 
-// #32918: one project at the same path on two SSH hosts shares the id `repoId::path`.
-function twinStore() {
+// #32918: one project at the same path on two hosts shares the id `repoId::path`.
+const id = 'repo1::/srv/ai-tools'
+
+function storeWith(...rows: Partial<Worktree>[]) {
   const store = createTestStore()
-  const id = 'repo1::/srv/ai-tools'
-  const onA = makeWorktree({
-    id,
-    repoId: 'repo1',
-    path: '/srv/ai-tools',
-    hostId: 'runtime:env-a',
-    head: 'aaa',
-    branch: 'refs/heads/master',
-    displayName: 'master'
-  })
-  const onB = makeWorktree({
-    id,
-    repoId: 'repo1',
-    path: '/srv/ai-tools',
-    hostId: 'runtime:env-b',
-    head: 'bbb',
-    branch: 'refs/heads/feature',
-    displayName: 'feature'
-  })
-  store.setState({ worktreesByRepo: { repo1: [onA, onB] } } as Partial<AppState>)
-  return { store, id }
+  const worktrees = rows.map((row) =>
+    makeWorktree({ id, repoId: 'repo1', path: '/srv/ai-tools', ...row })
+  )
+  store.setState({ worktreesByRepo: { repo1: worktrees } })
+  return store
+}
+
+function twinStore() {
+  return storeWith(
+    { hostId: 'runtime:env-a', head: 'aaa', branch: 'refs/heads/master', displayName: 'master' },
+    { hostId: 'runtime:env-b', head: 'bbb', branch: 'refs/heads/feature', displayName: 'feature' }
+  )
 }
 
 describe('updateWorktreeGitIdentity with a same-path twin on another host', () => {
   it("writes one host's git status only to that host's copy", () => {
-    const { store, id } = twinStore()
+    const store = twinStore()
 
     store
       .getState()
@@ -58,7 +53,7 @@ describe('updateWorktreeGitIdentity with a same-path twin on another host', () =
   })
 
   it('leaves both copies alone when the answering host is unknown', () => {
-    const { store, id } = twinStore()
+    const store = twinStore()
 
     store
       .getState()
@@ -67,5 +62,42 @@ describe('updateWorktreeGitIdentity with a same-path twin on another host', () =
     const [onA, onB] = store.getState().worktreesByRepo.repo1
     expect(onA.branch).toBe('refs/heads/master')
     expect(onB.branch).toBe('refs/heads/feature')
+  })
+
+  it('persists a branch-switch review clear for the copy that switched', async () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/master' },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/stack/one', linkedPR: 101 }
+    )
+
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/stack/two' }, 'ssh:box-b')
+
+    await vi.waitFor(() =>
+      expect(mockApi.worktrees.updateMeta).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktreeId: id,
+          updates: expect.objectContaining({ linkedPR: null })
+        })
+      )
+    )
+    const [localAfter, remoteAfter] = store.getState().worktreesByRepo.repo1
+    expect(localAfter.branch).toBe('refs/heads/master')
+    expect(remoteAfter.branch).toBe('refs/heads/stack/two')
+  })
+})
+
+describe('updateWorktreeGitIdentity host matching', () => {
+  it("reaches a paired server's SSH checkout through its runtime alias", () => {
+    const store = storeWith({
+      hostId: 'ssh:private-target',
+      runtimeOwnerEnvironmentId: 'hub-a',
+      branch: 'refs/heads/master'
+    })
+
+    store
+      .getState()
+      .updateWorktreeGitIdentity(id, { branch: 'refs/heads/feature' }, 'runtime:hub-a')
+
+    expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
   })
 })
