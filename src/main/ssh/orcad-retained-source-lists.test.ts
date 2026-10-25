@@ -25,6 +25,7 @@ vi.mock('../../shared/app-environment', () => ({
 
 const { isFrozenOrcadSourceSessionPartition, visibleProjectGroups, visibleProjectHostSetups } =
   await import('./orcad-retained-source')
+const { visibleSessionHostIds } = await import('./orcad-retained-source-session')
 
 const FENCED: SshTarget = {
   id: 'ssh-box',
@@ -106,6 +107,18 @@ describe('lists while a converted host keeps its source rows', () => {
       'source-group',
       'local-group'
     ])
+  })
+
+  // #33539: adopting the hidden source's session at startup restored tabs closed on the server.
+  it('leaves the hidden host session out of the partition census until the host changes', () => {
+    const hostIds: ExecutionHostId[] = ['local', 'ssh:ssh-box', 'ssh:other', 'runtime:env-1']
+    expect(visibleSessionHostIds(catalog([FENCED]), hostIds)).toEqual([
+      'local',
+      'ssh:other',
+      'runtime:env-1'
+    ])
+    const changed = { ...FENCED, orcadFence: { environmentId: 'env-1', sourceChangedAt: 'x' } }
+    expect(visibleSessionHostIds(catalog([changed]), hostIds)).toEqual(hostIds)
   })
 
   it('shows them until the migration commits, while freezing the session from the fence on', () => {
