@@ -4,8 +4,13 @@ import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
 import { restorePortForwards } from './ssh-port-forward-persistence'
 
 const restoring = new Map<string, Promise<void>>()
-/** The transport each host last restored on; a status note or call on the same one restores nothing new. */
-const restoredOn = new Map<string, { conn: SshConnection; generation: number }>()
+/** The transport each host last restored on; a full restore has nothing to add on it. */
+const restoredOn = new Map<
+  string,
+  { conn: SshConnection; generation: number; complete: boolean; at: number }
+>()
+// Per-call tunnel triggers would otherwise rebind a port that stays taken on every call.
+const INCOMPLETE_RETRY_MS = 30_000
 
 export type ManagedHostPortForwardRestoreOptions = {
   /** The managed server's tunnel is up, which proves the host is served even before a status lands. */
@@ -21,7 +26,10 @@ function mayRestore(targetId: string, options: ManagedHostPortForwardRestoreOpti
 function alreadyRestored(targetId: string): boolean {
   const conn = connectionManager?.getConnection(targetId)
   const last = restoredOn.get(targetId)
-  return !!conn && last?.conn === conn && last.generation === conn.getConnectGeneration()
+  if (!conn || last?.conn !== conn || last.generation !== conn.getConnectGeneration()) {
+    return false
+  }
+  return last.complete || Date.now() - last.at < INCOMPLETE_RETRY_MS
 }
 
 export function restoreManagedHostPortForwards(
@@ -41,9 +49,10 @@ export function restoreManagedHostPortForwards(
       }
       const conn = connectionManager?.getConnection(targetId)
       const generation = conn?.getConnectGeneration()
-      await restorePortForwards(targetId, getCurrentMainWindow)
+      const complete = await restorePortForwards(targetId, getCurrentMainWindow)
+      // A failed bind (e.g. a port briefly in use) is retried on the same transport, after a pause.
       if (conn && generation !== undefined && connectionManager?.getConnection(targetId) === conn) {
-        restoredOn.set(targetId, { conn, generation })
+        restoredOn.set(targetId, { conn, generation, complete, at: Date.now() })
       }
     })
     .catch((error: unknown) => {

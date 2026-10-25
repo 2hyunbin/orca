@@ -196,4 +196,20 @@ describe('saved port forward restore', () => {
     expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
     h.hostServerStatus.mockReturnValue({ kind: 'managed', environmentId: 'env-1' })
   })
+
+  it('retries a forward that failed to bind on the same transport', async () => {
+    h.portForwardManager.addForward.mockRejectedValueOnce(new Error('EADDRINUSE'))
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await restoreManagedHostPortForwards('t1')
+      expect(h.active).toEqual([])
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.active).toEqual([expect.objectContaining({ localPort: FORWARD.localPort })])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

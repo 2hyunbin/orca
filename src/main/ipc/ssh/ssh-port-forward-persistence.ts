@@ -41,21 +41,23 @@ export function persistPortForwards(
   })
 }
 
+/** Resolves true once every saved forward is live on this transport. */
 export async function restorePortForwards(
   targetId: string,
   getMainWindow: () => BrowserWindow | null
-): Promise<void> {
+): Promise<boolean> {
   const target = getSshTargetRegistryStore()!.getTarget(targetId)
   if (!target?.portForwards?.length) {
-    return
+    return true
   }
   const conn = connectionManager!.getConnection(targetId)
   if (!conn) {
-    return
+    return false
   }
   // Replaced transports can leave forwards holding local ports but reaching nothing.
   await portForwardManager!.closeStaleForwards(targetId, conn)
   const live = new Set(portForwardManager!.listForwards(targetId).map(forwardKey))
+  let complete = true
 
   for (const saved of target.portForwards) {
     if (live.has(forwardKey(saved))) {
@@ -63,7 +65,7 @@ export async function restorePortForwards(
     }
     // Reconnect can replace the transport mid-loop; stop before adding stale listeners.
     if (connectionManager!.getConnection(targetId) !== conn) {
-      return
+      return false
     }
     try {
       const entry = await portForwardManager!.addForward(
@@ -77,9 +79,10 @@ export async function restorePortForwards(
       // A concurrent disconnect swept older forwards; release this newly completed one too.
       if (connectionManager!.getConnection(targetId) !== conn) {
         await portForwardManager!.removeForwardAndWait(entry.id)
-        return
+        return false
       }
     } catch (err) {
+      complete = false
       console.warn(
         `[ssh] Failed to restore forward :${saved.localPort} → ${saved.remoteHost}:${saved.remotePort}: ${err instanceof Error ? err.message : String(err)}`
       )
@@ -88,4 +91,5 @@ export async function restorePortForwards(
 
   persistPortForwards(targetId)
   broadcastPortForwards(getMainWindow, targetId)
+  return complete
 }
