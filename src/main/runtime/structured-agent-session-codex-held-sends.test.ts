@@ -9,9 +9,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   CodexAppServerConnection,
-  CodexAppServerConnectionHandlers,
-  openCodexAppServerConnection
-} from '../codex/codex-app-server-connection'
+  CodexAppServerConnectionHandlers
+} from '../codex/app-server/codex-app-server-connection-types'
+import type { openCodexAppServerConnection } from '../codex/codex-app-server-connection'
 import { codexTurnLifecycleFake } from '../codex/codex-turn-lifecycle-fake'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import type { AgentJournalSubmission } from '../../shared/agent-session-journal-types'
@@ -245,6 +245,24 @@ describe('a Codex send whose turn completes without taking it', () => {
     )
     const published = lastPublished(blocked)
     expect(published && hasUnansweredStructuredAgentSessionDispatch([published], fence)).toBe(false)
+
+    const later = await send('second succeeds')
+    await vi.waitFor(() => expect(answers).toBe(2))
+    turns.start()
+    turns.echo(later)
+    turns.end('completed')
+    await vi.waitFor(async () =>
+      expect((await rawSubmission(later)).dispatchState).toBe('accepted')
+    )
+    handlers?.onExit?.(new Error('codex exited'))
+    await vi.waitFor(() =>
+      expect(host.deps.store.getRecord(SESSION)?.lease.claimStatus).toBe('released')
+    )
+    expect(
+      (await host.journalSnapshot(SESSION)).items.some(
+        (item) => item.body.kind === 'status' && item.body.failure
+      )
+    ).toBe(false)
   })
 
   it('keeps a send Working while Codex holds it, and its echo still settles it', async () => {

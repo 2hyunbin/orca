@@ -59,6 +59,7 @@ function referenceOpenFilesProjection(openFiles: AppState['openFiles']): string 
       mode: file.mode,
       diffSource: file.diffSource,
       isDirty: file.isDirty,
+      mirroredFromRuntimeSession: file.mirroredFromRuntimeSession,
       isUntitled: file.isUntitled,
       deleteUntouchedOnClose: file.deleteUntouchedOnClose,
       markdownPreviewSourceFileId: file.markdownPreviewSourceFileId
@@ -112,6 +113,8 @@ function referenceAgentStatusProjection(map: AppState['agentStatusByPaneKey']): 
         updatedAtBucket: Math.floor(entry.updatedAt / AGENT_STATUS_SYNC_UPDATED_AT_BUCKET_MS),
         stateStartedAt: entry.stateStartedAt,
         turnStartedAt: entry.turnStartedAt ?? null,
+        turnEndedAt: entry.turnEndedAt ?? null,
+        turnEndDisposition: entry.turnEndDisposition ?? null,
         agentType: entry.agentType ?? null,
         terminalTitle: entry.terminalTitle ?? null,
         stateHistory: entry.stateHistory.map((history) => ({
@@ -421,6 +424,7 @@ describe('open-files and browser projections', () => {
     const openFileCases: AppState['openFiles'][] = [
       [] as unknown as AppState['openFiles'],
       [makeOpenFile(0)] as unknown as AppState['openFiles'],
+      [makeOpenFile(0, { mirroredFromRuntimeSession: true })],
       [makeOpenFile(0, { isDirty: true })] as unknown as AppState['openFiles'],
       [
         makeOpenFile(0, { isDirty: true, diffSource: 'working' }),

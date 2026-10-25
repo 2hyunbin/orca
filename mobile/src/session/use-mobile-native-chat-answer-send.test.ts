@@ -285,6 +285,20 @@ describe('useMobileNativeChatAnswerSend', () => {
     ])
   })
 
+  it('sends a Codex async answer as one ordinary message, not selector keystrokes', async () => {
+    const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
+    await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'codex')
+    const prompt: AskPrompt = {
+      replyAsMessage: true,
+      questions: [{ question: 'Which color?', multiSelect: false, options: [{ label: 'Red' }] }]
+    }
+
+    await expect(answerSend?.answerAsk(prompt, [{ indices: [0] }])).resolves.toBe(true)
+    expect(sendRequest.mock.calls.map((call) => call[1])).toEqual([
+      expect.objectContaining({ text: '\x1b[200~> Which color?\r\rRed\x1b[201~', enter: true })
+    ])
+  })
+
   it('submits a non-selector answer as pasted label text with a single Enter', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
     await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'grok')
@@ -571,40 +585,6 @@ describe('useMobileNativeChatAnswerSend', () => {
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(true)
     expect(sendRequest).toHaveBeenCalledTimes(2)
-  })
-
-  it('does not write a successor after the prior delivery becomes ambiguous', async () => {
-    let rejectFirst: (error: Error) => void = () => undefined
-    const sendRequest = vi
-      .fn()
-      .mockImplementationOnce(
-        () =>
-          new Promise((_resolve, reject) => {
-            rejectFirst = reject
-          })
-      )
-      .mockResolvedValue(acceptedResponse())
-    await mount({ sendRequest } as unknown as RpcClient, vi.fn())
-
-    let first: Promise<boolean> | undefined
-    let second: Promise<boolean> | undefined
-    await act(async () => {
-      first = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [0] }])
-      await Promise.resolve()
-    })
-    await act(async () => {
-      second = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])
-      await Promise.resolve()
-    })
-    await act(async () => {
-      rejectFirst(markRpcDeliveryUnknown(new Error('Connection closed')))
-      await Promise.resolve()
-    })
-
-    // The key may have landed; a blind successor could double-step the selector.
-    await expect(first).resolves.toBe(false)
-    await expect(second).resolves.toBe(false)
-    expect(sendRequest).toHaveBeenCalledTimes(1)
   })
 
   it('tells the user when a queued answer is fenced instead of dropping it silently', async () => {

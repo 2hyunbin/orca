@@ -32,6 +32,10 @@ export const LOCAL_STORAGE_MODULE_DISPOSITIONS: Record<string, WslMoveFieldDispo
     notApplicableDisposition(45, 'Keyed by session id.'),
   'src/renderer/src/components/native-chat/structured-agent-session-legacy-outbox.ts':
     notApplicableDisposition(45, 'Keyed by session id.'),
+  'src/renderer/src/lib/desktop-created-server-tabs.ts': notApplicableDisposition(
+    60,
+    'Tabs this desktop created in a paired server workspace, keyed by that server; a local or WSL project has none.'
+  ),
   'src/renderer/src/store/slices/worktrees/session/worktree-visit-recency.ts':
     notApplicableDisposition(
       32,
@@ -100,7 +104,7 @@ export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
   'src/main/ai-vault-search/session-search-write-buffer.ts': 'ai-vault-search-staging',
   'src/main/ai-vault/session-parse-cache-database.ts': 'ai-vault-parse-cache',
   'src/main/ai-vault/session-scope-cwds-table.ts': 'ai-vault-parse-cache',
-  'src/main/browser/browser-cookie-staged-import.ts': 'browser-cookie-import',
+  'src/main/browser/cookies/browser-cookie-staged-import.ts': 'browser-cookie-import',
   'src/main/native-chat/agent-session-attachments/agent-session-attachment-claims.ts':
     'agent-session-journal',
   'src/main/native-chat/agent-session-journal/command-receipt-schema.ts': 'agent-session-journal',
@@ -121,7 +125,7 @@ export const SQLITE_SCHEMA_FILE_DATABASES: Record<string, string> = {
   // Test fixtures that mirror third-party agent and browser databases.
   'src/main/ai-vault/session-scanner-opencode-sqlite-fixture.ts': 'test-fixture',
   'src/main/ai-vault/session-scanner-test-fixtures.ts': 'test-fixture',
-  'src/main/browser/browser-cookie-import-test-database.ts': 'test-fixture',
+  'src/main/browser/cookies/browser-cookie-import-test-database.ts': 'test-fixture',
   'src/main/codex/codex-state-db-test-fixture.ts': 'test-fixture',
   'src/main/opencode-usage/opencode-usage-sqlite-fixture.ts': 'test-fixture'
 }

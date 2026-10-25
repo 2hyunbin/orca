@@ -6,7 +6,7 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
 import { ClaudeProfileSurfaceError } from './claude-profile-report'
 
-/** `executionHostId` routes calls to the host; it is the caller's view, so it is never persisted. */
+/** Caller-relative `executionHostId` routes calls but must not be persisted. */
 export type ClaudeProfileTarget =
   | { executionHostId: ExecutionHostId; runtime: 'host' }
   | { executionHostId: ExecutionHostId; runtime: 'wsl'; distro: string }
@@ -39,11 +39,7 @@ export function readClaudeProfileObject(file: string): ClaudeProfileRead<Record<
   }
 }
 
-/**
- * dataRoot belongs to the execution host: for WSL it is the guest's Linux data root. `home` is the
- * one spelling (absolute, normalized, no trailing separator) sign-in and launch must pass as
- * CLAUDE_CONFIG_DIR: Claude names the profile's Keychain entry from that exact text.
- */
+/** Use execution-host paths; pass the same normalized home at login and launch for Keychain identity. */
 export function describeClaudeProfile(
   dataRoot: string,
   accountId: string,
@@ -64,7 +60,7 @@ export function describeClaudeProfile(
   }
 }
 
-// Host-local facts only, in a fixed key order: the marker sits on the execution host's own disk.
+// Persist host-local identity in a stable key order for comparison.
 function ownershipRecord(
   version: unknown,
   accountId: unknown,
@@ -72,6 +68,20 @@ function ownershipRecord(
   distro: unknown
 ): string {
   return JSON.stringify({ version, accountId, runtime, distro })
+}
+
+function comparableOwnershipRecord(
+  version: unknown,
+  accountId: unknown,
+  runtime: unknown,
+  distro: unknown
+): string {
+  return ownershipRecord(
+    version,
+    accountId,
+    runtime,
+    runtime === 'wsl' && typeof distro === 'string' ? distro.trim().toLowerCase() : distro
+  )
 }
 
 function readOwnershipMarker(file: string): string | null {
@@ -90,20 +100,16 @@ function readOwnershipMarker(file: string): string | null {
     throw new ClaudeProfileSurfaceError('unreadable', 'Claude profile marker is unreadable')
   }
   const { version, accountId, runtime, distro } = marker.value
-  return ownershipRecord(version, accountId, runtime, distro)
+  return comparableOwnershipRecord(version, accountId, runtime, distro)
 }
 
-// Written when a first setup finishes, so its absence means no setup has finished here yet.
+// Setup writes this marker only after completing successfully.
 export function claudeProfileMarkerPath(profile: ClaudeProfileDescriptor): string {
   const path = profile.target.runtime === 'wsl' ? hostPath.posix : hostPath
   return path.join(path.dirname(profile.home), 'profile.json')
 }
 
-/**
- * The only gate before writing into a profile: namespace, containment, no linked components,
- * outside Claude's default homes, and an ownership marker beside the home. Refuses before creating
- * anything. Returns the step that writes the marker, which setup runs last.
- */
+/** Validate ownership before creation; the returned marker writer must run last during setup. */
 export function prepareClaudeProfileDirectory(
   dataRoot: string,
   profile: ClaudeProfileDescriptor,
@@ -128,7 +134,11 @@ export function prepareClaudeProfileDirectory(
   const distro = profile.target.runtime === 'wsl' ? profile.target.distro : undefined
   const record = ownershipRecord(profile.version, profile.accountId, profile.target.runtime, distro)
   const marker = readOwnershipMarker(markerPath)
-  if (marker !== null && marker !== record) {
+  if (
+    marker !== null &&
+    marker !==
+      comparableOwnershipRecord(profile.version, profile.accountId, profile.target.runtime, distro)
+  ) {
     throw new ClaudeProfileSurfaceError(
       'invalid-profile',
       'Claude profile belongs to another account or target'
@@ -169,10 +179,7 @@ function assertClaudeProfileDescendant(root: string, destination: string): void 
   }
 }
 
-/**
- * Resolves links in the deepest existing ancestor so a not-yet-created path cannot hide behind one;
- * the native call also returns on-disk case, so a case-only alias compares equal.
- */
+/** Resolve ancestor links and on-disk casing even for paths that do not exist yet. */
 function canonicalPath(file: string): string {
   const resolved = resolve(file)
   try {
@@ -203,7 +210,7 @@ function assertDistinctClaudeProfile(profile: string, defaultHome: string): void
   }
 }
 
-/** Claude's default homes: a profile may never be, contain, or sit inside one. */
+/** Profiles and default homes must not overlap in either direction. */
 function assertOutsideDefaultClaudeHomes(
   profileHome: string,
   userHome: string,

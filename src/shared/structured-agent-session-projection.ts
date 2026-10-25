@@ -36,7 +36,7 @@ import {
 
 import type { NativeChatBlock, NativeChatMessage } from './native-chat-types'
 import { sha256 } from './sha256'
-import { readAgentMessageSource } from './agent-session-message-source'
+import { readAgentMessageSource } from './agent-session/agent-session-message-source'
 import { structuredAgentSessionStatusStartedAt } from './structured-agent-session-status-started-at'
 import { owesStructuredAgentSessionWork } from './structured-agent-session-owed-work'
 import type { StructuredAgentSessionWorkScope } from './structured-agent-session-main-agent-working'
@@ -68,8 +68,8 @@ function toolResult(
 /** The markers a clipped payload carries in its own text, anchored to the end
  *  so nothing that merely looks like one inside the body can match. */
 const BOUNDED_TEXT_MARKERS = [
-  /\n… \(\d+ bytes\)$/,
-  /\n\[Orca: output truncated — \d+ bytes total, digest [0-9a-f]+\]$/
+  /\n\u2026 \(\d+ bytes\)$/,
+  /\n\[Orca: output truncated \u2014 \d+ bytes total, digest [0-9a-f]+\]$/
 ]
 
 /** Recovers the clipped body from a bounded payload's text, and says whether a

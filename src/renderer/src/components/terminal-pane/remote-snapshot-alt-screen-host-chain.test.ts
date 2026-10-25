@@ -1,5 +1,5 @@
 import type * as React from 'react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Terminal } from '@xterm/headless'
 import {
   TerminalStreamOpcode,
@@ -8,7 +8,12 @@ import {
   encodeTerminalStreamFrame
 } from '../../../../shared/terminal-stream-protocol'
 import { flushAsyncTicks, writeHeadlessTerminal } from './pty-connection-test-async'
-import { createMockTransport, createPane, createManager } from './pty-connection-test-pane-fixtures'
+import {
+  terminalWriteText,
+  createMockTransport,
+  createPane,
+  createManager
+} from './pty-connection-test-pane-fixtures'
 import type { ConnectCallbacks, MockTransport } from './pty-connection-test-pane-fixtures'
 import type { PtyReplayDataMeta } from './pty-transport-types'
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
@@ -170,10 +175,6 @@ type HostModules = {
   installMultiplexFlowControl: (build: HostConnection) => void
 }
 
-let hostModules: HostModules | null = null
-
-// Why a hook: the first load of the main runtime graph takes ~19s cold, and charged to the first
-// test it crossed the 30s test limit whenever the directory ran in parallel.
 async function loadHostModules(): Promise<HostModules> {
   const [runtime, publication, flowControl] = await Promise.all([
     vi.importActual<Pick<HostModules, 'OrcaRuntimeService'>>(
@@ -194,13 +195,13 @@ async function loadHostModules(): Promise<HostModules> {
   }
 }
 
+// Why module scope: collection has no per-hook timer for the main graph's slow cold load.
+const hostModules = await loadHostModules()
+
 /** Real host + client chain: returns what the remote transport hands the pane for the push. */
 async function publishHostRecovery(
   missed: string
 ): Promise<{ data: string; meta: PtyReplayDataMeta; published: HostSnapshot }> {
-  if (!hostModules) {
-    throw new Error('host modules are loaded in beforeAll')
-  }
   const {
     OrcaRuntimeService,
     sendSnapshotFrames,
@@ -331,10 +332,6 @@ async function publishHostRecovery(
 }
 
 describe('host-published recovery snapshot onto a live alt screen', () => {
-  beforeAll(async () => {
-    hostModules = await loadHostModules()
-  })
-
   beforeEach(async () => {
     vi.clearAllMocks()
     transportFactoryQueue = []
@@ -363,7 +360,8 @@ describe('host-published recovery snapshot onto a live alt screen', () => {
     const pane = createPane(1)
     const events: PaneEvent[] = []
     const parseCallbacks: (() => void)[] = []
-    pane.terminal.write.mockImplementation((chunk: string, callback?: () => void) => {
+    pane.terminal.write.mockImplementation((chunk: string | Uint8Array, callback?: () => void) => {
+      chunk = terminalWriteText(chunk)
       if (chunk.length > 0) {
         events.push(chunk)
       }

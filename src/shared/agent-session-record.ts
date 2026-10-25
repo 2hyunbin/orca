@@ -1,6 +1,6 @@
 import { isAgentSessionRewindRecord, type AgentSessionRewindRecord } from './agent-session-rewind'
 import { isAgentSessionLaunchArgs } from './agent-session-launch-args'
-import { isAgentSessionConversationName } from './agent-session-conversation-name'
+import { isAgentSessionConversationName } from './agent-session/agent-session-conversation-name'
 import {
   isPersistedAgentSessionHandoffStage,
   isPersistedAgentSessionRuntimeKind,
@@ -19,7 +19,7 @@ import type { ExecutionHostId } from './execution-host'
 import {
   isAgentSessionConversationCommandRecord,
   type AgentSessionConversationCommandRecord
-} from './agent-session-conversation-command'
+} from './agent-session/agent-session-conversation-command'
 import {
   decodePersistedAgentSessionProviderHandleChain,
   type AgentSessionProviderHandleLink
@@ -160,6 +160,8 @@ export type AgentSessionRecord = {
   conversationCommand?: AgentSessionConversationCommandRecord
   /** The name Orca gave this conversation, so a later acquisition need not name it again. */
   conversationName?: string
+  /** When the user's Sleep stopped this chat; the next admitted send clears it. */
+  sleptAt?: number
   launchArgs?: AgentSessionLaunchArgs
   lease: AgentSessionLease
   createdAt: number

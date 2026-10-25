@@ -31,13 +31,12 @@ import { ORCAD_USAGE, parseArgs, resolveOrcadWebClientRoot } from './orcad-comma
 import type { OrcadRuntimeCleanup } from './orcad-runtime-lifetime'
 import { installOrcadStopRequestListeners } from './orcad-stop-request-listener'
 import { prepareOrcadManagedStop } from './orcad-managed-stop-admission'
+import { bindOrcadStopTerminalAdmission } from './orcad-stop-terminal-admission'
 import type { OrcadHandle, OrcadOptions } from './orcad-start-contract'
 import { beginOrcadIdleExit, bindOrcadIdleShutdown } from './orcad-managed-idle-exit-host'
 import { orcadAutomationsKeepHostBusy, startOrcadAutomations } from './orcad-automations'
-import {
-  changedAiVaultSearchSettings,
-  type AiVaultSearchSettings
-} from '../../shared/ai-vault-search-settings'
+import { changedAiVaultSearchSettings } from '../../shared/ai-vault-search-settings'
+import type { AiVaultSearchSettings } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
 import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
@@ -218,7 +217,8 @@ async function startOrcadRuntime(
     clientCodexHomes: codexAccountHomes
   })
 
-  const { loadAgentSessionClaimSigner } = await import('../runtime/agent-session-claim-identity')
+  const { loadAgentSessionClaimSigner } =
+    await import('../runtime/agent-session/ownership/agent-session-claim-identity')
   const runtime = new OrcaRuntimeService(profileStore, stats, {
     // Why persistent: the terminal daemon outlives orcad, so a per-process key would make a
     // restarted orcad unable to recognise (and adopt) the agent PTYs it already owns.
@@ -339,6 +339,7 @@ async function startOrcadRuntime(
   })
 
   const bindHost = resolveOrcadBindHost(options.bind)
+  bindOrcadStopTerminalAdmission(runtime.terminalUpdateAdmission)
   const rpc = new OrcaRuntimeRpcServer({
     runtime,
     userDataPath: runtimeUserDataPath,

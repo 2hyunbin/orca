@@ -1,6 +1,6 @@
 import { provisionWslClaudeAccountProfile } from './claude-profile-wsl-setup'
 
-// Runs inside a WSL distro on Orca's pinned Node: `<guest home> <distro> <account id> <hooks enabled>`.
+// Runs in the distro: `<guest home> <distro> <account id> <hooks enabled>`.
 async function main(): Promise<void> {
   const [userHome = '', distro = '', accountId = '', hooks = 'false'] = process.argv.slice(2)
   const report = await provisionWslClaudeAccountProfile(

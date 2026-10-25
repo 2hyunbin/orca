@@ -1,7 +1,9 @@
 # Useful Commands
 
 - **Typecheck**: `pnpm tc` (or `tc:node` / `tc:cli` / `tc:web`)
+- Local typechecks use incremental tsrs on Apple Silicon macOS and x64/arm64 Linux; other platforms use Bun. Keep `.cache/typecheck/` between checks; delete it to force a fresh local check. `pnpm typecheck:ci` explicitly uses Bun; `pnpm tc --compiler=native` uses TypeScript.
 - **Test**: `pnpm test [path/to/file.test.ts]`
+- **Affected tests**: `pnpm test:changed [path] --maxWorkers=2` for uncommitted edits, or `pnpm test --changed=origin/main` for branch changes. Local runs cache loaded imports; cold caches run all tests in scope. Filesystem/subprocess inputs need explicit tests; see [test targeting](.github/CONTRIBUTING.md#targeting-local-tests).
 - **Lint**: `oxlint`, or `pnpm run check:code-quality:changed` for changed files (full `pnpm lint` is slow); format with `pnpm format`
 - **Design system**: `pnpm run lint:design-system` for the full renderer report (not a gate); the changed-lines gate above is what CI enforces
 
@@ -60,6 +62,8 @@ All changes must consider folder workspaces as well as git worktrees. Don't assu
 # Git / GitHub
 
 If changing code around `git`, `gh`, source-control, or review behavior read [`docs/reference/git-workflow.md`](./docs/reference/git-workflow.md).
+
+For a failed GitHub Actions run, inspect the failed jobs and retry with `gh run rerun <run-id> --failed --repo stablyai/orca`. Preserve successful jobs; use a full rerun only when the failure requires revalidating them. A code fix needs a new push and fresh checks, not a retry of the old SHA.
 
 # Tests
 

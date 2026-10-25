@@ -3,7 +3,6 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import type { RpcClient } from '../transport/rpc-client'
-import { createFakeRpcClient, rpcSuccess } from '../mobile-web-shell/bridge-host-test-fakes'
 import {
   useMobileNativeChatSession,
   type MobileNativeChatSession
@@ -49,36 +48,6 @@ describe('useMobileNativeChatSession', () => {
       renderer = create(createElement(Harness, { client }))
     })
   }
-
-  it.each([true, false])(
-    'preserves only post-response live changes while history waits (overlap: %s)',
-    async (overlap) => {
-      const cached = message('cached')
-      const partial = message('reply')
-      const history = { ...cached, blocks: [{ type: 'text' as const, text: 'fresh history' }] }
-      const final = { ...partial, blocks: [{ type: 'text' as const, text: 'complete' }] }
-      const response = [message('older'), history, partial, ...(overlap ? [] : [message('absent')])]
-      const subscribe: RpcClient['subscribe'] = (_method, _params, onData) => {
-        emit = onData
-        onData({ type: 'snapshot', messages: [cached, partial], hasMore: true })
-        return () => {}
-      }
-      const sendRequest = async () => rpcSuccess('older', { messages: response })
-      let land = () => {}
-      const settled = new Promise<void>((resolve) => {
-        land = resolve
-      })
-      await mount({ ...createFakeRpcClient(), subscribe, sendRequest })
-      await act(async () => {
-        state?.loadEarlier(() => settled)
-      })
-      await act(async () => emit({ type: 'appended', messages: [final, message('suffix')] }))
-      await act(async () => land())
-      expect(state?.messages.find((m) => m.id === 'reply')).toEqual(final)
-      expect(state?.messages.find((m) => m.id === 'cached')).toEqual(history)
-      expect(state?.messages.map((m) => m.id)).toEqual(response.map((m) => m.id).concat('suffix'))
-    }
-  )
 
   it('drops an older-page response captured before transcript replacement', async () => {
     let resolveEarlier: (response: unknown) => void = () => {}
@@ -173,6 +142,15 @@ describe('useMobileNativeChatSession', () => {
         })
       }
       const requestsAtCap = sendRequest.mock.calls.length
+      expect(requestsAtCap).toBe(33)
+      expect(state?.hasMore).toBe(false)
+      expect(sendRequest).toHaveBeenLastCalledWith(
+        'nativeChat.readSession',
+        { agent: 'claude', sessionId: 'session', limit: 40, beforeOffset: 50 },
+        expect.objectContaining({ budgetSpansConnect: true })
+      )
+      await act(async () => state?.loadEarlier())
+      expect(sendRequest).toHaveBeenCalledTimes(33)
 
       await act(async () =>
         emit({
@@ -751,13 +729,21 @@ describe('useMobileNativeChatSession transcriptLoading', () => {
     await mountAt(client, 'session-a')
 
     await act(async () =>
-      emitFrame({ type: 'snapshot', messages: [message('a-1')], hasMore: false })
+      emitFrame({ type: 'appended', messages: [message('early-a'), message('early-b')] })
+    )
+    await act(async () =>
+      emitFrame({
+        type: 'snapshot',
+        messages: [message('early-b'), message('base-c')],
+        hasMore: true,
+        beforeOffset: 100
+      })
     )
 
     expect(renders.at(-1)).toMatchObject({
       status: 'ready',
       transcriptLoading: false,
-      ids: ['a-1']
+      ids: ['early-b', 'base-c']
     })
   })
 

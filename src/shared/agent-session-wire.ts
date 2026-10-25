@@ -277,6 +277,9 @@ export type AgentSessionStatusSummary = {
   /** Why the host could not name this chat, kept in memory only while the chat still has the
    *  name the failed run would have replaced. Absent from older hosts; older clients ignore it. */
   namingError?: AgentSessionNamingError
+  /** The record's Sleep mark: the user's Sleep stopped this chat and nothing has been sent since.
+   *  Absent from older hosts. */
+  sleptAt?: number
   /** Host-path directory the session is held to regardless of its workspace's current directory
    *  (a floating chat's pinned folder). Absent means resolve the workspace id; older hosts omit it. */
   launchDirectory?: string
@@ -332,7 +335,7 @@ export type AgentSessionAttachResult = {
   sessionId: string
   fence: number
   page: AgentSessionHistoryPage
-  /** Submissions a crash boundary left `unknown` that provider history could not decide. */
+  /** Submissions a crash boundary left `unknown`. No client reads it; kept for older peers. */
   unconfirmedClientMessageIds: string[]
   /** The host-owned id of the tab showing this chat, when it has one. Absent from older hosts. */
   tabId?: string
@@ -387,6 +390,8 @@ export type AgentSessionOptionChoice = {
 }
 
 export type AgentSessionModelOption = {
+  resolvedModel?: string | null
+  effortsKnown?: false
   id: string
   label: string
   description?: string

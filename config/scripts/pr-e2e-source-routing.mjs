@@ -228,6 +228,16 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    id: 'ssh.orcad-sleep-disconnected',
+    specs: ['tests/e2e/ssh-orcad-sleep-disconnected.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/runtime\/(?:workspaces\/(?:workspace-sleep-|remote-workspace-terminal-sleep)|terminal\/stop\/worktree-terminal-sleep)|renderer\/src\/components\/sidebar\/(?:sleep-|workspace-sleep-))/.test(
+          file
+        ))
+  },
+  {
     id: 'ssh.orcad-idle-exit',
     specs: ['tests/e2e/ssh-orcad-idle-exit.spec.ts'],
     matches: (file) =>
@@ -257,6 +267,17 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
+    // A reconnect the host cannot image must still bring an idle full-screen program up to date (#26887).
+    id: 'ssh.orcad-reconnect-idle-frame',
+    specs: ['tests/e2e/ssh-orcad-terminal-reconnect-idle-frame.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/(?:renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|pty-connection\/(?:remote-program-redraw|hidden-output-restore-|park-reveal-snapshot-verdict))|main\/runtime\/rpc\/methods\/terminal\/terminal-(?:multiplex-initial-snapshot|snapshot-publication)\.ts$)/.test(
+          file
+        ))
+  },
+  {
     // Unsaved drafts stay on the desktop and are renamed to the server when a move commits.
     id: 'ssh.orcad-editor-drafts-migration',
     specs: ['tests/e2e/ssh-orcad-editor-drafts-migration.spec.ts'],
@@ -264,6 +285,17 @@ export const PR_E2E_SOURCE_ROUTES = [
       MANAGED_SSH_HARNESS.test(file) ||
       (isProductSource(file) &&
         /^src\/main\/(?:persistence\/migrating-orcad-catalog\/orcad-source-(?:draft-rename|workspace-session|session-copy-resolution|export)|ssh\/orcad-migration-source-retention|ipc\/ssh\/ssh)\.ts$/.test(
+          file
+        ))
+  },
+  {
+    // A saved managed tunnel port that can no longer be bound moves to a free one (#33182).
+    id: 'ssh.orcad-unbindable-tunnel-port',
+    specs: ['tests/e2e/ssh-orcad-unbindable-tunnel-port.spec.ts'],
+    matches: (file) =>
+      MANAGED_SSH_HARNESS.test(file) ||
+      (isProductSource(file) &&
+        /^src\/(?:main\/managed-server\/lifecycle\/orcad-managed-tunnel|main\/ssh\/system-transport\/system-ssh-forward-port-reservation|shared\/runtime-environment-(?:sidecar|managed-orcad-store))/.test(
           file
         ))
   },
@@ -499,6 +531,7 @@ export function selectPrE2eSpecs(
         (file.startsWith('tests/e2e/helpers/') &&
           [...specs].some((spec) => spec.startsWith(MANAGED_SSH_E2E_SPEC_PREFIX))) ||
         file === '.github/workflows/e2e.yml' ||
+        file === '.github/scripts/prepare-ubuntu-apt.sh' ||
         file === 'config/scripts/ci-e2e-job-selection.mjs'
     )
   ) {
