@@ -1,3 +1,4 @@
+import { STARTED_AT, turn, turnIdentity } from './journal-open-turn-test-support'
 import { ClaudeStructuredSessionAdapter } from '../../claude/claude-structured-session-adapter'
 import {
   fakeClaude,
@@ -31,7 +32,6 @@ import Database from '../../sqlite/sync-database'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalMessageItem,
-  type AgentJournalItemIdentity,
   type AgentJournalTurnItem
 } from '../../../shared/agent-session-journal-types'
 import {
@@ -68,7 +68,6 @@ import { providerTimelineSink } from '../agent-session-timeline/provider-timelin
 import { StructuredAgentSessionStatusOwnership } from '../agent-session-wire/structured-agent-session-status-ownership'
 
 const SESSION = 'session-1'
-const STARTED_AT = 1_800_000_000_000
 
 let root: string
 
@@ -80,21 +79,6 @@ afterEach(async () => {
   closeTestJournalHostDatabases()
   await rm(root, { recursive: true, force: true })
 })
-
-const turnIdentity = (turnId: string): AgentJournalItemIdentity => ({
-  provider: 'codex',
-  threadId: 'thread-1',
-  turnId,
-  ordinal: 0
-})
-
-function turn(
-  turnId: string,
-  state: AgentJournalTurnItem['state'],
-  outcome?: AgentJournalTurnItem['outcome']
-): AgentJournalTurnItem {
-  return { kind: 'turn', turnId, state, startedAt: STARTED_AT, ...(outcome ? { outcome } : {}) }
-}
 
 async function openJournal() {
   return openAgentSessionJournal({
