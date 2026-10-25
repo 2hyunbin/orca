@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { runMainProcessPreflight } from './main-process-preflight'
 
 const mocks = vi.hoisted(() => {
   const events: string[] = []
@@ -212,7 +213,6 @@ vi.mock('../browser/browser-identity-mode-store', () => ({
 
 describe('browser process user-agent startup ordering', () => {
   it('explains admission refusal before a desktop launch exits', async () => {
-    const { runMainProcessPreflight } = await import('./main-process-preflight')
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     mocks.backgroundLaunch.mockReturnValueOnce(false)
     mocks.admission.mockImplementationOnce(() => {
@@ -237,7 +237,6 @@ describe('browser process user-agent startup ordering', () => {
   })
 
   it('explains an orcad holding the profile instead of exiting silently', async () => {
-    const { runMainProcessPreflight } = await import('./main-process-preflight')
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     mocks.backgroundLaunch.mockReturnValueOnce(false)
     mocks.profileLock.mockReturnValueOnce({ state: 'held', message: 'Another orcad (pid 7)' })
@@ -264,7 +263,6 @@ describe('browser process user-agent startup ordering', () => {
   })
 
   it('does not acquire profile admission for a duplicate launch', async () => {
-    const { runMainProcessPreflight } = await import('./main-process-preflight')
     mocks.events.length = 0
     mocks.lock.mockReturnValueOnce(false)
     expect(
@@ -279,7 +277,6 @@ describe('browser process user-agent startup ordering', () => {
   it('executes after the dev app name and before later preflight work', async () => {
     const { getBrowserProcessUserAgentIdentity } =
       await import('../browser/browser-process-user-agent')
-    const { runMainProcessPreflight } = await import('./main-process-preflight')
 
     expect(
       runMainProcessPreflight({
@@ -310,7 +307,6 @@ describe('browser process user-agent startup ordering', () => {
   })
 
   it('exits without reading profile state or revealing a window when recovery holds admission', async () => {
-    const { runMainProcessPreflight } = await import('./main-process-preflight')
     mocks.events.length = 0
     mocks.admission.mockImplementationOnce(() => {
       throw new Error('Profile recovery is in progress')
@@ -346,7 +342,6 @@ it('exits and releases admission after pending profile move recovery fails', asy
   mocks.recoverMoves.mockImplementationOnce(() => {
     throw new Error('unreadable move journal')
   })
-  const { runMainProcessPreflight } = await import('./main-process-preflight')
   expect(
     runMainProcessPreflight({ focusExistingWindow: vi.fn(), requestDesktopActivation: vi.fn() })
   ).toBe(false)
@@ -356,7 +351,6 @@ it('exits and releases admission after pending profile move recovery fails', asy
 })
 
 it('defers a Linux desktop startup failure until Electron is ready', async () => {
-  const { runMainProcessPreflight } = await import('./main-process-preflight')
   const { resetBrowserProcessUserAgentForTests } =
     await import('../browser/browser-process-user-agent')
   resetBrowserProcessUserAgentForTests()
@@ -400,7 +394,6 @@ it('defers a Linux desktop startup failure until Electron is ready', async () =>
 })
 
 it('exits after a Linux desktop readiness rejection without showing a dialog', async () => {
-  const { runMainProcessPreflight } = await import('./main-process-preflight')
   const { resetBrowserProcessUserAgentForTests } =
     await import('../browser/browser-process-user-agent')
   resetBrowserProcessUserAgentForTests()
@@ -437,7 +430,6 @@ it('exits after a Linux desktop readiness rejection without showing a dialog', a
 })
 
 it('keeps Linux background startup failures console-only and immediate', async () => {
-  const { runMainProcessPreflight } = await import('./main-process-preflight')
   const { resetBrowserProcessUserAgentForTests } =
     await import('../browser/browser-process-user-agent')
   resetBrowserProcessUserAgentForTests()
@@ -467,7 +459,6 @@ it('keeps Linux background startup failures console-only and immediate', async (
 })
 
 it('keeps Linux serve startup failures console-only and immediate', async () => {
-  const { runMainProcessPreflight } = await import('./main-process-preflight')
   const { resetBrowserProcessUserAgentForTests } =
     await import('../browser/browser-process-user-agent')
   resetBrowserProcessUserAgentForTests()
