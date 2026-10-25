@@ -132,7 +132,7 @@ test.describe('Workspace Space git status checks', () => {
         { testRepoPath, worktreePaths: registeredWorktreePaths }
       )
 
-      // Require every row before absent-status assertions; zero rows would pass trivially.
+      // Visit every virtualized row so offscreen unchecked statuses cannot pass unnoticed.
       const findSpacePage = () =>
         electronApp.windows().find((page) => page.url().endsWith('/space.html'))
       await expect.poll(() => Boolean(findSpacePage())).toBe(true)
@@ -140,18 +140,32 @@ test.describe('Workspace Space git status checks', () => {
       if (!spacePage) {
         throw new Error('Expected the Space window to open')
       }
-      const rowCheckboxes = spacePage.getByRole('checkbox', {
-        name: new RegExp(
-          `^Select (?:${rowDisplayNames
-            .map((displayName) => displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-            .join('|')})$`
-        )
-      })
-      await expect(rowCheckboxes).toHaveCount(rowDisplayNames.length, {
-        timeout: 30_000
-      })
-
-      await expect(spacePage.getByText('Keep: git not checked')).toHaveCount(0, { timeout: 30_000 })
+      const rowName = new RegExp(
+        `^Select (?:${rowDisplayNames
+          .map((displayName) => displayName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|')})$`
+      )
+      const list = spacePage.getByTestId('virtualized-list')
+      for (let position = 1; position <= rowDisplayNames.length; position += 1) {
+        const row = list.locator(`[aria-posinset="${position}"]`)
+        if ((await row.count()) === 0) {
+          await list.evaluate(
+            (element, { position, count }) => {
+              const scroller = element.parentElement
+              if (!scroller) {
+                throw new Error('Expected the workspace list scroll container')
+              }
+              scroller.scrollTop = (element.clientHeight * (position - 1)) / count
+            },
+            { position, count: rowDisplayNames.length }
+          )
+        }
+        await expect(row).toHaveAttribute('aria-setsize', String(rowDisplayNames.length))
+        await expect(row.getByRole('checkbox', { name: rowName })).toHaveCount(1)
+        await expect(row.getByText('Keep: git not checked')).toHaveCount(0, {
+          timeout: 30_000
+        })
+      }
     } finally {
       for (const worktreePath of worktreePaths) {
         try {

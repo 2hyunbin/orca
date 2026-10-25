@@ -393,14 +393,18 @@ jobs:
           if grep -l '@headful' "${TEST_FILES[@]}" >/dev/null; then
             E2E_PROJECT_ARGS+=(--project=electron-headful)
           fi
-          mkdir -p ci-shards-changed
-          pnpm exec playwright test "${TEST_FILES[@]}" --config tests/playwright.config.ts --project=electron-headless "${E2E_PROJECT_ARGS[@]}" --list --reporter=json > ci-shards-changed/discovery.json
-          export ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
-          node config/scripts/ci-e2e-shard-plan.mjs ci-shards-changed/discovery.json "$SHARD" ci-shards-changed
-          pnpm exec playwright test "${TEST_FILES[@]}" --config tests/playwright.config.ts --project=electron-headless "${E2E_PROJECT_ARGS[@]}" --test-list=ci-shards-changed/selected.txt --list --reporter=json > ci-shards-changed/selected-discovery.json
-          node config/scripts/ci-e2e-shard-plan.mjs --verify ci-shards-changed/assignment.json ci-shards-changed/selected-discovery.json
+          E2E_SELECTION_ARGS=(--shard="$SHARD")
+          if [ -f config/scripts/ci-e2e-shard-plan.mjs ]; then
+            mkdir -p ci-shards-changed
+            pnpm exec playwright test "${TEST_FILES[@]}" --config tests/playwright.config.ts --project=electron-headless "${E2E_PROJECT_ARGS[@]}" --list --reporter=json > ci-shards-changed/discovery.json
+            export ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
+            node config/scripts/ci-e2e-shard-plan.mjs ci-shards-changed/discovery.json "$SHARD" ci-shards-changed
+            pnpm exec playwright test "${TEST_FILES[@]}" --config tests/playwright.config.ts --project=electron-headless "${E2E_PROJECT_ARGS[@]}" --test-list=ci-shards-changed/selected.txt --list --reporter=json > ci-shards-changed/selected-discovery.json
+            node config/scripts/ci-e2e-shard-plan.mjs --verify ci-shards-changed/assignment.json ci-shards-changed/selected-discovery.json
+            E2E_SELECTION_ARGS=(--test-list=ci-shards-changed/selected.txt)
+          fi
           xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env "${E2E_ENV[@]}" \
-            pnpm run test:e2e "${TEST_FILES[@]}" --test-list=ci-shards-changed/selected.txt --workers=1 "${E2E_PROJECT_ARGS[@]}"
+            pnpm run test:e2e "${TEST_FILES[@]}" "${E2E_SELECTION_ARGS[@]}" --workers=1 "${E2E_PROJECT_ARGS[@]}"
 
       - name: Upload changed E2E shard assignment
         if: always()

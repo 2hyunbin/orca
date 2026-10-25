@@ -1,5 +1,4 @@
-// #8372: kill another DaemonClient’s live session through Manage Sessions and require the closed status chip to change 3→2.
-// This main process never receives that session’s pty:exit; opening Resource Manager would refresh inventory and mask missing invalidation.
+// Resource counts stay unknown until Resources is opened; Manage Sessions must not invent an observation.
 
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -17,20 +16,7 @@ import {
 
 /** The closed status-bar chip. Its accessible name carries the same count it paints. */
 function resourceChip(page: Page) {
-  return page.getByRole('button', { name: /^Resource Manager, \d+ terminal session/ })
-}
-
-/** The count as the chip's accessible name reports it. */
-async function readChipAriaCount(page: Page): Promise<number | null> {
-  const label = await resourceChip(page).getAttribute('aria-label')
-  const match = /(\d+) terminal session/.exec(label ?? '')
-  return match ? Number(match[1]) : null
-}
-
-/** The count as a human reads it off the chip: the digits next to the terminal glyph. */
-async function readChipVisibleCount(page: Page): Promise<string | null> {
-  const text = await resourceChip(page).locator('span.tabular-nums').last().textContent()
-  return text?.trim() ?? null
+  return page.getByRole('button', { name: /^Resource Manager, / })
 }
 
 async function listDaemonSessionIds(page: Page): Promise<string[]> {
@@ -57,7 +43,7 @@ async function waitForStableSessionIds(page: Page, expected: number): Promise<vo
 }
 
 test.describe('Status bar CLI session count', () => {
-  test('drops after Manage Sessions kills a foreign daemon session, popover never opened', async ({
+  test('keeps an unobserved count unknown after Manage Sessions kills a foreign daemon session', async ({
     orcaPage: page,
     electronApp
   }) => {
@@ -96,7 +82,7 @@ test.describe('Status bar CLI session count', () => {
       )
       expect(created.isNew, 'the foreign daemon session was not created').toBe(true)
 
-      // Split afterward so a natural spawn-triggered inventory read initializes the chip correctly.
+      // Keep two attached panes alive alongside the foreign session throughout the kill.
       await splitActiveTerminalPane(page, 'vertical')
       await waitForPaneCount(page, 2, 30_000)
 
@@ -111,15 +97,10 @@ test.describe('Status bar CLI session count', () => {
       const baseline = baselineIds.length
       expect(baseline, 'expected the two panes plus the foreign session').toBe(3)
 
-      // Require chip/daemon agreement before kill so later mismatch isolates invalidation.
-      await expect(resourceChip(page)).toBeVisible()
-      await expect
-        .poll(async () => readChipAriaCount(page), {
-          timeout: 30_000,
-          message: 'The status-bar chip never caught up with the live session count'
-        })
-        .toBe(baseline)
-      expect(await readChipVisibleCount(page)).toMatch(new RegExp(`^${baseline}\\b`))
+      await expect(resourceChip(page)).toHaveAccessibleName(
+        'Resource Manager, terminal count unavailable'
+      )
+      await expect(resourceChip(page)).toHaveAttribute('aria-expanded', 'false')
 
       await page.evaluate(() => {
         const state = window.__store?.getState()
@@ -145,21 +126,11 @@ test.describe('Status bar CLI session count', () => {
         })
         .toBe(false)
 
-      // Guard the whole point of the bug: the popover refreshes on open, so it must stay closed.
-      await expect(page.locator('[data-radix-popper-content-wrapper]')).toHaveCount(0)
-
-      await expect
-        .poll(async () => readChipAriaCount(page), {
-          timeout: 15_000,
-          message: `The status-bar chip stayed at the pre-kill count instead of dropping to ${baseline - 1}`
-        })
-        .toBe(baseline - 1)
-      expect(
-        await readChipVisibleCount(page),
-        'The number painted on the chip did not follow its accessible name'
-      ).toMatch(new RegExp(`^${baseline - 1}\\b`))
-
-      await expect(page.locator('[data-radix-popper-content-wrapper]')).toHaveCount(0)
+      await waitForStableSessionIds(page, baseline - 1)
+      await expect(resourceChip(page)).toHaveAccessibleName(
+        'Resource Manager, terminal count unavailable'
+      )
+      await expect(resourceChip(page)).toHaveAttribute('aria-expanded', 'false')
     } finally {
       await foreignClient
         .request('kill', { sessionId: foreignSessionId, immediate: true })
