@@ -294,8 +294,6 @@ export const electronViteConfig: UserConfig = {
     }
   },
   renderer: {
-    // Cached dependencies must not discover configs from an enclosing checkout.
-    tsconfig: resolve('config/tsconfig.web.json'),
     // Shared node_modules installs must not share dependency optimization state across worktrees.
     cacheDir: resolve('.cache/vite/renderer'),
     define: {

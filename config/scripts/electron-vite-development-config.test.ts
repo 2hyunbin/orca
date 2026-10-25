@@ -1,8 +1,6 @@
 import { resolve } from 'node:path'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { resolveConfig as resolveElectronConfig } from 'electron-vite'
-import { resolveConfig, transformWithOxc } from 'vite'
+import { resolveConfig } from 'vite'
 import { runProcess } from '@orca/process-host'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -108,40 +106,4 @@ console.log(JSON.stringify({ loaded: Object.hasOwn(require.cache, require.resolv
     expect(resolved.cacheDir).toBe(resolve('.cache/vite/web').replaceAll('\\', '/'))
     expect(resolved.build.reportCompressedSize).toBe(false)
   })
-
-  it.each(['desktop', 'web'])(
-    'compiles %s cached dependencies inside a broken parent checkout',
-    async (client) => {
-      const parent = await mkdtemp(resolve(tmpdir(), 'orca-vite-parent-'))
-      try {
-        await writeFile(
-          resolve(parent, 'tsconfig.json'),
-          JSON.stringify({ extends: '@missing-parent-checkout/tsconfig' })
-        )
-        const cache = resolve(parent, 'child/.cache/vite/renderer/deps')
-        await mkdir(cache, { recursive: true })
-        const { config } = await resolveElectronConfig({ logLevel: 'silent' }, 'serve')
-        if (!config?.renderer) {
-          throw new Error('Electron Vite did not resolve the renderer configuration')
-        }
-        const resolved = await resolveConfig(
-          client === 'desktop'
-            ? { ...config.renderer, configFile: false }
-            : { configFile: resolve('vite.web.config.ts'), logLevel: 'silent' },
-          'serve'
-        )
-
-        const transformed = await transformWithOxc(
-          'export const dependency = 1',
-          resolve(cache, 'react_jsx-dev-runtime.js'),
-          { tsconfig: resolved.tsconfig }
-        )
-
-        expect(transformed.code).toContain('export')
-        expect(transformed.code).toContain('dependency')
-      } finally {
-        await rm(parent, { recursive: true, force: true })
-      }
-    }
-  )
 })
