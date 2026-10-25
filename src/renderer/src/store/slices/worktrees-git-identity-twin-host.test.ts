@@ -267,6 +267,18 @@ describe('review-clear tombstones are always keyed by the copy', () => {
     expect(newcomer).toMatchObject({ branch: 'refs/heads/b1', linkedPR: 2 })
   })
 
+  it('let a relink of the still-unstamped legacy row drop its stamped guard', () => {
+    const store = storeWith({ branch: 'refs/heads/a1', linkedPR: 1 })
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'ssh:box')
+    bumpHostedReviewLinkMutationGeneration(id, {})
+
+    const [relinked] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({ id, repoId: 'repo1', hostId: 'ssh:box', branch: 'refs/heads/a2', linkedPR: 9 })
+    ])
+
+    expect(relinked.linkedPR).toBe(9)
+  })
+
   it("keep the sibling's guard when one copy is relinked", () => {
     const store = storeWith(
       { hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 },

@@ -1,6 +1,5 @@
 import { useCallback, useEffect } from 'react'
 import { getConnectionId } from '@/lib/connection-context'
-import { resolveWorktreeGitCopyNow } from '@/lib/worktree-git-copy'
 import type { CreatePrIntentRunToken } from './create-pr-intent-flow'
 import type { SourceControlOperationTarget } from '../listing/operation-target'
 import type { SourceControlWorktreeContext } from '../listing/use-worktree-context'
@@ -51,7 +50,6 @@ export function useSourceControlCreatePrIntentTarget({
       createPrIntentOperationTarget(token, {
         activeRepoTarget,
         pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget,
-        resolveCopy: resolveWorktreeGitCopyNow,
         bareConnectionId: getConnectionId
       }),
     [activeRepoTarget, worktreeMap]
@@ -61,16 +59,15 @@ export function useSourceControlCreatePrIntentTarget({
 }
 
 /**
- * Pins a Create PR run's git calls to the copy it started on. A run that named a host and can no
- * longer resolve that copy gets no transport, so the call refuses instead of committing or pushing
- * on a same-path twin's checkout.
+ * Pins a Create PR run's calls to the copy and transport captured when it started, never
+ * re-resolved: a copy that did not resolve gets no transport, so the run refuses instead of
+ * committing or pushing on a same-path twin's checkout.
  */
 export function createPrIntentOperationTarget(
   token: CreatePrIntentRunToken,
   deps: {
     activeRepoTarget: SourceControlWorktreeContext['activeRepoTarget']
     pushTarget: SourceControlOperationTarget['pushTarget']
-    resolveCopy: typeof resolveWorktreeGitCopyNow
     bareConnectionId: (worktreeId: string) => string | null | undefined
   }
 ): SourceControlOperationTarget {
@@ -79,7 +76,7 @@ export function createPrIntentOperationTarget(
     worktreePath: token.worktreePath,
     pushTarget: deps.pushTarget
   }
-  if (!token.ownerHostId) {
+  if (token.pinnedCopy === undefined) {
     return {
       ...base,
       target: deps.activeRepoTarget,
@@ -87,12 +84,12 @@ export function createPrIntentOperationTarget(
       ownerHostId: null
     }
   }
-  const copy = deps.resolveCopy(token.worktreeId, token.ownerHostId)
+  const copy = token.pinnedCopy
   return {
     ...base,
     target: copy?.transport ?? null,
     connectionId: copy?.connectionId,
-    ownerHostId: token.ownerHostId
+    ownerHostId: copy?.hostId ?? null
   }
 }
 

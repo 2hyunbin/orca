@@ -78,3 +78,25 @@ export function moveCopyTombstones<T>(
   }
   return moved
 }
+
+/**
+ * A relink of one copy: drops that copy's tombstone (matched stamped or not) and moves the
+ * siblings' guards to `generation` so they stay live. True when a sibling is still guarded.
+ */
+export function dropCopyTombstone<
+  T extends { owner: string; rowOwner: string; generation: number }
+>(tombstones: Map<string, T>, worktreeId: string, owner: string, generation: number): boolean {
+  let siblingGuarded = false
+  for (const [key, tombstone] of Array.from(tombstones)) {
+    if (!key.startsWith(`${worktreeId}\0`)) {
+      continue
+    }
+    if (tombstone.owner === owner || tombstone.rowOwner === owner) {
+      tombstones.delete(key)
+    } else {
+      tombstones.set(key, { ...tombstone, generation })
+      siblingGuarded = true
+    }
+  }
+  return siblingGuarded
+}

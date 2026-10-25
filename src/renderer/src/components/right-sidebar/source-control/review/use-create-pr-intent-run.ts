@@ -115,7 +115,7 @@ export function useSourceControlCreatePrIntentRun({
       // Why: intent crosses async commit/push steps, so the base stays tied to what was selected when the run started.
       baseRef: effectiveBaseRef ?? null,
       // Why: the run outlives navigation; its git answers stay on the copy it started from.
-      ownerHostId: resolveWorktreeGitCopyNow(activeWorktreeId)?.hostId ?? null
+      pinnedCopy: resolveWorktreeGitCopyNow(activeWorktreeId)
     })
     const operationTarget = getCreatePrIntentOperationTarget(token)
     const snapshot = createCreatePrIntentRunSnapshot({

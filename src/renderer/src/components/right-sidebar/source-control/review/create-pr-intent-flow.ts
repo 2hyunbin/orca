@@ -1,4 +1,4 @@
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import type { WorktreeGitCopy } from '@/lib/worktree-git-copy'
 import {
   isBehindOnlyUpstream,
   shouldForcePushWithLeaseForUpstream
@@ -30,8 +30,11 @@ export type CreatePrIntentRunToken = {
   branch: string
   provider: HostedReviewProvider
   baseRef?: string | null
-  /** The worktree copy the run started on; a same-path twin on another host shares the id. */
-  ownerHostId?: ExecutionHostId | null
+  /**
+   * The worktree copy the run started on, pinned with its transport: a same-path twin on another
+   * host shares the id, and re-resolving later could land on it. Null refuses every call.
+   */
+  pinnedCopy?: WorktreeGitCopy | null
   startedAt: number
 }
 

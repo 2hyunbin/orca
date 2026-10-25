@@ -131,13 +131,7 @@ export function createUpdateWorktreeGitIdentity(
           clearedCopy = copy
           clearedOnTwin = targets.isTwin
           clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
-          rememberHostedReviewLinkClear(
-            worktreeId,
-            nextBranch,
-            clearGeneration,
-            nextHead,
-            copy.owner
-          )
+          rememberHostedReviewLinkClear(worktreeId, nextBranch, clearGeneration, nextHead, copy)
         } else {
           const tombstoneKey = reviewClearTombstoneKey(worktreeId, copy.owner)
           const tombstone = hostedReviewLinkClearTombstonesByCopy.get(tombstoneKey)

@@ -4,6 +4,7 @@ import type { WorktreeSlice } from '../../worktree-helpers'
 import {
   clearCopyReviewLinks,
   deleteCopyTombstones,
+  dropCopyTombstone,
   moveCopyTombstones,
   reviewClearTombstoneKey,
   type WorktreeCopyClear,
@@ -37,8 +38,10 @@ export const hostedReviewLinkClearTombstonesByCopy = new Map<
     branchIdentity: string
     generation: number
     head?: string
-    /** The guarded copy's {@link worktreeCopyOwnerKey}; part of the map key too. */
+    /** The guarded copy's stamped {@link worktreeCopyOwnerKey}; part of the map key too. */
     owner: string
+    /** Its key before a listing stamped it; a relink of the unstamped row still matches. */
+    rowOwner: string
   }
 >()
 export const hostedReviewLinkWorktreeIdAliases = new Map<string, string>()
@@ -79,14 +82,12 @@ export function bumpHostedReviewLinkMutationGeneration(
     pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
     return
   }
-  hostedReviewLinkClearTombstonesByCopy.delete(reviewClearTombstoneKey(worktreeId, owner))
-  let siblingGuarded = false
-  for (const [key, tombstone] of hostedReviewLinkClearTombstonesByCopy) {
-    if (key.startsWith(`${worktreeId}\0`)) {
-      hostedReviewLinkClearTombstonesByCopy.set(key, { ...tombstone, generation })
-      siblingGuarded = true
-    }
-  }
+  const siblingGuarded = dropCopyTombstone(
+    hostedReviewLinkClearTombstonesByCopy,
+    worktreeId,
+    owner,
+    generation
+  )
   if (!siblingGuarded) {
     pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
   }
@@ -198,14 +199,15 @@ export function rememberHostedReviewLinkClear(
   branch: string,
   generation: number,
   head: string | undefined,
-  owner: string
+  copy: Pick<WorktreeCopyClear, 'owner' | 'rowOwner'>
 ): void {
-  hostedReviewLinkClearTombstonesByCopy.set(reviewClearTombstoneKey(worktreeId, owner), {
+  hostedReviewLinkClearTombstonesByCopy.set(reviewClearTombstoneKey(worktreeId, copy.owner), {
     branch,
     branchIdentity: canonicalHostedReviewBranchIdentity(branch),
     generation,
     head,
-    owner
+    owner: copy.owner,
+    rowOwner: copy.rowOwner
   })
 }
 
