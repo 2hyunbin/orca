@@ -10,6 +10,14 @@ export function cleanGeneratedCommitMessage(raw: string): string {
   // Scan boundaries instead of allocating newline arrays for large generated bodies.
   let text = normalizeGeneratedCommitMessageLineFeeds(raw).trim()
 
+  // Kimi Code's stream-json mode separates hook output and thinking from the answer; the
+  // last assistant message is the commit message (#33556). No assistant message means the
+  // run produced no answer, so the result is empty rather than the tool records.
+  const streamJson = scanStreamJsonOutput(text)
+  if (streamJson.isStreamJson) {
+    text = streamJson.answer?.trim() ?? ''
+  }
+
   // Extract jcode --json text; plain mode mixes thinking and token-usage lines into stdout.
   if (text.startsWith('{')) {
     try {
@@ -48,6 +56,68 @@ export function cleanGeneratedCommitMessage(raw: string): string {
   text = text.replace(/^(\s*)(?:[-*\u2022\u25CF]\s+|\d+[.)]\s+)/, '$1').trim()
 
   return text
+}
+
+/**
+ * Kimi Code's `--output-format stream-json` prints one JSON message per line: assistant
+ * messages, tool results, then the answer as the last assistant message. Only a body whose
+ * every non-empty line is such a record counts as stream output, so a plain answer that
+ * merely mentions a JSON line is left alone. Scans line boundaries instead of allocating a
+ * line array, because large bodies pass through here.
+ */
+function scanStreamJsonOutput(text: string): { answer: string | null; isStreamJson: boolean } {
+  let answer: string | null = null
+  let sawRecord = false
+  let start = 0
+  while (start < text.length) {
+    const newline = text.indexOf('\n', start)
+    const end = newline === -1 ? text.length : newline
+    const line = text.slice(start, end).trim()
+    if (line.length > 0) {
+      const record = parseStreamJsonRecord(line)
+      if (record === null) {
+        return { answer: null, isStreamJson: false }
+      }
+      sawRecord = true
+      if (record.role === 'assistant') {
+        if (Array.isArray(record.tool_calls) && record.tool_calls.length > 0) {
+          // A message that asks for a tool is narration ("Let me look at the
+          // diff."), not the answer. If the run stops before a later assistant
+          // message, the run produced no commit message at all.
+          answer = null
+        } else if (typeof record.content === 'string') {
+          answer = record.content
+        }
+      }
+    }
+    if (newline === -1) {
+      break
+    }
+    start = newline + 1
+  }
+  return { answer, isStreamJson: sawRecord }
+}
+
+/** A stream record carries a string `role`; anything else is plain text that happens to be JSON. */
+function parseStreamJsonRecord(
+  line: string
+): { role: string; content?: unknown; tool_calls?: unknown } | null {
+  if (!line.startsWith('{')) {
+    return null
+  }
+  try {
+    const message: unknown = JSON.parse(line)
+    if (typeof message !== 'object' || message === null) {
+      return null
+    }
+    const record = message as { role?: unknown; content?: unknown; tool_calls?: unknown }
+    return typeof record.role === 'string'
+      ? { role: record.role, content: record.content, tool_calls: record.tool_calls }
+      : null
+  } catch {
+    // A partial or interleaved write is never the answer.
+    return null
+  }
 }
 
 // DeepSeek-R1/Qwen3/Kimi K2 reasoning uses <think>; Kimi-VL-Thinking uses ◁think▷.

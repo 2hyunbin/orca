@@ -87,6 +87,10 @@ export function buildSecondaryCommitMessageAgentSpecs({
       buildArgs: ({ prompt, model }) => [
         '--prompt',
         prompt,
+        // stream-json marks the answer as the last assistant message; text mode prefixes
+        // hook output and thinking with the same bullet (#33556).
+        '--output-format',
+        'stream-json',
         ...(model && model !== 'default' ? ['--model', model] : [])
       ],
       modelSource: 'static',
