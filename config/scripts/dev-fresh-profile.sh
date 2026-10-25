@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Launch `pn dev` with a fresh, isolated userData profile so the app behaves
-# like a first-time install (onboarding overlay paints, no persisted repos,
-# no saved sessions). Your real `orca-dev` profile is left untouched.
+# Launch pn dev with isolated first-install userData, preserving the real orca-dev profile.
 #
 # Usage:
 #   ./config/scripts/dev-fresh-profile.sh           # ephemeral temp profile, deleted on exit
