@@ -88,19 +88,14 @@ describe('uploadSkillPackageToSignedPolicy', () => {
     await writeFile(archivePath, archive)
     let uploaded = Buffer.alloc(0)
     let contentType = ''
-    const fetcher = vi.fn(async (_url: URL | RequestInfo, init?: RequestInit) => {
-      const chunks: Buffer[] = []
-      const body = init?.body as unknown as AsyncIterable<Buffer>
-      for await (const chunk of body) {
-        chunks.push(Buffer.from(chunk))
-      }
-      uploaded = Buffer.concat(chunks)
+    const fetcher = vi.fn<typeof fetch>(async (_url, init) => {
+      uploaded = Buffer.from(await new Response(init?.body).arrayBuffer())
       contentType = new Headers(init?.headers).get('content-type') ?? ''
       expect(Number(init?.headers && new Headers(init.headers).get('content-length'))).toBe(
         uploaded.length
       )
       return new Response(null, { status: 204 })
-    }) as typeof fetch
+    })
     const progress = vi.fn()
 
     await uploadSkillPackageToSignedPolicy({
@@ -178,13 +173,13 @@ describe('uploadSkillPackageToSignedPolicy', () => {
     const started = new Promise<void>((resolve) => {
       markStarted = resolve
     })
-    const fetcher = vi.fn(
-      async (_url: URL | RequestInfo, init?: RequestInit) =>
+    const fetcher = vi.fn<typeof fetch>(
+      async (_url, init) =>
         await new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true })
           markStarted()
         })
-    ) as typeof fetch
+    )
 
     const upload = uploadSkillPackageToSignedPolicy({
       policy: { url: 'https://storage.googleapis.com/upload', fields: {} },
