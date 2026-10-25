@@ -13,7 +13,7 @@ import {
   WORKSPACE,
   URL_TO_OPEN,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 import { captureLinkOpenIntent } from './link-open-intent'
 import { beginLinkOpenRequest } from './link-open-request'
 import { openWorkspaceBrowserTabForLink } from './workspace-browser-tab-open'

@@ -9,7 +9,6 @@ import {
 import { withOpenedServeBrowserTab } from './serve-browser-tab-layout'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { BLANK_BROWSER_TAB_STATE } from '../../shared/workspace-layout/workspace-layout-beside'
-import { browserManager } from '../browser/browser-manager'
 
 const BROWSER_ONLY_WORKTREE_ID = 'repo-1::/tmp/browser-only'
 
@@ -18,6 +17,7 @@ function restartedServe(session: WorkspaceSessionState = savedServeTabs()) {
   const { runtimeStore, getSession } = makeRuntimeStoreWithWorkspaceSession(saved)
   Object.assign(runtimeStore, { getWorkspaceSessionHostIds: () => ['local'] })
   const runtime = new OrcaRuntimeService(runtimeStore)
+  let profileId = 'default'
   const livePages: string[] = []
   const createTab = vi.fn(async ({ browserPageId }: { browserPageId?: string }) => {
     livePages.push(browserPageId!)
@@ -31,6 +31,7 @@ function restartedServe(session: WorkspaceSessionState = savedServeTabs()) {
       tabList: vi.fn(() => ({
         tabs: livePages.map((browserPageId, index) => ({
           browserPageId,
+          profileId,
           index,
           url: 'https://example.com/',
           title: 'Example',
@@ -47,7 +48,14 @@ function restartedServe(session: WorkspaceSessionState = savedServeTabs()) {
       }))
     } as never
   )
-  return { runtime, createTab, getSession }
+  return {
+    runtime,
+    createTab,
+    getSession,
+    setProfileId: (id: string) => {
+      profileId = id
+    }
+  }
 }
 
 function savedServeTabs(): WorkspaceSessionState {
@@ -141,33 +149,21 @@ describe('a saved browser tab on a host with no window', () => {
   })
 
   it('publishes the registered page profile and refreshes when only that identity changes', async () => {
-    const { runtime } = restartedServe()
+    const { runtime, setProfileId } = restartedServe()
     await runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'page-1')
-    let registeredProfileId: string | null = null
-    const guest = vi
-      .spyOn(browserManager, 'getGuestWebContentsId')
-      .mockImplementation((id) => (id === 'page-1' ? 101 : null))
-    const profile = vi
-      .spyOn(browserManager, 'getSessionProfileIdForTab')
-      .mockImplementation(() => registeredProfileId)
-    try {
-      const initial = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-      expect(initial.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
-        browserProfileId: 'default'
-      })
+    const initial = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(initial.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
+      browserProfileId: 'default'
+    })
 
-      registeredProfileId = 'registered-login'
-      const changed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-      expect(changed.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
-        browserProfileId: 'registered-login'
-      })
-      expect(changed.snapshotVersion).toBeGreaterThan(initial.snapshotVersion)
-      const dormant = changed.tabs.find((tab) => tab.id === 'page-2')
-      expect(dormant?.type === 'browser' && dormant.browserProfileId).toBeUndefined()
-    } finally {
-      guest.mockRestore()
-      profile.mockRestore()
-    }
+    setProfileId('registered-login')
+    const changed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(changed.tabs.find((tab) => tab.id === 'page-1')).toMatchObject({
+      browserProfileId: 'registered-login'
+    })
+    expect(changed.snapshotVersion).toBeGreaterThan(initial.snapshotVersion)
+    const dormant = changed.tabs.find((tab) => tab.id === 'page-2')
+    expect(dormant?.type === 'browser' && dormant.browserProfileId).toBeUndefined()
   })
 
   it('starts its page once, at its saved address, when a client opens it', async () => {

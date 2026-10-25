@@ -5,7 +5,7 @@ import {
   createBrowserLinkTestStore,
   URL_TO_OPEN,
   WORKSPACE
-} from '../lib/browser-link-open-test-harness'
+} from '../lib/browser-link-open.test-fixture'
 import { selectBrowserLinkDestination } from '../lib/browser-link-destination'
 import { captureLinkOpenIntent } from '../lib/link-open-intent'
 import { makeWorktree } from '../store/slices/store-test-helpers'

@@ -48,7 +48,7 @@ export function captureLinkOpenIntent(
 }
 
 export function liveLinkOpenGroupIds(
-  state: Pick<LinkPlacementState, 'groupsByWorktree' | 'layoutByWorktree'>,
+  state: Partial<Pick<LinkPlacementState, 'groupsByWorktree' | 'layoutByWorktree'>>,
   worktreeId: string
 ): Set<string> {
   const layout = state.layoutByWorktree?.[worktreeId]
@@ -69,7 +69,8 @@ export function isLiveLinkOpenGroup(
 
 /** "Open in this group" only differs from automatic placement when the source has company. */
 export function canOpenLinkInSourceGroup(
-  state: Pick<LinkPlacementState, 'groupsByWorktree' | 'layoutByWorktree'> & LinkSourceState,
+  state: Partial<Pick<LinkPlacementState, 'groupsByWorktree' | 'layoutByWorktree'>> &
+    LinkSourceState,
   workspaceId: string,
   sourceTabId: string | null | undefined
 ): boolean {

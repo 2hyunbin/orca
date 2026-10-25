@@ -14,7 +14,7 @@ import {
   WORKSPACE,
   URL_TO_OPEN,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 import { openFileInBrowserTab } from './file-preview'
 import { openWorkspaceBrowserTabForLink } from './workspace-browser-tab-open'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'

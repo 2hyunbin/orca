@@ -26,7 +26,6 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { captureAcknowledgedTerminalTabRetirement } from '../../workspace-session-terminal-tab-retirement-identity'
 import { closeLeafOrTab } from '../../../persistence/terminal-topology/terminal-topology-commit'
 import { markAgentLaunchesClosedByUser } from '../../../agent-launch/agent-launch-pane-attachment'
-import { browserManager } from '../../../browser/browser-manager'
 
 export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs extends OrcaRuntimeWithPersistTerminalSurfaceRetirements {
   // Offscreen browser pages live outside renderer graphs; expose session rows or snapshots prune them and close fails with tab_not_found.
@@ -53,10 +52,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
         title: tab.title || tab.url || 'Browser',
         browserWorkspaceId: tab.browserPageId,
         browserPageId: tab.browserPageId,
-        browserProfileId:
-          browserManager.getGuestWebContentsId(tab.browserPageId) === null
-            ? undefined
-            : (browserManager.getSessionProfileIdForTab(tab.browserPageId) ?? 'default'),
+        browserProfileId: tab.profileId ?? undefined,
         url: tab.url || 'about:blank',
         loading: false,
         canGoBack: false,

@@ -12,7 +12,7 @@ import {
   WORKSPACE,
   URL_TO_OPEN,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 
 const mocks = vi.hoisted(() => ({ getState: vi.fn(), ensureProfile: vi.fn() }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.getState() } }))

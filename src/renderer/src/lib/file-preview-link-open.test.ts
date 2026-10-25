@@ -11,7 +11,7 @@ import {
   createBrowserLinkTestStore,
   WORKSPACE,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 import { openFileInBrowserTab } from './file-preview'
 import { captureLinkOpenIntent } from './link-open-intent'
 import {

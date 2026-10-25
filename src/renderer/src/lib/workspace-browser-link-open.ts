@@ -19,7 +19,7 @@ import {
   getFloatingWorkspaceOperationRoute,
   resolveWorktreeOperationRoute
 } from './worktree-operation-route'
-import { getClientCreationActionPolicy } from './client-creation-action-policy'
+import { getWorkspaceClientCreationActionPolicy } from './client-creation-action-policy'
 import { selectWorkspaceSurface } from './workspace-surface-reveal'
 import { showWorkspaceTabs } from './http-link-browser-placement'
 
@@ -35,7 +35,8 @@ function ownsBrowserRoute(
     route?.executionHostId === destination.executionHostId &&
     (!destination.browserRuntimeEnvironmentId ||
       route.runtimeEnvironmentId === destination.browserRuntimeEnvironmentId) &&
-    getClientCreationActionPolicy(state, request.workspaceId)['managed-browser'].state === 'enabled'
+    getWorkspaceClientCreationActionPolicy(state, request.workspaceId)['managed-browser'].state ===
+      'enabled'
   )
 }
 

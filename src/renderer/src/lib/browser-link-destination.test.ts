@@ -12,7 +12,7 @@ import {
   WORKSPACE,
   URL_TO_OPEN,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 import { captureLinkOpenIntent } from './link-open-intent'
 import { makeUnifiedTab, makeWorktree } from '@/store/slices/store-test-helpers'
 import { makeFolderWorkspace } from '@/store/slices/worktrees-slice-test-fixtures'

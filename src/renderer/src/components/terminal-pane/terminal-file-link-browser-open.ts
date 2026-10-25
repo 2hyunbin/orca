@@ -1,4 +1,4 @@
-import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { getWorkspaceClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
 import { absolutePathToFileUri } from '@/components/editor/markdown-internal-links'
 import { useAppStore } from '@/store'
 import {
@@ -32,8 +32,8 @@ export async function openResolvedHtmlFileInBrowser(
       { status: 'browser-tab', url, title },
       context,
       (current) =>
-        getClientCreationActionPolicy(current, params.worktreeId)['managed-browser'].state ===
-        'enabled'
+        getWorkspaceClientCreationActionPolicy(current, params.worktreeId)['managed-browser']
+          .state === 'enabled'
     )
   }
   if (params.worktreeId) {

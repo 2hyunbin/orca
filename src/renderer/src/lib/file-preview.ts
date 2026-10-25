@@ -2,7 +2,7 @@ import { openPlannedFileBrowserLink, type FileBrowserLinkTarget } from './file-p
 import type { BrowserLinkOpenContext, BrowserOpenOutcome } from './browser-link-destination'
 import { toast } from 'sonner'
 import { absolutePathToFileUri } from '@/components/editor/markdown-internal-links'
-import { getClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
+import { getWorkspaceClientCreationActionPolicy } from '@/lib/client-creation-action-policy'
 import { webClientDocPreviewRefusal } from '@/lib/doc-preview-web-client'
 import { useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -42,7 +42,7 @@ function getLocalFilePreviewPlan(
   worktreeId: string,
   filePath: string
 ): WorkspaceFilePreviewPlan {
-  const availability = getClientCreationActionPolicy(state, worktreeId)['managed-browser']
+  const availability = getWorkspaceClientCreationActionPolicy(state, worktreeId)['managed-browser']
   if (availability.state !== 'enabled') {
     return { status: 'unsupported', message: availability.reason, reason: 'no-channel' }
   }
@@ -102,7 +102,7 @@ export function getWorkspaceFilePreviewPlan(
     }
     return webClientDocPreviewRefusal() ?? { status: 'doc-preview' }
   }
-  const availability = getClientCreationActionPolicy(state, worktreeId)['managed-browser']
+  const availability = getWorkspaceClientCreationActionPolicy(state, worktreeId)['managed-browser']
   if (availability.state !== 'enabled') {
     return { status: 'unsupported', message: availability.reason, reason: 'no-channel' }
   }
@@ -130,7 +130,7 @@ export function useWorkspaceFileBrowserActionPredicate(
   useAppStore(
     useShallow((state) => ({
       managedBrowser: worktreeId
-        ? getClientCreationActionPolicy(state, worktreeId)['managed-browser'].state
+        ? getWorkspaceClientCreationActionPolicy(state, worktreeId)['managed-browser'].state
         : null,
       runtimeEnvironmentId: worktreeId
         ? runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId)

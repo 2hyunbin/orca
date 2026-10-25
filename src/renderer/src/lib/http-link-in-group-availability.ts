@@ -3,7 +3,7 @@ import { createBrowserLinkHostMatcher } from './browser-link-owner'
 import type { AppState } from '@/store/types'
 import type { HttpLinkGroupActionRequest } from './http-link-routing'
 import { captureLinkOpenIntent } from './link-open-intent'
-import { getClientCreationActionPolicy } from './client-creation-action-policy'
+import { getWorkspaceClientCreationActionPolicy } from './client-creation-action-policy'
 import {
   getFloatingWorkspaceOperationRoute,
   resolveWorktreeOperationRoute
@@ -21,7 +21,9 @@ export function canOfferHttpLinkGroupAction(
   state: AppState,
   request: HttpLinkGroupActionRequest
 ): boolean {
-  const availability = getClientCreationActionPolicy(state, request.workspaceId)['managed-browser']
+  const availability = getWorkspaceClientCreationActionPolicy(state, request.workspaceId)[
+    'managed-browser'
+  ]
   const route =
     getFloatingWorkspaceOperationRoute(request.workspaceId) ??
     resolveWorktreeOperationRoute(state, request.workspaceId)

@@ -3,7 +3,7 @@ import { parseExecutionHostId } from '../../../shared/execution-host'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import { BROWSER_SCREENCAST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import {
-  getClientCreationActionPolicy,
+  getWorkspaceClientCreationActionPolicy,
   runtimeHostsPagesOnThisDesktop,
   type ClientCreationActionAvailability
 } from './client-creation-action-policy'
@@ -77,7 +77,7 @@ export function canOpenWorkspaceBrowserTabOnRuntime(
   workspaceId: string,
   expectedRuntimeEnvironmentId: string
 ): boolean {
-  const availability = getClientCreationActionPolicy(state, workspaceId)['managed-browser']
+  const availability = getWorkspaceClientCreationActionPolicy(state, workspaceId)['managed-browser']
   const route = resolveWorktreeOperationRoute(state, workspaceId)
   return (
     isExpectedRuntimeBrowserRoute(
@@ -128,7 +128,7 @@ export function canOpenWorkspaceBrowserTabOnSsh(
   workspaceId: string,
   expectedSshConnectionId: string
 ): boolean {
-  const availability = getClientCreationActionPolicy(state, workspaceId)['managed-browser']
+  const availability = getWorkspaceClientCreationActionPolicy(state, workspaceId)['managed-browser']
   const route = resolveWorktreeOperationRoute(state, workspaceId)
   return isExpectedSshBrowserRoute(state, availability, route, workspaceId, expectedSshConnectionId)
 }

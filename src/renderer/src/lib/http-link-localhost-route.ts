@@ -25,9 +25,6 @@ export function localhostLabelRouteForHttpLink(
   if (sourceOwner && sourceOwner.kind !== 'local') {
     return null
   }
-  if (!sourceOwner && state.settings?.activeRuntimeEnvironmentId?.trim()) {
-    return null
-  }
   const sourceScan =
     sourceOwner?.kind === 'local'
       ? (state.workspacePortScansByKey?.['local:all'] ?? null)

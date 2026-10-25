@@ -9,6 +9,7 @@ import { openLocalBrowserLink } from './browser-link-open'
 import { getResolvedExecutionHostIdForWorktree } from './resolved-worktree-execution-host'
 import { createBrowserLinkHostMatcher } from './browser-link-owner'
 import { resolveWorktreeOperationRoute } from './worktree-operation-route'
+import { selectDetectedWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { hasIndexedDetectedWorktree } from './worktree-runtime-owner-index'
 
 export type FileBrowserLinkTarget = {
@@ -22,7 +23,10 @@ function resolveFileBrowserLinkExecutionHostId(
   worktreeId: string
 ): ExecutionHostId | null {
   const executionHostId = getResolvedExecutionHostIdForWorktree(state, worktreeId)
-  if (executionHostId || !hasIndexedDetectedWorktree(state.detectedWorktreesByRepo, worktreeId)) {
+  if (
+    executionHostId ||
+    !hasIndexedDetectedWorktree(selectDetectedWorktreesByRepo(state), worktreeId)
+  ) {
     return executionHostId
   }
   const route = resolveWorktreeOperationRoute(state, worktreeId)

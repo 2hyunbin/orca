@@ -17,7 +17,7 @@ import {
   WORKSPACE,
   URL_TO_OPEN,
   type BrowserLinkTestStore
-} from './browser-link-open-test-harness'
+} from './browser-link-open.test-fixture'
 import type { BrowserOpenOutcome } from './browser-link-destination'
 
 const mocks = vi.hoisted(() => ({ getState: vi.fn() }))
