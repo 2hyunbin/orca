@@ -61,6 +61,7 @@ const ASK_NEXT_TAB = '\x1b[C'
 const ASK_PREVIOUS_ROW = '\x1b[A'
 const ASK_NEXT_ROW = '\x1b[B'
 const ASK_NOTES = '\t'
+const ASK_PREVIEW_NOTES = 'n'
 
 /** Build the ordered keystroke groups that answer a Claude Code AskUserQuestion.
  *  Each group is written a step apart so the selector applies it before the next.
@@ -70,6 +71,8 @@ const ASK_NOTES = '\t'
  *  - free-text answer    → the "Type something" row number, the text, then Enter
  *  - multi-select        → each option number TOGGLES its checkbox, then a step
  *    to the Submit tab
+ *  - preview single-select → the option number focuses it, free text becomes a
+ *    note on that row (the first row when none is picked), and Enter commits
  *  - a multi-question prompt (and a lone multi-select) finishes on a Submit
  *    confirmation, so it ends with one Enter
  *
@@ -88,7 +91,16 @@ export function buildAskAnswerKeys(
     const other = (sel?.other ?? '').trim()
     const typeSomething = String(q.options.length + 1)
 
-    if (q.multiSelect) {
+    if (q.hasPreviews && (other || (sel?.indices.length ?? 0) > 0)) {
+      const index = sel?.indices[0]
+      if (index !== undefined) {
+        groups.push({ raw: String(index + 1) })
+      }
+      if (other) {
+        groups.push({ raw: ASK_PREVIEW_NOTES }, { text: other })
+      }
+      groups.push({ raw: ASK_ENTER })
+    } else if (q.multiSelect) {
       for (const i of sel?.indices ?? []) {
         groups.push({ raw: String(i + 1) })
       }

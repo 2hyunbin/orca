@@ -273,6 +273,40 @@ describe('buildAskAnswerKeys', () => {
   it('is empty when nothing is answered', () => {
     expect(buildAskAnswerKeys(single(['Tabs', 'Spaces']), [{ indices: [] }])).toEqual([])
   })
+
+  it('preview single-select: focuses the option number, notes free text, then commits with Enter', () => {
+    // #16865: Claude's preview selector only moves focus on a digit.
+    const prompt = parseAskFromStatus(
+      JSON.stringify({
+        questions: [
+          {
+            question: 'Layout?',
+            options: [
+              { label: 'Alpha', preview: '+--+' },
+              { label: 'Beta', preview: '|  |' }
+            ]
+          },
+          { question: 'Color?', options: [{ label: 'Red' }, { label: 'Blue' }] }
+        ]
+      })
+    )!
+    expect(buildAskAnswerKeys(prompt, [{ indices: [1] }, { indices: [1] }])).toEqual([
+      { raw: '2' },
+      { raw: '\r' },
+      { raw: '2' },
+      { raw: '\r' }
+    ])
+    expect(
+      buildAskAnswerKeys(prompt, [{ indices: [1], other: 'wider' }, { indices: [0] }])
+    ).toEqual([
+      { raw: '2' },
+      { raw: 'n' },
+      { text: 'wider' },
+      { raw: '\r' },
+      { raw: '1' },
+      { raw: '\r' }
+    ])
+  })
 })
 
 describe('buildCodexAskAnswerKeys', () => {
