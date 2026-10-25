@@ -221,7 +221,8 @@
 2 src/renderer/src/lib/client-creation-action-policy.ts
 1 src/renderer/src/lib/default-creation-host.ts # the sanctioned reader of the default host
 6 src/renderer/src/lib/http-link-destinations.ts
-2 src/renderer/src/lib/http-link-routing.ts
+1 src/renderer/src/lib/http-link-localhost-route.ts # extracted from http-link-routing.ts
+1 src/renderer/src/lib/http-link-routing.ts
 1 src/renderer/src/lib/launch-agent-in-new-tab.ts
 2 src/renderer/src/lib/launch-agent-web-host-tab.ts
 1 src/renderer/src/lib/launch-ai-vault-session.ts
