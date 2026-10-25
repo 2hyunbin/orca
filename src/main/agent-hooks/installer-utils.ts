@@ -212,8 +212,9 @@ export function removeManagedCommands(
 }
 
 function hookHasManagedCommand(hook: HookCommandConfig, matches: (value?: string) => boolean) {
-  const args = Array.isArray(hook.args) ? hook.args : []
-  return matches(hook.command) || args.some((arg) => typeof arg === 'string' && matches(arg))
+  const args = Array.isArray(hook.args) ? hook.args.filter((arg) => typeof arg === 'string') : []
+  // Exec-form entries split the managed `<exe> <agent>` invocation across command and args.
+  return matches([hook.command, ...args].join(' ')) || args.some((arg) => matches(arg))
 }
 
 export function hookDefinitionHasManagedCommand(
