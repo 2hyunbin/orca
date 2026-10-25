@@ -1147,6 +1147,11 @@
         "openInChat": "この {{value0}} の会話はチャットで開かれています。開くにはセッション履歴を更新してください。",
         "ownershipUnknown": "Orca はこの {{value0}} の会話の所有者を確認できませんでした。セッション履歴を更新して、再試行してください。"
       },
+      "composerCreateHandoff": {
+        "reopen": "再度開く",
+        "preparationTimedOut": "ワークツリーの準備がタイムアウトしました。",
+        "needsInput": "追加の入力が必要なため、ワークツリーは作成されませんでした。"
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "ファイルをチェックアウト中… {{percent}}%",
         "provisioningVm": "VMをプロビジョニング中…",
@@ -1190,7 +1195,6 @@
         "folderWorkspaceCreateFailedTitle": "フォルダーワークスペースを作成できませんでした",
         "folderWorkspaceCreateFailedMessage": "フォルダーワークスペースを作成できませんでした。上のエラー詳細を確認して、もう一度お試しください。",
         "setupAgentStartupPolicySaveFailed": "セットアップ時の起動設定を保存できませんでした。",
-        "handoffNotStarted": "ワークツリーは作成されませんでした。「ワークツリーを作成」を開いてもう一度お試しください。",
         "5f3d2c8a1b": "MR のベースブランチを特定できませんでした。",
         "dropPartiallyAttached": "{{count}} 個のアイテムのうち {{failureCount}} 個を接続できませんでした。",
         "dropPartiallyAttached_one": "{{count}} アイテムの {{failureCount}} を接続できませんでした。",

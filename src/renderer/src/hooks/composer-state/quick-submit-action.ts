@@ -11,7 +11,6 @@ import {
   getWorkspaceCreateErrorToastMessage
 } from '@/lib/workspace-create-error-format'
 import { toast } from 'sonner'
-import { translate } from '@/i18n/i18n'
 import { scheduleComposerCreateHandoff } from '@/lib/composer-create-handoff'
 
 import type { ComposerModel } from './composer-model'
@@ -24,6 +23,7 @@ type QuickSubmitActionInput = Pick<
   | 'isProjectGroupTarget'
   | 'isSubmissionCancelled'
   | 'linkedPR'
+  | 'linkedWorkItem'
   | 'name'
   | 'onCreated'
   | 'parsedLinkedIssueNumber'
@@ -40,6 +40,8 @@ type QuickSubmitActionInput = Pick<
   | 'sourceIntentBlocksCreate'
   | 'sparseError'
   | 'submitFolderTarget'
+  | 'taskSourceContext'
+  | 'telemetrySource'
 >
 
 export function useQuickSubmitAction(input: QuickSubmitActionInput) {
@@ -50,6 +52,7 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
     isProjectGroupTarget,
     isSubmissionCancelled,
     linkedPR,
+    linkedWorkItem,
     name,
     onCreated,
     parsedLinkedIssueNumber,
@@ -65,7 +68,9 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
     showProjectRequiredError,
     sourceIntentBlocksCreate,
     sparseError,
-    submitFolderTarget
+    submitFolderTarget,
+    taskSourceContext,
+    telemetrySource
   } = input
 
   const submitQuick = useCallback(
@@ -148,10 +153,18 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
           quickPrompt: '',
           quickTelemetry: null
         },
+        // Why: closing (even under "Create more") keeps a later dismiss from cancelling this submit.
         onHandOff: () => onCreated?.(),
-        isCancelled: isSubmissionCancelled
+        isCancelled: isSubmissionCancelled,
+        reopenComposer: () =>
+          useAppStore.getState().openModal('new-workspace-composer', {
+            prefilledName: name,
+            initialRepoId: repoId,
+            linkedWorkItem,
+            taskSourceContext,
+            telemetrySource
+          })
       })
-      let failed = false
       try {
         const smartGitHubSettlement = await settleComposerSubmit(
           resolvePendingSmartGitHubSubmit(),
@@ -173,19 +186,14 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
         if (isSubmissionCancelled()) {
           return
         }
-        failed = true
         const formattedError = formatWorkspaceCreateError(error)
+        if (handoff.fail(getWorkspaceCreateErrorToastMessage(formattedError))) {
+          return
+        }
         setCreateError(formattedError)
         toast.error(getWorkspaceCreateErrorToastMessage(formattedError))
       } finally {
-        if (handoff.dispose() && !failed) {
-          toast.error(
-            translate(
-              'auto.hooks.useComposerState.handoffNotStarted',
-              'Worktree was not created. Open Create worktree to try again.'
-            )
-          )
-        }
+        handoff.dispose()
         setCreating(false)
       }
     },
@@ -196,6 +204,7 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
       isProjectGroupTarget,
       isSubmissionCancelled,
       linkedPR,
+      linkedWorkItem,
       name,
       onCreated,
       parsedLinkedIssueNumber,
@@ -211,7 +220,9 @@ export function useQuickSubmitAction(input: QuickSubmitActionInput) {
       showProjectRequiredError,
       sourceIntentBlocksCreate,
       sparseError,
-      submitFolderTarget
+      submitFolderTarget,
+      taskSourceContext,
+      telemetrySource
     ]
   )
 

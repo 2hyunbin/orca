@@ -1287,6 +1287,11 @@
         "openInChat": "Cette conversation {{value0}} est ouverte dans un chat. Actualisez l'historique des sessions pour l'ouvrir.",
         "ownershipUnknown": "Orca n'a pas pu confirmer à qui appartient cette conversation {{value0}}. Actualisez l'historique des sessions et réessayez."
       },
+      "composerCreateHandoff": {
+        "reopen": "Rouvrir",
+        "preparationTimedOut": "La préparation du worktree a expiré.",
+        "needsInput": "Le worktree n'a pas été créé, car des informations supplémentaires sont requises."
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "Extraction des fichiers… {{percent}}%",
         "provisioningVm": "Provisionnement de la VM…",
@@ -1330,7 +1335,6 @@
         "folderWorkspaceCreateFailedTitle": "Échec de la création de l'espace de travail de dossier",
         "folderWorkspaceCreateFailedMessage": "L'espace de travail de dossier n'a pas pu être créé. Vérifiez les détails de l'erreur ci-dessus, puis réessayez.",
         "setupAgentStartupPolicySaveFailed": "Échec de l'enregistrement du comportement de démarrage de la configuration.",
-        "handoffNotStarted": "Le worktree n'a pas été créé. Ouvrez Créer un worktree pour réessayer.",
         "5f3d2c8a1b": "Échec de la résolution de la base de la MR.",
         "dropPartiallyAttached": "Impossible de joindre {{failureCount}} des {{count}} éléments.",
         "dropPartiallyAttached_one": "Impossible de joindre l'élément {{failureCount}} de {{count}}.",

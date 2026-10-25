@@ -1147,6 +1147,11 @@
         "openInChat": "此 {{value0}} 会话已在聊天中打开。请刷新会话历史以打开它。",
         "ownershipUnknown": "Orca 无法确认此 {{value0}} 会话的归属。请刷新会话历史并重试。"
       },
+      "composerCreateHandoff": {
+        "reopen": "重新打开",
+        "preparationTimedOut": "工作树准备超时。",
+        "needsInput": "需要更多输入，因此未创建工作树。"
+      },
       "pendingWorktreeCreation": {
         "checkingOutFiles": "正在检出文件… {{percent}}%",
         "provisioningVm": "正在预配虚拟机…",
@@ -1190,7 +1195,6 @@
         "folderWorkspaceCreateFailedTitle": "文件夹工作区创建失败",
         "folderWorkspaceCreateFailedMessage": "无法创建文件夹工作区。请查看上方错误详情，然后重试。",
         "setupAgentStartupPolicySaveFailed": "保存设置启动行为失败",
-        "handoffNotStarted": "未创建工作树。请打开“创建工作树”后重试。",
         "5f3d2c8a1b": "解析 MR 基础分支失败",
         "dropPartiallyAttached": "无法附加 {{count}} 项中的 {{failureCount}} 项。",
         "dropPartiallyAttached_one": "无法附加 {{count}} 项目的 {{failureCount}}。",
