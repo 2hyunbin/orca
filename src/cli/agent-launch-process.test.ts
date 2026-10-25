@@ -12,6 +12,9 @@ import {
   AGENT_LAUNCH_SURFACE_RUNTIME_CAPABILITY
 } from '../shared/agent-launch-runtime-capability'
 import { agentLaunchFixture } from './agent-launch-test-fixtures'
+import { encodePairingOffer } from '../shared/pairing'
+import { addEnvironmentFromPairingCode } from './runtime/environments'
+import { worktreeListFixture } from './test-fixtures'
 
 it('real CLI processes carry surface choices and refuse invalid or unsupported picks before mutation', async () => {
   const manifest = createRequire(resolve('package.json')).resolve('bun/package.json')
@@ -48,9 +51,11 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
           result:
             request.method === 'status.get'
               ? { capabilities }
-              : request.method === 'worktree.show'
-                ? { worktree: { id: 'wt-fixture', lineage: null } }
-                : agentLaunchFixture('wt-fixture').result,
+              : request.method === 'worktree.list'
+                ? worktreeListFixture([]).result
+                : request.method === 'worktree.show'
+                  ? { worktree: { id: 'wt-fixture', lineage: null } }
+                  : agentLaunchFixture('wt-fixture').result,
           _meta: { runtimeId: 'fixture-host' }
         })}\n`
       )
@@ -137,6 +142,49 @@ it('real CLI processes carry surface choices and refuse invalid or unsupported p
       expect(mutate()).toHaveLength(beforeUnsupported)
       capabilities = AGENT_LAUNCH_RUNTIME_CAPABILITIES
     }
+    addEnvironmentFromPairingCode(root, {
+      name: 'fixture-remote',
+      pairingCode: encodePairingOffer({
+        v: 2,
+        endpoint: 'ws://127.0.0.1:1',
+        deviceToken: 'fixture-remote-token',
+        publicKeyB64: Buffer.from(new Uint8Array(32).fill(1)).toString('base64'),
+        scope: 'runtime'
+      })
+    })
+    const beforeParentMiss = requests.length
+    const response = await runProcess({
+      program,
+      args: [
+        resolve('src/cli/index.ts'),
+        'worktree',
+        'create',
+        '--environment',
+        'fixture-remote',
+        '--repo',
+        'id:repo-fixture',
+        '--name',
+        'child',
+        '--parent-worktree',
+        'active',
+        '--json'
+      ],
+      cwd: root,
+      env: { ...env, ORCA_WORKSPACE_ID: 'folder:fixture-native' },
+      timeoutMs: 15_000
+    })
+    expect(response.code, response.stderr + response.stdout).toBe(1)
+    expect(JSON.parse(response.stdout)).toMatchObject({
+      ok: false,
+      error: {
+        code: 'selector_not_found',
+        message: "Couldn't find the parent. Name the parent explicitly on the selected computer."
+      },
+      _meta: { runtimeId: null }
+    })
+    expect(
+      requests.slice(beforeParentMiss).map(({ method, params }) => ({ method, params }))
+    ).toEqual([{ method: 'worktree.list', params: { limit: 10_000 } }])
   } finally {
     await new Promise<void>((done) => server.close(() => done()))
     rmSync(root, { recursive: true, force: true })
