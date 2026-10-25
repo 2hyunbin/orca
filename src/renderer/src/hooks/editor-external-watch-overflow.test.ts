@@ -18,13 +18,6 @@ vi.mock('@/runtime/runtime-path-existence-batch', () => ({
 vi.mock('@/lib/file-owner-runtime-target', () => ({
   getRuntimeTargetForFileOwner: () => ({ kind: 'local' })
 }))
-// Seed the catalog owner so the watch root resolves docs/report.md in wt-1.
-vi.mock('@/lib/runtime-workspace-file-route', () => ({
-  findWorkspaceFileRoute: (_state: unknown, _hostId: string, absolutePath: string) =>
-    absolutePath === '/repo/docs/report.md'
-      ? { worktreeId: 'wt-1', relativePath: 'docs/report.md', executionHostId: 'local' }
-      : null
-}))
 vi.mock('./editor-external-watch-disk-verification', () => ({
   scheduleDebouncedEditorExternalReload: harness.scheduleReload,
   scheduleEditorSelfMoveEchoVerification: harness.compareDirty
@@ -98,6 +91,7 @@ describe('reconcileEditorTabsAfterOverflow', () => {
 
     expect(harness.scheduleReload).toHaveBeenCalledWith(notification('here.ts'))
     expect(setExternalMutation).toHaveBeenCalledWith('gone.ts', 'deleted')
+    // Why: a rename mark is kept as is rather than downgraded or cleared.
     expect(setExternalMutation).not.toHaveBeenCalledWith('moved.ts', expect.anything())
   })
 
@@ -130,22 +124,6 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(setExternalMutation).not.toHaveBeenCalled()
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()
     expect(harness.scheduleReload).not.toHaveBeenCalled()
-  })
-
-  it("re-reads another workspace's read-only view of the watched workspace's file", async () => {
-    setTabs(
-      tab('view', {
-        worktreeId: 'wt-other',
-        filePath: '/repo/docs/report.md',
-        relativePath: '/repo/docs/report.md',
-        readOnly: true
-      })
-    )
-    harness.runtimePathsExist.mockResolvedValue([{ exists: true }])
-    reconcileEditorTabsAfterOverflow(target, true)
-    await vi.waitFor(() => expect(harness.scheduleReload).toHaveBeenCalledTimes(1))
-
-    expect(harness.scheduleReload).toHaveBeenCalledWith(notification('docs/report.md'))
   })
 
   it('a storm overflow reloads clean tabs without probing or dropping combined bodies', () => {
@@ -197,6 +175,7 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     const ids = Array.from({ length: 129 }, (_, index) => `f${index}.ts`)
     setTabs(...ids.map((id) => tab(id)))
     harness.runtimePathsExist.mockImplementation(async (_context: unknown, paths: string[]) =>
+      // The last tab (the only one in the second chunk) is gone.
       paths.map((path) => ({ exists: path !== '/repo/f128.ts' }))
     )
     reconcileEditorTabsAfterOverflow(target, true)

@@ -6,6 +6,7 @@ import type { ProviderRateLimits, UsageRateLimitFailureKind } from '../../shared
 import {
   ANTIGRAVITY_MIN_USAGE_VERSION,
   ANTIGRAVITY_PROBE_ENV,
+  ANTIGRAVITY_SIGN_IN_PROMPT_COOLDOWN_MS,
   ANTIGRAVITY_USAGE_ARGS,
   ANTIGRAVITY_USAGE_MAX_OUTPUT_BYTES,
   ANTIGRAVITY_USAGE_TIMEOUT_MS,
@@ -15,7 +16,10 @@ import {
 } from './antigravity-usage-command'
 import { parseAntigravityUsageStdout, stdoutShowsModelTurn } from './antigravity-usage-response'
 
-import { classifyAntigravityUsageFailure } from './antigravity-usage-error'
+import {
+  classifyAntigravityUsageFailure,
+  stderrShowsInteractiveSignIn
+} from './antigravity-usage-error'
 
 const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
   'rate-limited':
@@ -29,14 +33,16 @@ const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
 const UNSUPPORTED_USAGE_COMMAND_REASON =
   'Antigravity usage is not available. This version of the Antigravity CLI answers `/usage` as a prompt instead of a command, so Orca stopped asking rather than spend quota on it. Update `agy` and restart Orca.'
 
-/** Latch billed-turn evidence for process lifetime; retrying would keep spending quota on the same unsupported read. */
+// Latch unsupported after any model-turn response: discovering unsupported /usage spends quota, so never retry it for process lifetime.
 let usageCommandUnsupported = false
 
+/** Clears the unsupported latch. Tests only — a live process has no way back. */
 export function resetAntigravityUsageSupportForTests(): void {
   usageCommandUnsupported = false
 }
 
 export type AntigravityUsageDependencies = {
+  /** Injected so tests exercise the classification without spawning agy. */
   runCommand?: typeof runProcess
   resolveCommand?: typeof resolveCommandOnLocalPath
   resolveEnvironment?: () => Promise<NodeJS.ProcessEnv>
@@ -59,7 +65,7 @@ function unavailable(
     weekly: null,
     updatedAt: now,
     error: message,
-    // Missing CLI/auth are actionable guidance states, not repeated refresh errors (#7809, #14227).
+    // Report absent CLI/signed-out account as actionable unavailable guidance, not recurring refresh error (#7809,#14227).
     status: 'unavailable',
     usageMetadata: { source: 'cli', attemptedSources: ['cli'], failureKind }
   }
@@ -85,8 +91,8 @@ function failed(
   }
 }
 
-/** Read the executing host's agy quota; callers must route remote workspaces to their owner.
- * Gemini retrieveUserQuota describes different buckets/windows and cannot represent Antigravity weekly pools (#9122, #22511). */
+// Read agy’s weekly Antigravity pools, not Gemini’s 60-minute per-model quota mislabeled as Antigravity (#9122,#22511); no Gemini CLI dependency.
+// Run on execution owner’s machine; caller must not query local agy for a remote workspace.
 export async function fetchAntigravityRateLimits(
   options: FetchAntigravityRateLimitsOptions = {}
 ): Promise<ProviderRateLimits> {
@@ -99,7 +105,7 @@ export async function fetchAntigravityRateLimits(
   const platform = options.platform ?? process.platform
   const resolveEnvironment = options.resolveEnvironment ?? (() => hostShellEnvironment())
 
-  // Resolve agy with agent-launch env: login-shell/saved Windows PATH can differ from Electron's.
+  // Why the env agent launches use: agy lives on the login-shell or saved Windows PATH, not Electron's.
   const env = { ...(await resolveEnvironment()), ...ANTIGRAVITY_PROBE_ENV }
   const command = antigravityCommandName()
   const program = await resolve(command, { platform, env })
@@ -153,6 +159,28 @@ export async function fetchAntigravityRateLimits(
     return failed(spawnFailureMessage(error), 'cli-unavailable', now())
   }
 
+  const reading = parseAntigravityUsageStdout(result.stdout)
+  // Why: a completed browser sign-in still yields a reading; only a failed read cools down.
+  if (
+    !reading &&
+    (result.timedOut || result.code !== 0) &&
+    stderrShowsInteractiveSignIn(result.stderr)
+  ) {
+    const at = now()
+    return {
+      ...unavailable(
+        'Antigravity usage is not available. Sign in with `agy`; Orca checks again within an hour, or when you refresh.',
+        'missing-credentials',
+        at
+      ),
+      usageMetadata: {
+        source: 'cli',
+        attemptedSources: ['cli'],
+        failureKind: 'missing-credentials',
+        retryAtMs: at + ANTIGRAVITY_SIGN_IN_PROMPT_COOLDOWN_MS
+      }
+    }
+  }
   if (result.timedOut) {
     return failed(
       'Antigravity usage is not available. The Antigravity CLI did not answer in time.',
@@ -161,8 +189,7 @@ export async function fetchAntigravityRateLimits(
     )
   }
 
-  const reading = parseAntigravityUsageStdout(result.stdout)
-  // Valid quota readings must not accidentally trip the billed-turn latch.
+  // Check valid reading before model-turn evidence so successful quota response cannot falsely latch unsupported.
   if (!reading && stdoutShowsModelTurn(result.stdout)) {
     usageCommandUnsupported = true
     return unavailable(UNSUPPORTED_USAGE_COMMAND_REASON, 'usage-unavailable', now())
@@ -186,7 +213,7 @@ export async function fetchAntigravityRateLimits(
     }
   }
   if (!reading) {
-    // Auth is classified earlier; include nonzero exit detail only when quota payload is missing.
+    // runProcess returns nonzero exit as data; classify signed-out first and add exit detail only when payload is missing.
     const exitDetail = result.code === 0 || result.code === null ? '' : ` (exit ${result.code})`
     return failed(
       `Antigravity usage is not available. The Antigravity CLI did not report a quota${exitDetail}.`,

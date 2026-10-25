@@ -12,7 +12,6 @@ import {
 import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { isImeCompositionKeyDown } from '@/lib/ime-composition-keyboard-event'
 import { translate } from '@/i18n/i18n'
-import { Badge } from '@/components/ui/badge'
 import type { OpenFile } from '@/store/slices/editor'
 import { isVirtualEditorFile } from '@/store/slices/editor/tabs/editor-tab-content-type'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
@@ -42,6 +41,7 @@ export function EditorPanelHeaderPath({
   const headerCopyState = getEditorHeaderCopyState(activeFile)
   const displayPath = splitPathForDisplay(headerCopyState.pathLabel)
   const canCopyHeaderPath = headerCopyState.copyText !== null
+  // Why: virtual editor tabs use synthetic ids instead of on-disk paths.
   const isVirtualEditorTab = isVirtualEditorFile(activeFile)
   const markdownPreviewShortcutLabel = useShortcutLabel('editor.markdownPreview')
   const {
@@ -81,7 +81,7 @@ export function EditorPanelHeaderPath({
               { value0: currentFileName }
             )}
             defaultValue={currentFileName}
-            // Long paths need the full header width while renaming.
+            // Span header for long-path rename space instead of sizing to filename.
             className="h-6 w-full min-w-0 max-w-full rounded-md border border-accent/40 bg-input/40 px-1.5 font-mono text-xs text-foreground outline-none focus:border-accent focus:ring-1 focus:ring-ring"
             spellCheck={false}
             onPointerDown={(event) => event.stopPropagation()}
@@ -89,7 +89,7 @@ export function EditorPanelHeaderPath({
             onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
-              // IME candidate confirmation must not submit the rename.
+              // IME candidate-confirming Enter must not commit rename; wait until composition ends.
               if (isImeCompositionKeyDown(event)) {
                 return
               }
@@ -117,12 +117,7 @@ export function EditorPanelHeaderPath({
             <span className="editor-header-path-file">{displayPath.fileName}</span>
           </button>
         )}
-        {!isRenaming && activeFile.readOnly === true && (
-          <Badge variant="outline">
-            {translate('auto.components.editor.EditorPanelHeader.readOnlyBadge', 'Read-only')}
-          </Badge>
-        )}
-        {/* Unmount the opacity-hidden toast during renames so it cannot reserve space the input needs. */}
+        {/* Unmount opacity-hidden toast while renaming or it reserves ~100px for an impossible message. */}
         {!isRenaming && (
           <span
             className={`editor-header-copy-toast${copiedPathVisible ? ' is-visible' : ''}`}
