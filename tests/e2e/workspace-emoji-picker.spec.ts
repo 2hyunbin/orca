@@ -72,7 +72,7 @@ test.describe('Workspace emoji picker', () => {
     await orcaPage.evaluate(() => window.__store!.getState().openModal('worktree-palette'))
     const palette = orcaPage.getByRole('dialog', { name: 'Jump to...' })
     const paletteInput = palette.getByPlaceholder(
-      'Search chats, terminals, workspaces, tasks, settings, and actions...'
+      'Search chats, terminals, worktrees, settings, and actions...'
     )
     await expect(paletteInput).toBeFocused()
     await captureProof(orcaPage, testInfo, 'cmd-j-before.png')
