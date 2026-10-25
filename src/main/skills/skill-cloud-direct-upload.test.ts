@@ -121,7 +121,9 @@ describe('uploadSkillPackageToSignedPolicy', () => {
     }
     expect(Buffer.from(await file.arrayBuffer())).toEqual(archive)
     expect(file.name).toBe('package.tar.gz')
-    expect(file.type).toBe('application/vnd.orca.skill+tar+gzip')
+    expect(uploaded.toString('utf8')).toContain(
+      'Content-Disposition: form-data; name="file"; filename="package.tar.gz"\r\nContent-Type: application/vnd.orca.skill+tar+gzip\r\n\r\n'
+    )
     const sent = progress.mock.calls.map(([bytes]) => bytes)
     expect(sent).not.toHaveLength(0)
     for (const [index, bytes] of sent.entries()) {
