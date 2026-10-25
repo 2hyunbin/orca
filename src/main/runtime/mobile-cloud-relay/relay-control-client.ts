@@ -22,6 +22,7 @@ import { answerRelayHostChallenge } from './relay-host-proof'
 import { RelayControlLiveness } from './relay-control-liveness'
 import { closeRelayControlSocket } from './relay-control-socket-close'
 import { controlWebSocketUrl } from './relay-control-url'
+import { RelayControlClosedError } from './relay-control-closed-error'
 
 type RelayControlState = 'idle' | 'opening' | 'proving' | 'active' | 'draining' | 'closed'
 
@@ -293,13 +294,7 @@ export class RelayControlClient {
     this.state = 'closed'
     this.liveness.stop()
     if (wasConnecting) {
-      this.connectReject?.(
-        new Error(
-          this.controlErrorCode
-            ? `relay_control_error_${this.controlErrorCode}`
-            : `relay_control_closed_${code}`
-        )
-      )
+      this.connectReject?.(new RelayControlClosedError(code, this.controlErrorCode))
       this.clearConnectPromise()
     }
     this.requests.rejectAll(new Error(`relay_control_closed_${code}`))

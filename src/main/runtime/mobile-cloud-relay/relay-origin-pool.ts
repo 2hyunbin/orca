@@ -5,8 +5,15 @@ import type { RelayControlClient } from './relay-control-client'
 import type { RelayDrainMessage } from './relay-control-protocol'
 import type { RelayHostCloseReason } from '../../../shared/relay-host-close-reason'
 import { RelayRetrySchedule } from './relay-retry-schedule'
-import { RelayHttpError, requestRelayAssignment, type RelayAssignment } from './relay-http-client'
+import {
+  RelayHttpError,
+  requestRelayAssignment,
+  shouldRetryRelayConnectionError,
+  type RelayAssignment
+} from './relay-http-client'
 import { RelayControlRotation } from './relay-control-rotation'
+import { isCellRedirect } from './relay-control-closed-error'
+import { RelayLastCellReattach, type RelayLastCellTarget } from './relay-last-cell-reattach'
 
 export class RelayOriginPool {
   private activeOrigin: RelayControlOrigin | null = null
@@ -25,10 +32,17 @@ export class RelayOriginPool {
   private readonly rotation: RelayControlRotation
   private rotationPromise: Promise<void> | null = null
   private readonly drainRetry: RelayRetrySchedule
+  // A drain that lands while a resolution runs; that resolution's success must not erase it.
+  private queuedDrain: { origin: RelayControlOrigin; message: RelayDrainMessage } | null = null
+  private readonly lastCell: RelayLastCellReattach
   private closed = false
 
   constructor(private readonly options: RelayOriginPoolOptions) {
     this.drainRetry = new RelayRetrySchedule(options.random)
+    this.lastCell = new RelayLastCellReattach({
+      isCurrent: () => this.isCurrent(),
+      random: options.random
+    })
     this.rotation = new RelayControlRotation({
       ...options,
       current: () => this.activeOrigin,
@@ -102,6 +116,8 @@ export class RelayOriginPool {
     this.closed = true
     this.rotation.cancel()
     this.drainRetry.reset()
+    this.queuedDrain = null
+    this.lastCell.forget()
     this.retirement.clear()
     for (const origin of this.origins) {
       origin.closeNow(hostCloseReason)
@@ -126,10 +142,16 @@ export class RelayOriginPool {
         }
         this.retirement.maybeClose(origin)
       },
-      onDrain: (origin, message) => this.handleDrain(origin, message),
+      onDrain: (origin, message) => {
+        this.lastCell.forget(origin)
+        this.handleDrain(origin, message)
+      },
       onPendingChanged: (origin) => this.retirement.maybeClose(origin),
-      onClose: (origin) => {
+      onClose: (origin, code) => {
         if (origin === this.activeOrigin && this.isCurrent()) {
+          // A pending rotation would race recovery with its own resume of this origin.
+          this.rotation.cancel()
+          this.lastCell.noteLoss(origin, code, this.drainingOrigins.has(origin))
           this.options.onStatus('offline')
           this.handleDrain(origin, {
             type: 'drain',
@@ -145,13 +167,25 @@ export class RelayOriginPool {
     if (!this.isCurrent() || !this.origins.has(origin)) {
       return
     }
+    if (this.rotationPromise) {
+      // The running resolution may activate this origin; adopt the drain once it settles.
+      this.queuedDrain = { origin, message }
+      return
+    }
     if (!this.retirement.adopt(origin, message)) {
       return
     }
     this.options.onStatus('draining')
-    if (!this.rotationPromise && !this.drainRetry.pending) {
+    if (!this.drainRetry.pending) {
       this.rotationPromise = this.resolveDrainTarget(origin, message).finally(() => {
         this.rotationPromise = null
+        const queued = this.queuedDrain
+        this.queuedDrain = null
+        // Backed off: a cell that re-sends its drain to a director-kept origin must not loop.
+        if (queued && this.isCurrent() && this.retirement.adopt(queued.origin, queued.message)) {
+          this.options.onStatus('draining')
+          this.drainRetry.schedule(0, () => this.handleDrain(queued.origin, queued.message))
+        }
       })
     }
   }
@@ -166,17 +200,36 @@ export class RelayOriginPool {
       }
       const preferredRegion = await this.options.resolvePreferredRegion?.().catch(() => undefined)
       this.assertCurrent()
-      // Migration targets must come from the configured director.
-      let assignment = await requestRelayAssignment({
-        directorUrl: this.options.directorUrl,
-        relayToken: this.relayJwt,
-        relayHostId: this.options.relayHostId,
-        reconnect: true,
-        preferredRegion,
-        isCurrent: () => this.isCurrent(),
-        fetch: this.options.fetch
-      })
+      let assignment: RelayAssignment
+      try {
+        // Migration targets must come from the configured director.
+        assignment = await requestRelayAssignment({
+          directorUrl: this.options.directorUrl,
+          relayToken: this.relayJwt,
+          relayHostId: this.options.relayHostId,
+          reconnect: true,
+          preferredRegion,
+          isCurrent: () => this.isCurrent(),
+          fetch: this.options.fetch
+        })
+      } catch (error) {
+        if (!shouldRetryRelayConnectionError(error)) {
+          throw error
+        }
+        await this.lastCell.attempt(
+          origin,
+          error,
+          () => this.heldAssignmentTarget(),
+          (target) =>
+            this.reattachSameCell(origin, target.assignment, target.relayJwt, message.graceMs)
+        )
+        // The backoff resets only on a director answer, so repeated losses keep backing off.
+        this.options.onStatus('registered')
+        this.rotation.schedule()
+        return
+      }
       this.assertCurrent()
+      this.lastCell.forget()
       if (
         this.deferredAssignment &&
         this.deferredAssignment.assignmentEpoch > assignment.assignmentEpoch
@@ -184,26 +237,13 @@ export class RelayOriginPool {
         assignment = this.deferredAssignment
       }
       this.deferredAssignment = null
-      if (assignment.cellUrl === origin.cellUrl) {
-        let rebound = false
-        try {
-          await origin.rebind(this.relayJwt, assignment)
-          rebound = true
-        } catch {
-          // A restarted cell lost the resume secret; failed rebind must recover with a fresh generation.
-          await this.activateTarget(origin, assignment, this.relayJwt, message.graceMs)
-        }
-        if (rebound) {
-          this.assertCurrent()
-          this.activeOrigin = origin
-          this.assignment = assignment
-          this.drainingOrigins.delete(origin)
-        }
-      } else {
-        await this.activateTarget(origin, assignment, this.relayJwt, message.graceMs)
-      }
+      await (assignment.cellUrl === origin.cellUrl
+        ? this.reattachSameCell(origin, assignment, this.relayJwt, message.graceMs)
+        : this.activateTarget(origin, assignment, this.relayJwt, message.graceMs))
       this.options.onStatus('registered')
-      this.drainRetry.reset()
+      if (!this.queuedDrain) {
+        this.drainRetry.reset()
+      }
       this.rotation.schedule()
     } catch (error) {
       if (this.isCurrent() && origin === this.activeOrigin) {
@@ -216,6 +256,36 @@ export class RelayOriginPool {
         this.drainRetry.schedule(retryAfterMs, () => this.handleDrain(origin, message))
       }
     }
+  }
+
+  private heldAssignmentTarget(): RelayLastCellTarget | null {
+    const { assignment, relayJwt } = this
+    if (!this.isCurrent() || this.deferredAssignment || !assignment || !relayJwt) {
+      return null
+    }
+    return { assignment, relayJwt }
+  }
+
+  private async reattachSameCell(
+    origin: RelayControlOrigin,
+    assignment: RelayAssignment,
+    relayJwt: string,
+    graceMs: number
+  ): Promise<void> {
+    try {
+      await origin.rebind(relayJwt, assignment)
+    } catch (error) {
+      if (isCellRedirect(error)) {
+        throw error
+      }
+      // A restarted cell lost the resume secret; failed rebind must recover with a fresh generation.
+      await this.activateTarget(origin, assignment, relayJwt, graceMs)
+      return
+    }
+    this.assertCurrent()
+    this.activeOrigin = origin
+    this.assignment = assignment
+    this.drainingOrigins.delete(origin)
   }
 
   private async activateTarget(
