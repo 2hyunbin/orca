@@ -37,10 +37,10 @@ export function runWorktreeDeleteWithToast(
   const removeWorktree = useAppStore.getState().removeWorktree
 
   const removeOptions = {
-    ...(options.assertBeforeDispatch ? { assertBeforeDispatch: options.assertBeforeDispatch } : {}),
     ...(options.suppressPreservedBranchToast ? { suppressPreservedBranchToast: true } : {}),
     ...(options.snapshotPruneBatchId ? { snapshotPruneBatchId: options.snapshotPruneBatchId } : {}),
-    ...(options.confirmedDiscards ? { confirmedDiscards: options.confirmedDiscards } : {})
+    ...(options.confirmedDiscards ? { confirmedDiscards: options.confirmedDiscards } : {}),
+    ...(options.assertBeforeDispatch ? { assertBeforeDispatch: options.assertBeforeDispatch } : {})
   }
   const showFailureToast = (
     error: string,

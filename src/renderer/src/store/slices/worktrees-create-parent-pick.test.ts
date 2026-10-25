@@ -218,6 +218,7 @@ describe('createWorktree composer parent pick', () => {
 
     expect(mockApi.worktrees.create).toHaveBeenCalledTimes(2)
     expect(mockApi.worktrees.create.mock.calls[1][0]).not.toHaveProperty('parentWorkspace')
+    expect(mockApi.worktrees.create.mock.calls[1][0]).not.toHaveProperty('parentWorktreeRef')
     expect(toast.warning).toHaveBeenCalledTimes(1)
   })
 
@@ -248,7 +249,7 @@ describe('createWorktree parent pick on a remote runtime', () => {
     resetRemoteRuntimeMocks()
   })
 
-  function createRemoteStore() {
+  function createRemoteStore(parentHostId?: ExecutionHostId) {
     const store = createRepoTestStore()
     store.setState({
       repos: [
@@ -268,7 +269,8 @@ describe('createWorktree parent pick on a remote runtime', () => {
             repoId: REMOTE_REPO,
             path: '/remote/parent',
             displayName: 'parent-wt',
-            instanceId: 'parent-instance'
+            instanceId: 'parent-instance',
+            ...(parentHostId ? { hostId: parentHostId } : {})
           })
         ]
       }
@@ -279,7 +281,7 @@ describe('createWorktree parent pick on a remote runtime', () => {
   function createOnRemote(store: ReturnType<typeof createTestStore>, parentSelection = PARENT_ID) {
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = [REMOTE_REPO, 'feature', 'origin/main']
-    args[25] = { parentWorktreeId: parentSelection }
+    args[25] = { parentWorktreeId: parentSelection, hostAgentLaunch: { agent: 'claude' } }
     return createWorktree(...args)
   }
 
@@ -369,11 +371,18 @@ describe('createWorktree parent pick on a remote runtime', () => {
       error: { code: 'LINEAGE_PARENT_NOT_FOUND', message: 'Parent selector was not found.' }
     }))
 
-    await createOnRemote(createRemoteStore())
+    await createOnRemote(createRemoteStore('local'))
 
     const calls = createCalls()
     expect(calls).toHaveLength(2)
+    expect(calls[0]?.params).toMatchObject({
+      startupAgent: 'claude',
+      parentWorktreeRef: { worktreeId: PARENT_ID, instanceId: 'parent-instance', external: true }
+    })
+    expect(calls[0]?.params).not.toHaveProperty('parentWorkspace')
+    expect(calls[1]?.params).toMatchObject({ startupAgent: 'claude' })
     expect(calls[1]?.params).not.toHaveProperty('parentWorkspace')
+    expect(calls[1]?.params).not.toHaveProperty('parentWorktreeRef')
     expect(toast.warning).toHaveBeenCalledWith(
       'Created without nesting under "parent-wt"',
       expect.objectContaining({ description: expect.any(String) })
@@ -435,6 +444,7 @@ describe('createWorktree parent pick on a remote runtime', () => {
       }
     })
     expect(calls[1]?.params).not.toHaveProperty('parentWorkspace')
+    expect(calls[1]?.params).not.toHaveProperty('parentWorktreeRef')
     expect(toast.warning).toHaveBeenCalledWith(
       'Created without nesting under "Design docs"',
       expect.objectContaining({ description: expect.any(String) })
@@ -448,9 +458,13 @@ describe('createWorktree parent pick on a remote runtime', () => {
       error: { code: 'internal_error', message: 'disk on fire' }
     }))
 
-    await expect(createOnRemote(createRemoteStore())).rejects.toThrow('disk on fire')
+    await expect(createOnRemote(createRemoteStore('local'))).rejects.toThrow('disk on fire')
 
     expect(createCalls()).toHaveLength(1)
+    expect(createCalls()[0]?.params).toMatchObject({
+      startupAgent: 'claude',
+      parentWorktreeRef: { worktreeId: PARENT_ID, instanceId: 'parent-instance', external: true }
+    })
     expect(toast.warning).not.toHaveBeenCalled()
   })
 })

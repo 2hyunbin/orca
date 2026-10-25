@@ -39,9 +39,10 @@ export type WorktreeDeleteWithToastOptions = {
   onForceDeleted?: (target: WorktreeRemovalTarget) => void
   onPreservedBranch?: (branch: PreservedBranchCleanup) => void
   suppressPreservedBranchToast?: boolean
-  assertBeforeDispatch?: () => void
   snapshotPruneBatchId?: string
   confirmedDiscards?: ConfirmedUnsavedDiscards
+  /** Throws when the confirmed workspace is gone; runs before every destructive send. */
+  assertBeforeDispatch?: () => void
 }
 
 export function toWorktreeDeleteIdentities(

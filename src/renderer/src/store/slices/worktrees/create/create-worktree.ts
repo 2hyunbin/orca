@@ -1,4 +1,5 @@
 import { WORKTREE_CROSS_MACHINE_LINEAGE_CAPABILITY } from '../../../../../../shared/worktree-runtime-capabilities'
+import { createWorktreeOnRuntimeHost } from './host-planned-agent-launch'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { repoHostId } from '../listing/worktree-host-ownership'
 import {
@@ -8,7 +9,6 @@ import {
 import { adoptFromEndpoint } from '../../../adopt-from-endpoint'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
-import type { CreateWorktreeResult } from '../../../../../../shared/worktree/create-types'
 import {
   pickClientWorktreeCreateSettings,
   type ClientWorktreeCreateSettings
@@ -19,10 +19,7 @@ import {
   getGeneratedWorktreeCreateRetryCandidate,
   isRetryableWorktreeCreateConflict
 } from '../../../../../../shared/new-workspace/worktree-create-retry-policy'
-import {
-  assertRuntimeEnvironmentCapability,
-  callRuntimeRpc
-} from '../../../../runtime/runtime-rpc-client'
+import { assertRuntimeEnvironmentCapability } from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
 import { WORKTREE_LINKED_WORK_ITEM_CONTEXT_RUNTIME_CAPABILITY } from '../../../../../../shared/protocol-version'
@@ -34,7 +31,7 @@ import { adoptRuntimeProvisionedRoot } from './runtime-provisioned-root-adoption
 import { isRuntimeLineageParentMissingError } from '../listing/runtime-worktree-rpc-errors'
 import {
   buildLocalWorktreeCreateArgs,
-  buildRuntimeWorktreeCreateParams,
+  type CreatedWorktreeResult,
   type WorktreeCreateAttempt,
   type WorktreeCreateRequest
 } from './worktree-create-payload'
@@ -48,7 +45,7 @@ import {
 type RuntimeTarget = RuntimeClientTarget
 
 type CreateAttemptOutcome = {
-  result: CreateWorktreeResult
+  result: CreatedWorktreeResult
   /** The host had no such parent, so this attempt was retried unattached. */
   droppedParent: boolean
 }
@@ -69,7 +66,7 @@ async function runCreateAttempt(
   const provisionedRoot = request.options?.provisionedRoot
   const create = async (
     parentWorkspace: WorktreeCreateAttempt['parentWorkspace']
-  ): Promise<CreateWorktreeResult> =>
+  ): Promise<CreatedWorktreeResult> =>
     provisionedRoot
       ? target.kind === 'environment'
         ? await adoptRuntimeProvisionedRoot(
@@ -99,19 +96,15 @@ async function runCreateAttempt(
               parentWorktreeRef: parentWorkspace ? attempt.parentWorktreeRef : undefined
             })
           )
-        : await callRuntimeRpc<CreateWorktreeResult>(
-            target,
-            'worktree.create',
+        : await createWorktreeOnRuntimeHost(
+            target.environmentId,
+            request,
             {
-              ...buildRuntimeWorktreeCreateParams(request, {
-                ...attempt,
-                parentWorkspace,
-                parentWorktreeRef: parentWorkspace ? attempt.parentWorktreeRef : undefined
-              }),
-              // Why: the host's own store defaults would otherwise override the user's choices.
-              ...clientCreateSettings
+              ...attempt,
+              parentWorkspace,
+              parentWorktreeRef: parentWorkspace ? attempt.parentWorktreeRef : undefined
             },
-            { timeoutMs: 10 * 60_000 }
+            clientCreateSettings
           )
   try {
     return { result: await create(attempt.parentWorkspace), droppedParent: false }

@@ -16,7 +16,7 @@ import {
   readDataFile,
   testState,
   writeDataFile
-} from './persistence-test-harness'
+} from './persistence/persistence-test-harness'
 import { getAllWorktreeMetaForHost } from './persistence/loading-store/worktree-identity-metadata'
 import { mergeWorktreeMetaForWrite } from './persistence/loading-store/worktree-meta-write-normalization'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
