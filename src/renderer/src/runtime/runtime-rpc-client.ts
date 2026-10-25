@@ -11,11 +11,11 @@ import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   clearRuntimeCompatibilityCache,
+  compatibilityEntry,
   getCachedRuntimeCompatibilityCheck,
   rememberRuntimeEnvironmentCompatibility,
   runtimeCompatibilityChecks,
-  RUNTIME_CAPABILITY_STATUS_TTL_MS,
-  type RuntimeCompatibilityCacheEntry
+  RUNTIME_CAPABILITY_STATUS_TTL_MS
 } from './runtime-compatibility-cache'
 
 export {
@@ -97,14 +97,7 @@ export async function ensureRuntimeEnvironmentCompatible(
   if (cached) {
     return cached.check
   }
-  const entry: RuntimeCompatibilityCacheEntry = {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: false,
-    status: null,
-    statusCheckedAt: null,
-    statusObservedAt: null
-  }
+  const entry = compatibilityEntry()
   const check = (async () => {
     const response = await callRuntimeEnvironmentWithRevision({
       environmentId,
@@ -143,14 +136,7 @@ export async function getRuntimeEnvironmentStatus(
   timeoutMs?: number
 ): Promise<RuntimeStatus> {
   const trimmed = environmentId.trim()
-  const entry: RuntimeCompatibilityCacheEntry = {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: false,
-    status: null,
-    statusCheckedAt: null,
-    statusObservedAt: null
-  }
+  const entry = compatibilityEntry()
   // Why: publish the in-flight probe before awaiting so concurrent cold-cache
   // capability lookups coalesce onto this one status.get (via the cache-hit path
   // in runtimeEnvironmentSupportsCapability) instead of each firing their own.
@@ -232,7 +218,8 @@ export async function runtimeEnvironmentSupportsCapability(
   const status = await getRuntimeEnvironmentStatus(trimmed, timeoutMs)
   const supported = status.capabilities?.includes(capability) === true
   const resolved = runtimeCompatibilityChecks.get(trimmed)
-  if (!supported && resolved?.status === status) {
+  // Why runtimeId: a status publication may have replaced the entry with its own copy.
+  if (!supported && resolved?.status?.runtimeId === status.runtimeId) {
     resolved.statusCheckedAt = null
   }
   return supported

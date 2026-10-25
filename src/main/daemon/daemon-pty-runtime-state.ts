@@ -1,4 +1,5 @@
 import { DaemonClient } from './client'
+import { DaemonPtyInputClosedIncarnations } from './daemon-pty-input-closed-incarnations'
 import { createDaemonAuditEligibilityTracker } from './daemon-audit-eligibility-event'
 import type {
   DaemonAuditContext,
@@ -123,6 +124,7 @@ export abstract class DaemonPtyRuntimeState {
   protected getSizeUnsupported = false
   protected sessionsAwaitingDaemonRecovery = new Set<string>()
   protected sessionIncarnations = new Map<string, string>()
+  protected inputClosedIncarnations = new DaemonPtyInputClosedIncarnations()
   protected pendingSpawnOperationsBySessionId = new Map<string, Set<PendingDaemonSpawnOperation>>()
   protected pendingClaimSpawnOperations = new Set<PendingDaemonSpawnOperation>()
   protected historySpawnLocks = new Map<string, Promise<void>>()
@@ -173,6 +175,7 @@ export abstract class DaemonPtyRuntimeState {
       return
     }
     this.activeSessionIds.delete(sessionId)
+    this.inputClosedIncarnations.delete(sessionId)
     this.clearSessionAwaitingDaemonRecovery(sessionId)
     this.dirtySessionVersions.delete(sessionId)
     this.pausedProducerSessionIds.delete(sessionId)

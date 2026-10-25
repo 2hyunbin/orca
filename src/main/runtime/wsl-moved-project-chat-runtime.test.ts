@@ -9,12 +9,8 @@ import type { Repo } from '../../shared/repo-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { Store } from '../persistence'
-import {
-  closeTestStores,
-  createStore,
-  makeTerminalTab,
-  testState
-} from '../persistence-test-harness'
+import { closeTestStores, createStore, testState } from '../persistence/persistence-test-harness'
+import { makeTerminalTab } from '../persistence/persistence-session-fixtures'
 import { wslMoveCutoverFixture as cutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../persistence/__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import {

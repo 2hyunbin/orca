@@ -9,12 +9,12 @@ import {
   type WslMoveBrowserCookieCopyCounts
 } from '../../shared/wsl-move/wsl-move-browser-cookie-copy'
 import type { CdpCookie } from './browser-cdp-cookie'
-import { identityFromCdpCookie, openCookieClearStore } from './browser-cookie-clear-store'
-import { withCookieMutationLock, type CookieClearIdentity } from './browser-cookie-import-clear'
+import { identityFromCdpCookie, openCookieClearStore } from './cookies/browser-cookie-clear-store'
+import { withCookieMutationLock, type CookieClearIdentity } from './cookies/browser-cookie-import-clear'
 import {
   isNonTransplantableCookieDomain,
   normalizeCookieDomain
-} from './browser-cookie-import-policy'
+} from './cookies/browser-cookie-import-policy'
 
 export type BrowserPartitionCookieCopyCounts = WslMoveBrowserCookieCopyCounts
 

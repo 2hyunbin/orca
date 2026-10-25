@@ -10,7 +10,7 @@ import {
   readPersistedStateJson,
   testState,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import {
   createWslMoveKillRig,
   removeWslMoveRigDirs,

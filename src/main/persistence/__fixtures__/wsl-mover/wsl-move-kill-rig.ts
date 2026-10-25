@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { wslMoveJournalKey } from '../../../../shared/wsl-move/wsl-move-cutover'
-import { createStore, testState } from '../../../persistence-test-harness'
+import { createStore, testState } from '../../persistence-test-harness'
 import type { Store } from '../../loading-store/store'
 import {
   listWslMoveCutoverChain,

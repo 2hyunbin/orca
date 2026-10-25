@@ -8,7 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../../shared/wsl-host-internal-gate'
-import { testState } from '../../persistence-test-harness'
+import { testState } from '../persistence-test-harness'
 import {
   createWslMoveKillRig,
   removeWslMoveRigDirs,

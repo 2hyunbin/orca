@@ -1,6 +1,6 @@
 import { useAppStore } from '@/store'
 import { findWslMovedProjectForWorkspace } from '@/store/repos/wsl-moved-projects'
-import { activateStructuredAgentSessionTab } from './structured-agent-session-tab-activation'
+import { activateStructuredAgentSessionTab } from './agent-session/structured-agent-session-tab-activation'
 
 /**
  * Opens a workspace of a project a WSL host now owns, for its chats only. Unlike a normal

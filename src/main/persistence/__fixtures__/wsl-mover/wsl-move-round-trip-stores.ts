@@ -9,7 +9,7 @@ import {
   readPersistedStateJson,
   testState,
   writeDataFile
-} from '../../../persistence-test-harness'
+} from '../../persistence-test-harness'
 import type { Store } from '../../loading-store/store'
 
 export function openWslMoveRoundTripStore(dir: string, seed?: PersistedState): Store {

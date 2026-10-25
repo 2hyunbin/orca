@@ -14,7 +14,7 @@ import {
   readPersistedStateJson,
   testState,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import { wslMoverProfile } from '../__fixtures__/wsl-mover/wsl-mover-profiles'

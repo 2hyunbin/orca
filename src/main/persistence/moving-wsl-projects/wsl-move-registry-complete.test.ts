@@ -13,7 +13,7 @@ import {
   createStore,
   testState,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { wslMoverProfile } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
 import { tabGroup, terminalTab, unifiedTab } from '../__fixtures__/wsl-mover/wsl-mover-profile-rows'

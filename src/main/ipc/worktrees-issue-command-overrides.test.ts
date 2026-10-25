@@ -196,8 +196,6 @@ describe('worktrees:create execution host routing', () => {
   })
 
   it('refuses a row that names an SSH host only as executionHostId instead of creating locally', async () => {
-    // No `connectionId`: the raw read answered "local" and ran `git worktree add` on the client
-    // against `/remote/repo`. The host is not served here, so the create refuses.
     useRepo(makeRepo({ executionHostId: 'ssh:target-a' }))
 
     await expect(
@@ -218,7 +216,7 @@ describe('worktrees:create execution host routing', () => {
   })
 
   it('refuses a runtime row that also names a nested SSH target', async () => {
-    // `target-a` names a target inside env-1, never one on this machine.
+    // This target belongs to env-1, never the local client.
     useRepo(makeRepo({ executionHostId: 'runtime:env-1', connectionId: 'target-a' }))
 
     await expect(
@@ -229,8 +227,7 @@ describe('worktrees:create execution host routing', () => {
   })
 
   it('answers local for a row that declares itself local while carrying a connection', async () => {
-    // A contradictory row: `getRepoSshConnectionId` lets `local` win, and the runtime sibling has
-    // always read it that way. The raw field sent it remote, so the two entry points disagreed.
+    // Explicit local ownership overrides legacy connection fields.
     useRepo(
       makeRepo({ path: '/workspace/repo', executionHostId: 'local', connectionId: 'target-a' })
     )

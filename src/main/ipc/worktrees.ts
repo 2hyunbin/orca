@@ -24,8 +24,7 @@ import {
 
 registerDetectedWorktreeScanInvalidation()
 
-// Why not module scope like the invalidation above: this needs `mainWindow`/`store`, which only
-// exist once a window is attached, and must track the current ones across re-registration.
+// Registration supplies the current window/store; dispose the previous listener before replacing them.
 let disposeSparseCheckoutCacheInvalidation: (() => void) | undefined
 
 const WORKTREE_HANDLER_CHANNELS = [
@@ -72,7 +71,6 @@ export function registerWorktreeHandlers(
     worktreeRemovalsInFlight: createWorktreeRemovalRegistry()
   }
 
-  // Remove all stale registrations before installing any replacement handler.
   for (const channel of WORKTREE_HANDLER_CHANNELS) {
     ipcMain.removeHandler(channel)
   }

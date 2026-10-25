@@ -1,5 +1,6 @@
 import type { RuntimeStatus } from '../../../shared/runtime-types'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
+import { isRuntimeStatusCompatible } from './runtime-protocol-compat'
 
 const RUNTIME_COMPATIBILITY_CACHE_MAX = 32
 const RECENT_RUNTIME_COMPATIBILITY_FAILURE_TTL_MS = 60_000
@@ -19,6 +20,22 @@ export type RuntimeCompatibilityCacheEntry = {
 }
 
 export const runtimeCompatibilityChecks = new Map<string, RuntimeCompatibilityCacheEntry>()
+
+/** A pending probe by default; an observed status is proof of itself. */
+export function compatibilityEntry(
+  status: RuntimeStatus | null = null,
+  provenCompatible = status !== null
+): RuntimeCompatibilityCacheEntry {
+  const statusCheckedAt = status ? Date.now() : null
+  return {
+    check: Promise.resolve(),
+    failedAt: null,
+    provenCompatible,
+    status,
+    statusCheckedAt,
+    statusObservedAt: statusCheckedAt
+  }
+}
 
 export function getCachedRuntimeCompatibilityCheck(
   environmentId: string,
@@ -81,6 +98,12 @@ export function clearRecentRuntimeCompatibilityFailure(
     // Why: a saved endpoint can reconnect to a different runtime version; its predecessor's
     // positive capability verdict must not route a structured request to the replacement.
     runtimeCompatibilityChecks.delete(trimmed)
+    // Why (STA-11921): the host publishes a probe's answer before settling it, so the detached
+    // probe never records it; the published answer is the proof synchronous readers need.
+    const answersPendingProbe = cached.failedAt === null && !cached.provenCompatible
+    if (observedStatus && answersPendingProbe && isRuntimeStatusCompatible(observedStatus)) {
+      rememberRuntimeEnvironmentCompatibility(trimmed, compatibilityEntry(observedStatus))
+    }
   }
 }
 
@@ -98,14 +121,7 @@ export function markRuntimeEnvironmentCompatible(environmentId: string): void {
   if (!trimmed) {
     return
   }
-  rememberRuntimeEnvironmentCompatibility(trimmed, {
-    check: Promise.resolve(),
-    failedAt: null,
-    provenCompatible: true,
-    status: null,
-    statusCheckedAt: null,
-    statusObservedAt: null
-  })
+  rememberRuntimeEnvironmentCompatibility(trimmed, compatibilityEntry(null, true))
 }
 
 /**

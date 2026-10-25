@@ -16,7 +16,7 @@ import {
   readPersistedStateJson,
   testState,
   writeDataFile
-} from '../../persistence-test-harness'
+} from '../persistence-test-harness'
 import { visibleFolderWorkspaces, visibleRepos } from '../../ssh/orcad-retained-source'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'

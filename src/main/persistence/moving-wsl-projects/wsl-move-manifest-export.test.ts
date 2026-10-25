@@ -8,7 +8,7 @@ import { assertOrcadMigrationManifestDigest } from '../../orcad/orcad-migration-
 import {
   DORMANT_AUTOMATION,
   DORMANT_AUTOMATION_RUN
-} from '../../persistence-orcad-migration-catalog-fixture'
+} from '../migrating-orcad-catalog/persistence-orcad-migration-catalog-fixture'
 import { createOrcadMigrationSourceScope } from '../migrating-orcad-catalog/orcad-source-scope'
 import { collectOrcadMigrationSourceDormantState } from '../migrating-orcad-catalog/orcad-source-dormant-state'
 import {

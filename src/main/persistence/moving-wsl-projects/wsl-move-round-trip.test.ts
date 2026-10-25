@@ -15,7 +15,7 @@ import { SESSION_FOCUS_FIELDS } from '../../../shared/workspace-session-host-fie
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../../shared/wsl-host-internal-gate'
-import { closeTestStores, testState } from '../../persistence-test-harness'
+import { closeTestStores, testState } from '../persistence-test-harness'
 import type { Store } from '../loading-store/store'
 import { createWslMoveWorld } from '../__fixtures__/wsl-mover/wsl-move-driver-world'
 import {

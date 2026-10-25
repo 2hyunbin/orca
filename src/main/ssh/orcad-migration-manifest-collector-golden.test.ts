@@ -12,7 +12,7 @@ import {
   FOLDER_WORKSPACE,
   PROJECT_GROUP,
   REPOSITORY
-} from '../persistence-orcad-migration-catalog-fixture'
+} from '../persistence/migrating-orcad-catalog/persistence-orcad-migration-catalog-fixture'
 import { createOrcadMigrationManifest } from './orcad-migration-manifest-export'
 
 // Pins the SSH export through the real dormant-state collectors, so generalizing their source scope
