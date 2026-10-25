@@ -84,7 +84,6 @@ function isSessionField(field: string): field is keyof WorkspaceSessionState {
   return Object.hasOwn(WORKSPACE_SESSION_FIELD_OWNERSHIP, field)
 }
 
-/** The store's write paths: a no-op unless some move has paused a project. */
 export function keepWslMoveFrozenSessionsForStore(
   next: WorkspaceSessionState,
   prior: WorkspaceSessionState | undefined

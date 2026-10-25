@@ -1,10 +1,4 @@
-/**
- * After quiesce, proof that no terminal of a moved workspace still runs on this desktop's daemon
- * (mover design, section 3.3). The local daemon can prove exit, so only a census it answered can
- * say `exited`; one it could not answer is `unverifiable`, never a guess (AGENTS.md: SSH Use Case).
- *
- * Precondition: the move's fence is up, so no new terminal can start in scope while this reads.
- */
+// Require a complete daemon census under the move fence; unavailable evidence cannot prove exit.
 import { parsePtySessionId, WORKTREE_ID_SEPARATOR } from '../../../shared/pty-session-id-format'
 import { comparableWslPath, isAtOrUnder, isLinuxSpelled } from './wsl-move-comparable-path'
 import type { SessionInfo } from '../../daemon/types'
@@ -17,20 +11,18 @@ export type WslMoveExitProof =
 type CensusSession = Pick<SessionInfo, 'sessionId' | 'isAlive' | 'cwd' | 'wslDistro'>
 
 export type WslMoveExitProofSources = {
-  /** `listLiveDaemonSessions`: null unless every daemon generation answered. */
+  /** Null unless every daemon generation answered. */
   listSessions: () => Promise<readonly CensusSession[] | null>
-  /** In-process fallback PTYs from degraded mode, which no daemon census lists. */
+  /** Degraded-mode PTYs absent from daemon censuses. */
   countFallbackSessions: () => number
-  /** The precondition: new terminals in scope are refused. */
   isScopeFenced: () => boolean
 }
 
 export type WslMoveExitProofScope = {
-  /** The moving distro; Linux-spelled paths are read inside it. */
   distro: string
-  /** Workspace keys as session ids mint them: `<repoId>::<path>` or `folder:<id>`. */
+  /** Session workspace keys: <repoId>::<path> or folder:<id>. */
   workspaceKeys: ReadonlySet<string>
-  /** The ids the moved panes recorded; covers a session whose id predates the minted format. */
+  /** Cover sessions whose IDs predate the minted workspace format. */
   sessionIds: ReadonlySet<string>
 }
 
@@ -114,7 +106,7 @@ function attributeSession(
   return attributeByCwd(session, scope.distro, roots)
 }
 
-// A session whose id names no workspace: its folder is the only evidence of where it runs.
+// Without workspace identity, cwd is the only attribution evidence.
 function attributeByCwd(
   session: CensusSession,
   distro: string,
@@ -142,7 +134,7 @@ function keyPath(key: string): string | null {
   return separator <= 0 ? null : key.slice(separator + WORKTREE_ID_SEPARATOR.length)
 }
 
-// One spelling per workspace across UNC aliases, distro case, Linux spelling, and trailing separators.
+// Canonicalize distro case, UNC aliases, Linux spelling and trailing separators.
 function comparableKey(key: string, distro: string): string {
   const path = keyPath(key)
   const comparable = path === null ? null : comparableWslPath(path, distro)

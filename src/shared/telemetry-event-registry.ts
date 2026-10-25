@@ -113,8 +113,7 @@ import {
 } from './telemetry-ssh-host-server-event-schemas'
 import { wslMoveSchema } from './telemetry-wsl-move-event-schemas'
 
-// ── Event registry: the one record the validator consumes ───────────────
-// Versioning: breaking changes (rename/re-mean/remove a key) need a new event name; in-place edits blend pre/post rows unmixably. Additive-optional fields are safe.
+// Breaking payload changes require a new event name to keep historical rows distinguishable; optional additions are safe.
 export const eventSchemas = {
   agent_dashboard_active: agentDashboardActiveSchema,
   agent_dashboard_enabled: agentDashboardEnabledSchema,

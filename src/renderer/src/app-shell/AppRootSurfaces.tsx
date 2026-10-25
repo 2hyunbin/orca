@@ -92,9 +92,9 @@ const FloatingTerminalPanel = lazy(() =>
     default: module.FloatingTerminalPanel
   }))
 )
-// Why: lazy so the WebP asset + overlay module aren't fetched unless the experimental flag is on.
+// Load the pet asset/overlay only when enabled.
 const PetOverlay = lazy(() => import('../components/pet/PetOverlay'))
-// Why: lazy so onboarding's step modules + assets aren't fetched for users past first-launch.
+// Avoid fetching onboarding assets for users past first launch.
 const OnboardingFlow = lazy(() => import('../components/onboarding/OnboardingFlow'))
 
 function shouldMountUpdateCardForStatus(status: UpdateStatus): boolean {
@@ -107,10 +107,7 @@ function shouldMountUpdateCardForStatus(status: UpdateStatus): boolean {
   return true
 }
 
-/**
- * Every overlay and modal hosted at the App root, in a fixed sibling order so stacking stays
- * stable. Each is gated so its chunk is only fetched once the surface can actually appear.
- */
+/** Keep root overlays in stable sibling order; fetch gated chunks only when their surfaces can appear. */
 export function AppRootSurfaces(props: {
   floatingWorkspace: FloatingWorkspacePanelState
   onboardingGate: OnboardingGate
@@ -121,8 +118,7 @@ export function AppRootSurfaces(props: {
   usePreloadWorktreeJumpPalette()
   const activeView = useAppStore((s) => s.activeView)
   const activeModal = useAppStore((s) => s.activeModal)
-  // Keep this always-mounted surface subscribed only to the settings fields it reads. A
-  // settings object replacement for an unrelated preference should not rerender every overlay.
+  // Subscribe only to consumed settings so unrelated preferences cannot rerender every overlay.
   const voiceEnabled = useAppStore(selectAppRootSurfaceVoiceEnabled)
   const petEnabled = useAppStore(selectAppRootSurfacePetEnabled)
   const telemetryOptedIn = useAppStore(selectAppRootSurfaceTelemetryOptedIn)
@@ -179,7 +175,7 @@ export function AppRootSurfaces(props: {
           </OverlayBoundary>
         </Suspense>
       ) : null}
-      {/* Why: keep in the entry bundle so a stale/corrupt lazy chunk can't strand users at Create. */}
+      {/* Keep Create in the entry bundle so a stale lazy chunk cannot strand users. */}
       {activeModal === 'new-workspace-composer' ? (
         <ModalBoundary boundaryId="modal.new-workspace-composer" resetKey>
           <NewWorkspaceComposerModal />
@@ -191,7 +187,7 @@ export function AppRootSurfaces(props: {
             <AddRepoDialog />
           </ModalBoundary>
         ) : null}
-        {/* Why: Settings can start Add Project without Sidebar, so its handoff dialogs must share the root host. */}
+        {/* Settings can add projects without Sidebar; host its handoff dialogs here too. */}
         {activeModal === 'confirm-non-git-folder' ? (
           <ModalBoundary boundaryId="modal.confirm-non-git-folder" resetKey>
             <NonGitFolderDialog />
@@ -207,7 +203,7 @@ export function AppRootSurfaces(props: {
             <ProjectAddedDialog />
           </ModalBoundary>
         ) : null}
-        {/* Root-hosted: inside a chat, its React events would reach the chat's capture handlers. */}
+        {/* Root hosting prevents chat capture handlers receiving history-dialog events. */}
         {activeModal === 'agent-session-history' ? (
           <ModalBoundary boundaryId="modal.agent-session-history" resetKey>
             <AiVaultSessionHistoryDialog />
@@ -215,20 +211,20 @@ export function AppRootSurfaces(props: {
         ) : null}
         {/* Own store, not activeModal: another modal must never evict a running move. */}
         <WslMoveDialogHost />
-        {/* Root-hosted: a toast, the SSH host row and a terminal pane all open it. */}
+        {/* Opened by toast, SSH host row and terminal pane. */}
         {activeModal === 'node-dist-mirror' ? (
           <ModalBoundary boundaryId="modal.node-dist-mirror" resetKey>
             <NodeDistMirrorDialog />
           </ModalBoundary>
         ) : null}
-        {/* Why: chat rows are virtualized, so the viewer must outlive the message that opened it. */}
+        {/* The viewer must outlive the virtualized chat row that opened it. */}
         {activeModal === 'diagram-viewer' ? (
           <ModalBoundary boundaryId="modal.diagram-viewer" resetKey>
             <DiagramViewerModal />
           </ModalBoundary>
         ) : null}
       </Suspense>
-      {/* Why: root overlays can render Radix <Tooltip>s; keep inside the shared provider so lazy surfaces mount from any entry point. */}
+      {/* Keep lazy root surfaces under the shared Radix Tooltip provider. */}
       <Suspense fallback={null}>
         {mountedLazyModalIds.has('workspace-cleanup') ? (
           <ModalBoundary
@@ -279,7 +275,7 @@ export function AppRootSurfaces(props: {
           <ContextualTourOverlay />
         </Suspense>
       ) : null}
-      {/* Why: mount only after UI hydration, else a hidden pet flashes while the store still holds default visibility. */}
+      {/* Wait for UI hydration so default visibility cannot flash a saved-hidden pet. */}
       {renderPetOverlay ? (
         <Suspense fallback={null}>
           <OverlayBoundary boundaryId="overlay.pet" resetKey={petVisible}>
@@ -311,7 +307,7 @@ export function AppRootSurfaces(props: {
         <StarNagToastHost />
       </OverlayBoundary>
       <StarNagAgentValueMomentObserver />
-      {/* Why: mount at App root to render once per session; internal cohort gate limits it to pre-telemetry users — see telemetry-plan.md §First-launch experience. */}
+      {/* Mount once per session; the internal gate selects pre-telemetry users (telemetry-plan.md §First-launch experience). */}
       <OverlayBoundary boundaryId="overlay.telemetry-first-launch" resetKey={telemetryOptedIn}>
         <TelemetryFirstLaunchSurface />
       </OverlayBoundary>
@@ -386,7 +382,7 @@ export function AppRootSurfaces(props: {
       <OverlayBoundary boundaryId="overlay.recent-tab-switcher" resetKey={activeView}>
         <RecentTabSwitcher />
       </OverlayBoundary>
-      {/* Why: hosts a live terminal pane needing the link-routing preference context; mounting outside crashes it. */}
+      {/* Its live terminal requires the link-routing preference context. */}
       <OverlayBoundary boundaryId="overlay.skill-freshness-update-dialog">
         <SkillFreshnessUpdateDialog />
       </OverlayBoundary>

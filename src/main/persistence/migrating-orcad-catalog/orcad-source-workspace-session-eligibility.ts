@@ -18,16 +18,13 @@ import {
   paneBelongsToTerminalLayout
 } from '../../../shared/workspace-session-pane-ownership'
 
-/**
- * What on the source the move must not drop or cannot carry, each named for the refusal with the
- * way out. Stale or unowned rows are not here: they stay in the retained profile.
- */
+/** Name unsupported live work and remedies; stale/unowned rows stay in the retained profile. */
 export function collectUnsupportedSessionItems(
   session: WorkspaceSessionState,
   scope: OrcadMigrationSourceScope,
   sourceHostPartition: boolean,
   terminalTabIds: ReadonlySet<string>,
-  /** Every partition's source terminal tabs: a record is orphaned only when none lists its tab. */
+  /** A resume record is orphaned only if no partition lists its tab. */
   sourceTerminalTabIds: ReadonlySet<string>
 ): string[] {
   const owns = (ownerKey: string): boolean => orcadMigrationOwnerMatchesScope(ownerKey, scope)
@@ -39,7 +36,7 @@ export function collectUnsupportedSessionItems(
     Boolean(ownerKey) &&
     (wholeHost || owns(ownerKey) || orcadMigrationOwnerKeyIsAmbiguous(ownerKey, scope))
   const items: string[] = []
-  // Another project's rows in this host's copy stay behind; only an unsaved draft there is work.
+  // Foreign projects stay behind; unsaved drafts still require preservation.
   if (wholeHost) {
     for (const [ownerKey, files] of Object.entries(session.openFilesByWorktree ?? {})) {
       if (!owns(ownerKey)) {
@@ -47,8 +44,7 @@ export function collectUnsupportedSessionItems(
       }
     }
   }
-  // PTY bindings, remote session ids and shutdown markers are not counted: whether their terminals
-  // still run is the terminal gate's verdict, taken before every move; the move drops them.
+  // The terminal gate proves exit before moves, so PTY bindings and shutdown markers can be dropped.
   for (const record of Object.values(session.sleepingAgentSessionsByPaneKey ?? {})) {
     const touchesSource =
       matches(record.worktreeId) ||
@@ -63,9 +59,7 @@ export function collectUnsupportedSessionItems(
       )
     }
   }
-  // Client-hosted pages, focus on a project outside the move and ambiguous markdown visibility are
-  // not counted: the move never carries the first, and the rest are presentation the server
-  // rebuilds. Activity at shutdown is the terminal gate's, like the PTY bindings above.
+  // Client-hosted pages stay behind; the server rebuilds presentation state.
   for (const [ownerKey, files] of Object.entries(session.openFilesByWorktree ?? {})) {
     if (owns(ownerKey)) {
       const hostBound = files.filter(
@@ -112,7 +106,6 @@ export function isUnsavedDraftItem(item: string): boolean {
   return item.startsWith(UNSAVED_DRAFT_PREFIX)
 }
 
-/** The path a worktree id carries, which is what the user sees in the sidebar. */
 export function worktreeLabel(ownerKey: string): string {
   const raw = unqualifyOrcadMigrationOwnerKey(ownerKey)
   const separator = raw.indexOf('::')
@@ -125,9 +118,7 @@ export function projectDormantSessionFocus(
   scope: OrcadMigrationSourceScope,
   terminalTabIds: ReadonlySet<string>
 ): void {
-  // These scalars are UI focus, not execution ownership. They are safe to carry
-  // only from the source host partition and only when they point at an entity
-  // already proven dormant and included in the projected session.
+  // Carry host focus only for dormant entities already included in the session.
   if (orcadMigrationOwnsRepoId(scope, source.activeRepoId)) {
     transferred.activeRepoId = source.activeRepoId
   }
@@ -195,7 +186,6 @@ function retainedOrphanedSleepingAgentSession(
   return (
     sleepingAgentSessionMayLeave(record, scope) &&
     (record.origin === 'quit' || record.origin === 'live') &&
-    // A tab any partition still lists is open, so its record is not an orphan.
     paneBelongsToTabs(record.paneKey, new Set([ownTab])) &&
     !paneBelongsToTabs(record.paneKey, sourceTerminalTabIds)
   )
@@ -208,7 +198,7 @@ function sleepingAgentSessionMayLeave(
   return (
     orcadMigrationOwnerMatchesScope(record.worktreeId, scope) &&
     (record.connectionId == null || record.connectionId === scope.targetId) &&
-    // Older profiles can still contain a worker-resume fence; never discard its authority.
+    // Legacy worker fences remain authoritative even after removal from the current type.
     (!('automaticResumeBlockedBy' in record) || record.automaticResumeBlockedBy === undefined)
   )
 }

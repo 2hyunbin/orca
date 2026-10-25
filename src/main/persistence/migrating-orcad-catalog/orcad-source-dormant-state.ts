@@ -41,15 +41,15 @@ type TransferredDormantKind = (typeof ORCAD_MIGRATION_TRANSFERRED_DORMANT_KINDS)
 export type OrcadMigrationSourceDormantInspection = {
   payload: OrcadMigrationDormantStatePayload
   blockedCounts: Record<TransferredDormantKind, number>
-  /** What blocks the saved tabs and panes, each with the way to clear it. */
+  /** Session blockers and remedies. */
   blockedSessionItems: string[]
-  /** What a confirmed "Move anyway" leaves in this desktop's retained profile. */
+  /** Retained on this desktop after confirmed "Move anyway". */
   leftBehindItems: string[]
   /** Automations a local WSL move carries disabled, to re-enable on the host once it commits. */
   automationsEnabledAtSource: string[]
 }
 
-/** The user confirmed "Move anyway" for this host: what can't move stays on this desktop. */
+/** Confirmed "Move anyway" permits retaining unsupported state; unsaved-draft blockers still apply. */
 export function orcadMigrationLeavesBehind(
   state: PersistedState,
   targetId: string | null
@@ -160,7 +160,7 @@ export function collectOrcadMigrationSourceDormantState(
     (entry) => entry.childWorkspaceKey,
     () => (blockedCounts['workspace-lineage'] += 1)
   )
-  // A repo id another host shares keys one registry for both hosts: it stays where it is.
+  // Bare repo IDs shared across hosts cannot prove ownership.
   const ownedRepoIds = [...scope.repoIds].filter((repoId) => !scope.sharedRepoIds.has(repoId))
   const sparsePresets = ownedRepoIds
     .flatMap((repoId) => state.sparsePresetsByRepo[repoId] ?? [])
@@ -202,13 +202,11 @@ export function collectOrcadMigrationSourceDormantState(
     { length: clientState.blockedCount },
     () => 'a browser page close saved twice'
   )
-  // "Move anyway": duplicate closes are already out of the payload. What the session still refuses
-  // is what can't be left behind (an unsaved draft), so it keeps blocking.
+  // Duplicate closes stay behind; unsaved drafts still block even after "Move anyway".
   ;(leaveBehind ? leftBehindItems : blockedSessionItems).push(...duplicateCloses)
   blockedCounts['workspace-session'] = blockedSessionItems.length
   if (leaveBehind) {
-    // Every row these counts name is already out of the payload. Saved port forwards never block,
-    // and the server itself refuses duplicate ports.
+    // These rows are excluded already; saved port conflicts are checked by the server.
     for (const kind of ORCAD_MIGRATION_TRANSFERRED_DORMANT_KINDS) {
       if (
         kind !== 'workspace-session' &&

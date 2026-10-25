@@ -26,7 +26,7 @@ export type OrcadMigrationSourceClientStateInspection = {
   payload: OrcadMigrationClientStatePayload | undefined
   /** Duplicate closes are folded into the existing workspace-session blocker. */
   blockedCount: number
-  /** Mobile selections and sidebar routing are presentation: what can't move stays behind. */
+  /** Presentation state that cannot move stays behind. */
   blockedCounts: { 'saved-port-forward': number }
 }
 
@@ -101,7 +101,6 @@ function collectMobileSelections(
       }
       const destinationKey = unqualifyOrcadMigrationOwnerKey(ownerKey)
       const representable = representableMobileSelection(selection, eligible)
-      // A selection naming a tab that did not move, or a second copy for one worktree, stays behind.
       if (!representable || destinationKeys.has(`${deviceId}\0${destinationKey}`)) {
         continue
       }
@@ -146,12 +145,11 @@ function collectUiRouting(
   if (manualOrder.length > 0) {
     result.manualRepoOrder = manualOrder
   }
-  // Sidebar filters stay behind: they belong to this desktop's window (ORCAD_MIGRATION_UI_ROUTING_MERGE).
+  // Sidebar filters belong to this desktop's window.
   const eligible = session ? collectEligibleSessionIdentity(session, scope) : null
   const sourceTabIds = collectSourceOwnedTabIds(state, scope)
   const acknowledgements = Object.entries(ui.acknowledgedAgentsByPaneKey ?? {}).filter(
     ([paneKey]) => {
-      // An acknowledgement for a pane that did not move stays behind with that pane.
       return (
         paneBelongsToTabs(paneKey, sourceTabIds) &&
         eligible !== null &&
@@ -165,7 +163,7 @@ function collectUiRouting(
   return Object.keys(result).length > 0 ? result : undefined
 }
 
-/** Every tab the source owns: its own partition's, and those keyed to its projects anywhere. */
+/** Include source-owned tabs from every partition. */
 function collectSourceOwnedTabIds(
   state: PersistedState,
   scope: ReturnType<typeof createOrcadMigrationExportScope>
@@ -212,13 +210,13 @@ function collectEligibleSessionIdentity(
   return { tabIds, groupIds }
 }
 
-/** A phone names a terminal by its pane, `${tabId}::${leafId}`; the pane moves with its tab. */
+/** Mobile terminal selections name panes: tabId::leafId. */
 function movedMobileTab(id: string, tabIds: ReadonlySet<string>): boolean {
   const separator = id.indexOf('::')
   return tabIds.has(id) || (separator !== -1 && tabIds.has(id.slice(0, separator)))
 }
 
-/** The selection without references to tabs or groups that did not move; null when none is left. */
+/** Drop references to tabs/groups that did not move; null when none remain. */
 function representableMobileSelection(
   selection: PersistedMobileClientTabSelection,
   eligible: EligibleSessionIdentity | null

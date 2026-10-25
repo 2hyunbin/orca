@@ -1,7 +1,4 @@
-/**
- * The path-rewrite stage of a local WSL move: a UNC path of the moved distro becomes the Linux path
- * orcad sees for the same file. Anything else is returned unchanged, as the stage contract requires.
- */
+// Convert only the moved distro's UNC paths; unrelated paths remain unchanged.
 import { wslUncPathToLinux } from '../../../shared/wsl-paths'
 import type { OrcadMigrationPathRewriter } from '../../ssh/orcad-migration-path-rewrite'
 
@@ -27,12 +24,12 @@ export function createUncToLinuxPathRewriter(distro: string): OrcadMigrationPath
   }
 }
 
-/** Windows built these against a UNC root; the host's own paths use `/`. */
+// Relative Windows paths need host-side POSIX separators.
 function toPosix(value: string): string {
   return value.replace(/\\/g, '/')
 }
 
-/** `C:trees` is drive-relative, i.e. on Windows; left as it is. */
+/** Drive-relative C:trees stays on Windows. */
 function isRelative(value: string): boolean {
   return !/^(?:[A-Za-z]:|[\\/])/.test(value)
 }

@@ -123,8 +123,7 @@ export async function ensureRuntimeEnvironmentCompatible(
     }
   } catch (error) {
     if (runtimeCompatibilityChecks.get(environmentId) === entry) {
-      // Why: startup asks each remote for repos, groups, then folders; an
-      // offline runtime should pay one timeout during that burst, not three.
+      // Startup repo/group/folder bursts should pay one offline-host timeout, not three.
       entry.failedAt = Date.now()
     }
     throw error
@@ -137,9 +136,7 @@ export async function getRuntimeEnvironmentStatus(
 ): Promise<RuntimeStatus> {
   const trimmed = environmentId.trim()
   const entry = compatibilityEntry()
-  // Why: publish the in-flight probe before awaiting so concurrent cold-cache
-  // capability lookups coalesce onto this one status.get (via the cache-hit path
-  // in runtimeEnvironmentSupportsCapability) instead of each firing their own.
+  // Publish before awaiting so concurrent cold capability reads share this status probe.
   const check = (async () => {
     const response = await window.api.runtimeEnvironments.call({
       selector: trimmed,
@@ -160,8 +157,7 @@ export async function getRuntimeEnvironmentStatus(
   try {
     await check
   } catch (error) {
-    // Why: this probe always re-fetches, so a failure must not linger as a
-    // cached verdict; drop the entry so the next call re-probes cleanly.
+    // Always-refetched probe failures must not remain cached verdicts; let next call retry.
     if (runtimeCompatibilityChecks.get(trimmed) === entry) {
       runtimeCompatibilityChecks.delete(trimmed)
     }
@@ -191,9 +187,7 @@ export async function runtimeEnvironmentSupportsCapability(
 ): Promise<boolean> {
   const trimmed = environmentId.trim()
   const cached = runtimeCompatibilityChecks.get(trimmed)
-  // Why: callRuntimeRpc re-probes after failed status checks by default. Capability
-  // lookups must not pin to a rejected cache promise or they block recovery for
-  // the full failure TTL even though the next RPC would re-probe successfully.
+  // Capability reads must discard rejected probes like ordinary RPCs or a recovered host stays blocked until failure TTL.
   if (cached && cached.failedAt === null) {
     try {
       await cached.check
@@ -205,8 +199,7 @@ export async function runtimeEnvironmentSupportsCapability(
       ) {
         const supported = cached.status.capabilities?.includes(capability) === true
         if (!supported) {
-          // Why: retain protocol proof for this legacy dispatch, but force the
-          // next capability decision to observe an in-place host upgrade.
+          // Keep protocol proof for this legacy call; next capability decision must observe in-place upgrades.
           cached.statusCheckedAt = null
         }
         return supported
