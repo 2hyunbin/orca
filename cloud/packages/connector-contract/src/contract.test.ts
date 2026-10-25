@@ -95,9 +95,16 @@ describe('events', () => {
     kind: 'turn-ended',
     conversation,
     paneKey: 'tab:leaf',
-    at: 1_793_000_000_000,
+    turnId: 1_793_000_000_000,
+    at: 1_793_000_060_000,
     stopReason: null
   }
+
+  it('names the turn that ended by its start', () => {
+    const { turnId: _, ...withoutTurnId } = turnEnded
+    expect(ConnectorEventSchema.safeParse(turnEnded).success).toBe(true)
+    expect(ConnectorEventSchema.safeParse(withoutTurnId).success).toBe(false)
+  })
 
   it('caps the last assistant message in UTF-8 bytes', () => {
     const limit = CONNECTOR_LIMITS.maxLastAssistantMessageBytes

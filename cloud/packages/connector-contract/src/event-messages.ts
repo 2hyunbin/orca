@@ -31,7 +31,7 @@ export const ConnectorPendingPromptSchema = z.discriminatedUnion('kind', [
 const textEncoder = new TextEncoder()
 const PaneEvent = { conversation: ConnectorConversationSchema, paneKey: OpaqueIdSchema }
 
-// Identities: linked by pane, prompt by pane + promptId, turns by pane + at (the turn id).
+// Identities: linked by pane, prompt by pane + promptId, a turn by pane + its turn-started `at` (turnId).
 export const ConnectorEventSchema = z.discriminatedUnion('kind', [
   z.object({ ...PaneEvent, kind: z.literal('linked'), agent: z.string().min(1) }),
   z.object({ ...PaneEvent, kind: z.literal('prompt'), prompt: ConnectorPendingPromptSchema }),
@@ -39,6 +39,8 @@ export const ConnectorEventSchema = z.discriminatedUnion('kind', [
   z.object({
     ...PaneEvent,
     kind: z.literal('turn-ended'),
+    // The turn-started `at` of the turn that ended, so start, end and replies share one id.
+    turnId: EpochMsSchema,
     at: EpochMsSchema,
     // The host's turn verdict; null when none was recorded.
     stopReason: z.string().min(1).nullable(),
@@ -69,7 +71,7 @@ export const ConnectorEventsRequestSchema = z.object({
   events: z.array(ConnectorEventSchema).min(1)
 })
 
-// replyId is minted once by the CLI and kept across retries.
+// replyId is minted once by the CLI and kept across retries; turnId is the turn-started `at`.
 export const ConnectorReplyRequestSchema = z.object({
   v: z.literal(1),
   replyId: OpaqueIdSchema,
