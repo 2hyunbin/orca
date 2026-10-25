@@ -46,7 +46,10 @@ export async function acceptHostCreatedWorktree(
     holdCreatedSidebarWorkspace({ worktree: created })
   }
   if (showNotices()) {
-    showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree)
+    showLocalBaseRefRefreshToast(result.localBaseRefRefresh, result.worktree, {
+      updateSettings: state.updateSettings,
+      executionHostId
+    })
     if (result.baseFallback) {
       requestWorktreeBaseFallbackNotice(result.baseFallback)
     }
