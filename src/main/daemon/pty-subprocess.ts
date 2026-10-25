@@ -85,10 +85,15 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
       cols: size.cols,
       rows: size.rows,
       windowsFallbackAttempts: launch.windowsFallbackAttempts,
+      startupCommandInShellArgs: launch.startupCommandDeliveredInShellArgs,
       onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy,
       ...(opts.cancelSignal ? { signal: opts.cancelSignal } : {})
     })
   } catch (error) {
+    // A cancel that lands while ConPTY's startup is awaited is a cancel, not a spawn failure.
+    if (opts.cancelSignal?.aborted) {
+      throw new TerminalAttachCanceledError(opts.sessionId)
+    }
     if (process.platform === 'win32') {
       throw formatPtySpawnError(error, launch.shellPath, launch.spawnCwd)
     }

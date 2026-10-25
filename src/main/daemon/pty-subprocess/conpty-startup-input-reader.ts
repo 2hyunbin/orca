@@ -1,4 +1,5 @@
 import type * as pty from 'node-pty'
+import { terminatePtyJob } from '../../windows/windows-pty-job'
 
 // Bundled ConPTY queries DA1 (or CPR when inheriting the cursor) right after it starts reading
 // input, and before relaying any client output. A pane without it never reads keyboard input.
@@ -7,7 +8,14 @@ const INPUT_READER_ANNOUNCEMENTS = ['\x1b[c', '\x1b[6n'] as const
 const WINDOW_VISIBILITY_REPORTS = ['\x1b[1t', '\x1b[2t'] as const
 
 export type ConptyStartupVerdict = 'pending' | 'input-reader' | 'no-input-reader'
-export type ConptyStartupOutcome = Exclude<ConptyStartupVerdict, 'pending'> | 'exited'
+export type ConptyStartupOutcome = Exclude<ConptyStartupVerdict, 'pending'> | 'exited' | 'undecided'
+
+// A console shell connects, prompting the announcement, within milliseconds; under heavy CI load
+// within ~4s. Past this the pane is handed out unverified rather than stalling the spawn reply.
+export const CONPTY_STARTUP_DECISION_LIMIT_MS = 5_000
+
+export const CONPTY_NO_INPUT_READER_NOTICE =
+  '\r\n\x1b[31m[Orca] Windows could not start keyboard input for this terminal. Close it and open a new one.\x1b[0m\r\n'
 
 export function classifyConptyStartupOutput(output: string): ConptyStartupVerdict {
   let rest = output
@@ -72,4 +80,116 @@ export function watchConptyStartup(proc: pty.IPty): ConptyStartupWatch {
       return events
     }
   }
+}
+
+async function decideConptyStartup(
+  proc: pty.IPty,
+  signal: AbortSignal | undefined
+): Promise<{ outcome: ConptyStartupOutcome; claim: () => ConptyStartupEvents }> {
+  const watch = watchConptyStartup(proc)
+  let limit: ReturnType<typeof setTimeout> | undefined
+  let onAbort = (): void => {}
+  try {
+    signal?.throwIfAborted()
+    const outcome = await new Promise<ConptyStartupOutcome>((resolve, reject) => {
+      onAbort = () => reject(signal?.reason)
+      signal?.addEventListener('abort', onAbort, { once: true })
+      limit = setTimeout(() => resolve('undecided'), CONPTY_STARTUP_DECISION_LIMIT_MS)
+      limit.unref?.()
+      void watch.verdict.then(resolve)
+    })
+    return { outcome, claim: watch.claim }
+  } catch (error) {
+    // A canceled spawn must not leave the half-started shell running.
+    discardConpty(proc, watch)
+    throw error
+  } finally {
+    clearTimeout(limit)
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
+function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>): void {
+  watch.claim()
+  // The job reaps anything the shell already started; kill closes the pseudoconsole and its host.
+  terminatePtyJob(proc)
+  proc.kill()
+}
+
+// Why process-wide: the announcement is a fact of the bundled ConPTY build. Until one pane shows
+// it, a missing one may mean a newer build changed its startup, not that input is dead.
+let announcementObserved = false
+let announcementUntrusted = false
+let respawnCount = 0
+
+/** Respawns since daemon start; a sudden rise means the announcement check misfires. */
+export function conptyNoInputReaderRespawnCount(): number {
+  return respawnCount
+}
+
+/** Test seam: reset the process-wide trust in the announcement. */
+export function _resetConptyStartupTrustForTest(): void {
+  announcementObserved = false
+  announcementUntrusted = false
+  respawnCount = 0
+}
+
+function withNotice(claim: () => ConptyStartupEvents): () => ConptyStartupEvents {
+  return () => {
+    const events = claim()
+    return { ...events, data: [...events.data, CONPTY_NO_INPUT_READER_NOTICE] }
+  }
+}
+
+/**
+ * Spawns a Windows ConPTY pane and confirms its console host reads input before anyone can write.
+ * Nothing holds the pane until this returns, so a respawn never repeats a command typed into it.
+ */
+export async function spawnConptyWithInputReader(
+  spawn: () => Promise<pty.IPty>,
+  opts: {
+    label: string
+    signal?: AbortSignal
+    /** The shell already received its command in argv; a respawn would run it twice. */
+    commandInShellArgs: boolean
+  }
+): Promise<{ proc: pty.IPty; claimStartupEvents: () => ConptyStartupEvents }> {
+  const first = await spawn()
+  if (announcementUntrusted) {
+    return { proc: first, claimStartupEvents: () => ({ data: [], exit: null }) }
+  }
+  const firstStartup = await decideConptyStartup(first, opts.signal)
+  if (firstStartup.outcome === 'input-reader') {
+    announcementObserved = true
+  }
+  if (firstStartup.outcome !== 'no-input-reader') {
+    return { proc: first, claimStartupEvents: firstStartup.claim }
+  }
+  if (opts.commandInShellArgs) {
+    console.warn(`[daemon/pty] ConPTY for "${opts.label}" started without an input reader`)
+    const claim = firstStartup.claim
+    return { proc: first, claimStartupEvents: announcementObserved ? withNotice(claim) : claim }
+  }
+  respawnCount += 1
+  console.warn(
+    `[daemon/pty] ConPTY for "${opts.label}" started without an input reader; respawning (${respawnCount})`
+  )
+  discardConpty(first, firstStartup)
+  const retry = await spawn()
+  const retryStartup = await decideConptyStartup(retry, opts.signal)
+  if (retryStartup.outcome === 'input-reader') {
+    announcementObserved = true
+  }
+  if (retryStartup.outcome !== 'no-input-reader') {
+    return { proc: retry, claimStartupEvents: retryStartup.claim }
+  }
+  if (!announcementObserved) {
+    // Two misses and no pane ever announced: distrust the check rather than respawn every pane.
+    announcementUntrusted = true
+    console.warn('[daemon/pty] ConPTY never announced an input reader; disabling the startup check')
+    return { proc: retry, claimStartupEvents: retryStartup.claim }
+  }
+  console.warn(`[daemon/pty] ConPTY for "${opts.label}" again started without an input reader`)
+  // Once only: a second dead pane says so on screen instead of silently ignoring keystrokes.
+  return { proc: retry, claimStartupEvents: withNotice(retryStartup.claim) }
 }

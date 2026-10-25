@@ -9,6 +9,7 @@ import {
   listPtyJobProcessIds,
   terminatePtyJob
 } from './windows-pty-job'
+import { watchConptyStartup } from '../daemon/pty-subprocess/conpty-startup-input-reader'
 
 /**
  * The unit tests pin the contract; this pins the thing the contract is for.
@@ -100,6 +101,21 @@ describeOnWindows('ConPTY job ownership', () => {
     await sleep(1_000)
     return { proc, grandchildPid }
   }
+
+  it('announces an input reader the daemon recognizes', async () => {
+    // A ConPTY upgrade that changes its startup must fail here, not respawn every pane.
+    const nodePty = await import('node-pty')
+    const proc = nodePty.spawn('cmd.exe', ['/d', '/q'], {
+      cols: 80,
+      rows: 24,
+      cwd: process.cwd(),
+      useConptyDll: true
+    })
+    spawned.push(proc)
+    const startup = watchConptyStartup(proc)
+    expect(await startup.verdict).toBe('input-reader')
+    startup.claim()
+  }, 30_000)
 
   it('reports this build as able to own pty trees', () => {
     // A node-pty rebuilt from unpatched sources would silently fall back to the
