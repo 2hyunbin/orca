@@ -76,7 +76,7 @@ import { computeValidatedBranchName } from './worktree-branch-name'
 import { mergeWorktree } from './worktree-metadata-merge'
 import { resolveCreatedWorktree } from './created-worktree-reconciliation'
 import { notifyLineageRepos } from '../worktree-lineage-change-notification'
-import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
+import { composeWorktreeId, getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import {
   getConnectionExecutionHostId,
   getRepoExecutionHostId,
@@ -1343,7 +1343,7 @@ async function performLocalWorktreeCreate(
   }
   // Why: the catalog watcher can publish the checkout mid-create; the renderer must not seed it a shell yet.
   emitCreateWorktreeProgress(mainWindow, 'creating', args.creationId, {
-    worktreeId: `${repo.id}::${worktreePath}`
+    worktreeId: composeWorktreeId(repo.id, worktreePath)
   })
 
   // Defer fork remote creation/fetch until first synchronization; read-only review creation needs neither.
