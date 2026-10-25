@@ -37,4 +37,27 @@ describe('Option/Alt + Forward-Delete', () => {
       )
     ).toBeNull()
   })
+
+  it('keeps CSI 3;3~ for a non-agent full-screen app such as vim', () => {
+    const resolve = (nonAgentFullScreen: boolean) =>
+      resolveTerminalShortcutAction(
+        altDelete,
+        true,
+        'false',
+        0,
+        false,
+        undefined,
+        undefined,
+        () => 0,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => nonAgentFullScreen
+      )
+    expect(resolve(true)).toBeNull()
+    expect(resolve(false)).toEqual({ type: 'sendInput', data: '\x1bd' })
+  })
 })
