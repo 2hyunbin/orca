@@ -24,7 +24,7 @@ import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type { AgentPromptActivity } from '../../agent-prompt-submission-verification'
 import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
 import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
-import { selectNewestExplicitAgentStatusRow } from '../../runtime-hook-agent-row-selection'
+import { selectFreshExplicitAgentStatusRow } from '../../runtime-hook-agent-row-selection'
 import { isClaudeDialogHoldingPane } from '../../claude-open-dialog-hold'
 
 import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
@@ -211,9 +211,8 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
   protected isPtyAwaitingUserInput(ptyId: string): boolean {
     const join = this.readHookRowJoinForPty(ptyId)
     return isClaudeDialogHoldingPane({
-      row: join ? selectNewestExplicitAgentStatusRow(join) : null,
+      row: join ? selectFreshExplicitAgentStatusRow(join) : null,
       respawnedAt: this.agentPromptExplicitStatusFloorByPtyId.get(ptyId),
-      lastInputAt: this.terminalRunFacts.readLastInputAt(ptyId),
       readScreenLines: () => this.readLiveTerminalScreenLines(ptyId)
     })
   }

@@ -46,20 +46,6 @@ function isPermissionState(state: AgentStatusEntry['state']): boolean {
 
 /** The freshest live hook row for a terminal, joined on any of its handles or pane keys. */
 export function selectFreshExplicitAgentStatusRow(args: HookRowJoin): AgentStatusIpcPayload | null {
-  return selectExplicitAgentStatusRow(args, AGENT_STATUS_STALE_AFTER_MS)
-}
-
-/** The newest live hook row however old: an unanswered question posts no further hooks. */
-export function selectNewestExplicitAgentStatusRow(
-  args: HookRowJoin
-): AgentStatusIpcPayload | null {
-  return selectExplicitAgentStatusRow(args, Number.POSITIVE_INFINITY)
-}
-
-function selectExplicitAgentStatusRow(
-  args: HookRowJoin,
-  staleAfterMs: number
-): AgentStatusIpcPayload | null {
   const now = Date.now()
   const handles = new Set(args.handles)
   const paneKeys = new Set(args.paneKeys)
@@ -71,7 +57,7 @@ function selectExplicitAgentStatusRow(
     if (!row.state || !isLiveObservation(row) || typeof row.receivedAt !== 'number') {
       continue
     }
-    if (now - (row.evidenceObservedAt ?? row.receivedAt) > staleAfterMs) {
+    if (now - (row.evidenceObservedAt ?? row.receivedAt) > AGENT_STATUS_STALE_AFTER_MS) {
       continue
     }
     if (

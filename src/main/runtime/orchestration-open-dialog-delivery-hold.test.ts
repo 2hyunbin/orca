@@ -20,7 +20,7 @@ vi.mock('electron', () => ({
   webContents: { fromId: vi.fn(() => null) }
 }))
 
-function claudeHookRow(state: AgentStatusIpcPayload['state'], ageMs = 0): AgentStatusIpcPayload {
+function claudeHookRow(state: AgentStatusIpcPayload['state']): AgentStatusIpcPayload {
   return {
     paneKey: PANE_KEY,
     terminalHandle: TERMINAL_HANDLE,
@@ -28,10 +28,14 @@ function claudeHookRow(state: AgentStatusIpcPayload['state'], ageMs = 0): AgentS
     state,
     prompt: '',
     connectionId: null,
-    receivedAt: Date.now() - ageMs,
-    stateStartedAt: Date.now() - ageMs
+    receivedAt: Date.now(),
+    stateStartedAt: Date.now()
   }
 }
+
+const QUESTION_SCREEN =
+  '\x1b]0;✳ Claude Code\x07Which color?\r\n❯ 1. Red\r\n  2. Blue\r\n' +
+  'Enter to select · ↑/↓ to navigate · Esc to cancel\r\n'
 
 describe('mailbox delivery into a pane with an open dialog', () => {
   afterEach(() => {
@@ -42,14 +46,15 @@ describe('mailbox delivery into a pane with an open dialog', () => {
   })
 
   it.each([
-    ['just opened', 0],
-    ['open past the 30-minute hook freshness window', 31 * 60_000]
-  ])(
-    'holds the pointer under a rest title while a question is %s, then delivers',
-    async (_label, ageMs) => {
+    ['answered', 'done', '\x1b[2J\x1b[H❯ \r\n', 2],
+    ['dismissed with Esc, which posts no hook', 'waiting', '\x1b[2J\x1b[H❯ \r\n', 2],
+    ['only navigated', 'waiting', '\x1b[2J\x1b[H  1. Red\r\n❯ 2. Blue\r\n', 0]
+  ] as const)(
+    'holds the pointer under a rest title while a question shows; %s',
+    async (_label, rowAfter, screenAfter, expectedWrites) => {
       vi.useFakeTimers()
       const db = createDatabase('orca-open-dialog-delivery-hold-')
-      let hook = claudeHookRow('waiting', ageMs)
+      let hook = claudeHookRow('waiting')
       const { runtime, write } = createRuntime(db, {
         getAgentStatusSnapshot: () => [hook],
         checkHookAgentPresence: async () => 'live',
@@ -58,55 +63,24 @@ describe('mailbox delivery into a pane with an open dialog', () => {
       const run = createBoundRun(db, 'Claude Run')
       await runtime.listTerminals()
 
-      runtime.onPtyData(PTY_ID, '\x1b]0;✳ Claude Code\x07', 1)
+      runtime.onPtyData(PTY_ID, QUESTION_SCREEN, 1)
       await vi.advanceTimersByTimeAsync(200)
       insertDirectRunMessage(db, run.id, 'Worker heartbeat')
       runtime.notifyMessageArrived(`run:${run.id}`, 'status')
       await vi.advanceTimersByTimeAsync(10_000)
-
       expect(write).not.toHaveBeenCalled()
 
-      hook = claudeHookRow('done')
-      await vi.advanceTimersByTimeAsync(4000)
-
-      expect(write.mock.calls.map(([, data]) => data)).toEqual([
-        expect.stringContaining('You have 1 orchestration message'),
-        '\r'
-      ])
-      db.close()
-    }
-  )
-
-  it.each([
-    ['dismissed with Esc', '\x1b[2J\x1b[H\u276F \r\n', 2],
-    ['only navigated', '\x1b[2J\x1b[H\u276F 2. Blue\r\n', 0]
-  ])(
-    'with the waiting row left behind, a question %s delivers only once off screen',
-    async (_label, screenAfterInput, expectedWrites) => {
-      vi.useFakeTimers()
-      const db = createDatabase('orca-open-dialog-delivery-hold-')
-      const question = claudeHookRow('waiting')
-      const { runtime, write } = createRuntime(db, {
-        getAgentStatusSnapshot: () => [question],
-        checkHookAgentPresence: async () => 'live',
-        launchAgent: 'claude'
-      })
-      const run = createBoundRun(db, 'Claude Run')
-      await runtime.listTerminals()
-
-      runtime.onPtyData(PTY_ID, '\x1b]0;\u2733 Claude Code\x07\u276F 1. Red\r\n', 1)
-      await vi.advanceTimersByTimeAsync(200)
-      insertDirectRunMessage(db, run.id, 'Worker heartbeat')
-      runtime.notifyMessageArrived(`run:${run.id}`, 'status')
-      await vi.advanceTimersByTimeAsync(5000)
-      expect(write).not.toHaveBeenCalled()
-
-      // Esc and arrow keys post no hook; only the screen tells them apart.
-      runtime.terminalRunFacts.recordInput(PTY_ID, 'driving', '\x1b')
-      runtime.onPtyData(PTY_ID, screenAfterInput, 2)
+      if (rowAfter === 'done') {
+        hook = claudeHookRow('done')
+      }
+      runtime.onPtyData(PTY_ID, screenAfter, 2)
       await vi.advanceTimersByTimeAsync(5000)
 
-      expect(write).toHaveBeenCalledTimes(expectedWrites)
+      expect(write.mock.calls.map(([, data]) => data)).toEqual(
+        expectedWrites === 0
+          ? []
+          : [expect.stringContaining('You have 1 orchestration message'), '\r']
+      )
       db.close()
     }
   )
