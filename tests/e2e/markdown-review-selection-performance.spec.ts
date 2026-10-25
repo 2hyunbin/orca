@@ -160,6 +160,21 @@ test('selection and scrolling reuse Markdown review source lines', async ({
     await orcaPage.keyboard.press('Shift+ArrowRight')
     await expect.poll(() => editor.evaluate((element) => Reflect.get(element, 'editor').state.selection.empty)).toBe(false)
     console.log('TRIAGE markdown selection', await editor.evaluate((element) => ({ selection: Reflect.get(element, 'editor')?.state.selection.toJSON(), dom: window.getSelection()?.toString(), active: document.activeElement?.outerHTML.slice(0, 250) })))
+    console.log('TRIAGE annotation gates', JSON.stringify(await editor.evaluate((element) => {
+      const selection = window.getSelection()
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+      const bounds = range?.getBoundingClientRect()
+      const key = Object.keys(element).find((name) => name.startsWith('__reactFiber$'))
+      let fiber = key ? Reflect.get(element, key) : null
+      const props = []
+      for (let count = 0; fiber && count < 50; count++, fiber = fiber.return) {
+        const p = fiber.memoizedProps
+        if (p && (Object.hasOwn(p, 'markdownAnnotationsEnabled') || Object.hasOwn(p, 'worktreeRoot'))) {
+          props.push({ component: fiber.type?.name, annotations: p.markdownAnnotationsEnabled, worktreeRoot: p.worktreeRoot, worktreeId: p.worktreeId, filePath: p.filePath })
+        }
+      }
+      return { props, reviewSetting: window.__store?.getState().settings.markdownReviewToolsEnabled, range: bounds ? { width: bounds.width, height: bounds.height } : null, parent: range?.commonAncestorContainer.parentElement?.tagName }
+    })))
     await expect(
       orcaPage.getByRole('button', { name: 'Add review note', exact: true })
     ).toBeVisible()
