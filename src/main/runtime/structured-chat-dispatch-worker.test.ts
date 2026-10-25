@@ -1,3 +1,9 @@
+vi.mock('../node-runtime/pinned-zip-members', () => ({
+  extractPinnedZipMembers: () => {
+    throw new Error('Mail fixtures must not install a runtime')
+  }
+}))
+
 import './rpc/unused-default-rpc-methods.test-fixture'
 // A chat as the assignee of `orchestration dispatch`, end to end on the coordinator-mail rig: its
 // task arrives as any agent's message into a chat does, and it then works the Dispatch as a
@@ -260,7 +266,7 @@ describe('a chat as the assignee of orchestration dispatch', () => {
       /\*\*Subject:\*\* also check the tests[\s\S]*`orca(-dev)? orchestration reply --id msg_\w+ --body "\.\.\."`$/
     )
     expect(await queuedCardTexts(PEER_CHAT)).toEqual([])
-    await settleTurn(PEER_CHAT, 0)
+    await settleTurn(PEER_CHAT, 0, 'completed')
     await vi.waitFor(
       async () =>
         expect(await call('orchestration.check', {}, { sessionId: PEER_CHAT })).toMatchObject({

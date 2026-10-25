@@ -11,8 +11,15 @@ import {
   parseOrcaSessionAddress,
   type OrcaSessionId
 } from '../../../shared/orca-session-address'
-import type { OrchestrationDb } from './db'
+import type { OrchestrationDb, MessageRow } from './db'
 import { currentRunCoordinatorOrcaSessionId } from './db/runs/run-coordinator-orca-session'
+import { selectStructuredMailHandoff } from './mailbox-settlement'
+import { drainLegacyMailHandoff } from './legacy-mail-handoff'
+import { structuredMailBody } from './structured-mail-source'
+import type { StructuredMailboxPointerHost } from './structured-mailbox-pointer-delivery'
+import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
+import type { OrchestrationCliCommand } from './cli-command'
+import type { SenderNameResolver } from './agent-message-sender'
 import type { StructuredPointerTarget } from './structured-mailbox-pointer-delivery'
 import {
   addressableSessionParty,
@@ -135,4 +142,89 @@ export function structuredSessionIdleEdgeMailboxes(
     return []
   }
   return db ? structuredSessionOwnedMailboxes(sessionId, db) : []
+}
+
+export async function selectSessionMail(input: {
+  db: OrchestrationDb
+  mailbox: string
+  target: StructuredPointerTarget
+  session: { epoch: string; frontier: string }
+  fence: number
+  reservedTypes: ReadonlySet<string> | undefined
+  reconciled: ReadonlySet<string>
+  host: StructuredMailboxPointerHost
+  getMessageWaiters: (mailbox: string) => ReadonlySet<OrchestrationMessageWaiter> | undefined
+  resolveStructuredTarget: (mailbox: string) => StructuredPointerTarget | null
+  getCliCommand: () => OrchestrationCliCommand
+  senderName: SenderNameResolver
+  park: (address: string, reservedTypes: ReadonlySet<string> | undefined) => void
+  ownWrite: <T>(write: () => T) => T
+  onIssued: (message: MessageRow, address: string) => void
+  forget: (address: string) => void
+}) {
+  const { db, mailbox, target, session, fence, reservedTypes, reconciled } = input
+  const sessionId = target.sessionId
+  let chosen:
+    | {
+        address: string
+        target: StructuredPointerTarget
+        batch: NonNullable<Awaited<ReturnType<typeof selectStructuredMailHandoff>>>
+      }
+    | undefined
+  const addresses = new Set([mailbox, ...structuredSessionOwnedMailboxes(sessionId, db)])
+  for (const address of addresses) {
+    const addressTarget = input.resolveStructuredTarget(address)
+    if (!addressTarget || addressTarget.sessionId !== sessionId) {
+      continue
+    }
+    const types = address === mailbox ? reservedTypes : undefined
+    input.park(address, types)
+    const legacy = db.getStructuredPointerOperation(address)
+    if (legacy?.session_id === sessionId) {
+      const evidence = await input.host.readHandoffEvidence({
+        sessionId,
+        clientMessageId: legacy.operation_id
+      })
+      if (evidence) {
+        input.ownWrite(() => drainLegacyMailHandoff(db, legacy, evidence))
+      }
+    }
+    const candidate = await selectStructuredMailHandoff({
+      db,
+      mailbox: address,
+      sessionId: target.sessionId,
+      epoch: session.epoch,
+      frontier: session.frontier,
+      waiters: input.getMessageWaiters(address),
+      reservedTypes: new Set([...(address === mailbox ? (reservedTypes ?? []) : []), 'heartbeat']),
+      limit: 1,
+      readEvidence: (reference) => input.host.readHandoffEvidence(reference),
+      skipOperations: reconciled,
+      ownWrite: input.ownWrite,
+      onIssued: (message) => input.onIssued(message, address),
+      manifest: (messages) => ({
+        members: messages.map((message) => message.id),
+        dispatchId: addressTarget.dispatchId,
+        runtimeFence: fence,
+        context: input.host.currentContextClearOperationId(target.sessionId),
+        body: JSON.stringify(
+          structuredMailBody({
+            db,
+            mailboxHandle: address,
+            dispatchId: addressTarget.dispatchId,
+            message: messages[0],
+            senderName: input.senderName,
+            cliCommand: input.getCliCommand()
+          })
+        )
+      })
+    })
+    if (
+      candidate &&
+      (!chosen || candidate.messages[0].sequence < chosen.batch.messages[0].sequence)
+    ) {
+      chosen = { address, target: addressTarget, batch: candidate }
+    }
+  }
+  return chosen
 }

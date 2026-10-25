@@ -1,3 +1,5 @@
+import { createChatPersonActions } from './structured-chat-mail-person-fixture'
+import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 // The coordinator-mail rig, shared by every suite that drives a worker's result into a structured
 // chat end to end in one process.
 //
@@ -81,7 +83,39 @@ export async function call(
 }
 
 export async function openChat(sessionId: string): Promise<FakeConnection> {
-  const attached = await host.attach({ callerKey: 'test-surface' }, attachParams(sessionId))
+  if (!host.deps.store.getRecord(sessionId)) {
+    const fresh = attachParams(sessionId)
+    expect(
+      await host.create(
+        { callerKey: 'test-surface' },
+        {
+          ...fresh,
+          envelope: {
+            ...fresh.envelope,
+            payloadFingerprint: computeAgentSessionPayloadFingerprint({
+              method: 'agentSession.create',
+              sessionId,
+              fields: { worktree: `id:${fresh.location.workspaceId}`, agent: fresh.agent }
+            })
+          }
+        }
+      )
+    ).toMatchObject({ ok: true })
+  }
+  const params = attachParams(sessionId)
+  const current = {
+    ...params,
+    envelope: {
+      ...params.envelope,
+      expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence
+    }
+  }
+  current.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
+    method: 'agentSession.attach',
+    sessionId,
+    fields: attachFingerprintFields(current)
+  })
+  const attached = await host.attach({ callerKey: 'test-surface' }, current)
   expect(attached, JSON.stringify(attached)).toMatchObject({ ok: true })
   await host.setSessionTabVisibility(sessionId, true)
   threadBySession.set(sessionId, codex.connections.at(-1)!.threadId!)
@@ -102,50 +136,10 @@ export function connectionFor(sessionId: string): FakeConnection {
   return connection
 }
 
-/** Codex's own sequence for a turn: it starts, echoes the user message, and completes. */
-export async function settleTurn(sessionId: string, turnIndex: number): Promise<void> {
-  const connection = connectionFor(sessionId)
-  const turn = connection.turns[turnIndex]!
-  const turnId = `turn-${turnIndex + 1}`
-  const notify = (method: string, params: unknown) =>
-    connection.handlers.onNotification?.(method, params)
-  notify('turn/started', { turn: { id: turnId } })
-  notify('item/completed', {
-    item: {
-      type: 'userMessage',
-      id: `echo-${turn.clientUserMessageId}`,
-      clientId: turn.clientUserMessageId,
-      content: [{ type: 'text', text: 'pointer' }]
-    }
-  })
-  notify('turn/completed', { turn: { id: turnId } })
-  await host.flushStreamedEvents(sessionId)
-}
-
-/** A user message typed into the chat, as the chat surface sends it. */
-export function sendUserMessage(sessionId: string, text: string) {
-  const body = {
-    kind: 'message' as const,
-    role: 'user' as const,
-    blocks: [{ type: 'text' as const, text }]
-  }
-  return host.send(
-    { callerKey: 'test-surface' },
-    {
-      envelope: {
-        sessionId,
-        clientOperationId: operationId(),
-        expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence,
-        payloadFingerprint: computeAgentSessionPayloadFingerprint({
-          method: 'agentSession.send',
-          sessionId,
-          fields: { body }
-        })
-      },
-      body
-    }
-  )
-}
+export const { settleTurn, sendUserMessage } = createChatPersonActions({
+  host: () => host,
+  connectionFor
+})
 
 export async function userTexts(sessionId: string): Promise<string[]> {
   return (await host.journalSnapshot(sessionId)).items.flatMap((item: AgentJournalRenderItem) =>
@@ -246,7 +240,12 @@ beforeEach(async () => {
   codex = fakeCodex()
   db = new OrchestrationDb(':memory:')
   runtime = startRuntime()
-  host = await ensureStructuredAgentSessionHost({
+  host = await createMailHost()
+  dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+})
+
+function createMailHost() {
+  return ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),
     stateDirectory: root,
     hostId: 'local',
@@ -258,11 +257,22 @@ beforeEach(async () => {
     resolveEnvironment: async () => ({ PATH: '/usr/bin' }),
     ...scriptedCodexTransport(codex.openConnection),
     // The same calls the runtime's own host install makes.
-    onSessionStatusChanged: (summary) => runtime.onStructuredSessionStatusForMail(summary),
+    onRequestFailure: (failure) => runtime.onStructuredRequestFailureForErrorMail(failure),
+    captureSessionMail: (sessionId, records) => runtime.captureSessionMail(sessionId, records),
+    onSessionMailActivity: (sessionId) => runtime.notifyStructuredSessionJournalActivity(sessionId),
+    onSessionStatusChanged: (summary) => {
+      runtime.onStructuredSessionStatusForMail(summary)
+    },
     onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId)
   })
-  dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
-})
+}
+
+export async function restartHostAndRuntime(): Promise<void> {
+  await stopStructuredAgentSessionRuntime()
+  restartRuntime()
+  host = await createMailHost()
+  await host.restoreReadableSessions([COORDINATOR])
+}
 
 /** The runtime over the shared database; a second call is what an Orca restart leaves behind. */
 export function startRuntime(): OrcaRuntimeService {

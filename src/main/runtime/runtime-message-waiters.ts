@@ -11,6 +11,14 @@ export type RuntimeMessageWaiter = {
 }
 
 export class RuntimeMessageWaiters {
+  private readonly revisions = new Map<string, number>()
+  constructor(private readonly onRelease?: (handle: string) => void) {}
+  revision(handle: string): number {
+    return this.revisions.get(handle) ?? 0
+  }
+  private changed(handle: string): void {
+    this.revisions.set(handle, this.revision(handle) + 1)
+  }
   private readonly waitersByHandle = new Map<string, Set<RuntimeMessageWaiter>>()
 
   notifyRouted(handle: string, types: readonly string[]): void {
@@ -79,6 +87,7 @@ export class RuntimeMessageWaiters {
         this.waitersByHandle.set(handle, waiters)
       }
       waiters.add(waiter)
+      this.changed(handle)
     })
   }
 
@@ -90,19 +99,6 @@ export class RuntimeMessageWaiters {
     for (const waiter of waiters) {
       this.resolve(waiter, 'cancelled')
     }
-  }
-
-  typeHasLiveWaiter(handle: string, messageType: string): boolean {
-    const waiters = this.waitersByHandle.get(handle)
-    if (!waiters) {
-      return false
-    }
-    for (const waiter of waiters) {
-      if (!waiter.typeFilter || waiter.typeFilter.includes(messageType)) {
-        return true
-      }
-    }
-    return false
   }
 
   /** Internal mailbox routing needs a read-only view of active waiters. */
@@ -135,7 +131,11 @@ export class RuntimeMessageWaiters {
     if (!waiters) {
       return
     }
-    waiters.delete(waiter)
+    if (!waiters.delete(waiter)) {
+      return
+    }
+    this.changed(waiter.handle)
+    queueMicrotask(() => queueMicrotask(() => this.onRelease?.(waiter.handle)))
     if (waiters.size === 0) {
       this.waitersByHandle.delete(waiter.handle)
     }

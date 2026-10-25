@@ -9,6 +9,7 @@ import type {
 } from './server-types'
 import { toAgentStatusIpcPayload } from './server-status-identity'
 import { AgentHookServerListeners } from './server-listeners'
+import { TerminalMailTargets } from './terminal-mail-target'
 
 function toMutationIdentity(
   row: EnrichedAgentHookEventPayload | null | undefined
@@ -35,8 +36,7 @@ function semanticRow(row: EnrichedAgentHookEventPayload): Record<string, unknown
   return semantic
 }
 
-// Why: runs on every status write; a structural walk exits on the first difference and skips
-// shared leaves (e.g. an unchanged 8 KB lastAssistantMessage) instead of serializing both rows.
+// Per-write comparison skips shared leaves and exits early without serializing large messages.
 function semanticRowsEqual(
   before: EnrichedAgentHookEventPayload | null | undefined,
   after: EnrichedAgentHookEventPayload | null | undefined
@@ -51,6 +51,7 @@ function semanticRowsEqual(
 }
 
 export abstract class AgentHookServerRowOwnership extends AgentHookServerListeners {
+  protected readonly terminalMailTargets = new TerminalMailTargets()
   _resetRowOwnershipForTests(): void {
     this.paneKeyByTerminalHandle.clear()
   }
@@ -92,6 +93,7 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
     after: EnrichedAgentHookEventPayload | null | undefined,
     emit = true
   ): boolean {
+    this.terminalMailTargets.observeRow(before, after)
     if (
       before?.terminalHandle &&
       this.paneKeyByTerminalHandle.get(before.terminalHandle) === before.paneKey
@@ -104,10 +106,28 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
     if (!emit || semanticRowsEqual(before, after)) {
       return false
     }
-    const mutation: AgentHookStatusRowMutation = {
+    this.notifyStatusRowMutationListeners({
       before: toMutationIdentity(before),
       after: toMutationIdentity(after)
+    })
+    return true
+  }
+
+  /** Facet-only ticks reach row/window readers, without triggering enriched transition subscribers. */
+  protected republishProgramStatusFacet(paneKey: string): void {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Main admits enriched legacy rows; the shared view declares their base event type.
+    const row = this.state.lastStatusByPaneKey.get(paneKey) as
+      | EnrichedAgentHookEventPayload
+      | undefined
+    if (!row || row.providerSessionOnly === true) {
+      return
     }
+    this.onAgentStatus?.({ ...this.programStatusFacets.stitch(row), programStatusOnly: true })
+    const identity = toMutationIdentity(row)
+    this.notifyStatusRowMutationListeners({ before: identity, after: identity })
+  }
+
+  private notifyStatusRowMutationListeners(mutation: AgentHookStatusRowMutation): void {
     for (const listener of this.statusRowMutationListeners) {
       try {
         listener(mutation)
@@ -115,6 +135,5 @@ export abstract class AgentHookServerRowOwnership extends AgentHookServerListene
         console.error('[agent-hooks] status-row mutation listener threw', error)
       }
     }
-    return true
   }
 }

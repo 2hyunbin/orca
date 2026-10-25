@@ -89,6 +89,9 @@ type StagedStoreTransaction<T> = {
 
 export class AgentSessionStoreTransactions {
   private queue: Promise<unknown> = Promise.resolve()
+  // Reads/reopens do not admit work; a count survives handle eviction without replaying history.
+  private readonly admittedSends = new Map<string, number>()
+  recordsRevision = 0
   private published: AgentSessionStoreState
   /** What this runtime took over from the runtimes before it, as loaded; never changes after. */
   readonly replacedRuntimes: ReadonlyMap<string, AgentSessionReplacedRuntime>
@@ -124,6 +127,8 @@ export class AgentSessionStoreTransactions {
     return this.journalDatabase.readOnly
   }
 
+  admittedSendCount = (sessionId: string): number => this.admittedSends.get(sessionId) ?? 0
+
   readCommandReceipt(scope: CommandReceiptScope, operationId: string) {
     return readCommandReceipt(this.journalDatabase.db, scope, operationId)
   }
@@ -149,28 +154,49 @@ export class AgentSessionStoreTransactions {
    */
   receipt(
     apply: (draft: AgentSessionStoreState) => void,
-    options: { insertOperationsIfAbsent?: true } = {}
+    options: { insertOperationsIfAbsent?: true; submissionSessionId?: string } = {}
   ): JournalOperationReceipt {
     let staged: StagedStoreTransaction<void> | null = null
+    let admitted: string | undefined
     return {
-      write: (db) => {
+      write: (db, row) => {
         if (this.journalDatabase.readOnly) {
           throw readOnlyStoreRefusal()
         }
-        staged = this.stage(apply)
+        admitted = row?.kind === 'submission' ? options.submissionSessionId : undefined
+        // The ledger and wake share one draft as well as one commit.
+        staged = this.stage((draft) => {
+          apply(draft)
+          const record = admitted ? draft.records.get(admitted) : undefined
+          if (record?.sleptAt !== undefined) {
+            const { sleptAt: _sleptAt, ...awake } = record
+            draft.records.set(record.sessionId, {
+              ...awake,
+              updatedAt: row?.ts ?? record.updatedAt
+            })
+          }
+        })
         const writes = staged.writes
         if (writes) {
           // TEMPORARY: ledger co-write preserves cross-family identity until every mutation uses receipts.
           if (options.insertOperationsIfAbsent) {
             insertAgentSessionOperationRowsIfAbsent(db, writes.operations.upsert)
-          } else {
-            writeAgentSessionStoreRows(db, writes)
           }
+          writeAgentSessionStoreRows(
+            db,
+            options.insertOperationsIfAbsent
+              ? { ...writes, operations: { ...writes.operations, upsert: [] } }
+              : writes
+          )
         }
       },
       committed: () => {
         staged?.adopt()
+        if (admitted) {
+          this.admittedSends.set(admitted, this.admittedSendCount(admitted) + 1)
+        }
         staged = null
+        admitted = undefined
       }
     }
   }
@@ -212,6 +238,9 @@ export class AgentSessionStoreTransactions {
         if (writes) {
           freezeRows(draft, writes)
           this.published = draft
+          if (writes.records.upsert.length || writes.records.remove.length) {
+            this.recordsRevision++
+          }
         }
       }
     }

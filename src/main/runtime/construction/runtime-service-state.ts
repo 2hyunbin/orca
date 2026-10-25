@@ -1,9 +1,10 @@
+import type { RuntimeConstructionBindings as HostBindings } from './runtime-construction-dependencies'
 import { OrchestrationStructuredMailboxPointerDelivery } from '../orchestration/structured-mailbox-pointer-delivery'
 
 import { createStructuredMailboxPointerHost } from '../orchestration/structured-mailbox-pointer-host'
 import { localOrchestrationCliCommand } from '../orchestration/cli-command'
 import { RuntimeOrchestrationSenderNames } from '../runtime-orchestration-sender-names'
-import { isStructuredWorkerHandle } from '../structured-worker-identity'
+import { isStructuredWorkerHandle } from '../../../shared/structured-worker-handle'
 import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-address'
 import { resolveStructuredWorkerAuthority } from '../structured-worker-authority'
 import { OrcaRuntimeWithRuntimeId } from './runtime-identity-state'
@@ -40,8 +41,14 @@ import { RuntimeMessageWaiters } from '../runtime-message-waiters'
 import type { RuntimeSkillCommands } from '../runtime-skill-command-surface'
 import { RuntimeTerminalStreamConsumers } from '../runtime-terminal-stream-consumers'
 import type { RecentPtyOutputBuffer } from '../recent-pty-output-buffer'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { mainListsEveryPane } from '../terminal/surface/main-terminal-surfaces'
 
 export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
+  protected readonly readTerminalMailTargetFn!: HostBindings['readTerminalMailTarget'] | null
+  protected readonly terminalMailTargetWasAbandonedFn!:
+    | HostBindings['terminalMailTargetWasAbandoned']
+    | null
   protected readonly stopRequestedPtyIds = new Set<string>()
 
   protected readonly ptyExitListenersByPtyId = new Map<string, Set<() => void>>()
@@ -100,7 +107,6 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
 
   protected readonly worktreeLineage = new RuntimeWorktreeLineageController({
     getStore: () => this.store,
-    getCachedWorktrees: () => this.resolvedWorktrees.peek()?.worktrees ?? null,
     getDb: () => this.getOrchestrationDbIfAvailable(),
     resolveWorktree: (selector) => this.resolveWorktreeSelector(selector),
     listResolvedWorktrees: () => this.listResolvedWorktrees(),
@@ -111,6 +117,7 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getDb: () => this.getOrchestrationDbIfAvailable(),
     getLeaves: () => this.leaves.values(),
     getPtys: () => this.ptysById.values(),
+    paneOf: (pty) => this.paneOfPty(pty),
     issueLeafHandle: (leaf) => this.issueHandle(leaf),
     issuePtyHandle: (pty) => this.issuePtyHandle(pty),
     makePaneKey: (leaf) => this.makeRuntimePaneKey(leaf),
@@ -142,7 +149,9 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getTabTitle: (tabId) => this.tabs.get(tabId)?.title ?? null,
     getTopologyRevision: (worktreeId) => this.getTerminalTopologyRevision(worktreeId),
     buildHostScope: (targetWorktreeId, terminals, worktrees, queriedHostIds) =>
-      this.buildTerminalListHostScope(targetWorktreeId, terminals, worktrees, queriedHostIds)
+      this.buildTerminalListHostScope(targetWorktreeId, terminals, worktrees, queriedHostIds),
+    // Switch point: main lists every saved pane of a workspace it owns.
+    ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { listsEveryPane: (id) => mainListsEveryPane(this, id) } : {})
   })
 
   protected readonly managedWorktreeQueries = new RuntimeManagedWorktreeQueries({
@@ -245,6 +254,9 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getCliCommand: (terminalHandle) => this.getTerminalOrchestrationCliCommand(terminalHandle),
     getTerminalHandleForLeafKey: (leafKey) => this.handleByLeafKey.get(leafKey),
     resolveSubmitTarget: (leaf, ptyId) => this.resolveOrchestrationPointerSubmitTarget(leaf, ptyId),
+    readMailTarget: (leaf) =>
+      this.readTerminalMailTargetFn?.(this.makeRuntimePaneKey(leaf)) ?? null,
+    mailTargetWasAbandoned: (target) => this.terminalMailTargetWasAbandonedFn?.(target) ?? false,
     isLeafPtyProvenAbsent: (ptyId) => this.isLeafPtyProvenAbsent(ptyId),
     redriveMailbox: (mailboxHandle, reservedTypes) =>
       this.deliverPendingMessagesForHandle(mailboxHandle, reservedTypes),
@@ -254,6 +266,7 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
   protected readonly orchestrationStructuredMailboxPointerDelivery =
     new OrchestrationStructuredMailboxPointerDelivery<RuntimeMessageWaiter>({
       getDb: () => this._orchestrationDb,
+      getWaiterRevision: (mailboxHandle) => this.messageWaiters.revision(mailboxHandle),
       getMessageWaiters: (mailboxHandle) => this.messageWaiters.get(mailboxHandle),
       resolveStructuredTarget: (mailboxHandle) =>
         this.resolveStructuredMailboxTarget(mailboxHandle),
@@ -297,7 +310,9 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
       resolveMessageWaiter: (waiter) => this.messageWaiters.resolveNotified(waiter)
     })
 
-  protected readonly messageWaiters = new RuntimeMessageWaiters()
+  protected readonly messageWaiters = new RuntimeMessageWaiters((handle) => {
+    this.orchestrationStructuredMailboxPointerDelivery.deliverForHandle(handle)
+  })
 
   protected readonly skillCommands!: RuntimeSkillCommands
 

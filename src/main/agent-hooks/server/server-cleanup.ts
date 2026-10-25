@@ -1,3 +1,4 @@
+import { retainedProviderSessionRow } from './retained-provider-session-row'
 import type { AgentProcessPresence } from '../../../shared/agent-process-presence'
 import {
   admitLegacyAgentStatus,
@@ -17,30 +18,28 @@ import { isLocalHookConnectionId } from '../../../shared/wsl-hook-relay-contract
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { AgentHookServerAuthorityFences } from './server-authority-fences'
 import { recordAgentExit } from './agent-exit-evidence'
+import type { TerminalMailTarget } from './terminal-mail-target'
 
 export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFences {
-  /** The resume-identity remnant of a dropped row: a `providerSessionOnly` entry carries no state
-   *  claim — it cannot gate a pane `working` — so it survives teardowns that end the pane's live
-   *  claims. Returns null when the row has no resumable session to keep. */
-  protected toRetainedProviderSessionRow(
-    entry: EnrichedAgentHookEventPayload | null | undefined
-  ): EnrichedAgentHookEventPayload | null {
-    if (
-      !entry?.providerSession ||
-      !entry.payload.agentType ||
-      entry.payload.agentType === 'unknown'
-    ) {
-      return null
-    }
-    const { launchToken: _launchToken, ...resumeIdentity } = entry
-    return { ...resumeIdentity, providerSessionOnly: true, retainedForLiveness: true }
+  readTerminalMailTarget(paneKey: string): TerminalMailTarget | null {
+    const key = this.resolvePaneKeyAlias(paneKey)
+    return this.terminalMailTargets.read(this.state.lastStatusByPaneKey.get(key))
   }
 
-  /** Drop only the status row (user dismissal); do NOT wipe prompt/tool caches since the pane's agent may still be alive. Use clearPaneState for PTY-teardown. */
+  terminalMailTargetWasAbandoned(target: TerminalMailTarget): boolean {
+    const key = this.resolvePaneKeyAlias(target.paneKey)
+    return this.terminalMailTargets.wasAbandoned(
+      { ...target, paneKey: key },
+      this.state.lastStatusByPaneKey.get(key),
+      this.agentExitedAtByPaneKey.get(key)?.process
+    )
+  }
+  protected toRetainedProviderSessionRow = retainedProviderSessionRow
+
+  /** Dismiss the row while preserving the live agent's caches; PTY teardown uses clearPaneState. */
   dropStatusEntry(
     paneKey: string,
-    /** Defaults to true: a dismissed pane can still be resumed in place. A structured session has
-     *  no pane to resume into and its record store owns resume identity, so it passes false. */
+    /** Structured sessions store resume identity elsewhere and opt out. */
     options?: { preserveResumeIdentity?: boolean }
   ): void {
     const deleted = this.deleteStatusEntry(paneKey, { preserveAuthority: true })
@@ -63,13 +62,11 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     this.emitStatusDropped(deleted.paneKey)
   }
 
-  /** Evict a UI-cleared status only if no newer status has replaced it. */
   dropPersistedStatusEntry(identity: AgentStatusCacheIdentity): boolean {
     return this.dropPersistedStatusEntries([identity]).length > 0
   }
 
-  /** Batch form: one persist and one listener notification for the whole set. Returns the
-   *  pane keys that were actually evicted. */
+  /** Persist and notify once for the evicted batch. */
   dropPersistedStatusEntries(identities: readonly AgentStatusCacheIdentity[]): string[] {
     const evicted: string[] = []
     for (const identity of identities) {
@@ -78,9 +75,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
         | EnrichedAgentHookEventPayload
         | undefined
       const canonical = existing ?? this.getTmuxSelectedStatus(resolvedPaneKey)
-      // Why: stateStartedAt pins the turn; the renderer's updatedAt is stamped at or after this
-      // receivedAt (runtime-sync and recovery paths use Date.now()/capturedAt), so a strictly
-      // newer cached event is the only replacement worth protecting.
+      // The turn clock pins identity; renderer updatedAt is at least receivedAt, so protect only newer rows.
       if (
         !canonical ||
         canonical.stateStartedAt !== identity.stateStartedAt ||
@@ -115,20 +110,12 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     return evicted
   }
 
-  /** Retire panes whose owning process is certifiably dead.
-   *
-   *  The ordinary teardown already does this: every attributable PTY exit reaches
-   *  `clearProviderPtyState`, which resolves the pane key and calls `clearPaneState`. But that
-   *  resolution depends on the spawn-time `ptyPaneKey` mapping, which a restored/reattached PTY may
-   *  never rebuild — so those panes keep a `working` row and its latches for good, with no hook left
-   *  to retire them. This is the same operation reached from the runtime's own pane-key knowledge,
-   *  so a dead pane is cleaned up identically however its keys were resolved. */
+  /** Reconcile dead panes whose restored PTYs may never rebuild the spawn-time ptyPaneKey mapping. */
   reconcileEndedProcessForPaneKeys(
     paneKeys: Iterable<string>,
     options?: {
       endedPresence?: AgentProcessPresence
-      /** The pane survives to resume into (a shell outlived the agent, or a pane restored after its
-       *  terminal died offline), so keep the `providerSessionOnly` remnant. */
+      /** Keep resume identity when the pane survives the agent. */
       preserveResumeIdentity?: boolean
     }
   ): number {
@@ -136,7 +123,9 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     for (const paneKey of paneKeys) {
       const resolvedPaneKey = this.resolvePaneKeyAlias(paneKey)
       if (options?.endedPresence) {
-        // Why both: cleanup below drops the alias, and a reader may still hold the original key.
+        const row = this.state.lastStatusByPaneKey.get(resolvedPaneKey)
+        this.terminalMailTargets.observeExit(row, options.endedPresence.process)
+        // Cleanup drops aliases, but readers may still hold either key.
         const paneKeys = new Set([resolvedPaneKey, paneKey])
         for (const [aliasKey, alias] of this.legacyPaneKeyAliases) {
           if (alias.stablePaneKey === resolvedPaneKey) {
@@ -151,6 +140,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       }
       const resumeRow = options?.preserveResumeIdentity
         ? this.toRetainedProviderSessionRow(
+            // SAFETY: Main writers attach or preserve both status clocks before admitting this row.
             this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
               | EnrichedAgentHookEventPayload
               | undefined
@@ -160,6 +150,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
         resumeRow && options?.endedPresence
           ? { ...resumeRow, agentPresence: options.endedPresence }
           : resumeRow
+      // SAFETY: This same main-only raw map admits rows with both status clocks preserved.
       const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
         | EnrichedAgentHookEventPayload
         | undefined
@@ -180,18 +171,14 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     return cleared
   }
 
-  /** Anything a dead pane could still be asserting: a row, or a latch that would re-gate one through
-   *  `resolveClaudePaneState` on the pane's next event even after the row reads `done`. The list
-   *  itself lives beside `clearPaneCacheState`, so adding a latch cannot leave this behind in a
-   *  different file. */
+  /** Include latches that can revive work even when the visible row is done. */
   protected hasLiveClaimsForPaneKey(paneKey: string): boolean {
     return Boolean(this.getTmuxSelectedStatus(paneKey)) || paneHasStateClaims(this.state, paneKey)
   }
 
-  /** Retire the panes a removed worktree occupied on `host`, and its leftover claim on any other pane. */
   dropStatusEntriesForRemovedWorktree(worktreeId: string, host?: ExecutionHostScope): void {
     const parsed = host === ALL_EXECUTION_HOSTS_SCOPE ? null : parseExecutionHostId(host ?? 'local')
-    // Why: a runtime host keeps its own store, so no row here is its to retire.
+    // Runtime hosts own separate status stores.
     if (host !== ALL_EXECUTION_HOSTS_SCOPE && (!parsed || parsed.kind === 'runtime')) {
       return
     }
@@ -240,7 +227,6 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       }
       const occupant = row ?? commitment
       if (occupant && !ownedByRemoved(occupant)) {
-        // Another owner has the pane now; only our outlived commitment is left to clear.
         if (commitment && ownedByRemoved(commitment)) {
           this.persistedAuthorityCommitmentsByPaneKey.delete(paneKey)
           this.hydratedLaunchTokenHashByPaneKey.delete(paneKey)
@@ -252,7 +238,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
         }
         continue
       }
-      // Why a pane fence, not a tab one: a surviving same-id host keeps the shared tab.
+      // Fence the pane; another host may still own the same tab ID.
       this.retirePaneAuthority(paneKey)
       if (row) {
         this.emitPaneStatusCleared({ paneKey })
@@ -260,7 +246,6 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     }
   }
 
-  /** Clear statuses proven to belong to one lost SSH transport. */
   clearStatusEntriesForConnection(connectionId: string): void {
     const normalizedConnectionId = connectionId.trim()
     if (normalizedConnectionId.length === 0) {
@@ -283,7 +268,7 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
         statusChanged = true
         this.commitStatusRowMutation(deleted, undefined)
         if (deleted.payload.agentType === 'codex') {
-          // Why: a replacement remote process may reuse the pane; don't merge it with the lost connection's children.
+          // A replacement remote process may reuse the pane; discard the lost owner's children.
           this.state.codexSubagentRosterByPaneKey.delete(paneKey)
           this.state.codexLeadStateByPaneKey.delete(paneKey)
         } else if (deleted.payload.agentType === 'claude') {
@@ -302,11 +287,10 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       }
     }
     if (statusChanged) {
-      // Why: persist/notify once — one disconnect can own many panes.
       this.scheduleStatusPersist()
       this.notifyStatusChangeListeners()
     }
-    // Why: always send the cutoff even with no matched entry — another host may have overwritten this pane's row.
+    // Send the cutoff even with no matched row; another host may have overwritten it.
     this.emitPaneStatusCleared({
       transient: true,
       connectionId: normalizedConnectionId,

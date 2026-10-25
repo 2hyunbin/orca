@@ -1,3 +1,4 @@
+import type { AgentIdleEdgeMeta } from '../../../../shared/terminal-output-side-effects'
 import type {
   RestoreSpawnIntent,
   SpawnDeferralReason
@@ -153,6 +154,7 @@ type PtyCallbacks = {
 }
 
 export type PtyTransportRecoveryState = {
+  reason?: 'ownership'
   phase:
     | 'connecting'
     | 'connected'
@@ -178,6 +180,8 @@ export type PtyTransport = {
      *  first byte and the gate + model responder own spawn-time queries.
      *  Ignored by remote-runtime transports (not gate-markable). */
     initiallyHidden?: boolean
+    /** Layout-owner build: attach to `sessionId` or start nothing; main starts the pane. */
+    attachOnlyView?: true
     /** Sent only when this connect resumes an agent, and only to hosts that accept it. */
     resumeSpawnIntent?: RestoreSpawnIntent
     command?: string
@@ -284,7 +288,6 @@ export type IpcPtyTransportOptions = {
   preconnectInput?: readonly PtyPreconnectInputEntry[]
   /** Records newly retained input against a remount-safe deferred split handoff. */
   onPreconnectInput?: (input: PtyPreconnectInputEntry) => void
-  cwdFallback?: 'worktree'
   env?: Record<string, string>
   envToDelete?: string[]
   command?: string
@@ -320,8 +323,10 @@ export type IpcPtyTransportOptions = {
   retainDisposedSpawn?: () => boolean
   /** Rebind an existing pane after its provider replaces the PTY identity. */
   onPtyRebind?: (ptyId: string, replacedPtyId: string, incarnationId?: string | null) => void
+  /** The host bound a new live process to a pane this transport already ended on its exit record. */
+  onHostReboundExitedPty?: (ptyId: string) => void
   onBell?: () => void
-  onAgentBecameIdle?: (title: string) => void
+  onAgentBecameIdle?: (title: string, meta?: AgentIdleEdgeMeta) => void
   onAgentBecameWorking?: () => void
   onAgentExited?: () => void
   onAgentStatus?: (payload: ParsedAgentStatusPayload) => void

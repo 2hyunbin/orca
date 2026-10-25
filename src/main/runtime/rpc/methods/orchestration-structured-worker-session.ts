@@ -340,7 +340,7 @@ const REDRIVE_MAX_WAIT_MS = 2_000
  * idle worker — that is `deliverForHandle`, called when the message is enqueued and untouched
  * here. This is only the retry for mail already parked because the worker was busy.
  */
-async function subscribeForRedrive(
+export async function subscribeForRedrive(
   host: StructuredAgentSessionHost,
   sessionId: string,
   onJournalActivity: (sessionId: string) => void

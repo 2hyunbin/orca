@@ -1,3 +1,4 @@
+import type { MailHandoffStoreMethods } from './messages/mail-handoff-store'
 import type { AttemptObservationStoreMethods } from './attempt-observation-store'
 import type { CoordinatorRunStoreMethods } from './coordinator-runs/coordinator-run-store'
 import type { DecisionGateStoreMethods } from './decision-gates/decision-gate-store'
@@ -62,10 +63,12 @@ import type { WorkerTerminalRecoveryMethods } from './worker-dispatch/worker-ter
 import type { WorkerTerminalArchiveMethods } from './worker-terminal/worker-terminal-archive'
 import type { WorkerTerminalListingMethods } from './worker-terminal/worker-terminal-listing'
 import type { WorkerTerminalReleaseMethods } from './worker-terminal/worker-terminal-release'
+import type { StructuredPointerOperationStoreMethods } from './messages/structured-pointer-operation-store'
 import type { WorkerTerminalResourceStoreMethods } from './worker-terminal/worker-terminal-resource-store'
 import type { WorkerTerminalTransferMethods } from './worker-terminal/worker-terminal-transfer'
 
-export type OrchestrationDbMethods = AttemptObservationStoreMethods &
+export type OrchestrationDbMethods = MailHandoffStoreMethods &
+  AttemptObservationStoreMethods &
   CreateTablesMethods &
   SchemaMigrateMethods &
   SchemaColumnProbesMethods &
@@ -118,6 +121,7 @@ export type OrchestrationDbMethods = AttemptObservationStoreMethods &
   FederationRelayImportMethods &
   RemoteQuestionStoreMethods &
   FederationRelayItemMethods &
+  StructuredPointerOperationStoreMethods &
   WorkerTerminalResourceStoreMethods &
   WorkerTerminalTransferMethods &
   WorkerTerminalReleaseMethods &

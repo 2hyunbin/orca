@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { openAttachedHostRig, send, hello, framesOf } from './acp-structured-host.test-support'
 import { PROVIDER_SESSION, waitFor } from './acp-structured-adapter.test-support'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
@@ -30,6 +30,7 @@ function sendMail(host: StructuredAgentSessionHost, operationId: string) {
     dispatchId: null,
     operationId,
     expectedRuntimeFence: host.deps.store.getRecord(SESSION)!.lease.runtimeFence,
+    beforeRun: () => true,
     body: mailNotice
   })
 }
@@ -63,10 +64,38 @@ it('holds mail without interrupting an answerable ACP question', async () => {
     toolCallId: 'question-1',
     questions: [{ question: 'Which file?', options: [{ label: 'a.ts' }] }]
   })
-  await waitFor(() => expect(host.currentWork(SESSION)?.hasActionablePrompt()).toBe(true))
+  const pointer = createStructuredMailboxPointerHost()
+  await waitFor(() => expect(pointer.hasActionablePromptNow(SESSION)).toBe(true))
+  const body: AgentJournalMessageItem = {
+    ...hello,
+    from: {
+      kind: 'agent',
+      senders: [],
+      orchestration: { message: 'mail-notice', mailbox: 'run:r1', dispatchId: null, messages: [] }
+    }
+  }
+  const before = await host.journalSnapshot(SESSION)
+  const questions = before.items.filter((row) => row.body.kind === 'question')
+  expect(questions).toHaveLength(1)
   const operationId = mintAgentSessionOperationId(Date.now())
-  expect(await sendMail(host, operationId)).toEqual({ kind: 'held' })
-  expect((await host.journalSnapshot(SESSION)).submissions).toHaveLength(1)
+  const expectedRuntimeFence = host.deps.store.getRecord(SESSION)!.lease.runtimeFence
+  const beforeRun = vi.fn(() => true)
+  expect(
+    await pointer.send({
+      sessionId: SESSION,
+      dispatchId: null,
+      operationId,
+      expectedRuntimeFence,
+      beforeRun,
+      body
+    })
+  ).toEqual({ kind: 'held' })
+  expect(beforeRun).toHaveBeenCalled()
+  const after = await host.journalSnapshot(SESSION)
+  expect(before.submissions).toHaveLength(1)
+  expect(after.submissions).toEqual(before.submissions)
+  expect(after.items.filter((row) => row.body.kind === 'question')).toEqual(questions)
+  expect(pointer.hasActionablePromptNow(SESSION)).toBe(true)
   expect(
     host.deps.store.readCommandReceipt(commandReceiptScope('any', 'global'), operationId)
   ).toMatchObject({ verdict: 'absent' })

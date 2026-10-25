@@ -1,5 +1,5 @@
+import { writeMailHold } from './journal-mail-holds'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
-// Republishing an epoch is ONE transaction.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -46,7 +46,6 @@ export function registerJournalEpochReplacementTests(): void {
     return clock
   }
 
-  /** Rows stored under the chat and epoch, whatever the chat's pointer names. */
   function storedRows(sessionId: string, epoch: string): number {
     return Number(
       database.db
@@ -70,6 +69,7 @@ export function registerJournalEpochReplacementTests(): void {
       fence: 1,
       items: input.items,
       queuePause: { lifted: false, liveStop: null, reopened: false },
+      queue: { cards: [], receipt: { write: () => {}, committed: () => {} } },
       now,
       mintEpoch: () => `epoch-${clock}`,
       onPublished: input.onPublished ?? (() => undefined)
@@ -85,14 +85,38 @@ export function registerJournalEpochReplacementTests(): void {
   afterEach(async () => {
     try {
       database.close()
-    } catch {
-      // Already closed by the case.
-    }
+    } catch {}
     await journals.closeAll()
     await rm(root, { recursive: true, force: true })
   })
 
   describe('journal epoch replacement', () => {
+    it('keeps personal mail intent through actual epoch retirement and non-person Stop restatement', async () => {
+      const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
+      database.transaction((db) =>
+        writeMailHold(db, IDENTITY.sessionId, {
+          version: 1,
+          status: 'held',
+          members: ['A', 'B'],
+          ambiguous: false,
+          releasedThrough: 0
+        })
+      )
+      const held = () =>
+        database.db
+          .prepare(
+            'SELECT intent_order, state_json FROM agent_session_mail_holds WHERE session_id = ?'
+          )
+          .get(IDENTITY.sessionId)
+      const before = held()
+      await journal.appendStopEvent({ reason: 'user-stop' }, 1)
+      await journal.rollEpoch('handle_forked', 1)
+      await journal.appendStopEvent({ reason: 'host-stop' }, 1)
+      expect(held()).toEqual(before)
+      replace({ items: [] })
+      expect(held()).toEqual(before)
+    })
+
     it('publishes one observable replacement', () => {
       const published: JournalLoad[] = []
 
@@ -109,7 +133,6 @@ export function registerJournalEpochReplacementTests(): void {
       expect(readTestJournalRows(database.db, IDENTITY.sessionId, epoch ?? '')).toHaveLength(2)
     })
 
-    // Keyed by identity: a retired epoch's rows go by (chat, epoch), and no other chat's go with them.
     it.each([
       [
         'a replace',

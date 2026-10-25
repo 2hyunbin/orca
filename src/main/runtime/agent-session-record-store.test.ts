@@ -738,26 +738,35 @@ describe('claim keys and unreadable rows', () => {
     expect(store.isClaimKeyVerifiable('key-unknown', NOW)).toBe(true)
   })
 
-  it.each([
-    [
-      'invalid checkpoint',
-      (record: PersistedAgentSessionRecord) =>
-        Object.assign(record.lease, { journalCheckpoint: { epoch: 'bad', sequence: 1 } })
-    ],
-    [
-      // No proof yet is a live owner whose provider has not answered; a proof naming no link is not.
-      'live proof naming no handle',
-      (record: PersistedAgentSessionRecord) =>
-        Object.assign(record.lease, { provenHandleLinkId: 'link-never-minted' })
-    ]
-  ])('quarantines a record with %s', async (_name, corrupt) => {
+  // No proof yet is a live owner whose provider has not answered; a proof naming no link is not.
+  it('quarantines a record with a live proof naming no handle', async () => {
     const first = await open()
     await establishOwner(first)
     await editPersistedTestAgentSessionStore(directory, (persisted) => {
-      corrupt(persisted.records['session-alpha'])
+      Object.assign(persisted.records['session-alpha'].lease, {
+        provenHandleLinkId: 'link-never-minted'
+      })
     })
     expect((await open()).isSessionUnreadable('session-alpha')).toBe(true)
   })
+
+  // Nothing reads the checkpoint any more, so even one this build could never have parsed loads.
+  it.each([null, { epoch: 3, sequence: 0 }, { epoch: 'bad', sequence: 1 }])(
+    "loads a record carrying an older build's journal checkpoint %o, and drops it on the next write",
+    async (journalCheckpoint) => {
+      const first = await open()
+      await establishOwner(first)
+      await editPersistedTestAgentSessionStore(directory, (persisted) => {
+        Object.assign(persisted.records['session-alpha'].lease, { journalCheckpoint })
+      })
+      const reopened = await open()
+      expect(reopened.isSessionUnreadable('session-alpha')).toBe(false)
+      await reopened.setConversationName('session-alpha', 'renamed')
+      const stored = (await readPersistedTestAgentSessionStore(directory)).records['session-alpha']
+      expect(stored.conversationName).toBe('renamed')
+      expect(stored.lease).not.toHaveProperty('journalCheckpoint')
+    }
+  )
 
   it('sets aside a row whose handle is in both stored forms and never rewrites it', async () => {
     const first = await open()
@@ -793,4 +802,42 @@ describe('claim keys and unreadable rows', () => {
       }
     })
   })
+})
+
+it('seeds only committed fresh founding, preserving replay results and rolling back receipt markers with their records', async () => {
+  const store = await open()
+  const database = openTestJournalHostDatabase(directory)
+  const rows = () =>
+    database.db
+      .prepare(
+        'SELECT session_id, intent_order FROM agent_session_mail_holds ORDER BY intent_order'
+      )
+      .all()
+  const request = reserveRequest()
+  expect((await store.founding.commit(request)).disposition).toBe('created')
+  const first = rows()
+  const revision = store.recordsRevision
+  expect((await store.founding.commit(request)).disposition).toBe('replayed')
+  expect(rows()).toEqual(first)
+  expect(store.recordsRevision).toBe(revision)
+  const next = reserveRequest({ sessionId: 'session-next' })
+  const receipt = store.founding.receipt(next)
+  expect(() =>
+    database.transaction((db) => {
+      receipt.write(db)
+      throw new Error('rollback')
+    })
+  ).toThrow('rollback')
+  expect(store.getRecord(next.sessionId)).toBeNull()
+  expect(rows()).toEqual(first)
+  const accepted = store.founding.receipt(next)
+  database.transaction((db) => accepted.write(db))
+  accepted.committed()
+  expect(rows().map((row) => row.session_id)).toEqual([request.sessionId, next.sessionId])
+  expect(() => database.transaction((db) => store.founding.receipt(next).write(db))).toThrow()
+  expect(rows()).toHaveLength(2)
+  await store.founding.commit(
+    reserveRequest({ sessionId: 'session-import', adoptedHandleLink: handleLink() })
+  )
+  expect(rows()).toHaveLength(2)
 })

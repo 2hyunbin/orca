@@ -117,8 +117,23 @@ async function renderPreamble(worker: 'chat' | 'terminal'): Promise<string> {
 
 /** The turn text the structured lane sends a chat for one message on `mailbox`. */
 async function renderChatMail(mailbox: string): Promise<string> {
+  db.db
+    .prepare(
+      "INSERT OR IGNORE INTO runs (id, objective, coordinator_handle, consumer_generation, legacy) VALUES ('run_parity', 'mail parity', 'coord', 1, 0)"
+    )
+    .run()
   const texts: string[] = []
   const message = db.insertMessage({ from: 'term_peer', to: mailbox, subject: 'hi' })
+  const evidence = {
+    mailHold: { members: new Set<string>(), ambiguous: false, key: 'released' },
+    epoch: 'epoch',
+    frontier: 'frontier',
+    stopInForce: false,
+    submission: undefined,
+    owner: null,
+    personStopped: false,
+    diedTurnId: null
+  }
   const delivery = new OrchestrationStructuredMailboxPointerDelivery({
     getDb: () => db,
     getMessageWaiters: () => undefined,
@@ -127,8 +142,10 @@ async function renderChatMail(mailbox: string): Promise<string> {
     getCliCommand: localOrchestrationCliCommand,
     senderName: () => null,
     host: {
-      readSessionFacts: async () => ({ submissions: [] }),
-      takesMailNow: () => true,
+      readSessionFacts: async () => evidence,
+      readHandoffEvidence: async () => evidence,
+      readHandoffEvidenceNow: () => evidence,
+      hasActionablePromptNow: () => false,
       currentFence: () => 1,
       currentContextClearOperationId: () => undefined,
       send: async (input) => {
@@ -141,7 +158,8 @@ async function renderChatMail(mailbox: string): Promise<string> {
   })
   delivery.deliverForHandle(mailbox)
   await vi.waitFor(() => expect(texts).toHaveLength(1))
-  expect(db.getMessageById(message.id)?.read).toBeTruthy()
+  // Read, as the agent's `check` reads it, so this mailbox's next mail is pointed too.
+  db.markAsRead([message.id])
   return texts[0]!
 }
 

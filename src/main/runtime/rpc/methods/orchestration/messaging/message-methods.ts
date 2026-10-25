@@ -8,18 +8,14 @@ import { orchestrationCallerIdentity, resolveRunScope } from '../runs/run-scope'
 import {
   readMutationReplayNudge,
   stripMutationReplayNudge
-} from '../../../orchestration-mutation-executor'
+} from '../../../orchestration-mutation-receipt'
 import { exposeMessage } from './mailbox-message-receipt'
-import { resolveOrchestrationParty } from '../../../../orchestration/orchestration-party'
+import { orchestrationInboxMethod } from './inbox-method'
 import { recordReceiptBeforeNudge, replayMutationNudge } from './mutation-replay-nudge'
 import { resolveReplyRecipient } from './recipient-routing'
-import {
-  ReplyParams,
-  InboxParams,
-  TaskCreateParams,
-  TaskListParams,
-  TaskUpdateParams
-} from '../schemas'
+import { helperQuestionAnswerer } from './helper-question-answerer'
+import { replyToRemoteRunHome } from './reply-remote'
+import { ReplyParams, TaskCreateParams, TaskListParams, TaskUpdateParams } from '../schemas'
 
 export const ORCHESTRATION_MESSAGE_METHODS = [
   defineMethod({
@@ -34,7 +30,8 @@ export const ORCHESTRATION_MESSAGE_METHODS = [
         runtime,
         legacyCoordinatorRunId,
         recordMutationReceipt,
-        replayedMutationReceipt
+        replayedMutationReceipt,
+        signal
       }
     ) => {
       const replayNudge = readMutationReplayNudge(replayedMutationReceipt)
@@ -71,6 +68,28 @@ export const ORCHESTRATION_MESSAGE_METHODS = [
       }
 
       const question = db.getQuestion(params.id)
+      const creatorAnswerer =
+        question && (params.run === undefined || params.run === question.run_id)
+          ? helperQuestionAnswerer(runtime, {
+              question: original,
+              from: params.from,
+              session: orchestrationCaller,
+              evidence: orchestrationCompatibilityEvidence
+            })
+          : undefined
+      if (question && creatorAnswerer) {
+        const answered = db.answerQuestion({
+          messageId: question.message_id,
+          runId: question.run_id,
+          answeredBy: creatorAnswerer,
+          body: params.body
+        })
+        return recordReceiptBeforeNudge(
+          recordMutationReceipt,
+          { ...answered, message: exposeMessage(answered.message) },
+          () => runtime.notifyMessageArrived(`dispatch:${question.dispatch_id}`, 'status')
+        )
+      }
       if (question) {
         const run = resolveRunScope(runtime, {
           runId: params.run ?? question.run_id,
@@ -115,6 +134,9 @@ export const ORCHESTRATION_MESSAGE_METHODS = [
         )
       }
 
+      if (db.getRun(original.run_id)?.home_database === 'remote') {
+        return await replyToRemoteRunHome({ runtime, db, original, params, signal })
+      }
       const recipient = resolveReplyRecipient({
         runtime,
         db,
@@ -138,30 +160,7 @@ export const ORCHESTRATION_MESSAGE_METHODS = [
     }
   }),
 
-  defineMethod({
-    name: 'orchestration.inbox',
-    permission: 'workspace',
-    params: InboxParams,
-    handler: (params, { runtime }) => {
-      const db = runtime.getOrchestrationDb()
-      // Why: stale/unknown handles return empty rather than error — historical rows survive handle deletion (design doc §3.3).
-      if (params.id) {
-        const message = db.getMessageById(params.id)
-        const recipient = params.terminal
-          ? resolveOrchestrationParty(params.terminal, db).address
-          : undefined
-        const messages = message && (!recipient || message.to_handle === recipient) ? [message] : []
-        return { messages, count: messages.length }
-      }
-      const messages = params.terminal
-        ? db.getAllMessagesForHandle(
-            resolveOrchestrationParty(params.terminal, db).address,
-            params.limit
-          )
-        : db.getInbox(params.limit)
-      return { messages, count: messages.length }
-    }
-  }),
+  orchestrationInboxMethod,
 
   defineMethod({
     name: 'orchestration.taskCreate',

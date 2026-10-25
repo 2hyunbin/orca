@@ -1,12 +1,13 @@
+import { withMailHandoffs } from './orchestration-mail-handoff.test-fixture'
 import type { MessagePriority, MessageRow, MessageType } from './orca-runtime-test-mocks.spec'
 
 // Why: these tests only need message-queue semantics; real SQLite would make them fail on unrelated native runtime ABI drift.
-export class InMemoryOrchestrationMessages {
+export class InMemoryMessageQueue {
   private sequence = 0
 
   private activeCoordinatorRun: { coordinator_handle: string } | null = null
 
-  private messages: MessageRow[] = []
+  protected messages: MessageRow[] = []
 
   private runs = new Map<
     string,
@@ -267,11 +268,13 @@ export class InMemoryOrchestrationMessages {
     )
   }
 
-  markAsDelivered(ids: string[]): void {
-    const deliveredIds = new Set(ids)
+  markAsDelivered(ids: string[], mailboxHandle: string): void {
+    const requested = new Set(ids)
+    const deliveredIds = new Set<string>()
     for (const message of this.messages) {
-      if (deliveredIds.has(message.id)) {
+      if (requested.has(message.id) && message.to_handle === mailboxHandle) {
         message.delivered_at = '1970-01-01 00:00:00'
+        deliveredIds.add(message.id)
       }
     }
     this.clearMailboxPointerEnter(deliveredIds)
@@ -341,3 +344,5 @@ export class InMemoryOrchestrationMessages {
 
   close(): void {}
 }
+
+export class InMemoryOrchestrationMessages extends withMailHandoffs(InMemoryMessageQueue) {}

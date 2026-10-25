@@ -1,3 +1,4 @@
+import type { CaptureSessionMail } from '../../native-chat/agent-session-journal/journal-mail-holds'
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
 import type { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from '../terminal/lifecycle/pty-worktree-refresh'
 import type { RuntimeAccountController } from '../runtime-account-controller'
@@ -40,9 +41,12 @@ export abstract class OrcaRuntimeWithWorktreePsDependencies extends OrcaRuntimeW
   ): ReturnType<
     OrcaRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
   >
+  abstract captureSessionMail: CaptureSessionMail
+  abstract notifyStructuredSessionJournalActivity(sessionId: string): void
   abstract onStructuredSessionStatusForMail(
     ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
   ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
+  abstract isChatWorkerErrorEscalationEnabled(): boolean
   abstract onStructuredSessionTabHidden(
     ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
   ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
