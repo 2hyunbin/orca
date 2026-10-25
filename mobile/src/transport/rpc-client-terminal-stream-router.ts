@@ -1,4 +1,5 @@
 import {
+  createUnreadableTerminalFrameState,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -9,6 +10,7 @@ export class RpcClientTerminalStreamRouter {
   private readonly listeners = new Map<number, TerminalListener>()
   private readonly idsByRequest = new Map<string, Set<number>>()
   private readonly snapshots = new Map<number, TerminalSnapshotState>()
+  private readonly unreadableFrames = createUnreadableTerminalFrameState()
 
   register(requestId: string, streamId: number, listener: TerminalListener): void {
     const ids = this.idsByRequest.get(requestId) ?? new Set<number>()
@@ -32,6 +34,7 @@ export class RpcClientTerminalStreamRouter {
   handle(bytes: Uint8Array): void {
     handleTerminalBinaryFrame(bytes, {
       terminalSnapshots: this.snapshots,
+      unreadableFrames: this.unreadableFrames,
       getListener: (streamId) => this.listeners.get(streamId)
     })
   }

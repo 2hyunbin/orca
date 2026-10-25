@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { handleTerminalBinaryFrame } from './rpc-client-terminal-binary-frame'
+import {
+  createUnreadableTerminalFrameState,
+  handleTerminalBinaryFrame
+} from './rpc-client-terminal-binary-frame'
 import {
   encodeTerminalStreamFrame,
   TerminalStreamOpcode
@@ -26,6 +29,7 @@ describe('handleTerminalBinaryFrame', () => {
       encodeFrame(TerminalStreamOpcode.Metadata, 42, { cwd: '/repo/src' }),
       {
         terminalSnapshots: new Map(),
+        unreadableFrames: createUnreadableTerminalFrameState(),
         getListener: (streamId) => (streamId === 42 ? listener : undefined)
       }
     )
@@ -42,7 +46,11 @@ describe('handleTerminalBinaryFrame', () => {
         rawLength: 31,
         transformed: true
       }),
-      { terminalSnapshots: new Map(), getListener: () => listener }
+      {
+        terminalSnapshots: new Map(),
+        unreadableFrames: createUnreadableTerminalFrameState(),
+        getListener: () => listener
+      }
     )
 
     expect(listener).toHaveBeenCalledWith({
@@ -52,17 +60,34 @@ describe('handleTerminalBinaryFrame', () => {
     })
   })
 
-  it('ends the stream instead of dropping a frame it cannot read', () => {
+  it('ends the stream on an unreadable frame, at most once per stream and per interval', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let now = 1_000
+    const options = {
+      terminalSnapshots: new Map(),
+      unreadableFrames: createUnreadableTerminalFrameState(() => now),
+      getListener: () => listener
+    }
     const listener = vi.fn()
-    const frame = encodeFrame(TerminalStreamOpcode.Output, 9, 'text')
-    // An opcode no build knows yet, as a newer host could send.
-    frame[2] = 250
+    const unreadable = (streamId: number): Uint8Array => {
+      const frame = encodeFrame(TerminalStreamOpcode.Output, streamId, 'text')
+      // An opcode no build knows yet, as a newer host could send.
+      frame[2] = 250
+      return frame
+    }
 
-    handleTerminalBinaryFrame(frame, { terminalSnapshots: new Map(), getListener: () => listener })
+    handleTerminalBinaryFrame(unreadable(9), options)
+    handleTerminalBinaryFrame(unreadable(9), options)
+    // The resubscribe's stream hits the same frame right away: logged, but not reset again.
+    handleTerminalBinaryFrame(unreadable(10), options)
+    now += 30_000
+    handleTerminalBinaryFrame(unreadable(11), options)
 
-    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', streamId: 9 }))
-    expect(warn).toHaveBeenCalled()
+    expect(listener.mock.calls.map(([event]) => event)).toEqual([
+      expect.objectContaining({ type: 'error', streamId: 9 }),
+      expect.objectContaining({ type: 'error', streamId: 11 })
+    ])
+    expect(warn).toHaveBeenCalledTimes(3)
     warn.mockRestore()
   })
 })

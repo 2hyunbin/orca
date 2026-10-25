@@ -1,5 +1,6 @@
 import { decodeBrowserScreencastFrame } from './browser-screencast-protocol'
 import {
+  createUnreadableTerminalFrameState,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -80,6 +81,7 @@ export class MobileRelayRpcStreams {
   >()
   private readonly terminalListeners = new Map<number, (result: unknown) => void>()
   private readonly terminalSnapshots = new Map<number, TerminalSnapshotState>()
+  private readonly unreadableTerminalFrames = createUnreadableTerminalFrameState()
   private activeBrowserStream: StreamRecord | null = null
   private sendCount = 0
 
@@ -201,6 +203,7 @@ export class MobileRelayRpcStreams {
     }
     handleTerminalBinaryFrame(bytes, {
       terminalSnapshots: this.terminalSnapshots,
+      unreadableFrames: this.unreadableTerminalFrames,
       getListener: (streamId) => this.terminalListeners.get(streamId)
     })
   }

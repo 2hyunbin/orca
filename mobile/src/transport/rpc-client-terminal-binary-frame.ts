@@ -14,8 +14,25 @@ export type TerminalSnapshotState = {
 
 type StreamingListener = (result: unknown) => void
 
+// Why: a host that always sends an unreadable frame must not turn every resubscribe into another reset.
+const UNREADABLE_FRAME_RESET_INTERVAL_MS = 30_000
+const MAX_TRACKED_UNREADABLE_STREAMS = 256
+
+export type UnreadableTerminalFrameState = {
+  now: () => number
+  lastResetAt: number | null
+  reportedStreamIds: Set<number>
+}
+
+export function createUnreadableTerminalFrameState(
+  now: () => number = Date.now
+): UnreadableTerminalFrameState {
+  return { now, lastResetAt: null, reportedStreamIds: new Set() }
+}
+
 type TerminalBinaryFrameOptions = {
   terminalSnapshots: Map<number, TerminalSnapshotState>
+  unreadableFrames: UnreadableTerminalFrameState
   getListener: (streamId: number) => StreamingListener | undefined
 }
 
@@ -124,17 +141,29 @@ export function handleTerminalBinaryFrame(
   reportUnreadableTerminalFrame(options, frame.streamId, frame.opcode)
 }
 
-// Why an error event: it ends the stream, and the resubscribe's snapshot restores whatever the frame held.
+// Why an error event: ending the stream makes the next subscription redraw from a fresh snapshot.
 function reportUnreadableTerminalFrame(
   options: TerminalBinaryFrameOptions,
   streamId: number,
   opcode: number
 ): void {
   const listener = options.getListener(streamId)
-  if (!listener) {
+  const state = options.unreadableFrames
+  if (!listener || state.reportedStreamIds.has(streamId)) {
     return
   }
-  console.warn('[terminal-stream] unreadable frame', { streamId, opcode })
+  if (state.reportedStreamIds.size >= MAX_TRACKED_UNREADABLE_STREAMS) {
+    state.reportedStreamIds.clear()
+  }
+  state.reportedStreamIds.add(streamId)
+  const now = state.now()
+  const reset =
+    state.lastResetAt === null || now - state.lastResetAt >= UNREADABLE_FRAME_RESET_INTERVAL_MS
+  console.warn('[terminal-stream] unreadable frame', { streamId, opcode, reset })
+  if (!reset) {
+    return
+  }
+  state.lastResetAt = now
   options.terminalSnapshots.delete(streamId)
   listener({
     type: 'error',
