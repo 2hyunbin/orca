@@ -144,6 +144,17 @@ describe('CellAdmitEffectiveWriter', () => {
     expect(DEAD_MAN_SLOT_HOLD_MS).toBeGreaterThan(5 * 60_000)
   })
 
+  it('still yields to a saturated pool for a reserve row, however old', async () => {
+    let busy = false
+    const { clock, writes, writer, settle } = setup({ busyWhen: () => busy })
+    writer.tick('reserve', true)
+    await settle()
+    busy = true
+    clock.value += DEAD_MAN_SLOT_HOLD_MS
+    writer.tick('reserve', true)
+    expect(writes).toEqual(['reserve'])
+  })
+
   it('never claims while requests wait for the pool, or with the switch off reserve', async () => {
     const busy = setup({ busy: true })
     busy.writer.tick('reserve', true, { slots: 1, permit: () => undefined })
