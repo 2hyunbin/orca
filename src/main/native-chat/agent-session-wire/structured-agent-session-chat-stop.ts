@@ -125,7 +125,7 @@ export function mutateWithChatStop<TValue>(
   ): Promise<ChatStopOutcome> => {
     // Turns may advance during acceptance; only a replacement child escapes this Stop.
     const current = context.sessions.get(ctx.sessionId)?.child
-    if (target.reach === 'withdraw' || current !== target.child) {
+    if (target.reach === 'withdraw' || !target.child || current !== target.child) {
       return { ok: true, value: { ...named, cancelled: settled } }
     }
     const { child } = target

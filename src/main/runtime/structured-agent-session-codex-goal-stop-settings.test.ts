@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { afterEach, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import { AGENT_SESSION_GOAL_CONTROL_COPY as COPY } from '../../shared/agent-session-goal-control-copy'
@@ -645,7 +646,7 @@ it('answers Stop before the shipped 15s phone budget while the owned 15,970ms cl
     completedAt: number | undefined
   vi.spyOn(host.deps.adapter, 'disposeSession').mockImplementation(async (id, observe) => {
     await closeProviderProcess({
-      child: { pid: 12345, kill: () => true, stdin: { end: () => {} } },
+      child: { pid: 12345, kill: () => true, stdin: new PassThrough() },
       exitPromise: exit.promise,
       rootVerdict: () => (rootExited ? 'exited' : 'live'),
       supervised: true,
