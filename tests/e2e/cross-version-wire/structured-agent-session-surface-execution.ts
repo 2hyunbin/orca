@@ -56,8 +56,7 @@ export function runtimeStub(overrides: Record<string, unknown> = {}): unknown {
   }
 }
 
-/** Every reply one call produced. Streaming methods answer more than once, and a
- *  refusal has to arrive as a reply rather than as silence. */
+// Collect every streaming reply: refusals must arrive explicitly, never as silence.
 export async function callBuild(
   build: AgentSessionWireBuild,
   method: string,
@@ -75,15 +74,7 @@ export async function callBuild(
   return replies
 }
 
-/**
- * The one thing this suite exists to guarantee, written once and applied per
- * build: every method the manifest declares is not merely registered but reaches
- * its host method on this call, answers, and answers with its declared result.
- *
- * Written as a helper rather than inline because a build passing it is the claim,
- * and each skew that registers the surface owes the same claim — a check that
- * covers one method leaves the rest registered-but-unusable behind a green suite.
- */
+// Require every declared method to reach its host and return its declared result in each build pairing.
 export async function expectDeclaredSurfaceExecutes(
   build: AgentSessionWireBuild,
   hostCalls: Record<string, ReturnType<typeof vi.fn>>,

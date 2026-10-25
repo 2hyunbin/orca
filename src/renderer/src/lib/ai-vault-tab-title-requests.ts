@@ -12,7 +12,6 @@ import { collectLeafIdsInOrder } from '@/components/terminal-pane/terminal-layou
 import { getIndexedRepoMap, getIndexedWorktreeMap } from '@/store/worktree-repo-index'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
-/** The conversation a tab's pane runs, for an agent `isAgent` accepts. */
 export type AgentPaneConversation<Agent extends AgentType> = {
   agent: Agent
   executionHostId: ExecutionHostId
@@ -256,7 +255,6 @@ export function collectAgentPaneConversations<Agent extends AgentType>(
     .map(({ priority: _priority, ...request }) => request)
 }
 
-/** One pane's running agent, mapped as above, so a pane's action finds that pane's own conversation. */
 export function resolvePaneAgentConversation<Agent extends AgentType>(
   state: AppState,
   pane: { worktreeId: string; paneKey: string },

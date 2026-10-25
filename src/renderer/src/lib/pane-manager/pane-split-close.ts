@@ -100,14 +100,12 @@ function prepareMovedPanesForSplit(
 
   return movedPanes.map((pane) => {
     clearPendingSplitScrollRestore(pane)
-    // Why: wrapInSplit reparents moved containers, resetting browser scrollTop.
+    // DOM reparenting clears scrollTop; preserve it across wrapInSplit.
     const scrollState = captureScrollState(pane.terminal)
-    // Why: lock prevents safeFit/fitAllPanes from restoring scroll during the
-    // async settle window; scheduleSplitScrollRestore owns the restore.
+    // The split scroll lock owns async settling; ordinary fits must not restore concurrently.
     pane.pendingSplitScrollState = scrollState
 
-    // Why: DOM reparenting can silently invalidate a WebGL context without
-    // firing contextlost, so dispose before the move and reattach after settle.
+    // Reparenting can silently invalidate WebGL; dispose before moving and reattach after settle.
     const hadWebgl = !!pane.webglAddon
     disposeWebgl(pane)
     return { pane, scrollState, hadWebgl }
@@ -156,8 +154,7 @@ function openSplitPane(
   applyDividerStyles(args.root, args.styleOptions)
   newPane.terminal.focus()
   updateMultiPaneState(args.getDragCallbacks())
-  // Why: forward one-shot spawn/adoption hints so the new pane inherits the
-  // source cwd for local splits or attaches a runtime-spawned PTY for web splits.
+  // Forward creation hints to inherit local cwd or adopt the runtime-spawned PTY in web splits.
   args.publishPaneCreated(newPane, {
     ...(cwd ? { cwd } : {}),
     ...(args.opts?.cwdPromise ? { cwdPromise: args.opts.cwdPromise } : {}),
@@ -225,13 +222,10 @@ export function closeManagedPane(args: CloseManagedPaneArgs): void {
 }
 
 export function detachManagedPaneForExternalMove(args: CloseManagedPaneArgs): boolean {
-  // Why: refuse to detach the last pane — there is no other pane to fall back to.
   if (!args.panes.has(args.paneId) || args.panes.size <= 1) {
     return false
   }
-  // Why: pane-to-tab detach tears down only this renderer pane; the PTY is
-  // adopted by the new tab, so the 'detach' reason tells TerminalPane to skip
-  // process-close cleanup.
+  // Detach destroys only the renderer pane; the new tab adopts its PTY, so skip process-close cleanup.
   teardownManagedPane(args, 'detach')
   return true
 }

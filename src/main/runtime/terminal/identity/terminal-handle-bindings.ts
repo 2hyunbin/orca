@@ -110,8 +110,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
 
   protected issuePtyHandle(pty: RuntimePtyWorktreeRecord): string {
     const handle = this.issuePtyHandleRecord(pty)
-    // Switch point: a terminal's record names no pane, so recovery reads the pane it was issued in;
-    // a terminal its replacement unbound keeps that stamp.
+    // An unbound terminal retains its issued pane stamp for recovery, including after replacement.
     const record = ORCA_LAYOUT_OWNER_IS_MAIN ? this.handles.get(handle) : undefined
     const issuedForPaneKey = record && this.paneOfPty(pty).paneKey
     if (record && issuedForPaneKey && record.issuedForPaneKey !== issuedForPaneKey) {
@@ -217,7 +216,7 @@ export abstract class OrcaRuntimeWithBindPtyIncarnationHandle extends OrcaRuntim
   protected rememberDetachedPreAllocatedLeaves(): void {
     for (const leaf of this.leaves.values()) {
       if (leaf.ptyId && this.handleByPtyId.has(leaf.ptyId)) {
-        // Why: ORCA_TERMINAL_HANDLE is an agent identity, so CLI control survives renderer graph loss while the PTY is alive.
+        // Agent identity via ORCA_TERMINAL_HANDLE must survive renderer graph loss while the PTY lives.
         this.detachedPreAllocatedLeaves.set(leaf.ptyId, leaf)
       }
     }

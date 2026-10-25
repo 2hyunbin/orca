@@ -17,7 +17,6 @@ import {
   withAiVaultCurrentWorktreeStatus
 } from './ai-vault-session-worktree'
 
-/** Where each listed session lives and where it would resume, relative to the panel's workspace. */
 export function useAiVaultPanelSessionResume(args: {
   sessions: readonly AiVaultSession[]
   repos: readonly Repo[]
@@ -35,7 +34,7 @@ export function useAiVaultPanelSessionResume(args: {
     repos,
     worktrees: ownerWorkspaces
   })
-  // `current` is stamped per row at read time so the map above stays cached.
+  // Stamp current per row to preserve the cached ownership map.
   const getSessionWorktreeInfo = useCallback(
     (session: AiVaultSession) =>
       withAiVaultCurrentWorktreeStatus(sessionWorktreeById.get(session.id) ?? null, workspaceId),

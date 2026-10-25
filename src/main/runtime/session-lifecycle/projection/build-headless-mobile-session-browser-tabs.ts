@@ -50,8 +50,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
       )
       return {
         type: 'browser' as const,
-        // Why: an offscreen page has no separate workspace identity, so the page id
-        // is its own workspace id (matches the server's browserWorkspaceId fallback).
+        // Offscreen pages lack separate workspace identity; use page id like the server browserWorkspaceId fallback.
         id: tab.browserPageId,
         title: tab.title || tab.url || 'Browser',
         browserWorkspaceId: tab.browserPageId,
@@ -192,12 +191,12 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): Promise<void> {
-    // Why best-effort, as for a tab: a failed kill must not keep a pane the user closed.
+    // Failed kill must not retain a pane the user explicitly closed.
     const pty = this.findPtyForMobileTerminalTab(worktreeId, tab)
     if (pty) {
       this.ptyController?.kill(pty.ptyId)
     } else if (!this.tabs.has(tab.parentTabId) && tab.ptyId && parseAppSshPtyId(tab.ptyId)) {
-      // Why: with no renderer to own the kill, a dormant SSH pane's durable id is its stop order.
+      // Without renderer kill ownership, a dormant SSH pane's durable id is the stop authority.
       this.ptyController?.kill(tab.ptyId)
     }
     await this.closeTerminalPane(worktreeId, {
@@ -282,13 +281,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
     }
   }
 
-  /**
-   * Answers one client's session-tabs question: whether this runtime has taken back *that* client's
-   * client-hosted pages yet and can say which chats exist, then that client's own tab selection.
-   *
-   * The holds are decided here and nowhere else, and each is set or cleared rather than only set,
-   * so a frame built for one client can never carry another client's, or an earlier, answer.
-   */
+  /** Recompute this client's reconciliation holds and selection, setting and clearing flags so earlier frames or other clients cannot leak authority. */
   protected projectMobileSessionTabsForClient(
     result: RuntimeMobileSessionTabsResult,
     clientNavigationId?: string
@@ -325,8 +318,7 @@ export abstract class OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs exten
       if (pending) {
         return pending
       }
-      // Why: reconnect exit bursts share one authoritative daemon inventory
-      // instead of multiplying a full cross-generation list RPC per stale tab.
+      // Coalesce reconnect exit bursts into one authoritative daemon inventory instead of one cross-generation RPC per stale tab.
       const refresh = this.performMobileSessionPtyRecordsRefresh(targetWorktreeId).finally(() => {
         if (this.pendingMobileSessionPtyAggregateInventoryRefresh === refresh) {
           this.pendingMobileSessionPtyAggregateInventoryRefresh = null

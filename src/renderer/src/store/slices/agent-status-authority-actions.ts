@@ -142,12 +142,7 @@ export function createAgentStatusAuthorityActions(
       }
     },
 
-    // Why: the tombstone claims this pane is gone; a live PTY binding to it proves
-    // otherwise. Lift the fence on that proof rather than on the next hook event —
-    // a pane re-attached mid-turn or while idle emits no new-turn event, so a
-    // turn-triggered revival leaves exactly the reported permanent suppression
-    // (STA-4114). This deliberately does NOT restore the rows retirement dropped;
-    // those are genuinely stale. It only re-opens the pane to future status.
+    // Live PTY binding disproves pane tombstone (STA-4114); revive future status without restoring stale rows. Waiting for a new hook turn permanently suppresses idle/mid-turn reattachments.
     restoreAgentPaneAuthority: (paneKey) => {
       const ownerPaneKey = resolveAgentPaneAuthorityKey(paneKey)
       // Why: a closed tab is a stronger, separate claim — re-attach must not undo it.
@@ -172,13 +167,7 @@ export function createAgentStatusAuthorityActions(
         }
         return { recentlyRetiredAgentStatusPaneKeys: next }
       })
-      // Why: deliberately OUTSIDE the guard above, and not gated on having cleared
-      // anything here. This map is not a mirror of main's — main fences panes the
-      // renderer never hears about (retirePtyAgentLaunchAuthority on command-finished
-      // and PTY exit calls the hook server directly, and nothing pushes that back), and
-      // this map is per-window and non-persisted, so a renderer reload empties it while
-      // main's survives. Gating the send on a local tombstone reintroduces STA-4114 for
-      // exactly those panes. The send is idempotent and main refuses closed tabs itself.
+      // Always send idempotent revival to main, even without local tombstone: main-only fences and renderer reloads make maps diverge. Main independently refuses closed tabs (STA-4114).
       if (typeof window !== 'undefined') {
         window.api?.agentStatus?.restorePaneAuthority?.(ownerPaneKey)
       }
@@ -190,8 +179,7 @@ export function createAgentStatusAuthorityActions(
       }
       const from = transfer.previousOwnerPaneKey
       const to = transfer.ownerPaneKey
-      // Why: the moved row carries the observation stamped for its OLD key; renderer-authored
-      // observations for the new key must sort after it, not race it.
+      // Moved row retains old-key observation; new-key renderer writes must sort after it.
       rendererAgentStatusObservations.forget(from)
       rendererAgentStatusObservations.rebind(to)
       const targetTabId = getTabIdFromPaneKey(to) ?? undefined

@@ -85,8 +85,7 @@ export class TerminalIntentionalStops {
     return (this.stopsByPtyId.get(ptyId)?.ownersByKind.get('reversible')?.inFlight ?? 0) > 0
   }
 
-  /** A process committed on this id. A landed stop's process is dead, so an entry no exit ever
-   *  pinned could otherwise claim the new process's exit as the stop. */
+  /** Clear an unpinned landed stop at spawn commit so a reused PTY id cannot claim the new process's exit. */
   noteSpawnCommit(ptyId: string): void {
     const stop = this.stopsByPtyId.get(ptyId)
     if (stop && stop.incarnationId === null && !hasInFlightOwners(stop)) {
@@ -95,8 +94,7 @@ export class TerminalIntentionalStops {
     }
   }
 
-  // Why: a settled entry joins only its own known process, so an id reused by a process whose
-  // incarnation is not yet known never inherits the old stop.
+  // Settled stops join only their known incarnation; reused ids with unknown identity must not inherit old stops.
   private joins(stop: IntentionalStop, incarnationId: string | null): boolean {
     if (stop.incarnationId !== null && stop.incarnationId === incarnationId) {
       return true
@@ -112,8 +110,7 @@ export class TerminalIntentionalStops {
       this.stopsByPtyId.delete(ptyId)
       return
     }
-    // Why a window: an SSH exit can arrive after the stop settles, and a synthetic exit can be
-    // followed by the provider's own; both describe the same stopped process.
+    // Keep a window for delayed SSH exits and duplicate synthetic/provider exits from the same process.
     stop.expiryTimer = setTimeout(() => {
       if (this.stopsByPtyId.get(ptyId) === stop) {
         this.stopsByPtyId.delete(ptyId)

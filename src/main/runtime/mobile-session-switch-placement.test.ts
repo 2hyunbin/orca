@@ -1,6 +1,6 @@
 import { withRuntimePaneAdmission } from './runtime-durable-store-fixture'
 import { addWorkspace } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { withChatTabChanges } from './agent-session-tab-layout'
+import { withChatTabChanges } from './agent-session/agent-session-tab-layout'
 import { observeSessionTabPlacementWork } from '../../shared/session-tab-placement-work.test-fixture'
 import * as profile from './profile-session-store.test-fixture'
 import { afterEach, expect, it, vi } from 'vitest'

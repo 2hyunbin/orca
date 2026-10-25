@@ -3,9 +3,7 @@ import { translate } from '@/i18n/i18n'
 import { agentLabel } from '../../../../shared/ai-vault-session-filters'
 import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
 
-/** Shared by the row menus and the details button, which offer the same fork. Two block lines, not
- *  one wrapped string: the tooltip balances wrapped text inside a box sized before balancing, which
- *  leaves a gap beside the shorter lines. */
+/** Use two blocks: balancing one wrapped string leaves a gap in the pre-sized tooltip. */
 export function ResumeInNewCliTooltipText(): React.JSX.Element {
   return (
     <>

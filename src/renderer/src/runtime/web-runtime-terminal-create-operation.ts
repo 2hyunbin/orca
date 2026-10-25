@@ -192,7 +192,7 @@ export async function createWebRuntimeSessionTerminalResult(
                 ? { resumeOrigin: args.resumeOrigin, resumeProviderSession: args.providerSession }
                 : {}),
               ...(args.viewMode ? { viewMode: args.viewMode } : {}),
-              // Why: old hosts understand activate:false; new hosts use select/navigation for caller-local focus.
+              // Old hosts use activate:false; new hosts use select/navigation for caller-local focus.
               activate: false,
               select: args.activate !== false,
               navigation: 'caller'
@@ -252,18 +252,17 @@ export async function createWebRuntimeSessionTerminalResult(
       })
     }
     if (args.activate !== false && createdTabId && matchesWebSessionIntentOwner(intentOwner)) {
-      // Why: record focus intent so the reconcile follows the snapshot's active
-      // tab to THIS new terminal, instead of sticky-keeping the prior tab.
+      // Intent lets reconciliation focus this new terminal instead of sticky-keeping the previous tab.
       recordWebSessionFocusIntent(intentOwner, args.worktreeId, createdTabId, createdLeafId)
     }
     const placementTabId =
       createdTabId && (args.targetGroupId || args.afterTabId) ? createdTabId : undefined
     await refreshWebRuntimeSessionTabsSnapshot(environmentId, args.worktreeId, {
       expectedEnvironmentPairingRevision: intentOwner.pairingRevision,
-      // Why: the publication can beat the RPC response; replay it once after caller intent exists.
+      // Publication can beat RPC response; replay once caller intent exists.
       acceptCurrentSnapshot:
         Boolean(createdTabId) && (args.activate !== false || Boolean(placementTabId)),
-      // Why: a placement record needs a post-create list; a deduped in-flight one can predate it.
+      // Require a post-create list; deduped in-flight lists may predate placement.
       ...(placementTabId ? { afterCurrentInFlight: true } : {})
     })
     if (placementTabId) {
@@ -292,7 +291,7 @@ export async function createWebRuntimeSessionTerminalResult(
       message
     )
     if (createdTabId) {
-      // Why: a record that outlives the create flow could yank a user-dragged tab back later.
+      // Expire create placement or later user drags can be yanked back.
       forgetWebSessionTerminalPlacement({
         environmentId,
         worktreeId: args.worktreeId,
@@ -302,8 +301,7 @@ export async function createWebRuntimeSessionTerminalResult(
     if (!hostCreated && workspaceSelectionRollback) {
       restoreActiveWorkspaceSelection(workspaceSelectionRollback)
     }
-    // Why: once the host accepted creation, reporting failure invites the user
-    // to retry with a new operation ID and can duplicate a fresh agent.
+    // Accepted creation must not report failure and invite duplicate agent retries with new operation IDs.
     return {
       outcome: hostCreated ? { status: 'created' } : { status: 'failed', message },
       ...(createdTabId ? { hostTabId: createdTabId } : {}),

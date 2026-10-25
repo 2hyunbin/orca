@@ -124,8 +124,7 @@ export abstract class OrcaRuntimeWithTerminalSurfaceCloseCommit extends OrcaRunt
             worktreeId,
             target,
             hostIds(),
-            // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The existing guard requires this getter; preserve late-bound store access.
-            store as Parameters<typeof captureTerminalCloseRequest>[3],
+            { getWorkspaceSession: (hostId) => store.getWorkspaceSession!(hostId) },
             fenced
           ),
           ownerMatches: () =>

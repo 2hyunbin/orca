@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mockCreateTab = vi.fn()
 const mockCreateEmptySplitGroup = vi.fn()
 const mockCloseEmptyGroup = vi.fn()
-/** Startup commands published with the created tabs, in creation order. */
 function queuedStartups() {
   return mockCreateTab.mock.calls.flatMap((call) => call[3]?.pendingStartup ?? [])
 }
@@ -99,7 +98,7 @@ describe('launchAiVaultSessionInNewTab', () => {
         request_kind: 'resume'
       }
     })
-    // Why: a resume can target a worktree the user is not viewing (it is activated afterwards).
+    // Resume can target another worktree before activation; resolve by the requested owner.
     expect(mockSetActiveTabType).toHaveBeenCalledExactlyOnceWith('terminal', 'wt-1')
     expect(mockSetTabBarOrder).toHaveBeenCalledWith('wt-1', ['tab-1'])
     expect(result).toEqual({ tabId: 'tab-1' })
@@ -199,7 +198,6 @@ describe('launchAiVaultSessionInNewTab', () => {
         agentArgs: '',
         activate: true
       },
-      // Its callers toast the failure with the agent's own wording.
       { notifyFailure: false }
     )
     expect(mockCreateTab).not.toHaveBeenCalled()
