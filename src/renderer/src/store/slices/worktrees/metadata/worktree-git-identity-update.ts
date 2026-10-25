@@ -47,7 +47,11 @@ function gitIdentityTargets(
   const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
     (worktree) => worktree.id === worktreeId
   )
-  if (new Set(rows.map((worktree) => worktree.hostId)).size <= 1) {
+  // Why provenance too: two paired servers can each publish the same `ssh:` host id.
+  const owners = new Set(
+    rows.map((row) => `${row.hostId ?? ''}\0${row.runtimeOwnerEnvironmentId ?? ''}`)
+  )
+  if (owners.size <= 1) {
     return { rows: new Set(rows), isTwin: false }
   }
   if (!ownerHostId) {

@@ -96,6 +96,17 @@ describe('updateWorktreeGitIdentity host matching', () => {
     expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
   })
 
+  it('keeps two paired servers apart when both publish the same SSH host id', () => {
+    const store = storeWith(
+      { hostId: 'ssh:shared', runtimeOwnerEnvironmentId: 'hub-a', branch: 'refs/heads/main' },
+      { hostId: 'ssh:shared', runtimeOwnerEnvironmentId: 'hub-b', branch: 'refs/heads/feature' }
+    )
+
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/main' }, 'runtime:hub-a')
+
+    expect(store.getState().worktreesByRepo.repo1[1].branch).toBe('refs/heads/feature')
+  })
+
   it('still patches a lone unstamped row named by its repo owner host', () => {
     const store = storeWith({ branch: 'refs/heads/master' })
 
