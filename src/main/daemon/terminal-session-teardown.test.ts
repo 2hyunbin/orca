@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TerminalSessionTeardown } from './terminal-session-teardown'
 import type { Session } from './session'
 import type { DescendantSnapshot } from '../pty-descendant-termination'
+import type { TuiAgent } from '../../shared/tui-agent'
 
 const killWithDescendantSweepMock = vi.hoisted(() => vi.fn())
 const terminateShutdownDescendantsMock = vi.hoisted(() => vi.fn())
@@ -190,6 +191,47 @@ describe('TerminalSessionTeardown plain-shell teardown', () => {
     killRoot()
     expect(session.signalTerminationRoot).toHaveBeenCalled()
     expect(session.forceKillAndWaitForExit).not.toHaveBeenCalled()
+  })
+})
+
+describe('graceful close preserves shell jobs only for plain shells', () => {
+  // Shell 10 with nohup job 30 in its own background group on the tty.
+  const snapshot: DescendantSnapshot = {
+    root: { pid: 10, startedAt: 'Tue Jul 14 12:00:00 2026' },
+    rootPgid: 10,
+    capturedAtMs: 0,
+    descendants: [
+      { pid: 20, ppid: 10, pgid: 20, tpgid: 20, startedAt: 'Tue Jul 14 12:00:00 2026' },
+      { pid: 30, ppid: 10, pgid: 30, tpgid: 20, startedAt: 'Tue Jul 14 12:00:00 2026' }
+    ]
+  }
+
+  beforeEach(() => {
+    killWithDescendantSweepMock.mockReset()
+    killWithDescendantSweepMock.mockImplementation(
+      async (
+        _pid: number,
+        _killRoot: () => void,
+        deps: { terminateDescendants: (s: DescendantSnapshot) => void }
+      ) => {
+        deps.terminateDescendants(snapshot)
+      }
+    )
+    terminateShutdownDescendantsMock.mockReset()
+  })
+
+  const cases: [string, TuiAgent | null, number[]][] = [
+    ['plain shell', null, [20]],
+    ['Orca-launched agent', 'codex', [20, 30]]
+  ]
+  it.each(cases)('%s', async (_label, launchAgent, swept) => {
+    const session = createPlainShellSession({ launchAgent })
+    const teardown = new TerminalSessionTeardown(new Map([['s1', session]]))
+
+    await teardown.killSession('s1', session, false)
+
+    const passed: DescendantSnapshot = terminateShutdownDescendantsMock.mock.calls[0][0]
+    expect(passed.descendants.map((row) => row.pid)).toEqual(swept)
   })
 })
 

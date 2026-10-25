@@ -1,4 +1,5 @@
 import { killWithDescendantSweep } from '../pty-descendant-termination'
+import { excludeShellBackgroundJobs } from '../pty-shell-job-preservation'
 import { terminateShutdownDescendants } from './terminal-descendant-shutdown'
 import type { Session } from './session'
 
@@ -164,7 +165,11 @@ export class TerminalSessionTeardown {
             ownsRoot: () => this.sessions.get(sessionId) === session && session.isAlive,
             terminateOwnedTree: () => session.terminateOwnedTree(),
             terminateDescendants: (snapshot) => {
-              entry.descendantVerification = terminateShutdownDescendants(snapshot)
+              entry.descendantVerification = terminateShutdownDescendants(
+                session.launchAgent || entry.immediate
+                  ? snapshot
+                  : excludeShellBackgroundJobs(snapshot)
+              )
               return entry.descendantVerification
             },
             awaitEscalation: () => entry.immediate

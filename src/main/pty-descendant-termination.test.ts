@@ -19,6 +19,7 @@ import {
   terminateDescendantSnapshotAndWait,
   terminateDescendantSnapshotWithVerdict
 } from './pty-descendant-exit-verification'
+import { excludeShellBackgroundJobs } from './pty-shell-job-preservation'
 
 const CAPTURED_AT_MS = Date.parse('Tue Jul 14 12:00:00 2026')
 
@@ -99,22 +100,27 @@ describe('collectDescendantRows', () => {
     expect(snapshot.capturedAtMs).toBe(CAPTURED_AT_MS)
   })
 
-  it("leaves the shell's background jobs to its SIGHUP but sweeps the foreground and setsid trees", () => {
+  it("excludes only the shell's own background jobs; agent-made process groups stay swept", () => {
     const tty = (pid: number, ppid: number, pgid: number, tpgid: number) => ({
       ...row(pid, ppid, pgid),
       tpgid
     })
-    // Shell 10 with foreground agent 20 (tool 21, setsid'd MCP 22) and nohup/disown job 30 (child 31).
+    // Shell 10: foreground agent 20 (tool 21, setsid'd MCP 22, setpgid'd MCP 23 keeping the tty)
+    // and nohup/disown job 30 (child 31).
     const table = [
       tty(10, 1, 10, 20),
       tty(20, 10, 20, 20),
       tty(21, 20, 20, 20),
       tty(22, 20, 22, -1),
+      tty(23, 20, 23, 20),
       tty(30, 10, 30, 20),
       tty(31, 30, 30, 20)
     ]
     const snapshot = collectDescendantRows(10, table, CAPTURED_AT_MS)
-    expect(snapshot.descendants.map((r) => r.pid)).toEqual([20, 21, 22])
+    expect(snapshot.descendants.map((r) => r.pid)).toEqual([20, 30, 21, 22, 23, 31])
+    expect(excludeShellBackgroundJobs(snapshot).descendants.map((r) => r.pid)).toEqual([
+      20, 21, 22, 23
+    ])
   })
 
   it('sweeps nothing when the root row is already gone (a vacated PID has no findable tree)', () => {
