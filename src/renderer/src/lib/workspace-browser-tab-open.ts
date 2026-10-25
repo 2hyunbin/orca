@@ -204,7 +204,7 @@ export async function openWorkspaceBrowserTab(
       `host ${route.executionHostId} does not own runtime ${environmentId}`
     )
   }
-  // Remote-pane links pin execution-host ownership over client-generic provider policy, except SSH-deployed servers whose pages this desktop hosts on SSH routes.
+  // Preserve desktop-provider behavior only for opted-in sources and SSH-deployed servers.
   if (
     (expectedEnvironmentId === null ||
       sshDeploymentClientRoute ||
