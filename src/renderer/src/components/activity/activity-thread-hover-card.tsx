@@ -57,7 +57,7 @@ export function ActivityThreadHoverCard({
   const open = detailsHoverControl.hoverOpen && !suppressed
   const { linkActionRequest, onOpenLink, closeLinkActions } = useWorkspaceReferenceLinkActions(
     thread.worktree.id,
-    detailsHoverControl.closeHover
+    detailsHoverControl
   )
 
   return (

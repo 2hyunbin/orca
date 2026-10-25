@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-type WorktreeCardDetailMenu = 'issue' | 'review'
+type WorktreeCardDetailMenu = 'issue' | 'review' | 'link-actions'
 
 export function useWorktreeCardDetailsHoverControl() {
   const [open, setOpen] = useState(false)
@@ -21,6 +21,11 @@ export function useWorktreeCardDetailsHoverControl() {
         pendingHoverCloseRef.current = !next
         return
       }
+      // Why: a link opened in the system browser takes focus (and the pointer)
+      // away; keep the card so it is still there when the user comes back.
+      if (!next && !document.hasFocus()) {
+        return
+      }
       pendingHoverCloseRef.current = false
       setOpen(next)
     },
@@ -31,7 +36,11 @@ export function useWorktreeCardDetailsHoverControl() {
     setOpenMenu(next ? menu : null)
     if (!next && pendingHoverCloseRef.current) {
       pendingHoverCloseRef.current = false
-      setOpen(false)
+      // Why: the link-action popover anchors on the card, so leaving the card
+      // for the popover is not a request to dismiss it.
+      if (menu !== 'link-actions') {
+        setOpen(false)
+      }
     }
   }, [])
 
@@ -42,6 +51,7 @@ export function useWorktreeCardDetailsHoverControl() {
     handleHoverOpenChange,
     handleIssueMenuOpenChange: (next: boolean) => setDetailMenuOpen('issue', next),
     handleReviewMenuOpenChange: (next: boolean) => setDetailMenuOpen('review', next),
+    handleLinkActionsOpenChange: (next: boolean) => setDetailMenuOpen('link-actions', next),
     closeHover
   }
 }

@@ -89,6 +89,7 @@ export function WorktreeCardDetailsHover({
   hoverControl
 }: WorktreeCardDetailsHoverProps): React.JSX.Element {
   const internalHoverControl = useWorktreeCardDetailsHoverControl()
+  const detailsHoverControl = hoverControl ?? internalHoverControl
   const {
     hoverOpen,
     issueMenuOpen,
@@ -97,10 +98,10 @@ export function WorktreeCardDetailsHover({
     handleIssueMenuOpenChange,
     handleReviewMenuOpenChange,
     closeHover
-  } = hoverControl ?? internalHoverControl
+  } = detailsHoverControl
   const { linkActionRequest, onOpenLink, closeLinkActions } = useWorkspaceReferenceLinkActions(
     workspace?.id,
-    closeHover
+    detailsHoverControl
   )
   const [workspaceTitleEditing, setWorkspaceTitleEditing] = React.useState(false)
   const pendingWorkspaceTitleCloseRef = React.useRef(false)
