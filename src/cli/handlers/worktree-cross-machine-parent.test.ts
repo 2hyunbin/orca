@@ -63,6 +63,35 @@ afterEach(() => {
 })
 
 describe('caller-side cross-machine create', () => {
+  it('adds conditional parent recovery only to explicit native-context Git misses without more reads', async () => {
+    vi.stubEnv('ORCA_WORKTREE_ID', '')
+    for (const remote of [false, true]) {
+      for (const nativeHint of [false, true]) {
+        vi.stubEnv('ORCA_WORKSPACE_ID', nativeHint ? 'folder:caller' : '')
+        for (const selector of ['active', 'current']) {
+          const target = context([], true)
+          target.context.flags.set('parent-worktree', selector)
+          Object.assign(target.context.client, {
+            isRemote: remote,
+            ...(!remote ? { call: localCall } : {})
+          })
+          localCall.mockClear()
+          localCall.mockResolvedValue({ result: { worktrees: [] } })
+          await expect(WORKTREE_HANDLERS['worktree create'](target.context)).rejects.toMatchObject({
+            code: 'selector_not_found',
+            message: nativeHint
+              ? remote
+                ? "Couldn't find the parent. Name the parent explicitly on the selected computer."
+                : "Couldn't find the parent. If you're in a folder workspace, name the parent folder workspace explicitly."
+              : 'No Orca-managed worktree contains the current directory: /unmanaged'
+          })
+          expect(localCall.mock.calls.map(([method]) => method)).toEqual(['worktree.list'])
+          expect(target.call).not.toHaveBeenCalled()
+        }
+      }
+    }
+  })
+
   it('keeps explicit target selectors and legacy folder payloads on an older peer', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
     for (const selector of [

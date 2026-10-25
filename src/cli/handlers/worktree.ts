@@ -15,7 +15,7 @@ import {
   annotateOmittedHostScope,
   type WithAnnotatedHostScope
 } from '../omitted-host-scope-selectors'
-import { RuntimeClientError } from '../runtime-client'
+import { RuntimeClientError, RuntimeRpcFailureError } from '../runtime-client'
 import {
   getOptionalPositiveIntegerFlag,
   getOptionalStringFlag,
@@ -101,7 +101,25 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       process.env.ORCA_TERMINAL_HANDLE.length > 0
         ? process.env.ORCA_TERMINAL_HANDLE
         : undefined
-    const explicitParent = await resolveCreateParentSelector(flags, cwd, client)
+    const explicitParent = await resolveCreateParentSelector(flags, cwd, client).catch(
+      (error: unknown) => {
+        if (
+          error instanceof RuntimeClientError &&
+          !(error instanceof RuntimeRpcFailureError) &&
+          error.code === 'selector_not_found' &&
+          getEnvParentWorkspace()?.startsWith('folder:')
+        ) {
+          throw new RuntimeClientError(
+            error.code,
+            client.isRemote
+              ? "Couldn't find the parent. Name the parent explicitly on the selected computer."
+              : "Couldn't find the parent. If you're in a folder workspace, name the parent folder workspace explicitly.",
+            error.data
+          )
+        }
+        throw error
+      }
+    )
     const explicitParentWorktree = explicitParent.parentWorktree
     const explicitParentWorkspace = explicitParent.parentWorkspace
     const startupAgent = getOptionalStartupAgent(flags)
