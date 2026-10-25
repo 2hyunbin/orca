@@ -201,6 +201,7 @@ describe('orchestration mailbox pointer submit', () => {
     const leaf = {
       tabId: 'tab-1',
       leafId: 'leaf-1',
+      paneRuntimeId: 1,
       ptyId,
       writable: true,
       lastAgentStatus: 'idle' as const,
