@@ -153,17 +153,20 @@ export function isMimoLaunchCommand(launchCommand: string | undefined): boolean 
   return getAgentLaunchExecutableName(launchCommand) === 'mimo'
 }
 
-export function resolveMimocodeSourceHome(baseEnv: Record<string, string>): string | undefined {
-  const sourceHome = baseEnv.ORCA_MIMOCODE_SOURCE_HOME ?? process.env.ORCA_MIMOCODE_SOURCE_HOME
-  if (sourceHome) {
-    return sourceHome
+export function resolveMimocodeSourceConfigDir(
+  baseEnv: Record<string, string>
+): string | undefined {
+  const sourceDir =
+    baseEnv.ORCA_MIMOCODE_SOURCE_CONFIG_DIR ?? process.env.ORCA_MIMOCODE_SOURCE_CONFIG_DIR
+  if (sourceDir) {
+    return sourceDir
   }
-  const configHome = baseEnv.MIMOCODE_HOME ?? process.env.MIMOCODE_HOME
-  const orcaHome = baseEnv.ORCA_MIMOCODE_HOME ?? process.env.ORCA_MIMOCODE_HOME
-  if (configHome && orcaHome && configHome === orcaHome) {
+  const configDir = baseEnv.MIMOCODE_CONFIG_DIR ?? process.env.MIMOCODE_CONFIG_DIR
+  const orcaDir = baseEnv.ORCA_MIMOCODE_CONFIG_DIR ?? process.env.ORCA_MIMOCODE_CONFIG_DIR
+  if (configDir && orcaDir && configDir === orcaDir) {
     return undefined
   }
-  return configHome
+  return configDir
 }
 
 export function resolveOpenCodeSourceConfigDir(

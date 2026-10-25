@@ -1,81 +1,77 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import { join } from 'node:path'
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, lstatSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { getOpenCodeFamilyPluginSource } from '../opencode/hook-service'
-import { mirrorEntry, safeRemoveTree } from '../pty/overlay-mirror'
+import { sourceOverlayDirName } from '../opencode/overlay-dir-names'
+import { isSafeDescendCandidate, mirrorEntry, safeRemoveTree } from '../pty/overlay-mirror'
 
 const ORCA_MIMOCODE_PLUGIN_FILE = 'orca-mimocode-status.js'
 const MIMOCODE_HOOKS_DIR = 'mimocode-hooks'
-const MIMOCODE_SHARED_HOME = 'shared'
+const PLUGIN_ONLY_CONFIG_DIR = 'config'
+const SOURCE_CONFIG_OVERLAYS_DIR = 'config-overlays'
 
-function defaultMimocodeConfigDir(): string {
-  return join(homedir(), '.config', 'mimocode')
-}
-
-function resolveSourceConfigDir(existingHome: string | undefined): string | undefined {
-  if (existingHome) {
-    const fromHome = join(existingHome, 'config')
-    if (existsSync(fromHome)) {
-      return fromHome
-    }
+function isDirectoryFollowingLinks(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
   }
-  const xdg = defaultMimocodeConfigDir()
-  return existsSync(xdg) ? xdg : undefined
 }
 
 function mirrorConfigDir(sourceConfigDir: string, targetConfigDir: string): void {
-  mkdirSync(targetConfigDir, { recursive: true })
   for (const entry of readdirSync(sourceConfigDir, { withFileTypes: true })) {
-    if (entry.name === 'plugins' && entry.isDirectory()) {
+    const sourcePath = join(sourceConfigDir, entry.name)
+    // A linked plugins dir must not be linked through, or Orca's plugin lands in the user's folder.
+    if (entry.name === 'plugins' && isDirectoryFollowingLinks(sourcePath)) {
       const overlayPlugins = join(targetConfigDir, 'plugins')
       mkdirSync(overlayPlugins, { recursive: true })
-      for (const pluginEntry of readdirSync(join(sourceConfigDir, 'plugins'), {
-        withFileTypes: true
-      })) {
-        if (pluginEntry.name === ORCA_MIMOCODE_PLUGIN_FILE) {
-          continue
+      for (const pluginName of readdirSync(sourcePath)) {
+        if (pluginName !== ORCA_MIMOCODE_PLUGIN_FILE) {
+          mirrorEntry(join(sourcePath, pluginName), join(overlayPlugins, pluginName))
         }
-        mirrorEntry(
-          join(sourceConfigDir, 'plugins', pluginEntry.name),
-          join(overlayPlugins, pluginEntry.name)
-        )
       }
       continue
     }
-    mirrorEntry(join(sourceConfigDir, entry.name), join(targetConfigDir, entry.name))
+    mirrorEntry(sourcePath, join(targetConfigDir, entry.name))
   }
+}
+
+function ensureRealDirectory(path: string): boolean {
+  mkdirSync(path, { recursive: true })
+  return isSafeDescendCandidate(lstatSync(path))
 }
 
 export class MimoCodeHookService {
   clearPty(_ptyId: string): void {}
 
-  buildPtyEnv(_ptyId: string, existingMimocodeHome?: string): Record<string, string> {
-    const home = join(
-      getAppEnvironment().getPath('userData'),
-      MIMOCODE_HOOKS_DIR,
-      MIMOCODE_SHARED_HOME
-    )
+  /** MIMOCODE_CONFIG_DIR adds a config layer; MIMOCODE_HOME would also move auth and session data. */
+  buildPtyEnv(_ptyId: string, existingConfigDir?: string): { MIMOCODE_CONFIG_DIR?: string } {
+    const fallback = { MIMOCODE_CONFIG_DIR: existingConfigDir }
+    const root = join(getAppEnvironment().getPath('userData'), MIMOCODE_HOOKS_DIR)
+    const overlay = existingConfigDir
+      ? join(root, SOURCE_CONFIG_OVERLAYS_DIR, sourceOverlayDirName(existingConfigDir))
+      : join(root, PLUGIN_ONLY_CONFIG_DIR)
     try {
-      for (const sub of ['config', 'data', 'cache', 'state'] as const) {
-        mkdirSync(join(home, sub), { recursive: true })
+      if (!ensureRealDirectory(root) || !ensureRealDirectory(overlay)) {
+        return fallback
       }
-      const overlayConfig = join(home, 'config')
-      const sourceConfig = resolveSourceConfigDir(existingMimocodeHome)
-      if (sourceConfig) {
-        safeRemoveTree(overlayConfig)
-        mirrorConfigDir(sourceConfig, overlayConfig)
+      if (existingConfigDir && existsSync(existingConfigDir)) {
+        safeRemoveTree(overlay)
+        mkdirSync(overlay, { recursive: true })
+        mirrorConfigDir(existingConfigDir, overlay)
       }
-      const pluginsDir = join(home, 'config', 'plugins')
-      mkdirSync(pluginsDir, { recursive: true })
+      const pluginsDir = join(overlay, 'plugins')
+      if (!ensureRealDirectory(pluginsDir)) {
+        return fallback
+      }
       writeFileSync(
         join(pluginsDir, ORCA_MIMOCODE_PLUGIN_FILE),
         getOpenCodeFamilyPluginSource('/hook/mimo-code', { emitSessionStart: false })
       )
     } catch {
-      return existingMimocodeHome ? { MIMOCODE_HOME: existingMimocodeHome } : {}
+      return fallback
     }
-    return { MIMOCODE_HOME: home }
+    return { MIMOCODE_CONFIG_DIR: overlay }
   }
 }
 

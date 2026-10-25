@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setAppEnvironment } from '../../shared/app-environment'
@@ -12,7 +21,7 @@ import { MimoCodeHookService } from './hook-service'
 
 describe('MimoCodeHookService buildPtyEnv', () => {
   let userDataDir: string
-  let mimocodeHome: string
+  let userConfigDir: string
 
   beforeEach(() => {
     userDataDir = mkdtempSync(join(tmpdir(), 'orca-mimocode-userdata-'))
@@ -32,53 +41,64 @@ describe('MimoCodeHookService buildPtyEnv', () => {
       getAppMetrics: () => []
     })
 
-    mimocodeHome = mkdtempSync(join(tmpdir(), 'orca-mimocode-home-'))
-    const configDir = join(mimocodeHome, 'config')
-    mkdirSync(join(configDir, 'plugins'), { recursive: true })
-    writeFileSync(join(configDir, 'mimocode.json'), '{"theme":"dark"}')
-    writeFileSync(join(configDir, 'plugins', 'user-plugin.js'), 'export default () => {}')
-    writeFileSync(join(configDir, 'plugins', 'orca-mimocode-status.js'), 'USER PLUGIN')
+    userConfigDir = mkdtempSync(join(tmpdir(), 'orca-mimocode-config-'))
+    mkdirSync(join(userConfigDir, 'plugins'), { recursive: true })
+    writeFileSync(join(userConfigDir, 'mimocode.json'), '{"theme":"dark"}')
+    writeFileSync(join(userConfigDir, 'plugins', 'user-plugin.js'), 'export default () => {}')
+    writeFileSync(join(userConfigDir, 'plugins', 'orca-mimocode-status.js'), 'USER PLUGIN')
   })
 
   afterEach(() => {
     rmSync(userDataDir, { recursive: true, force: true })
-    rmSync(mimocodeHome, { recursive: true, force: true })
+    rmSync(userConfigDir, { recursive: true, force: true })
   })
 
-  it('mirrors user config into shared overlay and installs Orca status plugin', () => {
-    const service = new MimoCodeHookService()
-    const env = service.buildPtyEnv('pty-1', mimocodeHome)
+  // MIMOCODE_HOME also moves auth.json, sessions and state (#9132); only add a config layer.
+  it('sets only MIMOCODE_CONFIG_DIR to a directory holding just the Orca plugin', () => {
+    const env = new MimoCodeHookService().buildPtyEnv('pty-1')
 
-    const overlayHome = join(userDataDir, 'mimocode-hooks', 'shared')
-    expect(env.MIMOCODE_HOME).toBe(overlayHome)
-    expect(readFileSync(join(overlayHome, 'config', 'mimocode.json'), 'utf8')).toBe(
-      '{"theme":"dark"}'
-    )
-    expect(readFileSync(join(overlayHome, 'config', 'plugins', 'user-plugin.js'), 'utf8')).toBe(
-      'export default () => {}'
-    )
-
-    const orcaPlugin = join(overlayHome, 'config', 'plugins', 'orca-mimocode-status.js')
-    expect(existsSync(orcaPlugin)).toBe(true)
-    const pluginSource = readFileSync(orcaPlugin, 'utf8')
+    const overlay = join(userDataDir, 'mimocode-hooks', 'config')
+    expect(env).toEqual({ MIMOCODE_CONFIG_DIR: overlay })
+    expect(readdirSync(overlay)).toEqual(['plugins'])
+    const pluginSource = readFileSync(join(overlay, 'plugins', 'orca-mimocode-status.js'), 'utf8')
     expect(pluginSource).toContain('/hook/mimo-code')
     expect(pluginSource).not.toContain('post("SessionStart"')
-
-    expect(
-      readFileSync(join(mimocodeHome, 'config', 'plugins', 'orca-mimocode-status.js'), 'utf8')
-    ).toBe('USER PLUGIN')
   })
 
-  it('reuses the overlay home on a second buildPtyEnv call', () => {
-    const service = new MimoCodeHookService()
-    const first = service.buildPtyEnv('pty-1', mimocodeHome)
-    const second = service.buildPtyEnv('pty-2', mimocodeHome)
+  it("layers the user's own MIMOCODE_CONFIG_DIR into the overlay without touching it", () => {
+    const env = new MimoCodeHookService().buildPtyEnv('pty-1', userConfigDir)
 
-    const overlayHome = join(userDataDir, 'mimocode-hooks', 'shared')
-    expect(first.MIMOCODE_HOME).toBe(overlayHome)
-    expect(second.MIMOCODE_HOME).toBe(overlayHome)
-    expect(
-      readFileSync(join(overlayHome, 'config', 'plugins', 'orca-mimocode-status.js'), 'utf8')
-    ).toContain('/hook/mimo-code')
+    const overlay = env.MIMOCODE_CONFIG_DIR ?? ''
+    expect(overlay).toContain(join(userDataDir, 'mimocode-hooks', 'config-overlays'))
+    expect(readFileSync(join(overlay, 'mimocode.json'), 'utf8')).toBe('{"theme":"dark"}')
+    expect(readFileSync(join(overlay, 'plugins', 'user-plugin.js'), 'utf8')).toBe(
+      'export default () => {}'
+    )
+    expect(readFileSync(join(overlay, 'plugins', 'orca-mimocode-status.js'), 'utf8')).toContain(
+      '/hook/mimo-code'
+    )
+    expect(readFileSync(join(userConfigDir, 'plugins', 'orca-mimocode-status.js'), 'utf8')).toBe(
+      'USER PLUGIN'
+    )
   })
+
+  it.skipIf(process.platform === 'win32')(
+    "never writes the Orca plugin through a user's linked plugins folder",
+    () => {
+      const linkedPlugins = mkdtempSync(join(tmpdir(), 'orca-mimocode-linked-plugins-'))
+      writeFileSync(join(linkedPlugins, 'user-plugin.js'), 'export default () => {}')
+      rmSync(join(userConfigDir, 'plugins'), { recursive: true })
+      symlinkSync(linkedPlugins, join(userConfigDir, 'plugins'))
+      try {
+        const env = new MimoCodeHookService().buildPtyEnv('pty-1', userConfigDir)
+
+        expect(existsSync(join(env.MIMOCODE_CONFIG_DIR ?? '', 'plugins', 'user-plugin.js'))).toBe(
+          true
+        )
+        expect(readdirSync(linkedPlugins)).toEqual(['user-plugin.js'])
+      } finally {
+        rmSync(linkedPlugins, { recursive: true, force: true })
+      }
+    }
+  )
 })
