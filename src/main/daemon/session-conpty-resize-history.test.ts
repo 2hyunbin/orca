@@ -57,7 +57,27 @@ async function renderRows(ansi: string): Promise<string[]> {
   return rows
 }
 
-async function checkpointAfterRelaunchResize(ownerBackend: PtyOwnerBackend): Promise<string[]> {
+/**
+ * ConPTY's own screen holds only what the shell wrote, at ConPTY's current height: shrinking keeps
+ * the cursor row and drops rows above it, and every resize repaints that screen from the top.
+ */
+class FakeConpty {
+  private lines = [...SHELL_ROWS]
+  private cursor = SHELL_ROWS.length - 1
+
+  resize(rows: number): string {
+    const dropped = Math.max(0, this.cursor - rows + 1)
+    this.lines = this.lines.slice(dropped, dropped + rows)
+    this.cursor -= dropped
+    const screen = Array.from({ length: rows }, (_, i) => `${this.lines[i] ?? ''}\x1b[K`)
+    return `\x1b[H${screen.join('\r\n')}\x1b[${this.cursor + 1};${PROMPT.length + 1}H`
+  }
+}
+
+async function checkpointAfterResizes(
+  ownerBackend: PtyOwnerBackend,
+  heights: readonly number[]
+): Promise<string[]> {
   const subprocess = createMockSubprocess()
   session = new Session({
     sessionId: 'conpty-resize',
@@ -73,32 +93,36 @@ async function checkpointAfterRelaunchResize(ownerBackend: PtyOwnerBackend): Pro
     ]
   })
   subprocess.simulateData(SHELL_ROWS.join('\r\n'))
-  // A relaunched window's first attach shrinks the grid, then fits it back.
-  session.resize(COLS, 2)
-  session.resize(COLS, ROWS)
-  // ConPTY then repaints the grid it owns from the top.
-  const repaint = Array.from({ length: ROWS }, (_, i) => `${SHELL_ROWS[i] ?? ''}\x1b[K`)
-  subprocess.simulateData(
-    `\x1b[H${repaint.join('\r\n')}\x1b[${SHELL_ROWS.length};${PROMPT.length + 1}H`
-  )
+  const conpty = new FakeConpty()
+  for (const rows of heights) {
+    session.resize(COLS, rows)
+    subprocess.simulateData(conpty.resize(rows))
+  }
   await session.settleShellOwnershipConfirmation()
   const snapshot = session.takePendingOutput(true, { teardownSnapshot: true })?.snapshot
   expect(snapshot).toBeTruthy()
   return renderRows(`${snapshot!.rehydrateSequences}${snapshot!.snapshotAnsi}`)
 }
 
+const RESTORED_ROWS = [
+  ...Array.from({ length: 6 }, (_, i) => [`${PROMPT}echo L${i}`, `L${i}`]).flat(),
+  `${PROMPT}echo PRESLEEP`,
+  'PRESLEEP',
+  PROMPT
+].map((row) => row.trimEnd())
+
 describe('daemon checkpoint after a relaunch resize under ConPTY', () => {
-  it('keeps restored history and the fresh-shell padding when ConPTY repaints', async () => {
-    const rows = await checkpointAfterRelaunchResize('windows-wsl')
-    const text = rows.join('\n')
-    expect(text.match(/^L\d$/gm)).toEqual(['L0', 'L1', 'L2', 'L3', 'L4', 'L5'])
-    expect(text).toContain('PRESLEEP')
-    const restoredPrompt = rows.indexOf('PRESLEEP') + 1
-    // The restored prompt stays alone on its row, padded away from the new shell's rows.
-    expect(rows[restoredPrompt]?.trimEnd()).toBe(PROMPT.trimEnd())
-    expect(rows.slice(restoredPrompt + 1, restoredPrompt + 30).every((row) => row === '')).toBe(
-      true
-    )
-    expect(rows.filter((row) => row.split(PROMPT.trimEnd()).length > 2)).toEqual([])
-  })
+  it.each([[[2, ROWS]], [[10, ROWS]], [[2, 30, ROWS]], [[ROWS + 12, ROWS]]])(
+    'keeps every restored and shell row once, in order, through heights %j',
+    async (heights) => {
+      const rows = (await checkpointAfterResizes('windows-wsl', heights)).map((row) =>
+        row.trimEnd()
+      )
+      const written = rows.filter((row) => row !== '')
+      expect(written).toEqual([...RESTORED_ROWS, ...SHELL_ROWS.map((row) => row.trimEnd())])
+      // The fresh-shell padding still separates the restored prompt from the new shell.
+      const restoredPrompt = rows.indexOf('PRESLEEP') + 1
+      expect(rows[restoredPrompt + 1]).toBe('')
+    }
+  )
 })
