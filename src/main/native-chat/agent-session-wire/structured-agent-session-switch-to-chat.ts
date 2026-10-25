@@ -8,6 +8,7 @@ import {
   refuseUnclassified
 } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionWireRefusal } from '../../../shared/agent-session-wire'
+import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-mutation-context'
 import type { StructuredAgentSessionProviderChildIdentity } from './structured-agent-session-host-types'
 import {
@@ -17,6 +18,7 @@ import {
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import {
+  type StructuredAgentSessionStartFailureCause,
   structuredAgentSessionStartFailure,
   structuredAgentSessionStartFailureFact,
   typedStartRefusal
@@ -46,9 +48,12 @@ export async function startStructuredAgentSessionForSwitch(
   }
   let { child, readiness } = selected
   if (!child) {
-    const started = await (selected.start?.outcome ?? operationDidNotRun())
+    const started: StructuredAgentSessionResumeOutcome = await (selected.start?.outcome ??
+      operationDidNotRun())
     if (!started.ok) {
-      return { ok: false, refusal: started.refusal }
+      return started.failure
+        ? switchStartFailure(context, sessionId, { failure: started.failure })
+        : { ok: false, refusal: started.refusal }
     }
     const selection = selectStructuredAgentSessionOperationChild(context, sessionId)
     if (!selection.ok || !selection.child) {
@@ -84,6 +89,14 @@ function switchStartVerdict(
   if (!failure) {
     return operationDidNotRun(outcome === 'timeout')
   }
+  return switchStartFailure(context, sessionId, failure)
+}
+
+function switchStartFailure(
+  context: StructuredAgentSessionMutationContext,
+  sessionId: string,
+  failure: StructuredAgentSessionStartFailureCause
+): StructuredAgentSessionSwitchToChatOutcome {
   const fact = structuredAgentSessionStartFailureFact(failure)
   const { reason } = structuredAgentSessionStartFailure(
     failure,
