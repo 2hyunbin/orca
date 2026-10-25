@@ -12,7 +12,7 @@ import {
   launchWorkspaceId,
   type LaunchWorkspace
 } from '../../shared/launch-parity-window-request.test-fixture'
-import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
+import { isHiddenRendererPty } from './pty/delivery/pty-hidden-delivery-gate'
 import { HOST_TAB_ID } from './pty-launch-parity-host.test-cases'
 import {
   partialRuntimeStore,
