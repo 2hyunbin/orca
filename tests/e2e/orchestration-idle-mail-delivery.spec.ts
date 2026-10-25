@@ -579,24 +579,22 @@ test.describe('orchestration push-on-idle mail delivery', () => {
     await expectSubmitted(pane)
   })
 
-  test('writes the pointer but never Enter for a Cursor agent pane', async ({
+  test('writes and submits the pointer for a Cursor agent pane', async ({
     orcaPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
     const { client, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
     const pane = await openAgentPane()
-    // Cursor treats injected bytes as editable prompt text; leave submission to the user.
     pane.agent.setTitle(CURSOR_IDLE_TITLE)
     await waitForObservedTitle(client, pane.handle, CURSOR_IDLE_TITLE)
-    const mailbox = await createRunMailbox(client, pane, 'Cursor no-submit')
+    const mailbox = await createRunMailbox(client, pane, 'Cursor pointer submit')
 
-    const subject = 'Cursor no-submit'
+    const subject = 'Cursor pointer submit'
     await sendMail(client, mailbox, { subject })
 
     await expectPointed(pane)
-    await orcaPage.waitForTimeout(2_000)
-    expectNotSubmitted(pane)
+    await expectSubmitted(pane)
   })
 })
 

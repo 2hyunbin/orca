@@ -420,6 +420,7 @@ describe('Codex launched composer readiness', () => {
       15_000
     )
 
+    // 0.157 discards input behind its provisional header; allow the readiness timeout to prove the veto.
     it('codex-0157-fresh-home-daemon-install: does not read the provisional screen as ready', async () => {
       const full = readRuntimeFixture('codex-0157-fresh-home-daemon-install')
       const install = full.indexOf('Installing daemon')

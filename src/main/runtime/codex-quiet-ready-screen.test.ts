@@ -442,6 +442,7 @@ describe('Codex quiet ready screen', () => {
       return created
     }
 
+    // Allow 3s quiescence and the 2s grid poll after transcript replay.
     it('codex 0.158: a tui-idle wait settles once the composer is quiet', async () => {
       const { runtime, handle } = await pane(CODEX_0158, 'codex', { cols: 120, rows: 40 })
       await expect(waitForTranscriptIdle({ runtime, handle }, 8_000)).resolves.toMatchObject({

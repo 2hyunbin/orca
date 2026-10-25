@@ -189,6 +189,7 @@ describe.skipIf(skip)('orca serve on orcad', () => {
     expect(result.stderr).toContain('The Orca desktop app')
   }, 90_000)
 
+  // Allow real orcad startup and HTTP round trips for the missing-web-client regression (#30120).
   it('serves the web client the CLI hands it, and answers other paths with 404', async () => {
     const userData = realpathSync(
       mkdtempSync(join(process.platform === 'win32' ? tmpdir() : '/tmp', 'orca-serve-web-'))

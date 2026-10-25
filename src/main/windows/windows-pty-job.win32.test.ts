@@ -93,6 +93,7 @@ describeOnWindows('ConPTY job ownership', () => {
     return { proc, grandchildPid }
   }
 
+  // Allow a real ConPTY host to publish its startup query on slow Windows CI.
   it('announces an input reader the daemon recognizes', async () => {
     // A ConPTY upgrade that changes its startup must fail here, not respawn every pane.
     const nodePty = await import('node-pty')
@@ -108,6 +109,7 @@ describeOnWindows('ConPTY job ownership', () => {
     startup.claim()
   }, 30_000)
 
+  // Allow native ConPTY teardown to settle before observing process retirement.
   it('tears down a pane discarded before its first output', async () => {
     // node-pty's own kill() would wait for output that a discarded pane never sends.
     const nodePty = await import('node-pty')
