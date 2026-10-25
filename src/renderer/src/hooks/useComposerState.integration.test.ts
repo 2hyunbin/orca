@@ -19,8 +19,10 @@ import * as creationExecution from '@/lib/worktree-creation-flow-execute'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { getWorktreeLineageSelection } from '../../../shared/sidebar-list/worktree-lineage-projection'
 import { getDefaultRepoHookSettings, getDefaultSettings } from '../../../shared/constants'
-import { COMPOSER_CREATE_HANDOFF_DELAY_MS } from '@/lib/composer-create-handoff'
-import { COMPOSER_CREATE_PREPARE_DEADLINE_MS } from '@/lib/composer-create-handoff'
+import {
+  COMPOSER_CREATE_HANDOFF_DELAY_MS,
+  COMPOSER_CREATE_PREPARE_DEADLINE_MS
+} from '@/lib/composer-create-handoff'
 
 vi.mock('@/components/NewWorkspaceComposerCard', () => ({ default: vi.fn(() => null) }))
 vi.mock('@/components/agent/AgentSettingsDialog', () => ({ default: () => null }))
