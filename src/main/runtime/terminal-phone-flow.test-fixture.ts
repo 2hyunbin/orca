@@ -53,9 +53,11 @@ export function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID)
     getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) => records.get(`${hostId}|${id}`),
     setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<SidebarRecord>) => {
       const record = records.get(`${target.hostId}|${target.id}`)
-      if (record) {
-        Object.assign(record, updates)
+      if (!record) {
+        throw new Error('Missing worktree metadata in phone-alert fixture')
       }
+      Object.assign(record, updates)
+      return record
     },
     getAllWorktreeMeta: () => ({}),
     getFolderWorkspaces: () => [
