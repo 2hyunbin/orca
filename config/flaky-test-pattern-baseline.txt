@@ -482,7 +482,6 @@
 1 test-no-real-time-wait:src/shared/darwin-terminal-names.test.ts
 5 test-no-real-time-wait:src/shared/fish-query-reply-child-stdin.node-pty.test.ts
 1 test-no-real-time-wait:src/shared/git-branch-line-total-soft-deadline.test.ts
-2 test-no-real-time-wait:src/shared/git-fetch-head-lock.test.ts
 1 test-no-real-time-wait:src/shared/osc52-clipboard.test.ts
 1 test-no-real-time-wait:src/shared/priority-semaphore.test.ts
 4 test-no-real-time-wait:src/shared/pty-reply-echo-shapes.node-pty.test.ts
