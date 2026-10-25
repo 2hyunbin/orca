@@ -2,8 +2,8 @@ import { lstat } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { isENOENT } from './filesystem-path-containment'
 import { classifyImportSource } from './filesystem-import-source-stat'
-import { deconflictCopyName } from '../../shared/import-copy-name'
-import type { ImportItemResult } from '../../shared/filesystem-import-result-types'
+import { deconflictCopyName } from '../../../shared/import-copy-name'
+import type { ImportItemResult } from '../../../shared/filesystem-import-result-types'
 import {
   copyLocalFileNoFollow,
   preScanForSymlinks,

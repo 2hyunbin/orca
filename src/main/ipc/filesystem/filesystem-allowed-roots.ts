@@ -1,20 +1,18 @@
 import { isAbsolute, resolve } from 'node:path'
-import type { RuntimeStore } from '../runtime/runtime-store-contract'
-import { computeWorkspaceRootWithin, getWorktreePathSettings } from './worktree-logic'
-import {
-  getWorktreeMirrorDistroForRuntime,
-  resolveLocalProjectRuntimesForRepos
-} from '../project-runtime-git-options'
-import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
+import type { RuntimeStore } from '../../runtime/runtime-store-contract'
+import { computeWorkspaceRootWithin, getWorktreePathSettings } from '../worktree-logic'
+import { getWorktreeMirrorDistroForRuntime } from '../../project-runtime-git-options'
+import { resolveLocalProjectRuntimesForRepos } from '../../local-project-runtime-resolution'
+import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
 import {
   buildProjectGroupChildIndex,
   collectProjectGroupSubtreeIds,
   type ProjectGroupChildIndex
-} from '../../shared/project-groups'
-import type { FolderWorkspace } from '../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../shared/project-group-types'
-import type { Repo } from '../../shared/repo-types'
-import { hasRemoteFilesystemOwner } from './remote-filesystem-owner'
+} from '../../../shared/project-groups'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Repo } from '../../../shared/repo-types'
+import { hasRemoteFilesystemOwner } from '../remote-filesystem-owner'
 
 type FolderScopeStore = Pick<RuntimeStore, 'getRepos'> &
   Partial<Pick<RuntimeStore, 'getProjectGroups' | 'getFolderWorkspaces'>>

@@ -1,25 +1,30 @@
-import { FileInventoryBudget, FileInventoryCapacityError } from '../../shared/file-inventory-budget'
-import { quickOpenListingPathFilter } from '../../shared/quick-open-listing-path-filter'
-import { getQuickOpenRgOutputMode } from '../../shared/quick-open-ripgrep-output-mode'
-import { RipgrepFilenameDecoder, RipgrepFilenameError } from '../../shared/ripgrep-filename-decoder'
+import {
+  FileInventoryBudget,
+  FileInventoryCapacityError
+} from '../../../shared/file-inventory-budget'
+import { quickOpenListingPathFilter } from '../../../shared/quick-open-listing-path-filter'
+import { getQuickOpenRgOutputMode } from '../../../shared/quick-open-ripgrep-output-mode'
+import {
+  RipgrepFilenameDecoder,
+  RipgrepFilenameError
+} from '../../../shared/ripgrep-filename-decoder'
 import { sep } from 'node:path'
-import type { ChildProcess } from 'node:child_process'
-import type { RuntimeStore as Store } from '../runtime/runtime-store-contract'
+import type { RuntimeStore as Store } from '../../runtime/runtime-store-contract'
 import { resolveAuthorizedPath } from './filesystem-auth'
-import { toWindowsWslPath } from '../wsl'
-import { resolveBundledRipgrepWslRouting } from '../ripgrep/bundled-ripgrep-wsl-routing'
-import { getLocalGitOptionsForRegisteredWorktree } from './local-worktree-runtime-options'
+import { toWindowsWslPath } from '../../../shared/wsl-paths'
+import { resolveBundledRipgrepWslRouting } from '../../ripgrep/bundled-ripgrep-wsl-routing'
+import { getLocalGitOptionsForRegisteredWorktree } from '../local-worktree-runtime-options'
 import {
   buildExcludePathPrefixes,
   buildRgArgsForQuickOpen,
   normalizeQuickOpenRgLine
-} from '../../shared/quick-open-filter'
+} from '../../../shared/quick-open-filter'
 import {
   limitQuickOpenFilesBySerializedBytes,
   serializedQuickOpenPathBytes
-} from '../../shared/quick-open-transport-budget'
-import { bundledRipgrepUnavailableError } from '../ripgrep/bundled-ripgrep-path'
-import { spawnBundledRipgrep } from '../ripgrep/bundled-ripgrep-spawn'
+} from '../../../shared/quick-open-transport-budget'
+import { bundledRipgrepUnavailableError } from '../../ripgrep/bundled-ripgrep-path'
+import { spawnBundledRipgrep } from '../../ripgrep/bundled-ripgrep-spawn'
 import {
   absorbPendingRipgrepSpawnError,
   isRipgrepUnavailableExit,
@@ -30,8 +35,12 @@ import {
   killSpawnedRipgrepProcess,
   ripgrepMissingCwdError,
   RipgrepUnavailableError
-} from '../../shared/ripgrep-process-availability'
-import { fileListingCancellationError } from '../../shared/file-listing-cancellation'
+} from '../../../shared/ripgrep-process-availability'
+import { fileListingCancellationError } from '../../../shared/file-listing-cancellation'
+import {
+  finishFilesystemListingProcesses,
+  type FilesystemListingProcess
+} from './filesystem-listing-process-cleanup'
 
 export async function listQuickOpenFiles(
   rootPath: string,
@@ -64,11 +73,7 @@ export async function listQuickOpenFiles(
     maxResults === undefined && maxSerializedBytes === undefined ? new FileInventoryBudget() : null
   const files = new Set<string>()
   let serializedBytes = 2
-  const children: {
-    child: ChildProcess
-    isDone: () => boolean
-    finish: (error?: Error) => void
-  }[] = []
+  const children: FilesystemListingProcess[] = []
   // WSL rg may emit absolute Linux paths; distro identity comes from UNC paths or project runtime.
   const { primary, ignoredPass } = buildRgArgsForQuickOpen({
     // Use a relative search root so root-relative exclusion globs prune traversal instead of only filtering output.
@@ -125,7 +130,10 @@ export async function listQuickOpenFiles(
         } catch (error) {
           buf = ''
           files.clear()
-          killSurvivors(error instanceof Error ? error : new FileInventoryCapacityError())
+          finishFilesystemListingProcesses(
+            children,
+            error instanceof Error ? error : new FileInventoryCapacityError()
+          )
           return true
         }
         files.add(relPath)
@@ -157,7 +165,7 @@ export async function listQuickOpenFiles(
         while (delimiterIdx !== -1) {
           if (processLine(buf.substring(start, delimiterIdx))) {
             buf = ''
-            killSurvivors()
+            finishFilesystemListingProcesses(children)
             return
           }
           start = delimiterIdx + 1
@@ -220,7 +228,7 @@ export async function listQuickOpenFiles(
         }
         if (buf && processLine(buf)) {
           buf = ''
-          killSurvivors()
+          finishFilesystemListingProcesses(children)
           return
         }
         if (code === 0 || code === 1 || (code === 2 && parseablePathCount > 0)) {
@@ -277,18 +285,6 @@ export async function listQuickOpenFiles(
       }
     })
 
-  const killSurvivors = (error?: Error): void => {
-    for (const entry of children) {
-      if (entry.isDone()) {
-        continue
-      }
-      entry.finish(error)
-      if (entry.child.exitCode === null && entry.child.signalCode === null) {
-        killSpawnedRipgrepProcess(entry.child)
-      }
-    }
-  }
-
   try {
     if (options.includeIgnored === false) {
       await runRg(primary)
@@ -320,7 +316,7 @@ export async function listQuickOpenFiles(
       }
     }
   } catch (err) {
-    killSurvivors()
+    finishFilesystemListingProcesses(children)
     throw err instanceof RipgrepUnavailableError ? bundledRipgrepUnavailableError() : err
   }
   const result = Array.from(files).slice(0, maxResults)

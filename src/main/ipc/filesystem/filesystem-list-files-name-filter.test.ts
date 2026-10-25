@@ -1,17 +1,17 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Store } from '../persistence'
-import type * as GitRunner from '../git/runner'
+import type { Store } from '../../persistence/loading-store/store'
+import type * as GitRunner from '../../git/runner'
 import {
   pathMatchesFileNameFilterTokens,
   splitFileNameFilterTokens
-} from '../../shared/file-name-filter-tokens'
+} from '../../../shared/file-name-filter-tokens'
 
 const { wslAwareSpawnMock } = vi.hoisted(() => ({
   wslAwareSpawnMock: vi.fn()
 }))
 
-vi.mock('../git/runner', async (importOriginal) => ({
+vi.mock('../../git/runner', async (importOriginal) => ({
   ...(await importOriginal<typeof GitRunner>()),
   wslAwareSpawn: wslAwareSpawnMock
 }))

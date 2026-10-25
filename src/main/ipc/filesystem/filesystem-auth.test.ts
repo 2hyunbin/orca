@@ -3,13 +3,13 @@ import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Store } from '../persistence'
-import type * as RepoWorktrees from '../repo-worktrees'
-import { listRepoWorktreeGraph } from '../repo-worktrees'
-import type { FolderWorkspace } from '../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../shared/project-group-types'
-import type { Repo } from '../../shared/repo-types'
-import type { GitWorktreeInfo } from '../../shared/worktree/types'
+import type { Store } from '../../persistence/loading-store/store'
+import type * as RepoWorktrees from '../../repo-worktrees'
+import { listRepoWorktreeGraph } from '../../repo-worktrees'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Repo } from '../../../shared/repo-types'
+import type { GitWorktreeInfo } from '../../../shared/worktree/types'
 import { resolveAuthorizedPath } from './filesystem-auth'
 import { isDescendantOrEqual, validateGitRelativeFilePath } from './filesystem-path-containment'
 import {
@@ -18,10 +18,10 @@ import {
   rebuildAuthorizedRootsCache,
   registerCreatedWorktreeRoot,
   resolveRegisteredWorktreePath
-} from './registered-worktree-roots-cache'
+} from '../registered-worktree-roots-cache'
 
-vi.mock('../repo-worktrees', async () => {
-  const actual = await vi.importActual<typeof RepoWorktrees>('../repo-worktrees')
+vi.mock('../../repo-worktrees', async () => {
+  const actual = await vi.importActual<typeof RepoWorktrees>('../../repo-worktrees')
   return {
     ...actual,
     listRepoWorktreeGraph: vi.fn()
@@ -390,7 +390,7 @@ describe('filesystem-auth path containment', () => {
 
   it('accepts Windows descendants when drive and root casing differ', async () => {
     vi.resetModules()
-    vi.doMock('../repo-worktrees', () => ({
+    vi.doMock('../../repo-worktrees', () => ({
       isRepoRoot: vi.fn(),
       listRepoWorktreeGraph: vi.fn()
     }))
@@ -414,7 +414,7 @@ describe('filesystem-auth path containment', () => {
       ).toBe(false)
     } finally {
       vi.doUnmock('path')
-      vi.doUnmock('../repo-worktrees')
+      vi.doUnmock('../../repo-worktrees')
       vi.resetModules()
     }
   })

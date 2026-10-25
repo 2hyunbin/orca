@@ -1,16 +1,19 @@
-import { getQuickOpenRgOutputMode } from '../../shared/quick-open-ripgrep-output-mode'
-import { RipgrepFilenameDecoder } from '../../shared/ripgrep-filename-decoder'
+import { getQuickOpenRgOutputMode } from '../../../shared/quick-open-ripgrep-output-mode'
+import { RipgrepFilenameDecoder } from '../../../shared/ripgrep-filename-decoder'
 import { sep } from 'node:path'
-import type { RuntimeStore } from '../runtime/runtime-store-contract'
-import { fileListingCancellationError } from '../../shared/file-listing-cancellation'
+import type { RuntimeStore } from '../../runtime/runtime-store-contract'
+import { fileListingCancellationError } from '../../../shared/file-listing-cancellation'
 import {
   buildExcludePathPrefixes,
   buildRgArgsForQuickOpen,
   normalizeQuickOpenRgLine,
   shouldExcludeQuickOpenRelPath,
   shouldIncludeQuickOpenPath
-} from '../../shared/quick-open-filter'
-import { isQuickOpenQueryTooLarge, QuickOpenPathRanker } from '../../shared/quick-open-path-search'
+} from '../../../shared/quick-open-filter'
+import {
+  isQuickOpenQueryTooLarge,
+  QuickOpenPathRanker
+} from '../../../shared/quick-open-path-search'
 import {
   absorbPendingRipgrepSpawnError,
   isRipgrepUnavailableExit,
@@ -22,14 +25,14 @@ import {
   ripgrepMissingCwdError,
   RipgrepLaunchFailureError,
   RipgrepUnavailableError
-} from '../../shared/ripgrep-process-availability'
-import { toWindowsWslPath } from '../wsl'
-import { resolveBundledRipgrepWslRouting } from '../ripgrep/bundled-ripgrep-wsl-routing'
+} from '../../../shared/ripgrep-process-availability'
+import { toWindowsWslPath } from '../../../shared/wsl-paths'
+import { resolveBundledRipgrepWslRouting } from '../../ripgrep/bundled-ripgrep-wsl-routing'
 import { resolveAuthorizedPath } from './filesystem-auth'
-import { getLocalGitOptionsForRegisteredWorktree } from './local-worktree-runtime-options'
-import { QuickOpenSubprocessPathAccumulator } from '../../shared/quick-open-subprocess-path-accumulator'
-import { bundledRipgrepUnavailableError } from '../ripgrep/bundled-ripgrep-path'
-import { spawnBundledRipgrep } from '../ripgrep/bundled-ripgrep-spawn'
+import { getLocalGitOptionsForRegisteredWorktree } from '../local-worktree-runtime-options'
+import { QuickOpenSubprocessPathAccumulator } from '../../../shared/quick-open-subprocess-path-accumulator'
+import { bundledRipgrepUnavailableError } from '../../ripgrep/bundled-ripgrep-path'
+import { spawnBundledRipgrep } from '../../ripgrep/bundled-ripgrep-spawn'
 
 export type QuickOpenFilePathSearchResult = {
   paths: string[]

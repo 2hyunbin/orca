@@ -2,30 +2,33 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Store } from '../persistence'
-import type * as RepoWorktrees from '../repo-worktrees'
-import { listRepoWorktreeGraph } from '../repo-worktrees'
-import type * as ProjectGroupsModule from '../../shared/project-groups'
-import { buildProjectGroupChildIndex, getProjectGroupSubtreeIds } from '../../shared/project-groups'
-import { isPathInsideOrEqual } from '../../shared/cross-platform-path'
-import type * as CrossPlatformPathModule from '../../shared/cross-platform-path'
-import { getWorktreeMirrorDistro } from '../project-runtime-git-options'
-import type { FolderWorkspace } from '../../shared/folder-workspace-types'
-import type { ProjectGroup } from '../../shared/project-group-types'
-import type { Project } from '../../shared/project-types'
-import type { Repo } from '../../shared/repo-types'
+import type { Store } from '../../persistence/loading-store/store'
+import type * as RepoWorktrees from '../../repo-worktrees'
+import { listRepoWorktreeGraph } from '../../repo-worktrees'
+import type * as ProjectGroupsModule from '../../../shared/project-groups'
+import {
+  buildProjectGroupChildIndex,
+  getProjectGroupSubtreeIds
+} from '../../../shared/project-groups'
+import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
+import type * as CrossPlatformPathModule from '../../../shared/cross-platform-path'
+import { getWorktreeMirrorDistro } from '../../project-runtime-git-options'
+import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Project } from '../../../shared/project-types'
+import type { Repo } from '../../../shared/repo-types'
 import { getAllowedRoots } from './filesystem-allowed-roots'
 import { resolveAuthorizedPath } from './filesystem-auth'
-import { invalidateAuthorizedRootsCache } from './registered-worktree-roots-cache'
-import { computeWorkspaceRoot, getWorktreePathSettings } from './worktree-logic'
+import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
+import { computeWorkspaceRoot, getWorktreePathSettings } from '../worktree-logic'
 
-vi.mock('../repo-worktrees', async () => {
-  const actual = await vi.importActual<typeof RepoWorktrees>('../repo-worktrees')
+vi.mock('../../repo-worktrees', async () => {
+  const actual = await vi.importActual<typeof RepoWorktrees>('../../repo-worktrees')
   return { ...actual, listRepoWorktreeGraph: vi.fn(async () => []) }
 })
 
-vi.mock('../../shared/project-groups', async () => {
-  const actual = await vi.importActual<typeof ProjectGroupsModule>('../../shared/project-groups')
+vi.mock('../../../shared/project-groups', async () => {
+  const actual = await vi.importActual<typeof ProjectGroupsModule>('../../../shared/project-groups')
   return {
     ...actual,
     buildProjectGroupChildIndex: vi.fn(actual.buildProjectGroupChildIndex),
@@ -33,9 +36,9 @@ vi.mock('../../shared/project-groups', async () => {
   }
 })
 
-vi.mock('../../shared/cross-platform-path', async () => {
+vi.mock('../../../shared/cross-platform-path', async () => {
   const actual = await vi.importActual<typeof CrossPlatformPathModule>(
-    '../../shared/cross-platform-path'
+    '../../../shared/cross-platform-path'
   )
   return { ...actual, isPathInsideOrEqual: vi.fn(actual.isPathInsideOrEqual) }
 })

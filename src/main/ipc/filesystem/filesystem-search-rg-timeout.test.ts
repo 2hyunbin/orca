@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import type { ChildProcess } from 'node:child_process'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as BundledRipgrepPath from '../ripgrep/bundled-ripgrep-path'
+import type * as BundledRipgrepPath from '../../ripgrep/bundled-ripgrep-path'
 
 const {
   handleMock,
@@ -33,13 +33,16 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../git/runner', () => ({
+vi.mock('../../git/runner', () => ({
   gitExecFileAsync: vi.fn(),
   wslAwareSpawn: wslAwareSpawnMock
 }))
 
-vi.mock('../wsl', () => ({
+vi.mock('../../wsl', () => ({
   parseWslPath: parseWslPathMock,
+  toWindowsWslPath: toWindowsWslPathMock
+}))
+vi.mock('../../../shared/wsl-paths', () => ({
   toWindowsWslPath: toWindowsWslPathMock
 }))
 
@@ -52,7 +55,7 @@ vi.mock('./filesystem-path-containment', () => ({
   validateGitRelativeFilePath: vi.fn((value: string) => value)
 }))
 
-vi.mock('./registered-worktree-roots-cache', () => ({
+vi.mock('../registered-worktree-roots-cache', () => ({
   resolveRegisteredWorktreePath: vi.fn(async (value: string) => value)
 }))
 
@@ -60,24 +63,24 @@ vi.mock('./filesystem-list-files', () => ({
   listQuickOpenFiles: vi.fn()
 }))
 
-vi.mock('./filesystem/filesystem-mutations', () => ({
+vi.mock('./filesystem-mutations', () => ({
   registerFilesystemMutationHandlers: vi.fn()
 }))
 
-vi.mock('../ripgrep/bundled-ripgrep-path', async (importOriginal) => ({
+vi.mock('../../ripgrep/bundled-ripgrep-path', async (importOriginal) => ({
   ...(await importOriginal<typeof BundledRipgrepPath>()),
   bundledRipgrepCommand: bundledRipgrepCommandMock
 }))
 
-vi.mock('./local-worktree-runtime-options', () => ({
+vi.mock('../local-worktree-runtime-options', () => ({
   getLocalGitOptionsForRegisteredWorktree: getLocalGitOptionsForRegisteredWorktreeMock
 }))
 
-vi.mock('./markdown-documents', () => ({
+vi.mock('../markdown-documents', () => ({
   listMarkdownDocuments: vi.fn()
 }))
 
-import { registerFilesystemHandlers } from './filesystem/filesystem'
+import { registerFilesystemHandlers } from './filesystem'
 
 function createMockProcess(): ChildProcess {
   const p = new EventEmitter() as unknown as ChildProcess

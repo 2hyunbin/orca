@@ -2,16 +2,16 @@ import {
   formatByteCeiling,
   REMOTE_IMPORT_MAX_FILE_BYTES,
   REMOTE_IMPORT_MAX_TOTAL_BYTES
-} from './runtime-import-limits'
+} from '../runtime-import-limits'
 import { constants } from 'node:fs'
 import { lstat, open, readdir, realpath, type FileHandle } from 'node:fs/promises'
 import { basename, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { classifyImportSource } from './filesystem-import-source-stat'
-import { detectImageFileSignature, IMAGE_SIGNATURE_BYTES } from '../image-file-signature'
+import { detectImageFileSignature, IMAGE_SIGNATURE_BYTES } from '../../image-file-signature'
 import type {
   StagedExternalImportEntry,
   StagedExternalImportSource
-} from '../../shared/filesystem-import-result-types'
+} from '../../../shared/filesystem-import-result-types'
 
 class RuntimeUploadSymlinkError extends Error {}
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import type * as BundledRipgrepPath from '../ripgrep/bundled-ripgrep-path'
+import type * as BundledRipgrepPath from '../../ripgrep/bundled-ripgrep-path'
 
 const {
   spawnMock,
@@ -24,20 +24,20 @@ vi.mock('./filesystem-auth', () => ({
   resolveAuthorizedPath: resolveAuthorizedPathMock
 }))
 
-vi.mock('../ripgrep/bundled-ripgrep-path', async (importOriginal) => ({
+vi.mock('../../ripgrep/bundled-ripgrep-path', async (importOriginal) => ({
   ...(await importOriginal<typeof BundledRipgrepPath>()),
   bundledRipgrepCommand: bundledRipgrepCommandMock
 }))
 
-vi.mock('./local-worktree-runtime-options', () => ({
+vi.mock('../local-worktree-runtime-options', () => ({
   getLocalGitOptionsForRegisteredWorktree: getLocalGitOptionsForRegisteredWorktreeMock
 }))
 
 import { listQuickOpenFiles } from './filesystem-list-files'
 import { EventEmitter } from 'node:events'
-import type { Store } from '../persistence'
+import type { Store } from '../../persistence/loading-store/store'
 import type { ChildProcess } from 'node:child_process'
-import { FileListingCancelledError } from '../../shared/file-listing-cancellation'
+import { FileListingCancelledError } from '../../../shared/file-listing-cancellation'
 
 const BUNDLED_RG = '/bundled/rg'
 const BUNDLED_ERROR = "Orca's bundled search tool (ripgrep) could not start"

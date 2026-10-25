@@ -9,8 +9,8 @@ import {
   getAllowedRoots,
   getLocalRepos,
   resolveUnanchoredWorkspaceRoot
-} from '../filesystem-allowed-roots'
-import { isPathAllowed } from '../filesystem-auth'
+} from './filesystem-allowed-roots'
+import { isPathAllowed } from './filesystem-auth'
 import {
   __resetCreatedWorktreeRootsForTests,
   invalidateAuthorizedRootsCache,
@@ -35,7 +35,9 @@ vi.mock('../worktree-logic', () => ({
   getWorktreePathSettings: mocks.pathSettings
 }))
 vi.mock('../../project-runtime-git-options', () => ({
-  getWorktreeMirrorDistroForRuntime: vi.fn(),
+  getWorktreeMirrorDistroForRuntime: vi.fn()
+}))
+vi.mock('../../local-project-runtime-resolution', () => ({
   resolveLocalProjectRuntimesForRepos: mocks.projectRuntimes
 }))
 

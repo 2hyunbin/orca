@@ -20053,11 +20053,11 @@
       "invariant": "Quick Open queries execute on the worktree host, find exact ignored-path matches beyond the legacy inventory prefix, return deterministic bounded results, and keep the paired runtime usable without overflowing its outbound reply buffer.",
       "oracle": "Create 88,763 paths with 77,792 ignored entries and a nominal 22 GiB sparse file, query exact late gitignored and .orcaignored targets through headed and headless paired runtimes, and require one deterministic match, a payload below 4 KiB, and a healthy follow-up worktree call.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
         "pnpm exec playwright test tests/e2e/paired-quick-open-large-tree.spec.ts --config tests/playwright.config.ts --workers=1"
       ],
       "testFiles": [
-        "src/main/ipc/filesystem-search-file-paths.test.ts",
+        "src/main/ipc/filesystem/filesystem-search-file-paths.test.ts",
         "src/main/runtime/orca-runtime-files-search.test.ts",
         "src/main/runtime/rpc/methods/files-path-search.test.ts",
         "src/renderer/src/components/quick-open-file-list.react.test.tsx",
@@ -20067,7 +20067,7 @@
       ],
       "assertionRefs": [
         {
-          "file": "src/main/ipc/filesystem-search-file-paths.test.ts",
+          "file": "src/main/ipc/filesystem/filesystem-search-file-paths.test.ts",
           "assertions": [
             "host search stays bounded and respects gitignore plus .orcaignore traversal"
           ]
@@ -20087,7 +20087,7 @@
           "runner": "local",
           "platform": "macos",
           "result": "passed",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
+          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem/filesystem-search-file-paths.test.ts src/main/runtime/orca-runtime-files-search.test.ts src/main/runtime/rpc/methods/files-path-search.test.ts src/renderer/src/components/quick-open-file-list.react.test.tsx src/renderer/src/runtime/runtime-file-client-search-listing.test.ts src/shared/quick-open-transport-budget.test.ts --reporter=dot",
           "durationSeconds": 5,
           "summary": "Six focused files passed 52 tests across host search, runtime RPC, renderer query ownership, and transport bounds; existing React act warnings remained non-fatal."
         }

@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Store } from '../persistence'
-import type { Repo } from '../../shared/repo-types'
+import type { Store } from '../../persistence/loading-store/store'
+import type { Repo } from '../../../shared/repo-types'
 import { PATH_ACCESS_DENIED_MESSAGE, resolveAuthorizedPath } from './filesystem-auth'
 import { isDescendantOrEqual } from './filesystem-path-containment'
 

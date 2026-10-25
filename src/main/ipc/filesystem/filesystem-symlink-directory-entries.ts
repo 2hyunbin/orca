@@ -1,8 +1,8 @@
 import type { Dirent } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { DirEntry } from '../../shared/filesystem-entry-types'
-import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+import type { DirEntry } from '../../../shared/filesystem-entry-types'
+import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 
 export function classifyFilesystemDirectoryEntries(
   dirPath: string,

@@ -1,8 +1,8 @@
 import type { Stats } from 'node:fs'
 import { lstat } from 'node:fs/promises'
-import type { ImportSkipReason } from '../../shared/filesystem-import-result-types'
-import { errorMessage } from '../../shared/error-message'
-import { isPermissionError } from '../win32-utils'
+import type { ImportSkipReason } from '../../../shared/filesystem-import-result-types'
+import { errorMessage } from '../../../shared/error-message'
+import { isPermissionError } from '../../win32-utils'
 import { isENOENT } from './filesystem-path-containment'
 
 export type ImportSourceRejection =
