@@ -33,7 +33,10 @@ import {
   type AgentJournalItemIdentity,
   type AgentJournalTurnItem
 } from '../../../shared/agent-session-journal-types'
-import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import {
+  agentJournalItemKey,
+  parseAgentJournalItemKey
+} from '../../../shared/agent-session-journal-item-key'
 import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { journalPragmaNumber } from './journal-database'
 import { JOURNAL_DB_SCHEMA_VERSION } from './journal-database-schema'
@@ -46,7 +49,6 @@ import { readJournalRestFacts } from './journal-row-table'
 import { agentSessionCurrentContextRows } from '../../../shared/agent-session-context-clear'
 import { latestStructuredAgentSessionRequest } from '../../../shared/structured-agent-session-latest-request'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
-import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { applyJournalRow, createJournalReducerState, renderJournalState } from './journal-reducer'
 import { stageJournalMutation } from './journal-mutation-stage'
 import type { JournalRow } from './journal-row-schema'

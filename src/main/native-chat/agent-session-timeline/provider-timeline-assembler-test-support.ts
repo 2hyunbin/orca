@@ -1,7 +1,12 @@
 // Exercise grammar events through the real deferred sink and on-disk journal.
 
 import { readJournalRestFacts } from '../agent-session-journal/journal-row-table'
-import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
+import {
+  openTestJournalHostDatabase,
+  closeTestJournalHostDatabase,
+  createTrackedJournalOpener,
+  type TestJournalOptions
+} from '../agent-session-journal/journal-host-database-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,11 +25,6 @@ import {
   isBackgroundTaskBlock,
   type NativeChatBackgroundTaskBlock
 } from '../../../shared/native-chat-types'
-import {
-  closeTestJournalHostDatabase,
-  createTrackedJournalOpener,
-  type TestJournalOptions
-} from '../agent-session-journal/journal-host-database-test-support'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
   createDeferredStructuredAgentSessionEventSink,

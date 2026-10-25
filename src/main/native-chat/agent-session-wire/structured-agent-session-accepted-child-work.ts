@@ -1,14 +1,20 @@
 import { randomUUID } from 'node:crypto'
-import type { AgentJournalTurnScope } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
-import { semanticWorkRecordId } from '../../../shared/agent-session-semantic-work'
-import type { AgentSessionSemanticWork } from '../../../shared/agent-session-semantic-work'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalTurnScope
+} from '../../../shared/agent-session-journal-types'
+import {
+  semanticWorkRecordId,
+  type AgentSessionSemanticWork
+} from '../../../shared/agent-session-semantic-work'
 import type { JournalLifecycleMutationInput } from '../agent-session-journal/journal-row-builders'
 import type { ChildWorkChange } from './structured-agent-session-open-child-work'
 import type { StructuredAgentSessionChildWorkProducer } from './structured-agent-session-subagent-rows'
-import type { StructuredAgentSessionSinkBarrier } from './structured-agent-session-event-sink'
-import type { StructuredAgentSessionSinkAdmission } from './structured-agent-session-event-sink'
+import type {
+  StructuredAgentSessionSinkBarrier,
+  StructuredAgentSessionSinkAdmission
+} from './structured-agent-session-event-sink'
 
 export type ChildWorkAdmission = StructuredAgentSessionSinkAdmission & {
   retry?: () => ChildWorkAdmission

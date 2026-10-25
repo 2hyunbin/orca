@@ -13,7 +13,10 @@ import {
 } from '../runtime/agent-session-record-store-test-harness'
 import { structuredClaudeLifecycleEvent } from '../runtime/structured-claude-runtime-adapter'
 import { settleStructuredAgentSessionChildExit } from '../native-chat/agent-session-wire/structured-agent-session-child-exit'
-import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import {
+  recordingStructuredAgentSessionLogger,
+  testEventSinkLogging
+} from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-types'
 import { openAgentSessionJournal } from '../native-chat/agent-session-journal/journal-store-factory'
 import {
@@ -21,7 +24,6 @@ import {
   closeTestJournalHostDatabases
 } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { StructuredAgentSessionStatusOwnership } from '../native-chat/agent-session-wire/structured-agent-session-status-ownership'
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { ChildWorkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-accepted-child-work'

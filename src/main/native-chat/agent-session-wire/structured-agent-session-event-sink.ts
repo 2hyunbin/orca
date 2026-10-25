@@ -1,5 +1,9 @@
 import { DEFAULT_WATERMARKS } from './structured-agent-session-sink-watermarks'
-import { publishCommitted } from './structured-agent-session-transition'
+import {
+  publishCommitted,
+  createStructuredAgentSessionTransitionMembers,
+  type StructuredAgentSessionTransitionSink
+} from './structured-agent-session-transition'
 import type { JournalItemEcho } from '../agent-session-journal/journal-item-echo'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type {
@@ -15,10 +19,6 @@ import { estimateStructuredAgentSessionItemBytes } from './structured-agent-sess
 import { StructuredAgentSessionSinkQueue } from './structured-agent-session-event-sink-queue'
 import { structuredAgentSessionJournalAppendOptions } from './structured-agent-session-journal-append-options'
 import { createStructuredAgentSessionResolvedAppend } from './structured-agent-session-resolved-append'
-import {
-  createStructuredAgentSessionTransitionMembers,
-  type StructuredAgentSessionTransitionSink
-} from './structured-agent-session-transition'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type {
   StructuredAgentSessionIdentityResolver,

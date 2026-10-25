@@ -24,7 +24,10 @@ import {
   structuredWorkerProcessIncarnation
 } from '../../runtime/structured-worker-identity'
 import { sendAgentTurn } from '../../runtime/orchestration/send-agent-turn'
-import { agentSessionProviderHandleRoot } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  agentSessionProviderHandleRoot,
+  claudeProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -33,7 +36,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
-import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import {
   openTestAgentSessionRecordStore,
