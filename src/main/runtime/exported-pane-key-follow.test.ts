@@ -50,27 +50,21 @@ async function relaunch(listed: PtyProcessInfo[]) {
   return runtime
 }
 
-function showSurvivorInNewTab(runtime: InstanceType<typeof OrcaRuntimeService>): void {
+function showSurvivorIn(
+  runtime: InstanceType<typeof OrcaRuntimeService>,
+  tabId: string,
+  leafId: string
+): void {
   runtime.syncWindowGraph(1, {
     tabs: [
-      {
-        tabId: NEW_TAB,
-        worktreeId: TEST_WORKTREE_ID,
-        title: 'Terminal',
-        activeLeafId: NEW_LEAF,
-        layout: null
-      }
+      { tabId, worktreeId: TEST_WORKTREE_ID, title: 'Terminal', activeLeafId: leafId, layout: null }
     ],
-    leaves: [
-      {
-        tabId: NEW_TAB,
-        worktreeId: TEST_WORKTREE_ID,
-        leafId: NEW_LEAF,
-        paneRuntimeId: 1,
-        ptyId: SURVIVOR
-      }
-    ]
+    leaves: [{ tabId, worktreeId: TEST_WORKTREE_ID, leafId, paneRuntimeId: 1, ptyId: SURVIVOR }]
   })
+}
+
+function showSurvivorInNewTab(runtime: InstanceType<typeof OrcaRuntimeService>): void {
+  showSurvivorIn(runtime, NEW_TAB, NEW_LEAF)
 }
 
 function listedSurvivor(envPaneKey?: string): PtyProcessInfo {
@@ -155,16 +149,44 @@ describe('agent status of a terminal re-homed after a restart', () => {
     expect(statesOn(NEW_PANE_KEY)).toEqual([])
   })
 
-  it('drops the move once a second live terminal turns out to have exported the same key', async () => {
+  it('returns a moved row to the exported key once a second live terminal also exported it', async () => {
+    hookFromOldShell('working')
     const listed = [listedSurvivor(OLD_PANE_KEY)]
     const runtime = await relaunch(listed)
     showSurvivorInNewTab(runtime)
     listed.push({ ...listedSurvivor(OLD_PANE_KEY), id: OTHER })
 
     await runtime.listTerminals()
-    hookFromOldShell('working')
 
     expect(statesOn(OLD_PANE_KEY)).toEqual(['working'])
     expect(statesOn(NEW_PANE_KEY)).toEqual([])
+    hookFromOldShell('done')
+    expect(statesOn(OLD_PANE_KEY)).toEqual(['done'])
+  })
+
+  it('leaves the row under the exported key when another live terminal exported the destination', async () => {
+    hookFromOldShell('working')
+    const runtime = await relaunch([
+      listedSurvivor(OLD_PANE_KEY),
+      { ...listedSurvivor(NEW_PANE_KEY), id: OTHER }
+    ])
+
+    showSurvivorInNewTab(runtime)
+
+    expect(statesOn(OLD_PANE_KEY)).toEqual(['working'])
+    expect(statesOn(NEW_PANE_KEY)).toEqual([])
+  })
+
+  it('brings the row back when the terminal is shown in its exported pane again', async () => {
+    hookFromOldShell('working')
+    const runtime = await relaunch([listedSurvivor(OLD_PANE_KEY)])
+    showSurvivorInNewTab(runtime)
+
+    showSurvivorIn(runtime, OLD_TAB, OLD_LEAF)
+
+    expect(statesOn(OLD_PANE_KEY)).toEqual(['working'])
+    expect(statesOn(NEW_PANE_KEY)).toEqual([])
+    hookFromOldShell('done')
+    expect(statesOn(OLD_PANE_KEY)).toEqual(['done'])
   })
 })
