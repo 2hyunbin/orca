@@ -80,7 +80,12 @@ export function configureLocalPtyProvider(args: {
         launchAgent: ctx?.launchAgent,
         launchCommand: ctx?.command
       })
-      await getClaudeAgentViewService().ready()
+      await getClaudeAgentViewService().readyForLaunch({
+        settings: ptySettings,
+        isWsl: ctx?.isWsl,
+        launchAgent: ctx?.launchAgent,
+        launchCommand: ctx?.command
+      })
       const env = buildPtyHostEnv(id, baseEnv, {
         isPackaged: getAppEnvironment().isPackaged(),
         resourcesPath: process.resourcesPath,

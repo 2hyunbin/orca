@@ -208,7 +208,12 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
       launchCommand
     })
-    await getClaudeAgentViewService().ready()
+    await getClaudeAgentViewService().readyForLaunch({
+      settings: ptySettings,
+      isWsl,
+      launchAgent: args.launchAgent,
+      launchCommand
+    })
     buildPtyHostEnv(sessionId, env, {
       isPackaged: getAppEnvironment().isPackaged(),
       resourcesPath: process.resourcesPath,

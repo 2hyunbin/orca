@@ -40,6 +40,11 @@ owned-shortcut cleanup behavior.
 Setup runs asynchronously at startup, when navigation settings change, and
 when a new account profile is provisioned. Reconciliation is serialized and
 PTY spawns use the cached plugin folder without reading or writing HOME.
+Only opted-in local Claude launches wait for pending setup, for at most 200 ms.
+Plain shells, other agents, WSL panes and disabled navigation never wait for it.
+If setup exceeds that budget, subsequent panes can use navigation once setup
+finishes. Disabled cleanup visits known config directories without probing a
+login shell.
 With navigation off, Orca leaves `CLAUDE_CODE_PLUGIN_DIRS` untouched unless it
 must strip a previously inherited Orca plugin path.
 

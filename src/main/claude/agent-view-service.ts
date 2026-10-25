@@ -3,6 +3,9 @@ import { join, resolve } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { isAgentStatusHooksEnabledForAgent } from '../../shared/agent-status-hooks-setting'
+import { getAgentLaunchExecutableName } from '../../shared/agent-command-line-intent'
+import { withTimeout } from '../../shared/promise-timeout-fallback'
+import type { TuiAgent } from '../../shared/tui-agent'
 import { listClaudeProfileHomesAsync } from '../claude-accounts/claude-profile-homes'
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
 import { reconcileClaudeAgentViewConfig } from './agent-view-config'
@@ -58,7 +61,7 @@ export class ClaudeAgentViewService {
     this.pluginRoot = undefined
     const generation = ++this.generation
     return this.enqueue(async () => {
-      const env = await this.deps.loginEnv()
+      const env = enabled ? await this.deps.loginEnv() : process.env
       this.defaultConfig =
         env.CLAUDE_CONFIG_DIR || process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
       for (const dir of [
@@ -91,6 +94,25 @@ export class ClaudeAgentViewService {
 
   ready(): Promise<void> {
     return this.tail
+  }
+
+  async readyForLaunch(args: {
+    settings?: NavigationSettings
+    isWsl?: boolean
+    launchAgent?: TuiAgent
+    launchCommand?: string
+  }): Promise<void> {
+    if (
+      args.settings?.claudeSubagentNavigationEnabled !== true ||
+      !isAgentStatusHooksEnabledForAgent(args.settings, 'claude') ||
+      args.isWsl ||
+      (args.launchAgent
+        ? args.launchAgent !== 'claude'
+        : getAgentLaunchExecutableName(args.launchCommand) !== 'claude')
+    ) {
+      return
+    }
+    await withTimeout(this.tail, 200, undefined)
   }
 
   read(configDir = this.defaultConfig): { pluginDir: string; configDir: string } | undefined {

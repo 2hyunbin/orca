@@ -10,12 +10,15 @@ import { claudeAgentViewChord } from './agent-view-keybindings'
 const roots: string[] = []
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  vi.unstubAllEnvs()
+  vi.useRealTimers()
 })
 
 it('serializes enable/disable for default and profile homes, restoring only shortcuts removed by Orca', async () => {
   const root = await mkdtemp(join(tmpdir(), 'orca-agent-view-service-'))
   roots.push(root)
   const config = join(root, 'default')
+  vi.stubEnv('CLAUDE_CONFIG_DIR', config)
   const profile = join(root, 'account')
   const reconcileConfig = vi.fn(reconcileClaudeAgentViewConfig)
   const ensurePlugin = vi.fn(ensureClaudeAgentViewPluginAsync)
@@ -108,6 +111,7 @@ it.each(['edited', 'reused', 'malformed'] as const)(
 
 it('keeps reconciliation ordered and prevents a stale enable from republishing its plugin root', async () => {
   const config = join(tmpdir(), 'orca-agent-view-ordered-config')
+  vi.stubEnv('CLAUDE_CONFIG_DIR', config)
   const userData = join(tmpdir(), 'orca-agent-view-ordered-data')
   let release = () => {}
   const gate = new Promise<void>((resolve) => {
@@ -134,3 +138,69 @@ it('keeps reconciliation ordered and prevents a stale enable from republishing i
   ])
   expect(service.read(config)).toBeUndefined()
 })
+
+it.each([
+  {},
+  { claudeSubagentNavigationEnabled: false },
+  { claudeSubagentNavigationEnabled: true, agentStatusHooksEnabled: false },
+  { claudeSubagentNavigationEnabled: true, disabledTuiAgents: ['claude' as const] }
+])('cleans disabled navigation without probing a login shell: %j', async (settings) => {
+  const config = join(tmpdir(), 'orca-agent-view-disabled-config')
+  const custom = join(tmpdir(), 'orca-agent-view-custom-config')
+  const profile = join(tmpdir(), 'orca-agent-view-account-config')
+  vi.stubEnv('CLAUDE_CONFIG_DIR', config)
+  const loginEnv = vi.fn(() => new Promise<NodeJS.ProcessEnv>(() => {}))
+  const reconcileConfig = vi.fn(async () => {})
+  const ensurePlugin = vi.fn(async () => 'unused')
+  const service = new ClaudeAgentViewService(join(tmpdir(), 'orca-agent-view-disabled-data'), {
+    reconcileConfig,
+    ensurePlugin,
+    loginEnv,
+    listProfiles: async () => [profile]
+  })
+  await service.reconcile({
+    ...settings,
+    agentDefaultEnv: { claude: { CLAUDE_CONFIG_DIR: custom } }
+  })
+  expect(loginEnv).not.toHaveBeenCalled()
+  expect(ensurePlugin).not.toHaveBeenCalled()
+  expect(reconcileConfig.mock.calls).toEqual(
+    [config, custom, profile].map((dir) => [join(dir, 'settings.json'), false])
+  )
+})
+
+it.each([{ launchAgent: 'claude' as const }, { launchCommand: 'claude --resume' }])(
+  'bounds an opted-in Claude launch waiting on stalled setup: %j',
+  async (launch) => {
+    vi.useFakeTimers()
+    const config = join(tmpdir(), 'orca-agent-view-stalled-config')
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const service = new ClaudeAgentViewService(join(tmpdir(), 'orca-agent-view-stalled-data'), {
+      reconcileConfig: () => gate,
+      ensurePlugin: async () => join(tmpdir(), 'orca-agent-view-stalled-plugin'),
+      loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config }),
+      listProfiles: async () => []
+    })
+    const settings = { claudeSubagentNavigationEnabled: true }
+    const reconcile = service.reconcile(settings)
+    let ready = false
+    const wait = service.readyForLaunch({ settings, ...launch }).then(() => {
+      ready = true
+    })
+    try {
+      await vi.advanceTimersByTimeAsync(199)
+      expect(ready).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      await wait
+      expect(service.read()).toBeUndefined()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      release()
+      await reconcile
+    }
+    expect(service.read()?.pluginDir).toBeTruthy()
+  }
+)

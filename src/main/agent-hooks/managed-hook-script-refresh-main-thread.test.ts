@@ -51,6 +51,7 @@ function syncCallsUnderHome(): string[] {
 describe('managed hook script refresh stays off the main thread', () => {
   beforeEach(async () => {
     state.home = await mkdtemp(join(tmpdir(), 'orca-hook-refresh-main-thread-'))
+    vi.stubEnv('CLAUDE_CONFIG_DIR', join(state.home, '.claude'))
     installFakeAppEnvironment({ getPath: () => join(state.home, 'user-data') })
     vi.stubEnv('ORCA_USER_DATA_PATH', join(state.home, 'user-data'))
     vi.stubEnv('GROK_HOME', undefined)
