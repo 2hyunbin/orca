@@ -333,8 +333,7 @@ describe('useMobileStructuredAgentSession', () => {
     )
     await vi.waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1))
 
-    // A transport loss retires the connection-scoped hold; after the host's 15s grace
-    // it may evict the provider child. Reconnect must acquire before replaying the stream.
+    // Reconnect must reacquire its connection-scoped hold; the host may evict the provider after grace expires.
     await act(async () => {
       renderer?.update(createElement(Harness, { connected: false }))
     })
@@ -418,7 +417,6 @@ describe('useMobileStructuredAgentSession', () => {
 
     await vi.waitFor(() => expect(hook.permission).not.toBeNull())
     await vi.waitFor(() => expect(hook.question).not.toBeNull())
-    // The seed paints first; the session's own list is what a pick is checked against.
     await vi.waitFor(() => {
       expect(listedModelIds(hook.optionSnapshot)).toContain('gpt-slow')
       expect(hook.optionSnapshot.find((descriptor) => descriptor.id === 'model')).toMatchObject({
