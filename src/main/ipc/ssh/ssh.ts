@@ -49,6 +49,7 @@ import {
 } from './ssh-ipc-context'
 import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
 import { persistPortForwards } from './ssh-port-forward-persistence'
+import { recordForwardFailure } from './ssh-port-forward-unrestored'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
 import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
@@ -126,6 +127,8 @@ export function registerSshHandlers(
             reason.detail ? `: ${reason.detail}` : ''
           }`
         )
+        // An ssh that starts and later dies backs off like one that never started.
+        recordForwardFailure(entry.connectionId, entry, reason.detail ?? 'exited unexpectedly')
       }
       persistPortForwards(entry.connectionId)
       broadcastPortForwards(getCurrentMainWindow, entry.connectionId)

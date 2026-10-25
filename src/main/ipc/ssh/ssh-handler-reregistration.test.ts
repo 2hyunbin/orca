@@ -85,7 +85,16 @@ describe('SSH IPC handlers', () => {
     expect(mockWindow.webContents.send).toHaveBeenCalledWith('ssh:port-forwards-changed', {
       targetId: 'ssh-1',
       forwards: [],
-      unrestored: [{ localPort: 4100, remoteHost: '127.0.0.1', remotePort: 3000, label: 'app' }]
+      // The exit counts as a failed start, so its retry backs off and the row says why.
+      unrestored: [
+        {
+          localPort: 4100,
+          remoteHost: '127.0.0.1',
+          remotePort: 3000,
+          label: 'app',
+          error: 'exited unexpectedly'
+        }
+      ]
     })
   })
 

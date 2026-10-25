@@ -93,6 +93,7 @@ export async function restorePortForwards(
       // A teardown or reconnect cancelled this start; the next transport retries without a backoff.
       if (
         err instanceof PortForwardTornDownError ||
+        conn.isDisposed() ||
         connectionManager!.getConnection(targetId) !== conn
       ) {
         return
