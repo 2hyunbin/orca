@@ -14944,6 +14944,7 @@
         "pnpm run build:cli && pnpm exec playwright test tests/e2e/terminal-send-agent-prompt-submit.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1",
         "pnpm.cmd exec playwright test tests/e2e/terminal-send-agent-prompt-submit.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1",
         "node tests/tools/repro-terminal-send-submit.mjs --cli orca --worktree <registered-worktree> --discard-report",
+        "pnpm exec vitest run --config config/vitest.config.ts src/cli/handlers/terminal.test.ts src/main/runtime/rpc/terminal-agent-prompt-send.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/runtime/orca-runtime.test.ts src/shared/agent-prompt-injection.test.ts",
         "pnpm test src/main/runtime/rpc/pi-terminal-prompt-framing.test.ts src/main/runtime/rpc/terminal-agent-prompt-send.test.ts src/main/runtime/rpc/terminal-prompt-delivery-receipt.test.ts src/main/runtime/rpc/terminal-send.test.ts"
       ],
       "testFiles": [
