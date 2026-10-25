@@ -2,7 +2,12 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import { applyWorktreeUpdates } from '../../worktree-helpers'
-import { clearTwinCopyReviewLinks, worktreeCopyOwnerKey } from './worktree-twin-copy'
+import {
+  clearTwinCopyReviewLinks,
+  deleteTwinCopyTombstones,
+  reviewClearTombstoneKey,
+  worktreeCopyOwnerKey
+} from './worktree-twin-copy'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
@@ -67,6 +72,7 @@ export function bumpHostedReviewLinkMutationGeneration(worktreeId: string): void
     getHostedReviewLinkMutationGeneration(worktreeId) + 1
   )
   hostedReviewLinkClearTombstonesByWorktreeId.delete(worktreeId)
+  deleteTwinCopyTombstones(hostedReviewLinkClearTombstonesByWorktreeId, worktreeId)
   pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
 }
 
@@ -74,6 +80,7 @@ export function pruneHostedReviewLinkMutationGenerations(worktreeIds: Iterable<s
   for (const worktreeId of worktreeIds) {
     hostedReviewLinkMutationGenerationByWorktreeId.delete(worktreeId)
     hostedReviewLinkClearTombstonesByWorktreeId.delete(worktreeId)
+    deleteTwinCopyTombstones(hostedReviewLinkClearTombstonesByWorktreeId, worktreeId)
     hostedReviewLinkWorktreeIdAliases.delete(worktreeId)
     for (const [oldWorktreeId, newWorktreeId] of hostedReviewLinkWorktreeIdAliases) {
       if (newWorktreeId === worktreeId) {
@@ -178,7 +185,7 @@ export function rememberHostedReviewLinkClear(
   head?: string,
   owner?: string
 ): void {
-  hostedReviewLinkClearTombstonesByWorktreeId.set(worktreeId, {
+  hostedReviewLinkClearTombstonesByWorktreeId.set(reviewClearTombstoneKey(worktreeId, owner), {
     branch,
     branchIdentity: canonicalHostedReviewBranchIdentity(branch),
     generation,
@@ -202,7 +209,10 @@ export function sanitizeHostedReviewLinksForBranchClear<
     >
 >(worktree: T, currentWorktrees?: readonly T[]): T {
   const hostedReviewWorktreeId = resolveHostedReviewLinkWorktreeId(worktree.id)
-  const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(hostedReviewWorktreeId)
+  const tombstone =
+    hostedReviewLinkClearTombstonesByWorktreeId.get(
+      reviewClearTombstoneKey(hostedReviewWorktreeId, worktreeCopyOwnerKey(worktree))
+    ) ?? hostedReviewLinkClearTombstonesByWorktreeId.get(hostedReviewWorktreeId)
   const hasBranchScopedContext =
     HOSTED_REVIEW_LINK_KEYS.some((key) => worktree[key] != null) ||
     worktree.pushTarget !== undefined

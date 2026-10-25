@@ -30,3 +30,20 @@ export function clearTwinCopyReviewLinks(
   })
   return changed && next ? { ...byRepo, [repoId]: next } : byRepo
 }
+
+/** A review-clear tombstone's key: the bare id, or id plus owner so each twin copy keeps its own. */
+export function reviewClearTombstoneKey(worktreeId: string, owner?: string): string {
+  return owner === undefined ? worktreeId : `${worktreeId}\0${owner}`
+}
+
+/** Drops every twin copy's tombstone for `worktreeId` (the bare-id one is the caller's). */
+export function deleteTwinCopyTombstones(
+  tombstones: Map<string, unknown>,
+  worktreeId: string
+): void {
+  for (const key of tombstones.keys()) {
+    if (key.startsWith(`${worktreeId}\0`)) {
+      tombstones.delete(key)
+    }
+  }
+}

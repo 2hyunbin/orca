@@ -18,7 +18,7 @@ import {
   rememberHostedReviewLinkClear,
   resolveHostedReviewLinkWorktreeId
 } from './hosted-review-link-mutation'
-import { worktreeCopyOwnerKey } from './worktree-twin-copy'
+import { reviewClearTombstoneKey, worktreeCopyOwnerKey } from './worktree-twin-copy'
 import { persistWorktreeMeta } from './worktree-meta-persist'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
@@ -128,11 +128,12 @@ export function createUpdateWorktreeGitIdentity(
             tombstoneOwner
           )
         } else {
-          const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(worktreeId)
-          if (tombstone && tombstone.owner === tombstoneOwner) {
+          const tombstoneKey = reviewClearTombstoneKey(worktreeId, tombstoneOwner)
+          const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(tombstoneKey)
+          if (tombstone) {
             clearedCopy = copy
             const nextBranchIdentity = canonicalHostedReviewBranchIdentity(nextBranch)
-            hostedReviewLinkClearTombstonesByWorktreeId.set(worktreeId, {
+            hostedReviewLinkClearTombstonesByWorktreeId.set(tombstoneKey, {
               ...tombstone,
               branch: nextBranch,
               branchIdentity: nextBranchIdentity,

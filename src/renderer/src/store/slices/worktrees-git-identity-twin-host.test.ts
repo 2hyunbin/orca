@@ -118,6 +118,23 @@ describe('a twin review-clear tombstone', () => {
   })
 })
 
+describe('twin review-clear tombstones when both copies switch', () => {
+  it('keep guarding the first copy after the second clears', () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/b1', linkedPR: 2 }
+    )
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'local')
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/b2' }, 'ssh:box-b')
+
+    const [first] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({ id, repoId: 'repo1', hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 })
+    ])
+
+    expect(first).toMatchObject({ branch: 'refs/heads/a2', linkedPR: null })
+  })
+})
+
 describe('a provenance twin review-clear tombstone', () => {
   it('spares the sibling another paired server publishes under the same SSH host id', () => {
     const shared = { hostId: 'ssh:shared' as const, branch: 'refs/heads/stack/one' }
