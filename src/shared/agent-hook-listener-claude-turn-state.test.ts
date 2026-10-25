@@ -91,6 +91,32 @@ describe('shared agent-hook-listener', () => {
     })
   })
 
+  it('records the folder a Claude session started in, not the one its Bash tool moved to (#16960)', () => {
+    const sessionId = '55555555-5555-4555-8555-555555555555'
+    normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: sessionId,
+      prompt: 'go',
+      cwd: '/repo/pkg'
+    })
+    // Claude's hook cwd follows `cd` inside its Bash tool.
+    const afterCd = normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'PostToolUse',
+      session_id: sessionId,
+      tool_name: 'Bash',
+      cwd: '/repo/pkg/sub'
+    })
+    const nextSession = normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'SessionStart',
+      source: 'clear',
+      session_id: '66666666-6666-4666-8666-666666666666',
+      cwd: '/repo/pkg/sub'
+    })
+
+    expect(afterCd?.providerSession).toMatchObject({ id: sessionId, cwd: '/repo/pkg' })
+    expect(nextSession?.providerSession?.cwd).toBe('/repo/pkg/sub')
+  })
+
   it('resets stale Claude turn state when SessionStart announces a new session on the pane', () => {
     normalizeAndAccept(state, 'claude', { hook_event_name: 'UserPromptSubmit', prompt: 'fix bug' })
     normalizeAndAccept(state, 'claude', {

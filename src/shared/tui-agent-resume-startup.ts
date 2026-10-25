@@ -12,6 +12,7 @@ import { resolveStartupShell, type AgentStartupShell } from './tui-agent-startup
 import { TUI_AGENT_CONFIG } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { buildAgentResumeLaunchCommand } from './agent-resume-launch-command'
+import { buildAiVaultResumeShellCommand } from './ai-vault-resume-command'
 
 export function buildAgentResumeStartupPlan(args: {
   agent: ResumableTuiAgent
@@ -28,6 +29,8 @@ export function buildAgentResumeStartupPlan(args: {
   isRemote?: boolean
   /** The caller chose the terminal folder on purpose, so Codex must not ask for the recorded one. */
   resumeInLaunchCwd?: boolean
+  /** Folder the resume shell starts in; an agent recorded elsewhere is resumed from its own folder (#16960). */
+  launchCwd?: string | null
   /** Open a copy of the conversation instead of re-entering it; null for agents that cannot. */
   fork?: boolean
 }): AgentStartupPlan | null {
@@ -68,7 +71,20 @@ export function buildAgentResumeStartupPlan(args: {
     ...args,
     agentCommand: baseCommand.commandWithoutSessionOptions
   })
-  const launchCommand = buildAgentResumeLaunchCommand(args.agent, baseCommand.command, argv, shell)
+  const resumeCommand = buildAgentResumeLaunchCommand(args.agent, baseCommand.command, argv, shell)
+  const agentCwd = args.providerSession.cwd
+  const launchCommand =
+    agentCwd &&
+    args.launchCwd &&
+    !args.resumeInLaunchCwd &&
+    !isSameFolder(agentCwd, args.launchCwd, args.platform)
+      ? buildAiVaultResumeShellCommand({
+          resumeCommand,
+          cwd: agentCwd,
+          platform: args.platform,
+          shell
+        })
+      : resumeCommand
   const applied = baseCommand.appliedSessionOptions
   return {
     agent: args.agent,
@@ -80,4 +96,12 @@ export function buildAgentResumeStartupPlan(args: {
     ...(Object.keys(applied).length > 0 ? { sessionOptions: { ...applied } } : {}),
     ...(args.agentEnv ? { env: { ...args.agentEnv } } : {})
   }
+}
+
+function isSameFolder(left: string, right: string, platform: NodeJS.Platform): boolean {
+  const normalize = (path: string): string => {
+    const trimmed = path.replace(/[\\/]+$/, '')
+    return platform === 'win32' ? trimmed.replace(/\//g, '\\').toLowerCase() : trimmed
+  }
+  return normalize(left) === normalize(right)
 }
