@@ -18,6 +18,7 @@ import {
 import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 import { selectFolderWorkspaces } from '../../../workspace-record-selectors'
+import { findIndexedFolderWorkspaceOwner } from '@/lib/worktree-runtime-owner-index'
 
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
@@ -71,7 +72,11 @@ export function resolveWorktreeCreateParent(
   const activeScope = parseWorkspaceKey(state.activeWorkspaceKey ?? '')
   const folder =
     activeScope?.type === 'folder'
-      ? selectFolderWorkspaces(state)?.find((row) => row.id === activeScope.folderWorkspaceId)
+      ? findIndexedFolderWorkspaceOwner(
+          selectFolderWorkspaces(state),
+          activeScope.folderWorkspaceId,
+          state.activeWorkspaceExecutionHostId ?? undefined
+        )
       : undefined
   const folderRow = folder ? folderWorkspaceToWorktree(folder) : undefined
   return {

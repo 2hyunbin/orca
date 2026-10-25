@@ -7,7 +7,12 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { toast } from 'sonner'
 import type { RuntimeEnvironmentCallRequest } from '../../runtime/runtime-compatibility-test-fixture'
 import { worktreeWorkspaceKey, folderWorkspaceKey } from '../../../../shared/workspace-scope'
-import { TEST_REPO, makeLineage, makeWorktree } from './worktrees-slice-test-fixtures'
+import {
+  TEST_REPO,
+  makeFolderWorkspace,
+  makeLineage,
+  makeWorktree
+} from './worktrees-slice-test-fixtures'
 import {
   createTestStore,
   mockApi,
@@ -85,6 +90,46 @@ describe('createWorktree composer parent pick', () => {
     expect(mockApi.worktrees.create).toHaveBeenCalledWith(
       expect.objectContaining({ parentWorkspace: worktreeWorkspaceKey(parent.id) })
     )
+  })
+
+  it('creates a local Git child under the active remote folder twin regardless of catalog order', async () => {
+    const local = makeFolderWorkspace({ id: 'parent', executionHostId: 'local' })
+    const remote = makeFolderWorkspace({ id: local.id, executionHostId: 'runtime:parent-server' })
+    const store = createParentPickStore()
+    const created = makeWorktree({ id: 'repo1::/path/child', repoId: 'repo1', path: '/path/child' })
+    mockApi.worktrees.create.mockResolvedValue({
+      worktree: created,
+      lineage: makeLineage({
+        worktreeId: created.id,
+        parentWorktreeId: folderWorkspaceKey(remote.id),
+        parentWorktreeInstanceId: folderWorkspaceKey(remote.id),
+        parentStore: 'external'
+      })
+    })
+    for (const folderWorkspaces of [
+      [local, remote],
+      [remote, local]
+    ]) {
+      mockApi.worktrees.create.mockClear()
+      store.setState({
+        folderWorkspaces,
+        activeWorkspaceKey: folderWorkspaceKey(remote.id),
+        activeWorktreeId: folderWorkspaceKey(remote.id),
+        activeWorkspaceExecutionHostId: 'runtime:parent-server'
+      })
+      await store.getState().createWorktree('repo1', 'feature', 'origin/main')
+      expect(mockApi.worktrees.create).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          repoId: 'repo1',
+          parentWorktreeRef: {
+            worktreeId: folderWorkspaceKey(remote.id),
+            instanceId: folderWorkspaceKey(remote.id),
+            external: true
+          }
+        })
+      )
+      expect(mockApi.worktrees.create.mock.calls[0][0]).not.toHaveProperty('parentWorkspace')
+    }
   })
 
   it('drops a stale parent pick and falls back to the active folder workspace', async () => {

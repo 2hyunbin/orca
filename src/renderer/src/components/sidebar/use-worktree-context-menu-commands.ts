@@ -11,7 +11,7 @@ import {
 } from './worktree-context-menu-delete-intent'
 import { runSleepWorktrees } from './sleep-worktree-flow'
 import { collectTwinHostsAlsoSlept } from './sleep-twin-confirmation'
-import { activateAndRevealWorktree } from '@/lib/worktree-activation'
+import { activateAndRevealWorkspace } from '@/lib/worktree-activation'
 import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
 import { VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT } from '@/hooks/useVirtualizedScrollAnchor'
 import {
@@ -182,7 +182,7 @@ export function useWorktreeContextMenuCommands(args: {
     }
     try {
       const parent = requireKnownLineageRow(args.getState(), args.validParent)
-      activateAndRevealWorktree(parent.id, {
+      activateAndRevealWorkspace(parent.id, {
         navigationIntent: 'user-open',
         executionHostId: parent.hostId
       })

@@ -222,12 +222,21 @@ describe('parent picker context menu affordance', () => {
 
     expect(hasWorktreeParentLink(child, {}, {})).toBe(true)
     const previous = useAppStore.getState()
-    const activate = vi
-      .spyOn(activation, 'activateAndRevealWorktree')
-      .mockReturnValue({ primaryTabId: null })
+    const activate = vi.spyOn(activation, 'activateAndRevealWorkspace')
     const notice = vi.spyOn(toast, 'info').mockImplementation(() => 0)
     const folder = makeFolderWorkspace({ id: 'chosen-parent', executionHostId: 'local' })
-    useAppStore.setState({ repos: [TEST_REPO], worktreesByRepo: {}, folderWorkspaces: [folder] })
+    const pathStatus = vi.fn(() => ({
+      path: folder.folderPath,
+      exists: false,
+      reason: 'missing' as const
+    }))
+    const blocked = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    useAppStore.setState({
+      repos: [TEST_REPO],
+      worktreesByRepo: {},
+      folderWorkspaces: [folder],
+      getFreshFolderWorkspacePathStatus: pathStatus
+    })
     const selected = folderWorkspaceToWorktree(folder)
     expect(useAppStore.getState().getKnownWorktreeById(selected.id, 'local')).not.toBe(selected)
     const current = useAppStore.getState()
@@ -255,11 +264,26 @@ describe('parent picker context menu affordance', () => {
         initialProps: args
       })
       commands.result.current.handleOpenParent()
+      expect(pathStatus).toHaveBeenCalledWith(
+        { scope: 'folder-workspace', folderWorkspaceId: folder.id },
+        { runtimeEnvironmentId: null }
+      )
+      expect(blocked).toHaveBeenCalledWith(
+        'Folder not found',
+        expect.objectContaining({ description: expect.any(String) })
+      )
+      expect(useAppStore.getState().activeWorkspaceKey).toBe(current.activeWorkspaceKey)
+      expect(useAppStore.getState().activeWorktreeId).toBe(current.activeWorktreeId)
+      expect(useAppStore.getState().activeWorkspaceExecutionHostId).toBe(
+        current.activeWorkspaceExecutionHostId
+      )
+      expect(notice).not.toHaveBeenCalled()
       expect(activate).toHaveBeenLastCalledWith(selected.id, {
         navigationIntent: 'user-open',
         executionHostId: 'local'
       })
       activate.mockClear()
+      activate.mockReturnValue({ primaryTabId: null })
       useAppStore.setState({
         folderWorkspaces: [{ ...folder, executionHostId: 'runtime:replacement' }]
       })
