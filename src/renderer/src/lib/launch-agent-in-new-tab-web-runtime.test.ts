@@ -122,6 +122,9 @@ describe('launchAgentInNewTab paired web runtime', () => {
         pasteDraftAfterLaunch: false
       })
     )
+    if (!result?.startupPlan) {
+      throw new Error('Terminal quick launch must return a startup plan')
+    }
     expect(mocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith({
       worktreeId: 'wt-1',
       environmentId: 'web-runtime',
