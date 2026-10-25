@@ -58,8 +58,8 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       existingPty.incarnationId !== null &&
       existingPty.incarnationId !== binding.incarnationId
     const claim = this.pendingPtyRegistrationIncarnations.get(ptyId)
-    const early = claim?.setupObservation
-    const preserveEarly = early !== undefined && claim.incarnationId === binding?.incarnationId
+    const preserveEarly =
+      claim?.setupObservation !== undefined && claim.incarnationId === binding?.incarnationId
     if (incarnationChanged || pendingReplacementMatches) {
       if (!preserveEarly) {
         this.setupCompletionTokenByPtyId.get(ptyId)?.fail(new Error('terminal_handle_stale'))
