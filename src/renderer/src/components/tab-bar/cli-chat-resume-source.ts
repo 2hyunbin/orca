@@ -3,7 +3,7 @@ import {
   collectAgentPaneConversations,
   resolvePaneAgentConversation
 } from '@/lib/ai-vault-tab-title-requests'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import {
   adoptsCliConversations,
   type CliConversationRowAgent
@@ -36,7 +36,6 @@ export function resolveCliChatResumeSource(
     !conversation ||
     conversation.tabId !== args.tab.id ||
     conversation.worktreeId !== args.tab.worktreeId ||
-    conversation.executionHostId !== LOCAL_EXECUTION_HOST_ID ||
     !canPaneOfferResumeInNewChat(state, {
       worktreeId: conversation.worktreeId,
       paneKey: conversation.paneKey

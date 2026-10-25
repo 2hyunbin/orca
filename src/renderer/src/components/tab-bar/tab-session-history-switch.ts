@@ -42,6 +42,8 @@ import { resolveAiVaultHostScopeDefaults } from '../right-sidebar/ai-vault-host-
 import { getAiVaultResumeWorkspaceExecutionHostId } from '@/lib/ai-vault-resume-target'
 import { claimAiVaultForcedRescan } from '../right-sidebar/ai-vault-session-refresh'
 import { structuredAgentSessionLaunchFeasible } from '@/lib/agent-session-launch-plan'
+import { resolveHostCapabilities } from '@/lib/agent-launch-route-input'
+import { STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
 
@@ -65,15 +67,11 @@ export type TabSessionSwitch = {
 }
 
 /** Skips lookups on hosts where the row's gate can never pass, so no remote scan runs for nothing. */
-function canHostOfferTabSessionMove(
-  kind: TabSessionHistorySubject['kind'],
-  hostScope: ExecutionHostScope
-): boolean {
+function canHostOfferTabSessionMove(hostScope: ExecutionHostScope): boolean {
   if (hostScope === LOCAL_EXECUTION_HOST_ID) {
     return true
   }
-  // CLI resume requires local recording; chat ownership can also be projected by paired runtimes, never SSH relays.
-  return kind === 'chat' && parseExecutionHostId(hostScope)?.kind === 'runtime'
+  return parseExecutionHostId(hostScope)?.kind === 'runtime'
 }
 
 /** The pane's known identity and launch route, without a History request. */
@@ -91,7 +89,11 @@ export function canPaneOfferResumeInNewChat(
   ).defaultExecutionHostScope
   // The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it.
   return (
-    canHostOfferTabSessionMove('cli', hostScope) &&
+    canHostOfferTabSessionMove(hostScope) &&
+    (conversation.executionHostId === LOCAL_EXECUTION_HOST_ID ||
+      resolveHostCapabilities(state, conversation.executionHostId)?.includes(
+        STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY
+      ) === true) &&
     CLI_CONVERSATION_ADOPTING_AGENTS[conversation.agent].some((agent) =>
       structuredAgentSessionLaunchFeasible(state, {
         agent,
@@ -133,7 +135,7 @@ export function resolveNativeChatCliForkIdentity(
     getAiVaultResumeWorkspaceExecutionHostId(state, tab.worktreeId),
     tab.worktreeId
   ).defaultExecutionHostScope
-  return canHostOfferTabSessionMove('chat', executionHostScope)
+  return canHostOfferTabSessionMove(executionHostScope)
     ? { workspaceId: tab.worktreeId, sessionId: nativeChat.sessionId, executionHostScope }
     : null
 }
@@ -148,14 +150,12 @@ export function resolveTabSessionHistorySubject(
     paneKey?: string
   }
 ): TabSessionHistorySubject | null {
-  const workspace = (workspaceId: string, kind: TabSessionHistorySubject['kind']) => {
+  const workspace = (workspaceId: string) => {
     if (!resolveAiVaultTargetWorkspacePath(state, workspaceId)) {
       return null
     }
     const request = resolveAiVaultPanelSessionListRequest(state, workspaceId)
-    return canHostOfferTabSessionMove(kind, request.executionHostScope)
-      ? { workspaceId, request }
-      : null
+    return canHostOfferTabSessionMove(request.executionHostScope) ? { workspaceId, request } : null
   }
   if (args.nativeChat) {
     // A chat tab's only move is opening a copy in its CLI.
@@ -182,7 +182,7 @@ export function resolveTabSessionHistorySubject(
     : (collectAgentPaneConversations(state, adoptsCliConversations, {
         runningAgentsOnly: true
       }).find((candidate) => candidate.tabId === args.tab.id) ?? null)
-  const target = conversation ? workspace(conversation.worktreeId, 'cli') : null
+  const target = conversation ? workspace(conversation.worktreeId) : null
   return conversation && target
     ? {
         ...target,

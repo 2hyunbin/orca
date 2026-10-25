@@ -42,7 +42,7 @@ export async function runCliChatResume(
     return
   }
   const target = structuredAgentSessionTargetForHost(source.executionHostId)
-  if (!target || target.kind !== 'local') {
+  if (!target) {
     return
   }
   const controller = new AbortController()
@@ -105,7 +105,7 @@ export async function runCliChatResume(
       return
     }
     const agent = await waitForPromiseWithSignal(
-      adoptingAgentOnHost(source.agent, source.workspaceId),
+      adoptingAgentOnHost(source.agent, source.workspaceId, source.executionHostId),
       controller.signal
     )
     if (!isCurrent()) {
