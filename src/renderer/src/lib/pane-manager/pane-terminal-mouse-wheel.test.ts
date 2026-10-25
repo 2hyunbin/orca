@@ -312,24 +312,33 @@ describe('terminal mouse wheel multiplier', () => {
     expect(notchReports(afterTrackpad)).toEqual(notchReports(fresh))
   })
 
-  it('stops treating a ratio-matching notch as trackpad input once the window lapses', () => {
-    const notch = { deltaY: 40, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -120 }
-    const afterTrackpad = createTerminalTuiMouseWheelDistanceState()
-    resolveTerminalTuiMouseWheelReportCount(
-      { deltaY: 8, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -24, timeStamp: 0 },
-      1,
-      afterTrackpad,
-      { cellHeight: 16 }
+  it('keeps a long hard Mac flick at its 1:1 row distance through the momentum', () => {
+    const state = createTerminalTuiMouseWheelDistanceState()
+    // Real gestures start small; 16 ms apart, it peaks at 150 px and stays above 34 px for over 600 ms.
+    const flick = [8, 75, 150]
+    while (flick.at(-1)! >= 1) {
+      flick.push(flick.at(-1)! * 0.97)
+    }
+
+    const total = flick.reduce(
+      (sum, deltaY, index) =>
+        sum +
+        resolveTerminalTuiMouseWheelReportCount(
+          {
+            deltaY,
+            deltaMode: DOM_DELTA_PIXEL,
+            wheelDeltaY: -Math.trunc(3 * deltaY),
+            timeStamp: index * 16
+          },
+          1,
+          state,
+          { cellHeight: 16 }
+        ),
+      0
     )
 
-    const reports = [200, 400, 600].map((timeStamp) =>
-      resolveTerminalTuiMouseWheelReportCount({ ...notch, timeStamp }, 5, afterTrackpad, {
-        cellHeight: 16
-      })
-    )
-
-    // The first notch may still read as trackpad input; later ones get the 5x wheel curve.
-    expect(reports.slice(1).every((count) => count >= 15)).toBe(true)
+    const linearRows = flick.reduce((sum, deltaY) => sum + deltaY, 0) / 16
+    expect(Math.abs(total - linearRows)).toBeLessThanOrEqual(1)
   })
 
   it('keeps a touchpad flick linear when wheelDelta tracks deltaY one to one', () => {

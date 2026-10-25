@@ -93,9 +93,8 @@ function matchesContinuousWheelDeltaRatio(
 // Why: a small wheelDelta can only come from a continuous device, but a fast
 // trackpad event can reach a notch-sized one (a Mac trackpad reports -3 x deltaY).
 // Native terminals get a per-device precision flag that is constant across a
-// gesture; emulate that by keeping large events continuous shortly after small
-// ones while they keep the continuous delta ratio. Only small events extend the
-// window, so a notch that happens to match the ratio is captured for 300 ms at most.
+// gesture; emulate that by keeping the gesture continuous while large events keep
+// the continuous delta shape, which a notch (4-40 px or 100 px per 120) does not.
 function resolveContinuousWheelGesture(
   event: TerminalTuiWheelEventInput,
   state: TerminalTuiMouseWheelDistanceState
@@ -106,20 +105,16 @@ function resolveContinuousWheelGesture(
   }
   const inputAt = wheelInputTime(event)
   const legacyDelta = legacyVerticalWheelDelta(event)
-  if (legacyDelta === null || Math.abs(legacyDelta) < LEGACY_MOUSE_WHEEL_DELTA_MIN) {
-    state.continuousGestureAt = inputAt
-    return true
-  }
-  const continuesGesture =
-    inputAt !== null &&
-    state.continuousGestureAt !== null &&
-    inputAt >= state.continuousGestureAt &&
-    inputAt - state.continuousGestureAt <= CONTINUOUS_WHEEL_GESTURE_IDLE_MS &&
-    matchesContinuousWheelDeltaRatio(event, legacyDelta)
-  if (!continuesGesture) {
-    state.continuousGestureAt = null
-  }
-  return continuesGesture
+  const continuous =
+    legacyDelta === null ||
+    Math.abs(legacyDelta) < LEGACY_MOUSE_WHEEL_DELTA_MIN ||
+    (inputAt !== null &&
+      state.continuousGestureAt !== null &&
+      inputAt >= state.continuousGestureAt &&
+      inputAt - state.continuousGestureAt <= CONTINUOUS_WHEEL_GESTURE_IDLE_MS &&
+      matchesContinuousWheelDeltaRatio(event, legacyDelta))
+  state.continuousGestureAt = continuous ? inputAt : null
+  return continuous
 }
 
 function normalizeCellHeight(cellHeight: number | undefined): number {
