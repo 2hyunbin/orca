@@ -18,7 +18,6 @@ import {
   type RemoteInspectionState
 } from './agent-completion-inspection-result'
 
-/** Keeps exit cleanup tied to the agent session that produced the process evidence. */
 export function createAgentCompletionProcessMonitor({
   options,
   state,

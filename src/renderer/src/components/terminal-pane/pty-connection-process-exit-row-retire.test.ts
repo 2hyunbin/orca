@@ -129,7 +129,6 @@ vi.mock('./agent-completion-coordinator', async (importOriginal) => {
   }
 })
 
-/** Uses the real connection path so exit assertions include status retirement and terminal resets. */
 async function connectAgentPane(args: {
   ptyId: string
   tabId?: string

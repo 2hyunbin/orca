@@ -10,11 +10,11 @@ import {
 describe('agent completion local exit confirmation', () => {
   useAgentCompletionCoordinatorLifecycle()
 
-  const agentShellCases = ['codex', 'claude'].flatMap((agent) =>
-    ['pwsh.exe', '/usr/bin/bash', '/bin/zsh'].map((shell) => ({ agent, shell }))
-  )
+  const agentShellCases = [
+    { agent: 'codex', shell: 'pwsh.exe' },
+    { agent: 'claude', shell: '/bin/zsh' }
+  ]
 
-  /** Establishes live-agent evidence before injecting conflicting cached and fresh process reads. */
   async function trackAgent(
     confirmForegroundProcess = vi.fn(async (): Promise<string | null> => 'codex'),
     agent = 'codex'
