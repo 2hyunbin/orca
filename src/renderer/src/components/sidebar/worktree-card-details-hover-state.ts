@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
 type WorktreeCardDetailMenu = 'issue' | 'review' | 'link-actions'
 
@@ -12,14 +12,6 @@ export function useWorktreeCardDetailsHoverControl() {
   const setOpenMenu = useCallback((menu: WorktreeCardDetailMenu | null) => {
     openMenuRef.current = menu
     setOpenMenuState(menu)
-  }, [])
-
-  useEffect(() => {
-    const releaseHold = (): void => {
-      holdOpenUntilRefocusRef.current = false
-    }
-    window.addEventListener('focus', releaseHold)
-    return () => window.removeEventListener('focus', releaseHold)
   }, [])
 
   const closeHover = useCallback(() => {
@@ -72,7 +64,17 @@ export function useWorktreeCardDetailsHoverControl() {
   )
 
   const holdOpenUntilRefocus = useCallback(() => {
+    if (holdOpenUntilRefocusRef.current) {
+      return
+    }
     holdOpenUntilRefocusRef.current = true
+    window.addEventListener(
+      'focus',
+      () => {
+        holdOpenUntilRefocusRef.current = false
+      },
+      { once: true }
+    )
   }, [])
 
   return {
