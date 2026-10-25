@@ -467,6 +467,9 @@ describe('tui agent startup plans', () => {
 
     expect(resume('/repo/pkg', '/repo')).toBe("cd '/repo/pkg' && claude '--resume' 's1'")
     expect(resume('/repo/', '/repo')).toBe("claude '--resume' 's1'")
+    expect(resume('/home/me/repo', '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo')).toBe(
+      "claude '--resume' 's1'"
+    )
   })
 
   it('quotes Windows resume argv for cmd.exe when shell is cmd', () => {

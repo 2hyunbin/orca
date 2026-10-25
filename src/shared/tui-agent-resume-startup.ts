@@ -13,6 +13,8 @@ import { TUI_AGENT_CONFIG } from './tui-agent-config'
 import type { TuiAgent } from './tui-agent'
 import { buildAgentResumeLaunchCommand } from './agent-resume-launch-command'
 import { buildAiVaultResumeShellCommand } from './ai-vault-resume-command'
+import { normalizeRuntimePathForComparison } from './cross-platform-path'
+import { parseWslUncPath } from './wsl-paths'
 
 export function buildAgentResumeStartupPlan(args: {
   agent: ResumableTuiAgent
@@ -74,10 +76,7 @@ export function buildAgentResumeStartupPlan(args: {
   const resumeCommand = buildAgentResumeLaunchCommand(args.agent, baseCommand.command, argv, shell)
   const agentCwd = args.providerSession.cwd
   const launchCommand =
-    agentCwd &&
-    args.launchCwd &&
-    !args.resumeInLaunchCwd &&
-    !isSameFolder(agentCwd, args.launchCwd, args.platform)
+    agentCwd && args.launchCwd && !args.resumeInLaunchCwd && !isSameFolder(agentCwd, args.launchCwd)
       ? buildAiVaultResumeShellCommand({
           resumeCommand,
           cwd: agentCwd,
@@ -98,10 +97,10 @@ export function buildAgentResumeStartupPlan(args: {
   }
 }
 
-function isSameFolder(left: string, right: string, platform: NodeJS.Platform): boolean {
-  const normalize = (path: string): string => {
-    const trimmed = path.replace(/[\\/]+$/, '')
-    return platform === 'win32' ? trimmed.replace(/\//g, '\\').toLowerCase() : trimmed
-  }
-  return normalize(left) === normalize(right)
+/** WSL panes start at a UNC path while the agent reports its Linux path. */
+function isSameFolder(agentCwd: string, launchCwd: string): boolean {
+  const launchPath = parseWslUncPath(launchCwd)?.linuxPath ?? launchCwd
+  return (
+    normalizeRuntimePathForComparison(agentCwd) === normalizeRuntimePathForComparison(launchPath)
+  )
 }

@@ -106,15 +106,22 @@ describe('shared agent-hook-listener', () => {
       tool_name: 'Bash',
       cwd: '/repo/pkg/sub'
     })
-    const nextSession = normalizeAndAccept(state, 'claude', {
+    const cleared = normalizeAndAccept(state, 'claude', {
       hook_event_name: 'SessionStart',
       source: 'clear',
       session_id: '66666666-6666-4666-8666-666666666666',
       cwd: '/repo/pkg/sub'
     })
+    const relaunched = normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'SessionStart',
+      source: 'startup',
+      session_id: '77777777-7777-4777-8777-777777777777',
+      cwd: '/elsewhere'
+    })
 
     expect(afterCd?.providerSession).toMatchObject({ id: sessionId, cwd: '/repo/pkg' })
-    expect(nextSession?.providerSession?.cwd).toBe('/repo/pkg/sub')
+    expect(cleared?.providerSession?.cwd).toBe('/repo/pkg')
+    expect(relaunched?.providerSession?.cwd).toBe('/elsewhere')
   })
 
   it('resets stale Claude turn state when SessionStart announces a new session on the pane', () => {

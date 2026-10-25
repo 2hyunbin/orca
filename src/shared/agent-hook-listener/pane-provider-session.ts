@@ -25,11 +25,26 @@ export function readPaneProviderSession(
   if (!providerSession) {
     return null
   }
-  // Keep the session's first folder: Claude's hook cwd follows its Bash tool's `cd`.
-  const previous = state.lastStatusByPaneKey.get(paneKey)?.providerSession
-  const cwd =
-    previous?.id === providerSession.id && previous.cwd
-      ? previous.cwd
-      : readPathFromKeys(hookPayload, ['cwd'])
+  const cwd = readAgentCwd(state, source, paneKey, hookPayload)
   return cwd ? { ...providerSession, cwd } : providerSession
+}
+
+/** The folder the pane's agent started in. Only Claude/Codex hooks are known to report it (Cursor's cwd is a shell command's). */
+function readAgentCwd(
+  state: HookListenerState,
+  source: AgentHookSource,
+  paneKey: string,
+  hookPayload: Record<string, unknown>
+): string | undefined {
+  if (source !== 'claude' && source !== 'codex') {
+    return undefined
+  }
+  const previous = state.lastStatusByPaneKey.get(paneKey)
+  const previousCwd = previous?.source === source ? previous.providerSession?.cwd : undefined
+  // Claude's hook cwd follows its Bash tool's `cd`; only a fresh launch names a new folder.
+  const isClaudeLaunch =
+    source === 'claude' &&
+    hookPayload.hook_event_name === 'SessionStart' &&
+    hookPayload.source === 'startup'
+  return previousCwd && !isClaudeLaunch ? previousCwd : readPathFromKeys(hookPayload, ['cwd'])
 }
