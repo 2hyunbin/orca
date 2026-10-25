@@ -312,4 +312,12 @@ describe('saved port forward restore', () => {
     await restoreManagedHostPortForwards('t1')
     expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
   })
+
+  it('retries a failed forward at once on a reconnected transport', async () => {
+    h.portForwardManager.addForward.mockRejectedValueOnce(new Error('channel open failed'))
+    await restoreManagedHostPortForwards('t1')
+    h.conn.generation += 1
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+  })
 })

@@ -57,6 +57,11 @@ export function restoreManagedHostPortForwards(
     }
     const conn = connectionManager?.getConnection(targetId)
     const generation = conn?.getConnectGeneration()
+    const last = restoredOn.get(targetId)
+    // A reconnect reuses the connection with a new generation; failures on the old one don't carry.
+    if (last && (last.conn !== conn || last.generation !== generation)) {
+      forgetForwardFailures(targetId)
+    }
     await restorePortForwards(targetId, getCurrentMainWindow)
     if (conn && generation !== undefined && connectionManager?.getConnection(targetId) === conn) {
       restoredOn.set(targetId, { conn, generation, at: Date.now() })
