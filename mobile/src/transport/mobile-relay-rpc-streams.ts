@@ -1,6 +1,8 @@
 import { decodeBrowserScreencastFrame } from './browser-screencast-protocol'
 import {
+  clearUnreadableTerminalFrameStreams,
   createUnreadableTerminalFrameState,
+  forgetUnreadableTerminalFrameStream,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -216,6 +218,7 @@ export class MobileRelayRpcStreams {
     this.cancelledSubscriptions.clear()
     this.terminalListeners.clear()
     this.terminalSnapshots.clear()
+    clearUnreadableTerminalFrameStreams(this.unreadableTerminalFrames)
     this.activeBrowserStream = null
   }
 
@@ -304,6 +307,7 @@ export class MobileRelayRpcStreams {
     for (const streamId of stream.streamIds) {
       this.terminalListeners.delete(streamId)
       this.terminalSnapshots.delete(streamId)
+      forgetUnreadableTerminalFrameStream(this.unreadableTerminalFrames, streamId)
     }
     if (this.activeBrowserStream === stream) {
       this.activeBrowserStream = null

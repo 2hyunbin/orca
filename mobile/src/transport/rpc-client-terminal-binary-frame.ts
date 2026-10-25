@@ -21,13 +21,28 @@ const MAX_TRACKED_UNREADABLE_STREAMS = 256
 export type UnreadableTerminalFrameState = {
   now: () => number
   lastResetAt: number | null
-  reportedStreamIds: Set<number>
+  resetStreamIds: Set<number>
+  loggedStreamIds: Set<number>
 }
 
 export function createUnreadableTerminalFrameState(
   now: () => number = Date.now
 ): UnreadableTerminalFrameState {
-  return { now, lastResetAt: null, reportedStreamIds: new Set() }
+  return { now, lastResetAt: null, resetStreamIds: new Set(), loggedStreamIds: new Set() }
+}
+
+/** Call wherever a stream's id is released, so a host that reuses it starts clean. */
+export function forgetUnreadableTerminalFrameStream(
+  state: UnreadableTerminalFrameState,
+  streamId: number
+): void {
+  state.resetStreamIds.delete(streamId)
+  state.loggedStreamIds.delete(streamId)
+}
+
+export function clearUnreadableTerminalFrameStreams(state: UnreadableTerminalFrameState): void {
+  state.resetStreamIds.clear()
+  state.loggedStreamIds.clear()
 }
 
 type TerminalBinaryFrameOptions = {
@@ -149,25 +164,33 @@ function reportUnreadableTerminalFrame(
 ): void {
   const listener = options.getListener(streamId)
   const state = options.unreadableFrames
-  if (!listener || state.reportedStreamIds.has(streamId)) {
+  // A reset stream is already ending; its later frames have nowhere to go.
+  if (!listener || state.resetStreamIds.has(streamId)) {
     return
   }
-  if (state.reportedStreamIds.size >= MAX_TRACKED_UNREADABLE_STREAMS) {
-    state.reportedStreamIds.clear()
-  }
-  state.reportedStreamIds.add(streamId)
   const now = state.now()
-  const reset =
-    state.lastResetAt === null || now - state.lastResetAt >= UNREADABLE_FRAME_RESET_INTERVAL_MS
-  console.warn('[terminal-stream] unreadable frame', { streamId, opcode, reset })
-  if (!reset) {
+  const throttled =
+    state.lastResetAt !== null && now - state.lastResetAt < UNREADABLE_FRAME_RESET_INTERVAL_MS
+  if (!state.loggedStreamIds.has(streamId)) {
+    trackUnreadableStream(state.loggedStreamIds, streamId)
+    console.warn('[terminal-stream] unreadable frame', { streamId, opcode, throttled })
+  }
+  if (throttled) {
     return
   }
   state.lastResetAt = now
+  trackUnreadableStream(state.resetStreamIds, streamId)
   options.terminalSnapshots.delete(streamId)
   listener({
     type: 'error',
     streamId,
     message: `Unsupported terminal stream frame (opcode ${opcode}).`
   })
+}
+
+function trackUnreadableStream(ids: Set<number>, streamId: number): void {
+  if (ids.size >= MAX_TRACKED_UNREADABLE_STREAMS) {
+    ids.clear()
+  }
+  ids.add(streamId)
 }

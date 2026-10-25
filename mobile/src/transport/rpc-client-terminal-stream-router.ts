@@ -1,5 +1,6 @@
 import {
   createUnreadableTerminalFrameState,
+  forgetUnreadableTerminalFrameStream,
   handleTerminalBinaryFrame,
   type TerminalSnapshotState
 } from './rpc-client-terminal-binary-frame'
@@ -27,6 +28,7 @@ export class RpcClientTerminalStreamRouter {
     for (const streamId of streamIds) {
       this.listeners.delete(streamId)
       this.snapshots.delete(streamId)
+      forgetUnreadableTerminalFrameStream(this.unreadableFrames, streamId)
     }
     this.idsByRequest.delete(requestId)
   }
