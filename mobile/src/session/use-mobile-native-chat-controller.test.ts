@@ -140,7 +140,7 @@ vi.mock('./mobile-native-chat-permission-send', () => ({
 vi.mock('./use-mobile-native-chat-stop', () => ({
   useMobileNativeChatStop: () => vi.fn()
 }))
-vi.mock('./use-mobile-native-chat-file-search', () => ({
+vi.mock('./native-chat/composer/use-mobile-native-chat-file-search', () => ({
   useMobileNativeChatFileSearch: () => ({ nativeChatFilePaths: [], loadNativeChatFiles: vi.fn() })
 }))
 // Keep the real timeout constant available to stale-input heal through the partial send mock.

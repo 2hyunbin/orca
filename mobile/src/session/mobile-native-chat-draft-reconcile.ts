@@ -5,8 +5,7 @@ import {
   normalizeImageTranscriptMessages,
   normalizeNativeChatUserText,
   normalizedNativeChatUserMessageText
-} from './mobile-native-chat-image-transcript-markers'
-export { normalizeNativeChatUserText as normalizeReconcileText } from './mobile-native-chat-image-transcript-markers'
+} from '../../../src/shared/native-chat-image-transcript-markers'
 
 export type UnconfirmedSend = {
   draftKey: string

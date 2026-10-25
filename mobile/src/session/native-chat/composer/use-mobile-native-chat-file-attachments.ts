@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
-import type { RpcClient } from '../transport/rpc-client'
-import { useMediaPicker } from '../platform/media-picker'
-import { uploadMobileAgentSessionAttachment } from './mobile-agent-session-attachment-upload'
+import type { RpcClient } from '../../../transport/rpc-client'
+import { useMediaPicker } from '../../../platform/media-picker'
+import { uploadMobileAgentSessionAttachment } from '../../mobile-agent-session-attachment-upload'
 import { withScopeAttachments } from './mobile-native-chat-image-scope-state'
 import {
   uploadPickedNativeChatFiles,

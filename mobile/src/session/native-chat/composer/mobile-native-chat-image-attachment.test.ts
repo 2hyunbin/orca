@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RpcClient } from '../transport/rpc-client'
-import type { RpcResponse, RpcSuccess } from '../transport/types'
+import type { RpcClient } from '../../../transport/rpc-client'
+import type { RpcResponse, RpcSuccess } from '../../../transport/types'
 import { uploadMobileNativeChatImages } from './mobile-native-chat-image-attachment'
 
 function ok(id: string, result: unknown): RpcSuccess {

@@ -497,7 +497,7 @@ describe('loader write fence', () => {
     // Require discovered owners/loaders so an empty scan cannot pass vacuously.
     expect(
       holders.map(({ path }) => relative(mobileRoot, path).split(/[/\\]/).join('/'))
-    ).toContain('src/session/use-mobile-native-chat-file-search.ts')
+    ).toContain('src/session/native-chat/composer/use-mobile-native-chat-file-search.ts')
     expect(
       holders.reduce((total, { path, source }) => total + loaders(path, source).length, 0)
     ).toBeGreaterThan(0)

@@ -1,7 +1,7 @@
-import { saveMobileClipboardImageAsTempFile } from './mobile-clipboard-image'
-import type { MobileClipboardImageRpcSender } from './mobile-clipboard-image-operations'
+import { saveMobileClipboardImageAsTempFile } from '../../mobile-clipboard-image'
+import type { MobileClipboardImageRpcSender } from '../../mobile-clipboard-image-operations'
 // Keep picker dependencies type-only so this upload module stays free of Expo/React Native at runtime.
-import type { MobileImageSource, PickedMobileImage } from './mobile-image-source-picker'
+import type { MobileImageSource, PickedMobileImage } from '../../../platform/media-picker-contract'
 
 // path belongs to the host for sending; previewUri belongs to the phone for display.
 export type PendingNativeChatImage = {
