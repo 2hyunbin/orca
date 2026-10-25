@@ -72,8 +72,8 @@ describe('openCodexThread', () => {
 
     const params = request.mock.calls[0]?.[1] ?? {}
     expect(params).toMatchObject({
-      approvalPolicy: 'on-request',
-      sandbox: 'workspace-write',
+      approvalPolicy: 'untrusted',
+      sandbox: 'read-only',
       approvalsReviewer: 'user'
     })
     expect(Object.keys(params)).toEqual(

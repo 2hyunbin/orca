@@ -161,8 +161,8 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
       method: 'thread/start',
       params: {
         cwd: '/work/repo',
-        approvalPolicy: 'on-request',
-        sandbox: 'workspace-write',
+        approvalPolicy: 'untrusted',
+        sandbox: 'read-only',
         approvalsReviewer: 'user',
         // Explicit values survive inherit = core.
         config: {

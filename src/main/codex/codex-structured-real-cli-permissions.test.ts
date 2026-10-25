@@ -84,9 +84,11 @@ function effectivePolicy(mode: AgentChatPermissionMode) {
         sandbox: { type: 'dangerFullAccess' },
         approvalsReviewer: 'user'
       }
-    : {
-        approvalPolicy: 'on-request',
-        sandbox: { type: 'workspaceWrite' },
-        approvalsReviewer: mode === 'auto' ? 'auto_review' : 'user'
-      }
+    : mode === 'ask'
+      ? { approvalPolicy: 'untrusted', sandbox: { type: 'readOnly' }, approvalsReviewer: 'user' }
+      : {
+          approvalPolicy: 'on-request',
+          sandbox: { type: 'workspaceWrite' },
+          approvalsReviewer: 'auto_review'
+        }
 }
