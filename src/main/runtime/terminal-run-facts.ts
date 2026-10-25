@@ -3,7 +3,7 @@ import {
   type PtySpawnCommitOrigin
 } from '../persistence/loading-store/pty-binding-span'
 import { isUntypedTerminalInput } from '../../shared/terminal-untyped-input'
-import type { TerminalInputKind } from '../../shared/terminal-input-kind'
+import { isDrivingInputKind, type TerminalInputKind } from '../../shared/terminal-input-kind'
 
 export type TerminalRunFacts = {
   /** This process was started for its pane, not reattached, adopted or cold-restored. */
@@ -117,8 +117,10 @@ export class TerminalRunFactsRegister {
     }
     this.lastInputAtByPtyId.set(ptyId, now)
     const run = this.runsByPtyId.get(ptyId)
-    if (inputKind === 'driving') {
-      this.lastDrivingInputAtByPtyId.set(ptyId, now)
+    if (isDrivingInputKind(inputKind)) {
+      if (inputKind === 'driving') {
+        this.lastDrivingInputAtByPtyId.set(ptyId, now)
+      }
       for (const listener of this.inputListeners) {
         listener(ptyId, now)
       }
@@ -129,7 +131,7 @@ export class TerminalRunFactsRegister {
         this.pendingByPtyId.set(ptyId, { incarnationId: null, firstInputAt: now })
       }
     }
-    if (run && inputKind === 'driving') {
+    if (run && isDrivingInputKind(inputKind)) {
       run.firstUserInputAt ??= now
     }
   }
@@ -140,7 +142,7 @@ export class TerminalRunFactsRegister {
     return this.lastInputAtByPtyId.get(ptyId) ?? null
   }
 
-  /** Like readLastInputAt, but only driving input, so Orca's own launch writes and drafts don't count. */
+  /** Like readLastInputAt, but only `driving` input, so Orca's own launch and orchestration writes don't count. */
   readLastDrivingInputAt(ptyId: string): number | null {
     return this.lastDrivingInputAtByPtyId.get(ptyId) ?? null
   }
