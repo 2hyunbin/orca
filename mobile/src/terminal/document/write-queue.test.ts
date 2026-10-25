@@ -4,9 +4,7 @@ import { createTerminalDocumentScope } from './document-scope'
 import * as escapeIntroducers from './escape-introducers'
 import { documentModuleSource } from './document-module-source.test-support'
 
-// Why: the two implementations are compared rather than asserted about, so both are evaluated. The
-// shipped one is the module's own source and the pre-change one is that source with the statement
-// under test removed, which is what keeps the oracle from drifting away from the code it measures.
+// Derive the pre-change oracle by removing the measured statement from real source so implementations cannot drift.
 const WRITE_QUEUE_SOURCE = documentModuleSource('write-queue')
 const CLEARED_SLOT_STATEMENT = '  scope.writeQueue[scope.writeQueueHead] = undefined\n'
 const PREVIOUS_WRITE_QUEUE_SOURCE = WRITE_QUEUE_SOURCE.replace(CLEARED_SLOT_STATEMENT, '')
@@ -31,18 +29,10 @@ type WriteQueueHarness = WriteQueueRuntime & {
   queuedCodeUnits: () => number
 }
 
-/**
- * One module's exports, evaluated.
- *
- * A CommonJS transform of the module's own text is the whole thing: no bundler, no scope object
- * baked in, and the pre-change arm is the same text minus one statement. Every function it exports
- * takes the scope as its first argument, which is what lets one evaluation serve two scopes. Its
- * one value import is resolved to the real module, so both arms read the same escape bytes.
- */
+// Evaluate the source once per arm and drive explicit scopes; resolve imports to the same real escape constants.
 function moduleExports(source: string): Record<string, (...args: never[]) => unknown> {
   const js = transformSync(source, { loader: 'ts', format: 'cjs' }).code
-  // The transform replaces `module.exports` wholesale, so the exports are read back off it rather
-  // than from the object handed in.
+  // Read the transformed module’s replacement exports object.
   const evaluated: { exports: Record<string, (...args: never[]) => unknown> } = { exports: {} }
   new Function('exports', 'module', 'require', js)(
     evaluated.exports,
@@ -125,8 +115,7 @@ function drain(queue: WriteQueueHarness): void {
 }
 
 describe('terminal WebView write queue', () => {
-  // Distinct contents per chunk: with one shared string the sum below would count the same
-  // 64 KB string 128 times and read identically even if nothing were released.
+  // Use distinct chunk strings so retained-code-unit counts detect actual queue retention.
   function distinctChunks(count: number, codeUnits: number): string[] {
     return Array.from({ length: count }, (_v, i) => {
       const marker = `chunk-${i}:`
@@ -134,8 +123,7 @@ describe('terminal WebView write queue', () => {
     })
   }
 
-  // The measured quantity is a count of queue-reachable string code units, not heap bytes:
-  // xterm may still hold the submitted chunk, so this proves only that the queue released it.
+  // Count queue-reachable string units, not heap bytes; xterm may still retain submitted chunks.
   it('retains one chunk instead of every dequeued chunk after 127 of 128 dequeues', () => {
     const CHUNK_CODE_UNITS = 65_536
     const CHUNK_COUNT = 128
@@ -155,8 +143,7 @@ describe('terminal WebView write queue', () => {
     expect(measure(WRITE_QUEUE_SOURCE)).toBe(CHUNK_CODE_UNITS)
   })
 
-  // Compaction is gated on writeQueueHead * 2 > writeQueue.length, so the pre-change retention
-  // window grows with the backlog rather than sitting at a fixed cap.
+  // Legacy compaction retention grows with backlog because it waits for consumed slots to exceed half the queue.
   it.each([
     [1_000, 500],
     [10_000, 5_000]
@@ -176,12 +163,10 @@ describe('terminal WebView write queue', () => {
 
     const previous = measure(PREVIOUS_WRITE_QUEUE_SOURCE)
     const shipped = measure(WRITE_QUEUE_SOURCE)
-    // No compaction has run yet at this depth, in either implementation.
     expect(previous.head).toBe(dequeues)
     expect(shipped.head).toBe(dequeues)
     expect(previous.slots).toBe(backlog)
     expect(shipped.slots).toBe(backlog)
-    // Pre-change: every consumed slot is still reachable. Shipped: only the pending ones.
     expect(previous.codeUnits).toBe(backlog * 64)
     expect(shipped.codeUnits).toBe((backlog - dequeues) * 64)
   })
@@ -207,7 +192,6 @@ describe('terminal WebView write queue', () => {
     queue.pump()
     expect(order).toEqual([])
     queue.flushWrite()
-    // The boundary runs once the replay write lands, before the live chunk is submitted.
     expect(order).toEqual(['boundary'])
     expect(queue.writes).toEqual(['replay', 'live'])
     queue.flushWrite()
@@ -225,7 +209,6 @@ describe('terminal WebView write queue', () => {
     drain(queue)
 
     expect(calls).toEqual(['first', 'second'])
-    // Empty chunks still reach xterm; the queue does not filter them.
     expect(queue.writes).toEqual(['', ''])
     expect(queue.snapshot()).toEqual({ slots: [], head: 0 })
   })
