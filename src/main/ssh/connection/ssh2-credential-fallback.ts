@@ -9,6 +9,7 @@ import {
   isAgentFallbackError,
   isGssapiSystemSshFallbackCandidate,
   isPassphraseError,
+  isSsh2AlgorithmNegotiationError,
   isSystemSshFallbackError
 } from '../ssh-reconnect-error-classification'
 import { isHostKeyVerificationError } from '../ssh-host-key-decision'
@@ -108,6 +109,18 @@ export async function recoverFailedSsh2Attempt(
     } catch {
       host.resetSystemTransportIfCurrent()
       throw err
+    }
+  }
+
+  if (isSsh2AlgorithmNegotiationError(err)) {
+    host.killProxyIfCurrent()
+    try {
+      await host.probeSystemSsh(resolved)
+      return
+    } catch (probeErr) {
+      host.resetSystemTransportIfCurrent()
+      // ssh2 can never reach this host, so the system SSH failure is the one the user can act on.
+      throw probeErr
     }
   }
 

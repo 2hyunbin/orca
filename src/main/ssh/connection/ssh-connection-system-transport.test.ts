@@ -332,6 +332,45 @@ describe('SshConnection', () => {
     )
     expect(conn.usesSystemSshTransport()).toBe(false)
   })
+
+  it.each([
+    'Handshake failed: no matching host key format',
+    'Handshake failed: no matching key exchange algorithm',
+    'Handshake failed: no matching C->S cipher'
+  ])(
+    'falls back to system SSH when ssh2 shares no algorithm with the host (%s)',
+    async (message) => {
+      ssh2Mock.connectBehavior = 'error'
+      ssh2Mock.connectErrorMessage = message
+      const conn = new SshConnection(
+        createTarget({ host: 'cert.example.com', label: 'Cert host' }),
+        createCallbacks()
+      )
+
+      await conn.connect()
+
+      expect(conn.getState().status).toBe('connected')
+      expect(conn.usesSystemSshTransport()).toBe(true)
+    }
+  )
+
+  it('reports the system SSH failure when ssh2 cannot negotiate with the host', async () => {
+    ssh2Mock.connectBehavior = 'error'
+    ssh2Mock.connectErrorMessage = 'Handshake failed: no matching host key format'
+    spawnSystemSshCommandMock.mockImplementation(() => {
+      throw new Error('No system ssh binary found. Install OpenSSH to use system SSH transport.')
+    })
+    const conn = new SshConnection(
+      createTarget({ host: 'cert.example.com', label: 'Cert host' }),
+      createCallbacks()
+    )
+    const privateConn = conn as unknown as {
+      attemptConnect: () => Promise<void>
+    }
+
+    await expect(privateConn.attemptConnect()).rejects.toThrow('No system ssh binary found')
+    expect(conn.usesSystemSshTransport()).toBe(false)
+  })
 })
 
 describe('shouldUseSystemSshTransport', () => {
