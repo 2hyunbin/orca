@@ -93,9 +93,7 @@ export class RuntimeRepositoryRegistrationController {
     }
     const { admission } = placement
     const repoPath = admission.registrationPath
-    // Local on purpose, whatever `executionHostId` stamps on the row: this controller already
-    // validated and will read `path` in this process. A `runtime:` stamp is how a paired client
-    // addresses the row, not a second machine holding the files.
+    // This controller validated/read the path locally; runtime: is the paired-client address, not another machine.
     const detected = await detectRepoIconAndUpstream({
       repoPath,
       kind,
@@ -152,7 +150,7 @@ export class RuntimeRepositoryRegistrationController {
       name: trimmedName,
       domain: registrationDomain(caller),
       fromPairedClient: caller.fromPairedClient,
-      // Why host-qualified: an SSH project at this path string is another machine's directory.
+      // Qualify by host: identical SSH paths name another machine's directory.
       sameTarget: (repo) =>
         runtimeRepoIsRegistrationCandidate(repo) && runtimePathsEqual(repo.path, targetPath)
     })

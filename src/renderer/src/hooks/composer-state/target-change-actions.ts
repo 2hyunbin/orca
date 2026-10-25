@@ -102,13 +102,13 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
         setRepoId(value)
         return
       }
-      // Why: capture a descriptor of the prior Start-from selection so the field can show an inline reset (e.g. "was PR #8778") after it's wiped.
+      // Retain the previous checkout-source label so repo switches can show what reset.
       let hint: string | null = null
       if (!options.preserveStartFrom) {
         if (linkedWorkItem?.type === 'pr' && baseBranch) {
           hint = `was PR #${linkedWorkItem.number}`
         } else if (linkedWorkItem?.type === 'mr' && baseBranch) {
-          // Why: GitLab MR convention is `!N`, not `#N` — match the upstream UI so the hint is recognizable.
+          // Use GitLab’s !N convention in the reset hint.
           hint = `was MR !${linkedWorkItem.number}`
         } else if (baseBranch) {
           hint = `was ${baseBranch}`
@@ -143,9 +143,7 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
         setLinkedPR(null)
         setLinkedGitLabIssue(null)
         setLinkedGitLabMR(null)
-        // Why: a repo change invalidates repo-scoped sources, but Linear and
-        // Jira issues are workspace-scoped and must survive choosing the
-        // implementation project — not just Linear.
+        // Keep workspace-scoped Jira/Linear sources while changing their implementation repo; repo-scoped sources reset.
         if (linkedWorkItem && !shouldPreserveWorkspaceSourceOnRepoChange(linkedWorkItem)) {
           setLinkedWorkItem(null)
           setLinkedTaskSourceContext(null)
@@ -153,9 +151,8 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
       }
       setSparseEnabled(false)
       setSparseDirectories('')
-      // Why: presets are repo-scoped, so a prior-repo selection is meaningless after a switch.
       setSparseSelectedPresetId(null)
-      // Why: Start-from is repo-scoped; reset to undefined so the field falls back to the new repo's effective base ref.
+      // Clear repo-scoped checkout source to undefined so the new repo supplies its effective base.
       if (!options.preserveStartFrom) {
         setBaseBranch(undefined)
         setCompareBaseRef(undefined)
@@ -164,7 +161,7 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
         setBranchNameOverride(preservedLinearBranchName)
         setBranchNameOverridePreservesNameEdits(Boolean(preservedLinearBranchName))
         branchAutoNameRef.current = preservedLinearBranchName ?? ''
-        // Why (#5181): reuse state is branch-scoped, so a repo switch clears it even when a workspace-scoped Linear override is restored.
+        // Clear branch-reuse state on repo switch even when a workspace-scoped Linear override survives (#5181).
         setReuseEligibleBranch(null)
         setReuseSelectedBranch(false)
         setForkPushWarning(null)

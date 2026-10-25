@@ -71,7 +71,6 @@ export function nestedImportRefreshTargets(
   )
 }
 
-/** The host the Add Project dialog picked; no picked server means this app. */
 export function resolveAddRepoRuntimeTarget(
   runtimeEnvironmentId: string | null | undefined
 ): RuntimeClientTarget {

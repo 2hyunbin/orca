@@ -109,13 +109,11 @@ describe('new agent launch routing', () => {
       ],
       hostStructuredAgents: ['grok']
     }
-    // Routing does not depend on native installation inventory.
     expect(route({ agent: 'claude' })).toBe('structured-native-chat')
     expect(route(grokHost)).toBe('structured-native-chat')
     expect(
       route({ ...grokHost, settings: { ...settings, nativeChatProviders: { grok: false } } })
     ).toBe('terminal-tui')
-    // A saved choice wins either way.
     expect(route({ settings: { ...settings, nativeChatProviders: { codex: false } } })).toBe(
       'terminal-tui'
     )
