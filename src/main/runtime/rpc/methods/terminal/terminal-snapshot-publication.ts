@@ -28,10 +28,10 @@ const PHONE_SNAPSHOT_DEPTH: SnapshotDepth = {
   bytes: MOBILE_SNAPSHOT_BYTE_BUDGET
 }
 
-/** Paired desktop panes keep desktop scrollback; reveal snapshots already allow this depth and budget. */
+/** A paired desktop paints its subscribe snapshot on mount without asking for history; margin keeps it under older clients' 2 MiB cap. */
 export const DESKTOP_PAIRED_SNAPSHOT_DEPTH: SnapshotDepth = {
   rows: DESKTOP_TERMINAL_SCROLLBACK_ROWS_DEFAULT,
-  bytes: REQUESTED_SNAPSHOT_BYTE_BUDGET
+  bytes: 1.75 * 1024 * 1024
 }
 
 /** E2E-only: simulate unavailable retained state, which a parked client cannot distinguish from slow hydration. */
@@ -219,8 +219,8 @@ export async function serializeBudgetedMobileSnapshot(
   }
   // Include history for desktop too; screen-only snapshots lost it on remount/reconnect (#20158).
   const candidates = [
-    ...new Set([depth.rows, MOBILE_SUBSCRIBE_SCROLLBACK_ROWS, 500, 250, 100, 25, 0])
-  ]
+    ...new Set([depth.rows, 2500, MOBILE_SUBSCRIBE_SCROLLBACK_ROWS, 500, 250, 100, 25, 0])
+  ].filter((rows) => rows <= depth.rows)
   for (const rows of candidates) {
     const serialized = await runtime.serializeTerminalBuffer(ptyId, { scrollbackRows: rows })
     if (!serialized) {

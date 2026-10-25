@@ -14,7 +14,7 @@ import type {
   TerminalSubscribeBinaryState,
   TerminalSubscriptionArgs
 } from './terminal-subscribe-types'
-import { desktopDepthModelSeed } from './desktop-depth-model-snapshot'
+import { deepenHeadlessCopyToDesktopDepth } from './headless-copy-desktop-depth'
 
 const MOBILE_RENDERER_MOUNT_READY_TIMEOUT_MS = 3_000
 
@@ -124,6 +124,7 @@ export async function publishTerminalSubscribeBinarySnapshot(
       state.lateRendererReadyPromise = rendererReadyPromise
     }
   }
+  let rendererSeed: { seq?: number } | null = null
   if (rendererReady) {
     read = await runtime.readTerminal(params.terminal)
     const stableRendererSnapshot = await serializeStableMobileRendererSnapshot(
@@ -141,10 +142,6 @@ export async function publishTerminalSubscribeBinarySnapshot(
       (typeof stableRendererSnapshot.seq === 'number' || state.pendingOutput.length === 0)
     ) {
       serialized = stableRendererSnapshot
-      const modelSeed = await desktopDepthModelSeed(runtime, ptyId, stableRendererSnapshot)
-      if (state.closed) {
-        return
-      }
       const trailingOutput = state.pendingOutput.flatMap((item) => {
         const output = getOutputAfterSnapshotSeq(item, stableRendererSnapshot.seq)
         const seq = item.meta?.seq
@@ -152,9 +149,10 @@ export async function publishTerminalSubscribeBinarySnapshot(
       })
       runtime.replaceHeadlessTerminalFromRendererSnapshotForRecovery(
         ptyId,
-        modelSeed,
+        stableRendererSnapshot,
         trailingOutput
       )
+      rendererSeed = stableRendererSnapshot
     }
   }
   let initialOutputOverflowed = false
@@ -221,6 +219,9 @@ export async function publishTerminalSubscribeBinarySnapshot(
     scrollbackRows: serialized?.scrollbackRows,
     truncatedByByteBudget: serialized?.truncatedByByteBudget === true
   })
+  if (rendererSeed) {
+    void deepenHeadlessCopyToDesktopDepth(runtime, ptyId, rendererSeed, () => !state.closed)
+  }
   // Initial replay already rewrapped to these columns; seed resize replay gating.
   state.lastResizeCols = serialized?.cols ?? size?.cols
   let recoveryAttempts = 0
