@@ -1,4 +1,5 @@
 import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
 import type { DashboardAgentRow } from '@/components/dashboard/useDashboardData'
 import { useAppStore } from '@/store'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
@@ -58,20 +59,42 @@ export async function viewClaudeAgentFromRow(agent: DashboardAgentRow): Promise<
     if (view.status === 'unsupported') {
       if (child) {
         toast.info(
-          'Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required.'
+          translate(
+            'auto.lib.claudeAgentRowView.restartRequired',
+            'Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required.'
+          )
         )
       }
     } else if (view.status === 'permission') {
-      toast.info('Answer Claude’s permission prompt before switching agents.')
+      toast.info(
+        translate(
+          'auto.lib.claudeAgentRowView.permissionPrompt',
+          'Answer Claude’s permission prompt before switching agents.'
+        )
+      )
     } else if (view.status === 'denied') {
-      toast.info(view.reason ?? 'Claude cannot open this agent. It may no longer be available.')
+      toast.info(
+        view.reason ??
+          translate(
+            'auto.lib.claudeAgentRowView.agentUnavailable',
+            'Claude cannot open this agent. It may no longer be available.'
+          )
+      )
     } else {
-      toast.info('Claude did not switch views. Close any open dialog and try again.')
+      toast.info(
+        translate(
+          'auto.lib.claudeAgentRowView.closeDialog',
+          'Claude did not switch views. Close any open dialog and try again.'
+        )
+      )
     }
   } catch {
     if (child) {
       toast.info(
-        'Subagent navigation is unavailable on this host. Update Orca and restart Claude in this pane.'
+        translate(
+          'auto.lib.claudeAgentRowView.hostUnavailable',
+          'Subagent navigation is unavailable on this host. Update Orca and restart Claude in this pane.'
+        )
       )
     }
   }
