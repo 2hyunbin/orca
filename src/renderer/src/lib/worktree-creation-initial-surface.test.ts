@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { useAppStore } from '@/store'
+import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { PendingWorktreeCreation } from './pending-worktree-creation'
+import { activateAndRevealWorktree } from './worktree-activation'
 import { ensureWorktreeHasInitialTerminal } from './worktree-initial-terminal-seeding'
 import {
   createMockStore,
@@ -9,8 +12,8 @@ import {
 
 registerWorktreeActivationReset()
 
-function creatingStore() {
-  const entry: PendingWorktreeCreation = {
+function creatingEntry(): PendingWorktreeCreation {
+  return {
     creationId: 'creation-1',
     worktreeId: 'wt-1',
     phase: 'creating',
@@ -30,9 +33,12 @@ function creatingStore() {
       quickTelemetry: null
     }
   }
+}
+
+function creatingStore() {
   return createMockStore({
     settings: {},
-    pendingWorktreeCreations: { 'creation-1': entry }
+    pendingWorktreeCreations: { 'creation-1': creatingEntry() }
   })
 }
 
@@ -61,5 +67,22 @@ describe('initial surface during worktree creation', () => {
     ).toBe('tab-1')
     expect(store.createTab).toHaveBeenCalledOnce()
     expect(createdTabStartups(store)['tab-1']).toEqual({ command: 'codex', launchAgent: 'codex' })
+  })
+
+  it('shows the creation panel instead of an empty workspace when the row is opened early', () => {
+    useAppStore.setState({
+      activeView: 'tasks',
+      activePendingCreationId: null,
+      worktreesByRepo: { 'repo-1': [makeWorktree({ id: 'wt-1', repoId: 'repo-1' })] },
+      pendingWorktreeCreations: { 'creation-1': { ...creatingEntry(), loaderVisible: false } }
+    })
+
+    expect(activateAndRevealWorktree('wt-1')).toEqual({ primaryTabId: null })
+
+    const state = useAppStore.getState()
+    expect(state.activePendingCreationId).toBe('creation-1')
+    expect(state.activeView).toBe('terminal')
+    expect(state.activeWorktreeId).not.toBe('wt-1')
+    expect(state.pendingWorktreeCreations['creation-1']?.loaderVisible).toBe(true)
   })
 })

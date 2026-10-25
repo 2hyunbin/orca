@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => {
     createTab: vi.fn(),
     createUnifiedTab: vi.fn(),
     begin: vi.fn(),
-    select: (selector: (state: object) => unknown) => selector({}),
+    select: (selector: (state: { pendingWorktreeCreations: Record<string, never> }) => unknown) =>
+      selector({ pendingWorktreeCreations: {} }),
     answers
   }
 })
