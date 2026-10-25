@@ -1,7 +1,4 @@
-/**
- * Counts how many tab-strip tabs each React commit re-renders, the way React DevTools highlights
- * updates: through the commit hook the renderer always installs.
- */
+// Count tab-strip renders through the renderer’s React DevTools commit hook.
 
 import type { Page } from '@stablyai/playwright-test'
 
