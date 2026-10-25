@@ -30,8 +30,9 @@ const ZCODE_COMPOSER_BOX_CORNER = '╭'
 // Why: Claude Code's prompt-input mode indicator is `figures.pointer` + NBSP; its startup menus
 // (trust, theme) draw the same pointer followed by a cursor move, so the NBSP means the composer.
 const CLAUDE_COMPOSER_PROMPT = '❯\u00a0'
-// Why: Claude 2.1.280-2.1.310 turn on palette-change reports with bracketed paste and drop both on
-// exit; shells never send it, so a p10k/starship `❯` + NBSP prompt cannot arm Claude's marker.
+// Why: Claude 2.1.310 turns on palette-change reports with bracketed paste and drops both on exit.
+// zsh/bash never send it, so their p10k/starship `❯` prompt cannot arm the marker; fish 4+ holds it
+// only while idle at its prompt, where a `❯` + NBSP glyph is unlikely.
 const DECSET_COLOR_PALETTE_UPDATES = '\x1b[?2031h'
 const DECRST_COLOR_PALETTE_UPDATES = '\x1b[?2031l'
 const DECSET_ALT_SCREEN = '\x1b[?1049h'

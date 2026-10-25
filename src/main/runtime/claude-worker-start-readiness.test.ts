@@ -81,6 +81,14 @@ describe('the Claude composer marker', () => {
     expect(scanner.observe(SHELL_PROMPT).ready).toBe(false)
   })
 
+  it('does not fire on a fish prompt cycle, which holds palette reports while idle', () => {
+    const scanner = createDraftPasteReadyScanner('claude-composer-prompt')
+    // fish 4+: 2031/2004 on at its prompt, off when it runs the launch line.
+    expect(scanner.observe('\x1b[?2031h\x1b[?2004h~/repo> claude\r\n').ready).toBe(false)
+    expect(scanner.observe('\x1b[?2004l\x1b[?2031l').ready).toBe(false)
+    expect(scanner.observe(SHELL_PROMPT).ready).toBe(false)
+  })
+
   it('does not fire on the shell prompt drawn after Claude exits', () => {
     const scanner = createDraftPasteReadyScanner('claude-composer-prompt')
     const boot = readRuntimeFixture('claude-dialog-trust-workspace')
