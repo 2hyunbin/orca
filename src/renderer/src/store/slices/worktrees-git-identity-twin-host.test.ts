@@ -162,6 +162,23 @@ describe('a twin review-clear tombstone across a rename', () => {
   })
 })
 
+describe('a twin review-clear tombstone after the sibling goes away', () => {
+  it('still drives a retry of the clear on the next branch switch', async () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/a1' },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/b1', linkedPR: 2 }
+    )
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/b2' }, 'ssh:box-b')
+    await vi.waitFor(() => expect(mockApi.worktrees.updateMeta).toHaveBeenCalledTimes(1))
+    const [, remote] = store.getState().worktreesByRepo.repo1
+    store.setState({ worktreesByRepo: { repo1: [remote] } })
+
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/b3' }, 'ssh:box-b')
+
+    await vi.waitFor(() => expect(mockApi.worktrees.updateMeta).toHaveBeenCalledTimes(2))
+  })
+})
+
 describe('a provenance twin review-clear tombstone', () => {
   it('spares the sibling another paired server publishes under the same SSH host id', () => {
     const shared = { hostId: 'ssh:shared' as const, branch: 'refs/heads/stack/one' }

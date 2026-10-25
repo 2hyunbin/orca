@@ -128,10 +128,18 @@ export function createUpdateWorktreeGitIdentity(
             tombstoneOwner
           )
         } else {
-          const tombstoneKey = reviewClearTombstoneKey(worktreeId, tombstoneOwner)
-          const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(tombstoneKey)
+          // Why the copy key first: a tombstone left from when this copy had a twin still guards it.
+          const ownKey = reviewClearTombstoneKey(worktreeId, worktreeCopyOwnerKey(worktree))
+          const ownTombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(ownKey)
+          const tombstoneKey = ownTombstone
+            ? ownKey
+            : reviewClearTombstoneKey(worktreeId, tombstoneOwner)
+          const tombstone =
+            ownTombstone ?? hostedReviewLinkClearTombstonesByWorktreeId.get(tombstoneKey)
           if (tombstone) {
-            clearedCopy = copy
+            clearedCopy = ownTombstone
+              ? { owner: worktreeCopyOwnerKey(worktree), hostId: worktree.hostId }
+              : copy
             const nextBranchIdentity = canonicalHostedReviewBranchIdentity(nextBranch)
             hostedReviewLinkClearTombstonesByWorktreeId.set(tombstoneKey, {
               ...tombstone,
