@@ -391,12 +391,12 @@ it('retains reader-produced tied image pages through prepend, append and reconne
     ]
       .map(
         ([id, text]) =>
-          JSON.stringify({
+          `${JSON.stringify({
             type: 'user',
             uuid: id,
             timestamp: '2026-06-01T10:00:00Z',
             message: { role: 'user', content: text }
-          }) + '\n'
+          })}\n`
       )
       .join('')
   )
