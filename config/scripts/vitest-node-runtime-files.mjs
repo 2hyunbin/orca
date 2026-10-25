@@ -123,6 +123,7 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/ai-vault-search/session-search-fts5-contract.test.ts',
   'src/main/foreign-sqlite-readers/**/*.test.ts',
   'src/main/browser/*cookie*.test.ts',
+  'src/main/browser/cookies/*cookie*.test.ts',
   'src/main/browser/cookies/sources/browser-cookie-validation.test.ts',
   'src/main/browser/cookies/sources/browser-cookie-decryption.test.ts',
   'src/main/browser/cookies/sources/browser-cookie-import-undecryptable.test.ts',
@@ -196,6 +197,7 @@ const NODE_RUNTIME_INCLUDE = [
   'config/scripts/vitest-node-runtime-pool.test.ts'
 ]
 
-export function getNodeRuntimeInclude() {
-  return [...NODE_RUNTIME_INCLUDE, ...findSqliteRuntimeTests()]
+/** `filters` limits the SQLite import scan to the tests a filtered CLI run can select. */
+export function getNodeRuntimeInclude({ filters } = {}) {
+  return [...NODE_RUNTIME_INCLUDE, ...findSqliteRuntimeTests({ filters })]
 }
