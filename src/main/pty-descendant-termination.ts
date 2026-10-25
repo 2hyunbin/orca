@@ -45,7 +45,7 @@ function readFreshProcessTable(
   return new Promise((resolve, reject) => {
     execFile(
       'ps',
-      ['-axo', 'pid=,ppid=,pgid=,lstart='],
+      ['-axo', 'pid=,ppid=,pgid=,tpgid=,lstart='],
       {
         maxBuffer: PS_MAX_BUFFER_BYTES,
         timeout: timeoutMs,
@@ -124,6 +124,18 @@ export function readProcessTableBeforeDeadline(
   })
 }
 
+/** A nohup/disown job keeps the shell's terminal in a background group; the shell's own SIGHUP
+ *  decides its fate, as in any terminal. Agent tools that setsid() away have no terminal and are swept. */
+function isShellBackgroundJob(row: ProcessTableRow, root: ProcessTableRow): boolean {
+  const foreground = root.tpgid ?? 0
+  return (
+    foreground > 0 &&
+    row.tpgid === foreground &&
+    row.pgid !== foreground &&
+    row.pgid !== root.pgid
+  )
+}
+
 export function collectDescendantRows(
   rootPid: number,
   table: ProcessTableRow[],
@@ -161,7 +173,9 @@ export function collectDescendantRows(
         continue
       }
       visited.add(child.pid)
-      descendants.push(child)
+      if (!isShellBackgroundJob(child, rootRow)) {
+        descendants.push(child)
+      }
       queue.push(child.pid)
     }
   }

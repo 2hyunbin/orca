@@ -69,15 +69,15 @@ describe('parseProcessTable', () => {
   it('parses pid/ppid/pgid and keeps the space-containing lstart verbatim', () => {
     const rows = parseProcessTable(
       [
-        '  101   1  101 Mon Jul 13 12:54:47 2026',
-        '42017 101 42017 Tue Jul 14 01:02:03 2026  ',
+        '  101   1  101    -1 Mon Jul 13 12:54:47 2026',
+        '42017 101 42017 42017 Tue Jul 14 01:02:03 2026  ',
         '',
         'not a process line'
       ].join('\n')
     )
     expect(rows).toEqual([
-      { pid: 101, ppid: 1, pgid: 101, startedAt: 'Mon Jul 13 12:54:47 2026' },
-      { pid: 42017, ppid: 101, pgid: 42017, startedAt: 'Tue Jul 14 01:02:03 2026' }
+      { pid: 101, ppid: 1, pgid: 101, tpgid: -1, startedAt: 'Mon Jul 13 12:54:47 2026' },
+      { pid: 42017, ppid: 101, pgid: 42017, tpgid: 42017, startedAt: 'Tue Jul 14 01:02:03 2026' }
     ])
   })
 })
@@ -97,6 +97,24 @@ describe('collectDescendantRows', () => {
     expect(snapshot.rootPgid).toBe(10)
     expect(snapshot.descendants.map((r) => r.pid)).toEqual([20, 30, 31])
     expect(snapshot.capturedAtMs).toBe(CAPTURED_AT_MS)
+  })
+
+  it("leaves the shell's background jobs to its SIGHUP but sweeps the foreground and setsid trees", () => {
+    const tty = (pid: number, ppid: number, pgid: number, tpgid: number) => ({
+      ...row(pid, ppid, pgid),
+      tpgid
+    })
+    // Shell 10 with foreground agent 20 (tool 21, setsid'd MCP 22) and nohup/disown job 30 (child 31).
+    const table = [
+      tty(10, 1, 10, 20),
+      tty(20, 10, 20, 20),
+      tty(21, 20, 20, 20),
+      tty(22, 20, 22, -1),
+      tty(30, 10, 30, 20),
+      tty(31, 30, 30, 20)
+    ]
+    const snapshot = collectDescendantRows(10, table, CAPTURED_AT_MS)
+    expect(snapshot.descendants.map((r) => r.pid)).toEqual([20, 21, 22])
   })
 
   it('sweeps nothing when the root row is already gone (a vacated PID has no findable tree)', () => {
@@ -180,7 +198,7 @@ describe('captureDescendantSnapshot', () => {
     expect(result).not.toBeNull()
     expect(execFileMock).toHaveBeenCalledWith(
       'ps',
-      ['-axo', 'pid=,ppid=,pgid=,lstart='],
+      ['-axo', 'pid=,ppid=,pgid=,tpgid=,lstart='],
       expect.objectContaining({
         timeout: 321,
         killSignal: 'SIGKILL',
@@ -197,14 +215,16 @@ describe('captureDescendantSnapshot', () => {
       vi.setSystemTime(CAPTURED_AT_MS + 1_100)
       callback(
         null,
-        ['10 1 10 Tue Jul 14 12:00:00 2026', '20 10 20 Tue Jul 14 12:00:00 2026'].join('\n')
+        ['10 1 10 0 Tue Jul 14 12:00:00 2026', '20 10 20 0 Tue Jul 14 12:00:00 2026'].join('\n')
       )
     })
 
     const result = await captureDescendantSnapshot(10, { platform: 'darwin' })
 
     expect(result?.capturedAtMs).toBe(CAPTURED_AT_MS + 900)
-    expect(result?.descendants).toEqual([row(20, 10, 20, 'Tue Jul 14 12:00:00 2026')])
+    expect(result?.descendants).toEqual([
+      { ...row(20, 10, 20, 'Tue Jul 14 12:00:00 2026'), tpgid: 0 }
+    ])
   })
 })
 
