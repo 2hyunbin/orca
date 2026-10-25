@@ -13,7 +13,7 @@ import type {
 
 type InitMessage = Extract<BridgeHostMessage, { type: 'init' }>
 
-// Same-session init updates in place; replacement drops prior exchanges and publishes the new session/listeners in order.
+// Same-session init preserves exchanges; replacement drops prior work before publishing the new session to listeners.
 export type BridgeClientShellSession = {
   current: () => BridgeShellSession | null
   accept: (message: InitMessage) => void
@@ -42,7 +42,7 @@ export function createBridgeClientShellSession(args: {
       if (held !== null && update === null) {
         args.onReplaced()
       }
-      // Preserve the session object and original storage snapshot across same-session init; rebuild only on replacement.
+      // Preserve the original storage snapshot across same-session init while rebuilding the session value with new route/insets.
       const sent = message.safeAreaInsets ?? ZERO_SAFE_AREA_INSETS
       const movedInsets = held !== null && !sameSafeAreaInsets(held.safeAreaInsets, sent)
       // Reuse equal values’ identity so repeated ready cannot rerender keyed readers.
