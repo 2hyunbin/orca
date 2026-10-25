@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 
 vi.mock('@/i18n/i18n', () => ({
@@ -14,13 +14,21 @@ vi.mock('../../store', () => ({
 }))
 
 const { ProviderSegment } = await import('./StatusBarProviderSegment')
+const NOW = 1_800_000_000_000
+
+beforeEach(() => {
+  vi.useFakeTimers({ now: NOW })
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 function lapsedClaude(ageMs: number): ProviderRateLimits {
   return {
     provider: 'claude',
     session: { usedPercent: 40, windowMinutes: 300, resetsAt: null, resetDescription: null },
     weekly: null,
-    updatedAt: Date.now() - ageMs,
+    updatedAt: NOW - ageMs,
     error: 'Claude usage updates the next time Claude runs.',
     status: 'error',
     usageMetadata: { failureKind: 'stale-token' }

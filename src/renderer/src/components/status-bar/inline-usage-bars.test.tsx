@@ -95,7 +95,7 @@ describe('InlineUsageBars', () => {
         provider: 'claude',
         session: null,
         weekly: null,
-        updatedAt: Date.now(),
+        updatedAt: 0,
         // An older host's wording; the row speaks from the failure kind.
         error: 'Claude usage has expired. Start Claude in this account to refresh it.',
         status: 'error',
@@ -122,7 +122,7 @@ describe('InlineUsageBars', () => {
       provider: 'claude',
       session: null,
       weekly: null,
-      updatedAt: Date.now(),
+      updatedAt: 0,
       error: 'Claude usage is unavailable.',
       status: 'error',
       usageMetadata: { failureKind: row.failureKind }

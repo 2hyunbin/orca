@@ -79,7 +79,7 @@ it('lets the server decide a locally expired token and never refreshes it', asyn
         accessToken: 'expired-fake',
         refreshToken: 'must-not-be-used',
         expiresAt: 1,
-        refreshTokenExpiresAt: Date.now() + 86_400_000
+        refreshTokenExpiresAt: 4_102_444_800_000
       }
     })
   )
