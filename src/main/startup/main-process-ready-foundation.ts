@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from 'electron'
+import { app, session } from 'electron'
 import { applyBackgroundActivationPolicy } from '../window/foreground-activation-policy'
 import { applyElectronProxySettings } from '../network/proxy-settings'
 import { installElectronProxyRequestGuard } from '../network/electron-proxy-request-guard'
@@ -13,17 +13,7 @@ import { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
 import { getCanonicalUserDataPath } from '../persistence'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { loadWslMoveFence } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
-import { recoverInterruptedWslMoves } from '../persistence/moving-wsl-projects/wsl-move-reset'
-import { isWslDistroRegistered } from '../wsl/wsl-distro-registry-id'
-import { runWslMoveStartupRewrite } from '../persistence/moving-wsl-projects/wsl-move-startup-rewrite'
-import { installWslMoveRetention } from '../persistence/moving-wsl-projects/wsl-move-retention'
-import { registerWslMoveDesktopRewriteRegistry } from '../persistence/moving-wsl-projects/wsl-move-desktop-rewrite-registry'
-import { reapplyWslMoveFocusRewrites } from '../persistence/moving-wsl-projects/wsl-move-stale-window-reapply'
-import { sweepOrphanedWslMoveSleptSpools } from '../persistence/moving-wsl-projects/wsl-move-slept-spool-sweep'
-import { enableWslHostAutomations } from '../ipc/wsl-host-automation-enable'
-import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
-import { orchestrationDbFile } from '../runtime/orchestration/db/orchestration-db-file'
-import { productionWslMoveBrowserCookieCopyDependencies } from '../persistence/moving-wsl-projects/wsl-move-browser-cookie-store'
+import { startWslMoveStartup } from '../persistence/moving-wsl-projects/wsl-move-startup'
 import { createProfileStateStoreForStartup } from '../persistence/profile-state/profile-state-startup-authority'
 import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import { initializeBrowserClientHostId } from '../browser/browser-client-host-id'
@@ -165,38 +155,11 @@ export async function initializeReadyFoundation(): Promise<void> {
   const store = profileState.store
   state.store = store
   setNodeDistMirrorSettingReader(() => store.getSettings().nodeDistMirrorUrl)
-  const userDataPath = getAppEnvironment().getPath('userData')
-  registerWslMoveDesktopRewriteRegistry({
-    profile: store,
-    windowOpen: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
-    orchestrationDatabasePath: orchestrationDbFile(userDataPath),
-    hostAutomations: {
-      enable: (environmentId, ids) => enableWslHostAutomations(userDataPath, environmentId, ids)
-    },
-    browserCookies: productionWslMoveBrowserCookieCopyDependencies(userDataPath)
-  })
-  // Resets a move interrupted before commit, corrects stale focus on finished ones, then finishes
-  // one that committed; main-process-ready waits on all three, bounded. Gated off, none runs.
-  state.wslMoveStartupRewriteReady = runWslMoveStartupRewrite(
-    { userDataPath },
-    {
-      recover: async () => {
-        await recoverInterruptedWslMoves(userDataPath, undefined, (distro, distroGuid) =>
-          isWslDistroRegistered(distro, distroGuid)
-        )
-        sweepOrphanedWslMoveSleptSpools(userDataPath)
-      },
-      reapply: () => {
-        reapplyWslMoveFocusRewrites(userDataPath, store)
-      }
-    }
+  // Main-process-ready waits on interrupted moves being reset or finished, bounded.
+  state.wslMoveStartupRewriteReady = startWslMoveStartup(
+    getAppEnvironment().getPath('userData'),
+    store
   )
-  // Re-marks retained rows a downgrade stripped; never awaited, since nothing it writes gates a read.
-  void state.wslMoveStartupRewriteReady.then(() => {
-    installWslMoveRetention({ userDataPath, store })
-    // A committed move's host step (automations back on) that failed retries until it lands.
-    scheduleWslMoveRewriteRetry(userDataPath)
-  })
   // Publish proxy readiness before guarding default-session requests; network awaits it, while window creation can proceed.
   state.initialProxyApplicationReady = applyElectronProxySettings(store.getSettings()).then(
     (result) => {
