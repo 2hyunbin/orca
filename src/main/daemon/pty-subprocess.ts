@@ -85,7 +85,8 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
       cols: size.cols,
       rows: size.rows,
       windowsFallbackAttempts: launch.windowsFallbackAttempts,
-      onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy
+      onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy,
+      ...(opts.cancelSignal ? { signal: opts.cancelSignal } : {})
     })
   } catch (error) {
     if (process.platform === 'win32') {
@@ -104,6 +105,8 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
     reportsChildExitStatus: spawned.reportsChildExitStatus,
     requestedCwd: opts.cwd,
     sessionId: opts.sessionId,
-    startupAgentRecognition: launch.startupAgentRecognition
+    startupAgentRecognition: launch.startupAgentRecognition,
+    // Claimed here, synchronously with the handle's own subscription, so no event falls between.
+    ...(spawned.claimStartupEvents ? { startupEvents: spawned.claimStartupEvents() } : {})
   })
 }
