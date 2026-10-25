@@ -71,6 +71,17 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
     }
   }
 
+  /** Runs a pending trailing-edge scan now, so a reader never judges blocked text its stamp lags. */
+  protected flushPendingWaitBlockedCheck(ptyId: string): void {
+    const state = this.waitBlockedCheckStateByPtyId.get(ptyId)
+    if (!state?.timer) {
+      return
+    }
+    clearTimeout(state.timer)
+    state.timer = null
+    this.runWaitBlockedCheck(ptyId, state, Date.now())
+  }
+
   protected runWaitBlockedCheck(ptyId: string, state: WaitBlockedCheckState, at: number): void {
     const pty = this.ptysById.get(ptyId)
     if (!pty) {
@@ -95,6 +106,12 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
       )
     ) {
       pty.waitBlockedAt = at
+      // Trailing scans run after onPtyData copies stamps to leaves; refresh those stamps before pane-backed waits read them.
+      for (const leaf of this.getLeavesForPty(ptyId)) {
+        if (leaf.tailBuffer === pty.tailBuffer) {
+          leaf.waitBlockedAt = at
+        }
+      }
       this.recordAgentPromptPermissionObservation(ptyId)
     }
     state.lastAt = at

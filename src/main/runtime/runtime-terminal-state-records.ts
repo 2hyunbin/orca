@@ -71,6 +71,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null
   launchAgent: TuiAgent | null
+  /** Identify flagged unmanaged --command panes before foreground reads; null for adopted/restored panes. */
+  launchCommandAgent: TuiAgent | null
   agentSessionOwners: AgentSessionOwnerBinding[]
   /** Conversations the `incarnationId` execution reported; a later row can't hide them. In memory only. */
   cliConversations?: {

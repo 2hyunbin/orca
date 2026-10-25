@@ -60,6 +60,7 @@ type IdlePollEntry = {
   waiter: TerminalWaiter
   foregroundPollInFlight: boolean
   screenReadInFlight: boolean
+  recheckTimer?: ReturnType<typeof setTimeout>
 } & ({ kind: 'leaf'; leaf: RuntimeLeafRecord } | { kind: 'pty'; pty: RuntimePtyWorktreeRecord })
 
 /** One reading of a waiter's pane, and the results it would settle with. */
@@ -103,7 +104,22 @@ export class RuntimeTerminalIdlePolls {
     // Probe weak ready immediately; short automation waits may expire before the next sweep.
     if (verdict?.kind === 'ready-weak') {
       void this.tick(entry)
+    } else if (verdict) {
+      this.armRecheck(entry, verdict)
     }
+  }
+
+  private armRecheck(entry: IdlePollEntry, verdict: TuiIdleVerdict): void {
+    if (verdict.kind !== 'pending' || verdict.recheckAt === undefined || entry.recheckTimer) {
+      return
+    }
+    entry.recheckTimer = setTimeout(
+      () => {
+        entry.recheckTimer = undefined
+        void this.tick(entry)
+      },
+      Math.max(verdict.recheckAt - Date.now(), 0)
+    )
   }
 
   private sweep(): void {
@@ -174,6 +190,7 @@ export class RuntimeTerminalIdlePolls {
         this.settle(entry, sample.ready())
         return
       }
+      this.armRecheck(entry, verdict)
       // Working output can quote dialog source; do not screen-probe it for startup blockers.
       if (verdict.kind === 'working' || entry.screenReadInFlight) {
         return
@@ -244,6 +261,7 @@ export class RuntimeTerminalIdlePolls {
       return
     }
     entry.waiter.cancelIdlePoll = null
+    clearTimeout(entry.recheckTimer)
     if (this.entries.size === 0 && this.sweepTimer) {
       clearInterval(this.sweepTimer)
       this.sweepTimer = null

@@ -39,26 +39,28 @@ export type ClaudeSessionMoveCandidate = {
   leafId: string
 }
 
+// Match npm Claude by its fresh command line: generic node/python may now run user programs.
 function isClaudeProcess(processName: string | null): boolean {
-  return (
-    processName !== null &&
-    (recognizeAgentProcess(processName)?.agent === 'claude' ||
-      isAgentForegroundWrapperProcess(processName))
-  )
+  return recognizeAgentProcess(processName)?.agent === 'claude'
 }
 
 /** Confirm foreground identity: cached names flap to shells and native macOS binaries report version-folder names. */
 async function isClaudeInForeground(
   ptyId: string,
   inspection: RuntimeTerminalProcessInspection
-): Promise<boolean> {
+): Promise<boolean | 'unchecked'> {
   if (isClientOnlyUnverifiableInspection(inspection)) {
     return false
   }
   if (isClaudeProcess(inspection.foregroundProcess)) {
     return true
   }
-  return isClaudeProcess(await confirmRuntimeTerminalForegroundProcess(ptyId))
+  const fresh = await confirmRuntimeTerminalForegroundProcess(ptyId)
+  // Why: a bare node/python may be an npm Claude, but only the failed fresh read could have said so.
+  if (fresh === null && isAgentForegroundWrapperProcess(inspection.foregroundProcess ?? '')) {
+    return 'unchecked'
+  }
+  return isClaudeProcess(fresh)
 }
 
 /** Whether the pane's Claude is mid-turn; a restart during a permission prompt or question drops it. */
@@ -168,6 +170,8 @@ export async function findMovableClaudeSessions(args: {
   target: CodexAccountSelectionTarget
   /** Only sessions known to run on this account count; null is System default. */
   fromAccountId: string | null
+  /** Sessions left out because their foreground could not be read. */
+  onUnchecked?: (sessions: ClaudeSessionMoveCandidate[]) => void
 }): Promise<ClaudeSessionMoveCandidate[]> {
   if (args.owner.kind !== 'local') {
     return []
@@ -208,5 +212,9 @@ export async function findMovableClaudeSessions(args: {
       )
     )
   )
-  return candidates.filter((_, index) => inForeground[index])
+  const unchecked = candidates.filter((_, index) => inForeground[index] === 'unchecked')
+  if (unchecked.length > 0) {
+    args.onUnchecked?.(unchecked)
+  }
+  return candidates.filter((_, index) => inForeground[index] === true)
 }

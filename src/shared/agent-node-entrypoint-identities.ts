@@ -13,6 +13,12 @@ export const EXACT_NODE_ENTRYPOINT_IDENTITIES: readonly {
     agent: 'cursor',
     processName: 'cursor-agent'
   },
+  // npm Claude's historical cli.js still appears behind pnpm/yarn/npx shims.
+  {
+    pattern: /(?:^|\/)node_modules\/@anthropic-ai\/claude-code\/cli\.js$/,
+    agent: 'claude',
+    processName: 'claude'
+  },
   // Pi cli.js is generic; require the package path.
   {
     pattern:

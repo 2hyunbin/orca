@@ -19,7 +19,7 @@ type HeldAgentPrompt = {
 }
 
 export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission {
-  // Best-effort Enter retry for early composers or Windows paste bursts; never fail an already submitted prompt.
+  /** Retry blind Enter and drafts held by Windows input-record pastes or unopened dsh launchpads; retries cannot fail a submitted prompt. */
   protected async resubmitHeldAgentPrompt(
     ptyId: string,
     generation: number,
@@ -30,7 +30,9 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
     const retryDelayMs = agent ? TUI_AGENT_CONFIG[agent]?.submitRetryDelayMs : undefined
     const prompt = held.prompt
     const gated = held.heldBudgetMs > 0 && prompt !== undefined
-    let blind = options.composerReady === true
+    // Why: the draft reader knows dsh's launchpad, which its first-run guide covers once ready.
+    const readsLaunchDraft = agent === 'dsh'
+    let blind = options.composerReady === true && !readsLaunchDraft
     if (retryDelayMs === undefined || (!blind && !gated)) {
       return 0
     }
@@ -54,7 +56,8 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
           )
         if (!blind && !(await holdsPrompt())) {
           // Gone after a gated retry means it was taken; before one, the burst may still be read.
-          if (gatedResubmits > 0) {
+          // dsh paints its draft at once, so gone means it was taken or the guide covers it.
+          if (gatedResubmits > 0 || readsLaunchDraft) {
             return resubmits
           }
           continue

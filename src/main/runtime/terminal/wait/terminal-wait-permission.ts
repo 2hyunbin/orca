@@ -16,14 +16,16 @@ import { renewRuntimeMobileAgentStatusFromPtyTitle } from '../../runtime-mobile-
 import { getDisplayPromptLifecycle } from '../../runtime-worktree-status-projection'
 import type { RuntimeTerminalWriteOptions } from '../../runtime-terminal-writer'
 import type { WriteSettlement } from '../../../../shared/pty-write-settlement'
-import { getRegisteredSshState } from '../../../ssh/targets/ssh-target-registry'
-import { splitWorktreeIdForFilesystem } from '../../../../shared/worktree/id'
-import { isWindowsAbsolutePathLike } from '../../../../shared/cross-platform-path'
+import { resolvePtyWriteHostPlatform } from '../input/pty-write-host-platform'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type { AgentPromptActivity } from '../../agent-prompt-submission-verification'
 import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
-import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
+import {
+  readTuiIdleHookTurn,
+  retainedTailIncludes,
+  type TuiIdleHookTurn
+} from '../../tui-idle-hook-lane'
 import { selectFreshExplicitAgentStatusRow } from '../../runtime-hook-agent-row-selection'
 import { isClaudeDialogHoldingPane } from '../../claude-open-dialog-hold'
 
@@ -199,6 +201,7 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
       hasExplicitIdleTitle: hasExplicitIdleTitle(pty),
       respawnedAt: this.agentPromptExplicitStatusFloorByPtyId.get(ptyId),
       lastInputAt: this.terminalRunFacts.readLastInputAt(ptyId),
+      tailIncludes: (text) => retainedTailIncludes(pty.tailBuffer, pty.tailPartialLine, text),
       resolveBlockedText: (state, row) =>
         this.resolveTuiIdleHookBlockedText(ptyId, handles, state, row)
     })
@@ -283,21 +286,8 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     return this.terminalWriter.writeChunks(ptyId, text, options)
   }
 
-  /** Use the PTY transport host: WSL writes still pay Windows ConPTY ingestion, while SSH uses remote node-pty rather than the client OS. */
   protected getPtyWriteHostPlatform(ptyId: string): NodeJS.Platform {
-    const pty = this.ptysById.get(ptyId)
-    const connectionId = pty?.connectionId
-    if (!connectionId) {
-      return process.platform
-    }
-    const remotePlatform = getRegisteredSshState(connectionId)?.remotePlatform
-    if (remotePlatform) {
-      return remotePlatform
-    }
-    // Why: remotePlatform only arrives with the relay handshake; until then the worktree path
-    // flavor is the same signal getAgentLaunchPlatformForRepo already trusts for a remote repo.
-    const worktreePath = pty ? splitWorktreeIdForFilesystem(pty.worktreeId)?.worktreePath : null
-    return worktreePath && isWindowsAbsolutePathLike(worktreePath) ? 'win32' : 'linux'
+    return resolvePtyWriteHostPlatform(this.ptysById.get(ptyId))
   }
 
   protected getPtyAgent(ptyId: string): TerminalAgent | null {
