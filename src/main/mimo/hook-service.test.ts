@@ -103,7 +103,7 @@ describe('MimoCodeHookService buildPtyEnv', () => {
     }
   )
 
-  it('carries a login made under the old Orca MIMOCODE_HOME over once, owner-only, never overwriting', () => {
+  it('carries a login made under the old Orca MIMOCODE_HOME over once, owner-only', () => {
     const legacyData = join(userDataDir, 'mimocode-hooks', 'shared', 'data')
     mkdirSync(legacyData, { recursive: true })
     writeFileSync(join(legacyData, 'auth.json'), '{"legacy":true}')
@@ -117,9 +117,29 @@ describe('MimoCodeHookService buildPtyEnv', () => {
       expect(statSync(auth).mode & 0o777).toBe(0o600)
     }
 
+    expect(existsSync(join(legacyData, 'auth.json'))).toBe(false)
+    expect(existsSync(join(legacyData, 'auth.json.migrated'))).toBe(true)
+
+    rmSync(auth)
+    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
+    expect(existsSync(auth)).toBe(false)
+  })
+
+  it('never overwrites an existing login or follows a relative MIMOCODE_HOME', () => {
+    const legacyData = join(userDataDir, 'mimocode-hooks', 'shared', 'data')
+    mkdirSync(legacyData, { recursive: true })
+    writeFileSync(join(legacyData, 'auth.json'), '{"legacy":true}')
+    const xdgData = join(userDataDir, 'xdg-data')
+    mkdirSync(join(xdgData, 'mimocode'), { recursive: true })
+    const auth = join(xdgData, 'mimocode', 'auth.json')
     writeFileSync(auth, '{"canonical":true}')
+    const service = new MimoCodeHookService()
+
     service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
     expect(readFileSync(auth, 'utf8')).toBe('{"canonical":true}')
+
+    service.carryOverLegacyAuth({ MIMOCODE_HOME: 'relative-mimo-home' })
+    expect(existsSync(join(process.cwd(), 'relative-mimo-home'))).toBe(false)
     expect(existsSync(join(legacyData, 'auth.json'))).toBe(true)
   })
 })

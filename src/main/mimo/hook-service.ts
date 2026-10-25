@@ -1,5 +1,5 @@
 import { getAppEnvironment } from '../../shared/app-environment'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { homedir } from 'node:os'
 import {
   chmodSync,
@@ -9,6 +9,7 @@ import {
   lstatSync,
   mkdirSync,
   readdirSync,
+  renameSync,
   statSync,
   writeFileSync
 } from 'node:fs'
@@ -112,7 +113,7 @@ export class MimoCodeHookService {
     return { MIMOCODE_CONFIG_DIR: overlay }
   }
 
-  /** Older builds kept MiMo data under Orca's MIMOCODE_HOME; carry a login made there over once. */
+  /** Older builds kept MiMo data under Orca's MIMOCODE_HOME; move a login made there over once, then mark it migrated. */
   carryOverLegacyAuth(env: Record<string, string | undefined>): void {
     const legacyAuth = join(
       getAppEnvironment().getPath('userData'),
@@ -121,6 +122,10 @@ export class MimoCodeHookService {
       'data',
       'auth.json'
     )
+    // MiMo rejects a relative MIMOCODE_HOME; Orca would otherwise write relative to its own cwd.
+    if (env.MIMOCODE_HOME && !isAbsolute(env.MIMOCODE_HOME)) {
+      return
+    }
     // Mirrors MiMo's Global.Path.data resolution (xdg-basedir, or MIMOCODE_HOME/data).
     const dataDir = env.MIMOCODE_HOME
       ? join(env.MIMOCODE_HOME, 'data')
@@ -133,6 +138,8 @@ export class MimoCodeHookService {
       mkdirSync(dataDir, { recursive: true })
       copyFileSync(legacyAuth, auth, constants.COPYFILE_EXCL)
       chmodSync(auth, 0o600)
+      // A user who later deletes the copy must not get the Orca-only login back.
+      renameSync(legacyAuth, `${legacyAuth}.migrated`)
     } catch {
       // A failed carry-over leaves MiMo logged out, as before; never block the launch.
     }
