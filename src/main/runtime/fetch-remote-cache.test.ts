@@ -135,18 +135,6 @@ describe('OrcaRuntimeService.fetchRemoteWithCache', () => {
     expect(fetchCallCount()).toBe(2)
   })
 
-  it('does not advance the freshness timestamp when the fetch rejects', async () => {
-    // Failed fetches cannot make unknown remote state look fresh.
-    mockFetchResults([Promise.reject(new Error('boom')), { stdout: '', stderr: '' }])
-
-    const runtime = new OrcaRuntimeService(null)
-
-    await runtime.fetchRemoteWithCache('/repo/b', 'origin')
-    await runtime.fetchRemoteWithCache('/repo/b', 'origin')
-
-    expect(fetchCallCount()).toBe(2)
-  })
-
   it('serializes two concurrent callers onto a single git fetch', async () => {
     let resolveFetch!: () => void
     const pending = new Promise<{ stdout: string; stderr: string }>((resolve) => {

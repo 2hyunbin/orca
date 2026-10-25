@@ -12,11 +12,7 @@ vi.mock('node:fs', () => ({
   }
 }))
 
-import {
-  WINDOWS_RUNTIME_FILE_WATCH_LEADING_MS,
-  WINDOWS_RUNTIME_FILE_WATCH_REFRESH_MS,
-  watchWindowsRuntimeFileExplorer
-} from './windows-file-watch'
+import { watchWindowsRuntimeFileExplorer } from './windows-file-watch'
 
 describe('watchWindowsRuntimeFileExplorer', () => {
   beforeEach(() => {
@@ -34,7 +30,7 @@ describe('watchWindowsRuntimeFileExplorer', () => {
       fsWatch.listener?.()
       vi.advanceTimersByTime(50)
     }
-    expect(callback).toHaveBeenCalledTimes(2_000 / WINDOWS_RUNTIME_FILE_WATCH_REFRESH_MS)
+    expect(callback).toHaveBeenCalledTimes(4)
     expect(callback).toHaveBeenCalledWith([{ kind: 'overflow', absolutePath: 'C:\\repo' }])
   })
 
@@ -42,11 +38,13 @@ describe('watchWindowsRuntimeFileExplorer', () => {
     const callback = vi.fn()
     watchWindowsRuntimeFileExplorer('C:\\repo', callback, vi.fn())
     fsWatch.listener?.()
-    vi.advanceTimersByTime(WINDOWS_RUNTIME_FILE_WATCH_LEADING_MS)
+    vi.advanceTimersByTime(149)
+    expect(callback).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1)
     expect(callback).toHaveBeenCalledTimes(1)
 
     fsWatch.listener?.()
-    vi.advanceTimersByTime(WINDOWS_RUNTIME_FILE_WATCH_REFRESH_MS - 1)
+    vi.advanceTimersByTime(499)
     expect(callback).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(1)
     expect(callback).toHaveBeenCalledTimes(2)

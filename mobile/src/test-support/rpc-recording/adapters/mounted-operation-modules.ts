@@ -86,7 +86,7 @@ import { workspaceSettingsMounts } from './workspace-settings-mounts'
 import { worktreeCatalogMountAdapters } from './worktree-catalog-mount-adapters'
 import type { MountedOperationModule } from '../mounted-operation-module'
 
-// Register adapters inside their seam so new domains add no engine code or golden changes; source tests pin each declaring file.
+/** Keep domain registration inside its seam to avoid engine edits or golden moves; adapter-seam.test.ts checks directory parity. */
 export const MOUNTED_OPERATION_MODULES: readonly MountedOperationModule[] = [
   {
     source: 'agent-history-mount-adapters.ts',

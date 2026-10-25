@@ -8,26 +8,6 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { OrcaRuntimeService } from './orca-runtime'
 import * as mobileSessionTerminalProjection from './mobile-session-terminal-projection'
 
-// Mirror renderer freshness without importing it: same-epoch versions must strictly increase.
-function makeWebClientFreshnessGate(): (frame: RuntimeMobileSessionTabsResult) => boolean {
-  const latestByWorktree = new Map<string, { publicationEpoch: string; snapshotVersion: number }>()
-  return (frame) => {
-    const current = latestByWorktree.get(frame.worktree)
-    if (
-      current &&
-      current.publicationEpoch === frame.publicationEpoch &&
-      frame.snapshotVersion <= current.snapshotVersion
-    ) {
-      return false
-    }
-    latestByWorktree.set(frame.worktree, {
-      publicationEpoch: frame.publicationEpoch,
-      snapshotVersion: frame.snapshotVersion
-    })
-    return true
-  }
-}
-
 const WT = 'repo-1::/tmp/worktree-a'
 const WT_B = 'repo-1::/tmp/worktree-b'
 
@@ -348,7 +328,6 @@ describe('graph-sync mobile snapshot gating', () => {
 
   it('emits ready when a graph-only sync binds a restored leaf under an unchanged snapshot pair', () => {
     const { events, sync } = createRuntime(makeSession())
-    const webClientAccepts = makeWebClientFreshnessGate()
     // Restored layout has a PTY id before the graph leaf binds, yielding pending-handle.
     const snapshot = makeRendererSnapshot({ version: 1, ptyId: 'pty-restored' })
     const nullLeaf = {
@@ -362,7 +341,7 @@ describe('graph-sync mobile snapshot gating', () => {
     vi.advanceTimersByTime(300)
     expect(events).toHaveLength(1)
     expect(events[0]?.tabs[0]).toMatchObject({ status: 'pending-handle', terminal: null })
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    const pendingVersion = events[0]!.snapshotVersion
 
     // Leaf binding changes payload even when the renderer resends the same epoch/version.
     events.length = 0
@@ -373,8 +352,7 @@ describe('graph-sync mobile snapshot gating', () => {
       status: 'ready',
       terminal: expect.stringMatching(/^term_/)
     })
-    // Listener delivery is insufficient: the ready frame needs a newer version to pass client freshness.
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    expect(events[0]?.snapshotVersion).toBeGreaterThan(pendingVersion)
 
     events.length = 0
     sync([structuredClone(snapshot)], { leaves: [{ ...nullLeaf, ptyId: 'pty-restored' }] })
@@ -558,17 +536,17 @@ describe('graph-sync mobile snapshot gating', () => {
         tabsByWorktree: { [WT]: [makeTerminalTab('serve-tab', 'serve-pty-1')] }
       })
     )
-    const webClientAccepts = makeWebClientFreshnessGate()
 
+    // Record the first renderer+serve merged publication.
     sync([makeRendererSnapshot({ version: 1 })])
     vi.advanceTimersByTime(300)
     expect(events).toHaveLength(1)
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    const mergedVersion = events[0]!.snapshotVersion
     expect(events[0]?.tabs.map((tab) => ('parentTabId' in tab ? tab.parentTabId : tab.id))).toEqual(
       ['serve-tab', 'tab-1']
     )
 
-    // Pruning desktop rows changes payload under the same serve epoch; bump version or phones retain closed tabs.
+    // Omitting the renderer tab must publish a newer version with only the serve tab.
     events.length = 0
     sync([])
     vi.advanceTimersByTime(60)
@@ -576,7 +554,7 @@ describe('graph-sync mobile snapshot gating', () => {
     expect(events[0]?.tabs).toEqual([
       expect.objectContaining({ type: 'terminal', parentTabId: 'serve-tab' })
     ])
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    expect(events[0]?.snapshotVersion).toBeGreaterThan(mergedVersion)
 
     events.length = 0
     for (let i = 0; i < 3; i++) {
@@ -589,7 +567,6 @@ describe('graph-sync mobile snapshot gating', () => {
   it('drops a de-persisted serve tab when the renderer resends the unchanged accepted revision', () => {
     const { runtime, events, sync, setSession } = createRuntime(makeSession())
     const internals = runtime as unknown as RuntimeInternals
-    const webClientAccepts = makeWebClientFreshnessGate()
 
     setSession(
       makeSession({
@@ -599,14 +576,15 @@ describe('graph-sync mobile snapshot gating', () => {
     sync([makeRendererSnapshot({ version: 1 })])
     vi.advanceTimersByTime(300)
     expect(events).toHaveLength(1)
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    const mergedVersion = events[0]!.snapshotVersion
     expect(
       internals.mobileSessionTabsByWorktree
         .get(WT)
         ?.tabs.some((tab) => tab.type === 'terminal' && tab.parentTabId === 'serve-tab')
     ).toBe(true)
 
-    // Binding removal must re-merge the unchanged renderer revision and publish a newer version without the serve tab.
+    // An unchanged desktop resends the same epoch/version after an unbacked serve binding vanishes;
+    // re-merge and publish a newer snapshot rather than preserving the stale serve tab.
     setSession(makeSession())
     events.length = 0
     sync([makeRendererSnapshot({ version: 1 })])
@@ -615,7 +593,7 @@ describe('graph-sync mobile snapshot gating', () => {
     expect(
       events[0]?.tabs.some((tab) => 'parentTabId' in tab && tab.parentTabId === 'serve-tab')
     ).toBe(false)
-    expect(webClientAccepts(events[0]!)).toBe(true)
+    expect(events[0]?.snapshotVersion).toBeGreaterThan(mergedVersion)
     expect(
       internals.mobileSessionTabsByWorktree
         .get(WT)

@@ -12,7 +12,7 @@ export function refusedFrames(posted: readonly string[]): string[] {
   return posted.filter((json) => !readBridgeHostMessage(json).ok)
 }
 
-// Add counterfactual meta only to replies; events also carry payloads but must keep their subscription bytes unchanged.
+/** Adds counterfactual reply metadata, leaving events and other frames unchanged. */
 export function withReplyMeta(json: string): string {
   const frame: unknown = JSON.parse(json)
   if (typeof frame !== 'object' || frame === null || !('payload' in frame)) {

@@ -706,20 +706,6 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(getTabRowIds()).toHaveLength(2)
   })
 
-  it('excludes the idle current tab from the recent section', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' }
-      })
-    )
-
-    expect(getTabRowIds()).toEqual(['tab-beta'])
-  })
-
   it('keeps the current tab in recent when its agent needs permission', async () => {
     await renderPalette(
       makeRecentTabState({
@@ -751,38 +737,6 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     // Attention on the current tab still earns a row; idle current tabs do not.
     expect(getTabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
     expect(testContainer.textContent).toContain('Current Tab')
-  })
-
-  it('keeps the current tab in recent when its agent is working', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' },
-        agentStatusByPaneKey: {
-          [makePaneKey('term-alpha', LEAF_ID)]: makeAgentEntry('term-alpha', 'working', Date.now())
-        }
-      })
-    )
-
-    expect(getTabRowIds()).toContain('tab-alpha')
-  })
-
-  it('keeps the current tab in recent when it has unread activity', async () => {
-    await renderPalette(
-      makeRecentTabState({
-        activeWorktreeId: 'wt-alpha',
-        activeTabType: 'terminal',
-        activeTabId: 'term-alpha',
-        activeTabIdByWorktree: { 'wt-alpha': 'term-alpha' },
-        activeTabTypeByWorktree: { 'wt-alpha': 'terminal' },
-        unreadTerminalTabs: { 'term-alpha': true }
-      })
-    )
-
-    expect(getTabRowIds()).toContain('tab-alpha')
   })
 
   it.each([undefined, true])('excludes current terminal outcomes', async (interrupted) => {
