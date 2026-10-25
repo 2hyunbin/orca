@@ -62,6 +62,8 @@ src/settings/native-notification-delivery-settings.test.tsx
 src/settings/notification-display-test.test.tsx
 src/settings/settings-screen-state.test.tsx
 src/settings/voice-settings-poller-refresh.test.tsx
+src/tasks/source-workspace-create.test.ts
+src/tasks/task-source-search-reply-schema.test.ts
 src/terminal/buffered-terminal-draft-restoration.test.ts
 src/terminal/terminal-caret-rendering-oracle.test.ts
 src/terminal/terminal-live-accessory-raw-send.test.ts
