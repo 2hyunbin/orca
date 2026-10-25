@@ -1,5 +1,3 @@
-// Where a new PTY starts and in which shell/runtime, for both the window and the host spawn lane.
-
 import {
   isWslShellName,
   type LocalWindowsTerminalRuntimeOptions
@@ -187,8 +185,7 @@ async function resolveStartupCwdWithFallback(
     onFallbackToWorkspaceRoot
   })
   if (allowMissingCwdFallback) {
-    // Why replay: the shared resolver asks synchronously, so probe each folder it asks about off
-    // the main thread, in its order, until a dry run asks about none it lacks.
+    // Replay synchronous resolution, asynchronously probing each requested folder until no unknown directory remains.
     for (;;) {
       unprobedDirectory = undefined
       resolveStartupCwd(worktreeId, args.cwd, missingDirFallback())

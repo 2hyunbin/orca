@@ -166,7 +166,7 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
       const events = eventsSince(offset)
       const admitted = events.filter((event) => event.event === 'admission')
       expect(new Set(admitted.map((event) => event.owner)).size).toBe(2)
-      // Each parent's delivery is observed independently; ordering across parents is not authority.
+      // Compare creation order within each parent; cross-parent ordering does not establish ownership.
       for (const owner of admitted.map((event) => event.owner)) {
         assertObservedCreationOrder(
           events.filter((event) => event.owner === owner || !event.owner),
@@ -215,7 +215,7 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
           (event) => event.event === (path === 'adopted' ? 'createWindow' : 'did-create-window')
         )
       ).toHaveLength(2)
-      // Both creation callbacks precede the renderer's close(); this is not a missing-callback cancellation.
+      // Both creation callbacks occur before close(), so no admission callback was skipped.
       snapshots.push(status())
       await closeChildren(page)
     }
@@ -254,7 +254,9 @@ describe('Electron popup adapter API limits (not an admission safety gate)', () 
     const before = receipts.length
     const tabs = status().tabOpens.length
     await installSandboxFrame(page, 'restricted', `${origin}/baseline-restricted`, 'script')
-    await page.frameLocator('#sandbox-probe').locator('#open').click()
+    const open = page.frameLocator('#sandbox-probe').locator('#open')
+    await waitForHiddenFrameInput(open)
+    await open.click()
     await expect.poll(() => status().tabOpens.length).toBe(tabs + 1)
     expect(status().tabOpens.at(-1)).toEqual({
       url: `${origin}/baseline-restricted`,

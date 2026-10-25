@@ -15,7 +15,7 @@ const ROWS = 24
 const openUrlMock = vi.fn()
 const setActiveWorktreeMock = vi.fn()
 const createBrowserTabMock = vi.fn()
-const openRuntimeBrowserTabMock = vi.fn(() => Promise.resolve())
+const openRuntimeBrowserTabMock = vi.fn((): Promise<string | null> => Promise.resolve(null))
 const runtimeSourceOwner = { kind: 'runtime', runtimeEnvironmentId: 'env-1' } as const
 const sshSourceOwner = { kind: 'ssh', connectionId: 'ssh-1' } as const
 
@@ -97,8 +97,7 @@ function clickEvent(): MouseEvent {
   } as unknown as MouseEvent
 }
 
-// Why: runtimes bind per workspace, so the global activeRuntimeEnvironmentId is
-// null even while the clicked pane lives on a remote host.
+// Workspace runtimes can own the clicked pane while the global active runtime is null.
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubGlobal('navigator', { userAgent: 'Macintosh' })

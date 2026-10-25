@@ -2,6 +2,7 @@ import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 import { createIpcPtyProcessDescription } from './ipc-pty-process-description'
 import { attachIpcPty } from './ipc-pty-attach'
 import { connectIpcPty } from './ipc-pty-connect'
+import { closeIpcPty } from './ipc-pty-close'
 import { createIpcPtySessionHandlers } from './ipc-pty-session-handlers'
 import { ensurePtyDispatcher } from './pty-dispatcher'
 import { createPtyInputWriteQueue } from './pty-input-write-queue'
@@ -112,6 +113,10 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       }
       return
     }
+    if (opts.releasePreconnectInput && !opts.releasePreconnectInput()) {
+      dropPtyPreconnectInput(preconnectInputBuffer, 'startup work appeared before it attached')
+      return
+    }
     await preconnectInputBuffer.flush({
       isCurrent: () => !destroyed && connected && ptyId === id,
       sendInput: (data, inputKind) => inputWriteQueue.enqueue(id, data, inputKind),
@@ -207,10 +212,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       handlers.clearAccumulatedState()
       if (id) {
         try {
-          void window.api.pty
-            .kill(id)
-            ?.then(retire)
-            .catch((error) => console.warn('[pty-transport] could not close terminal', error))
+          closeIpcPty(id, retire)
         } finally {
           handlers.unregisterAll(id)
           storedCallbacks.onDisconnect?.()

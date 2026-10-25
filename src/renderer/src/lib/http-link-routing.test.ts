@@ -18,7 +18,9 @@ const openUrlMock = vi.fn()
 const registerLocalhostLabelMock = vi.fn()
 const setActiveWorktreeMock = vi.fn()
 const createBrowserTabMock = vi.fn()
-const openRuntimeBrowserTabMock = vi.fn(() => Promise.resolve())
+const setActiveViewMock = vi.fn()
+const openRuntimeBrowserTabMock = vi.fn((): Promise<string | null> => Promise.resolve(null))
+const dispatchEventMock = vi.fn()
 
 function noActiveWorkspace(): {
   activeWorktreeId: string | null
@@ -27,17 +29,22 @@ function noActiveWorkspace(): {
   return { activeWorktreeId: null, activeWorkspaceExecutionHostId: null }
 }
 
+type LinkTestSettings = {
+  openLinksInApp?: boolean
+  openLinksInAppModifierInverts?: boolean
+  openLinksInAppInBackground?: boolean
+  openLinksInAppPreferencePrompted?: boolean
+  activeRuntimeEnvironmentId?: string | null
+  localhostWorktreeLabelsEnabled?: boolean
+}
+const noSettings = (): LinkTestSettings | undefined => undefined
+const terminalView = (): 'terminal' | 'activity' => 'terminal'
+
 const storeState = {
-  settings: undefined as
-    | {
-        openLinksInApp?: boolean
-        openLinksInAppModifierInverts?: boolean
-        openLinksInAppPreferencePrompted?: boolean
-        activeRuntimeEnvironmentId?: string | null
-        localhostWorktreeLabelsEnabled?: boolean
-      }
-    | undefined,
+  settings: noSettings(),
   setActiveWorktree: setActiveWorktreeMock,
+  activeView: terminalView(),
+  setActiveView: setActiveViewMock,
   ...noActiveWorkspace(),
   createBrowserTab: createBrowserTabMock,
   repos: [] as { id: string; displayName: string; repoIcon?: null; badgeColor?: string }[],
@@ -56,11 +63,13 @@ const storeState = {
 beforeEach(() => {
   vi.clearAllMocks()
   storeState.settings = undefined
+  storeState.activeView = 'terminal'
   Object.assign(storeState, noActiveWorkspace())
   storeState.workspacePortScansByKey = {}
   registerHttpLinkStoreAccessor(() => storeState)
   registerWorkspaceHttpLinkBrowserOpener(openRuntimeBrowserTabMock)
   vi.stubGlobal('window', {
+    dispatchEvent: dispatchEventMock,
     api: {
       shell: {
         openUrl: openUrlMock
@@ -98,6 +107,28 @@ describe('openHttpLink', () => {
       activate: true
     })
     expect(openUrlMock).not.toHaveBeenCalled()
+  })
+
+  // Why: #31530 — queued links must not pull focus or the selected workspace away from the source.
+  it('opens in the background without selecting the tab or its workspace', () => {
+    storeState.settings = { openLinksInApp: true, openLinksInAppInBackground: true }
+
+    openHttpLink('https://example.com/', { worktreeId: 'wt-1' })
+
+    expect(setActiveWorktreeMock).not.toHaveBeenCalled()
+    expect(createBrowserTabMock).toHaveBeenCalledWith('wt-1', 'https://example.com/', {
+      activate: false
+    })
+  })
+
+  // Why: #7813 — a link clicked in Agents View landed in a tab layout that was not on screen.
+  it('brings the workspace tabs on screen for a link clicked in Agents View', () => {
+    storeState.settings = { openLinksInApp: true }
+    storeState.activeView = 'activity'
+
+    openHttpLink('https://example.com/', { worktreeId: 'wt-1' })
+
+    expect(setActiveViewMock).toHaveBeenCalledWith('terminal')
   })
 
   it('defaults to the system browser when settings have not hydrated', () => {
@@ -219,6 +250,24 @@ describe('openHttpLink', () => {
     expect(openUrlMock).not.toHaveBeenCalled()
   })
 
+  // Why: an SSH page renders on this desktop, so its link tab takes keyboard focus like a local one.
+  it('focuses the page an SSH link opened on this desktop', async () => {
+    storeState.settings = { openLinksInApp: true }
+    openRuntimeBrowserTabMock.mockResolvedValueOnce('ssh-page')
+
+    openHttpLink('https://example.com/', {
+      allowRemoteInApp: true,
+      worktreeId: 'wt-1',
+      sourceOwner: { kind: 'ssh', connectionId: 'ssh-1' }
+    })
+
+    await vi.waitFor(() =>
+      expect(dispatchEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: { pageId: 'ssh-page', target: 'webview' } })
+      )
+    )
+  })
+
   it('routes runtime and SSH document owners through their workspace browsers', () => {
     storeState.settings = { openLinksInApp: true, localhostWorktreeLabelsEnabled: true }
 
@@ -250,8 +299,7 @@ describe('openHttpLink', () => {
     expect(registerLocalhostLabelMock).not.toHaveBeenCalled()
   })
 
-  // Why: runtimes bind per workspace, so activeRuntimeEnvironmentId is commonly
-  // null while a pane is remote — ownership must come from the click source.
+  // Per-workspace runtimes commonly leave global activeRuntimeEnvironmentId null; route from the click’s owner.
   it('uses the pane runtime owner when no runtime is globally active', () => {
     storeState.settings = { openLinksInApp: true, activeRuntimeEnvironmentId: null }
 
@@ -546,8 +594,7 @@ describe('openHttpLink', () => {
     expect(registerLocalhostLabelMock).not.toHaveBeenCalled()
   })
 
-  // Why: the hover label must describe the click's real destination — a remote pane's
-  // loopback URL opens raw in the system browser, so a local worktree label would lie.
+  // Hover labels must match clicks: remote loopback opens raw in the system browser, never under a local workspace label.
   it.each([
     ['runtime', { kind: 'runtime', runtimeEnvironmentId: 'env-1' }] as const,
     ['ssh', { kind: 'ssh', connectionId: 'conn-1' }] as const
@@ -588,8 +635,7 @@ describe('openHttpLink', () => {
     expect(registerLocalhostLabelMock).not.toHaveBeenCalled()
   })
 
-  // Why: a local pane keeps its label from the local scan even while another pane's
-  // runtime is globally active — the same scan the click resolves.
+  // Local labels use the click’s local scan even while another pane’s runtime has global focus.
   it('labels a local-owned localhost link from the local scan', async () => {
     storeState.settings = {
       localhostWorktreeLabelsEnabled: true,
@@ -640,8 +686,7 @@ describe('openHttpLink modifier routing', () => {
     expect(createBrowserTabMock).not.toHaveBeenCalled()
   })
 
-  // Why: this is the pre-existing dead gesture — Shift already meant "system
-  // browser", which is where the link was going anyway.
+  // Shift historically forced the system browser and did nothing when it was already the default.
   it('stays on the system browser when inverting is off and links open externally', () => {
     storeState.settings = { openLinksInApp: false, openLinksInAppModifierInverts: false }
 

@@ -75,7 +75,7 @@ export function reattachLocalPty(id: string, cols: number, rows: number): PtySpa
     ...readLocalPtyProcessFacts(id),
     pid: existing.pid,
     isReattach: true,
-    // Why: unlike daemon/relay attach, this one really moved the live PTY to the caller's grid.
+    // This reattach actually resized the live PTY; daemon/relay attachment does not.
     ...(resized ? { attachedGrid: { cols, rows } } : {})
   }
 }

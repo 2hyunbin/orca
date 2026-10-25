@@ -34,7 +34,7 @@ export async function prepareRuntimePtySpawn(
       await admission
     }
   }
-  // Only this machine spawns here: an `ssh:` connection throws, so every line below is local.
+  // SSH execution is rejected here; remaining preparation belongs to this machine.
   ctx.provider = getProvider(getConnectionExecutionHostId(args.connectionId))
   const freshSpawnRecovery = ctx.preAdoptedStablePane
     ? undefined
@@ -116,7 +116,7 @@ export async function prepareRuntimePtySpawn(
     ctx.env = { ...ctx.env, ORCA_TERMINAL_HANDLE: args.preAllocatedHandle }
   }
   if (ctx.env) {
-    // Why a copy: without a handle or Claude auth this is still the caller's env, which a split reuses.
+    // Clone caller environment before injection; another split may reuse it.
     ctx.env = { ...ctx.env }
     const pane = ptySpawnPaneFromIds(args)
     const jcodeEnv = pane ? await ensureJcodeRuntimeDir(pane.paneKey) : undefined

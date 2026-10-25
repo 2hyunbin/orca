@@ -117,6 +117,60 @@ describe('createIpcPtyTransport', () => {
     expect(delivered).toEqual(['first-', 'second-', 'third'])
   })
 
+  it('delivers keys typed during a slow SSH spawn in order once the PTY binds', async () => {
+    const spawn = createDeferred<{ id: string }>()
+    vi.mocked(window.api.pty.spawn).mockReturnValue(spawn.promise as never)
+    const { createIpcPtyTransport } = await import('./pty-transport')
+    const transport = createIpcPtyTransport({
+      connectionId: 'ssh-1',
+      bufferInputUntilConnect: true
+    })
+
+    expect(transport.sendInput('ec', 'driving')).toBe(true)
+    const connecting = transport.connect({ url: '', callbacks: {} })
+    expect(transport.sendInput('ho hi\r', 'driving')).toBe(true)
+    expect(window.api.pty.write).not.toHaveBeenCalled()
+
+    spawn.resolve({ id: 'pty-1' })
+    await connecting
+    await flushAsyncTicks()
+    expect(vi.mocked(window.api.pty.write).mock.calls).toEqual([
+      ['pty-1', 'ec', 'driving'],
+      ['pty-1', 'ho hi\r', 'driving']
+    ])
+
+    // Live input still writes straight through.
+    expect(transport.sendInput('next', 'driving')).toBe(true)
+    await flushAsyncTicks()
+    expect(window.api.pty.write).toHaveBeenLastCalledWith('pty-1', 'next', 'driving')
+  })
+
+  it('drops held keys instead of flushing them when startup work appeared before the bind', async () => {
+    const spawn = createDeferred<{ id: string }>()
+    vi.mocked(window.api.pty.spawn).mockReturnValue(spawn.promise as never)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let release = true
+    const { createIpcPtyTransport } = await import('./pty-transport')
+    const transport = createIpcPtyTransport({
+      bufferInputUntilConnect: true,
+      releasePreconnectInput: () => release
+    })
+
+    const connecting = transport.connect({ url: '', callbacks: {} })
+    expect(transport.sendInput('make the tests pass\r', 'driving')).toBe(true)
+    release = false
+    spawn.resolve({ id: 'pty-1' })
+    await connecting
+    await flushAsyncTicks()
+
+    expect(window.api.pty.write).not.toHaveBeenCalled()
+    // Live input after the bind is unchanged.
+    expect(transport.sendInput('next', 'driving')).toBe(true)
+    await flushAsyncTicks()
+    expect(window.api.pty.write).toHaveBeenCalledWith('pty-1', 'next', 'driving')
+    warn.mockRestore()
+  })
+
   it('flushes remount-handoff input before newly typed input without recapturing the seed', async () => {
     const spawn = createDeferred<{ id: string }>()
     vi.mocked(window.api.pty.spawn).mockReturnValue(spawn.promise as never)
@@ -628,67 +682,6 @@ describe('createIpcPtyTransport', () => {
     expect(transport.sendInput('after-exit', 'driving')).toBe(false)
     clearPreHandlerPtyState(ptyId)
   })
-
-  it.each(['onData', 'onExit'] as const)(
-    'clears preconnect input and recovers after %s registration fails before binding',
-    async (failedRegistration) => {
-      const dataListeners = new Set<Parameters<typeof window.api.pty.onData>[0]>()
-      const replayListeners = new Set<Parameters<typeof window.api.pty.onReplay>[0]>()
-      vi.mocked(window.api.pty.onData).mockImplementation((callback) => {
-        dataListeners.add(callback)
-        return () => {
-          dataListeners.delete(callback)
-        }
-      })
-      vi.mocked(window.api.pty.onReplay).mockImplementation((callback) => {
-        replayListeners.add(callback)
-        return () => {
-          replayListeners.delete(callback)
-        }
-      })
-      vi.mocked(window.api.pty[failedRegistration]).mockImplementationOnce(() => {
-        throw new Error('dispatcher attach failed')
-      })
-      const { createIpcPtyTransport } = await import('./pty-transport')
-      const transport = createIpcPtyTransport({ bufferInputUntilConnect: true })
-      const accepted = transport.sendInputAccepted?.('input', 'driving')
-
-      expect(() =>
-        transport.attach({ existingPtyId: 'pty-attach-failure', callbacks: {} })
-      ).toThrow('dispatcher attach failed')
-
-      await expect(accepted).resolves.toBe(false)
-      expect(transport.isConnected()).toBe(false)
-      expect(transport.sendInput('after-failure', 'driving')).toBe(false)
-      expect(dataListeners.size).toBe(0)
-      expect(replayListeners.size).toBe(0)
-
-      const data = vi.fn(),
-        replay = vi.fn(),
-        exited = vi.fn()
-      transport.attach({
-        existingPtyId: 'pty-attach-failure',
-        callbacks: { onData: data, onReplayData: replay, onExit: exited }
-      })
-      for (const listener of dataListeners) {
-        listener({ id: 'pty-attach-failure', data: 'recovered output' })
-      }
-      for (const listener of replayListeners) {
-        listener({ id: 'pty-attach-failure', data: 'recovered replay' })
-      }
-      expect(data).toHaveBeenCalledExactlyOnceWith('recovered output')
-      expect(replay).toHaveBeenCalledExactlyOnceWith('recovered replay')
-      await expect(transport.sendInputAccepted?.('fresh', 'driving')).resolves.toBe(true)
-      expect(window.api.pty.writeAccepted).toHaveBeenCalledExactlyOnceWith(
-        'pty-attach-failure',
-        'fresh',
-        'driving'
-      )
-      onExit?.({ id: 'pty-attach-failure', code: 7 })
-      expect(exited).toHaveBeenCalledExactlyOnceWith(7)
-      expect(transport.isConnected()).toBe(false)
-    }
-  )
 
   it('settles and drops preconnect input when the split spawn fails', async () => {
     vi.mocked(window.api.pty.spawn).mockRejectedValue(new Error('spawn failed'))

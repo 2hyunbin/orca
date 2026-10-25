@@ -9,6 +9,15 @@ import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/wor
 import { toast } from 'sonner'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { reselectWorkspaceKeepingHost } from './active-workspace-host'
+import {
+  focusHttpLinkPage,
+  isHttpLinkBackgroundOpen,
+  openLocalHttpLinkTab,
+  prepareRemoteHttpLinkTab,
+  resolveHttpLinkBrowserPlacement,
+  type HttpLinkBrowserRequestFields,
+  type HttpLinkBrowserTabState
+} from './http-link-browser-placement'
 
 export type OpenHttpLinkOptions = {
   worktreeId?: string | null
@@ -29,7 +38,7 @@ export type HttpLinkSourceOwner =
   | { kind: 'ssh'; connectionId: string }
   | { kind: 'unknown' }
 
-type StoreAccessor = () => {
+type StoreAccessor = () => HttpLinkBrowserTabState & {
   settings?: Partial<
     Pick<
       GlobalSettings,
@@ -42,7 +51,6 @@ type StoreAccessor = () => {
   setActiveWorktree: (worktreeId: string, executionHostId?: ExecutionHostId) => void
   activeWorktreeId?: string | null
   activeWorkspaceExecutionHostId?: ExecutionHostId | null
-  createBrowserTab: (worktreeId: string, url: string, opts: { activate: boolean }) => unknown
   repos?: readonly LocalhostLinkRepo[]
   projects?: readonly LocalhostLinkProject[]
   worktreesByRepo?: Record<string, LocalhostLinkWorktree[]>
@@ -51,7 +59,7 @@ type StoreAccessor = () => {
   workspacePortScansByKey?: Record<string, WorkspacePortScanResult>
 }
 
-type WorkspaceHttpLinkBrowserRequest = {
+type WorkspaceHttpLinkBrowserRequest = HttpLinkBrowserRequestFields & {
   workspaceId: string
   url: string
   intent: { kind: 'url' }
@@ -59,7 +67,10 @@ type WorkspaceHttpLinkBrowserRequest = {
   expectedSshConnectionId?: string
 }
 
-type WorkspaceHttpLinkBrowserOpener = (request: WorkspaceHttpLinkBrowserRequest) => Promise<void>
+/** Resolves to the page id when the page renders on this desktop, else null. */
+type WorkspaceHttpLinkBrowserOpener = (
+  request: WorkspaceHttpLinkBrowserRequest
+) => Promise<string | null>
 
 type LocalhostLinkRepo = {
   id: string
@@ -73,11 +84,7 @@ type LocalhostLinkWorktree = {
   projectId?: string
 }
 
-// Why: store access is injected via registerHttpLinkStoreAccessor rather than
-// a direct `import '@/store'` to avoid a circular import — store/slices/editor.ts
-// imports this module, and '@/store' transitively imports editor.ts. Without
-// the break, several renderer test files that load this module first see
-// `createEditorSlice` as undefined at store/index.ts initialization.
+// Inject store access to break editor-slice → HTTP routing → store initialization cycles.
 let storeAccessor: StoreAccessor | null = null
 let workspaceHttpLinkBrowserOpener: WorkspaceHttpLinkBrowserOpener | null = null
 
@@ -91,18 +98,8 @@ export function registerWorkspaceHttpLinkBrowserOpener(
   workspaceHttpLinkBrowserOpener = fn
 }
 
-// Scope: http(s) URLs only. file: URIs and in-worktree markdown targets are
-// owned by resolveMarkdownLinkTarget and must stay on that path — this helper
-// is only invoked on target.kind === 'external' (and for the terminal's http
-// branch). Shift+Cmd/Ctrl is the escape hatch: click handlers pass modifierHeld
-// so resolveModifierRouting applies it; forceSystemBrowser stays reserved for
-// callers that must bypass the setting unconditionally.
-/**
- * Resolves what the Shift modifier means for one click. Historically it always
- * forced the system browser, which is a no-op when that is already the default;
- * openLinksInAppModifierInverts makes it flip whichever way Link Routing points
- * so the other destination is always one click away.
- */
+// Route only external http(s); file/markdown targets stay with resolveMarkdownLinkTarget. Modifier-held resolves the user’s Shift choice; forceSystemBrowser is unconditional.
+/** Shift traditionally forces system browser; the inversion setting instead chooses the other destination when system is already default. */
 function resolveModifierRouting(
   modifierHeld: boolean,
   openLinksInApp: boolean,
@@ -155,44 +152,47 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
       effectiveSourceOwner?.kind === 'ssh' ||
       (!effectiveSourceOwner && remoteRuntimeActive))
   ) {
-    if (workspaceHttpLinkBrowserOpener) {
+    if (workspaceHttpLinkBrowserOpener && state) {
+      const fields = prepareRemoteHttpLinkTab(state, worktreeId)
       void workspaceHttpLinkBrowserOpener({
         workspaceId: worktreeId,
         url,
         intent: { kind: 'url' },
+        ...fields,
         ...(effectiveSourceOwner?.kind === 'runtime'
           ? { expectedRuntimeEnvironmentId: effectiveSourceOwner.runtimeEnvironmentId }
           : effectiveSourceOwner?.kind === 'ssh'
             ? { expectedSshConnectionId: effectiveSourceOwner.connectionId }
             : {})
-      }).catch((error) => {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : translate('auto.lib.workspace.browser.tab.open.urlFailed', 'Unable to open URL.')
-        )
-      })
+      }).then(
+        (pageId) => focusHttpLinkPage(fields.focusOnCreate === false ? null : pageId),
+        (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : translate('auto.lib.workspace.browser.tab.open.urlFailed', 'Unable to open URL.')
+          )
+        }
+      )
     }
     return
   }
 
   if (wantsOrca && sourceIsLocal && worktreeId && state) {
-    // Why: http clicks from inside a worktree should not push a worktree-switch
-    // history entry — the user isn't changing worktrees, they're opening a tab
-    // in the one they're already in. activateAndRevealWorktree is reserved for
-    // file-link jumps that genuinely switch worktrees.
-    if (!isFloatingWorkspaceId(worktreeId)) {
-      // Why: the floating workspace uses a synthetic worktree id. Promoting it
-      // to the global activeWorktreeId deselects the real repo workspace.
+    // Opening a tab in the same worktree must not add switch history; reserve activateAndRevealWorktree for real file-link jumps.
+    if (!isHttpLinkBackgroundOpen(state) && !isFloatingWorkspaceId(worktreeId)) {
+      // Floating workspace IDs are synthetic; global activation would deselect the real repo workspace.
       reselectWorkspaceKeepingHost(state, worktreeId)
     }
     const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
     if (!localhostRoute) {
-      state.createBrowserTab(worktreeId, url, { activate: true })
+      openLocalHttpLinkTab(state, worktreeId, url)
       return
     }
+    // Why placed now: the clicked pane is the active group only until the user clicks elsewhere.
+    const placement = resolveHttpLinkBrowserPlacement(state, worktreeId)
     void openLabeledLocalhostLink(url, localhostRoute, (labeledUrl) => {
-      state.createBrowserTab(worktreeId, labeledUrl, { activate: true })
+      openLocalHttpLinkTab(storeAccessor?.() ?? state, worktreeId, labeledUrl, placement)
     })
     return
   }
@@ -233,8 +233,7 @@ export async function resolveLocalhostHttpLinkDisplayUrl(
   if (!state) {
     return null
   }
-  // Why: the hover label must resolve the same route the click will take, or a
-  // remote pane's loopback URL gets shown with a local worktree's label.
+  // Resolve hover and click through the same route so remote loopback cannot borrow a local workspace label.
   const localhostRoute = localhostLabelRouteForHttpLink(url, state, sourceOwner)
   if (!localhostRoute) {
     return null
@@ -272,8 +271,7 @@ function localhostLabelRouteForTerminalLink(
   ) {
     return null
   }
-  // Why: only loopback links we can attribute to a scanned workspace port
-  // should get a worktree label; everything else must stay as-is.
+  // Label only scanned workspace loopback ports; leave unattributed URLs unchanged.
   const parsed = parseLoopbackUrlWithPort(rawUrl)
   if (!parsed) {
     return null
