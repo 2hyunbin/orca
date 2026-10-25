@@ -170,7 +170,8 @@ export function useSourceControlStatusRefresh({
         await refreshGitStatusForWorktree({
           // Why: generation can finish after a host switch; refresh the host that owned the generation request.
           target: context.runtimeTarget,
-          ownerHostId: getGitIdentityHostId(context.worktreeId),
+          // Why null: the selection may have moved to a twin since; an unplaced twin is refused.
+          ownerHostId: null,
           worktreeId: context.worktreeId,
           worktreePath: context.worktreePath,
           connectionId: context.connectionId,

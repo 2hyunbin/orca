@@ -28,27 +28,37 @@ import {
   type WorkspaceRecordState
 } from '../../../workspace-record-selectors'
 
+type GitIdentityTargets = {
+  rows: Set<Worktree>
+  /** Set only for a same-id twin: the host every follow-up read and write must stay on. */
+  twinHostId: ExecutionHostId | undefined
+}
+
 /**
- * The row one host's git answer for `worktreeId` describes. Ids are `repoId::path`, so a same-path
- * twin on another host shares it; with no host named, a twin pair is ambiguous and gets nothing.
+ * The rows one host's git answer for `worktreeId` describes. Ids are `repoId::path`, so a same-path
+ * twin on another host shares it. An id on one host keeps the id-only patch; a twin needs the
+ * answering host, and without one gets nothing until its listing places each copy.
  */
-function gitIdentityTargetRows(
+function gitIdentityTargets(
   state: WorkspaceRecordState,
   worktreeId: string,
   ownerHostId: ExecutionHostId | null
-): Set<Worktree> {
-  if (ownerHostId) {
-    // Why the host target: it also places a paired server's SSH checkout under its `runtime:` alias.
-    const row = selectWorkspaceByHostTarget(
-      state,
-      hostWorktreeTarget({ id: worktreeId, hostId: ownerHostId })
-    )
-    return new Set(row ? [row] : [])
-  }
+): GitIdentityTargets {
   const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
     (worktree) => worktree.id === worktreeId
   )
-  return new Set(new Set(rows.map((worktree) => worktree.hostId)).size > 1 ? [] : rows)
+  if (new Set(rows.map((worktree) => worktree.hostId)).size <= 1) {
+    return { rows: new Set(rows), twinHostId: undefined }
+  }
+  if (!ownerHostId) {
+    return { rows: new Set(), twinHostId: undefined }
+  }
+  // Why the host target: it also places a paired server's SSH checkout under its `runtime:` alias.
+  const row = selectWorkspaceByHostTarget(
+    state,
+    hostWorktreeTarget({ id: worktreeId, hostId: ownerHostId })
+  )
+  return { rows: new Set(row ? [row] : []), twinHostId: ownerHostId }
 }
 
 export function createUpdateWorktreeGitIdentity(
@@ -63,8 +73,9 @@ export function createUpdateWorktreeGitIdentity(
     const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
     const nextBranchFor = (worktree: Worktree): string =>
       identity.branch === null ? '' : (identity.branch ?? worktree.branch)
-    const initialTargets = gitIdentityTargetRows(get(), worktreeId, ownerHostId)
-    const anyTargetChanges = [...initialTargets].some(
+    const initialTargets = gitIdentityTargets(get(), worktreeId, ownerHostId)
+    let twinHostId = initialTargets.twinHostId
+    const anyTargetChanges = [...initialTargets.rows].some(
       (worktree) =>
         nextHeadFor(worktree) !== worktree.head || nextBranchFor(worktree) !== worktree.branch
     )
@@ -79,9 +90,10 @@ export function createUpdateWorktreeGitIdentity(
       }
 
       let changed = false
-      const targets = gitIdentityTargetRows(s, worktreeId, ownerHostId)
+      const targets = gitIdentityTargets(s, worktreeId, ownerHostId)
+      twinHostId = targets.twinHostId
       const next = current.map((worktree) => {
-        if (!targets.has(worktree)) {
+        if (!targets.rows.has(worktree)) {
           return worktree
         }
         const nextHead = nextHeadFor(worktree)
@@ -162,7 +174,10 @@ export function createUpdateWorktreeGitIdentity(
     }
 
     // Why: the deferred clear must read, clear and persist the copy this answer patched, not its twin.
-    const readTargetRow = (id: string) => get().getKnownWorktreeById(id, ownerHostId ?? undefined)
+    const followUpHostId = twinHostId
+    const readTargetRow = (id: string) => get().getKnownWorktreeById(id, followUpHostId)
+    const clearTargetRow = (id: string): void =>
+      applyHostedReviewLinkClear(set, id, followUpHostId ? readTargetRow(id)?.hostId : undefined)
     void Promise.resolve()
       .then(async () => {
         let currentWorktreeId = resolveHostedReviewLinkWorktreeId(worktreeId)
@@ -183,18 +198,14 @@ export function createUpdateWorktreeGitIdentity(
           }
           if (!hostedReviewLinksAreCleared(current as Worktree)) {
             // Why: a refetch can rehydrate stale linked-review metadata before this async clear starts; clear it again.
-            applyHostedReviewLinkClear(
-              set,
-              currentWorktreeId,
-              readTargetRow(currentWorktreeId)?.hostId
-            )
+            clearTargetRow(currentWorktreeId)
             current = readTargetRow(currentWorktreeId)
             if (!current || current.branch !== clearedBranch) {
               return
             }
           }
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, ownerHostId ?? undefined),
+            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, followUpHostId),
             currentWorktreeId,
             CLEARED_HOSTED_REVIEW_LINK_UPDATES
           )
@@ -216,14 +227,14 @@ export function createUpdateWorktreeGitIdentity(
         if (getHostedReviewLinkMutationGeneration(currentWorktreeId) !== clearGeneration) {
           // Why: a delayed branch-switch clear must not win over a newer manual relink.
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, ownerHostId ?? undefined),
+            runtimeTargetForWorktreeOwner(get(), currentWorktreeId, followUpHostId),
             currentWorktreeId,
             getHostedReviewLinkUpdates(latest as Worktree)
           )
           return
         }
         // Why: a refetch can rehydrate old metadata before the branch-switch clear reaches disk; don't write the stale link back.
-        applyHostedReviewLinkClear(set, currentWorktreeId, readTargetRow(currentWorktreeId)?.hostId)
+        clearTargetRow(currentWorktreeId)
       })
       .catch((err) => {
         if (isRuntimeSelectorNotFoundError(err)) {

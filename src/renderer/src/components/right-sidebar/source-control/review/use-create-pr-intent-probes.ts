@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { getGitIdentityHostId, requireGitOwnerTarget } from '../../worktree-git-owner-target'
+import { requireGitOwnerTarget } from '../../worktree-git-owner-target'
 import { getConnectionId } from '@/lib/connection-context'
 import { getRuntimeGitBranchCompare } from '@/runtime/runtime-git-diff-client'
 import type { HostedReviewCreationEligibility } from '../../../../../../shared/hosted-review'
@@ -157,7 +157,8 @@ export function useSourceControlCreatePrIntentProbes({
       return await refreshGitStatusForWorktreeStrict({
         // Why: intent can finish in the background after navigation; branch-safety checks must inspect the worktree that started it.
         target: requireGitOwnerTarget(target.target),
-        ownerHostId: getGitIdentityHostId(target.worktreeId),
+        // Why null: the selection may have moved to a twin since; an unplaced twin is refused.
+        ownerHostId: null,
         worktreeId: target.worktreeId,
         worktreePath: target.worktreePath,
         connectionId: target.connectionId,

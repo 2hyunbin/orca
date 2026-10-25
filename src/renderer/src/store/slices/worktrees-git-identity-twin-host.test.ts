@@ -100,4 +100,12 @@ describe('updateWorktreeGitIdentity host matching', () => {
 
     expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
   })
+
+  it('still patches a lone unstamped row named by its repo owner host', () => {
+    const store = storeWith({ branch: 'refs/heads/master' })
+
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/feature' }, 'ssh:box')
+
+    expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
+  })
 })
