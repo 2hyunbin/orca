@@ -13,6 +13,7 @@ import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { fetchProjectHostSetupCompatibility } from '../projects/project-host-routing'
 import { mergeFetchedReposForHost } from './repo-catalog-identity'
+import { dropWorktreeRowsOfDroppedRepos } from './dropped-repo-worktree-rows'
 
 export type FetchedRepoCatalog = {
   repos: readonly Repo[]
@@ -113,6 +114,22 @@ export function reconcileReadoptedSshWorktreeState(
     detectedWorktreesByRepo,
     sortEpoch: worktreesByRepo === state.worktreesByRepo ? state.sortEpoch : state.sortEpoch + 1
   }
+}
+
+/** The worktree rows a fetched catalog leaves: re-adopted SSH rows moved, dropped repos' rows gone. */
+export function reconcileFetchedCatalogWorktreeState(
+  state: Pick<
+    AppState,
+    | 'repos'
+    | 'pendingSshRepoReadoptions'
+    | 'worktreesByRepo'
+    | 'detectedWorktreesByRepo'
+    | 'sortEpoch'
+  >,
+  nextRepos: readonly Repo[]
+): Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo' | 'sortEpoch'> {
+  const readopted = reconcileReadoptedSshWorktreeState(state, state.pendingSshRepoReadoptions)
+  return dropWorktreeRowsOfDroppedRepos(readopted, state.repos, nextRepos)
 }
 
 export function filterTrustedOrcaHooksToValidRepos(
