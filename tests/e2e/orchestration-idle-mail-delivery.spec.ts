@@ -351,6 +351,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
         timeoutMs: 30_000
       })
     const waiters = [waitForMail(), waitForMail()]
+    // ast-grep-ignore: test-no-real-time-wait -- the runtime exposes no signal that a wait registered
     await orcaPage.waitForTimeout(NO_DELIVERY_SETTLE_MS)
 
     const subject = 'Waiter claims it'
