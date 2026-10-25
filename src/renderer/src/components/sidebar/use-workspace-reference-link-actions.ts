@@ -10,7 +10,7 @@ import type { WorktreeCardDetailsHoverControl } from './worktree-card-details-ho
 
 export function useWorkspaceReferenceLinkActions(
   workspaceId: string | undefined,
-  { closeHover, handleLinkActionsOpenChange }: WorktreeCardDetailsHoverControl
+  { closeHover, handleLinkActionsOpenChange, holdOpenUntilRefocus }: WorktreeCardDetailsHoverControl
 ) {
   const [linkActionRequest, setLinkActionRequest] = useState<LinkActionRequest | null>(null)
   // Why: only an Orca-browser open moves the user elsewhere in the app; a
@@ -18,7 +18,9 @@ export function useWorkspaceReferenceLinkActions(
   const closeHoverOnInternalRun = (action: LinkAction): LinkAction => ({
     ...action,
     run: () => {
-      if (!action.external) {
+      if (action.external) {
+        holdOpenUntilRefocus()
+      } else {
         closeHover()
       }
       return action.run()
@@ -28,6 +30,7 @@ export function useWorkspaceReferenceLinkActions(
     if (!workspaceId) {
       event.preventDefault()
       event.stopPropagation()
+      holdOpenUntilRefocus()
       void window.api.shell.openUrl(url)
       return
     }
@@ -57,13 +60,17 @@ export function useWorkspaceReferenceLinkActions(
         })
       }
     })
-    if (!consumed || requested) {
+    if (requested) {
       return
     }
-    const destination = isTerminalLinkDirectActivation(event)
-      ? httpLinkDirectClickDestination(routing.destinations, event.shiftKey)
-      : routing.destinations.primary
-    if (destination !== 'system') {
+    const destination = !consumed
+      ? 'system'
+      : isTerminalLinkDirectActivation(event)
+        ? httpLinkDirectClickDestination(routing.destinations, event.shiftKey)
+        : routing.destinations.primary
+    if (destination === 'system') {
+      holdOpenUntilRefocus()
+    } else {
       closeHover()
     }
   }
@@ -71,5 +78,25 @@ export function useWorkspaceReferenceLinkActions(
     setLinkActionRequest(null)
     handleLinkActionsOpenChange(false)
   }
-  return { linkActionRequest, onOpenLink, closeLinkActions }
+  const linkActionPopoverProps = {
+    request: linkActionRequest,
+    onClose: closeLinkActions,
+    // Why: a click on the card itself only dismisses the chooser; anywhere else dismisses both.
+    onPointerDownOutside: (event: Event): void => {
+      if (
+        !(event.target instanceof Element) ||
+        !event.target.closest('[data-slot="hover-card-content"]')
+      ) {
+        closeHover()
+      }
+    },
+    onOpenSettings: closeHover
+  }
+  // Why: middle-click takes the anchor's native target=_blank path to the system browser.
+  const onAuxClickCapture = (event: MouseEvent): void => {
+    if (event.button === 1 && event.target instanceof Element && event.target.closest('a[href]')) {
+      holdOpenUntilRefocus()
+    }
+  }
+  return { linkActionPopoverProps, onOpenLink, onAuxClickCapture }
 }
