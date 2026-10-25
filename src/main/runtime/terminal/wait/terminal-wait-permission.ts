@@ -25,6 +25,7 @@ import type { AgentPromptActivity } from '../../agent-prompt-submission-verifica
 import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
 import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
 import { selectNewestExplicitAgentStatusRow } from '../../runtime-hook-agent-row-selection'
+import { isClaudeDialogHoldingPane } from '../../claude-open-dialog-hold'
 
 import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
 
@@ -207,15 +208,14 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     })
   }
 
-  // Claude keeps its `✳` rest title under AskUserQuestion; without OSC 7501 only the hook shows it.
   protected isPtyAwaitingUserInput(ptyId: string): boolean {
     const join = this.readHookRowJoinForPty(ptyId)
-    const row = join ? selectNewestExplicitAgentStatusRow(join) : null
-    return (
-      row !== null &&
-      row.receivedAt >= (this.agentPromptExplicitStatusFloorByPtyId.get(ptyId) ?? -1) &&
-      (row.state === 'waiting' || row.state === 'blocked')
-    )
+    return isClaudeDialogHoldingPane({
+      row: join ? selectNewestExplicitAgentStatusRow(join) : null,
+      respawnedAt: this.agentPromptExplicitStatusFloorByPtyId.get(ptyId),
+      lastInputAt: this.terminalRunFacts.readLastInputAt(ptyId),
+      readScreenLines: () => this.readLiveTerminalScreenLines(ptyId)
+    })
   }
 
   private readHookRowJoinForPty(ptyId: string): {

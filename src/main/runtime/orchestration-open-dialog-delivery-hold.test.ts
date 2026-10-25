@@ -76,4 +76,38 @@ describe('mailbox delivery into a pane with an open dialog', () => {
       db.close()
     }
   )
+
+  it.each([
+    ['dismissed with Esc', '\x1b[2J\x1b[H\u276F \r\n', 2],
+    ['only navigated', '\x1b[2J\x1b[H\u276F 2. Blue\r\n', 0]
+  ])(
+    'with the waiting row left behind, a question %s delivers only once off screen',
+    async (_label, screenAfterInput, expectedWrites) => {
+      vi.useFakeTimers()
+      const db = createDatabase('orca-open-dialog-delivery-hold-')
+      const question = claudeHookRow('waiting')
+      const { runtime, write } = createRuntime(db, {
+        getAgentStatusSnapshot: () => [question],
+        checkHookAgentPresence: async () => 'live',
+        launchAgent: 'claude'
+      })
+      const run = createBoundRun(db, 'Claude Run')
+      await runtime.listTerminals()
+
+      runtime.onPtyData(PTY_ID, '\x1b]0;\u2733 Claude Code\x07\u276F 1. Red\r\n', 1)
+      await vi.advanceTimersByTimeAsync(200)
+      insertDirectRunMessage(db, run.id, 'Worker heartbeat')
+      runtime.notifyMessageArrived(`run:${run.id}`, 'status')
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(write).not.toHaveBeenCalled()
+
+      // Esc and arrow keys post no hook; only the screen tells them apart.
+      runtime.terminalRunFacts.recordInput(PTY_ID, 'driving', '\x1b')
+      runtime.onPtyData(PTY_ID, screenAfterInput, 2)
+      await vi.advanceTimersByTimeAsync(5000)
+
+      expect(write).toHaveBeenCalledTimes(expectedWrites)
+      db.close()
+    }
+  )
 })
