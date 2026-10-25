@@ -1,4 +1,5 @@
 import { focusOpenedBrowserLink } from './browser-link-focus'
+import { createBrowserLinkHostMatcher } from './browser-link-owner'
 import { resolveBrowserLinkSession } from './browser-link-session'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -31,8 +32,15 @@ function ownsBrowserRoute(
   const route =
     getFloatingWorkspaceOperationRoute(request.workspaceId) ??
     resolveWorktreeOperationRoute(state, request.workspaceId)
+  if (!route?.executionHostId) {
+    return false
+  }
   return (
-    route?.executionHostId === destination.executionHostId &&
+    createBrowserLinkHostMatcher(
+      state,
+      request.workspaceId,
+      destination.executionHostId
+    )(route.executionHostId) &&
     (!destination.browserRuntimeEnvironmentId ||
       route.runtimeEnvironmentId === destination.browserRuntimeEnvironmentId) &&
     getWorkspaceClientCreationActionPolicy(state, request.workspaceId)['managed-browser'].state ===

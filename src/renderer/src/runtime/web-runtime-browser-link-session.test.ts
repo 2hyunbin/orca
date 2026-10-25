@@ -23,6 +23,7 @@ import {
   pendingCreates,
   resetHostPages,
   publishHostSnapshot,
+  wrapperForRemotePage,
   HOST,
   SOURCE,
   AFTER,
@@ -76,7 +77,10 @@ beforeEach(() => {
   })
   installRuntimeTransport()
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 function open() {
   return openWorkspaceBrowserTabForLink({
@@ -209,3 +213,72 @@ it('uses the paired runtime profile catalog for its SSH-owned workspace', async 
   expect(await creating).toMatchObject({ status: 'opened' })
   expect(sentProfile).toBe('runtime-profile')
 })
+
+it.each(['unchanged', 'different-host', 'different-runtime'] as const)(
+  'validates the captured SSH owner after foreground runtime selection (%s)',
+  async (ownerChange) => {
+    const sshHost = 'ssh:ssh-target'
+    useAppStore.setState((state) => ({
+      activeWorkspaceExecutionHostId: sshHost,
+      repos: state.repos.map((repo) => ({ ...repo, executionHostId: sshHost })),
+      worktreesByRepo: {
+        repo: state.worktreesByRepo.repo!.map((worktree) => ({ ...worktree, hostId: sshHost }))
+      },
+      unifiedTabsByWorktree: {
+        [WT]: state.unifiedTabsByWorktree[WT]!.map((tab) => ({
+          ...tab,
+          executionHostId: sshHost
+        }))
+      }
+    }))
+    vi.spyOn(useAppStore.getState(), 'refreshGitHubForWorktreeIfStale').mockImplementation(
+      () => undefined
+    )
+    const creating = openWorkspaceBrowserTabForLink({
+      workspaceId: WT,
+      url: URL_TO_OPEN,
+      intent: { kind: 'url' },
+      expectedRuntimeEnvironmentId: ENV,
+      placementPreference: 'server',
+      linkContext: {
+        linkIntent: captureLinkOpenIntent(useAppStore.getState(), WT, SOURCE.unifiedTabId)
+      }
+    })
+    expect(pendingCreates).toHaveLength(1)
+    expect(useAppStore.getState().activeWorkspaceExecutionHostId).toBe(HOST)
+    if (ownerChange === 'different-host') {
+      useAppStore.setState((state) => ({
+        activeWorkspaceExecutionHostId: 'ssh:other-target',
+        worktreesByRepo: {
+          repo: [
+            ...state.worktreesByRepo.repo!,
+            ...state.worktreesByRepo.repo!.map((worktree) => ({
+              ...worktree,
+              hostId: 'ssh:other-target' as const
+            }))
+          ]
+        }
+      }))
+    } else if (ownerChange === 'different-runtime') {
+      useAppStore.setState((state) => ({
+        activeWorkspaceExecutionHostId: sshHost,
+        worktreesByRepo: {
+          repo: state.worktreesByRepo.repo!.map((worktree) => ({
+            ...worktree,
+            runtimeOwnerEnvironmentId: 'other-environment'
+          }))
+        }
+      }))
+    }
+    const remotePageId = `foreground-ssh-${ownerChange}`
+    pendingCreates[0]!.resolve(remotePageId)
+    const outcome = await creating
+    expect(wrapperForRemotePage(remotePageId)).toBeDefined()
+    expect(outcome).toMatchObject({
+      status: ownerChange === 'unchanged' ? 'opened' : 'refused'
+    })
+    if (outcome.status === 'opened') {
+      expect(outcome.result).toMatchObject({ worktreeId: WT, executionHostId: sshHost })
+    }
+  }
+)
