@@ -30,6 +30,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     owned.clear()
   })
 
+  // Real process startup and the 1.5s orphan lifetime need headroom on loaded runners.
   it('keeps independent slots excluded after the owning client exits and recovers on child exit', async () => {
     const fd = supportedFilesystemLock('attribution')
     let parent: ChildProcess
@@ -54,6 +55,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     await once(parent, 'exit')
     expect(() => openDarwinPortScanLock('attribution')).toThrow()
     closeSync(supportedFilesystemLock('listeners'))
+    // ast-grep-ignore: test-no-real-time-wait -- The orphan releases its kernel lock on real exit; fake timers cannot advance it.
     await new Promise((resolve) => setTimeout(resolve, 1700))
     closeSync(supportedFilesystemLock('attribution'))
     await expect(
@@ -62,6 +64,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     closeSync(supportedFilesystemLock('attribution'))
   }, 10_000)
 
+  // Exercises the real 4s command timeout followed by the child's 4.6s natural exit.
   it('settles a caller timeout while the actual child retains admission, then allows recovery', async () => {
     const probe = runPortScanCommandInProcess(
       process.execPath,
@@ -77,6 +80,7 @@ describe.runIf(process.platform === 'darwin')('Darwin operation admission', () =
     await expect(probe).rejects.toBeInstanceOf(PortScanCommandTimeoutError)
     expect(() => openDarwinPortScanLock('attribution')).toThrow()
     closeSync(supportedFilesystemLock('listeners'))
+    // ast-grep-ignore: test-no-real-time-wait -- The timed-out child must naturally exit and release its kernel lock.
     await new Promise((resolve) => setTimeout(resolve, 900))
     const recovered = await runPortScanCommandInProcess(
       process.execPath,
