@@ -132,13 +132,15 @@ export class MimoCodeHookService {
       : join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'mimocode')
     const auth = join(dataDir, 'auth.json')
     try {
-      if (!existsSync(legacyAuth) || existsSync(auth)) {
+      if (!existsSync(legacyAuth)) {
         return
       }
-      mkdirSync(dataDir, { recursive: true })
-      copyFileSync(legacyAuth, auth, constants.COPYFILE_EXCL)
-      chmodSync(auth, 0o600)
-      // A user who later deletes the copy must not get the Orca-only login back.
+      if (!existsSync(auth)) {
+        mkdirSync(dataDir, { recursive: true })
+        copyFileSync(legacyAuth, auth, constants.COPYFILE_EXCL)
+        chmodSync(auth, 0o600)
+      }
+      // Never restore the Orca-only login later, e.g. after the user deletes the canonical one.
       renameSync(legacyAuth, `${legacyAuth}.migrated`)
     } catch {
       // A failed carry-over leaves MiMo logged out, as before; never block the launch.

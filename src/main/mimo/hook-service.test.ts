@@ -135,11 +135,16 @@ describe('MimoCodeHookService buildPtyEnv', () => {
     writeFileSync(auth, '{"canonical":true}')
     const service = new MimoCodeHookService()
 
-    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
-    expect(readFileSync(auth, 'utf8')).toBe('{"canonical":true}')
-
     service.carryOverLegacyAuth({ MIMOCODE_HOME: 'relative-mimo-home' })
     expect(existsSync(join(process.cwd(), 'relative-mimo-home'))).toBe(false)
     expect(existsSync(join(legacyData, 'auth.json'))).toBe(true)
+
+    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
+    expect(readFileSync(auth, 'utf8')).toBe('{"canonical":true}')
+    expect(existsSync(join(legacyData, 'auth.json.migrated'))).toBe(true)
+
+    rmSync(auth)
+    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
+    expect(existsSync(auth)).toBe(false)
   })
 })
