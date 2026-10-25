@@ -11,7 +11,9 @@ export async function readCloudRunInstanceZone(
       headers: { 'Metadata-Flavor': 'Google' },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
     })
-    if (!response.ok) return undefined
+    if (!response.ok) {
+      return undefined
+    }
     const zone = (await response.text()).trim().split('/').at(-1)
     return zone && /^[a-z0-9-]+$/.test(zone) ? zone : undefined
   } catch {

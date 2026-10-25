@@ -335,7 +335,7 @@ describe('relay observability', () => {
   })
 
   it('stamps the instance zone once it is known', () => {
-    const entries: Array<Record<string, unknown>> = []
+    const entries: Record<string, unknown>[] = []
     const observability = new RelayObservability(
       { role: 'director', cellId: 'director', region: 'us-central1' },
       (entry) => entries.push(entry)
