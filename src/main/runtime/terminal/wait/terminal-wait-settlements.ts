@@ -22,6 +22,8 @@ import { TUI_IDLE_QUIESCENCE_MS } from '../../orca-runtime-postlude'
 
 import type { OrcaRuntimeWithResolveWaiter } from '../../orca-runtime-resolve-waiter'
 
+const DIALOG_HOLD_RECHECK_MS = 2000
+
 export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithBindPtyIncarnationHandle {
   protected abstract resolveWaiter(
     ...args: Parameters<OrcaRuntimeWithResolveWaiter['resolveWaiter']>
@@ -163,7 +165,11 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
     const live = this.leaves.get(leafKey)
     // Only quiet-window refusal expires with time; schedule just beyond it and re-arm from fresher output if still streaming.
     const elapsed = live?.lastOutputAt ? Date.now() - live.lastOutputAt : 0
-    const delay = Math.max(TUI_IDLE_QUIESCENCE_MS - elapsed, 0) + 50
+    // An open dialog lifts only when the user answers it, so poll it slowly rather than at 20 Hz.
+    const delay =
+      live?.ptyId && this.isPtyAwaitingUserInput(live.ptyId)
+        ? DIALOG_HOLD_RECHECK_MS
+        : Math.max(TUI_IDLE_QUIESCENCE_MS - elapsed, 0) + 50
     const timer = setTimeout(() => {
       this.deliveryRecheckTimersByLeafKey.delete(leafKey)
       const current = this.leaves.get(leafKey)
@@ -182,7 +188,7 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
   /** Pointer plus Enter requires the same readiness ranking as waits; name-only titles can occur mid-turn (#6011). Callers separately require live status evidence. */
   protected isAgentSettledForDelivery(leaf: { tabId: string; leafId: string }): boolean {
     const live = this.leaves.get(this.getLeafKey(leaf.tabId, leaf.leafId))
-    if (!live) {
+    if (!live || (live.ptyId && this.isPtyAwaitingUserInput(live.ptyId))) {
       return false
     }
     const evidence = leafTuiIdleEvidence(this.tuiIdleEvidenceSource, live, () =>
