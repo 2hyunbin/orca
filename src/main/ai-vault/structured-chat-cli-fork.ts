@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises'
-import { isAbsolute, join, relative } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { getSystemCodexHomePath } from '../codex/codex-home-paths'
+import { codexDatedRolloutRelativePath } from '../codex/codex-session-resume-home'
 import { agentForksConversations, agentForksThroughChat } from '../../shared/agent-resume-argv'
 import { isLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
@@ -198,11 +199,12 @@ export async function prepareStructuredChatCliTranscript(
     if (!fork) {
       throw new Error('This conversation is saved under a different Codex account here.')
     }
-    filePath = join(
-      preparedHome ?? getSystemCodexHomePath(),
-      'sessions',
-      relative(join(codexHome, 'sessions'), filePath)
-    )
+    // Codex canonicalizes CODEX_HOME, so Windows transcripts can carry a \\?\ prefix (#27200).
+    const relativePath = codexDatedRolloutRelativePath(join(codexHome, 'sessions'), filePath)
+    if (!relativePath) {
+      throw new Error('The prepared conversation is unavailable in the selected account.')
+    }
+    filePath = join(preparedHome ?? getSystemCodexHomePath(), 'sessions', relativePath)
     const preparedFile = await stat(filePath)
     if (!preparedFile.isFile() || preparedFile.size === 0) {
       throw new Error('The prepared conversation is unavailable in the selected account.')
