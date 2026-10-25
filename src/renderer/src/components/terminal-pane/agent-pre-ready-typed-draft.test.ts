@@ -17,6 +17,7 @@ import {
 } from './pty-connection-test-environment'
 import { createInitialStoreState } from './pty-connection-test-store-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
+import type * as TerminalWorktreeRouteModule from '@/lib/terminal-worktree-route'
 import { appendTypedDraftText } from './pty-connection/agent-pre-ready-typed-draft'
 
 const {
@@ -53,6 +54,37 @@ vi.mock('../../../../shared/layout-owner-switch', () => ({
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync }))
 
 vi.mock('@/lib/agent-draft-readiness', () => ({ waitForAgentDraftInputReady }))
+
+const pairedRoute = vi.hoisted(() => {
+  const route: { runtimeEnvironmentId: string | null } = { runtimeEnvironmentId: null }
+  return route
+})
+
+vi.mock('@/lib/terminal-worktree-route', async (importOriginal) => {
+  const actual = await importOriginal<typeof TerminalWorktreeRouteModule>()
+  return {
+    ...actual,
+    resolveTerminalWorktreeRoute: (
+      ...args: Parameters<typeof actual.resolveTerminalWorktreeRoute>
+    ) =>
+      pairedRoute.runtimeEnvironmentId
+        ? { runtimeEnvironmentId: pairedRoute.runtimeEnvironmentId }
+        : actual.resolveTerminalWorktreeRoute(...args)
+  }
+})
+
+vi.mock('./remote-runtime-pty-transport', () => ({
+  createRemoteRuntimePtyTransport: vi.fn(
+    (_environmentId: string, options: Record<string, unknown>) => {
+      createdTransportOptions.push(options)
+      const nextTransport = transportFactoryQueue.shift()
+      if (!nextTransport) {
+        throw new Error('No mock transport queued')
+      }
+      return nextTransport
+    }
+  )
+}))
 
 vi.mock('@/lib/agent-draft-paste-content', () => ({ sendAgentDraftPasteContent }))
 
@@ -212,6 +244,7 @@ describe('agent pane keys typed before its PTY binds', () => {
   })
 
   afterEach(async () => {
+    pairedRoute.runtimeEnvironmentId = null
     await restoreTerminalTestGlobals()
   })
 
@@ -426,6 +459,36 @@ describe('agent pane keys typed before its PTY binds', () => {
     expect(waitForAgentDraftInputReady).not.toHaveBeenCalled()
     expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
     expect(onPasteTimeout).toHaveBeenCalledOnce()
+    pane.dispose()
+  })
+
+  // Why: the paired-server transport holds and delivers type-ahead itself, Ctrl+C included.
+  it('leaves a paired-server agent pane resuming a live entry on its own transport', async () => {
+    pairedRoute.runtimeEnvironmentId = 'env-1'
+    const paneKey = makePaneKey('tab-1', leafIdForPane(1))
+    mockStoreState.agentStatusByPaneKey[paneKey] = {
+      state: 'working',
+      prompt: '',
+      agentType: 'claude',
+      paneKey,
+      updatedAt: 1_000,
+      stateStartedAt: 1_000,
+      stateHistory: [],
+      providerSession: { key: 'session_id', id: 'session-1' }
+    }
+    const pane = connectAgentPane({ startup: undefined })
+    await flushAsyncTicks(20)
+
+    pane.type('before reattach')
+    pane.type('\x03')
+
+    expect(pane.transport.sendInput).toHaveBeenCalledWith('before reattach', 'driving')
+    // Ctrl+C takes the acknowledged-write path.
+    expect(pane.transport.sendInputAccepted).toHaveBeenCalledWith('\x03', 'driving')
+    pane.bind('pty-1')
+    await flushAsyncTicks(20)
+    expect(waitForAgentDraftInputReady).not.toHaveBeenCalled()
+    expect(sendAgentDraftPasteContent).not.toHaveBeenCalled()
     pane.dispose()
   })
 

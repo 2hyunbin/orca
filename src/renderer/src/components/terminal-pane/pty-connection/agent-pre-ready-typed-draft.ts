@@ -66,8 +66,11 @@ export function installAgentPreReadyTypedDraft(session: ConnectPanePtySession): 
   const resolveAgent = (): TuiAgent | null => {
     if (agent === undefined) {
       const state = useAppStore.getState()
+      // Why not paired panes: their transport already holds and delivers type-ahead itself.
       agent =
-        !session.transportOptions?.bufferInputUntilConnect && paneHasStartupWork(session)
+        !session.runtimeEnvironmentId &&
+        !session.transportOptions?.bufferInputUntilConnect &&
+        paneHasStartupWork(session)
           ? ((session.paneStartup
               ? (session.startupDraftAgent ?? session.resolveExpectedLaunchTuiAgent())
               : null) ??
