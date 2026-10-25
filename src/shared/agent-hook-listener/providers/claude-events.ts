@@ -111,14 +111,25 @@ export function normalizeClaudeEvent(
   const isAskUserQuestion = eventName === 'PreToolUse' && isAskUserQuestionWait
   // Manual PostCompact ends at idle without Stop; auto compaction stays in-turn, and PreCompact alone can be aborted (STA-2915).
   const isManualCompactCompletion = eventName === 'PostCompact' && hookPayload.trigger === 'manual'
-  // Why: Claude's MCP elicitation dialog is a human wait (#25020). Other providers already map
-  // notification_type elicitation_dialog to waiting. ElicitationResult means the person answered
-  // and the in-flight tool continues, so the pane returns to working rather than done.
+  // An answered MCP dialog restores the displaced state; a server can elicit outside any turn.
+  if (eventName === 'ElicitationResult') {
+    if (previousLead?.state !== 'waiting' || previousLead.waitingAgentId !== eventAgentId) {
+      return null
+    }
+    const restored = setClaudeMainAgentTurnState(
+      state,
+      paneKey,
+      previousLead.stateBeforeWait ?? { state: 'working' }
+    )
+    return buildClaudeStatusPayload(state, eventName, promptText, paneKey, hookPayload, {
+      ...resolveClaudePaneStatus(state, paneKey, restored),
+      updateToolSnapshot: true
+    })
+  }
   const reportedStateName =
     eventName === 'UserPromptSubmit' ||
     eventName === 'PostToolUse' ||
     eventName === 'PostToolUseFailure' ||
-    eventName === 'ElicitationResult' ||
     (eventName === 'PreToolUse' && !isAskUserQuestion)
       ? 'working'
       : eventName === 'PermissionRequest' || eventName === 'Elicitation' || isAskUserQuestion
@@ -228,7 +239,7 @@ export function normalizeClaudeEvent(
   }
   // Preserve the original lead stash through multiple child waits.
   const stateBeforeWait =
-    isWaitingInducing && eventAgentId && previousLead
+    isWaitingInducing && (eventAgentId || eventName === 'Elicitation') && previousLead
       ? previousLead.state === 'waiting'
         ? previousLead.stateBeforeWait
         : {

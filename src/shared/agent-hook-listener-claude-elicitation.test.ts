@@ -60,6 +60,17 @@ describe('Claude MCP elicitation', () => {
     })
   })
 
+  it('settles back to done when a server elicits while the session is idle', () => {
+    claude({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
+    claude({ hook_event_name: 'Stop' })
+    expect(
+      claude({ hook_event_name: 'Elicitation', mcp_server_name: 'server', mode: 'url' })?.state
+    ).toBe('waiting')
+    expect(
+      claude({ hook_event_name: 'ElicitationResult', mcp_server_name: 'server', action: 'cancel' })
+    ).toMatchObject({ state: 'done', mainAgent: { state: 'done' } })
+  })
+
   it('keeps the lead record when a child elicitation needs the person', () => {
     claude({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     const running = claude({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
