@@ -25,7 +25,7 @@ export function readPaneProviderSession(
   if (!providerSession) {
     return null
   }
-  const cwd = readAgentCwd(state, source, paneKey, hookPayload)
+  const cwd = readAgentCwd(state, source, paneKey, providerSession.id, hookPayload)
   return cwd ? { ...providerSession, cwd } : providerSession
 }
 
@@ -34,6 +34,7 @@ function readAgentCwd(
   state: HookListenerState,
   source: AgentHookSource,
   paneKey: string,
+  sessionId: string,
   hookPayload: Record<string, unknown>
 ): string | undefined {
   if (source !== 'claude' && source !== 'codex') {
@@ -41,10 +42,11 @@ function readAgentCwd(
   }
   const previous = state.lastStatusByPaneKey.get(paneKey)
   const previousCwd = previous?.source === source ? previous.providerSession?.cwd : undefined
-  // Claude's hook cwd follows its Bash tool's `cd`; only a fresh launch names a new folder.
-  const isClaudeLaunch =
-    source === 'claude' &&
-    hookPayload.hook_event_name === 'SessionStart' &&
-    hookPayload.source === 'startup'
-  return previousCwd && !isClaudeLaunch ? previousCwd : readPathFromKeys(hookPayload, ['cwd'])
+  // Claude's hook cwd follows its Bash tool's `cd`; /clear and compact restart in the same process.
+  const keepsPreviousFolder =
+    previous?.providerSession?.id === sessionId ||
+    (source === 'claude' &&
+      hookPayload.hook_event_name === 'SessionStart' &&
+      (hookPayload.source === 'clear' || hookPayload.source === 'compact'))
+  return previousCwd && keepsPreviousFolder ? previousCwd : readPathFromKeys(hookPayload, ['cwd'])
 }

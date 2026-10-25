@@ -110,18 +110,25 @@ describe('shared agent-hook-listener', () => {
       hook_event_name: 'SessionStart',
       source: 'clear',
       session_id: '66666666-6666-4666-8666-666666666666',
+      cwd: '/repo/pkg'
+    })
+    const clearedPrompt = normalizeAndAccept(state, 'claude', {
+      hook_event_name: 'UserPromptSubmit',
+      session_id: '66666666-6666-4666-8666-666666666666',
+      prompt: 'next',
       cwd: '/repo/pkg/sub'
     })
-    const relaunched = normalizeAndAccept(state, 'claude', {
+    const resumedElsewhere = normalizeAndAccept(state, 'claude', {
       hook_event_name: 'SessionStart',
-      source: 'startup',
+      source: 'resume',
       session_id: '77777777-7777-4777-8777-777777777777',
       cwd: '/elsewhere'
     })
 
     expect(afterCd?.providerSession).toMatchObject({ id: sessionId, cwd: '/repo/pkg' })
     expect(cleared?.providerSession?.cwd).toBe('/repo/pkg')
-    expect(relaunched?.providerSession?.cwd).toBe('/elsewhere')
+    expect(clearedPrompt?.providerSession?.cwd).toBe('/repo/pkg')
+    expect(resumedElsewhere?.providerSession?.cwd).toBe('/elsewhere')
   })
 
   it('resets stale Claude turn state when SessionStart announces a new session on the pane', () => {
