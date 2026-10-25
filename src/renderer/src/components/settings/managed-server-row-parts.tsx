@@ -223,10 +223,7 @@ export function ManagedServerConfirmations({
         keepLabel={translate('auto.components.settings.managedServers.row.notNow', 'Not now')}
         disabled={disabled}
         tone="default"
-        onConfirm={() => {
-          lifecycle.setConfirmingForceUpdate(null)
-          void run('forceUpdate')
-        }}
+        onConfirm={() => void run('forceUpdate')}
         onKeep={() => lifecycle.setConfirmingForceUpdate(null)}
       />
     )

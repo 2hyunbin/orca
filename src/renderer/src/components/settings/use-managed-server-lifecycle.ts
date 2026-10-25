@@ -80,7 +80,7 @@ export function useManagedServerLifecycle({
   // Why derived: another desktop's activation, a stop or a migration voids the confirmation.
   const confirmingForceUpdate =
     forceUpdateRequest &&
-    status?.availableUpdate &&
+    status &&
     status.activeVersion === forceUpdateRequest.incumbentVersion &&
     !status.recovery &&
     !status.migration

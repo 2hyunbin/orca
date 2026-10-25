@@ -216,6 +216,17 @@ describe('managed server row', () => {
     })
   })
 
+  it('confirms past running terminals for a menu Update the row does not advertise', async () => {
+    const retried = { ...status, migration: null, deferredUpdate: null, availableUpdate: null }
+    const { container, update } = await render(retried, async () => retried)
+    await act(async () => button(container, 'Update Orca on this host')?.click())
+    await act(async () => button(container, 'Update anyway')?.click())
+    expect(update).toHaveBeenLastCalledWith({
+      selector: 'env-1',
+      pastLiveTerminals: { incumbentVersion: '1.2.0' }
+    })
+  })
+
   it('drops the Update anyway confirmation once the host runs another build', async () => {
     let current = {
       ...status,

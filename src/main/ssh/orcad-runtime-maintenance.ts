@@ -84,7 +84,8 @@ export function updateManagedOrcadEnvironment(
   args: LifecycleArgs & { force?: boolean; pastLiveTerminals?: OrcadManagedPastLiveTerminals }
 ): Promise<OrcadManagedDeployResult> {
   const { pastLiveTerminals } = args
-  const intent = args.force ? 'force' : 'update'
+  // Update anyway keeps Update's version admission even if a caller also passed force.
+  const intent = args.force && !pastLiveTerminals ? 'force' : 'update'
   return withManagedOrcadLifecycle(userDataPath, args.selector, async (managed) => {
     const admitIntent = admitOrcadRecordForIntent(intent, getAppEnvironment().getVersion())
     // Checked under the host fence: another desktop may have activated a build since the confirm.
