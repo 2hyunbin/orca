@@ -1,4 +1,4 @@
-import { defaultAgentChatLabel } from '../../../shared/agent-session-chat-label'
+import { defaultAgentChatLabel } from '../../../shared/agent-session/agent-session-chat-label'
 import type {
   RuntimeMobileSessionAgentTab,
   RuntimeMobileSessionTabsSnapshot

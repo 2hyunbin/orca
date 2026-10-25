@@ -78,11 +78,11 @@ function trackEventListenerCleanup(): () => {
     vi.spyOn(owner, 'addEventListener').mockImplementation(function (
       this: EventTarget,
       type: string,
-      listener: EventListenerOrEventListenerObject,
+      listener: EventListenerOrEventListenerObject | null,
       options?: boolean | AddEventListenerOptions
     ) {
       addEventListener.call(this, type, listener, options)
-      if (!activeRegistration(this, type, listener, options)) {
+      if (listener && !activeRegistration(this, type, listener, options)) {
         registrations.push({
           capture: capture(options),
           listener,
@@ -95,11 +95,11 @@ function trackEventListenerCleanup(): () => {
     vi.spyOn(owner, 'removeEventListener').mockImplementation(function (
       this: EventTarget,
       type: string,
-      listener: EventListenerOrEventListenerObject,
+      listener: EventListenerOrEventListenerObject | null,
       options?: boolean | EventListenerOptions
     ) {
       removeEventListener.call(this, type, listener, options)
-      const registration = activeRegistration(this, type, listener, options)
+      const registration = listener && activeRegistration(this, type, listener, options)
       if (registration) {
         registration.removed = true
       }

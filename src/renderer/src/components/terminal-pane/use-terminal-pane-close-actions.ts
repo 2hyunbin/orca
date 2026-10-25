@@ -95,14 +95,16 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       }
       manager.closePane(paneId)
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
     [
       clearSessionRestoredBannerForPane,
       onCloseTab,
       syncPanePtyLayoutBinding,
       syncPanePtyLayoutBindingForLeaf,
       tabId,
-      worktreeId
+      worktreeId,
+      managerRef,
+      paneTransportsRef,
+      setTerminalErrorsByPaneId
     ]
   )
   const executeClosePane = useCallback(
@@ -133,13 +135,11 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       }
       closePaneLocally(paneId)
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [closePaneLocally, onCloseTab, tabId, worktreeId]
+    [closePaneLocally, onCloseTab, tabId, worktreeId, managerRef]
   )
   const getCloseDialogCopyKind = useCallback(
     (paneId: number) => resolveLeafCloseCopyKind(tabId, managerRef.current?.getLeafId(paneId)),
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [tabId]
+    [tabId, managerRef]
   )
   const handleRequestClosePane = useCallback(
     (paneId: number) => {
@@ -218,8 +218,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
     if (pane) {
       handleRequestClosePane(pane.id)
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-  }, [handleRequestClosePane])
+  }, [handleRequestClosePane, managerRef])
   useEffect(
     () => onActiveTerminalPaneCloseRequest(tabId, closeActivePane),
     [closeActivePane, tabId]
@@ -227,14 +226,17 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
   const handleSearchSelectedText = useCallback((selectedText: string): void => {
     useAppStore.getState().showRightSidebarSearch({ query: selectedText })
   }, [])
+  const clearCloseConfirmation = useCallback(() => {
+    confirmedCloseRef.current = null
+    setPendingCloseConfirmation(null)
+  }, [setPendingCloseConfirmation])
   const handleConfirmClose = useCallback(
     (dontAskAgain: boolean) => {
       if (pendingCloseConfirmation === null || confirmedCloseRef.current === null) {
         return
       }
       const confirmedClose = confirmedCloseRef.current
-      confirmedCloseRef.current = null
-      setPendingCloseConfirmation(null)
+      clearCloseConfirmation()
       if (dontAskAgain) {
         void updateSettings({
           skipCloseTerminalWithRunningProcessConfirm: true
@@ -242,14 +244,8 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       }
       confirmedClose()
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [executeClosePane, pendingCloseConfirmation, updateSettings]
+    [pendingCloseConfirmation, updateSettings, clearCloseConfirmation]
   )
-  const handleCancelClose = useCallback(() => {
-    confirmedCloseRef.current = null
-    setPendingCloseConfirmation(null)
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-  }, [])
   const resolveExternalPaneDropTarget = useCallback(
     ({
       sourcePaneId,
@@ -271,8 +267,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
         worktreeId
       })
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [worktreeId]
+    [worktreeId, managerRef]
   )
   const handleExternalPaneDrop = useCallback(
     (sourcePaneId: number, target: PaneExternalDropTarget): boolean => {
@@ -297,8 +292,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
       }).catch((error) => console.warn('[terminal-pane-detach] move failed', error))
       return true
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
-    [persistLayoutSnapshot, tabId, worktreeId]
+    [persistLayoutSnapshot, tabId, worktreeId, managerRef, paneCwdRef, paneTransportsRef]
   )
 
   return {
@@ -308,7 +302,7 @@ export function useTerminalPaneCloseActions(controller: TerminalPaneBindingContr
     handleRequestClosePane,
     handleSearchSelectedText,
     handleConfirmClose,
-    handleCancelClose,
+    handleCancelClose: clearCloseConfirmation,
     resolveExternalPaneDropTarget,
     handleExternalPaneDrop
   }
