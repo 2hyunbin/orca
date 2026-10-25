@@ -803,6 +803,7 @@ describe.each([20, 200])('with %i earlier sends', (count) => {
     expect(connection.closeCount).toBe(0)
   })
 
+  // The 200-send case awaits journal writes and dispatches, so it has a larger test budget.
   it('refuses each queued model change behind an admitted send, reading what the CLI holds once per check', async () => {
     claudeFrames.initProof = 'none'
     const connection = claude.connections[0]!
