@@ -2,10 +2,10 @@ import { appendFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import type { AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
-import { eraseRpcMethods, type RpcContext } from '../core'
-import { NATIVE_CHAT_METHODS } from './native-chat'
+import type { AgentStatusIpcPayload } from '../../src/shared/agent-status-types'
+import type { NativeChatMessage } from '../../src/shared/native-chat-types'
+import { eraseRpcMethods, type RpcContext } from '../../src/main/runtime/rpc/core'
+import { NATIVE_CHAT_METHODS } from '../../src/main/runtime/rpc/methods/native-chat'
 
 const CONNECTION_ID = 'ssh-target-26057'
 const SESSION_ID = 'claude-session-26057'
@@ -106,16 +106,15 @@ describe('native chat for an agent whose transcript lives on an SSH host (#26057
   it.each([false, true])(
     'negotiates reader and every stream representation before slicing (modern=%s)',
     async (modern) => {
-      const { NativeChatSession } =
-        await import('../../../../shared/rpc-contract/native-chat-params')
+      const { NativeChatSession } = await import('../../src/shared/rpc-contract/native-chat-params')
       const { compareNativeChatTranscriptMessages } =
-        await import('../../../../shared/native-chat-transcript-projection')
+        await import('../../src/shared/native-chat-transcript-projection')
       const { parseRuntimeNativeChatReadSessionResult } =
-        await import('../../../../renderer/src/components/native-chat/native-chat-runtime-contract')
+        await import('../../src/renderer/src/components/native-chat/native-chat-runtime-contract')
       const { createNativeChatMessageListProjection } =
-        await import('../../../../renderer/src/components/native-chat/native-chat-message-list-projection')
+        await import('../../src/renderer/src/components/native-chat/native-chat-message-list-projection')
       const { commandMarkersAsMessages } =
-        await import('../../../../renderer/src/components/native-chat/native-chat-command-marker')
+        await import('../../src/renderer/src/components/native-chat/native-chat-command-marker')
       hookRows = [{ ...sshHookRow(transcriptPath), connectionId: null }]
       const line = (id: string, seconds: number) =>
         `${JSON.stringify({

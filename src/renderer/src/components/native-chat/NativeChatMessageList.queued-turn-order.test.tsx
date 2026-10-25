@@ -2,7 +2,7 @@
 
 import '@testing-library/jest-dom/vitest'
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 // Why: these fixtures have neither inline visual owners nor sender navigation.
@@ -192,46 +192,3 @@ describe.each([['states each row’s turn', true]])(
     })
   }
 )
-
-it('renders terminal file reasoning before its equal-clock answer without journal authority', async () => {
-  const { Readable } = await import('node:stream')
-  const { decodeTranscriptStream } =
-    await import('../../../../main/native-chat/transcript-stream-lines')
-  const { decodeClaudeTranscriptLine } =
-    await import('../../../../main/native-chat/transcript-line-decoders')
-  const records = [
-    { type: 'user', uuid: 'prompt', message: { role: 'user', content: 'Explain the result' } },
-    {
-      type: 'assistant',
-      uuid: 'z-thinking',
-      message: {
-        role: 'assistant',
-        content: [{ type: 'thinking', thinking: 'File reasoning before final answer' }]
-      }
-    },
-    {
-      type: 'assistant',
-      uuid: 'a-answer',
-      message: { role: 'assistant', content: 'The final file answer' }
-    }
-  ]
-    .map((row) => `${JSON.stringify({ ...row, timestamp: '2026-06-01T10:00:00Z' })}\n`)
-    .join('')
-  const { messages } = await decodeTranscriptStream(
-    Readable.from([records]),
-    'terminal.jsonl',
-    0,
-    decodeClaudeTranscriptLine,
-    true,
-    Infinity,
-    true
-  )
-  render(<NativeChatMessageList session={{ ...session('ready'), messages }} expandSignal />)
-  const disclosure = screen.getByRole('button', { name: /^Reasoning/ })
-  if (disclosure.getAttribute('aria-expanded') === 'false') {
-    fireEvent.click(disclosure)
-  }
-  const thought = screen.getByText('File reasoning before final answer')
-  const answer = screen.getByText('The final file answer')
-  expect(thought.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-})

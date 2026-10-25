@@ -2,10 +2,13 @@ import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { NativeChatMessage } from '../../shared/native-chat-types'
-import { projectNativeChatTranscriptMessages } from '../../shared/native-chat-transcript-projection'
-import { readNativeChatTranscript } from './transcript-reader'
-import { readNativeChatTranscriptTail, subscribeNativeChatTranscript } from './transcript-watch'
+import type { NativeChatMessage } from '../../src/shared/native-chat-types'
+import { projectNativeChatTranscriptMessages } from '../../src/shared/native-chat-transcript-projection'
+import { readNativeChatTranscript } from '../../src/main/native-chat/transcript-reader'
+import {
+  readNativeChatTranscriptTail,
+  subscribeNativeChatTranscript
+} from '../../src/main/native-chat/transcript-watch'
 
 // Claude timestamps queued prompts at send time but writes them after the tool result that absorbed them.
 const PROMPT = {
@@ -194,8 +197,9 @@ describe('canonical source positions', () => {
       const older = await read(filePath, 2, tail.beforeOffset)
       expect([...older.messages, ...tail.messages]).toEqual(full.messages)
       const { createIncrementalTranscriptState, readIncrementalTranscriptMessages } =
-        await import('./transcript-incremental-reader')
-      const { decodeClaudeTranscriptLine } = await import('./transcript-line-decoders')
+        await import('../../src/main/native-chat/transcript-incremental-reader')
+      const { decodeClaudeTranscriptLine } =
+        await import('../../src/main/native-chat/transcript-line-decoders')
       const state = createIncrementalTranscriptState()
       state.offset = state.pendingStart = Buffer.byteLength(encoded[0])
       await writeFile(filePath, encoded[0] + encoded[1].slice(0, -2))
@@ -235,13 +239,13 @@ describe('canonical source positions', () => {
     'rejoins image units across page and append boundaries, source-first=%s',
     async (sourceFirst) => {
       const { createIncrementalAssembler, reset, applyAppends } =
-        await import('../../renderer/src/components/native-chat/native-chat-incremental-assembler')
+        await import('../../src/renderer/src/components/native-chat/native-chat-incremental-assembler')
       const { prepareNativeChatLiveMessages } =
-        await import('../../renderer/src/components/native-chat/native-chat-live-message-preparation')
+        await import('../../src/renderer/src/components/native-chat/native-chat-live-message-preparation')
       const { commandMarkersAsMessages } =
-        await import('../../renderer/src/components/native-chat/native-chat-command-marker')
+        await import('../../src/renderer/src/components/native-chat/native-chat-command-marker')
       const { createNativeChatMessageListProjection } =
-        await import('../../renderer/src/components/native-chat/native-chat-message-list-projection')
+        await import('../../src/renderer/src/components/native-chat/native-chat-message-list-projection')
       const pair = (id: string, path: string) => {
         const prompt = record(id, PROMPT.timestamp, `${id} [Image #1]`, 'user')
         const images = [1, 2].map((n) =>
@@ -289,13 +293,13 @@ describe('canonical source positions', () => {
 
   it('keeps factual clocks for status, clear boundaries, mixed sources and optimistic tiers', async () => {
     const { mergeNativeChatLiveSession } =
-      await import('../../renderer/src/components/native-chat/native-chat-live-status')
+      await import('../../src/renderer/src/components/native-chat/native-chat-live-status')
     const { applyCommandMarkerBoundaries, commandMarkersAsMessages } =
-      await import('../../renderer/src/components/native-chat/native-chat-command-marker')
+      await import('../../src/renderer/src/components/native-chat/native-chat-command-marker')
     const { assembleNativeChatSession } =
-      await import('../../renderer/src/components/native-chat/native-chat-session-assembler')
+      await import('../../src/renderer/src/components/native-chat/native-chat-session-assembler')
     const { NATIVE_CHAT_STREAMING_ID } =
-      await import('../../shared/native-chat/native-chat-streaming')
+      await import('../../src/shared/native-chat/native-chat-streaming')
     const filePath = await transcriptFile(
       lines(...Array.from({ length: 20 }, (_, i) => record(`old-${i}`, PROMPT.timestamp)))
     )
