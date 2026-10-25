@@ -8,8 +8,7 @@ export type InstalledRuntime = {
   adapter: { closeAll(): Promise<void> }
   /** Closed last, once every conversation has drained into it. */
   journalDatabase: JournalHostDatabase
-  /** Resolves after every observed adapter exit has published, and every
-   *  recovery callback it raised has settled. */
+  // Wait for observed adapter exits to publish and all recovery callbacks they raised to settle.
   waitForRecovery: () => Promise<void>
   /** Host bookkeeping that runs on timers, stopped before anything else. */
   stopBackgroundWork?: () => void
@@ -39,9 +38,8 @@ export async function tearDownRuntime(
   // be writing lifecycle rows or acquiring a replacement child.
   await installed.waitForRecovery()
   const failures: unknown[] = []
-  // Evict host sessions before closing adapters so disposeSession can prove exit and release leases.
-  // Eviction orders child stop, tail drain, settlement and sink unbind; closeAll only backs up unindexed or refused children.
-  // Backstop rows have no sink; drain their late exit callbacks before closing the database.
+  // Evict host sessions first so child stop, tail drain, settlement and lease release run with their sinks.
+  // closeAll backs up unindexed/refused children; drain their late exit callbacks before closing the database.
   try {
     await installed.host.flushAllStreamedEvents({ trigger })
   } catch (error) {

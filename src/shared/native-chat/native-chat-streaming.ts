@@ -5,7 +5,6 @@ import type { NativeChatMessage } from '../native-chat-types'
 /** Stable preview id across ticks lets the real turn replace it without key churn. */
 export const NATIVE_CHAT_STREAMING_ID = 'streaming'
 
-/** Concatenated text of an assistant message's text blocks, trimmed. */
 function assistantText(message: NativeChatMessage | undefined): string {
   if (!message || message.role !== 'assistant') {
     return ''
@@ -17,8 +16,7 @@ function assistantText(message: NativeChatMessage | undefined): string {
     .trim()
 }
 
-/** The newest assistant words after row `after`: read back past the tool calls and thoughts that
- *  landed after them, but never past the user's message, which starts a different reply. */
+// Read past tool/thought rows for the latest assistant words, stopping at the next user-message boundary.
 export function latestNativeChatReplyText(
   messages: readonly NativeChatMessage[],
   after = -1
@@ -36,8 +34,7 @@ export function latestNativeChatReplyText(
   return ''
 }
 
-/** Show previews only while working and ahead of transcript text; suppress caught-up duplicates.
- * Always reject previewIsToolOutput: status stdout/errors never become assistant blocks and cannot retire through transcript catch-up. */
+// Show only working previews ahead of transcript text; always suppress tool stdout/errors because transcript catch-up cannot retire them.
 export function deriveNativeChatStreamingText(args: {
   messages: readonly NativeChatMessage[]
   previewText: string | null | undefined
@@ -56,15 +53,13 @@ export function deriveNativeChatStreamingText(args: {
   if (lastText.includes(text) || text.length <= lastText.length) {
     return null
   }
-  // A tool call or thought after the sentence leaves the last row wordless. Hide only that same
-  // sentence: a new, shorter reply after the tool is not the earlier, longer commentary.
+  // Tool/thought rows may follow a sentence; hide only a caught-up duplicate, never a new shorter reply.
   if (!lastText && latestNativeChatReplyText(messages).includes(text)) {
     return null
   }
   return text
 }
 
-/** Build the synthetic streaming assistant message for the given text. */
 export function nativeChatStreamingMessage(text: string): NativeChatMessage {
   return {
     id: NATIVE_CHAT_STREAMING_ID,

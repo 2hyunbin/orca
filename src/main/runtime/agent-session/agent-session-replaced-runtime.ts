@@ -1,5 +1,5 @@
-// The profile instance lock proves earlier host runtimes lost their pipes; their turns ended even if provider-process death is unproven.
-// Attribute only runtimes this host actually replaced, never terminal claims or unknown owners.
+// The profile lock proves replaced host runtimes lost their pipes, not that provider processes died.
+// Attribute only runtimes this host replaced; terminal claims and unknown owners provide no such evidence.
 
 import type { AgentSessionOrcaStopCause } from '../../../shared/agent-session-orca-stop'
 import type { AgentSessionStoreState } from '../agent-session-store-state'

@@ -1,4 +1,5 @@
-/** Share provider-child close/proof between orchestration and worktree teardown; callers retain dispatch cleanup. Only absent host ownership plus a non-live lease after close prove exit; retain unproven sessions for retry. */
+// Share close/proof across orchestration and teardown; retain unproven sessions for retry.
+// Only absent host ownership and a non-live lease after close prove exit.
 
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
@@ -21,9 +22,9 @@ export type StructuredAgentSessionCloseOptions = {
     OrcaRuntimeService,
     'forgetStructuredSessionMail' | 'retireStructuredAgentSessionTabFromSnapshot'
   >
-  /** Run after close issuance but before proof, including unsettled closes, or released dispatches retain redrive subscriptions nudging unowned sessions. */
+  // Run after close issuance even when unsettled, or released dispatches retain redrive subscriptions.
   afterClose?: () => void
-  /** Default restores previously visible tabs after unproven close; false for callers deleting the workspace regardless, to avoid restoring tabs that point at deleted workspaces. */
+  // Restore visibility on unproven close unless the caller will delete the workspace regardless.
   restoreTabOnUnprovenClose?: boolean
 }
 
@@ -104,9 +105,8 @@ function readPersistedTabId(host: StructuredAgentSessionHost, sessionId: string)
   }
 }
 
-/** Restore prior visibility only while close remains unproven; close can throw after actual exit.
- * Reobserve here and in the sweep: a child may exit between these observations across the restore write.
- * Never throw or replace the actionable close failure; missing session identity is expected after exit. */
+// Restore prior visibility only while exit is unproven; reobserve across the write to catch racing exits.
+// Never replace the actionable close failure; missing identity after exit is expected.
 async function restorePersistedTabVisibility(
   host: StructuredAgentSessionHost,
   sessionId: string,

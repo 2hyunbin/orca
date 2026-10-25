@@ -1,4 +1,4 @@
-/** Unproven closes must restore previously visible tabs: hiding before failed close must not leave a running conversation absent from the durable restore index. */
+// Unproven close must restore previously visible tabs so running conversations remain in the durable restore index.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -124,7 +124,6 @@ describe('closeStructuredAgentSessionChild tab-visibility rollback', () => {
     expect(outcome).toEqual({ stopped: true, closeAttempted: true })
     expect(host.visible.has(SESSION)).toBe(false)
     expect(retire).toHaveBeenCalledWith(SESSION)
-    // The hide is the only visibility write a settled close performs.
     expect(host.setSessionTabVisibility.mock.calls).toEqual([HIDE_PENDING_CLOSE])
   })
 
@@ -141,7 +140,6 @@ describe('closeStructuredAgentSessionChild tab-visibility rollback', () => {
       HIDE_PENDING_CLOSE,
       [SESSION, true, TAB_ID]
     ])
-    // Sent once, after the tab is back: a chat worker's Dispatch reads the chat as open.
     expect(host.notifySessionTabHidden.mock.calls).toEqual([[SESSION]])
     expect(host.notifySessionTabHidden.mock.invocationCallOrder[0]).toBeGreaterThan(
       host.setSessionTabVisibility.mock.invocationCallOrder[1]!

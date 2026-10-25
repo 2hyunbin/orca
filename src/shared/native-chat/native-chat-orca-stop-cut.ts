@@ -12,7 +12,7 @@ import { agentTurnVerdict, type AgentTurnOutcome } from '../agent-turn-outcome'
 import { structuredAgentSessionCommandTurnItemIds } from '../structured-agent-session-command-entry'
 import { isStructuredAgentSessionNonRequestRow } from '../structured-agent-session-latest-request'
 
-/** Key shutdown rows by stopped child to dedupe retries. Keep the legacy cut-explanation prefix so older clients add no duplicate notice. */
+// Dedupe shutdown rows by stopped child; preserve the legacy prefix so older clients add no duplicate notice.
 export function orcaShutdownRowClientMessageId(
   sessionId: string,
   fence: number,
@@ -21,7 +21,6 @@ export function orcaShutdownRowClientMessageId(
   return `${STALE_SESSION_ROW_PREFIX}${sessionId}:shutdown-${fence}-${generation}`
 }
 
-/** Why Orca stopped, from a status row the host wrote about it; null for any other row. */
 export function orcaStopCauseOfRow(item: AgentJournalRenderItem): AgentSessionOrcaStopCause | null {
   return item.body.kind === 'status'
     ? (readAgentSessionOrcaStop(item.body.orcaStop)?.cause ?? null)
@@ -64,7 +63,6 @@ export function latestNativeChatTurnSinceRequest(
   return null
 }
 
-/** The rows inside one turn that answer `read`, first match wins. */
 export function findInNativeChatTurn<T>(
   items: readonly AgentJournalRenderItem[],
   turnItemId: string,
@@ -80,7 +78,6 @@ export function findInNativeChatTurn<T>(
   return null
 }
 
-/** The latest root turn, when an Orca stop cut it and nothing was sent since. Null otherwise. */
 export function latestNativeChatOrcaStopCut(
   items: readonly AgentJournalRenderItem[],
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]

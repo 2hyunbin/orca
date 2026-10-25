@@ -45,7 +45,6 @@ describe('a windowless host’s chat tab saves', () => {
     expect(groups[0]?.id).not.toBe(firstGroup)
   })
 
-  // L270: windowless saves share the placement rule.
   it('save a chat opened with no client place at the end of the remembered active group', () => {
     const tab = (sessionId: string, groupId: string): Tab => ({
       id: `structured-agent-session-${sessionId}`,
