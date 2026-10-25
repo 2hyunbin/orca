@@ -149,7 +149,10 @@ export function createAgentCompletionProcessMonitor({
                 : {
                     ...result,
                     foregroundProcess,
-                    hasChildProcesses: !isShellProcess(foregroundProcess)
+                    // An unlisted shell name (-zsh, wsl.exe) that matches the cached read is still exit evidence.
+                    hasChildProcesses:
+                      !isShellProcess(foregroundProcess) &&
+                      foregroundProcess !== result.foregroundProcess
                   }
           }
           if (
