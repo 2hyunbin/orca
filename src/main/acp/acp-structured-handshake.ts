@@ -46,6 +46,7 @@ type AcpHandshakeInput = {
     finishLoad: () => AcpLoadHistoryFrame[] | null
   }
   onSettled: AcpStructuredTurnsDeps['settle']
+  onSessionLost: AcpStructuredTurnsDeps['sessionLost']
 }
 
 export async function initializeAcpStructuredSession(
@@ -183,7 +184,8 @@ export async function initializeAcpStructuredSession(
       lane: liveLane,
       agentName,
       now,
-      settle: onSettled
+      settle: onSettled,
+      sessionLost: input.onSessionLost
     })
   })
   if (!isAcpReadySession(child)) {
