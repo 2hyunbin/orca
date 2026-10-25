@@ -180,6 +180,17 @@ describe('ClaudeSessionContinuationTracker', () => {
     })
     expect(tracker.resolve(session(FORK, forkPath))).toEqual(session(CLEARED, clearedPath))
     expect(tracker.resolve(session(OLD, oldPath))).toEqual(session(CLEARED, clearedPath))
+
+    // A second `/clear`: the job state stays under FORK, so the row on CLEARED must still find it.
+    const reclearedPath = writeTranscript(projectDir, SECOND_FORK, turn(SECOND_FORK, 'u3'))
+    writeJobState(configDir, {
+      sessionId: FORK,
+      resumeSessionId: SECOND_FORK,
+      linkScanPath: reclearedPath
+    })
+    expect(tracker.resolve(session(CLEARED, clearedPath))).toEqual(
+      session(SECOND_FORK, reclearedPath)
+    )
   })
 
   it.each([

@@ -13,7 +13,7 @@ const FIRST_SCAN_BYTES = 1024 * 1024
 const RESCAN_OVERLAP_BYTES = 64 * 1024
 const FORK_HEAD_SCAN_BYTES = 256 * 1024
 const MAX_CONTINUATION_HOPS = 8
-const MAX_REMEMBERED_TRANSCRIPTS = 256
+const MAX_REMEMBERED_ENTRIES = 256
 
 /**
  * Follows the `continued-in` record Claude Code writes when it forks a pane's session into a
@@ -23,6 +23,8 @@ const MAX_REMEMBERED_TRANSCRIPTS = 256
 export class ClaudeSessionContinuationTracker {
   /** Transcript size at the last scan that found no pointer, so an unchanged file is not re-read. */
   private readonly scannedSizeByTranscript = new Map<string, number>()
+  /** A session `/clear` started inside a job → that job's first session, which names its state dir. */
+  private readonly jobSessionBySession = new Map<string, string>()
 
   resolve(session: AgentProviderSessionMetadata): AgentProviderSessionMetadata | null {
     const visited = new Set([session.id])
@@ -47,8 +49,10 @@ export class ClaudeSessionContinuationTracker {
     }
     // Why before the size memo: after `/clear` the old transcript stops growing, so only the job's
     // state says where the conversation went.
-    const cleared = resolveClearedJobSession(transcriptPath, session.id)
+    const jobSessionId = this.jobSessionBySession.get(session.id) ?? session.id
+    const cleared = resolveClearedJobSession(transcriptPath, jobSessionId, session.id)
     if (cleared) {
+      remember(this.jobSessionBySession, cleared.id, jobSessionId)
       return cleared
     }
     let size: number
@@ -67,23 +71,23 @@ export class ClaudeSessionContinuationTracker {
         : FIRST_SCAN_BYTES
     const pointer = readContinuationPointer(transcriptPath, session.id, maxScanBytes)
     if (!pointer) {
-      this.rememberScannedSize(transcriptPath, size)
+      remember(this.scannedSizeByTranscript, transcriptPath, size)
       return null
     }
     // Why not remember a pointer whose fork is not on disk yet: the old file stops growing after it.
     return resolveForkedSession(transcriptPath, pointer)
   }
+}
 
-  private rememberScannedSize(transcriptPath: string, size: number): void {
-    this.scannedSizeByTranscript.delete(transcriptPath)
-    this.scannedSizeByTranscript.set(transcriptPath, size)
-    while (this.scannedSizeByTranscript.size > MAX_REMEMBERED_TRANSCRIPTS) {
-      const oldest = this.scannedSizeByTranscript.keys().next().value
-      if (oldest === undefined) {
-        break
-      }
-      this.scannedSizeByTranscript.delete(oldest)
+function remember<V>(map: Map<string, V>, key: string, value: V): void {
+  map.delete(key)
+  map.set(key, value)
+  while (map.size > MAX_REMEMBERED_ENTRIES) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) {
+      break
     }
+    map.delete(oldest)
   }
 }
 
@@ -183,9 +187,10 @@ function findForkedTranscript(transcriptPath: string, sessionId: string): string
  *  keeps its first session id and names the current one as `resumeSessionId`. */
 function resolveClearedJobSession(
   transcriptPath: string,
+  jobSessionId: string,
   sessionId: string
 ): AgentProviderSessionMetadata | null {
-  const state = readJobState(transcriptPath, sessionId)
+  const state = readJobState(transcriptPath, jobSessionId)
   const current = state
     ? normalizeAgentProviderSession({ key: 'session_id', id: state.resumeSessionId })
     : null
