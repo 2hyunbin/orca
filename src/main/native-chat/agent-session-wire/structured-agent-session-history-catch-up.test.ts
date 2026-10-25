@@ -29,7 +29,7 @@ describe('history catch-up runner', () => {
         sessionId: 'session-1',
         requestFrontier: () => null,
         runningTurn: () => null,
-        submission: () => null,
+        submission: () => undefined,
         readInOrder: async (read) => read(),
         cursor: () => ({ epoch: 'epoch-1', sequence: 0 }),
         item: () => null,

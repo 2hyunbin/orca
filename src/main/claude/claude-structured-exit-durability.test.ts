@@ -1,4 +1,5 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
+import type { AgentSessionExecutionLocation } from '../../shared/agent-session-record'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -361,7 +362,7 @@ it.each(['bind', 'close'] as const)(
   }
 )
 
-function identityLocation() {
+function identityLocation(): AgentSessionExecutionLocation {
   return {
     executionHostId: LOCAL_EXECUTION_HOST_ID,
     workspaceId: 'workspace-1',

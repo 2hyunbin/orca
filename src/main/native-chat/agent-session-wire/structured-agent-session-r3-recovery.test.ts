@@ -232,7 +232,14 @@ it.each([32, 320])(
     const retry = 'foreign-later-proved'
     const visible = 'visible-unknown'
     const recent = 'recent-unknown'
-    const records = [...known, ...foreign, target, retry, visible, recent].map((id) => {
+    const records: AgentSessionRecord[] = [
+      ...known,
+      ...foreign,
+      target,
+      retry,
+      visible,
+      recent
+    ].map((id) => {
       const r = record(id)
       return {
         ...r,
