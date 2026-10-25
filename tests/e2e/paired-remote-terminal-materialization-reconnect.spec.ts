@@ -213,8 +213,7 @@ async function parkHostTerminal(
       expect(parked, evidence).toBe(true)
       return
     }
-    // Why: the host reports a set mismatch once the target PTY is no longer live, which is the
-    // parked state this journey needs even when the stop call itself missed the exit.
+    // Set mismatch also confirms the no-longer-live PTY is parked when stop verification misses exit.
     if (
       lastError.includes('terminal_stop_pty_set_mismatch') ||
       (await hostSurfaceStatus(page, environmentId, worktreeId, parentTabId)) !== 'ready'
@@ -281,8 +280,7 @@ async function runMaterializationJourney(
     expectedPtyId: originalTerminal.terminal.ptyId,
     original: originalTerminal.terminal
   })
-  // Why: the stale error must land on an already-parked surface, or the journey proves nothing
-  // about materializing a pending handle.
+  // Require an already-parked surface before applying the stale error.
   await expect
     .poll(() => hostSurfaceStatus(page, environmentId, worktreeId, created.tab.parentTabId), {
       timeout: 15_000,
@@ -329,8 +327,7 @@ async function runMaterializationJourney(
     .toBe(true)
   expect(replacementHandle).not.toBeNull()
 
-  // Why: parking the host PTY can clear this client's active-worktree selection, so reselect the
-  // pane before reading the PTY it rebound to — the rebind itself is what this journey asserts.
+  // Reselect after host parking clears client selection, then read the rebound PTY.
   await page.evaluate((id) => window.__store?.getState().setActiveWorktree(id), worktreeId)
   await expect(tab).toBeVisible({ timeout: 10_000 })
   await tab.click()
