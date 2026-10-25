@@ -7,7 +7,7 @@ import {
   runClaudeControl
 } from '../../claude/claude-agent-sdk-control-requests'
 import { createCodexAppServerRecordDispatcher } from '../../codex/codex-app-server-record-dispatch'
-import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { CodexAppServerRequestError } from '../../codex/app-server/codex-app-server-request-error'
 import { JsonlRpcPeer, JsonlRpcResponseError } from '../../jsonl-rpc/peer'
 import { withProviderRequestTimeout } from '../../provider-process/provider-request-timeout'
 import {

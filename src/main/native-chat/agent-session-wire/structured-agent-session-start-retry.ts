@@ -1,4 +1,4 @@
-import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { CodexAppServerRequestError } from '../../codex/app-server/codex-app-server-request-error'
 import { ClaudeControlRequestError } from '../../claude/claude-agent-sdk-control-requests'
 import { AcpRpcError } from '../../acp/acp-errors'
 import { JsonlRpcResponseError } from '../../jsonl-rpc/peer'

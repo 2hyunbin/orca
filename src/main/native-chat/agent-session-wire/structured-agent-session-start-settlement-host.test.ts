@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as TimerPromises from 'node:timers/promises'
-import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { CodexAppServerRequestError } from '../../codex/app-server/codex-app-server-request-error'
 import { withProviderRequestTimeout } from '../../provider-process/provider-request-timeout'
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
