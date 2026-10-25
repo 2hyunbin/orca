@@ -510,6 +510,11 @@ const ROLL_ISOLATED_ADMISSION: CellAdmissionState = 'migration-only'
 // park would reactivate. Both want the same answer, and it is the pre-existing
 // one: keep the pin and let the host retry its own cell.
 const ROLL_ISOLATION_STAMP_MAX_AGE_MS = 2 * 60 * 60_000
+// A same-cap roll never sets enabled = 0, so its committed fence counts while the stamp is
+// current; aliases `cell` and `admission`, one `?` = now - ROLL_ISOLATION_STAMP_MAX_AGE_MS.
+const FENCE_HONOURING_ADMISSION = `(cell.enabled = 0 OR (
+  admission.admission_state = '${ROLL_ISOLATED_ADMISSION}' AND admission.roll_isolated_at > ?
+))`
 const REGION_PREFERENCE_RETENTION_MS = 30 * 24 * 60 * 60_000
 const REGIONAL_REHOME_UNREGISTERED_REFRESH_MS = 5 * 60_000
 const REGIONAL_REHOME_MAX_REFRESH_MS = 24 * 60 * 60_000
@@ -1527,17 +1532,19 @@ export class RelayAssignmentStore {
         // below would hand the pin straight back — the cell is live and, being
         // emptied, has more headroom than anyone. A cell that is *not* live is
         // left to the dead-cell path below, whose fence is the only proof that
-        // an unreachable cell has stopped serving the sockets it still holds.
+        // an unreachable cell has stopped serving the sockets it still holds —
+        // unless a process started since the roll stamp proves the drained one gone.
         if (
           !strandedReassignment &&
-          currentIsLive &&
           (await this.incumbentCellIsolatedForRoll(
             transaction,
             identity,
             existing,
             now,
             admission
-          ))
+          )) &&
+          (currentIsLive ||
+            (await this.isolatedCellRestartedSinceRoll(transaction, current.cellId, now)))
         ) {
           isolatedTarget =
             (await this.leastLoadedCell(transaction, lockedCells, current.region, 'require')) ??
@@ -1620,8 +1627,8 @@ export class RelayAssignmentStore {
         // enforces the invariant itself — verifyCellAssignment reads
         // relay_assignments live, so the epoch bump below makes it close any
         // attach naming the old epoch with 4409. `isolatedIncumbent` is only set
-        // when the cell is live, so a cell that stopped heartbeating while still
-        // holding sockets still takes this branch.
+        // when the cell is live or restarted since the stamp, so a cell that
+        // stopped heartbeating while still holding sockets still takes this branch.
         if (!strandedReassignment && !connectionHeadroomReassignment && !isolatedIncumbent) {
           const fence = await this.deadCellFenceRequirement(
             transaction,
@@ -2380,7 +2387,7 @@ export class RelayAssignmentStore {
         ])
       )[0]
       if (!cell) throw new Error('cell_not_found')
-      if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
+      await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
       const runtime = (
         await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
           input.cellId
@@ -2641,7 +2648,7 @@ export class RelayAssignmentStore {
           ])
         )[0]
         if (!cell) throw new Error('cell_not_found')
-        if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
+        await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
         const runtime = (
           await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
             input.cellId
@@ -2691,7 +2698,7 @@ export class RelayAssignmentStore {
         ])
       )[0]
       if (!cell) throw new Error('cell_not_found')
-      if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
+      await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
       const runtime = (
         await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
           input.cellId
@@ -3436,6 +3443,7 @@ export class RelayAssignmentStore {
          ON attempt.attempt_id = committed.attempt_id
        LEFT JOIN relay_cell_fences fence ON fence.cell_id = assignment.cell_id
        LEFT JOIN relay_cell_runtime runtime ON runtime.cell_id = cell.cell_id
+       LEFT JOIN relay_cell_admission admission ON admission.cell_id = cell.cell_id
        WHERE (runtime.cell_id IS NULL OR runtime.ready != ? OR runtime.last_heartbeat_at <= ?)
          AND (
            (
@@ -3459,7 +3467,7 @@ export class RelayAssignmentStore {
              )
            )
            OR (
-             cell.enabled = 0
+             ${FENCE_HONOURING_ADMISSION}
              AND (
                EXISTS (
                  SELECT 1 FROM relay_cell_connection_limits limits
@@ -3490,7 +3498,15 @@ export class RelayAssignmentStore {
          )
          AND assignment.cell_id IN (${cellIds.map(() => '?').join(', ')})
        ORDER BY assignment.user_id, assignment.relay_host_id LIMIT ?`,
-      [1, cutoff, this.now(), this.now(), ...cellIds, limit]
+      [
+        1,
+        cutoff,
+        this.now() - ROLL_ISOLATION_STAMP_MAX_AGE_MS,
+        this.now(),
+        this.now(),
+        ...cellIds,
+        limit
+      ]
     )
     let moved = 0
     for (const row of rows) {
@@ -3528,6 +3544,7 @@ export class RelayAssignmentStore {
        LEFT JOIN relay_cell_fence_attempts attempt ON attempt.attempt_id = committed.attempt_id
        LEFT JOIN relay_cell_fences fence ON fence.cell_id = cell.cell_id
        LEFT JOIN relay_cell_runtime runtime ON runtime.cell_id = cell.cell_id
+       LEFT JOIN relay_cell_admission admission ON admission.cell_id = cell.cell_id
        WHERE (runtime.cell_id IS NULL OR runtime.ready != ? OR runtime.last_heartbeat_at <= ?)
          AND (
            (
@@ -3538,7 +3555,7 @@ export class RelayAssignmentStore {
              )
            )
            OR (
-             cell.enabled = 0
+             ${FENCE_HONOURING_ADMISSION}
              AND attempt.completed_at IS NOT NULL
              AND attempt.aborted_at IS NULL
              AND committed.cell_incarnation = runtime.cell_incarnation
@@ -3549,7 +3566,7 @@ export class RelayAssignmentStore {
            )
          )
        ORDER BY cell.cell_id`,
-      [1, cutoff, now, now]
+      [1, cutoff, now - ROLL_ISOLATION_STAMP_MAX_AGE_MS, now, now]
     )
     return rows.map((row) => text(row, 'cell_id'))
   }
@@ -8240,15 +8257,20 @@ export class RelayAssignmentStore {
     if (await this.assignmentStrandedOnUnservedCell(database, identity, existing, now, pinned?.state)) {
       return false
     }
-    if (this.requireLiveCells && !(await this.cellIsLive(database, cellId, now))) return false
-    return await this.incumbentCellIsolatedForRoll(
-      database,
-      identity,
-      existing,
-      now,
-      undefined,
-      pinned
-    )
+    const live = await this.cellIsLive(database, cellId, now)
+    if (
+      !(await this.incumbentCellIsolatedForRoll(
+        database,
+        identity,
+        existing,
+        now,
+        undefined,
+        pinned
+      ))
+    ) {
+      return false
+    }
+    return live || (await this.isolatedCellRestartedSinceRoll(database, cellId, now))
   }
 
   private async unlockedCell(database: RelayDatabase, cellId: string): Promise<CellRow> {
@@ -8525,6 +8547,40 @@ export class RelayAssignmentStore {
     return rows.length === 1
   }
 
+  // Why: one relay container per VM, and a MIG that deletes before it creates, so a process
+  // started after the stamp is not the drained one. Fresh and (capped) empty: it holds nothing.
+  private async isolatedCellRestartedSinceRoll(
+    database: RelayDatabase,
+    cellId: string,
+    now: number
+  ): Promise<boolean> {
+    const row = (
+      await database.query(
+        `SELECT runtime.started_at, runtime.last_heartbeat_at, admission.roll_isolated_at,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM relay_cell_connection_limits limits WHERE limits.cell_id = runtime.cell_id
+           ) THEN 1 ELSE 0 END AS capped,
+           CASE WHEN connections.cell_incarnation = runtime.cell_incarnation
+             AND connections.total_connections = 0 AND connections.in_flight_connections = 0
+           THEN 1 ELSE 0 END AS holds_nothing
+         FROM relay_cell_runtime runtime
+         JOIN relay_cell_admission admission ON admission.cell_id = runtime.cell_id
+         LEFT JOIN relay_cell_connection_runtime connections
+           ON connections.cell_id = runtime.cell_id
+         WHERE runtime.cell_id = ?`,
+        [cellId]
+      )
+    )[0]
+    if (!row) return false
+    const rollIsolatedAt = optionalInteger(row, 'roll_isolated_at')
+    return (
+      rollIsolatedAt !== undefined &&
+      integer(row, 'started_at') > rollIsolatedAt &&
+      integer(row, 'last_heartbeat_at') > now - this.heartbeatTtlMs &&
+      (integer(row, 'capped') === 0 || integer(row, 'holds_nothing') === 1)
+    )
+  }
+
   // Why: a cell isolated for a roll keeps heartbeating ready=1 for the whole
   // drain while its registry refuses every attach with 4503, so `cellIsLive`
   // cannot see that the host's home has stopped taking it. Re-granting the pin
@@ -8652,6 +8708,18 @@ export class RelayAssignmentStore {
     )
   }
 
+  // The attempt chain's writers take the same admission the reader honours.
+  private async assertCellFenceAdmission(
+    transaction: RelayDatabase,
+    cell: SqlRow,
+    cellId: string,
+    now: number
+  ): Promise<void> {
+    if (integer(cell, 'enabled') === 0) return
+    if (rollIsolationIsCurrent(await this.pinnedCellAdmission(transaction, cellId), now)) return
+    throw new Error('cell_fence_admission_enabled')
+  }
+
   private async cellHasCommittedFence(
     database: RelayDatabase,
     cellId: string,
@@ -8665,16 +8733,17 @@ export class RelayAssignmentStore {
        JOIN relay_cell_fences fence ON fence.cell_id = committed.cell_id
        JOIN relay_cell_runtime runtime ON runtime.cell_id = committed.cell_id
        JOIN relay_cells cell ON cell.cell_id = committed.cell_id
+       LEFT JOIN relay_cell_admission admission ON admission.cell_id = committed.cell_id
        WHERE committed.cell_id = ?
          AND attempt.completed_at IS NOT NULL
          AND attempt.aborted_at IS NULL
-         AND cell.enabled = 0
+         AND ${FENCE_HONOURING_ADMISSION}
          AND committed.cell_incarnation = runtime.cell_incarnation
          AND fence.cell_incarnation = committed.cell_incarnation
          AND committed.attested_at >= runtime.last_heartbeat_at
          AND committed.expires_at > ?
          AND fence.expires_at > ?`,
-      [cellId, now, now]
+      [cellId, now - ROLL_ISOLATION_STAMP_MAX_AGE_MS, now, now]
     )
     return rows.length === 1
   }
