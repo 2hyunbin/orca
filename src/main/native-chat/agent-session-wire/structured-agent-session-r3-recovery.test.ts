@@ -264,28 +264,71 @@ it.each([32, 320])(
     ).run(target, retry, visible, recent)
     let taskWork = 0
     let maxTaskWork = 0
+    let taskRecords = 0
+    let maxTaskRecords = 0
+    let discoveryRows = 0
+    let reconsidering = false
+    let reconsiderPoints = 0
+    const reconsiderRecords: string[] = []
+    const reconsiderTabs: string[] = []
     let resetPending = false
-    const mark = () => {
-      taskWork++
-      maxTaskWork = Math.max(maxTaskWork, taskWork)
+    const mark = (record = false) => {
+      if (record) {
+        taskRecords++
+        maxTaskRecords = Math.max(maxTaskRecords, taskRecords)
+      } else if (reconsidering) {
+        reconsiderPoints++
+      } else {
+        taskWork++
+        maxTaskWork = Math.max(maxTaskWork, taskWork)
+      }
       if (!resetPending) {
         resetPending = true
         setImmediate(() => {
           taskWork = 0
+          taskRecords = 0
           resetPending = false
         })
       }
     }
     const original = current.deps.store.getRecord
     const owners = vi.spyOn(current.deps.store, 'getRecord').mockImplementation((id) => {
+      if (reconsidering) {
+        reconsiderRecords.push(id)
+      }
       mark()
       return original(id)
     })
     const tabId = current.deps.store.getSessionTabId.bind(current.deps.store)
     const ordered = vi.spyOn(current.deps.store, 'getSessionTabId').mockImplementation((id) => {
+      if (reconsidering) {
+        reconsiderTabs.push(id)
+      }
       mark()
       return tabId(id)
     })
+    const iterateRecords = current.deps.store.iterateRecords.bind(current.deps.store)
+    const discovery = vi
+      .spyOn(current.deps.store, 'iterateRecords')
+      .mockImplementation(function* () {
+        for (const record of iterateRecords()) {
+          discoveryRows++
+          mark(true)
+          yield record
+        }
+      })
+    const listed = vi.spyOn(current.deps.store, 'listRecords')
+    const reconsider = JournalLegacyRestInitializer.prototype.reconsider
+    const reconsidered = vi
+      .spyOn(JournalLegacyRestInitializer.prototype, 'reconsider')
+      .mockImplementation(function (id) {
+        reconsidering = true
+        try {
+          return reconsider.call(this, id)
+        } finally {
+          reconsidering = false
+        }
+      })
     const sql = vi.spyOn(db, 'prepare')
     const advance = vi.spyOn(JournalLegacyRestInitializer.prototype, 'advance')
     setStructuredAgentSessionHost(current)
@@ -300,6 +343,11 @@ it.each([32, 320])(
     expect(classified).toEqual([visible, recent, target])
     expect(maxTaskWork).toBeLessThanOrEqual(34)
     expect(ordered).toHaveBeenCalledTimes(records.length + 1)
+    expect(maxTaskRecords).toBeLessThanOrEqual(32)
+    expect(discoveryRows).toBe(records.length)
+    expect(discovery).toHaveBeenCalledOnce()
+    expect(listed).not.toHaveBeenCalled()
+    expect(reconsidered).not.toHaveBeenCalled()
     const exhausted = {
       probes: sql.mock.calls.length,
       owners: owners.mock.calls.length,
@@ -314,13 +362,57 @@ it.each([32, 320])(
       owners: owners.mock.calls.length,
       ordered: ordered.mock.calls.length
     }).toEqual(exhausted)
-    await current.deps.store.reconcileOnRestart({
+    const reconciled = await current.deps.store.reconcileOnRestart({
       now: NOW,
       probe: async () => ({ outcome: 'pid-absent' })
     })
     await advance.mock.results.findLast((result) => result.value)?.value
+    const changed = [...foreign, retry]
+    expect(Array.from(reconciled.keys())).toEqual(records.map((record) => record.sessionId))
+    expect(reconsidered.mock.calls.map(([id]) => id)).toEqual(changed)
+    expect(ordered.mock.calls.slice(exhausted.ordered).map(([id]) => id)).toEqual(changed)
+    expect(reconsiderRecords).toEqual(changed)
+    expect(reconsiderTabs).toEqual(changed)
+    expect(reconsiderPoints).toBe(2 * changed.length)
+    expect(ordered).toHaveBeenCalledTimes(records.length + 1 + changed.length)
+    expect(listed).toHaveBeenCalledOnce()
+    expect(listed.mock.results[0].value).toHaveLength(records.length)
+    expect(discovery).toHaveBeenCalledOnce()
+    expect(discoveryRows).toBe(records.length)
+    expect(maxTaskWork).toBeLessThanOrEqual(34)
+    expect(maxTaskRecords).toBeLessThanOrEqual(32)
     expect(readJournalRestFacts(db, retry)?.known).toBe(true)
-    expect(ordered).toHaveBeenCalledTimes(records.length + 1)
+    expect(readJournalRestFacts(db, target)?.known).toBe(true)
+    const afterReconsider = {
+      probes: sql.mock.calls.length,
+      owners: owners.mock.calls.length,
+      ordered: ordered.mock.calls.length
+    }
+    for (let i = 0; i < 3; i++) {
+      beginStructuredJournalForeground()()
+      await advance.mock.results.findLast((result) => result.value)?.value
+    }
+    expect({
+      probes: sql.mock.calls.length,
+      owners: owners.mock.calls.length,
+      ordered: ordered.mock.calls.length
+    }).toEqual(afterReconsider)
+    expect(discovery).toHaveBeenCalledOnce()
+    expect(discoveryRows).toBe(records.length)
+    expect(listed).toHaveBeenCalledOnce()
+    console.info('legacy registry operation receipts', {
+      count,
+      discoveryRows,
+      reconciliationRows: listed.mock.results[0].value.length,
+      recordPoints: owners.mock.calls.length,
+      tabPoints: ordered.mock.calls.length,
+      reconsiderations: changed.length,
+      reconsiderRecordPoints: reconsiderRecords.length,
+      reconsiderTabPoints: reconsiderTabs.length,
+      reconsiderPoints,
+      maxTaskWork,
+      maxTaskRecords
+    })
   }
 )
 

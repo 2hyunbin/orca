@@ -87,8 +87,11 @@ export async function runPopulationUpgrade(
   const cleanupSpy = vi
     .spyOn(JournalStructuralScratch.prototype, 'cleanupStep')
     .mockImplementation(function (limit, canWork) {
-      cleanupSteps++
-      return cleanup.call(this, limit, canWork)
+      try {
+        return cleanup.call(this, limit, canWork)
+      } finally {
+        cleanupSteps++
+      }
     })
   try {
     unknown()

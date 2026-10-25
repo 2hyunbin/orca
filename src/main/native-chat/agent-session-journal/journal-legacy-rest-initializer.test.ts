@@ -14,6 +14,8 @@ import { codexProviderHandle } from '../../../shared/agent-session-provider-hand
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { WorkBucket } from './journal-work-bucket'
 import { JournalLegacyRestInitializer } from './journal-legacy-rest-initializer'
+import { InProcessLegacyRestWorker } from './journal-legacy-rest-replay-test-support'
+import { LegacyRestSourceOwner } from './journal-legacy-rest-source'
 import {
   JournalStructuralScratch,
   type JournalStructuralCheckpoint
@@ -345,11 +347,6 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
           if (race === 'owner') {
             owner = null
           }
-          if (race === 'tip') {
-            database.db
-              .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
-              .run(sessionId)
-          }
           if (race === 'epoch') {
             database.db
               .prepare('UPDATE journal_sessions SET epoch = ? WHERE session_id = ?')
@@ -366,6 +363,47 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
       initialized: publish,
       failed
     })
+    let completeReplies = 0
+    let staleRefusals = 0
+    let completedGuard: string | undefined
+    const mainCommit =
+      race === 'tip' ? vi.spyOn(LegacyRestSourceOwner.prototype, 'commit') : undefined
+    if (race === 'tip') {
+      const grant = InProcessLegacyRestWorker.prototype.grant
+      vi.spyOn(InProcessLegacyRestWorker.prototype, 'grant').mockImplementation(
+        async function (request, canWork) {
+          const response = await grant.call(this, request, canWork)
+          if (request.mode === 'replay' && response.status === 'complete') {
+            expect(completeReplies).toBe(0)
+            expect(request.source?.tip).toBe(2)
+            expect(response.cursor).toBe(2)
+            expect(response.pending).toBe(false)
+            expect(response.guard).toBe(request.source?.guard)
+            expect(response.fact).toEqual({ itemId: agentJournalItemKey(identity('cut')), since })
+            const removed = database.db
+              .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 2')
+              .run(sessionId)
+            expect(removed.changes).toBe(1)
+            completedGuard = response.guard
+            completeReplies++
+          }
+          return response
+        }
+      )
+      const source = LegacyRestSourceOwner.prototype.source
+      vi.spyOn(LegacyRestSourceOwner.prototype, 'source').mockImplementation(function (id) {
+        const current = source.call(this, id)
+        if (completedGuard !== undefined) {
+          expect(staleRefusals).toBe(0)
+          expect(id).toBe(sessionId)
+          expect(current?.tip).toBe(1)
+          expect(current?.guard).not.toBe(completedGuard)
+          // Main compares this actual returned guard before checking eligibility again.
+          staleRefusals++
+        }
+        return current
+      })
+    }
     const transaction = database.transaction.bind(database)
     if (race === 'core-failure') {
       vi.spyOn(database, 'transaction').mockImplementationOnce((run) =>
@@ -387,8 +425,15 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
         .prepare('DELETE FROM journal_rows WHERE session_id = ? AND seq = 1')
         .run(sessionId)
     }
-    await initializer.advance(() => true)
+    await initializer.advance(() => race !== 'tip' || staleRefusals === 0)
     await initializer.close()
+    if (race === 'tip') {
+      expect(completeReplies).toBe(1)
+      expect(staleRefusals).toBe(1)
+      expect(mainCommit).not.toHaveBeenCalled()
+      expect(failed).not.toHaveBeenCalled()
+      expect(facts()?.lastSequence).toBe(1)
+    }
     expect(publish).not.toHaveBeenCalled()
     expect(facts()?.known).toBe(race === 'pair')
     if (['core-failure', 'newer', 'gap'].includes(race)) {
