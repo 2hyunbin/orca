@@ -183,8 +183,10 @@ function detectTerminalComposer(
 }
 
 // Why: dsh-tui 0.17 boxes its single-line launchpad composer (`│ ❯ draft │`) under a `╭─╮` top.
-const BOXED_COMPOSER_TOP = /^\s*╭─{8,}╮\s*$/
-const BOXED_COMPOSER_ROW = /^\s*│ ❯ /
+// Why String.raw: the orcad bundle must stay ASCII, and the formatter unescapes regex literals.
+const BOXED_COMPOSER_TOP = new RegExp(String.raw`^\s*\u256D\u2500{8,}\u256E\s*$`)
+const BOXED_COMPOSER_ROW = new RegExp(String.raw`^\s*\u2502 \u276F `)
+const BOXED_COMPOSER_RIGHT_EDGE = new RegExp(String.raw`\u2502\s*$`)
 
 function detectBoxedComposerDraft(context: TerminalCursorContext): TerminalComposerDraft | null {
   const cursorIndex = context.rows.length - 1
@@ -200,7 +202,7 @@ function detectBoxedComposerDraft(context: TerminalCursorContext): TerminalCompo
   if (!typed.trim()) {
     return null
   }
-  const text = `${typed}${context.afterCursor.replace(/│\s*$/, '')}`.trim()
+  const text = `${typed}${context.afterCursor.replace(BOXED_COMPOSER_RIGHT_EDGE, '')}`.trim()
   const row = context.cursorViewportRow
   return { text, promptRow: row, cursorRow: row, endRow: row, promptGlyph: '❯' }
 }
