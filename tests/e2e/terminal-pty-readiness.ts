@@ -88,8 +88,7 @@ export async function waitForPtyShellEcho(
   const deadline = Date.now() + timeoutMs
   await waitForPtyPaneMounted(page, ptyId, Math.min(10_000, timeoutMs))
   while (Date.now() < deadline) {
-    // Why: terminal scrollback includes command echo. Encode the marker inside
-    // the node snippet so seeing the plain marker proves the shell executed it.
+    // Encode the marker in the snippet so command echo cannot satisfy execution readiness.
     for (const input of buildFreshShellProbeInputSequence(
       encodedMarkerCommand(marker, nodeCommand)
     )) {
