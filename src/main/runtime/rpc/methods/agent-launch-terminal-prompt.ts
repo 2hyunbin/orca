@@ -15,6 +15,12 @@ import {
   createLaunchedAgentWriteGuard,
   type LaunchedAgentWriteGuardRuntime
 } from '../../launched-agent-write-guard'
+import type { WorktreeStartupFollowup } from '../../runtime-worktree-agent-startup'
+import {
+  waitForWorktreeStartupFollowup,
+  type WorktreeStartupReadinessHost
+} from '../../runtime-worktree-startup-readiness'
+import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
 
 /** The same budget orchestration gives a worker to reach its composer before dispatching to it. */
 const AGENT_READY_TIMEOUT_MS = 60_000
@@ -144,4 +150,29 @@ export async function deliverTerminalAgentLaunchPrompt(args: {
   } finally {
     guard.dispose()
   }
+}
+
+/** A post-start agent's create-time prompt: its process in front can still drop typed text (#10336). */
+export async function deliverStartupFollowupPrompt(
+  runtime: TerminalPromptRuntime,
+  host: WorktreeStartupReadinessHost,
+  handle: string,
+  { agent, prompt }: WorktreeStartupFollowup
+): Promise<boolean> {
+  // The launch command may not be typed yet; until then readiness can only be the shell's.
+  if (
+    !(await waitForWorktreeStartupFollowup(host, handle, TUI_AGENT_CONFIG[agent].expectedProcess))
+  ) {
+    console.warn('[worktree-create] agent did not become ready for follow-up prompt')
+    return false
+  }
+  return deliverTerminalAgentLaunchPrompt({
+    runtime,
+    handle,
+    agent,
+    freshLaunch: true,
+    text: prompt,
+    // Windows cannot prove which agent is foreground; refuse only a proven shell, as worker briefs do.
+    unprovableHost: 'write-unless-shell'
+  })
 }

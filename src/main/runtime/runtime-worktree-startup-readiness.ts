@@ -8,10 +8,7 @@ import { resolveDraftPasteReadyTimeoutMs } from '../../shared/draft-paste-ready-
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
-import type {
-  WorktreeStartupDraftPaste,
-  WorktreeStartupFollowup
-} from './runtime-worktree-agent-startup'
+import type { WorktreeStartupDraftPaste } from './runtime-worktree-agent-startup'
 
 const BRACKETED_PASTE_BEGIN = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
@@ -44,34 +41,6 @@ export function pasteWorktreeStartupDraftWhenReady(
       host.write(ptyId, `${BRACKETED_PASTE_BEGIN}${draft.content}${BRACKETED_PASTE_END}`, 'launch')
     })
     .catch((error) => console.warn('[worktree-create] failed to paste startup draft:', error))
-}
-
-export function sendWorktreeStartupFollowupWhenReady(
-  host: WorktreeStartupReadinessHost,
-  handle: string,
-  followup: WorktreeStartupFollowup
-): void {
-  void deliverWorktreeStartupFollowup(host, handle, followup)
-}
-
-/** Types the follow-up once the agent process is in front; true when it was written. */
-export async function deliverWorktreeStartupFollowup(
-  host: WorktreeStartupReadinessHost,
-  handle: string,
-  followup: WorktreeStartupFollowup
-): Promise<boolean> {
-  try {
-    const ptyId = await waitForWorktreeStartupFollowup(host, handle, followup.expectedProcess)
-    if (!ptyId) {
-      console.warn('[worktree-create] agent did not become ready for follow-up prompt')
-      return false
-    }
-    host.write(ptyId, `${followup.prompt}\r`, 'launch')
-    return true
-  } catch (error) {
-    console.warn('[worktree-create] failed to send startup follow-up prompt:', error)
-    return false
-  }
 }
 
 export async function waitForWorktreeStartupFollowup(

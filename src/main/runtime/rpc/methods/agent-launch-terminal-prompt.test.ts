@@ -1,7 +1,11 @@
 /** A closed composer proves no write; stalled submission proves text was written despite unobserved progress. Receipts must distinguish them to avoid duplicate turns. */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { deliverTerminalAgentLaunchPrompt } from './agent-launch-terminal-prompt'
+import {
+  deliverStartupFollowupPrompt,
+  deliverTerminalAgentLaunchPrompt
+} from './agent-launch-terminal-prompt'
+import type { WorktreeStartupReadinessHost } from '../../runtime-worktree-startup-readiness'
 import { AGENT_PROMPT_STALLED_ERROR } from '../../agent-prompt-submission-verification'
 
 type SendResult = { handle: string; accepted: boolean; bytesWritten: number }
@@ -554,3 +558,42 @@ function fakeClock() {
     }
   }
 }
+
+describe('a startup follow-up prompt', () => {
+  function readinessHost() {
+    const write = vi.fn()
+    const host: WorktreeStartupReadinessHost = {
+      getPtyId: () => 'pty-1',
+      getForegroundProcess: async () => 'kimi',
+      subscribeToData: () => () => {},
+      readRecentOutput: () => undefined,
+      write
+    }
+    return { host, write }
+  }
+
+  // Kimi is in front before its TUI reads input; text typed then is echoed and lost (#10336).
+  it('pastes and submits through composer readiness once the agent is in front', async () => {
+    const stub = runtimeStub({ composerSignal: true })
+    const { host, write } = readinessHost()
+
+    await expect(
+      deliverStartupFollowupPrompt(stub.runtime, host, 'term_1', {
+        agent: 'kimi',
+        prompt: 'fix the flaky test'
+      })
+    ).resolves.toBe(true)
+    expect(stub.waitForFreshWorkerComposer).toHaveBeenCalledWith(
+      'term_1',
+      'kimi',
+      expect.any(Number),
+      expect.objectContaining({ requireComposerMarker: false })
+    )
+    expect(stub.sendTerminalAgentPrompt).toHaveBeenCalledWith(
+      'term_1',
+      'fix the flaky test',
+      expect.objectContaining({ inputKind: 'launch', composerReady: true })
+    )
+    expect(write).not.toHaveBeenCalled()
+  })
+})

@@ -196,6 +196,8 @@ export function agentLaunchSurfaceFactory(
         agent,
         freshLaunch,
         text: prompt.text,
+        // Windows cannot prove the agent is in front and a stdin-after-start prompt cannot ride the launch line (#10336).
+        unprovableHost: 'write-unless-shell',
         ...(signal ? { signal } : {})
       })
   }
