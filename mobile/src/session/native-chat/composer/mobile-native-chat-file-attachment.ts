@@ -1,6 +1,9 @@
-import { formatNativeChatFileReference } from '../../../src/shared/agent-image-paste'
-import { MobileFileTooLargeError, type PickedMobileFile } from '../platform/media-picker-contract'
-import type { AgentSessionAttachmentUploadCommitResult } from '../../../src/shared/agent-session-attachments'
+import { formatNativeChatFileReference } from '../../../../../src/shared/agent-image-paste'
+import {
+  MobileFileTooLargeError,
+  type PickedMobileFile
+} from '../../../platform/media-picker-contract'
+import type { AgentSessionAttachmentUploadCommitResult } from '../../../../../src/shared/agent-session-attachments'
 
 /** A file in the composer: its chip shows from the pick, and `path` arrives once the host stored it. */
 export type PendingNativeChatFile = {

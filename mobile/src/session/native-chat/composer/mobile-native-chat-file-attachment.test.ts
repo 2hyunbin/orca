@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { MobileFileTooLargeError, type PickedMobileFile } from '../platform/media-picker-contract'
+import {
+  MobileFileTooLargeError,
+  type PickedMobileFile
+} from '../../../platform/media-picker-contract'
 import {
   nativeChatTextWithFileReferences,
   uploadPickedNativeChatFiles,

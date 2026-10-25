@@ -20,7 +20,6 @@ function createMockSubprocess() {
   let onData: ((data: string) => void) | null = null
   let onExit: ((code: number) => void) | null = null
   let killed = false
-  let clearCalls = 0
   let pauseCalls = 0
   let resumeCalls = 0
 
@@ -54,12 +53,7 @@ function createMockSubprocess() {
     resume() {
       resumeCalls++
     },
-    get clearCalls() {
-      return clearCalls
-    },
-    clear() {
-      clearCalls++
-    },
+    clear() {},
     kill() {
       killed = true
       setTimeout(() => onExit?.(0), 5)
@@ -438,8 +432,10 @@ describe('Session', () => {
       expect(subprocess.written).toEqual(['first\n', 'second\n'])
     })
 
-    it('contains live color replies without releasing queued startup input', async () => {
-      const reply = '\x1b[?997;1n'
+    it.each([
+      ['color', '\x1b[?997;1n'],
+      ['XTVERSION', '\x1bP>|xterm.js(6.1.0)\x1b\\']
+    ])('contains live %s replies without releasing queued startup input', async (_, reply) => {
       createSession({ shellReadySupported: true, shellReadyTimeoutMs: 100 })
       session.write('codex\n')
 

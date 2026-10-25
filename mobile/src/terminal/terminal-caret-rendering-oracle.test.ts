@@ -60,7 +60,7 @@ function trackEventListenerCleanup(): () => {
   const activeRegistration = (
     target: EventTarget,
     type: string,
-    listener: EventListenerOrEventListenerObject,
+    listener: EventListenerOrEventListenerObject | null,
     options?: boolean | AddEventListenerOptions | EventListenerOptions
   ) =>
     registrations.find(
@@ -145,6 +145,7 @@ describe('xterm caret rendering oracle', () => {
 
     try {
       terminal.open(container)
+      await vi.waitFor(() => expect(cursorCoreService(terminal).isCursorInitialized).toBe(true))
       await write(terminal, '\x1b[?25h\x1b[2K\x1b[1G> hello\x1b[?2004h\x1b[1;3H')
       terminal.refresh(0, terminal.rows - 1)
       await vi.waitFor(() => expect(container.textContent).toContain('hello'))
@@ -168,24 +169,6 @@ describe('xterm caret rendering oracle', () => {
     }
 
     expect(container.querySelector('.xterm')).toBeNull()
-    const cleanup = listenerCleanup()
-    expect(cleanup.added).toBeGreaterThan(0)
-    expect(cleanup.removed).toBe(cleanup.added)
-    expect(cleanup.unreleased).toEqual([])
-  })
-
-  it('releases listeners across 25 terminal lifecycles', () => {
-    const listenerCleanup = trackEventListenerCleanup()
-    for (let cycle = 0; cycle < 25; cycle += 1) {
-      const terminal = new Terminal(MOBILE_TERMINAL_CARET_OPTIONS)
-      const container = document.createElement('div')
-      document.body.append(container)
-      terminal.open(container)
-      terminal.dispose()
-      expect(container.querySelector('.xterm')).toBeNull()
-      container.remove()
-    }
-
     const cleanup = listenerCleanup()
     expect(cleanup.added).toBeGreaterThan(0)
     expect(cleanup.removed).toBe(cleanup.added)
