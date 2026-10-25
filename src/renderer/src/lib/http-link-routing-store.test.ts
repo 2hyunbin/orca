@@ -8,13 +8,12 @@ import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shar
 import { seedBrowserLinkTestStore, WORKSPACE, URL_TO_OPEN } from './browser-link-open.test-fixture'
 import { captureLinkOpenIntent } from './link-open-intent'
 import { openHttpLink } from './http-link-routing'
-import { openRoutedHttpLink } from './http-link-destinations'
+import { httpLinkActionDestinationsFor, openRoutedHttpLink } from './http-link-destinations'
 import * as workspaceBrowserTabOpen from './workspace-browser-tab-open'
 import type { DocPreviewExternalLink } from '../../../shared/doc-preview-scheme'
 import { subscribeDocPreviewExternalLinkConfirmation } from '@/components/browser-pane/workspace-doc/doc-preview-external-link-confirmation'
 import { canNativeChatOpenOwnedBrowser } from '@/components/native-chat/native-chat-http-link-source-owner'
 import { canOfferHttpLinkGroupAction } from './http-link-in-group-availability'
-import { httpLinkActionDestinationsFor } from './http-link-destinations'
 import { runtimeStatuses } from '@/store/slices/browser-slice-test-harness'
 
 const routeMocks = vi.hoisted(() => ({ remote: vi.fn(), error: vi.fn() }))
