@@ -8,27 +8,18 @@ import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Tab } from '../../../../shared/tab-types'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { getRemoteRuntimePtyEnvironmentId } from '../runtime-terminal-stream'
-import { mirroredRuntimeEnvironmentIdForWorkspace } from './mirrored-workspace-owner'
 import type { WebSessionTabsSyncState } from './state'
 import { environmentIdsMirroringLocalTab } from './tracking-mappings'
 
 /**
- * The sync state is the app store at runtime; these optional reads stay absent in minimal
- * assemblies, which then fall back to treating every row as the publishing runtime's own.
+ * The sync state is the app store at runtime; minimal assemblies omit the catalog, and then every
+ * runtime a row names counts as live.
  */
 export type MirrorRowOwnershipState = WebSessionTabsSyncState &
   Partial<
     Pick<
       AppState,
-      | 'removedRuntimeEnvironmentIds'
-      | 'runtimeEnvironments'
-      | 'runtimeEnvironmentCatalogSettled'
-      | 'repos'
-      | 'worktreesByRepo'
-      | 'detectedWorktreesByRepo'
-      | 'folderWorkspaces'
-      | 'projectGroups'
-      | 'settings'
+      'removedRuntimeEnvironmentIds' | 'runtimeEnvironments' | 'runtimeEnvironmentCatalogSettled'
     >
   >
 
@@ -55,7 +46,7 @@ function ownedByAnotherLiveEnvironment(
 
 /**
  * Pane bindings name a mirrored terminal's runtime; a mirror still awaiting its first handle is
- * known by the frames that last published it, and failing those by the workspace's own server.
+ * known by the frames that last published it.
  */
 export function isMirroredTerminalOfAnotherEnvironment(
   state: MirrorRowOwnershipState,
@@ -68,20 +59,17 @@ export function isMirroredTerminalOfAnotherEnvironment(
   ]
     .map((ptyId) => (ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null))
     .filter((owner): owner is string => owner !== null)
-  const verdict =
+  // No evidence leaves the row to this frame: guessing an owner would let a ghost outlive the
+  // retraction of the runtime that really published it.
+  return (
     ownedByAnotherLiveEnvironment(state, environmentId, bindingOwners) ??
     ownedByAnotherLiveEnvironment(
       state,
       environmentId,
       environmentIdsMirroringLocalTab(tab.worktreeId, tab.id)
-    )
-  if (verdict !== null) {
-    return verdict
-  }
-  const workspaceOwner = mirroredRuntimeEnvironmentIdForWorkspace(state, tab.worktreeId)
-  return workspaceOwner
-    ? (ownedByAnotherLiveEnvironment(state, environmentId, [workspaceOwner]) ?? false)
-    : false
+    ) ??
+    false
+  )
 }
 
 /** A chat names its host; only a live paired runtime other than the publisher keeps it. */

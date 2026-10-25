@@ -190,7 +190,10 @@ export function prepareWebSessionTabsSnapshotBrowser(
   const retainedUnifiedTabs = currentUnifiedTabs.filter((tab) => {
     if (tab.contentType === 'agent-session') {
       // Another runtime's chat in this workspace; only its own host's frames speak for it (#31983).
-      if (isAgentSessionTabOfAnotherHost(state, tab, snapshotExecutionHostId)) {
+      if (
+        !publishedAgentSessionIds.has(tab.entityId) &&
+        isAgentSessionTabOfAnotherHost(state, tab, snapshotExecutionHostId)
+      ) {
         return true
       }
       // A matching host row is authoritative; retaining the provisional tab beside its mirror
