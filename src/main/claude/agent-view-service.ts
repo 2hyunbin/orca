@@ -49,7 +49,7 @@ export class ClaudeAgentViewService {
 
   reconcile(settings: NavigationSettings): Promise<void> {
     const enabled =
-      settings.claudeSubagentNavigationEnabled === true &&
+      settings.claudeSubagentNavigationEnabled !== false &&
       isAgentStatusHooksEnabledForAgent(settings, 'claude')
     const customConfig = settings.agentDefaultEnv?.claude?.CLAUDE_CONFIG_DIR
     const key = JSON.stringify([enabled, customConfig])
@@ -105,7 +105,7 @@ export class ClaudeAgentViewService {
     launchCommand?: string
   }): Promise<void> {
     if (
-      args.settings?.claudeSubagentNavigationEnabled !== true ||
+      args.settings?.claudeSubagentNavigationEnabled === false ||
       !isAgentStatusHooksEnabledForAgent(args.settings, 'claude') ||
       args.isWsl ||
       (args.launchAgent

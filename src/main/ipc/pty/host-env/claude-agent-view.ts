@@ -21,7 +21,7 @@ export function applyClaudeAgentViewEnv(
   delete env.ORCA_CLAUDE_CONFIG_DIR
   if (
     !opts.agentStatusHooksEnabled ||
-    opts.claudeSubagentNavigationEnabled !== true ||
+    opts.claudeSubagentNavigationEnabled === false ||
     !isTuiAgentEnabled('claude', opts.disabledTuiAgents) ||
     opts.isWsl
   ) {

@@ -1,5 +1,10 @@
 import { getAgentLaunchExecutableName } from '../../shared/agent-command-line-intent'
 import {
+  isAgentStatusHooksEnabledForAgent,
+  type AgentStatusHooksSettings
+} from '../../shared/agent-status-hooks-setting'
+import type { ClaudeAgentViewSettings } from '../../shared/claude-agent-view'
+import {
   detectExplicitPiAgentKindFromCommand,
   isPiCompatibleAgentType,
   type PiAgentKind
@@ -13,7 +18,7 @@ export async function awaitExplicitAgentPluginGuestReadiness(args: {
   codexHomePath?: string | null
   launchAgent?: TuiAgent
   launchCommand?: string
-  claudeSubagentNavigationEnabled?: boolean
+  settings?: AgentStatusHooksSettings & ClaudeAgentViewSettings
   timeoutMs?: number
   manager?: Pick<
     WslHookRelayManager,
@@ -28,7 +33,8 @@ export async function awaitExplicitAgentPluginGuestReadiness(args: {
     ? args.launchAgent
     : detectExplicitPiAgentKindFromCommand(args.launchCommand)
   const claude =
-    args.claudeSubagentNavigationEnabled === true &&
+    args.settings?.claudeSubagentNavigationEnabled !== false &&
+    isAgentStatusHooksEnabledForAgent(args.settings, 'claude') &&
     (args.launchAgent === 'claude' ||
       (!args.launchAgent && getAgentLaunchExecutableName(args.launchCommand) === 'claude'))
   if (kind !== 'pi' && kind !== 'omp' && !claude) {

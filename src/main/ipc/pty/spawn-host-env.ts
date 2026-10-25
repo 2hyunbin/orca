@@ -201,7 +201,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchCommand
     })
     await awaitExplicitAgentPluginGuestReadiness({
-      claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
+      settings: ptySettings,
       isWsl,
       distro: wslDistro,
       codexHomePath: selectedCodexHomePath,

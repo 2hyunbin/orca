@@ -10,9 +10,10 @@ child's name; the compact group summary keeps the focused agent's indicator.
 
 ## Setup
 
-Enable **Settings → Agents → Claude subagent navigation**, keep agent status
-hooks enabled, and launch Claude Code 2.1.300 or newer in Orca. This setting is
-off by default. It permits Orca to add a shortcut to the selected Claude
+Navigation works automatically in new Orca panes with agent status hooks enabled
+and Claude mod support (Claude Code 2.1.300 or newer). It is on by default; an
+explicitly saved off setting stays off. Disable it under
+**Settings → Agents → Claude subagent navigation**. Orca adds a shortcut to the selected Claude
 config's `keybindings.json`, including account profiles and `CLAUDE_CONFIG_DIR`.
 
 Mod code lives under Orca's userData directory, in a folder named by its content
@@ -40,7 +41,7 @@ owned-shortcut cleanup behavior.
 Setup runs asynchronously at startup, when navigation settings change, and
 when a new account profile is provisioned. Reconciliation is serialized and
 PTY spawns use the cached plugin folder without reading or writing HOME.
-Only opted-in local Claude launches wait for pending setup, for at most 200 ms.
+Only local Claude launches with navigation and hooks enabled wait for pending setup, for at most 200 ms.
 Plain shells, other agents, WSL panes and disabled navigation never wait for it.
 If setup exceeds that budget, subsequent panes can use navigation once setup
 finishes. Disabled cleanup visits known config directories and any config directory
@@ -60,7 +61,7 @@ Unowned folders remain untouched. Malformed keybindings are preserved, the
 global mod is retired, and its binding cleanup is retried after the JSONC is
 repaired. WSL loads a versioned guest-resident mod from relay storage; it never
 receives a Windows plugin path. Updated paired runtime hosts use their own
-storage and opt-in setting. Older hosts safely decline navigation.
+storage and navigation setting. Older hosts safely decline navigation.
 
 ## Delivery
 

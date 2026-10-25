@@ -140,7 +140,7 @@ export function buildPtyHostEnv(
         baseEnv.ORCA_AGENT_HOOK_ENDPOINT = guestEndpoint
       }
       const claude =
-        opts.claudeSubagentNavigationEnabled === true &&
+        opts.claudeSubagentNavigationEnabled !== false &&
         isTuiAgentEnabled('claude', opts.disabledTuiAgents)
           ? wslHookRelayManager.getClaudeAgentView(distro)
           : null

@@ -73,7 +73,7 @@ export function configureLocalPtyProvider(args: {
         launchCommand: ctx?.command
       })
       await awaitExplicitAgentPluginGuestReadiness({
-        claudeSubagentNavigationEnabled: ptySettings?.claudeSubagentNavigationEnabled,
+        settings: ptySettings,
         isWsl: ctx?.isWsl === true,
         distro: ctx?.wslDistro,
         codexHomePath: selectedCodexHomePath,

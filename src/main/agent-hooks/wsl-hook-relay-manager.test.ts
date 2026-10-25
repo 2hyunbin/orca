@@ -180,6 +180,7 @@ describe('WslHookRelayManager', () => {
       registerInstallPlugins?: boolean
       detectedAgents?: string[]
       claudeVersion?: string
+      claudePluginDir?: string
     } = {}
   ): MultiplexerTransport {
     const { registerInstallPlugins = true, detectedAgents = ['codex'], claudeVersion } = options
@@ -195,13 +196,16 @@ describe('WslHookRelayManager', () => {
     }))
     // A guest bundle predating the plugin overlay omits this handler (-32601).
     if (registerInstallPlugins) {
-      harness.guestDispatcher.onRequest(AGENT_HOOK_INSTALL_PLUGINS_METHOD, async () => ({
+      harness.guestDispatcher.onRequest(AGENT_HOOK_INSTALL_PLUGINS_METHOD, async (params) => ({
         installed: { opencode: true, opencode2: true, pi: false, omp: false },
         overlayDirs: {
           opencode: opencodeOverlayDir,
           opencode2: opencode2OverlayDir,
           pi: `${home}/.pi/agent`,
-          omp: `${home}/.omp/agent/extensions/orca-agent-status.ts`
+          omp: `${home}/.omp/agent/extensions/orca-agent-status.ts`,
+          ...(options.claudePluginDir && params?.claudeAgentViewSource
+            ? { claudeAgentView: options.claudePluginDir, claudeConfig: `${home}/.claude` }
+            : {})
         }
       }))
     }
@@ -341,6 +345,42 @@ describe('WslHookRelayManager', () => {
     expect(manager.getOpenCodeOverlayDir('Ubuntu')).toBe(opencodeOverlayDir)
     manager.disposeAll()
   })
+
+  it.each([
+    { settings: {}, expected: true },
+    { settings: { claudeSubagentNavigationEnabled: false }, expected: false },
+    { settings: { agentStatusHooksEnabled: false }, expected: false },
+    { settings: { disabledTuiAgents: ['claude' as const] }, expected: false }
+  ])(
+    'prepares Claude guest navigation automatically and honors opt-outs: %j',
+    async ({ settings, expected }) => {
+      const pluginDir = `${home}/.orca-relay/claude-agent-view/version/orca-agent-view`
+      const { manager, deps } = createManager({
+        pluginSources: () => ({ claudeAgentViewSource: 'export function register() {}' }),
+        managedHookSettings: () => settings,
+        waitForSentinel: vi.fn(async () => guestTransport({ claudePluginDir: pluginDir }))
+      })
+      try {
+        await expect(
+          awaitExplicitAgentPluginGuestReadiness({
+            isWsl: true,
+            distro: 'Ubuntu',
+            launchAgent: 'claude',
+            settings,
+            manager
+          })
+        ).resolves.toBe(true)
+        expect(manager.getClaudeAgentView('Ubuntu')).toEqual(
+          expected ? { pluginDir, configDir: `${home}/.claude` } : null
+        )
+        if (!expected) {
+          expect(deps.spawnRelay).not.toHaveBeenCalled()
+        }
+      } finally {
+        manager.disposeAll()
+      }
+    }
+  )
 
   it('does not treat the endpoint as ready before guest install completes', async () => {
     let releaseInstall!: () => void

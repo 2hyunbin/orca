@@ -29,35 +29,38 @@ it.each([undefined, '', 'user-plugin'])(
       value === undefined ? {} : { CLAUDE_CODE_PLUGIN_DIRS: value }
     const original = { ...env }
     for (let pane = 0; pane < 100; pane++) {
-      applyClaudeAgentViewEnv(env, options)
+      applyClaudeAgentViewEnv(env, { ...options, claudeSubagentNavigationEnabled: false })
     }
     expect(env).toEqual(original)
     expect(read).not.toHaveBeenCalled()
   }
 )
 
-it('reads only the prepared cache on every spawn and preserves user plugin paths', () => {
-  vi.stubEnv('CLAUDE_CODE_PLUGIN_DIRS', undefined)
-  vi.stubEnv('ORCA_CLAUDE_AGENT_VIEW_PLUGIN_DIR', undefined)
-  read.mockReturnValue({ pluginDir: '/orca/plugin', configDir: '/claude-profile' })
-  for (let pane = 0; pane < 100; pane++) {
-    const env = {
-      CLAUDE_CONFIG_DIR: '/claude-profile',
-      CLAUDE_CODE_PLUGIN_DIRS: `first${delimiter}second`
+it.each([undefined, true])(
+  'uses the cache and preserves user plugin paths when enabled: %j',
+  (enabled) => {
+    vi.stubEnv('CLAUDE_CODE_PLUGIN_DIRS', undefined)
+    vi.stubEnv('ORCA_CLAUDE_AGENT_VIEW_PLUGIN_DIR', undefined)
+    read.mockReturnValue({ pluginDir: '/orca/plugin', configDir: '/claude-profile' })
+    for (let pane = 0; pane < 100; pane++) {
+      const env = {
+        CLAUDE_CONFIG_DIR: '/claude-profile',
+        CLAUDE_CODE_PLUGIN_DIRS: `first${delimiter}second`
+      }
+      applyClaudeAgentViewEnv(env, { ...options, claudeSubagentNavigationEnabled: enabled })
+      expect(env).toMatchObject({
+        CLAUDE_CODE_PLUGIN_DIRS: `first${delimiter}second${delimiter}/orca/plugin`,
+        ORCA_CLAUDE_CONFIG_DIR: '/claude-profile'
+      })
     }
-    applyClaudeAgentViewEnv(env, { ...options, claudeSubagentNavigationEnabled: true })
-    expect(env).toMatchObject({
-      CLAUDE_CODE_PLUGIN_DIRS: `first${delimiter}second${delimiter}/orca/plugin`,
-      ORCA_CLAUDE_CONFIG_DIR: '/claude-profile'
-    })
+    expect(read).toHaveBeenCalledTimes(100)
   }
-  expect(read).toHaveBeenCalledTimes(100)
-})
+)
 
 it('strips only a previously inherited Orca path when disabled', () => {
   vi.stubEnv('ORCA_CLAUDE_AGENT_VIEW_PLUGIN_DIR', '/orca/previous')
   vi.stubEnv('CLAUDE_CODE_PLUGIN_DIRS', `/user/plugin${delimiter}/orca/previous`)
   const env = {}
-  applyClaudeAgentViewEnv(env, options)
+  applyClaudeAgentViewEnv(env, { ...options, claudeSubagentNavigationEnabled: false })
   expect(env).toEqual({ CLAUDE_CODE_PLUGIN_DIRS: '/user/plugin' })
 })

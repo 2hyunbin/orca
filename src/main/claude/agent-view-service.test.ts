@@ -20,56 +20,58 @@ afterEach(async () => {
   resetLoginShellEnvironmentCacheForTests()
 })
 
-it('serializes enable/disable for default and profile homes, restoring only shortcuts removed by Orca', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-agent-view-service-'))
-  roots.push(root)
-  const config = join(root, 'default')
-  vi.stubEnv('CLAUDE_CONFIG_DIR', config)
-  const profile = join(root, 'account')
-  const reconcileConfig = vi.fn(reconcileClaudeAgentViewConfig)
-  const ensurePlugin = vi.fn(ensureClaudeAgentViewPluginAsync)
-  const service = new ClaudeAgentViewService(join(root, 'orca'), {
-    reconcileConfig,
-    ensurePlugin,
-    listProfiles: async () => [profile],
-    loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config })
-  })
-  const enabled = { claudeSubagentNavigationEnabled: true }
-  await Promise.all(Array.from({ length: 100 }, () => service.reconcile(enabled)))
-  expect(reconcileConfig).toHaveBeenCalledTimes(2)
-  expect(ensurePlugin).toHaveBeenCalledOnce()
-  expect(service.read(config)?.pluginDir).toBeTruthy()
-  expect(service.read(config)?.pluginDir).toBe(ensureClaudeAgentViewPlugin(join(root, 'orca')))
-  await writeFile(join(profile, 'keybindings.json'), '{"bindings":[]}')
-  await service.reconcile({ claudeSubagentNavigationEnabled: false })
-  expect(service.read(config)).toBeUndefined()
-  expect(
-    claudeAgentViewChord(await readFile(join(config, 'keybindings.json'), 'utf8'))
-  ).toBeUndefined()
-  expect(JSON.parse(await readFile(join(config, 'orca-agent-view.json'), 'utf8')).setup).toBe(
-    'pending'
-  )
-  expect(JSON.parse(await readFile(join(profile, 'orca-agent-view.json'), 'utf8')).setup).toBe(
-    'attempted'
-  )
-  await reconcileClaudeAgentViewConfig(join(config, 'settings.json'), false)
-  await service.reconcile(enabled)
-  expect(claudeAgentViewChord(await readFile(join(config, 'keybindings.json'), 'utf8'))).toBe(
-    'ctrl+alt+g'
-  )
-  expect(await readFile(join(profile, 'keybindings.json'), 'utf8')).toBe('{"bindings":[]}')
-  const calls = reconcileConfig.mock.calls.length
-  for (let pane = 0; pane < 100; pane++) {
-    service.read(config)
+it.each([{}, { claudeSubagentNavigationEnabled: true }])(
+  'prepares navigation automatically, serializing config changes and respecting shortcut removals: %j',
+  async (enabled) => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-agent-view-service-'))
+    roots.push(root)
+    const config = join(root, 'default')
+    vi.stubEnv('CLAUDE_CONFIG_DIR', config)
+    const profile = join(root, 'account')
+    const reconcileConfig = vi.fn(reconcileClaudeAgentViewConfig)
+    const ensurePlugin = vi.fn(ensureClaudeAgentViewPluginAsync)
+    const service = new ClaudeAgentViewService(join(root, 'orca'), {
+      reconcileConfig,
+      ensurePlugin,
+      listProfiles: async () => [profile],
+      loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config })
+    })
+    await Promise.all(Array.from({ length: 100 }, () => service.reconcile(enabled)))
+    expect(reconcileConfig).toHaveBeenCalledTimes(2)
+    expect(ensurePlugin).toHaveBeenCalledOnce()
+    expect(service.read(config)?.pluginDir).toBeTruthy()
+    expect(service.read(config)?.pluginDir).toBe(ensureClaudeAgentViewPlugin(join(root, 'orca')))
+    await writeFile(join(profile, 'keybindings.json'), '{"bindings":[]}')
+    await service.reconcile({ claudeSubagentNavigationEnabled: false })
+    expect(service.read(config)).toBeUndefined()
+    expect(
+      claudeAgentViewChord(await readFile(join(config, 'keybindings.json'), 'utf8'))
+    ).toBeUndefined()
+    expect(JSON.parse(await readFile(join(config, 'orca-agent-view.json'), 'utf8')).setup).toBe(
+      'pending'
+    )
+    expect(JSON.parse(await readFile(join(profile, 'orca-agent-view.json'), 'utf8')).setup).toBe(
+      'attempted'
+    )
+    await reconcileClaudeAgentViewConfig(join(config, 'settings.json'), false)
+    await service.reconcile(enabled)
+    expect(claudeAgentViewChord(await readFile(join(config, 'keybindings.json'), 'utf8'))).toBe(
+      'ctrl+alt+g'
+    )
+    expect(await readFile(join(profile, 'keybindings.json'), 'utf8')).toBe('{"bindings":[]}')
+    const calls = reconcileConfig.mock.calls.length
+    for (let pane = 0; pane < 100; pane++) {
+      service.read(config)
+    }
+    expect(reconcileConfig).toHaveBeenCalledTimes(calls)
+    await service.prepareProfile(join(root, 'new-account'))
+    expect(
+      claudeAgentViewChord(await readFile(join(root, 'new-account', 'keybindings.json'), 'utf8'))
+    ).toBe('ctrl+alt+g')
+    await service.prepareProfile(join(root, 'new-account'))
+    expect(reconcileConfig).toHaveBeenCalledTimes(calls + 1)
   }
-  expect(reconcileConfig).toHaveBeenCalledTimes(calls)
-  await service.prepareProfile(join(root, 'new-account'))
-  expect(
-    claudeAgentViewChord(await readFile(join(root, 'new-account', 'keybindings.json'), 'utf8'))
-  ).toBe('ctrl+alt+g')
-  await service.prepareProfile(join(root, 'new-account'))
-  expect(reconcileConfig).toHaveBeenCalledTimes(calls + 1)
-})
+)
 
 it.each(['edited', 'reused', 'malformed'] as const)(
   'preserves user bindings through disabling and restart: %s',
@@ -146,10 +148,9 @@ it('keeps reconciliation ordered and prevents a stale enable from republishing i
 })
 
 it.each([
-  {},
   { claudeSubagentNavigationEnabled: false },
-  { claudeSubagentNavigationEnabled: true, agentStatusHooksEnabled: false },
-  { claudeSubagentNavigationEnabled: true, disabledTuiAgents: ['claude' as const] }
+  { agentStatusHooksEnabled: false },
+  { disabledTuiAgents: ['claude' as const] }
 ])('cleans disabled navigation without probing a login shell: %j', async (settings) => {
   const config = join(tmpdir(), 'orca-agent-view-disabled-config')
   const custom = join(tmpdir(), 'orca-agent-view-custom-config')
@@ -244,38 +245,39 @@ it.each([
   }
 })
 
-it.each([{ launchAgent: 'claude' as const }, { launchCommand: 'claude --resume' }])(
-  'bounds an opted-in Claude launch waiting on stalled setup: %j',
-  async (launch) => {
-    vi.useFakeTimers()
-    const config = join(tmpdir(), 'orca-agent-view-stalled-config')
-    let release = () => {}
-    const gate = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    const service = new ClaudeAgentViewService(join(tmpdir(), 'orca-agent-view-stalled-data'), {
-      reconcileConfig: () => gate,
-      ensurePlugin: async () => join(tmpdir(), 'orca-agent-view-stalled-plugin'),
-      loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config }),
-      listProfiles: async () => []
-    })
-    const settings = { claudeSubagentNavigationEnabled: true }
-    const reconcile = service.reconcile(settings)
-    let ready = false
-    const wait = service.readyForLaunch({ settings, ...launch }).then(() => {
-      ready = true
-    })
-    try {
-      await vi.advanceTimersByTimeAsync(199)
-      expect(ready).toBe(false)
-      await vi.advanceTimersByTimeAsync(1)
-      await wait
-      expect(service.read()).toBeUndefined()
-      expect(vi.getTimerCount()).toBe(0)
-    } finally {
-      release()
-      await reconcile
-    }
-    expect(service.read()?.pluginDir).toBeTruthy()
+it.each([
+  { launchAgent: 'claude' as const },
+  { launchCommand: 'claude --resume' },
+  { launchAgent: 'claude' as const, settings: { claudeSubagentNavigationEnabled: true } }
+])('bounds an enabled Claude launch waiting on stalled setup: %j', async (launch) => {
+  vi.useFakeTimers()
+  const config = join(tmpdir(), 'orca-agent-view-stalled-config')
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const service = new ClaudeAgentViewService(join(tmpdir(), 'orca-agent-view-stalled-data'), {
+    reconcileConfig: () => gate,
+    ensurePlugin: async () => join(tmpdir(), 'orca-agent-view-stalled-plugin'),
+    loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config }),
+    listProfiles: async () => []
+  })
+  const settings = {}
+  const reconcile = service.reconcile(settings)
+  let ready = false
+  const wait = service.readyForLaunch({ settings, ...launch }).then(() => {
+    ready = true
+  })
+  try {
+    await vi.advanceTimersByTimeAsync(199)
+    expect(ready).toBe(false)
+    await vi.advanceTimersByTimeAsync(1)
+    await wait
+    expect(service.read()).toBeUndefined()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally {
+    release()
+    await reconcile
   }
-)
+  expect(service.read()?.pluginDir).toBeTruthy()
+})

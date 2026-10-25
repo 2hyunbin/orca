@@ -88,10 +88,10 @@ export function AgentsPane({
         <SettingsSwitchRow
           label={getClaudeSubagentNavigationTitle()}
           description={getClaudeSubagentNavigationDescription()}
-          checked={settings.claudeSubagentNavigationEnabled === true}
+          checked={settings.claudeSubagentNavigationEnabled !== false}
           onChange={() =>
             updateSettings({
-              claudeSubagentNavigationEnabled: settings.claudeSubagentNavigationEnabled !== true
+              claudeSubagentNavigationEnabled: settings.claudeSubagentNavigationEnabled === false
             })
           }
           ariaLabel={getClaudeSubagentNavigationTitle()}
