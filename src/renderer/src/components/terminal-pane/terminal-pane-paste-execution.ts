@@ -109,7 +109,7 @@ export function createTerminalPanePasteExecution(
     pane: ManagedPane
   ): TerminalPasteTextOptions | undefined => {
     const state = useAppStore.getState()
-    return resolveProtectedMultilinePasteOptionsForPane({
+    const options = resolveProtectedMultilinePasteOptionsForPane({
       isWindowsClient: forceBracketedMultilineTextPaste,
       hostPlatform: resolveTerminalInputHostPlatform({
         clientPlatform: shortcutPlatform,
@@ -122,6 +122,10 @@ export function createTerminalPanePasteExecution(
       tabId,
       leafId: pane.leafId
     })
+    // Why: non-Windows clients keep xterm's own bracketing; only the Windows input-record contract is added.
+    return forceBracketedMultilineTextPaste || options?.windowsInputRecordNewline
+      ? options
+      : undefined
   }
 
   const pasteFromClipboard = (

@@ -16,24 +16,26 @@ vi.mock('./terminal-clipboard-paste', () => ({
 const TAB_ID = 'tab-1'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 
-function createExecution(): ReturnType<typeof createTerminalPanePasteExecution> {
+function createExecution(
+  platform: NodeJS.Platform = 'win32'
+): ReturnType<typeof createTerminalPanePasteExecution> {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: paste execution reads only these controller fields.
   const controller = {
-    forceBracketedMultilineTextPaste: true,
+    forceBracketedMultilineTextPaste: platform === 'win32',
     managerRef: { current: null },
     paneTransportsRef: { current: new Map() },
     setTerminalError: vi.fn(),
     tabId: TAB_ID,
     worktreeId: 'worktree-1'
   } as unknown as TerminalPaneCloseController
-  return createTerminalPanePasteExecution(controller, 'win32')
+  return createTerminalPanePasteExecution(controller, platform)
 }
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: option resolution reads only the pane ids.
 const pane = { id: 1, leafId: LEAF_ID } as unknown as ManagedPane
 
-async function pasteWithKeyboard(): Promise<unknown> {
-  createExecution().pasteFromClipboard(pane, 'keyboard', vi.fn())
+async function pasteWithKeyboard(platform?: NodeJS.Platform): Promise<unknown> {
+  createExecution(platform).pasteFromClipboard(pane, 'keyboard', vi.fn())
   await vi.waitFor(() => expect(mocks.pasteTerminalClipboard).toHaveBeenCalledOnce())
   return mocks.pasteTerminalClipboard.mock.calls[0][0].protectedMultilineTextPasteOptions
 }
@@ -57,5 +59,15 @@ describe('createTerminalPanePasteExecution.pasteFromClipboard', () => {
     })
 
     await expect(pasteWithKeyboard()).resolves.toEqual({ windowsInputRecordNewline: 'alt-enter' })
+  })
+
+  it('leaves non-Windows Codex Cmd+V on xterm bracketing', async () => {
+    useAppStore.setState({
+      paneForegroundAgentByPaneKey: {
+        [`${TAB_ID}:${LEAF_ID}`]: { agent: 'codex', shellForeground: false }
+      }
+    })
+
+    await expect(pasteWithKeyboard('darwin')).resolves.toBeUndefined()
   })
 })
