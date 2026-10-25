@@ -47,7 +47,6 @@ describe('laidOutCellBox', () => {
     const scope = scopeWithCell(cell, fontPxForScale(1.25), posted)
     reportLaidOutCellBox(scope)
     reportLaidOutCellBox(scope)
-    // A new grid with the same box tells the host nothing; the document holds that grid.
     Object.assign(scope.term!, { cols: 50 })
     reportLaidOutCellBox(scope)
     cell.width = 9.75
@@ -68,7 +67,6 @@ describe('laidOutCellBox', () => {
 })
 
 describe('a started document', () => {
-  /** A document whose engine builds grids with a cell that follows the font, and every notify. */
   function started(host: TerminalDocumentHost = {}) {
     document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
     const cell = { width: 23 / 3, height: 15 }
@@ -202,7 +200,6 @@ describe('a started document', () => {
   it('keeps the terminal built before ready out of sight until the first init has replayed', async () => {
     const { scope, posted, init } = started()
     try {
-      // Hidden, not removed from layout: the box is measured and reported while it is out of sight.
       expect(scope.surface?.style.visibility).toBe('hidden')
       expect(scope.surface?.style.display).toBe('')
       expect(posted[0]).toEqual({
@@ -213,7 +210,6 @@ describe('a started document', () => {
       expect(scope.surface?.style.visibility).toBe('hidden')
       await untilReady(posted)
       expect(scope.surface?.style.visibility).toBe('')
-      // The box is the ready's own at the init's grid, which the app already holds.
       expect(posted.filter((message) => message.type === 'cell-box')).toEqual([])
     } finally {
       stopTerminalDocument(scope)
@@ -223,7 +219,6 @@ describe('a started document', () => {
   it('reports a paused renderer at ready, before ready itself', async () => {
     const { scope, cell, posted, init } = started()
     try {
-      // The DOM renderer's box at the init's grid, which the paused renderer has not drawn yet.
       cell.width = 7.8
       init()
       await untilReady(posted)
@@ -237,9 +232,7 @@ describe('a started document', () => {
   })
 
   it('reports a text-size change on the render after it, not when the font is set', async () => {
-    // xterm updates the render service's cell box synchronously when fontSize is set
-    // (CharSizeService.measure → RenderService.handleCharSizeChanged), and onRender fires after the
-    // rows it redrew, so the next render reads the new box at the new scale.
+    // Font-size changes update xterm metrics synchronously; onRender observes the new box only after repaint.
     const { scope, posted, render, init } = started()
     try {
       init()
@@ -274,7 +267,6 @@ describe('a started document', () => {
   it("refits a DOM first init once, and not again on the refit's own report", async () => {
     const { scope, cell, posted, render, init } = started()
     try {
-      // The terminal built before ready laid its box out at 80x24; the DOM renderer's box follows cols.
       cell.width = 7.8
       init()
       await untilReady(posted)
@@ -313,11 +305,9 @@ describe('a started document', () => {
     try {
       init()
       await untilReady(posted)
-      // A width change applied in place: the WebGL box is unchanged, so nothing is told.
       reflowTo(scope, 50)
       render()
       expect(refits(posted)).toEqual([])
-      // WebGL context lost: the DOM fallback lays out a new box at the same grid.
       cell.width = 7.8
       render()
       expect(refits(posted)).toEqual([true])

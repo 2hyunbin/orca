@@ -5,9 +5,6 @@ import {
   worktreeHostedBaseSchema
 } from './workspace-create-reply-schema'
 
-// Pins the one requirement on a create receipt, the arm order of the hosted-base union, and the
-// two paths that must stay reachable: an empty worktree id and an empty soft-error message.
-
 describe('the worktree create receipt', () => {
   it('reads every recorded create', () => {
     for (const result of [

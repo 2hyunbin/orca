@@ -66,8 +66,7 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
   })
 
   it('reads agent.launch support from the same status.get probe', async () => {
-    // Why: mobile must not send `agent.launch` to a host that never advertised it, and one probe
-    // has to answer that alongside create idempotency so a create cannot straddle two answers.
+    // Resolve launch and create-idempotency support in one probe so creation cannot straddle inconsistent answers.
     await expect(
       readNewWorktreeRuntimeCapabilities(
         statusClient([{ capabilities: [AGENT_LAUNCH_RUNTIME_CAPABILITY] }])
@@ -75,8 +74,7 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
     ).resolves.toEqual({
       tasksSupported: false,
       worktreeCreateIdempotency: false,
-      // Advertising the method is not advertising the ledger: `operationId` degrades silently on a
-      // host that has one and not the other, so the two are answered separately.
+      // Method support does not imply ledger support; older hosts may silently strip operationId.
       agentLaunch: { replay: false },
       hostPlatform: 'darwin'
     })
@@ -102,8 +100,7 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
     })
   })
 
-  // A host cannot admit an operation for a method it does not have, so the ledger capability alone
-  // must not turn the launch route on.
+  // Ledger capability alone cannot enable a missing launch method.
   it('ignores the replay capability on a host without agent.launch', async () => {
     await expect(
       readNewWorktreeRuntimeCapabilities(
