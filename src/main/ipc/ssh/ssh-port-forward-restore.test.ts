@@ -73,6 +73,9 @@ vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
 }))
 
 import { persistPortForwards, restorePortForwards } from './ssh-port-forward-persistence'
+import { forgetForwardFailures } from './ssh-port-forward-unrestored'
+import { connectInFlight } from './ssh-connect-attempt-registry'
+import { getSshProviderAuthority } from '../../ssh/ssh-provider-authority'
 import {
   restoreManagedHostPortForwards,
   serializePortForwardChange
@@ -85,8 +88,9 @@ describe('saved port forward restore', () => {
     vi.clearAllMocks()
     h.active.length = 0
     h.saved.portForwards = [{ ...FORWARD }]
-    // Each case starts on a transport no earlier case restored on.
+    // Each case starts on a transport no earlier case restored on, with no remembered failures.
     h.conn.generation += 1
+    forgetForwardFailures('t1')
   })
 
   it('closes forwards bound to a replaced transport before re-adding the saved ones', async () => {
@@ -216,11 +220,43 @@ describe('saved port forward restore', () => {
     }
   })
 
-  it('restores again on the same transport once a restored forward closed', async () => {
-    await restoreManagedHostPortForwards('t1')
-    h.active.length = 0
-    await restoreManagedHostPortForwards('t1')
-    expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+  // With system SSH every attempt is a new login, so per-call triggers must not storm.
+  it('restores a forward that closed again, at most once per pause', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await restoreManagedHostPortForwards('t1')
+      h.active.length = 0
+      for (let call = 0; call < 5; call += 1) {
+        await restoreManagedHostPortForwards('t1', { tunnelUp: true })
+      }
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('backs off a forward that keeps failing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      h.portForwardManager.addForward.mockRejectedValue(new Error('port in use'))
+      await restoreManagedHostPortForwards('t1')
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+      // The second failure doubles the wait, so the next pause alone doesn't retry it.
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(3)
+    } finally {
+      h.portForwardManager.addForward.mockReset()
+      vi.useRealTimers()
+    }
   })
 
   it('replaces an unrestored mapping whose local port a new forward took', () => {
@@ -251,5 +287,20 @@ describe('saved port forward restore', () => {
     await Promise.all([edit, restore])
     expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
     expect(h.saved.portForwards).toEqual([{ ...FORWARD, localPort: 4999 }])
+  })
+
+  it('leaves a host mid-connect to the connect, even with its tunnel up', async () => {
+    h.hostServerStatus.mockReturnValue(undefined)
+    connectInFlight.set('t1', {
+      authority: getSshProviderAuthority('t1'),
+      promise: new Promise(() => {})
+    })
+    try {
+      await restoreManagedHostPortForwards('t1', { tunnelUp: true })
+      expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
+    } finally {
+      connectInFlight.delete('t1')
+      h.hostServerStatus.mockReturnValue({ kind: 'managed', environmentId: 'env-1' })
+    }
   })
 })

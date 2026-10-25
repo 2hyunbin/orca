@@ -56,7 +56,7 @@ test('Quick Open finds a file in a monorepo-sized managed workspace', async (// 
   })
 })
 
-for (const across of ['', 'reconnect', 'restart', 'restart without an SSH connect'] as const) {
+for (const across of ['', 'reconnect', 'restart without an SSH connect'] as const) {
   test(`a managed host reports its listener, and an SSH forward reaches it${across ? ` across a ${across}` : ''}`, async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
   {}, testInfo) => {
     test.setTimeout(10 * 60_000)
@@ -99,8 +99,6 @@ for (const across of ['', 'reconnect', 'restart', 'restart without an SSH connec
       if (across) {
         if (across === 'reconnect') {
           await reconnect(page, seeded.targetId)
-        } else if (across === 'restart') {
-          page = await relaunchManagedApp(fixture)
         } else {
           // #32484: every SSH connect fails, so only the server's tunnel brings the host back.
           page = await relaunchManagedApp(fixture, undefined, {

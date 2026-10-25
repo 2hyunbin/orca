@@ -10,6 +10,8 @@ const h = vi.hoisted(() => ({
     remoteHost: '127.0.0.1',
     remotePort: 80
   },
+  live: [] as { id: string; connectionId: string }[],
+  removeForwardAndWait: vi.fn(async () => null),
   persist: vi.fn(),
   broadcast: vi.fn()
 }))
@@ -24,7 +26,11 @@ vi.mock('./ssh-ipc-context', () => ({
   connectionManager: { getConnection: () => ({}) },
   getCurrentMainWindow: () => null,
   persistedStore: null,
-  portForwardManager: { updateForward: h.updateForward, listForwards: () => [h.previous] }
+  portForwardManager: {
+    updateForward: h.updateForward,
+    listForwards: () => h.live,
+    removeForwardAndWait: h.removeForwardAndWait
+  }
 }))
 vi.mock('./ssh-port-forward-persistence', () => ({ persistPortForwards: h.persist }))
 vi.mock('./ssh-renderer-broadcast', () => ({
@@ -46,6 +52,7 @@ const edit = {
 describe('ssh:updatePortForward', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    h.live = [h.previous]
     h.handlers.clear()
     registerSshPortForwardHandlers()
   })
@@ -69,5 +76,21 @@ describe('ssh:updatePortForward', () => {
     h.updateForward.mockResolvedValue({ ...h.previous, localPort: 3001 })
     await h.handlers.get('ssh:updatePortForward')!({}, edit)
     expect(h.persist).toHaveBeenCalledWith('t1', h.previous)
+  })
+
+  it('skips a remove whose forward an edit queued ahead of it replaced', async () => {
+    let finishEdit: (() => void) | null = null
+    h.updateForward.mockImplementation(async () => {
+      await new Promise<void>((resolve) => (finishEdit = resolve))
+      h.live = [{ ...h.previous, id: 'pf-2' }]
+      return h.live[0]
+    })
+    const editing = h.handlers.get('ssh:updatePortForward')!({}, edit)
+    await vi.waitFor(() => expect(finishEdit).not.toBeNull())
+    const removing = h.handlers.get('ssh:removePortForward')!({}, { id: 'pf-1' })
+    finishEdit!()
+    await editing
+    await expect(removing).resolves.toBeNull()
+    expect(h.removeForwardAndWait).not.toHaveBeenCalled()
   })
 })

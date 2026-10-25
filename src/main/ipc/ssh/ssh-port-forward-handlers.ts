@@ -99,6 +99,13 @@ export function registerSshPortForwardHandlers(): void {
       return null
     }
     return serializePortForwardChange(targetId, async () => {
+      // An edit queued ahead may have replaced this entry, or moved it to another host.
+      const current = portForwardManager!
+        .listForwards(targetId)
+        .find((forward) => forward.id === args.id)
+      if (!current) {
+        return null
+      }
       const removed = await portForwardManager!.removeForwardAndWait(args.id)
       if (removed) {
         persistPortForwards(removed.connectionId, removed)

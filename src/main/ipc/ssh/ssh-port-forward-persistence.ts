@@ -3,12 +3,12 @@ import type { SavedPortForward } from '../../../shared/ssh-types'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
-
-function forwardKey(
-  forward: Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
-): string {
-  return `${forward.localPort}:${forward.remoteHost}:${forward.remotePort}`
-}
+import {
+  clearForwardFailure,
+  forwardKey,
+  isForwardBackingOff,
+  recordForwardFailure
+} from './ssh-port-forward-unrestored'
 
 /**
  * Saves the live forwards plus every saved one not live, so a forward a restart left unrestored
@@ -49,31 +49,29 @@ export function savedPortForwardsAllLive(targetId: string): boolean {
   return saved.every((forward) => live.has(forwardKey(forward)))
 }
 
-/** Resolves true once every saved forward is live on this transport. */
 export async function restorePortForwards(
   targetId: string,
   getMainWindow: () => BrowserWindow | null
-): Promise<boolean> {
+): Promise<void> {
   const target = getSshTargetRegistryStore()!.getTarget(targetId)
   if (!target?.portForwards?.length) {
-    return true
+    return
   }
   const conn = connectionManager!.getConnection(targetId)
   if (!conn) {
-    return false
+    return
   }
   // Replaced transports can leave forwards holding local ports but reaching nothing.
   await portForwardManager!.closeStaleForwards(targetId, conn)
   const live = new Set(portForwardManager!.listForwards(targetId).map(forwardKey))
-  let complete = true
 
   for (const saved of target.portForwards) {
-    if (live.has(forwardKey(saved))) {
+    if (live.has(forwardKey(saved)) || isForwardBackingOff(targetId, saved)) {
       continue
     }
     // Reconnect can replace the transport mid-loop; stop before adding stale listeners.
     if (connectionManager!.getConnection(targetId) !== conn) {
-      return false
+      return
     }
     try {
       const entry = await portForwardManager!.addForward(
@@ -87,10 +85,11 @@ export async function restorePortForwards(
       // A concurrent disconnect swept older forwards; release this newly completed one too.
       if (connectionManager!.getConnection(targetId) !== conn) {
         await portForwardManager!.removeForwardAndWait(entry.id)
-        return false
+        return
       }
+      clearForwardFailure(targetId, saved)
     } catch (err) {
-      complete = false
+      recordForwardFailure(targetId, saved)
       console.warn(
         `[ssh] Failed to restore forward :${saved.localPort} → ${saved.remoteHost}:${saved.remotePort}: ${err instanceof Error ? err.message : String(err)}`
       )
@@ -99,5 +98,4 @@ export async function restorePortForwards(
 
   persistPortForwards(targetId)
   broadcastPortForwards(getMainWindow, targetId)
-  return complete
 }
