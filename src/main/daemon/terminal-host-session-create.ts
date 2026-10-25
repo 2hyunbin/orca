@@ -176,6 +176,7 @@ async function spawnAndPublishSession(
     (Boolean(nativeSetupCompletionToken(opts.env)) &&
       win32.basename(subprocess.shellPath ?? '').toLowerCase() === 'wsl.exe')
   const session = new Session({
+    initialClient: opts.streamClient,
     sessionId: opts.sessionId,
     cols: size.cols,
     rows: size.rows,
@@ -226,7 +227,7 @@ async function spawnAndPublishSession(
   deps.sessions.set(opts.sessionId, session)
   deps.onSessionCreated(opts.sessionId, opts.agentSessionGeneration, session.isAlive)
   onPublished(opts.sessionId, session.isAlive)
-  const token = session.attachClient(opts.streamClient)
+  const token = session.initialAttachToken!
   attachSessionInputViewer(session, opts.streamClient)
 
   const startupCommandWritten =

@@ -136,12 +136,12 @@ describe('DaemonPtyRouter keeps live sessions on their older daemon', () => {
       expect(current.spawn).toHaveBeenCalledOnce()
     }
   )
-  it.each([50, 51])(
-    'keeps generation%s live ownership while generation52 receives new native setup',
+  it.each([50, 51, 52])(
+    'keeps generation%s live ownership while generation53 receives new native setup',
     async (previous) => {
-      expect(PROTOCOL_VERSION).toBe(52)
+      expect(PROTOCOL_VERSION).toBe(53)
       expect(PREVIOUS_DAEMON_PROTOCOL_VERSIONS).toContain(previous)
-      const current = createAdapter('v52', [], undefined, 52)
+      const current = createAdapter('v53', [], undefined, 53)
       const legacy = createAdapter(`v${previous}`, ['old-live'], undefined, previous)
       const router = new DaemonPtyRouter({ current, legacy: [legacy] })
       await router.discoverLegacySessions()

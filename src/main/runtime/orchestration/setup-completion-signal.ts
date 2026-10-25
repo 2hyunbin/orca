@@ -1,4 +1,5 @@
 import { basename, win32 } from 'node:path'
+import { createStrictTerminalEscapeScanner } from '../../../shared/terminal-escape-scanner'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import {
   resolveSetupRunnerCommand,
@@ -86,19 +87,19 @@ export function appendNativeSetupCompletion(
   if (!token || !shell) {
     return command
   }
-  const prefix = completionPrefix(token)
+  const prefix = `ORCA_SETUP_DONE:${token}:`
   if (shell === 'cmd') {
     // Defer status to CALL after setup; the child-body quotes protect its separator on reparse.
-    return `${command} & call "%ComSpec%" /d /c ^"echo ${prefix}%^errorlevel%^&exit /b %^errorlevel%^"`
+    return `${command} & call "%ComSpec%" /d /c ^"echo ${prefix}%^errorlevel%;^&exit /b %^errorlevel%^"`
   }
   if (shell === 'powershell') {
-    return `${command}; $__orca_success=$?; $__orca_status=$LASTEXITCODE; if ($__orca_success) { $__orca_status=0 } elseif (!$__orca_status) { $__orca_status=1 }; [Console]::WriteLine('${prefix}' + $__orca_status); if ($__orca_status -ne 0) { Write-Error 'setup failed' -ErrorAction Ignore }`
+    return `${command}; $__orca_success=$?; $__orca_status=$LASTEXITCODE; if ($__orca_success) { $__orca_status=0 } elseif (!$__orca_status) { $__orca_status=1 }; [Console]::WriteLine('${prefix}' + $__orca_status + ';'); if ($__orca_status -ne 0) { Write-Error 'setup failed' -ErrorAction Ignore }`
   }
   // Why one submission: a second stdin line could become the setup program's input.
   if (shell === 'fish') {
-    return `${command}; begin; set -l __orca_status $status; printf '\\n${prefix}%s\\n' $__orca_status; /bin/sh -c 'exit "$1"' sh $__orca_status; end`
+    return `${command}; begin; set -l __orca_status $status; printf '\\n${prefix}%s;\\n' $__orca_status; /bin/sh -c 'exit "$1"' sh $__orca_status; end`
   }
-  return `${command}; ( __orca_status=$?; printf '\\n${prefix}%s\\n' "$__orca_status"; exit "$__orca_status" )`
+  return `${command}; ( __orca_status=$?; printf '\\n${prefix}%s;\\n' "$__orca_status"; exit "$__orca_status" )`
 }
 
 export function createSetupCompletionScanner(
@@ -106,11 +107,16 @@ export function createSetupCompletionScanner(
   onComplete: (exitCode: number) => void
 ): {
   scan: (data: string) => void
+  interrupt: () => void
 } {
+  if (completionToken.startsWith('native:')) {
+    return createNativeSetupCompletionScanner(completionToken, onComplete)
+  }
   const expectedPrefix = completionPrefix(completionToken)
   let carry = ''
   let completed = false
   return {
+    interrupt(): void {},
     scan(data: string): void {
       if (completed || data.length === 0) {
         return
@@ -131,23 +137,145 @@ export function createSetupCompletionScanner(
   }
 }
 
+function createNativeSetupCompletionScanner(token: string, onComplete: (code: number) => void) {
+  const current = `ORCA_SETUP_DONE:${token}:`
+  const legacy = completionPrefix(token)
+  let candidate = ''
+  let completed = false
+  const reset = (): void => {
+    candidate = ''
+  }
+  const accept = (terminator: string): void => {
+    const prefix = terminator === ';' ? current : legacy
+    if (!candidate.startsWith(prefix)) {
+      return
+    }
+    const number = candidate.slice(prefix.length).replace(/\r$/, '')
+    if (!/^-?\d{1,10}$/.test(number)) {
+      return
+    }
+    const code = Number(number)
+    if (code < -2147483648 || code > 4294967295) {
+      return
+    }
+    completed = true
+    onComplete(code)
+  }
+  const lexer = createStrictTerminalEscapeScanner({
+    onText(text) {
+      if (completed) {
+        return
+      }
+      if (text === ';') {
+        accept(';')
+        reset()
+        return
+      }
+      candidate += text
+      if (current.startsWith(candidate) || legacy.startsWith(candidate)) {
+        return
+      }
+      const prefix = candidate.startsWith(current)
+        ? current
+        : candidate.startsWith(legacy)
+          ? legacy
+          : null
+      if (prefix && /^-?\d{0,10}$/.test(candidate.slice(prefix.length))) {
+        return
+      }
+      candidate = text === current[0] || text === legacy[0] ? text : ''
+    },
+    onControl(control, ground) {
+      if (completed) {
+        return
+      }
+      if (ground && control === '\n') {
+        accept('\n')
+      }
+      if (ground && control === '\r' && candidate.startsWith(legacy) && !candidate.endsWith('\r')) {
+        candidate += '\r'
+      } else {
+        reset()
+      }
+    }
+  })
+  return {
+    scan: (data: string): void => {
+      if (!completed) {
+        lexer.observe(data)
+      }
+    },
+    interrupt: reset
+  }
+}
+
 function completionPrefix(completionToken: string): string {
   return `${SETUP_COMPLETION_PREFIX}${completionToken}:`
 }
 
-export function createSetupCompletionObservation(token: string) {
+export function createSetupCompletionObservation(token: string, fromSpawn = false) {
+  let settled = false
   let finish: (exitCode: number | null) => void = () => {}
   let fail: (error: unknown) => void = () => {}
   const completion = new Promise<{ exitCode: number | null }>((resolve, reject) => {
-    fail = reject
-    finish = (exitCode) => resolve({ exitCode })
+    fail = (error) => {
+      settled = true
+      reject(error)
+    }
+    finish = (exitCode) => {
+      settled = true
+      resolve({ exitCode })
+    }
   })
   void completion.catch(() => {})
+  let unknown = token.startsWith('native:') && !fromSpawn
+  let sourceEnd = 0
+  let published = !fromSpawn
+  let pendingCode: number | undefined
+  const scanner = createSetupCompletionScanner(token, (code) => {
+    settled = true
+    pendingCode = code
+    if (published) {
+      finish(code)
+    }
+  })
   return {
     token,
+    get unknown() {
+      return unknown
+    },
+    publish(): void {
+      published = true
+      if (pendingCode !== undefined) {
+        finish(pendingCode)
+      }
+    },
+    noteGap(): void {
+      if (!settled && token.startsWith('native:')) {
+        unknown = true
+      }
+    },
+    scan(data: string, rawLength = data.length, transformed = false, seq?: number): void {
+      if (unknown || settled) {
+        return
+      }
+      if (token.startsWith('native:')) {
+        if (!data.length && rawLength === 0 && !transformed && seq === undefined) {
+          return
+        }
+        if (seq === undefined || seq - rawLength !== sourceEnd) {
+          unknown = true
+          return
+        }
+        sourceEnd = seq
+        if (transformed && data.length === 0) {
+          scanner.interrupt()
+        }
+      }
+      scanner.scan(data)
+    },
     completion,
     finish,
-    fail,
-    ...createSetupCompletionScanner(token, (code) => finish(code))
+    fail
   }
 }

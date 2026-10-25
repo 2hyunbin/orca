@@ -29,7 +29,8 @@ export function drainShellReadyHeldBytes(state: ShellReadyScanState): string {
 
 export function scanForShellReadyBoundary(
   state: ShellReadyScanState,
-  data: string
+  data: string,
+  emit?: (data: string, removed?: boolean) => void
 ): ShellReadyBoundaryScanResult {
   let output = ''
 
@@ -55,6 +56,9 @@ export function scanForShellReadyBoundary(
       const marker = state.heldBytes
       state.heldBytes = ''
       state.matchPos = 0
+      emit?.(output)
+      emit?.('', true)
+      emit?.(remaining)
       return {
         output: output + remaining,
         matched: true,
@@ -82,6 +86,7 @@ export function scanForShellReadyBoundary(
     }
   }
 
+  emit?.(output)
   return {
     output,
     matched: false,

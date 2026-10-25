@@ -113,7 +113,7 @@ it.skipIf(process.platform !== 'win32')(
                     process: spawn(shell, args, {
                       cwd: resolved.effectiveCwd,
                       env,
-                      cols: 200,
+                      cols: status === 0 && route === cmd && command === commands[1] ? 32 : 200,
                       rows: 40
                     }),
                     shellPath: shell,
@@ -269,7 +269,7 @@ it.skipIf(process.platform !== 'win32')(
           nativeSetupCompletionShell(attempts[1].shellPath)
         )
       ).toBe(
-        'cmd.exe /c plain.cmd & call "%ComSpec%" /d /c ^"echo __ORCA_SETUP_COMPLETE__:native:fallback:%^errorlevel%^&exit /b %^errorlevel%^"'
+        'cmd.exe /c plain.cmd & call "%ComSpec%" /d /c ^"echo ORCA_SETUP_DONE:native:fallback:%^errorlevel%;^&exit /b %^errorlevel%^"'
       )
     } finally {
       await rm(root, { recursive: true, force: true })

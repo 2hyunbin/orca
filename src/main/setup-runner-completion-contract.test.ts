@@ -144,7 +144,7 @@ it.skipIf(process.platform === 'win32')(
           status = value
         }).scan(observed.stdout)
         expect(status).toBe(ending.startsWith('printf') ? 0 : ending === 'exit 17' ? 17 : 1)
-        const withoutMarker = observed.stdout.replace(/\n__ORCA_SETUP_COMPLETE__:[^\n]+\n/, '')
+        const withoutMarker = observed.stdout.replace(/\nORCA_SETUP_DONE:[^\n]+;\n/, '')
         expect(withoutMarker).toBe(base.stdout)
         expect(observed.stdout).toContain('parent-alive')
         expect(observed.stdout.match(/user-trap/g)).toHaveLength(1)
@@ -199,9 +199,7 @@ it.skipIf(process.platform === 'win32')(
         const observed = await run(native)
         expect(native.startsWith(`${command};`)).toBe(true)
         expect(observed.code, observed.stderr).toBe(0)
-        expect(observed.stdout.replace(/\n__ORCA_SETUP_COMPLETE__:[^\n]+\n/, '')).toBe(
-          original.stdout
-        )
+        expect(observed.stdout.replace(/\nORCA_SETUP_DONE:[^\n]+;\n/, '')).toBe(original.stdout)
         expect(observed.stdout).toContain('input:actual stdin')
         expect(observed.stdout).toContain('parent-status:17')
         let code: number | undefined

@@ -1,3 +1,4 @@
+import type { AttachedClient } from './session-output-plane'
 import type { SubprocessHandle } from './session-subprocess-handle'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { PtyStartupIngressIntent } from '../../shared/pty-startup-ingress'
@@ -11,6 +12,7 @@ export type NativeSetupWrite = {
 
 export type SessionOptions = {
   sessionId: string
+  initialClient?: Omit<AttachedClient, 'token'>
   cols: number
   rows: number
   terminalHandle?: string

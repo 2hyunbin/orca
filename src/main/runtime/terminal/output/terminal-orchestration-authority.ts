@@ -191,7 +191,6 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
       this.recentPtyOutputById.set(ptyId, recentOutputBuffer)
     }
     recentOutputBuffer.append(data)
-    this.setupCompletionTokenByPtyId.get(ptyId)?.scan(data)
     if (
       this.recentPtyPathCandidateTrackingActive ||
       // Why: an over-window chunk is stored pre-sliced, so activation backfill

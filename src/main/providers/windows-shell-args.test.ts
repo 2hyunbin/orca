@@ -118,7 +118,7 @@ describe('resolveWindowsShellLaunchArgs', () => {
     const full = setupCompletionSignal.appendNativeSetupCompletion(command, 'native:unit', 'cmd')
     expect(full.startsWith(command)).toBe(true)
     expect(full).toBe(
-      `${command} & call "%ComSpec%" /d /c ^"echo __ORCA_SETUP_COMPLETE__:native:unit:%^errorlevel%^&exit /b %^errorlevel%^"`
+      `${command} & call "%ComSpec%" /d /c ^"echo ORCA_SETUP_DONE:native:unit:%^errorlevel%;^&exit /b %^errorlevel%^"`
     )
   })
 

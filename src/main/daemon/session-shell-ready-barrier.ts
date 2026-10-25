@@ -39,7 +39,7 @@ export type SessionShellReadyBarrierDeps = {
   shellReadyTimeoutMs: number | undefined
   installDeviceAttributesFilter(): void
   releaseDeviceAttributesFilter(): void
-  acceptStartupIngress(data: string): void
+  acceptStartupIngress(data: string, removed?: boolean): void
   /** Use an injected file-log sink because detached daemon stdio is ignored. */
   reportReadinessEvent?(event: string, details: Record<string, unknown>): void
 }
@@ -147,8 +147,12 @@ export class SessionShellReadyBarrier {
 
   ingestSubprocessData(data: string): void {
     let releaseStartupDeviceAttributes = false
+    let emitted = false
     if (this._state === 'pending' && this.scanState) {
-      const scanned = scanShellStartupOutput(this.scanState, data)
+      const scanned = scanShellStartupOutput(this.scanState, data, (part, removed) => {
+        emitted = true
+        this.deps.acceptStartupIngress(part, removed)
+      })
       data = scanned.output
       if (scanned.shellPid) {
         this.shellStartupPid = scanned.shellPid
@@ -189,7 +193,9 @@ export class SessionShellReadyBarrier {
       this.postReadyFlushGate.notifyData()
     }
 
-    this.deps.acceptStartupIngress(data)
+    if (!emitted) {
+      this.deps.acceptStartupIngress(data)
+    }
     if (this._state === 'pending' && data.length > 0) {
       this.promptReadinessProbe?.notifyOutput(data)
     }

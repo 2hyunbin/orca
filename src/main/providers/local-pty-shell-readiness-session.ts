@@ -131,8 +131,20 @@ export function createLocalPtyShellReadinessSession(args: {
     shellReadyPromise,
     acceptData: (rawData) => {
       let data = rawData
+      let emitted = false
       if (shellStartupOutputScanState && resolveShellReady) {
-        const scanned = scanShellStartupOutput(shellStartupOutputScanState, data)
+        const scanned = scanShellStartupOutput(
+          shellStartupOutputScanState,
+          data,
+          (part, removed) => {
+            emitted = true
+            if (removed) {
+              startupIngress.interruptPaintedText()
+            } else {
+              startupIngress.accept(part)
+            }
+          }
+        )
         data = scanned.output
         if (scanned.shellPid) {
           shellStartupPid = scanned.shellPid
@@ -170,7 +182,9 @@ export function createLocalPtyShellReadinessSession(args: {
           }
         }
       }
-      startupIngress.accept(data)
+      if (!emitted) {
+        startupIngress.accept(data)
+      }
       if (resolveShellReady && data.length > 0) {
         shellPromptReadinessProbe?.notifyOutput(data)
       }

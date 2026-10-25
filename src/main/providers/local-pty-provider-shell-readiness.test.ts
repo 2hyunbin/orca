@@ -338,7 +338,10 @@ describe('LocalPtyProvider', () => {
         expect(onData).toHaveBeenCalledWith(
           expect.any(String),
           '\x1b]777;orca-shell-ready',
-          expect.any(Number)
+          expect.any(Number),
+          22,
+          false,
+          22
         )
         expect(mockProc.write).not.toHaveBeenCalled()
 
@@ -365,7 +368,10 @@ describe('LocalPtyProvider', () => {
       expect(onData).toHaveBeenCalledWith(
         expect.any(String),
         '\x1b]777;orca-shell-ready',
-        expect.any(Number)
+        expect.any(Number),
+        22,
+        false,
+        22
       )
     })
     it('native setup strips metadata before spawn, waits for post-profile proof, and cannot dispatch after close', async () => {
