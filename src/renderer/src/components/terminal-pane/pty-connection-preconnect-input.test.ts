@@ -220,7 +220,8 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
-  it('keeps releasing a deferred split’s held keys as before when startup work appears', async () => {
+  // Why: a split's held keys flushed ahead of a resume would run in the shell before it.
+  it('stops releasing a deferred split’s held keys once startup work appears', async () => {
     transportFactoryQueue.push(createMockTransport())
 
     const binding = connectPlainPane({ cwdPromise: new Promise<string>(() => {}) })
@@ -232,7 +233,7 @@ describe('connectPanePty pre-connect input', () => {
       worktreeId: 'wt-1'
     }
 
-    expect(typeof release === 'function' && release()).toBe(true)
+    expect(typeof release === 'function' && release()).toBe(false)
     binding.dispose()
   })
 
