@@ -1,6 +1,3 @@
-// A remembered model option a new chat's saved listing no longer admits is dropped from the
-// seed, so a launch never fails on a choice its caller made in some other chat.
-
 import { expect, it, vi } from 'vitest'
 import type { AgentSessionAttachParams } from '../../../native-chat/agent-session-wire/structured-agent-session-attach'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
@@ -33,6 +30,7 @@ async function prepareWithSeed(
     runtimeKind: 'native' as const,
     ...(seed ? { options: seed } : {})
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements only the members prepare reaches.
   const host = {
     deps: {
       modelCatalog: listingModels ? { read: vi.fn(async () => listing(listingModels)) } : undefined
@@ -55,30 +53,31 @@ async function prepareWithSeed(
   return prepared.attachParams.options
 }
 
+const piRow = (efforts: readonly string[]) => ({
+  id: 'some/model',
+  label: 'Some Model',
+  isDefault: false,
+  efforts: efforts.map((value) => ({ value, label: value }))
+})
+
+it('moves a remembered effort the saved probe row lacks to its nearest listed level', async () => {
+  // Pi's live menu offers xhigh where its --list-models probe stops at high.
+  const options = await prepareWithSeed({ model: 'some/model', effort: 'xhigh' }, undefined, [
+    piRow(['off', 'minimal', 'low', 'medium', 'high'])
+  ])
+  expect(options).toEqual({ model: 'some/model', effort: 'high' })
+})
+
 it('drops a remembered effort its saved row no longer admits', async () => {
   const options = await prepareWithSeed({ model: 'some/model', effort: 'off' }, undefined, [
-    { id: 'some/model', label: 'Some Model', isDefault: false, efforts: [] }
+    piRow([])
   ])
   expect(options).toEqual({ model: 'some/model' })
 })
 
-it('keeps a remembered effort its saved row admits', async () => {
-  const options = await prepareWithSeed({ model: 'some/model', effort: 'low' }, undefined, [
-    {
-      id: 'some/model',
-      label: 'Some Model',
-      isDefault: false,
-      efforts: [{ value: 'low', label: 'low' }]
-    }
-  ])
-  expect(options).toEqual({ model: 'some/model', effort: 'low' })
-})
-
 it('keeps an effort this launch named itself, even one its row does not admit', async () => {
   // Explicit options replace the saved selection; only their own values stay the caller's picks.
-  const options = await prepareWithSeed({ model: 'some/model' }, { effort: 'off' }, [
-    { id: 'some/model', label: 'Some Model', isDefault: false, efforts: [] }
-  ])
+  const options = await prepareWithSeed({ model: 'some/model' }, { effort: 'off' }, [piRow([])])
   expect(options).toEqual({ effort: 'off' })
 })
 

@@ -6,6 +6,7 @@ import type {
   AgentSessionRecord
 } from '../../shared/agent-session-record'
 import type { AgentSessionModelOption } from '../../shared/agent-session-wire'
+import { nearestAgentEffort } from './session-tabs/structured-launch-seed-listing'
 
 export function replaceAgentSessionRecordOptions(
   record: AgentSessionRecord,
@@ -47,21 +48,32 @@ export function agentSessionOptionAdmitted(
   )
 }
 
-/** A remembered seed's values against its model's saved row, dropping ones the row no longer
- *  admits: a launch is refused only on options its caller named for it. */
+/** Fit a remembered seed to its model's saved row: an effort the row lacks moves to the nearest listed
+ *  level, other unlisted values drop; keys the caller named this launch keep strict admission. */
 export function seedOptionsAdmittedOnSavedListing(
   provider: string,
   seed: Readonly<Record<string, string>>,
   models: AgentSessionAdmissionModels,
-  /** Keys the caller itself named this launch; their values stay as the caller picked them. */
   explicit: ReadonlySet<string>
 ): Record<string, string> | undefined {
-  const admitted = Object.fromEntries(
-    Object.entries(seed).filter(
-      ([key, value]) =>
-        explicit.has(key) || agentSessionOptionAdmitted(provider, models, seed.model, key, value)
-    )
-  )
+  const admitted: Record<string, string> = {}
+  for (const [key, value] of Object.entries(seed)) {
+    if (explicit.has(key) || agentSessionOptionAdmitted(provider, models, seed.model, key, value)) {
+      admitted[key] = value
+      continue
+    }
+    const row = models?.find((entry) => entry.id === seed.model)
+    const nearest =
+      key === 'effort' && row
+        ? nearestAgentEffort(
+            value,
+            row.efforts.map((choice) => choice.value)
+          )
+        : undefined
+    if (nearest) {
+      admitted[key] = nearest
+    }
+  }
   return Object.keys(admitted).length > 0 ? admitted : undefined
 }
 

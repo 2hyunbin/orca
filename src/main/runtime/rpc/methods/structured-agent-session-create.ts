@@ -166,9 +166,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
           await catalogFolder()
         )
       : undefined
-  // A remembered value its model's saved row no longer admits is dropped, never refused; a value
-  // this launch named itself stays its caller's own pick. The seed's model always stays: a listed
-  // row admits its own id.
+  // Fit remembered values to the saved row instead of refusing the create (#31493).
   const admittedSeed =
     options && catalogModels && !args.options?.model
       ? seedOptionsAdmittedOnSavedListing(
