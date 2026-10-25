@@ -6,11 +6,11 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
-import type { OrcaRuntimeService } from '../orca-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
+import { stubRuntime } from './terminal-multiplex-test-harness'
 
 const request: RpcRequest = {
   id: 'req-late-renderer',
@@ -48,10 +48,9 @@ async function lateRendererRecovery(outputDuringDeepRead: boolean) {
       return { data: 'phone history', cols: 80, rows: 24, seq: 5 }
     }
   )
-  const replaceHeadlessTerminalFromRendererSnapshotForRecovery = vi.fn()
-  const runtime = {
-    getRuntimeId: () => 'test-runtime',
-    subscribeToPtyExit: vi.fn(() => vi.fn()),
+  const replaceHeadlessTerminalFromRendererSnapshotForRecovery =
+    vi.fn<(ptyId: string, seed: { data: string }) => void>()
+  const runtime = stubRuntime({
     resolveLeafForHandle: vi.fn().mockReturnValue({ ptyId: 'pty-late' }),
     hasHeadlessTerminalState: vi.fn(() => false),
     requestRendererTerminalTabMount: vi.fn(() => true),
@@ -79,7 +78,7 @@ async function lateRendererRecovery(outputDuringDeepRead: boolean) {
     registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
     cleanupSubscription: vi.fn(registry.cleanupSubscription),
     waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {}))
-  } as unknown as OrcaRuntimeService
+  })
   const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
   const dispatchPromise = dispatcher.dispatchStreaming(request, vi.fn(), {
     connectionId: 'conn-phone',
@@ -105,7 +104,7 @@ async function lateRendererRecovery(outputDuringDeepRead: boolean) {
   )
   await vi.advanceTimersByTimeAsync(0)
   const seeds = replaceHeadlessTerminalFromRendererSnapshotForRecovery.mock.calls.map(
-    ([, seed]) => (seed as { data: string }).data
+    ([, seed]) => seed.data
   )
   runtime.cleanupSubscription('terminal-late-renderer:phone-late-renderer')
   await dispatchPromise
