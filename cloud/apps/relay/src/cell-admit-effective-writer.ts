@@ -1,7 +1,4 @@
-// The cell's raw admit mode in Postgres (relay_cell_admit_effective), so the database path can
-// place on a tripped reserve cell even when no director's feed poll reaches it. Only the database
-// path's PG-reserve cells need a row, so a cell writes only while its switch says reserve, plus
-// one db write on the way out: with step 5 off, no cell writes anything.
+// Publish raw mode so DB placement can use tripped reserve cells despite unreachable feeds. Write while switch says reserve plus one db exit write; step 5 off adds no writes.
 export const CELL_ADMIT_EFFECTIVE_REFRESH_MS = 15_000
 const CELL_ADMIT_EFFECTIVE_FAILURE_LOG_MS = 60_000
 
