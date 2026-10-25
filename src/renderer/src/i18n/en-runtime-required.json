@@ -1,4 +1,11 @@
 {
+  "agentLaunch": {
+    "opencode": {
+      "invalidConfig": "OpenCode could not apply this model choice to the launch configuration. Check the OpenCode launch configuration and try again, or omit the model choice.",
+      "unsupportedLaunch": "OpenCode cannot apply this model choice to this launch. Start a fresh local terminal with supported launch arguments, or omit the model choice.",
+      "updateRequired": "OpenCode cannot safely start with a chosen model on this version. Update OpenCode to a supported release, or omit the model choice."
+    }
+  },
   "agentsSidebarIntro": {
     "migrated": {
       "action": "Open Agents"
