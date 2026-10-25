@@ -109,8 +109,7 @@ describe('MobileNativeChatComposer', () => {
 
     await act(async () => sendButton().props.onPress())
 
-    // Verbatim: the send seam trims for the wire, so a rejected send can hand
-    // back the draft byte-for-byte (#14819).
+    // The send seam trims; preserve raw draft bytes when send rejects.
     expect(onSend).toHaveBeenCalledWith(' hello ')
     expect(onChangeText).not.toHaveBeenCalled()
   })
@@ -145,9 +144,7 @@ describe('MobileNativeChatComposer', () => {
   })
 
   it('locks pickers during a pending send while keeping Stop and the next draft usable', async () => {
-    // The reverse of the test below. The host spaces a send's body and its Enter
-    // ~500ms apart, so an apply tapped inside that window would be submitted as
-    // part of the user's prompt instead of running as its own command.
+    // Apply during the host’s body/Enter delay would become part of the prompt.
     let releaseSend: ((accepted: boolean) => void) | undefined
     const onSend = vi.fn(
       () =>
@@ -196,7 +193,6 @@ describe('MobileNativeChatComposer', () => {
         (node) => node.type === 'Pressable' && node.props.accessibilityLabel === 'Model, Model'
       ) as { props: { accessibilityState: { disabled: boolean } } }
     expect(modelPill().props.accessibilityState).toMatchObject({ disabled: false })
-    // Start the send but don't await it — it stays in flight on purpose.
     let pressed!: Promise<void>
     await act(async () => {
       pressed = sendButton().props.onPress()
@@ -292,8 +288,7 @@ describe('MobileNativeChatComposer', () => {
     const originalInput = input()
     await act(async () => input().props.onFocus())
     await act(async () => renderer!.update(draw(true)))
-    // Revoking `editable` on a focused field resigns first responder on iOS and
-    // yanks the keyboard mid-typing (#10681) — the lock may only gate sending.
+    // Do not revoke editable: iOS resigns first responder and closes the keyboard.
     expect(input()).toBe(originalInput)
     expect(input().props.editable).not.toBe(false)
     expect(sendButton().props).toMatchObject({ disabled: true })
@@ -366,7 +361,6 @@ describe('MobileNativeChatComposer', () => {
     expect(bar().props.style).toBe(unfocused)
     await act(async () => field().props.onBlur())
 
-    // A typed draft takes Send back, unless a prompt card owns Send.
     await act(async () => renderer!.update(draw('queue this')))
     expect(bar().props.style).toBe(unfocused)
     expect(labelled('Send message')).toHaveLength(1)
@@ -504,9 +498,7 @@ describe('MobileNativeChatComposer', () => {
           onSelectionChange: (e: { nativeEvent: { selection: { end: number } } }) => void
         }
       }
-    // Uncontrolled selection until a suggestion is applied.
     expect(input().props.selection).toBeUndefined()
-    // Place the caret at the end so the slash trigger is active and suggestions render.
     await act(async () =>
       input().props.onSelectionChange({ nativeEvent: { selection: { end: 2 } } })
     )
@@ -515,9 +507,7 @@ describe('MobileNativeChatComposer', () => {
     )
     await act(async () => clear.props.onPress())
     expect(onChangeText).toHaveBeenCalledWith('/clear ')
-    // `/clear ` is 7 chars — the caret jumps just past the inserted command + space.
     expect(input().props.selection).toEqual({ start: 7, end: 7 })
-    // The next native selection event releases control so manual placement still works.
     await act(async () =>
       input().props.onSelectionChange({ nativeEvent: { selection: { end: 7 } } })
     )
@@ -544,8 +534,6 @@ describe('MobileNativeChatComposer', () => {
     const texts = renderer!.root
       .findAll((node) => node.type === 'Text')
       .map((node) => (node.props as { children?: unknown }).children)
-    // Codex-only commands from the shared catalog, with their description rows —
-    // and none of the old hardcoded provider-agnostic list's phantom entries.
     expect(texts).toContain('/permissions')
     expect(texts).toContain('Choose what Codex is allowed to do')
     expect(texts).not.toContain('/cost')
@@ -575,7 +563,6 @@ describe('MobileNativeChatComposer', () => {
         })
       )
     })
-    // Hold mode is walkie-talkie: press-in/out drive dictation, tap is inert.
     expect(mic().props.onPress).toBeUndefined()
     expect(mic().props.onPressIn).toBe(onMicPressIn)
     expect(mic().props.onPressOut).toBe(onMicPressOut)
@@ -595,14 +582,12 @@ describe('MobileNativeChatComposer', () => {
         })
       )
     })
-    // Toggle mode: tap drives dictation, press-in/out inert.
     expect(mic().props.onPress).toBe(onMicPress)
     expect(mic().props.onPressIn).toBeUndefined()
     expect(mic().props.onPressOut).toBeUndefined()
   })
 
   it('dismisses the keyboard once a send is accepted', async () => {
-    // Why: the reply the user is now waiting on sits behind the keyboard.
     vi.mocked(Keyboard.dismiss).mockClear()
     await render(vi.fn().mockResolvedValue(true), vi.fn())
 
@@ -635,8 +620,7 @@ describe('MobileNativeChatComposer', () => {
   })
 
   it('keeps the keyboard up when the send is rejected', async () => {
-    // A rejected send hands the draft back for editing, so yanking the keyboard
-    // would make the user re-open it to fix and retry.
+    // Keep the keyboard after rejection so the draft can be corrected and retried.
     vi.mocked(Keyboard.dismiss).mockClear()
     await render(vi.fn().mockResolvedValue(false), vi.fn())
 
