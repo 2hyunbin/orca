@@ -1,5 +1,5 @@
 import './unused-default-rpc-methods.test-fixture'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { agentHookServer } from '../../agent-hooks/server'
 import type { OrcaRuntimeService } from '../orca-runtime'
 import { RpcDispatcher } from './dispatcher'
@@ -10,10 +10,16 @@ const identity = {
   sessionId: 'session',
   instanceId: 'mod'
 }
+const now = 1_700_000_000_000
+
+beforeEach(() => {
+  vi.useFakeTimers({ now })
+})
 
 afterEach(() => {
   agentHookServer.claudeAgentViews.clear()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 it.each(['permission', 'new-session', 'new-mod', 'new-pty', 'mobile-lock'] as const)(
@@ -31,8 +37,8 @@ it.each(['permission', 'new-session', 'new-mod', 'new-pty', 'mobile-lock'] as co
         prompt: '',
         providerSession: { key: 'session_id', id: sessionId },
         connectionId: null,
-        receivedAt: Date.now(),
-        stateStartedAt: Date.now()
+        receivedAt: now,
+        stateStartedAt: now
       }
     ])
     agentHookServer.claudeAgentViews.receive({

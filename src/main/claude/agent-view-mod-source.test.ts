@@ -43,6 +43,7 @@ it.each(['{}', '', 'not-json', 'null'])(
       view?: { agentId?: string; revision: number }
     }[] = []
     const view = vi.fn(async () => ({}))
+    const now = 1_700_000_000_000
     const api = {
       env: {
         get: async (key: string) =>
@@ -69,7 +70,7 @@ it.each(['{}', '', 'not-json', 'null'])(
       },
       session: { id: async () => sessionId },
       clock: {
-        now: async () => Date.now(),
+        now: async () => now,
         every: (_ms: number, callback: () => Promise<unknown>) => {
           heartbeat = callback
         }
@@ -94,7 +95,7 @@ it.each(['{}', '', 'not-json', 'null'])(
                       ? {
                           requestId: 'request',
                           agentId: 'child',
-                          expiresAt: Date.now() + 1000
+                          expiresAt: now + 1000
                         }
                       : {}
                   )
