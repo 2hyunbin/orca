@@ -5,7 +5,8 @@ export const CLAUDE_DIALOG_HOLD_CAP_MS = 10 * 60_000
 // A dialog is painted at the bottom of the screen; older rows are scrollback.
 const DIALOG_REGION_LINES = 14
 const DIALOG_FOOTER_RE = /Enter to select|Esc to cancel/
-const CURSORED_OPTION_RE = /^\s*❯ \d+\. /
+// Why String.raw: the orcad bundle must stay ASCII, and the formatter unescapes regex literals.
+const CURSORED_OPTION_RE = new RegExp(String.raw`^\s*\u276F \d+\. `)
 const OPTION_RE = /^\s+\d+\. /
 
 /** Plan approval has no footer: its cursored option sits directly above or below another one. */
@@ -18,7 +19,7 @@ function hasCursoredOptionList(lines: readonly string[]): boolean {
 }
 
 /**
- * Whether a Claude dialog still holds the pane: Claude keeps its `✳` rest title under it, so
+ * Whether a Claude dialog still holds the pane: Claude keeps its rest-glyph title under it, so
  * without OSC 7501 only the hook row shows it. Esc dismisses it without a hook, so the screen
  * decides whenever it can be read, and the cap bounds a row nothing else retires.
  */
