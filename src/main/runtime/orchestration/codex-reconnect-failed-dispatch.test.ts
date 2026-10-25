@@ -81,6 +81,18 @@ describe('Codex reconnect failure inside a live worker PTY', () => {
     }
   })
 
+  it('ignores the text when a Codex pane shows it as indented output', async () => {
+    const { db, write, dispatchId } = await startWorkerPane('codex')
+    try {
+      await write([
+        `    \u2514 docs: ${ERROR_GLYPH} Automatic reconnect could not restore this session.\r\n`
+      ])
+      expect(db.getDispatchContextById(dispatchId)?.status).toBe('dispatched')
+    } finally {
+      db.close()
+    }
+  })
+
   it('ignores the same text printed in a non-Codex pane', async () => {
     const { db, write, dispatchId } = await startWorkerPane('claude')
     try {

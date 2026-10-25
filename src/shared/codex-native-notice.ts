@@ -25,13 +25,18 @@ function capacityNoticeAboveComposer(lines: readonly string[]): boolean {
   return false
 }
 
-/** Codex paints its reconnect-failed error cell (wrapped in narrow panes) above later status rows. */
+/** Codex paints its error cell at column 0 (history_cell/notices.rs new_error_event); indented echoes are output. */
 function reconnectFailedNoticeOnScreen(lines: readonly string[]): boolean {
-  return lines
-    .map((line) => line.trim())
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .includes(`\u25A0 ${CODEX_RECONNECT_FAILED_MESSAGE}`)
+  const notice = `\u25A0 ${CODEX_RECONNECT_FAILED_MESSAGE}`
+  return lines.some(
+    (line, index) =>
+      line.startsWith('\u25A0 ') &&
+      lines
+        .slice(index, index + 8)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .startsWith(notice)
+  )
 }
 
 /** Streams Codex's native error/warning cells: a glyph-led message, confirmed on the settled screen. */

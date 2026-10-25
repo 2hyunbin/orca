@@ -79,7 +79,11 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
         handle: this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId)),
         paneKey: this.makeRuntimePaneKey(leaf)
       })),
-      { handle: this.handleByPtyId.get(ptyId) }
+      // Pane identity survives handle reminting, as on the exit path.
+      {
+        handle: this.handleByPtyId.get(ptyId),
+        paneKey: this.paneOfPty(this.ptysById.get(ptyId)).paneKey ?? undefined
+      }
     ]
     const reason = 'Codex lost its app-server and could not reconnect; relaunch Codex to continue'
     try {
@@ -88,7 +92,7 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
           handle !== undefined &&
           this.failActiveDispatchAndEscalate(handle, paneKey, {
             error: reason,
-            // The terminal and worktree stay up so the operator can read what happened.
+            // The terminal and worktree stay up for inspection; workerProcessExited bypasses the active-worker guard for this dead session.
             options: { workerProcessExited: true, workerStage: 'agent_session_lost' },
             processExited: false,
             escalate: true,
