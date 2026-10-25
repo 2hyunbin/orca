@@ -16,7 +16,7 @@ import {
 import { runCodexAppServerSession } from './codex-app-server-session'
 import { isCodexSkillsListUnsupported, requestCodexSkillReport } from './codex-skill-list'
 import { supportsCodexStructuredLocation } from './codex-structured-location-support'
-import { resolveHiddenProbeCwd } from '../rate-limits/hidden-rate-limit-pty-cwd'
+import { resolveHiddenProbeCwd } from '../rate-limits/hidden-probe-cwd'
 import {
   resolveCodexStructuredInvocation,
   type CodexStructuredInvocationDeps

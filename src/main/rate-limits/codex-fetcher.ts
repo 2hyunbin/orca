@@ -28,10 +28,7 @@ import {
   supplementCodexRateLimitResetCredits
 } from './codex-reset-credit-client'
 import { readCodexRateLimitsViaRpc } from './codex-rpc-rate-limit-probe'
-import {
-  getHiddenRateLimitWslCwdSetupCommands,
-  resolveHiddenProbeCwd
-} from './hidden-rate-limit-pty-cwd'
+import { getHiddenProbeWslCwdSetupCommands, resolveHiddenProbeCwd } from './hidden-probe-cwd'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { resolveWslInteropSpawnCwd } from '../wsl-interop-spawn-directory'
 
@@ -51,7 +48,7 @@ function buildWslCodexCommand(
     return null
   }
   const setupCommands = [
-    ...getHiddenRateLimitWslCwdSetupCommands(),
+    ...getHiddenProbeWslCwdSetupCommands(),
     `export CODEX_HOME=${quotePosixShell(wslInfo.linuxPath)}`
   ].join(' && ')
   const execSuffix = `${args.map(quotePosixShell).join(' ')} <&3 >&4 3<&- 4>&-`
