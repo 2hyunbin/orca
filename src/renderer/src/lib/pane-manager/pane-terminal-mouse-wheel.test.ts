@@ -312,6 +312,26 @@ describe('terminal mouse wheel multiplier', () => {
     expect(notchReports(afterTrackpad)).toEqual(notchReports(fresh))
   })
 
+  it('stops treating a ratio-matching notch as trackpad input once the window lapses', () => {
+    const notch = { deltaY: 40, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -120 }
+    const afterTrackpad = createTerminalTuiMouseWheelDistanceState()
+    resolveTerminalTuiMouseWheelReportCount(
+      { deltaY: 8, deltaMode: DOM_DELTA_PIXEL, wheelDeltaY: -24, timeStamp: 0 },
+      1,
+      afterTrackpad,
+      { cellHeight: 16 }
+    )
+
+    const reports = [200, 400, 600].map((timeStamp) =>
+      resolveTerminalTuiMouseWheelReportCount({ ...notch, timeStamp }, 5, afterTrackpad, {
+        cellHeight: 16
+      })
+    )
+
+    // The first notch may still read as trackpad input; later ones get the 5x wheel curve.
+    expect(reports.slice(1).every((count) => count >= 15)).toBe(true)
+  })
+
   it('keeps a touchpad flick linear when wheelDelta tracks deltaY one to one', () => {
     const state = createTerminalTuiMouseWheelDistanceState()
     const flick = [20, 60, 120, 160, 120, 60, 20]
