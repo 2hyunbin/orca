@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { Repo } from '../../../../shared/repo-types'
+import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { retainValidFilterRepoIds } from '../slices/repo-filter-selection'
 import { readRuntimeWorktreeVisibilitySnapshot } from '../slices/worktree-visibility-owner-settings'
 import { getRepoHostIdentity } from '../slices/repo-host-identity'
@@ -25,9 +26,9 @@ import {
   fetchRepoCatalogForTarget,
   filterSetupsForPrunedRepoRows,
   filterTrustedOrcaHooksToValidRepos,
-  finalizeFetchedRepoCatalog,
-  flushEditsOfDroppedRepoWorktrees,
-  reconcileFetchedCatalogWorktreeState
+  mergeFetchedRepoCatalog,
+  reconcileFetchedCatalogWorktreeState,
+  reconcileSupersededSshRepos
 } from './repo-catalog-merge'
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
@@ -56,14 +57,15 @@ export function createAllHostRepoCatalogActions(
         if (!isCurrent(fence)) {
           return false
         }
-        flushEditsOfDroppedRepoWorktrees(get(), catalog)
         let hostRepos: Repo[] = []
         set((s) => {
           // Why: skip a catalog whose env was tombstoned mid-load (removed), not one merely absent from the not-yet-hydrated saved list (#8881).
           if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
             return s
           }
-          const { result, reconciliation, finalizedRepos } = finalizeFetchedRepoCatalog(catalog, s)
+          const result = mergeFetchedRepoCatalog(catalog, s.repos)
+          const reconciliation = reconcileSupersededSshRepos(result.repos, s)
+          const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({
             previous: {
               projects: s.projects,
@@ -83,7 +85,7 @@ export function createAllHostRepoCatalogActions(
           return {
             repos: finalizedRepos,
             pendingSshRepoReadoptions: reconciliation.pendingReadoptions,
-            ...reconcileFetchedCatalogWorktreeState(s, finalizedRepos),
+            ...reconcileFetchedCatalogWorktreeState(s, catalog, finalizedRepos),
             ...mergedProjectCompatibility,
             ...(arrayElementsUnchanged(finalizedRepos, s.repos)
               ? {}
@@ -119,7 +121,9 @@ export function createAllHostRepoCatalogActions(
       let localCatalogOutcome: LocalRepoCatalogFetchOutcome = { status: 'fulfilled' }
       const localFence = claimHostCatalogFence(get, 'repos', { kind: 'local' })
       try {
-        if (!applyCatalog(await fetchRepoCatalogForTarget({ kind: 'local' }), localFence)) {
+        if (
+          !applyCatalog(await fetchRepoCatalogForTarget({ kind: 'local' }, get().repos), localFence)
+        ) {
           failed = true
         }
       } catch (err) {
@@ -144,7 +148,7 @@ export function createAllHostRepoCatalogActions(
         'repos',
         async (target, fence) => {
           const [catalogResult, visibilitySnapshot] = await Promise.all([
-            fetchRepoCatalogForTarget(target).then(
+            fetchRepoCatalogForTarget(target, get().repos).then(
               (catalog) => ({ ok: true as const, catalog }),
               (error: unknown) => ({ ok: false as const, error })
             ),

@@ -1,19 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../../shared/repo-types'
+import type { DetectedWorktreeListResult } from '../../../../shared/worktree/types'
 import { toRuntimeExecutionHostId } from '../../../../shared/execution-host'
 import {
   createCompatibleRuntimeStatusResponseIfNeeded,
   type RuntimeEnvironmentCallRequest
 } from '../../runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
-import { createTestStore, makeTab, makeWorktree, seedStore } from '../slices/store-test-helpers'
+import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
 
 const SERVER = toRuntimeExecutionHostId('env-1')
 
-function serverRepo(id: string): Repo {
+function serverRepo(id: string, path = '/srv/app'): Repo {
   return {
     id,
-    path: '/srv/app',
+    path,
     displayName: 'app',
     badgeColor: '#737373',
     addedAt: 1,
@@ -21,20 +22,30 @@ function serverRepo(id: string): Repo {
   }
 }
 
+function serverRow(repoId: string, path = '/srv/app') {
+  return makeWorktree({ id: `${repoId}::${path}`, repoId, path, hostId: SERVER })
+}
+
 let serverRepos: Repo[] = []
-const call = vi.fn((args: RuntimeEnvironmentCallRequest) => {
+let repoListGate: Promise<void> | null = null
+const call = vi.fn(async (args: RuntimeEnvironmentCallRequest) => {
   const compatible = createCompatibleRuntimeStatusResponseIfNeeded(args)
   if (compatible) {
     return compatible
   }
-  const result = args.method === 'repo.list' ? { repos: structuredClone(serverRepos) } : {}
-  return { id: `rpc-${args.method}`, ok: true, result, _meta: { runtimeId: 'remote-runtime' } }
+  if (args.method === 'repo.list') {
+    const answer = structuredClone(serverRepos)
+    await repoListGate
+    return { id: 'rpc-repo.list', ok: true, result: { repos: answer }, _meta: {} }
+  }
+  return { id: `rpc-${args.method}`, ok: true, result: {}, _meta: { runtimeId: 'remote-runtime' } }
 })
 
 describe('a fetched catalog that drops a repo registration', () => {
   beforeEach(() => {
     clearRuntimeCompatibilityCacheForTests()
     call.mockClear()
+    repoListGate = null
     vi.stubGlobal('window', {
       api: { runtimeEnvironments: { call, list: vi.fn().mockResolvedValue([]) } },
       dispatchEvent: vi.fn()
@@ -44,25 +55,28 @@ describe('a fetched catalog that drops a repo registration', () => {
   it('drops that host’s rows when the server relists its checkout under a new repo id', async () => {
     const store = createTestStore()
     const localTwin: Repo = { ...serverRepo('old'), path: '/local/app', executionHostId: 'local' }
+    const localRow = makeWorktree({
+      id: 'old::/local/app',
+      repoId: 'old',
+      path: '/local/app',
+      hostId: 'local'
+    })
+    const legacyRow = makeWorktree({ id: 'old::/legacy', repoId: 'old', path: '/legacy' })
+    const detected: DetectedWorktreeListResult = {
+      repoId: 'old',
+      authoritative: true,
+      source: 'git',
+      worktrees: [serverRow('old'), localRow].map((row) => ({
+        ...row,
+        ownership: 'orca-managed' as const,
+        selectedCheckout: true,
+        visible: true
+      }))
+    }
     seedStore(store, {
       repos: [serverRepo('old'), localTwin],
-      worktreesByRepo: {
-        old: [
-          makeWorktree({ id: 'old::/srv/app', repoId: 'old', path: '/srv/app', hostId: SERVER }),
-          makeWorktree({
-            id: 'old::/local/app',
-            repoId: 'old',
-            path: '/local/app',
-            hostId: 'local'
-          }),
-          makeWorktree({ id: 'old::/legacy', repoId: 'old', path: '/legacy' })
-        ]
-      },
-      activeWorktreeId: 'old::/srv/app',
-      tabsByWorktree: {
-        'old::/srv/app': [makeTab({ id: 'server-tab', worktreeId: 'old::/srv/app' })],
-        'old::/local/app': [makeTab({ id: 'local-tab', worktreeId: 'old::/local/app' })]
-      }
+      worktreesByRepo: { old: [serverRow('old'), localRow, legacyRow] },
+      detectedWorktreesByRepo: { old: detected }
     })
     serverRepos = [serverRepo('copied')]
 
@@ -78,9 +92,9 @@ describe('a fetched catalog that drops a repo registration', () => {
       'old::/local/app',
       'old::/legacy'
     ])
-    // Purged like a checkout an authoritative scan lost: its selection and tabs go with it.
-    expect(state.activeWorktreeId).toBeNull()
-    expect(Object.keys(state.tabsByWorktree)).toEqual(['old::/local/app'])
+    expect(state.detectedWorktreesByRepo.old?.worktrees.map((worktree) => worktree.id)).toEqual([
+      'old::/local/app'
+    ])
   })
 
   it('drops the pre-host rows too once no host registers the repo id', async () => {
@@ -89,7 +103,7 @@ describe('a fetched catalog that drops a repo registration', () => {
       repos: [serverRepo('old')],
       worktreesByRepo: {
         old: [
-          makeWorktree({ id: 'old::/srv/app', repoId: 'old', path: '/srv/app', hostId: SERVER }),
+          serverRow('old'),
           makeWorktree({ id: 'old::/legacy', repoId: 'old', path: '/legacy' })
         ]
       }
@@ -99,5 +113,29 @@ describe('a fetched catalog that drops a repo registration', () => {
     await store.getState().fetchRuntimeEnvironmentRepos('env-1')
 
     expect(store.getState().worktreesByRepo.old).toEqual([])
+  })
+
+  it('keeps the rows of a repo added while the catalog was in flight', async () => {
+    const store = createTestStore()
+    seedStore(store, {
+      repos: [serverRepo('kept')],
+      worktreesByRepo: { kept: [serverRow('kept')] }
+    })
+    serverRepos = [serverRepo('kept')]
+    const { promise, resolve } = Promise.withResolvers<void>()
+    repoListGate = promise
+
+    const fetching = store.getState().fetchRuntimeEnvironmentRepos('env-1')
+    // The add lands after the request went out, so the answer cannot list it.
+    store.setState((s) => ({
+      repos: [...s.repos, serverRepo('added', '/srv/added')],
+      worktreesByRepo: { ...s.worktreesByRepo, added: [serverRow('added', '/srv/added')] }
+    }))
+    resolve()
+    await fetching
+
+    expect(store.getState().worktreesByRepo.added?.map((worktree) => worktree.id)).toEqual([
+      'added::/srv/added'
+    ])
   })
 })

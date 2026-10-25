@@ -14,18 +14,19 @@ import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { fetchProjectHostSetupCompatibility } from '../projects/project-host-routing'
 import { mergeFetchedReposForHost } from './repo-catalog-identity'
 import { dropWorktreeRowsOfDroppedRepos } from './dropped-repo-worktree-rows'
-import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
-import { buildWorktreePurgeState } from '../slices/worktrees/teardown/worktree-purge-state'
-import { flushPurgedWorkspaceEdits } from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
+import { getRepoHostIdentity } from '../slices/repo-host-identity'
 
 export type FetchedRepoCatalog = {
   repos: readonly Repo[]
   projectHostSetupCompatibility: ProjectHostSetupProjection
   hostId: ReturnType<typeof getRuntimeTargetHostId>
+  /** This store's repo rows when the request went out; a registration added since is not its to drop. */
+  reposAtRequest: readonly Repo[]
 }
 
 export async function fetchRepoCatalogForTarget(
-  target: RuntimeClientTarget
+  target: RuntimeClientTarget,
+  reposAtRequest: readonly Repo[]
 ): Promise<FetchedRepoCatalog> {
   const fetchedRepos =
     target.kind === 'local'
@@ -40,7 +41,8 @@ export async function fetchRepoCatalogForTarget(
   return {
     repos,
     projectHostSetupCompatibility: await fetchProjectHostSetupCompatibility(target, repos),
-    hostId: getRuntimeTargetHostId(target)
+    hostId: getRuntimeTargetHostId(target),
+    reposAtRequest
   }
 }
 
@@ -119,53 +121,24 @@ export function reconcileReadoptedSshWorktreeState(
   }
 }
 
-/** The repo rows a fetched catalog leaves once merged, superseded SSH rows reconciled and ordered. */
-export function finalizeFetchedRepoCatalog(
-  catalog: FetchedRepoCatalog,
-  state: Pick<AppState, 'repos' | 'pendingSshRepoReadoptions' | 'manualRepoOrder'>
-): {
-  result: ReturnType<typeof mergeFetchedRepoCatalog>
-  reconciliation: SshRepoReconciliation
-  finalizedRepos: readonly Repo[]
-} {
-  const result = mergeFetchedRepoCatalog(catalog, state.repos)
-  const reconciliation = reconcileSupersededSshRepos(result.repos, state)
-  return {
-    result,
-    reconciliation,
-    finalizedRepos: applyManualRepoOrder(reconciliation.repos, state.manualRepoOrder)
-  }
-}
-
-function dropRowsOfDroppedRepos(state: AppState, nextRepos: readonly Repo[]) {
-  const readopted = reconcileReadoptedSshWorktreeState(state, state.pendingSshRepoReadoptions)
-  return dropWorktreeRowsOfDroppedRepos(readopted, state.repos, nextRepos)
-}
-
-/** Why before the update: a purged workspace's delayed editor views must commit their text first. */
-export function flushEditsOfDroppedRepoWorktrees(
-  state: AppState,
-  catalog: FetchedRepoCatalog
-): void {
-  const { removed } = dropRowsOfDroppedRepos(
-    state,
-    finalizeFetchedRepoCatalog(catalog, state).finalizedRepos
-  )
-  if (removed.length > 0) {
-    flushPurgedWorkspaceEdits(state, removed)
-  }
-}
-
-/**
- * The worktree state a fetched catalog leaves: re-adopted SSH rows moved, and the rows of every
- * repo registration it dropped purged as an authoritative scan purges a vanished checkout.
- */
+/** The worktree rows a fetched catalog leaves: re-adopted SSH rows moved, dropped repos' rows gone. */
 export function reconcileFetchedCatalogWorktreeState(
-  state: AppState,
+  state: Pick<
+    AppState,
+    | 'repos'
+    | 'pendingSshRepoReadoptions'
+    | 'worktreesByRepo'
+    | 'detectedWorktreesByRepo'
+    | 'sortEpoch'
+  >,
+  catalog: Pick<FetchedRepoCatalog, 'reposAtRequest'>,
   nextRepos: readonly Repo[]
-): Partial<AppState> {
-  const { removed, ...rows } = dropRowsOfDroppedRepos(state, nextRepos)
-  return removed.length === 0 ? rows : { ...buildWorktreePurgeState(state, removed), ...rows }
+): Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo' | 'sortEpoch'> {
+  const readopted = reconcileReadoptedSshWorktreeState(state, state.pendingSshRepoReadoptions)
+  // Why: a catalog requested before an add may omit it; that add's rows are not this answer's to drop.
+  const requested = new Set(catalog.reposAtRequest.map(getRepoHostIdentity))
+  const previous = state.repos.filter((repo) => requested.has(getRepoHostIdentity(repo)))
+  return dropWorktreeRowsOfDroppedRepos(readopted, previous, nextRepos)
 }
 
 export function filterTrustedOrcaHooksToValidRepos(

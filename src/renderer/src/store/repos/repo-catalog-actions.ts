@@ -1,6 +1,7 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import type { Repo } from '../../../../shared/repo-types'
+import { applyManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { reconcileCatalogRows } from '../../../../shared/catalog-row-reconcile'
 import { retainValidFilterRepoIds } from '../slices/repo-filter-selection'
 import {
@@ -23,10 +24,10 @@ import { claimHostCatalogFence, isHostCatalogFenceCurrent } from '../host-catalo
 import {
   fetchRepoCatalogForTarget,
   filterSetupsForPrunedRepoRows,
-  finalizeFetchedRepoCatalog,
-  flushEditsOfDroppedRepoWorktrees,
+  mergeFetchedRepoCatalog,
   reconcileFetchedCatalogWorktreeState,
-  reconcileReadoptedSshWorktreeState
+  reconcileReadoptedSshWorktreeState,
+  reconcileSupersededSshRepos
 } from './repo-catalog-merge'
 import {
   getProjectHostSetupOwnerKey,
@@ -95,12 +96,11 @@ export function createRepoCatalogActions(
       set((s) => ({ reposFetchGeneration: s.reposFetchGeneration + 1 }))
       const fence = claimHostCatalogFence(get, 'repos', target)
       try {
-        const catalog = await fetchRepoCatalogForTarget(target)
+        const catalog = await fetchRepoCatalogForTarget(target, get().repos)
         // A newer same-host fetch or a replaced connection superseded us — drop this stale result.
         if (!isHostCatalogFenceCurrent(get, fence)) {
           return
         }
-        flushEditsOfDroppedRepoWorktrees(get(), catalog)
         let finalizedHostRepos: Repo[] = []
         set((s) => {
           // Why: an in-flight fetch for a just-removed env would re-add purged repos and stick; skip only when the env was tombstoned, not merely unhydrated (#8881).
@@ -108,11 +108,9 @@ export function createRepoCatalogActions(
             return s
           }
           // Why: re-adoption leaves a stale row on the old SSH target id (a ghost that fails "SSH target not found"); drop rows a live-host sibling supersedes.
-          const {
-            result,
-            reconciliation,
-            finalizedRepos: prunedRepos
-          } = finalizeFetchedRepoCatalog(catalog, s)
+          const result = mergeFetchedRepoCatalog(catalog, s.repos)
+          const reconciliation = reconcileSupersededSshRepos(result.repos, s)
+          const prunedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
           const validRepoIds = new Set(prunedRepos.map((repo) => repo.id))
           const validRepoHostIdentities = new Set(prunedRepos.map(getRepoHostIdentity))
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({
@@ -134,7 +132,7 @@ export function createRepoCatalogActions(
           return {
             repos: prunedRepos,
             pendingSshRepoReadoptions: reconciliation.pendingReadoptions,
-            ...reconcileFetchedCatalogWorktreeState(s, prunedRepos),
+            ...reconcileFetchedCatalogWorktreeState(s, catalog, prunedRepos),
             ...mergedProjectCompatibility,
             ...(arrayElementsUnchanged(prunedRepos, s.repos)
               ? {}
