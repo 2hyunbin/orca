@@ -202,8 +202,7 @@ export async function submission(id: string): Promise<AgentJournalSubmission | u
 export async function heldBehindStart(text: string, interval = 0): Promise<string> {
   const id = await accept(text)
   await eventually(
-    async () =>
-      expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('starting'),
+    async () => expect(host.readStatusSummary(SESSION)?.hostExecutionPhase).toBe('starting'),
     interval
   )
   return id
