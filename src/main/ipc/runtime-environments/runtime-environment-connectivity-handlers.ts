@@ -47,6 +47,10 @@ import {
   wslOrcadHostSupports
 } from '../../wsl/wsl-orcad-host-environments'
 import { assertWslHostReachable, isGatedOffWslHost } from '../../wsl/wsl-host-gate'
+import {
+  isHostSpawnFencedForWslMoveUndo,
+  wslMoveUndoSpawnFencedResponse
+} from '../../persistence/moving-wsl-projects/wsl-move-undo-spawn-fence'
 
 function manuallyDisconnectedResponse(
   environment: ReturnType<typeof resolveEnvironment>
@@ -248,6 +252,9 @@ function registerPassiveCallHandler(getUserDataPath: () => string): void {
       const environment = resolveEnvironment(getUserDataPath(), args.selector)
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
+      }
+      if (isHostSpawnFencedForWslMoveUndo(environment.id, args.method)) {
+        return wslMoveUndoSpawnFencedResponse(environment, args.method)
       }
       // Every renderer request to a paired host passes this account environment boundary.
       const accounts = await withWslOrcadAccountEnv({

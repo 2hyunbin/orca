@@ -69,14 +69,16 @@ export function settleWslMoveWindowWriteHoldForCommit(committed: boolean): void 
 }
 
 /** After the rewrite is on disk: reloads the held window. A no-op when nothing was held. */
-export function reloadWslMoveWindowWithWritesHeld(): void {
+export function reloadWslMoveWindowWithWritesHeld(onReloaded: () => void = () => {}): void {
   if (!reloadOwed || commitPending) {
+    onReloaded()
     return
   }
   reloadOwed = false
   const window = getWindow()
   if (!window || window.isDestroyed()) {
     held = false
+    onReloaded()
     return
   }
   // Why override: drafts reach disk with each save before the hold, and a vetoed reload would keep
@@ -86,6 +88,7 @@ export function reloadWslMoveWindowWithWritesHeld(): void {
     held = false
     removeAllowUnload()
     removeLift()
+    onReloaded()
   })
   // After the caller's reply reaches the renderer, so its awaited call settles first.
   setImmediate(() => {

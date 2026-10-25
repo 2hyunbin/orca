@@ -4,6 +4,7 @@
  * empty / refuses while the internal WSL hosts gate is closed, before it touches anything.
  */
 import { ipcMain, type WebContents } from 'electron'
+import { fenceHostSpawnsForWslMoveUndo } from '../persistence/moving-wsl-projects/wsl-move-undo-spawn-fence'
 import type {
   WslMovePendingRendererRewrite,
   WslMoveRecordStoreRewrittenResult
@@ -197,8 +198,11 @@ function registerWslMoveUseHereHandler(
         return refusal
       }
       // The host's copies stop first, or an agent the move resumed there runs beside this one.
+      // Fenced until the reload: an open host pane would otherwise start its stopped agent again.
+      const releaseSpawnFence = fenceHostSpawnsForWslMoveUndo(found.move.destinationEnvironmentId)
       const stop = await createUndoPorts().stopHostCopies(found.move)
       if (stop !== 'stopped') {
+        releaseSpawnFence()
         return {
           released: false,
           reason: stop === 'unreachable' ? 'host-unreachable' : 'host-still-running'
@@ -208,7 +212,9 @@ function registerWslMoveUseHereHandler(
       if (result.released) {
         // The page holds only the project's chats; the reloaded one hydrates its pre-move session.
         holdWslMoveWindowWrites()
-        reloadWslMoveWindowWithWritesHeld()
+        reloadWslMoveWindowWithWritesHeld(releaseSpawnFence)
+      } else {
+        releaseSpawnFence()
       }
       return result
     }
