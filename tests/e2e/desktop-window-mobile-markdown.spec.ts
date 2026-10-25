@@ -93,7 +93,8 @@ test('a phone saves a Markdown tab the desktop has unsaved edits in, without tou
             tabId
           })
           read = response.ok ? response.result : null
-          return response.ok ? 'read' : `${response.error.code}: ${response.error.message}`
+          console.log('TRIAGE mobile read', JSON.stringify(response))
+          return response.ok ? (response.result.isDirty ? 'read' : 'awaiting-dirty-publication') : `${response.error.code}: ${response.error.message}`
         },
         { timeout: 30_000 }
       )

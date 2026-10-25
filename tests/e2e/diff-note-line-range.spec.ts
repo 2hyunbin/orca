@@ -153,6 +153,7 @@ async function revealAddButton(
   lineNumber: number
 ): Promise<{ x: number; y: number; top: string }> {
   const line = await gutterPoint(page, lineNumber)
+  console.log('TRIAGE diff hover target', line, await page.evaluate(({ x, y }) => ({ hit: document.elementFromPoint(x + 260, y)?.outerHTML.slice(0, 500) }), line))
   await page.mouse.move(line.x + 260, line.y)
   const button = page.locator('.orca-diff-comment-add-btn')
   await expect(button, 'the "+" never appeared on the hovered line').toBeVisible()

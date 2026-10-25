@@ -313,10 +313,20 @@ test('adds a WSL distro as a host, adds a project on it, and runs a terminal the
     await waitForActiveTerminalManager(page, 30_000)
     const ptyId = await waitForActivePanePtyId(page, 30_000)
     expect(ptyId).toMatch(/^remote:/)
+    await waitForTerminalOutput(page, '$', 30_000)
     await focusActiveTerminalInput(page)
+    console.log('TRIAGE WSL focus', await page.evaluate(() => ({ focus: document.activeElement?.outerHTML, panes: Array.from(document.querySelectorAll('.pane[data-pty-id]')).map((element) => ({ pty: element.getAttribute('data-pty-id'), recovery: element.getAttribute('data-pty-recovery-state') })) })))
     await page.keyboard.type("printf 'WSL_HOST_TERMINAL_%s\\n' ready")
     await page.keyboard.press('Enter')
-    await waitForTerminalOutput(page, 'WSL_HOST_TERMINAL_ready', 30_000)
+    try {
+      await waitForTerminalOutput(page, 'WSL_HOST_TERMINAL_ready', 30_000)
+    } catch (error) {
+      console.log('TRIAGE WSL keyboard output absent; testing direct input', ptyId)
+      await page.evaluate((id) => window.api.pty.write(id, "printf 'WSL_HOST_TERMINAL_%s\\n' ready\r", 'driving'), ptyId)
+      await waitForTerminalOutput(page, 'WSL_HOST_TERMINAL_ready', 30_000)
+      console.log('TRIAGE WSL direct input succeeded')
+      throw error
+    }
     await page.screenshot({ path: testInfo.outputPath('wsl-host-terminal.png') })
 
     await checkWindowsFolderPicker(desktop, projectPath, testInfo)

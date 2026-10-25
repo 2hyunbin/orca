@@ -67,6 +67,9 @@ export async function startRecordingTabRenders(page: Page): Promise<void> {
       }
       previousFibersByRoot.set(root, fibers)
       if (renderedTabIds.size > 0) {
+        const history = Reflect.get(window, '__triageTabRenderIds') ?? []
+        history.push(Array.from(renderedTabIds).map((id) => ({ id, title: document.querySelector(`[data-tab-id="${id}"]`)?.getAttribute('data-tab-title') })))
+        Reflect.set(window, '__triageTabRenderIds', history)
         recorded.push(renderedTabIds.size)
       }
       return original?.call(this, rendererId, root, ...rest)

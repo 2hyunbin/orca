@@ -155,7 +155,9 @@ test('selection and scrolling reuse Markdown review source lines', async ({
       return { x: rect.left, y: rect.top + rect.height / 2 }
     })
     await orcaPage.mouse.click(point.x, point.y)
+    await expect(editor).toBeFocused()
     await orcaPage.keyboard.press('Shift+ArrowRight')
+    console.log('TRIAGE markdown selection', await editor.evaluate((element) => ({ selection: Reflect.get(element, 'editor')?.state.selection.toJSON(), dom: window.getSelection()?.toString(), active: document.activeElement?.outerHTML.slice(0, 250) })))
     await expect(
       orcaPage.getByRole('button', { name: 'Add review note', exact: true })
     ).toBeVisible()
