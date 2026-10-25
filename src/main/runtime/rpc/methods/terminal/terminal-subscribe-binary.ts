@@ -93,7 +93,8 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
         meta.seq
       )
     }
-    for (const chunk of iterateTerminalOutputFrameChunks(data, meta)) {
+    // Why text: no terminal.subscribe client (every phone) has ever decoded OutputSpan; a span frame here is lost output.
+    for (const chunk of iterateTerminalOutputFrameChunks(data, meta, 'text')) {
       sendFrame(chunk.opcode ?? TerminalStreamOpcode.Output, chunk.bytes, chunk.seq)
     }
   })

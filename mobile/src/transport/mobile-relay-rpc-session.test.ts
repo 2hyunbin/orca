@@ -3,7 +3,7 @@ import {
   BrowserScreencastOpcode,
   encodeBrowserScreencastFrame
 } from '../../../src/shared/browser-screencast-protocol'
-import { encodeTerminalStreamFrame, TerminalStreamOpcode } from './terminal-stream-protocol'
+import { encodeTerminalStreamFrame, TerminalStreamOpcode } from '../../../src/shared/terminal-stream-protocol'
 import { scopeRpcClientToExecutionHost } from './execution-host-scoped-rpc-client'
 import { isRpcDeliveryUnknown } from './rpc-delivery-ambiguity'
 
