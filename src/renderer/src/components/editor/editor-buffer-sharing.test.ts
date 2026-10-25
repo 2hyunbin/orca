@@ -254,7 +254,12 @@ describe('restored floating and ordinary views', () => {
       expect(floating.operationProvenance).toBeUndefined()
       const model = mount(store, ordinary.id)
       expect(mount(store, floating.id)).toBe(model)
-      store.setState((state) => ({ settings: { ...state.settings, editorAutoSave: false } }))
+      store.setState((state) => {
+        if (!state.settings) {
+          throw new Error('Editor fixture settings must be initialized')
+        }
+        return { settings: { ...state.settings, editorAutoSave: false } }
+      })
       const cleanup = attachEditorAutosaveController(store)
       try {
         for (const source of [ordinary, floating]) {
