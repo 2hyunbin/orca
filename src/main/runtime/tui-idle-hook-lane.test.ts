@@ -401,15 +401,8 @@ describe('evaluateTuiIdle turn-end hook lane (dsh)', () => {
     )
   const PENDING = { kind: 'pending', quietForeground: 'closed' }
 
-  it("settles on the hook store's done once its final frame is due, with no first-party status", () => {
-    const receivedAt = Date.now()
-    expect(dsh([row({ agentType: 'dsh', receivedAt })])).toEqual({
-      ...PENDING,
-      recheckAt: receivedAt + 750
-    })
-    expect(dsh([row({ agentType: 'dsh', receivedAt: receivedAt - 750 })])).toEqual({
-      kind: 'ready-strong'
-    })
+  it("settles on the hook store's fresh done, with no first-party status", () => {
+    expect(dsh([row({ agentType: 'dsh' })])).toEqual({ kind: 'ready-strong' })
   })
 
   it('does not settle on a stale done, one from before the latest input, or a working row', () => {

@@ -22,6 +22,8 @@ export type TuiIdleHookTurn = {
 
 // Why: Codex runs its Stop hook before it paints the turn's last frame, which can be its plan menu.
 const TURN_END_FINAL_FRAME_MS = 750
+// Why: Codex opens its plan menu only after a turn that rendered a proposed plan; no hook field says so.
+const CODEX_PROPOSED_PLAN_HEADER = 'Proposed Plan'
 
 /**
  * Reads the main agent's turn off its row. Why the main agent's own state: the row's combined
@@ -60,6 +62,8 @@ export type TuiIdleHookTurnRead = {
    *  the turn that input may have started (or the agent it restarted), whose first hook can still
    *  be in flight. */
   lastInputAt?: number | null
+  /** Whether the pane's retained output holds `text`; read only while a fresh `done` may precede a menu. */
+  tailIncludes?: (text: string) => boolean
   /** The existing permission arbiter, given the turn as the pane's explicit status. */
   resolveBlockedText(
     status: HookTurnState,
@@ -72,6 +76,23 @@ export type TuiIdleHookTurnRead = {
  * reaches (a PTY created with no pane key whose agent never posted under one) has no answer, and
  * neither does a row another agent or an earlier process wrote: the caller's other lanes decide.
  */
+/** Scans newest-first so the common hit (this turn's plan) returns early. */
+export function retainedTailIncludes(
+  lines: readonly string[],
+  partialLine: string,
+  text: string
+): boolean {
+  if (partialLine.includes(text)) {
+    return true
+  }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].includes(text)) {
+      return true
+    }
+  }
+  return false
+}
+
 export function readTuiIdleHookTurn(read: TuiIdleHookTurnRead): TuiIdleHookTurn | null {
   const row = selectFreshExplicitAgentStatusRow(read)
   if (!row || row.agentType !== read.agent || row.receivedAt < (read.respawnedAt ?? -1)) {
@@ -101,7 +122,10 @@ export function readTuiIdleHookTurn(read: TuiIdleHookTurnRead): TuiIdleHookTurn 
     (!read.launchToken || row.launchToken === read.launchToken)
   const finalFrameAt = row.receivedAt + TURN_END_FINAL_FRAME_MS
   const finalFramePending =
-    state === 'done' && hookAuthority(read.agent) === 'turn-end' && Date.now() < finalFrameAt
+    state === 'done' &&
+    hookAuthority(read.agent) === 'turn-end' &&
+    Date.now() < finalFrameAt &&
+    read.tailIncludes?.(CODEX_PROPOSED_PLAN_HEADER) === true
   return {
     state,
     ...(taskWakeupPending ? { taskWakeupPending: true as const } : {}),

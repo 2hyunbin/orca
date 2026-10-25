@@ -23,7 +23,11 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type { AgentPromptActivity } from '../../agent-prompt-submission-verification'
 import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
-import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
+import {
+  readTuiIdleHookTurn,
+  retainedTailIncludes,
+  type TuiIdleHookTurn
+} from '../../tui-idle-hook-lane'
 
 import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
 
@@ -212,6 +216,7 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
       hasExplicitIdleTitle: hasExplicitIdleTitle(pty),
       respawnedAt: this.agentPromptExplicitStatusFloorByPtyId.get(ptyId),
       lastInputAt: this.terminalRunFacts.readLastInputAt(ptyId),
+      tailIncludes: (text) => retainedTailIncludes(pty.tailBuffer, pty.tailPartialLine, text),
       resolveBlockedText: (state, row) =>
         this.resolveTuiIdleHookBlockedText(ptyId, handles, state, row)
     })
