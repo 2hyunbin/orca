@@ -25,11 +25,13 @@ vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof TimerPromises>()
   return {
     ...actual,
-    setTimeout: (...args: Parameters<typeof actual.setTimeout>) =>
-      retryClock.fake
-        ? // ast-grep-ignore: test-no-real-time-wait -- routes the retry backoff onto the faked global timer
-          new Promise((resolve) => setTimeout(() => resolve(args[1]), args[0]))
-        : actual.setTimeout(...args)
+    setTimeout: (...args: Parameters<typeof actual.setTimeout>) => {
+      if (!retryClock.fake) {
+        return actual.setTimeout(...args)
+      }
+      // ast-grep-ignore: test-no-real-time-wait -- routes the retry backoff onto the faked global timer
+      return new Promise((resolve) => setTimeout(() => resolve(args[1]), args[0]))
+    }
   }
 })
 
