@@ -19900,8 +19900,7 @@
         "continue": "Continuar",
         "failed": "Não foi possível continuar este chat. Tente novamente ou envie uma mensagem.",
         "explanation": "Ao continuar, o agente verifica primeiro se a última etapa foi concluída.",
-        "unconfirmed": "Não foi possível confirmar se o {{agent}} recebeu Continuar. Confira o chat antes de tentar novamente.",
-        "usageLimitExplanation": "Pede ao agente para continuar de onde parou. Use quando o limite for restabelecido."
+        "unconfirmed": "Não foi possível confirmar se o {{agent}} recebeu Continuar. Confira o chat antes de tentar novamente."
       },
       "antigravitySignIn": {
         "sentence": "Você não está conectado ao Antigravity. Entre em <settings>Configurações → Contas → Antigravity</settings>. Depois envie sua mensagem novamente."

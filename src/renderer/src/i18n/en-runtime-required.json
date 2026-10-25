@@ -3186,9 +3186,6 @@
         "usageLimitWindowWeeklyModel": "weekly model",
         "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent."
       },
-      "interruptedContinue": {
-        "usageLimitExplanation": "Asks the agent to continue where it left off. Use it once the limit resets."
-      },
       "notices": {
         "compaction": "Context compacted",
         "contextCleared": "Context cleared",
