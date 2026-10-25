@@ -3,6 +3,7 @@ import type { SavedPortForward } from '../../../shared/ssh-types'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
+import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import {
   clearForwardFailure,
   forwardKey,
@@ -89,6 +90,13 @@ export async function restorePortForwards(
       }
       clearForwardFailure(targetId, saved)
     } catch (err) {
+      // A teardown or reconnect cancelled this start; the next transport retries without a backoff.
+      if (
+        err instanceof PortForwardTornDownError ||
+        connectionManager!.getConnection(targetId) !== conn
+      ) {
+        return
+      }
       recordForwardFailure(targetId, saved)
       console.warn(
         `[ssh] Failed to restore forward :${saved.localPort} → ${saved.remoteHost}:${saved.remotePort}: ${err instanceof Error ? err.message : String(err)}`

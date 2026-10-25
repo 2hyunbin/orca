@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+type LiveForward = { id: string; connectionId: string }
+
 const h = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
   updateForward: vi.fn(),
@@ -10,7 +12,7 @@ const h = vi.hoisted(() => ({
     remoteHost: '127.0.0.1',
     remotePort: 80
   },
-  live: [] as { id: string; connectionId: string }[],
+  live: new Array<LiveForward>(),
   removeForwardAndWait: vi.fn(async () => null),
   persist: vi.fn(),
   broadcast: vi.fn()

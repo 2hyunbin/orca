@@ -74,6 +74,7 @@ vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
 
 import { persistPortForwards, restorePortForwards } from './ssh-port-forward-persistence'
 import { forgetForwardFailures } from './ssh-port-forward-unrestored'
+import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import { connectInFlight } from './ssh-connect-attempt-registry'
 import { getSshProviderAuthority } from '../../ssh/ssh-provider-authority'
 import {
@@ -302,5 +303,13 @@ describe('saved port forward restore', () => {
       connectInFlight.delete('t1')
       h.hostServerStatus.mockReturnValue({ kind: 'managed', environmentId: 'env-1' })
     }
+  })
+
+  it('records no backoff when a teardown cancels the start', async () => {
+    h.portForwardManager.addForward.mockRejectedValueOnce(new PortForwardTornDownError())
+    await restoreManagedHostPortForwards('t1')
+    h.conn.generation += 1
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
   })
 })
