@@ -3,10 +3,7 @@ import {
   PACK_INDEX_MAINTENANCE_COOLDOWN_MS,
   PACK_INDEX_MAINTENANCE_FAILURE_COOLDOWN_MS
 } from './repo-pack-index-maintenance-policy'
-import {
-  OBJECT_MAINTENANCE_BACKLOG_RETRY_MS,
-  OBJECT_MAINTENANCE_COOLDOWN_MS
-} from './repo-object-maintenance-policy'
+import { OBJECT_MAINTENANCE_COOLDOWN_MS } from './repo-object-maintenance-policy'
 import { RepoRefMaintenance } from './repo-ref-maintenance'
 import {
   REF_MAINTENANCE_ATTEMPT_DEADLINE_MS,
@@ -168,6 +165,7 @@ describe('idle object maintenance scheduling', () => {
       .mockImplementationOnce(
         () =>
           new Promise((resolve) =>
+            // ast-grep-ignore: test-no-real-time-wait -- fake timers carry this repack past the deadline
             setTimeout(() => resolve('ran'), REF_MAINTENANCE_ATTEMPT_DEADLINE_MS + 1)
           )
       )
@@ -185,18 +183,5 @@ describe('idle object maintenance scheduling', () => {
     maintenance.arm(target)
     await advance(maintenance, OBJECT_MAINTENANCE_COOLDOWN_MS)
     expect(target.maintainObjects).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps index and ref phases running while a huge backlog waits for the user to leave', async () => {
-    countLooseRefsMock.mockResolvedValue({ count: 20, saturated: true })
-    const { maintenance, target, packRefs } = fixture()
-    target.maintainObjects = vi.fn(async () => 'backlog_deferred' as const)
-    maintenance.arm(target)
-    await advance(maintenance, QUIET_MS)
-    expect(packRefs).toHaveBeenCalledTimes(1)
-    maintenance.arm(target)
-    await advance(maintenance, OBJECT_MAINTENANCE_BACKLOG_RETRY_MS)
-    expect(target.maintainObjects).toHaveBeenCalledTimes(2)
-    expect(packRefs).toHaveBeenCalledTimes(1)
   })
 })

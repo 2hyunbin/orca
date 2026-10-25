@@ -1,6 +1,5 @@
 import { posix, win32 } from 'node:path'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
-import type { RepoMaintenanceConfig } from '../../shared/repo-maintenance-config'
 import { RepoRefMaintenance } from '../../shared/repo-ref-maintenance'
 import {
   PACK_REFS_ARGS,
@@ -14,10 +13,10 @@ import { isWslUncPath, toWindowsWslPath } from '../../shared/wsl-paths'
 import { withSpan } from '../observability/tracer'
 import { clearHostGitVersionCache } from './git-version'
 import { PackRefsLockOwnership } from './pack-refs-lock-ownership'
-import { probeRepoMaintenanceConfig } from './repo-maintenance-config-probe'
 import { maintainRepoObjects } from './repo-object-maintenance'
 import {
   clearRepoPackIndexMaintenanceCache,
+  isUnsetGitConfigError,
   maintainRepoPackIndex
 } from './repo-pack-index-maintenance'
 import { gitExecFileAsync } from './runner'
@@ -30,7 +29,6 @@ export type RepoMaintenanceActivityProbe = () => boolean
 const REPO_BUSY_PROBE_MAX = 64
 
 let activityProbe: RepoMaintenanceActivityProbe | null = null
-let backlogProbe: RepoMaintenanceActivityProbe | null = null
 let shared: RepoRefMaintenance | null = null
 // All arming paths must share the current per-repo busy probe.
 const repoBusyProbes = new Map<string, () => boolean>()
@@ -51,11 +49,6 @@ export function setRepoRefMaintenanceBusyProbe(key: string, probe: () => boolean
 /** The main entry point supplies agent, battery, creation and quit activity unavailable in the Git layer. */
 export function setRepoMaintenanceActivityProbe(probe: RepoMaintenanceActivityProbe | null): void {
   activityProbe = probe
-}
-
-/** True when a huge first repack may start; unset means never run one unattended. */
-export function setRepoObjectBacklogProbe(probe: RepoMaintenanceActivityProbe | null): void {
-  backlogProbe = probe
 }
 
 function isDisabled(): boolean {
@@ -123,7 +116,6 @@ export function _resetLocalRepoRefMaintenanceForTests(
   shared?.dispose()
   shared = overrides ? new RepoRefMaintenance({ ...localMaintenanceOptions(), ...overrides }) : null
   activityProbe = null
-  backlogProbe = null
   repoBusyProbes.clear()
   clearRepoPackIndexMaintenanceCache()
   clearHostGitVersionCache()
@@ -136,6 +128,36 @@ function refsDirectoryForMainProcess(commonDir: string, wslDistro: string | unde
   }
   // Decided by path syntax, not by platform: `win32.isAbsolute` accepts POSIX paths too.
   return (isWindowsAbsolutePathLike(commonDir) ? win32 : posix).join(commonDir, 'refs')
+}
+
+function normalizeRepoPath(path: string): string {
+  const slashed = path.replace(/\\/g, '/').replace(/\/+$/, '')
+  return /^[a-z]:\//i.test(slashed) || slashed.startsWith('//') ? slashed.toLowerCase() : slashed
+}
+
+/**
+ * Read user opt-outs; Orca's per-command flags never appear in persisted config.
+ * `maintenance.auto=false` alone is not one: `git maintenance register` writes it, and a
+ * registered repo (listed in `maintenance.repo`) is the opt-out, owned by Git's scheduler.
+ */
+export function isGitAutoMaintenanceDisabled(
+  configOutput: string,
+  repoPaths: readonly string[]
+): boolean {
+  const candidates = new Set(repoPaths.map(normalizeRepoPath))
+  return configOutput.split(/\r?\n/).some((line) => {
+    const registered = /^\s*maintenance\.repo\s+(.+?)\s*$/i.exec(line)?.[1]
+    return (
+      (registered !== undefined && candidates.has(normalizeRepoPath(registered))) ||
+      /^\s*maintenance\.strategy\s+none\s*$/i.test(line) ||
+      /^\s*gc\.auto\s+[+-]?0+(?:[kmg])?\s*$/i.test(line)
+    )
+  })
+}
+
+/** Registration records the main worktree; `repoPath` may be a linked one. */
+function registeredRepoPathCandidates(repoPath: string, commonDir: string | undefined): string[] {
+  return commonDir ? [repoPath, commonDir, commonDir.replace(/[\\/]\.git[\\/]?$/, '')] : [repoPath]
 }
 
 /** Choose path syntax after WSL-to-UNC conversion; choosing before it would derive . instead. */
@@ -172,13 +194,6 @@ export function createLocalRepoRefMaintenanceTarget(
     })
     return commonDir
   }
-  // The opt-out probe runs first in every attempt, so the object phase reuses its answer.
-  let config: RepoMaintenanceConfig | undefined
-  const readConfig = async (signal: AbortSignal): Promise<RepoMaintenanceConfig> => {
-    const resolved = await resolveCommonDir(signal)
-    config = await probeRepoMaintenanceConfig({ ...args, commonDir: resolved, signal })
-    return config
-  }
   return {
     key: args.key,
     isBusy: () => repoBusyProbes.get(args.key)?.() ?? false,
@@ -187,7 +202,23 @@ export function createLocalRepoRefMaintenanceTarget(
       return resolved ? refsDirectoryForMainProcess(resolved, args.wslDistro) : undefined
     },
     async isOptedOut(signal: AbortSignal) {
-      return (await readConfig(signal)).optOut !== null
+      try {
+        const { stdout } = await gitExecFileAsync(
+          ['config', '--get-regexp', '^(maintenance\\.(strategy|repo)|gc\\.auto)$'],
+          { cwd: args.repoPath, ...gitOptions, admissionTier: 'background', signal }
+        )
+        // Resolve the common dir only when a registration needs matching.
+        const repoPaths = /^\s*maintenance\.repo\s/im.test(stdout)
+          ? registeredRepoPathCandidates(args.repoPath, await resolveCommonDir(signal))
+          : [args.repoPath]
+        return isGitAutoMaintenanceDisabled(stdout, repoPaths)
+      } catch (error) {
+        if (isUnsetGitConfigError(error)) {
+          return false
+        }
+        // A failed probe blocks writers and retries without claiming a user opt-out.
+        throw error
+      }
     },
     async maintainObjects(signal, span, canWrite) {
       const resolved = await resolveCommonDir(signal)
@@ -198,11 +229,9 @@ export function createLocalRepoRefMaintenanceTarget(
         repoPath: args.repoPath,
         commonDir: gitCommonDirForMainProcess(resolved, args.wslDistro),
         ...gitOptions,
-        config: config ?? (await readConfig(signal)),
         signal,
         span,
-        canWrite,
-        canRunBacklog: () => backlogProbe?.() ?? false
+        canWrite
       })
     },
     async maintainPackIndex(signal, span, canWrite) {

@@ -2,14 +2,14 @@ import type { ObjectMaintenanceOutcome } from './repo-object-maintenance-policy'
 import type { PackIndexMaintenanceOutcome } from './repo-pack-index-maintenance-policy'
 
 /**
- * Idle-time loose-ref packing for repositories Orca itself degrades.
+ * Idle-time loose-ref packing for repositories Orca degrades.
  *
- * Orca strips git's auto-maintenance off its own frequent fetches
- * (`GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS`) and never compensated, so an
- * Orca-driven checkout accumulates loose refs forever and every ref
- * enumeration -- `show-ref`, `for-each-ref`, worktree create -- pays for them.
- * This is the compensation: after a repo goes quiet, probe it, and pack only
- * when the backlog is real.
+ * An Orca-driven checkout can accumulate loose refs, and every ref enumeration
+ * -- `show-ref`, `for-each-ref`, worktree create -- pays for them. Git's
+ * auto-maintenance is skipped only on Orca's latency-critical fetches
+ * (`GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS`: exact-base refreshes,
+ * branch-cleanup fetches, the base-branch fast-forward). After a repo goes
+ * quiet, probe it, and pack only when the backlog is real.
  *
  * The engine is host-agnostic on purpose. The execution host owns everything
  * that touches execution, so each host supplies its own target (which git to
@@ -120,10 +120,7 @@ export type RepoRefMaintenanceTarget = {
   isOptedOut?(signal: AbortSignal): Promise<boolean>
   /** True while work on *this repo* is in flight -- a fetch, a create, a removal. */
   isBusy?(): boolean
-  /**
-   * Repack packs and loose objects under the same idle admission. A started run is
-   * never killed; its signal cancels admission only.
-   */
+  /** Compact packs under the same idle admission; a started run is never killed. */
   maintainObjects?(
     signal: AbortSignal,
     span: RefMaintenanceSpan,

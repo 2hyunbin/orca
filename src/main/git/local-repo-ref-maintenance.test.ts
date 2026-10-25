@@ -72,29 +72,29 @@ describe('local repo ref maintenance target', () => {
     )
   })
 
-  it('reads a scheduler registration as an opt-out, but not the maintenance.auto it writes', async () => {
+  it('reads user opt-outs, but not the maintenance.auto that registration writes', async () => {
     readRepoCommonDirFromGitMock.mockResolvedValue('/repo/.git')
-    let config = ''
-    gitExecFileAsyncMock.mockImplementation(async (argv: string[]) => {
-      if (argv[0] === '--version') {
-        return { stdout: 'git version 2.45.1\n', stderr: '' }
-      }
-      if (config === '') {
-        // `git config --get-regexp` exits non-zero when nothing matches.
-        throw Object.assign(new Error('key unset'), { code: 1 })
-      }
-      return { stdout: config, stderr: '' }
-    })
+    for (const stdout of [
+      'gc.auto 0\n',
+      'gc.auto 0k\n',
+      'maintenance.strategy none\n',
+      'maintenance.auto false\nmaintenance.repo /repo\n'
+    ]) {
+      gitExecFileAsyncMock.mockResolvedValue({ stdout, stderr: '' })
+      await expect(target().isOptedOut?.(NO_ABORT), stdout).resolves.toBe(true)
+    }
 
+    for (const stdout of [
+      'maintenance.auto false\n',
+      'maintenance.repo /other\ngc.auto 6700\nmaintenance.strategy incremental\n'
+    ]) {
+      gitExecFileAsyncMock.mockResolvedValue({ stdout, stderr: '' })
+      await expect(target().isOptedOut?.(NO_ABORT), stdout).resolves.toBe(false)
+    }
+
+    // `git config --get-regexp` exits non-zero when nothing matches.
+    gitExecFileAsyncMock.mockRejectedValue(Object.assign(new Error('key unset'), { code: 1 }))
     await expect(target().isOptedOut?.(NO_ABORT)).resolves.toBe(false)
-    config = 'local\tmaintenance.auto false\nlocal\tmaintenance.strategy incremental\n'
-    await expect(target().isOptedOut?.(NO_ABORT)).resolves.toBe(false)
-    config += 'global\tmaintenance.repo /repo\n'
-    await expect(target().isOptedOut?.(NO_ABORT)).resolves.toBe(true)
-    expect(gitExecFileAsyncMock).toHaveBeenCalledWith(
-      expect.arrayContaining(['config', '--show-scope', '--get-regexp']),
-      expect.objectContaining({ cwd: '/repo', admissionTier: 'background' })
-    )
   })
 
   it('reports unreadable auto-maintenance config without claiming a user opt-out', async () => {

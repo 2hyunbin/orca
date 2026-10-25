@@ -1,6 +1,5 @@
 import { BoundedMap } from './bounded-map'
 import {
-  OBJECT_MAINTENANCE_BACKLOG_RETRY_MS,
   OBJECT_MAINTENANCE_COOLDOWN_MS,
   OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS,
   type ObjectMaintenanceOutcome
@@ -38,12 +37,8 @@ export class RepoMaintenanceSchedule {
     return Math.min(
       refDueAt,
       target.maintainPackIndex ? this.indexDueAt(target.key) : refDueAt,
-      target.maintainObjects ? this.objectDueAt(target.key) : refDueAt
+      target.maintainObjects ? (this.objectCooldownUntil.get(target.key) ?? 0) : refDueAt
     )
-  }
-
-  objectDueAt(key: string): number {
-    return this.objectCooldownUntil.get(key) ?? 0
   }
 
   postponeIndex(key: string, cooldownMs: number): void {
@@ -113,33 +108,25 @@ export class RepoMaintenanceSchedule {
     return outcome
   }
 
-  /** Defers when admission closed; a finished repack settles even if the attempt was interrupted. */
+  /** A started repack settles even if admission closed meanwhile; it was never killed. */
   async maintainObjects(
     target: RepoRefMaintenanceTarget,
     signal: AbortSignal,
     span: RefMaintenanceSpan,
     canWrite: () => boolean
   ): Promise<ObjectMaintenanceOutcome | void> {
-    if (!canWrite()) {
-      return 'deferred'
-    }
-    if (!target.maintainObjects || this.now() < this.objectDueAt(target.key)) {
+    if (!target.maintainObjects || this.now() < (this.objectCooldownUntil.get(target.key) ?? 0)) {
       return
     }
     const outcome = await target.maintainObjects(signal, span, canWrite)
     span.setAttribute('git.object_maintenance_outcome', outcome)
-    if (outcome === 'deferred') {
-      return outcome
-    }
-    if (outcome !== 'ran' && (signal.aborted || !canWrite())) {
+    if (outcome === 'deferred' || (outcome !== 'ran' && (signal.aborted || !canWrite()))) {
       return 'deferred'
     }
     const cooldown =
       outcome === 'failed' || outcome === 'unsupported'
         ? OBJECT_MAINTENANCE_FAILURE_COOLDOWN_MS
-        : outcome === 'backlog_deferred' || outcome === 'busy'
-          ? OBJECT_MAINTENANCE_BACKLOG_RETRY_MS
-          : OBJECT_MAINTENANCE_COOLDOWN_MS
+        : OBJECT_MAINTENANCE_COOLDOWN_MS
     this.objectCooldownUntil.set(target.key, this.now() + cooldown)
     return outcome
   }

@@ -1,21 +1,30 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type * as ProcessHost from '@orca/process-host'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
-  parseRepoMaintenanceConfig,
-  readRepoMaintenanceConfig
-} from '../../shared/repo-maintenance-config'
-import {
-  isGitVersionAtLeast,
   OBJECT_PACK_COUNT_THRESHOLD,
-  parseGitVersion
+  supportsPromisorGeometricRepack
 } from '../../shared/repo-object-maintenance-policy'
-import { maintainRepoObjects } from './repo-object-maintenance'
+import { maintainRepoObjects, probeRepoObjectStore } from './repo-object-maintenance'
+
+// A real gc on the developer's machine must not decide whether the stale lock is removed.
+vi.mock('@orca/process-host', async (importOriginal) => {
+  const actual = await importOriginal<typeof ProcessHost>()
+  return {
+    ...actual,
+    runProcess: (options: Parameters<typeof actual.runProcess>[0]) =>
+      options.program === 'ps' || options.program === 'powershell.exe'
+        ? Promise.resolve({ code: 0, timedOut: false, stdout: '', stderr: '' })
+        : actual.runProcess(options)
+  }
+})
 
 const BLOBS = OBJECT_PACK_COUNT_THRESHOLD + 10
+const LONG_AGO = new Date(Date.UTC(2020, 0, 1))
 let root = ''
 
 function git(cwd: string, args: string[]): string {
@@ -31,8 +40,9 @@ async function packCount(repoPath: string): Promise<number> {
   return names.filter((name) => name.endsWith('.pack')).length
 }
 
-const version = parseGitVersion(execFileSync('git', ['--version'], { encoding: 'utf8' }))
-const supported = version !== undefined && isGitVersionAtLeast(version, 2, 30)
+const supported = supportsPromisorGeometricRepack(
+  execFileSync('git', ['--version'], { encoding: 'utf8' })
+)
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-object-maintenance-git-'))
@@ -42,8 +52,28 @@ afterAll(async () => {
   await rm(root, { recursive: true, force: true })
 })
 
+describe('pack count trigger', () => {
+  it('counts promisor packs toward the threshold', async () => {
+    const pack = join(root, 'probe', 'objects', 'pack')
+    await mkdir(pack, { recursive: true })
+    for (let index = 0; index < OBJECT_PACK_COUNT_THRESHOLD - 1; index += 1) {
+      await writeFile(join(pack, `pack-${index}.pack`), '')
+      await writeFile(join(pack, `pack-${index}.promisor`), '')
+    }
+    const signal = new AbortController().signal
+    expect((await probeRepoObjectStore(join(root, 'probe'), signal)).packCount).toBe(
+      OBJECT_PACK_COUNT_THRESHOLD - 1
+    )
+    await writeFile(join(pack, 'pack-last.pack'), '')
+    expect((await probeRepoObjectStore(join(root, 'probe'), signal)).packCount).toBe(
+      OBJECT_PACK_COUNT_THRESHOLD
+    )
+  })
+})
+
 describe.skipIf(!supported)('idle object maintenance against real Git', () => {
-  it('compacts a fragmented blob:none clone without pruning an unreachable worktree', async () => {
+  // Builds a source repo, a partial clone and 60 lazy fetches, each its own git process.
+  it('clears a stale lock and compacts promisor packs without pruning a worktree', async () => {
     const source = join(root, 'source')
     git(root, ['init', '--quiet', source])
     git(source, ['config', 'user.email', 'test@example.com'])
@@ -55,7 +85,7 @@ describe.skipIf(!supported)('idle object maintenance against real Git', () => {
     }
     git(source, ['add', '.'])
     git(source, ['commit', '--quiet', '-m', 'initial'])
-    // `<mode> blob <oid>\tfile-<n>.txt`; --object-only needs Git 2.36.
+    // `<mode> blob <oid>\tfile-<n>.txt`
     const blobs = git(source, ['ls-tree', 'HEAD'])
       .split('\n')
       .map((line) => {
@@ -82,29 +112,23 @@ describe.skipIf(!supported)('idle object maintenance against real Git', () => {
     // Any gc or worktree-prune task would now remove the missing worktree immediately.
     git(clone, ['config', 'gc.worktreePruneExpire', 'now'])
     const before = await packCount(clone)
-    expect(before).toBeGreaterThanOrEqual(OBJECT_PACK_COUNT_THRESHOLD)
+    expect(before).toBeGreaterThanOrEqual(BLOBS)
+    // A killed run's lock: every `git maintenance run` would exit 0 having done nothing.
+    const lock = join(clone, '.git', 'objects', 'maintenance.lock')
+    await writeFile(lock, '')
+    await utimes(lock, LONG_AGO, LONG_AGO)
 
-    const config = readRepoMaintenanceConfig(
-      parseRepoMaintenanceConfig(
-        git(clone, ['config', '--get-regexp', '^remote\\..+\\.promisor$'])
-      ),
-      [clone]
-    )
-    expect(config.partialClone).toBe(true)
     const outcome = await maintainRepoObjects({
       repoPath: clone,
       commonDir: join(clone, '.git'),
-      config,
       signal: new AbortController().signal,
       span: { setAttribute: () => {} },
-      canWrite: () => true,
-      canRunBacklog: () => true
+      canWrite: () => true
     })
 
     expect(outcome).toBe('ran')
-    if (version && isGitVersionAtLeast(version, 2, 53)) {
-      expect(await packCount(clone)).toBeLessThan(before)
-    }
+    await expect(stat(lock)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await packCount(clone)).toBeLessThanOrEqual(2)
     await expect(
       stat(join(clone, '.git', 'worktrees', 'unmounted-volume-worktree', 'gitdir'))
     ).resolves.toBeDefined()

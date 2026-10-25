@@ -130,7 +130,7 @@ function createMaintenance(
       })
       maintenance.arm({
         ...target,
-        // Repacking is covered by its own real-Git test; these assert pack files stay untouched.
+        // Repacking has its own real-Git test; these assert pack files stay untouched.
         maintainObjects: undefined,
         packRefs: async (signal) => {
           onPackRefs()

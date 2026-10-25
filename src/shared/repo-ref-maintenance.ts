@@ -228,7 +228,9 @@ export class RepoRefMaintenance {
     this.tracked.delete(key)
     const nextDueAt = this.phases.nextDueAt(tracked.target)
     if (this.now() < nextDueAt) {
-      return this.keepArmed(key, tracked, nextDueAt - this.now())
+      this.tracked.set(key, tracked)
+      this.schedule(key, tracked, nextDueAt - this.now())
+      return
     }
     if (this.inFlight !== null) {
       this.defer(key, tracked, false)
@@ -280,22 +282,26 @@ export class RepoRefMaintenance {
     if (optedOut) {
       return
     }
+    if (this.suspensions > 0 || this.isBusy(tracked)) {
+      return this.yieldTo(key, tracked, span, signal)
+    }
     const objectOutcome = await this.phases.maintainObjects(tracked.target, signal, span, canWrite)
     if (objectOutcome === 'ran') {
-      // A repack can outlive the attempt deadline; finish later phases on a fresh attempt.
-      return this.keepArmed(key, tracked, this.quietPeriodMs)
+      // A repack can outlive the attempt deadline; run later phases on a fresh attempt.
+      return this.defer(key, tracked, false)
     }
-    const indexOutcome =
-      objectOutcome === 'deferred' || !canWrite()
-        ? 'deferred'
-        : await this.phases.maintain(tracked.target, signal, span, canWrite)
+    const indexOutcome = await this.phases.maintain(tracked.target, signal, span, canWrite)
     if (indexOutcome === 'deferred' || !canWrite()) {
       return this.yieldTo(key, tracked, span, signal)
     }
     if (this.now() < this.phases.refDueAt(key)) {
       span.setAttribute('repo.maintenance_outcome', 'index_only' satisfies RefMaintenanceOutcome)
       // Keep the arm for its ref phase; the write that armed it may have left loose refs.
-      return this.keepArmed(key, tracked, this.phases.refDueAt(key) - this.now())
+      if (!this.disposed && !this.tracked.has(key)) {
+        this.tracked.set(key, tracked)
+        this.schedule(key, tracked, this.phases.refDueAt(key) - this.now())
+      }
+      return
     }
     const refsDirectory = await tracked.target.resolveRefsDirectory(signal)
     if (!canWrite()) {
@@ -355,13 +361,6 @@ export class RepoRefMaintenance {
     }
     span.setAttribute('git.pack_refs_partial', partial)
     this.phases.settleRefs(key, span, 'packed', REF_MAINTENANCE_PACKED_COOLDOWN_MS)
-  }
-
-  private keepArmed(key: string, tracked: TrackedRepo, delayMs: number): void {
-    if (!this.disposed && !tracked.superseded && !this.tracked.has(key)) {
-      this.tracked.set(key, tracked)
-      this.schedule(key, tracked, delayMs)
-    }
   }
 
   /** Retry ineligible work; back off only for activity or deadlines. */
