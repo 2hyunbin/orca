@@ -20,8 +20,7 @@ import {
   WORKFLOW
 } from './agent-status-subagent-event-fixtures'
 
-// Orderings mirror runs recorded from Pi 0.87.1 with pi-subagents 0.71.0: a session change or
-// /reload shuts the old registration down and runs the factory again on a fresh `pi.events`.
+// Match Pi 0.87.1/pi-subagents 0.71.0 registration replacement and fresh event buses.
 function session(id: string) {
   return {
     isIdle: () => true,
@@ -130,7 +129,7 @@ describe('Pi session changes', () => {
     )
     await harness.callHook('session_start', { reason: 'startup' }, session('A'))
     await harness.callHook('agent_start', {}, session('A'))
-    // Pi aborts the turn before it shuts the session down; that completion queues behind the post in flight.
+    // Old-turn completion queues before session shutdown while delivery is in flight.
     await endTurn(harness)
     await harness.replacePiSession('new')
     await harness.callHook(
@@ -147,7 +146,6 @@ describe('Pi session changes', () => {
       { hook_event_name: 'agent_end', session_id: 'A' },
       { hook_event_name: 'session_start', session_id: 'B' }
     ])
-    // A turn that really finished is a completion, not a session boundary.
     expect(posts(harness).at(-2)).not.toHaveProperty('session_boundary')
   })
 
@@ -204,7 +202,6 @@ describe('Pi session changes', () => {
       { reason: 'new', previousSessionFile: '/sessions/A.jsonl' },
       session('B')
     )
-    // A child of the new session must not ride on the old session's last post.
     startAsync(harness, 'run-b', 'scout')
 
     while (releases.length > 0) {
@@ -241,7 +238,7 @@ describe('Pi session changes', () => {
       session('B')
     )
     await vi.advanceTimersByTimeAsync(0)
-    // The new session's post waits out the backoff behind the old session's completion.
+    // Finish old-session retry before allowing new-session posts to prevent stale final status.
     expect(postedHookNames(harness).at(-1)).toBe('agent_end')
     expect(agentEndCount(harness)).toBe(1)
     await vi.advanceTimersByTimeAsync(250)
@@ -260,7 +257,7 @@ describe('Pi session changes', () => {
     await vi.advanceTimersByTimeAsync(0)
     const sent = posts(harness).length
 
-    // Another extension's shutdown handler can still be running while pi-subagents emits here.
+    // Sibling shutdown handlers can overlap late child events.
     startAsync(harness, 'run-late', 'scout')
     await vi.advanceTimersByTimeAsync(0)
     expect(posts(harness)).toHaveLength(sent)
@@ -333,7 +330,7 @@ describe('Pi session changes', () => {
       { id: 'run-a', state: 'working', startedAt: expect.any(Number), agentType: 'scout' }
     ])
 
-    // pi-subagents reports the run's completion to the resumed session, finished or not.
+    // Resumed sessions receive completion again, even for children that already finished.
     complete(harness, 'run-a')
     await vi.advanceTimersByTimeAsync(0)
     expect(posts(harness).at(-1)).toEqual({
@@ -415,7 +412,6 @@ describe('Pi /reload', () => {
     expect(harness.piEventListenerCount('subagent:async-complete')).toBe(1)
     expect(harness.piEventListenerCount('subagent:process-terminal')).toBe(1)
 
-    // A turn that ends while the pre-reload child still runs must not report done.
     await harness.callHook('agent_start', {}, session('A'))
     await vi.advanceTimersByTimeAsync(0)
     expect(childIds(posts(harness).at(-1))).toEqual(['run-a'])
@@ -450,7 +446,7 @@ describe('Pi /reload', () => {
     startWorkflow(harness)
     startChild(harness, 'child-a')
     await endTurn(harness)
-    // Pi drops the old registration's runner-exit events, so child-a never reports its end.
+    // Reload drops old runner-exit delivery, so workflow completion must settle orphaned children.
     await harness.reloadPi()
     await harness.callHook('session_start', { reason: 'reload' }, session('A'))
     complete(harness, WORKFLOW)
@@ -591,7 +587,7 @@ describe('OMP session switches', () => {
     vi.useRealTimers()
   })
 
-  // OMP keeps one registration and one SessionManager across a switch.
+  // OMP switches preserve registration and SessionManager identity.
   function ompSession() {
     let id = 'A'
     const context = {
@@ -809,7 +805,6 @@ describe('OMP session switches', () => {
 
     expect(posts(harness).at(-1)).toMatchObject({ hook_event_name: 'agent_end', session_id: 'A' })
 
-    // The turn is over, so a child that starts now re-opens the run.
     harness.emitPiEvent('task:subagent:lifecycle', { id: 'w1', agent: 'task', status: 'started' })
     harness.emitPiEvent('task:subagent:lifecycle', { id: 'w1', status: 'completed' })
     await vi.advanceTimersByTimeAsync(0)

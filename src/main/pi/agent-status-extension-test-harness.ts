@@ -60,15 +60,12 @@ export type AgentStatusExtensionHarness = {
   callHook: (name: string, event?: unknown, context?: HookContext) => Promise<void>
   emitPiEvent: (name: string, event: unknown) => void
   piEventListenerCount: (name: string) => number
-  // Re-run the factory on the same event bus and module state.
   reload: () => void
-  // What Pi does for /new, resume and fork: shut the old registration down, drop its bus
-  // subscriptions, then run the factory again on a fresh `pi.events` (module state kept).
+  // /new, resume and fork replace registration and bus while retaining module state.
   replacePiSession: (reason: 'new' | 'resume' | 'fork', targetSessionFile?: string) => Promise<void>
-  // What Pi does for /reload: as above, but the module is evaluated again and `globalThis` survives.
+  // /reload also reevaluates the module, preserving globalThis.
   reloadPi: () => Promise<void>
-  // An OMP in-process task child: the same module's factory, run again on the child's own bus.
-  // Returns an emitter for events on that child's bus.
+  // OMP task children share the module factory but use independent event buses.
   registerSession: () => ReturnType<typeof sessionDispatch.createIndependentSession>
   registerTaskChild: () => (name: string, event: unknown) => void
 }
@@ -84,8 +81,7 @@ const BASE_ENV = {
   ORCA_AGENT_HOOK_VERSION: '1.2.3'
 } satisfies Record<string, string>
 
-// Why: ownership keys on process.pid, so reload and child-process tests need
-// stable, distinct identities.
+// Ownership is PID-based; reload and child tests need distinct stable identities.
 export const AGENT_STATUS_EXTENSION_SELF_PID = 4242
 
 const transpiledExtensionSources = new Map<string, string>()
@@ -117,9 +113,8 @@ export function createAgentStatusExtensionHarness(args: {
   statSync?: (path: string) => { mtimeMs: number; size: number; ino: number }
   curlExitCode?: number | null
   fetchImpl?: (...params: Parameters<typeof fetch>) => Promise<unknown>
-  // Runs before the first registration, to leave state an older build would have put on the bus.
   seedEventBus?: (bus: EventEmitter) => void
-  // Pi before 0.84 handed every registration the one shared bus.
+  // Pi versions before 0.84 shared one event bus across registrations.
   sharedEventBus?: boolean
   titlebar?: 'first' | 'last' | 'only'
 }): AgentStatusExtensionHarness {
@@ -227,7 +222,7 @@ export function createAgentStatusExtensionHarness(args: {
 
   const source = getPiAgentStatusExtensionSource(args.kind)
   createContext(context)
-  // Why: a function scope per evaluation, so a Pi reload can evaluate the module again in one realm.
+  // Wrap evaluations so reload can reuse the same VM realm.
   const evaluateModule = (rawSource = source): NonNullable<typeof module.exports.default> => {
     const compiled = transpileExtensionSource(rawSource)
     runInContext(`(function () {\n${compiled}\n})()`, context)
@@ -264,8 +259,7 @@ export function createAgentStatusExtensionHarness(args: {
   const callHook: AgentStatusExtensionHarness['callHook'] = async (name, event, hookContext) => {
     await handlers[name]?.(event, hookContext)
   }
-  // Why: each Pi registration gets its own `pi.events` object, and Pi removes its subscriptions when
-  // the registration is replaced; anything an extension stores on that object goes with it.
+  // Replacing a registration removes its subscriptions and per-bus stored state.
   const registerLikePi = (): void => {
     for (const [name, listener] of busSubscriptions) {
       piEvents.off(name, listener)

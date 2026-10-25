@@ -10,6 +10,7 @@ export function getPiTitlebarLifetimeSourceLines(): string[] {
     '  let disposed = false',
     '  function activate() {',
     '    if (active) return',
+    '    // Factories share the process realm; retire old ownership before painting.',
     '    owners.get(paneKey)?.()',
     '    owners.set(paneKey, dispose)',
     '    active = true',
