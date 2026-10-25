@@ -22,7 +22,6 @@ import {
 } from './state-equality-files'
 import { shouldRetainStructuredAgentSessionLaunchTab } from '@/lib/structured-agent-session-launch-registry'
 import { executionHostIdForSessionTabsOwner } from '../local-structured-session-owner'
-import { isAgentSessionTabOfAnotherHost } from './mirror-row-ownership'
 import { isUnlistedCreatedChat } from '@/lib/structured-agent-session-unlisted-created-chats'
 
 export function prepareWebSessionTabsSnapshotBrowser(
@@ -186,16 +185,8 @@ export function prepareWebSessionTabsSnapshotBrowser(
     return sameOpenFiles(state.openFiles, next) ? state.openFiles : next
   })()
   advanceWebSessionOpenFilesIndex(batchContext, nextOpenFiles, worktreeId)
-  const snapshotExecutionHostId = executionHostIdForSessionTabsOwner(environmentId)
   const retainedUnifiedTabs = currentUnifiedTabs.filter((tab) => {
     if (tab.contentType === 'agent-session') {
-      // Another runtime's chat in this workspace; only its own host's frames speak for it (#31983).
-      if (
-        !publishedAgentSessionIds.has(tab.entityId) &&
-        isAgentSessionTabOfAnotherHost(state, tab, snapshotExecutionHostId)
-      ) {
-        return true
-      }
       // A matching host row is authoritative; retaining the provisional tab beside its mirror
       // would briefly render two panes before lifecycle publication is recorded.
       // A host that cannot list its chats is no evidence this one closed.

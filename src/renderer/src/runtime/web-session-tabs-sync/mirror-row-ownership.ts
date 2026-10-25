@@ -5,8 +5,6 @@
 
 import type { AppState } from '@/store/types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { Tab } from '../../../../shared/tab-types'
-import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { getRemoteRuntimePtyEnvironmentId } from '../runtime-terminal-stream'
 import type { WebSessionTabsSyncState } from './state'
 import { environmentIdsMirroringLocalTab } from './tracking-mappings'
@@ -34,53 +32,26 @@ function isLiveEnvironment(state: MirrorRowOwnershipState, environmentId: string
   return state.runtimeEnvironments.some((environment) => environment.id === environmentId)
 }
 
-/** Whether evidence names only other live runtimes; no live evidence leaves the row to this frame. */
-function ownedByAnotherLiveEnvironment(
-  state: MirrorRowOwnershipState,
-  environmentId: string,
-  owners: Iterable<string>
-): boolean | null {
-  const live = [...owners].filter((owner) => isLiveEnvironment(state, owner))
-  return live.length === 0 ? null : !live.includes(environmentId)
-}
-
 /**
- * Pane bindings name a mirrored terminal's runtime; a mirror still awaiting its first handle is
- * known by the frames that last published it.
+ * Pane bindings and the frames that last published a mirrored terminal name the runtimes it
+ * belongs to. While any other live runtime still claims it, this frame may not retire it — a row
+ * two runtimes share stays until neither claims it. With no claim at all it is this frame's.
  */
 export function isMirroredTerminalOfAnotherEnvironment(
   state: MirrorRowOwnershipState,
   tab: TerminalTab,
   environmentId: string
 ): boolean {
-  const bindingOwners = [
+  const owners = new Set(environmentIdsMirroringLocalTab(tab.worktreeId, tab.id))
+  for (const ptyId of [
     tab.ptyId,
     ...Object.values(state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {})
-  ]
-    .map((ptyId) => (ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null))
-    .filter((owner): owner is string => owner !== null)
-  // No evidence leaves the row to this frame: guessing an owner would let a ghost outlive the
-  // retraction of the runtime that really published it.
-  return (
-    ownedByAnotherLiveEnvironment(state, environmentId, bindingOwners) ??
-    ownedByAnotherLiveEnvironment(
-      state,
-      environmentId,
-      environmentIdsMirroringLocalTab(tab.worktreeId, tab.id)
-    ) ??
-    false
-  )
-}
-
-/** A chat names its host; only a live paired runtime other than the publisher keeps it. */
-export function isAgentSessionTabOfAnotherHost(
-  state: MirrorRowOwnershipState,
-  tab: Pick<Tab, 'executionHostId'>,
-  publisherExecutionHostId: string
-): boolean {
-  if (!tab.executionHostId || tab.executionHostId === publisherExecutionHostId) {
-    return false
+  ]) {
+    const owner = ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null
+    if (owner) {
+      owners.add(owner)
+    }
   }
-  const host = parseExecutionHostId(tab.executionHostId)
-  return host?.kind !== 'runtime' || isLiveEnvironment(state, host.environmentId)
+  owners.delete(environmentId)
+  return [...owners].some((owner) => isLiveEnvironment(state, owner))
 }
