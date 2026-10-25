@@ -85,6 +85,8 @@ const SSH_IPC_CHANNELS = [
   'ssh:updatePortForward',
   'ssh:removePortForward',
   'ssh:listPortForwards',
+  'ssh:listUnrestoredPortForwards',
+  'ssh:removeSavedPortForward',
   'ssh:listDetectedPorts'
 ] as const
 

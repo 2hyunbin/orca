@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type LiveForward = { id: string; connectionId: string }
+type LiveForward = {
+  id: string
+  connectionId: string
+  localPort: number
+  remoteHost: string
+  remotePort: number
+}
 
 const h = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
@@ -83,6 +89,15 @@ describe('ssh:updatePortForward', () => {
       remotePort: 80
     })
     expect(h.broadcast).toHaveBeenCalled()
+  })
+
+  it('closes a forward a restore opened before a queued saved-forward remove ran', async () => {
+    h.live = [{ ...h.previous, localPort: 4100 }]
+    await h.handlers.get('ssh:removeSavedPortForward')!(
+      {},
+      { targetId: 't1', localPort: 4100, remoteHost: '127.0.0.1', remotePort: 80 }
+    )
+    expect(h.removeForwardAndWait).toHaveBeenCalledWith('pf-1')
   })
 
   it('drops only the edited-away forward from the saved list', async () => {

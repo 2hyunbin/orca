@@ -231,7 +231,7 @@ export function SshPortsPanel({
       )}
 
       {/* Empty state */}
-      {allForwards.length === 0 && allDetected.length === 0 && (
+      {allForwards.length === 0 && unrestoredForwards.length === 0 && allDetected.length === 0 && (
         <div className="flex flex-col items-center justify-center flex-1 px-4 text-center text-muted-foreground">
           <p className="text-sm">
             {translate('auto.components.right.sidebar.PortsPanel.1f0d2a24f9', 'No forwarded ports')}

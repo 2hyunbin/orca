@@ -129,6 +129,18 @@ export function registerSshPortForwardHandlers(): void {
     ) =>
       serializePortForwardChange(args.targetId, async () => {
         const { targetId, ...mapping } = args
+        // A restore queued ahead may have opened it since the row was drawn; close that too.
+        const live = portForwardManager!
+          .listForwards(targetId)
+          .find(
+            (forward) =>
+              forward.localPort === mapping.localPort &&
+              forward.remoteHost === mapping.remoteHost &&
+              forward.remotePort === mapping.remotePort
+          )
+        if (live) {
+          await portForwardManager!.removeForwardAndWait(live.id)
+        }
         persistPortForwards(targetId, mapping)
         clearForwardFailure(targetId, mapping)
         broadcastPortForwards(getCurrentMainWindow, targetId)
