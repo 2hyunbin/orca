@@ -17,9 +17,7 @@ import { projectJournalBatch } from '../../../src/main/native-chat/agent-session
 import { readAgentSessionHydrationPage } from '../../../src/main/native-chat/agent-session-wire/agent-session-history-page'
 import { importReleaseCheckoutModule, materializeReleaseCheckout } from './release-checkout'
 
-// Released clients that predate the published submission position and answered turn: each must
-// fold and draw a history page and an incremental batch carrying them exactly as it draws the same
-// without them, whether the turn is named or stated as none.
+// Pin readers before submission position/answered turn; new fields must not change their page or incremental rendering.
 const BASELINE_REFS = ['v1.4.219', 'v1.4.220'] as const
 
 const IDENTITY: AgentSessionJournalIdentity = {
