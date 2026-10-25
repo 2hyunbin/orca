@@ -79,10 +79,11 @@ export async function performThreadGoalChange(
     change.kind === 'set' || (change.kind === 'status' && change.status === 'active')
       ? captureStructuredExecutionOptions({
           ...ctx,
-          persistedOptions: {
-            model: ctx.persistedOptions?.model,
-            effort: ctx.persistedOptions?.effort
-          }
+          persistedOptions: Object.fromEntries(
+            Object.entries(ctx.persistedOptions ?? {}).filter(
+              ([key]) => key === 'model' || key === 'effort'
+            )
+          )
         })
       : { options: undefined }
   if ('refusal' in captured) {

@@ -599,13 +599,15 @@ it('opens Antigravity accounts from its signed-out notice, and offers no link fo
   }
 })
 
-it('renders the localized durable-goal uncertainty through the existing Stop notice', async () => {
+it('renders the localized unacknowledged goal pause through the existing Stop notice', async () => {
   await i18n.changeLanguage('ja')
   renderStatus({
     kind: 'status',
     tone: 'warning',
-    failure: { kind: 'cancelUnconfirmed' },
-    text: 'Codex stopped running, but its goal pause was not confirmed. Check the goal before continuing.'
+    ...agentSessionFailureWords(agentSessionFailureFact('cancelUnconfirmed'), {
+      surface: 'row',
+      stopNotice: 'pauseUnconfirmed'
+    })
   })
   expect(
     screen.getByText(

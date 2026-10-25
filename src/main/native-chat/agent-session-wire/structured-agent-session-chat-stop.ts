@@ -1,7 +1,6 @@
 // Atomically accept Stop/withdrawals/receipt before acting on the captured target.
 // Queue session-ending wind-down in the mutation’s tick; saved failures answer from the receipt.
 
-import type { AgentSessionStopOutcome } from './structured-agent-session-adapter-stop'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
@@ -74,6 +73,7 @@ export function mutateWithChatStop<TValue>(
     context.deps.logger.warn('ending the agent process on Stop failed', {
       scope: 'stop-child',
       sessionId,
+      operationId: envelope.clientOperationId,
       error
     })
   // Failed durable acceptance must leave the agent running.
@@ -129,24 +129,35 @@ export function mutateWithChatStop<TValue>(
       return { ok: true, value: { ...named, cancelled: settled } }
     }
     const { child } = target
-    let stopOutcome: AgentSessionStopOutcome | undefined
+    const feedbackId = `child:${child.fence}:${child.generation ?? 'unknown'}`
+    let stopOutcome = child.close?.stopOutcome
     const stopChild = async () => {
       if (context.sessions.get(sessionId)?.child === child) {
-        await context.stopAgent(sessionId, {
-          recorded: 'user-stop',
-          observeClose: (evidence) => {
-            if (stopOutcome) {
-              stopOutcome.root = evidence?.root === 'exited' ? 'exited' : 'unproven'
-              stopOutcome.workload = evidence?.workload === 'exited' ? 'exited' : 'unproven'
+        try {
+          await context.stopAgent(sessionId, {
+            recorded: 'user-stop',
+            observeClose: (evidence) => {
+              if (stopOutcome) {
+                if (evidence?.root === 'exited') {
+                  stopOutcome.root = 'exited'
+                }
+                if (evidence?.workload === 'exited') {
+                  stopOutcome.workload = 'exited'
+                }
+              }
             }
+          })
+        } finally {
+          if (child.close) {
+            child.close.stopOutcome ??= stopOutcome
           }
-        })
+        }
       }
     }
     if (target.reach === 'close') {
       // Join existing close and retry exit proof; the child already refuses input.
       if (ctx.agent === 'codex') {
-        stopOutcome = {
+        stopOutcome ??= {
           pause: 'unconfirmed',
           interrupt: 'unconfirmed',
           root: 'unproven',
@@ -158,6 +169,7 @@ export function mutateWithChatStop<TValue>(
           stopChild,
           owed: {
             outcome: stopOutcome,
+            feedbackId,
             operationId: envelope.clientOperationId,
             noteFence: () =>
               context.deps.store.getRecord(sessionId)?.lease.runtimeFence ?? ctx.fence,
@@ -189,6 +201,7 @@ export function mutateWithChatStop<TValue>(
         childReleased: () => context.sessions.get(sessionId)?.child !== child,
         endSession: (owed) => {
           stopOutcome = owed.outcome
+          owed.feedbackId = feedbackId
           windDown = { owed, ctx, stopChild }
         },
         withdrewQueued: Promise.resolve(settled),
@@ -293,10 +306,5 @@ export function mutateWithChatStop<TValue>(
     }
   })
   void shutdown.catch(logChildEnd)
-  return result.then(async (accepted) => {
-    if (windDown?.owed.outcome) {
-      await shutdown
-    }
-    return accepted
-  })
+  return result
 }

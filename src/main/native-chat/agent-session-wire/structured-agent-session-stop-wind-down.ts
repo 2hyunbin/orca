@@ -1,5 +1,4 @@
 import type { AgentSessionStopOutcome } from './structured-agent-session-adapter-stop'
-import { AGENT_SESSION_GOAL_CONTROL_COPY } from '../../../shared/agent-session-goal-control-copy'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
@@ -21,6 +20,7 @@ import { structuredAgentSessionNamedTurnScope } from './structured-agent-session
 export type StructuredAgentSessionStopWindDown = {
   outcome?: AgentSessionStopOutcome
   operationId: string
+  feedbackId?: string
   noteFence?: () => number
   waitsForProvider: boolean
   stoppedAt: number
@@ -37,7 +37,7 @@ export async function endStoppedStructuredAgentSession(
   windDown: StructuredAgentSessionStopWindDown,
   stopChild: () => Promise<void>,
   onError: (error: unknown) => void
-): Promise<AgentSessionStopOutcome | undefined> {
+): Promise<void> {
   let failedOn: JournalStopFailedOn | undefined
   try {
     if (windDown.waitsForProvider) {
@@ -74,7 +74,9 @@ export async function endStoppedStructuredAgentSession(
       outcome.workload !== 'exited')
   ) {
     // Thread-scoped operation feedback survives generic turn-end rekeying and turnless shutdown.
-    const identity = structuredAgentSessionStopNoteIdentity(windDown.operationId)
+    const identity = structuredAgentSessionStopNoteIdentity(
+      windDown.feedbackId ?? windDown.operationId
+    )
     await ctx.journal.appendLifecycleBatch({
       settlementId: `stop-outcome:${windDown.operationId}`,
       fence: Math.max(ctx.fence, windDown.noteFence?.() ?? ctx.fence),
@@ -89,17 +91,21 @@ export async function endStoppedStructuredAgentSession(
           body: {
             kind: 'status',
             tone: 'warning',
-            failure: agentSessionFailureFact('cancelUnconfirmed'),
-            text:
-              outcome.root === 'exited' && outcome.workload === 'exited'
-                ? AGENT_SESSION_GOAL_CONTROL_COPY.pauseUnconfirmed
-                : AGENT_SESSION_GOAL_CONTROL_COPY.stopUnconfirmed
+            ...agentSessionFailureWords(agentSessionFailureFact('cancelUnconfirmed'), {
+              surface: 'row',
+              stopNotice:
+                outcome.pause === 'unconfirmed' &&
+                outcome.interrupt !== 'unconfirmed' &&
+                outcome.root === 'exited' &&
+                outcome.workload === 'exited'
+                  ? 'pauseUnconfirmed'
+                  : 'stopUnconfirmed'
+            })
           }
         }
       ]
     })
   }
-  return outcome
 }
 
 /** Revise only while work runs; ended work took the Stop regardless of child exit. */

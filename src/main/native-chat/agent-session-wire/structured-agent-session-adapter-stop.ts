@@ -19,11 +19,11 @@ export type AgentSessionCloseObserver = (evidence: AgentSessionCloseEvidence | u
 
 /** In-process completion evidence is separate from durable command acceptance. */
 export type AgentSessionStopOutcome = {
-  pause: 'confirmed' | 'not-needed' | 'unconfirmed'
+  /** Read/pause acknowledgement, not universal durable-write quiescence. */
+  pause: 'acknowledged' | 'not-needed' | 'unconfirmed'
   interrupt: 'accepted' | 'not-needed' | 'unconfirmed'
   root: 'exited' | 'unproven'
   workload: 'exited' | 'unproven'
-  lastGoalState?: unknown
   errors: unknown[]
 }
 

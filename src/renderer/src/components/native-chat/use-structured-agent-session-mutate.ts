@@ -67,7 +67,7 @@ function notDone(
   fingerprintMethod: string,
   fields: Record<string, unknown>,
   agentName: string | undefined
-): ExecutionResult<never> {
+): Extract<ExecutionResult<never>, { kind: 'not-done' }> {
   return {
     kind: 'not-done',
     notice: agentSessionWriteFailureText(

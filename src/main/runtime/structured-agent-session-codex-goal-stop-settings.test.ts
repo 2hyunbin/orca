@@ -19,6 +19,10 @@ import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
 } from './structured-agent-session-runtime'
+import {
+  closeProviderProcess,
+  rootOnlyProviderClosePolicy
+} from '../provider-process/provider-process-close'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 
 const CALLER = { callerKey: 'goal-stop-settings' }
@@ -81,14 +85,18 @@ const goal = (host: StructuredAgentSessionHost, change: AgentSessionThreadGoalCh
     envelope: envelope(host, 'agentSession.threadGoal', { change }),
     change
   })
-const stop = (host: StructuredAgentSessionHost) =>
-  host.cancel(CALLER, { envelope: envelope(host, 'agentSession.cancel', {}) })
+const stop = (host: StructuredAgentSessionHost, turnId?: string) => {
+  const fields = turnId ? { turnId } : {}
+  return host.cancel(CALLER, { envelope: envelope(host, 'agentSession.cancel', fields), ...fields })
+}
 const setOption = (host: StructuredAgentSessionHost, key: string, value: string) =>
   host.setOption(CALLER, {
     envelope: envelope(host, 'agentSession.setOption', { key, value }),
     key,
     value
   })
+const settleStop = (host: StructuredAgentSessionHost) =>
+  host.collaboratorsForTests().serialize(SESSION, async () => {})
 async function rows(host: StructuredAgentSessionHost) {
   return (await host.journalSnapshot(SESSION)).items.flatMap((row) =>
     row.body.kind === 'status' ? [row.body.text] : []
@@ -173,7 +181,7 @@ it.each(['rejected', 'unsupported'] as const)(
 )
 
 it.each([null, 'complete'] as const)(
-  'repairs a model-created goal after the first %s read, joins close, and preserves durable uncertainty',
+  'repairs a model-created goal after the first %s read without warning on acknowledged shutdown',
   async (initial) => {
     let state: string | null = initial
     let reads = 0
@@ -193,6 +201,7 @@ it.each([null, 'complete'] as const)(
     const host = await openChat(child)
     const request = { envelope: envelope(host, 'agentSession.cancel', {}) }
     expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true })
+    await settleStop(host)
     expect(child.closes()).toBe(1)
     expect(state).toBe('paused')
     expect(
@@ -201,25 +210,52 @@ it.each([null, 'complete'] as const)(
         .filter((r) => r.method.startsWith('thread/goal/'))
         .map((r) => r.method)
     ).toEqual(['thread/goal/get', 'thread/goal/get', 'thread/goal/set'])
-    expect(await rows(host)).toContain(COPY.pauseUnconfirmed)
+    expect(await rows(host)).not.toContain(COPY.pauseUnconfirmed)
     const calls = child.requests().length
     expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true })
     expect(child.requests()).toHaveLength(calls)
   }
 )
 
-it.each(['pause', 'interrupt', 'workload', 'root', 'note'] as const)(
+it.each([
+  'pause',
+  'first-pause',
+  'interrupt',
+  'disabled-interrupt',
+  'workload',
+  'root',
+  'named-root',
+  'note'
+] as const)(
   'retains %s failure after shutdown, including turnless work and strict note failure',
   async (failure) => {
+    const rootFailure = failure === 'root' || failure === 'named-root'
+    const stopCurrent = (host: StructuredAgentSessionHost) =>
+      stop(host, failure === 'named-root' ? 'autonomous' : undefined)
+    let pauses = 0
     const child = codexScriptedChild({
-      'thread/goal/get': () => ({ goal: { status: 'active' } }),
+      'thread/goal/get': () => {
+        if (failure === 'disabled-interrupt') {
+          throw new CodexAppServerRequestError(
+            'thread/goal/get',
+            -32600,
+            'goals feature is disabled'
+          )
+        }
+        return { goal: { status: 'active' } }
+      },
       'thread/goal/set': () => {
-        if (failure === 'pause') {
+        if (
+          failure === 'pause' ||
+          failure === 'note' ||
+          ((failure === 'first-pause' || rootFailure) && ++pauses === 1)
+        ) {
           throw new CodexAppServerRequestError('thread/goal/set', -32602, 'refused')
         }
         return { goal: { status: 'paused' } }
       },
-      ...(failure === 'interrupt'
+      ...(failure === 'named-root' ? { 'turn/interrupt': () => ({}) } : {}),
+      ...(failure === 'interrupt' || failure === 'disabled-interrupt'
         ? {
             'turn/interrupt': () => {
               throw new Error('lost interrupt')
@@ -228,13 +264,13 @@ it.each(['pause', 'interrupt', 'workload', 'root', 'note'] as const)(
         : {})
     })
     const host = await openChat(child)
-    if (failure === 'interrupt') {
+    if (failure === 'interrupt' || failure === 'disabled-interrupt' || failure === 'named-root') {
       child.notify('turn/started', { threadId: THREAD, turn: { id: 'autonomous' } })
     }
     if (failure === 'workload') {
       child.closeEvidence = { root: 'exited', tree: 'unverifiable' }
     }
-    if (failure === 'root') {
+    if (rootFailure) {
       vi.spyOn(host.deps.adapter, 'disposeSession').mockResolvedValue(false)
     }
     if (failure === 'note') {
@@ -242,23 +278,69 @@ it.each(['pause', 'interrupt', 'workload', 'root', 'note'] as const)(
       if (!journal) {
         throw new Error('missing journal')
       }
+      const releaseNote = Promise.withResolvers<void>()
       const append = journal.appendLifecycleBatch.bind(journal)
       vi.spyOn(journal, 'appendLifecycleBatch').mockImplementation((batch) => {
         if (batch.settlementId.startsWith('stop-outcome:')) {
-          return Promise.reject(new Error('note store unavailable'))
+          return releaseNote.promise.then(() => {
+            throw new Error('note store unavailable')
+          })
         }
         return append(batch)
       })
-      await expect(stop(host)).rejects.toThrow('note store unavailable')
-    } else {
-      expect(await stop(host)).toMatchObject({ ok: true })
-      expect(await rows(host)).toContain(
-        failure === 'root' || failure === 'workload' ? COPY.stopUnconfirmed : COPY.pauseUnconfirmed
+      const logged = vi.spyOn(host.deps.logger, 'warn')
+      const request = { envelope: envelope(host, 'agentSession.cancel', {}) }
+      expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true })
+      releaseNote.resolve() // Strict warning write fails only after the accepted reply.
+      await settleStop(host)
+      expect(logged).toHaveBeenCalledWith(
+        'ending the agent process on Stop failed',
+        expect.objectContaining({
+          sessionId: SESSION,
+          operationId: request.envelope.clientOperationId,
+          error: expect.objectContaining({ message: 'note store unavailable' })
+        })
       )
-      if (failure === 'root') {
+      expect(await rows(host)).not.toContain(COPY.pauseUnconfirmed)
+    } else {
+      expect(await stopCurrent(host)).toMatchObject({ ok: true })
+      await settleStop(host)
+      expect(await rows(host)).toContain(
+        failure === 'pause' || failure === 'first-pause'
+          ? COPY.pauseUnconfirmed
+          : COPY.stopUnconfirmed
+      )
+      if (rootFailure) {
         expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.close).toBeDefined()
-        expect(await stop(host)).toMatchObject({ ok: true })
-        expect(await rows(host)).toContain(COPY.stopUnconfirmed)
+        const before = (await host.journalSnapshot(SESSION)).items.filter(
+          (r) => r.body.kind === 'status' && r.body.text === COPY.stopUnconfirmed
+        )
+        expect(before).toHaveLength(1)
+        const firstOutcome = host.collaboratorsForTests().sessions.get(SESSION)?.child
+          ?.close?.stopOutcome
+        const controls = child.requests().length
+        expect(await stopCurrent(host)).toMatchObject({ ok: true })
+        await settleStop(host)
+        expect((await rows(host)).filter((text) => text === COPY.stopUnconfirmed)).toHaveLength(1)
+        expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.close?.stopOutcome).toBe(
+          firstOutcome
+        )
+        vi.mocked(host.deps.adapter.disposeSession!).mockRestore()
+        expect(await stopCurrent(host)).toMatchObject({ ok: true })
+        await settleStop(host)
+        expect(child.requests()).toHaveLength(controls)
+        const after = (await host.journalSnapshot(SESSION)).items.filter(
+          (r) => r.body.kind === 'status' && r.body.failure?.kind === 'cancelUnconfirmed'
+        )
+        expect(after).toHaveLength(1)
+        expect(after[0].body).toMatchObject({ text: COPY.pauseUnconfirmed })
+        expect(after[0].itemId).toBe(before[0].itemId)
+        expect(firstOutcome).toMatchObject({
+          pause: 'unconfirmed',
+          root: 'exited',
+          workload: 'exited'
+        })
+        expect(firstOutcome?.errors.length).toBeGreaterThan(0)
       } else {
         expect(child.closes()).toBe(1)
       }
@@ -276,6 +358,7 @@ it('pauses before resolving an autonomous turn and interrupts before the final g
   })
   const host = await openChat(child)
   expect(await stop(host)).toMatchObject({ ok: true })
+  await settleStop(host)
   const calls = child
     .requests()
     .filter((r) => r.method === 'turn/interrupt' || r.method.startsWith('thread/goal/'))
@@ -324,9 +407,12 @@ it.each(['first-read', 'interrupt'] as const)(
     expect(reads).toBe(hung === 'first-read' ? 2 : 1)
     await vi.advanceTimersByTimeAsync(3_333)
     expect(await pending).toMatchObject({ ok: true })
+    await settleStop(host)
     expect(child.closes()).toBe(1)
     expect(reads).toBe(hung === 'first-read' ? 2 : 1)
-    expect(await rows(host)).toContain(COPY.pauseUnconfirmed)
+    expect(await rows(host)).toContain(
+      hung === 'first-read' ? COPY.pauseUnconfirmed : COPY.stopUnconfirmed
+    )
   }
 )
 
@@ -338,6 +424,7 @@ it('treats an exact goals-disabled declaration as inapplicable without skipping 
   })
   const host = await openChat(child)
   expect(await stop(host)).toMatchObject({ ok: true })
+  await settleStop(host)
   expect(child.closes()).toBe(1)
   expect(child.requests().filter((r) => r.method.startsWith('thread/goal/'))).toHaveLength(1)
   expect(await rows(host)).not.toContain(COPY.pauseUnconfirmed)
@@ -399,4 +486,85 @@ it('orders Stop behind active-Set handler effects and closes the old child befor
   expect(trace).toEqual(['active', 'get', 'paused', 'interrupt', 'get', 'active'])
   expect(state).toBe('active')
   expect(child.closes()).toBe(1)
+})
+
+it('answers Stop before the shipped 15s phone budget while the owned 15,970ms close excludes later input', async () => {
+  let state = 'active'
+  const child = codexScriptedChild({
+    'thread/goal/get': () => ({ goal: { status: state } }),
+    'thread/goal/set': (params) => {
+      state = String(params?.status)
+      return { goal: { status: state } }
+    },
+    'turn/interrupt': () => ({})
+  })
+  const host = await openChat(child)
+  child.notify('turn/started', { threadId: THREAD, turn: { id: 'running' } })
+  await host.flushStreamedEvents(SESSION)
+  const dispose = host.deps.adapter.disposeSession?.bind(host.deps.adapter)
+  if (!dispose) {
+    throw new Error('missing disposal')
+  }
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+  const started = Date.now()
+  const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  const exit = Promise.withResolvers<void>()
+  let rootExited = false,
+    completedAt: number | undefined
+  vi.spyOn(host.deps.adapter, 'disposeSession').mockImplementation(async (id, observe) => {
+    await closeProviderProcess({
+      child: { pid: 12345, kill: () => true, stdin: { end: () => {} } },
+      exitPromise: exit.promise,
+      rootVerdict: () => (rootExited ? 'exited' : 'live'),
+      supervised: true,
+      policy: rootOnlyProviderClosePolicy(true),
+      tree: {
+        capture: () => delay(990),
+        refresh: () => delay(990),
+        reap: async () => {
+          rootExited = true
+          exit.resolve()
+          await delay(3490)
+          return 'exited'
+        },
+        treeVerdict: 'exited'
+      },
+      terminateTree: async () => {
+        throw new Error('unexpected fallback')
+      }
+    })
+    const result = await dispose(id, observe)
+    completedAt = Date.now() - started
+    return result
+  })
+  const request = { envelope: envelope(host, 'agentSession.cancel', {}) }
+  expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true })
+  expect(Date.now() - started).toBeLessThan(15_000) // Unchanged shipped phone cancel budget.
+  expect(completedAt).toBeUndefined()
+  expect(
+    child
+      .requests()
+      .filter((r) => r.method.startsWith('thread/goal/') || r.method === 'turn/interrupt')
+      .map((r) => r.method)
+  ).toEqual(['thread/goal/get', 'thread/goal/set', 'turn/interrupt', 'thread/goal/get'])
+  let laterFinished = false
+  const later = goal(host, { kind: 'set', objective: 'After Stop' }).then((value) => {
+    laterFinished = true
+    return value
+  })
+  for (const ms of [5000, 990, 5500, 990]) {
+    await vi.advanceTimersByTimeAsync(ms)
+    expect(laterFinished).toBe(false)
+    expect(child.closes()).toBe(0)
+  }
+  await vi.advanceTimersByTimeAsync(3490)
+  expect(await later).toMatchObject({ ok: true })
+  expect(completedAt).toBe(15_970)
+  expect(child.closes()).toBe(1)
+  const calls = child.requests().length
+  expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true })
+  await settleStop(host)
+  expect(child.requests()).toHaveLength(calls)
+  expect(child.closes()).toBe(1)
+  expect(await rows(host)).not.toContain(COPY.pauseUnconfirmed)
 })

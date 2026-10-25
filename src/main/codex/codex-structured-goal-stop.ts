@@ -25,7 +25,6 @@ export async function stopCodexGoal(input: {
     workload: 'unproven',
     errors: []
   }
-  let unavailable = false
   const pause = async (phaseDeadline: number) => {
     const rpc = (method: string, params: Record<string, unknown>) => {
       if (!current() || session.connection.closed || phaseDeadline <= Date.now()) {
@@ -40,16 +39,15 @@ export async function stopCodexGoal(input: {
       if (!Object.hasOwn(result, 'goal')) {
         throw new Error('codex goal read did not report a goal')
       }
-      facts.lastGoalState = result.goal
       if (readRecord(result.goal).status === 'active') {
-        const paused = readRecord(
-          await rpc('thread/goal/set', {
-            threadId: session.threadId,
-            status: 'paused',
-            origin: 'user'
-          })
-        )
-        facts.lastGoalState = paused.goal
+        await rpc('thread/goal/set', {
+          threadId: session.threadId,
+          status: 'paused',
+          origin: 'user'
+        })
+      }
+      if (facts.errors.length === 0) {
+        facts.pause = 'acknowledged'
       }
     } catch (error) {
       if (
@@ -57,9 +55,9 @@ export async function stopCodexGoal(input: {
         (isCodexAppServerRequestError(error) &&
           /(?:^|: )goals feature is disabled[.!]?$/i.test(error.message))
       ) {
-        unavailable = true
         facts.pause = 'not-needed'
       } else {
+        facts.pause = 'unconfirmed'
         facts.errors.push(error)
       }
     }
@@ -83,7 +81,7 @@ export async function stopCodexGoal(input: {
     facts.interrupt = 'unconfirmed'
     facts.errors.push(error)
   }
-  if (!unavailable) {
+  if (facts.pause !== 'not-needed') {
     await pause(deadline)
   }
   return { ...outcome, stop: facts }

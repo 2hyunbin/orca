@@ -9,12 +9,8 @@ type Settings = { model?: string; effort?: string | null }
 
 /** Only explicit method declarations permit compatibility fallback. */
 export function codexMethodUnavailable(error: unknown, method: string): boolean {
-  if (
-    isCodexAppServerUnsupportedError(error) &&
-    error instanceof Error &&
-    error.message.includes(method)
-  ) {
-    return true
+  if (isCodexAppServerUnsupportedError(error) && error instanceof Error) {
+    return error.message.includes(method)
   }
   return (
     isCodexAppServerRequestError(error) &&
@@ -34,17 +30,36 @@ export class CodexAppliedSettings {
 
   observe(value: unknown): void {
     const row = readRecord(value)
+    const previous = this.snapshot
     this.snapshot = {
       ...(typeof row.model === 'string' ? { model: row.model } : {}),
       ...(typeof row.effort === 'string' || row.effort === null ? { effort: row.effort } : {})
     }
+    const changed = new Set(
+      (['model', 'effort'] as const).filter((key) => previous[key] !== this.snapshot[key])
+    )
+    if (changed.size === 0) {
+      return
+    }
+    let through: Settings | undefined
+    // Each changed field proves its earliest possible source; combine their FIFO lower bounds.
     for (const write of this.pending) {
-      if (
-        (['model', 'effort'] as const).every(
-          (key) => write[key] === undefined || write[key] === this.snapshot[key]
-        )
-      ) {
+      for (const key of changed) {
+        if (write[key] !== undefined && write[key] === this.snapshot[key]) {
+          through = write
+          changed.delete(key)
+        }
+      }
+      if (changed.size === 0) {
+        break
+      }
+    }
+    if (through) {
+      for (const write of this.pending) {
         this.pending.delete(write)
+        if (write === through) {
+          break
+        }
       }
     }
     for (const listener of this.listeners) {
@@ -65,19 +80,27 @@ export class CodexAppliedSettings {
     if (this.equivalent(choices)) {
       return () => {}
     }
-    this.pending.add(choices)
-    return () => this.pending.delete(choices)
+    const write = { model: choices.model, effort: choices.effort }
+    this.pending.add(write)
+    return () => this.pending.delete(write)
   }
 
   private equivalent(choices: Settings): boolean {
-    return (['model', 'effort'] as const).every(
-      (key) =>
-        choices[key] === undefined ||
-        (choices[key] === this.snapshot[key] &&
-          ![...this.pending].some(
-            (write) => write[key] !== undefined && write[key] !== choices[key]
-          ))
-    )
+    const keys = ['model', 'effort'] as const
+    if (keys.some((key) => choices[key] !== undefined && choices[key] !== this.snapshot[key])) {
+      return false
+    }
+    for (const write of this.pending) {
+      if (
+        keys.some(
+          (key) =>
+            choices[key] !== undefined && write[key] !== undefined && write[key] !== choices[key]
+        )
+      ) {
+        return false
+      }
+    }
+    return true
   }
 
   async install(
@@ -93,10 +116,11 @@ export class CodexAppliedSettings {
     }
     const deadline = Date.now() + timeoutMs
     const changed = Promise.withResolvers<void>()
+    let replied = false
     const check = () => {
       if (this.ended) {
         expired.reject(new Error('codex settings connection ended'))
-      } else if (this.equivalent(choices)) {
+      } else if (replied && this.equivalent(choices)) {
         changed.resolve()
       }
     }
@@ -133,6 +157,7 @@ export class CodexAppliedSettings {
           }
           throw error
         }
+        replied = true
         check()
         await changed.promise
       })()
