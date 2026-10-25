@@ -25,6 +25,23 @@ const TURN_END_FINAL_FRAME_MS = 750
 // Why: Codex opens its plan menu only after a turn that rendered a proposed plan; no hook field says so.
 const CODEX_PROPOSED_PLAN_HEADER = 'Proposed Plan'
 
+/** Scans newest-first so the common hit (this turn's plan) returns early. */
+export function retainedTailIncludes(
+  lines: readonly string[],
+  partialLine: string,
+  text: string
+): boolean {
+  if (partialLine.includes(text)) {
+    return true
+  }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].includes(text)) {
+      return true
+    }
+  }
+  return false
+}
+
 /**
  * Reads the main agent's turn off its row. Why the main agent's own state: the row's combined
  * state folds child work in, and a subagent finishing must not end the lead turn (#6011); a
@@ -76,23 +93,6 @@ export type TuiIdleHookTurnRead = {
  * reaches (a PTY created with no pane key whose agent never posted under one) has no answer, and
  * neither does a row another agent or an earlier process wrote: the caller's other lanes decide.
  */
-/** Scans newest-first so the common hit (this turn's plan) returns early. */
-export function retainedTailIncludes(
-  lines: readonly string[],
-  partialLine: string,
-  text: string
-): boolean {
-  if (partialLine.includes(text)) {
-    return true
-  }
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].includes(text)) {
-      return true
-    }
-  }
-  return false
-}
-
 export function readTuiIdleHookTurn(read: TuiIdleHookTurnRead): TuiIdleHookTurn | null {
   const row = selectFreshExplicitAgentStatusRow(read)
   if (!row || row.agentType !== read.agent || row.receivedAt < (read.respawnedAt ?? -1)) {
