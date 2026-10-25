@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 import {
   buildClaudeAgentTeamsLaunchPlan,
   ensureClaudeAgentTeamsShimDir,
@@ -15,6 +16,7 @@ const roots: string[] = []
 
 afterEach(async () => {
   vi.unstubAllEnvs()
+  installFakeAppEnvironment()
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })))
   roots.length = 0
 })
@@ -95,6 +97,25 @@ describe('claude agent teams shim env', () => {
 
     expect(resolveClaudeAgentTeamsShimBin({ PATH: root })).toBe(cliPath)
   })
+
+  it.skipIf(process.platform === 'win32')(
+    "prefers a headless host's CLI launcher over a GUI binary earlier on PATH",
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
+      roots.push(root)
+      // Why: an AppImage puts its Electron binary, named like the CLI, first on PATH.
+      const electron = join(root, 'orca-ide')
+      const launcher = join(root, 'cli', 'bin', 'orca')
+      await mkdir(dirname(launcher), { recursive: true })
+      for (const path of [electron, launcher]) {
+        await writeFile(path, '#!/usr/bin/env sh\n', 'utf8')
+        await chmod(path, 0o755)
+      }
+      installFakeAppEnvironment({ getCliLauncherPath: () => launcher })
+
+      expect(resolveClaudeAgentTeamsShimBin({ PATH: root })).toBe(launcher)
+    }
+  )
 
   it('refuses to resolve a CLI through relative PATH entries or a bare override', async () => {
     const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))

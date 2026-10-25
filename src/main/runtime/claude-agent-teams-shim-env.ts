@@ -8,7 +8,9 @@ import {
   isDirectClaudeCommand,
   type ClaudeAgentTeamsMode
 } from '../../shared/claude-agent-teams-tmux-compat'
+import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import { getOrcaCliCommandNameForPlatform } from '../../shared/orca-cli-command-name'
+import { getBundledLauncherPath } from '../cli/bundled-cli-launcher-path'
 import { resolvePathEnvKey } from '../pty/windows-path-segment-merge'
 
 export type ClaudeAgentTeamsLaunchPlan = {
@@ -73,7 +75,15 @@ export function resolveClaudeAgentTeamsShimBin(
       return qualified
     }
   }
-  const bundled = bundledLauncherPath()
+  // Why first: a headless host has no resources dir, and the PATH fallback below can then find
+  // the AppImage's Electron binary, which boots the GUI instead of the CLI.
+  const hostLauncher = hasAppEnvironment() ? getAppEnvironment().getCliLauncherPath?.() : null
+  if (hostLauncher && isAbsolute(hostLauncher) && isExecutableFile(hostLauncher)) {
+    return hostLauncher
+  }
+  const bundled = process.resourcesPath
+    ? getBundledLauncherPath(process.platform, process.resourcesPath)
+    : null
   if (bundled && isExecutableFile(bundled)) {
     return bundled
   }
@@ -85,22 +95,6 @@ export function resolveClaudeAgentTeamsShimBin(
 
 function defaultShimRoot(): string {
   return join(homedir(), '.orca', 'claude-agent-teams-bin')
-}
-
-function bundledLauncherPath(): string | null {
-  if (!process.resourcesPath) {
-    return null
-  }
-  if (process.platform === 'darwin') {
-    return join(process.resourcesPath, 'bin', 'orca')
-  }
-  if (process.platform === 'linux') {
-    return join(process.resourcesPath, 'bin', 'orca-ide')
-  }
-  if (process.platform === 'win32') {
-    return join(process.resourcesPath, 'bin', 'orca.exe')
-  }
-  return null
 }
 
 function findExecutableOnPath(command: string, pathValue: string | undefined): string | null {
