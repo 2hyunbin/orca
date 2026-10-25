@@ -82,6 +82,7 @@ export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePty
     ptyId: string,
     entry: RuntimePtyTitleTrackerEntry
   ): void
+  protected abstract settleLostAgentSession(ptyId: string, previous: string, appended: string): void
 
   /** Arrival-order mode scan: the settled tracker plus any in-flight snapshot capture's. */
   protected scanProviderModeTrackers(ptyId: string, data: string): void {
@@ -159,6 +160,7 @@ export abstract class OrcaRuntimeWithOnPtyData extends OrcaRuntimeWithPreparePty
       pty.tailLinesTotal += nextTail.newCompleteLines
       pty.preview = buildPreview(pty.tailBuffer, pty.tailPartialLine)
       this.scheduleWaitBlockedCheck(ptyId, normalized.text, at)
+      this.settleLostAgentSession(ptyId, ptyTailBefore?.partialLine ?? '', normalized.text)
     }
 
     for (const leaf of this.getLeavesForPty(ptyId)) {

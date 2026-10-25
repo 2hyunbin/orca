@@ -23,6 +23,10 @@ import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import { escalateWorkerFailure } from '../../orchestration/worker-failure-escalation'
 import { dispatchReportMailbox } from '../../orchestration/dispatch-report-mailbox'
 import { LOCAL_EXECUTION_HOST_ID, toSshExecutionHostId } from '../../../../shared/execution-host'
+import {
+  CODEX_RECONNECT_FAILED_REASON,
+  codexReconnectFailedBannerArrived
+} from '../../../codex/codex-reconnect-failed-banner'
 
 export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRuntimeWithApplyMobileDisplayMode {
   subscribeToTerminalResize(
@@ -103,6 +107,61 @@ export abstract class OrcaRuntimeWithSubscribeToTerminalResize extends OrcaRunti
       },
       (to, type) => this.notifyMessageArrived(to, type)
     )
+  }
+
+  /** Codex outlives a failed reconnect, so no PTY exit will ever settle its dispatch (#24791). */
+  protected settleLostAgentSession(ptyId: string, previous: string, appended: string): void {
+    if (!codexReconnectFailedBannerArrived(previous, appended)) {
+      return
+    }
+    try {
+      this.failActiveDispatchOnAgentSessionLost(ptyId, CODEX_RECONNECT_FAILED_REASON)
+    } catch (error) {
+      console.warn('[orchestration] failed to settle a lost agent session', ptyId, error)
+    }
+  }
+
+  private failActiveDispatchOnAgentSessionLost(ptyId: string, reason: string): void {
+    const db = this._orchestrationDb
+    if (!db) {
+      return
+    }
+    const surfaces: { handle: string | undefined; paneKey?: string }[] = this.getLeavesForPty(
+      ptyId
+    ).map((leaf) => ({
+      handle: this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId)),
+      paneKey: `${leaf.tabId}:${leaf.leafId}`
+    }))
+    surfaces.push({ handle: this.handleByPtyId.get(ptyId) })
+    for (const { handle, paneKey } of surfaces) {
+      const dispatch = handle && db.getActiveDispatchForTerminal(handle, paneKey)
+      if (!handle || !dispatch) {
+        continue
+      }
+      if (db.getWorkerDispatch?.(dispatch.id)?.state === 'stopping') {
+        return
+      }
+      // The terminal and worktree stay up so the operator can read what happened.
+      const settled = db.failDispatch(dispatch.id, reason, {
+        workerProcessExited: true,
+        workerStage: 'agent_session_lost'
+      })
+      escalateWorkerFailure(
+        db,
+        dispatch,
+        {
+          from: handle,
+          mailbox: () => dispatchReportMailbox(db, dispatch),
+          describe: (task) => ({
+            subject: 'Agent session lost',
+            body: `Worker ${handle} can no longer run task ${task}: ${reason}. Its terminal is still open for inspection.${settled?.status === 'circuit_broken' ? ' This task has now failed too many times, so it will not be retried automatically.' : settled?.status === 'failed' ? ' The task is ready to be dispatched again.' : ''}`
+          }),
+          payload: { taskId: dispatch.task_id, dispatchId: dispatch.id, handle, reason }
+        },
+        (to, type) => this.notifyMessageArrived(to, type)
+      )
+      return
+    }
   }
 
   async listTerminals(
