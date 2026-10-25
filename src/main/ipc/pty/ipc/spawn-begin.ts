@@ -6,7 +6,7 @@ import { AGENT_LAUNCH_PANE_REFUSED_CODE } from '../../../../shared/agent-launch-
 import { agentLaunchPaneLiveness } from '../pane/agent-launch-pane-evidence'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import type { CodexPaneHomeRoute } from '../../../codex/codex-pane-account-registry'
-import { createPtySpawnTiming } from '../../pty-spawn-timing'
+import { createPtySpawnTiming } from '../pty-spawn-timing'
 import { allocatePtyLifecycleSequence } from '../host-env/types'
 import { snapshotCodexPaneHomeRoutes } from '../host-env/codex-home'
 import { getAppPtyId } from '../provider/registry'

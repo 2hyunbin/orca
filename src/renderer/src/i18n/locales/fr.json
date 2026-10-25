@@ -349,6 +349,7 @@
           "microphone": "micro",
           "location": "emplacement",
           "clipboard": "presse-papiers",
+          "localNetwork": "réseau local",
           "notifications": "notifications"
         },
         "empty": "Aucun site n'a encore été autorisé ou bloqué.",
@@ -450,6 +451,7 @@
     "view": "Affichage",
     "reload": "Recharger",
     "forceReload": "Forcer le rechargement",
+    "toggleDevTools": "Afficher/Masquer les outils de développement",
     "resetSize": "Réinitialiser la taille",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
@@ -4385,10 +4387,6 @@
               "waiting": {
                 "label": "Se met à jour quand Claude s'exécute",
                 "message": "L'utilisation de Claude se met à jour la prochaine fois que Claude s'exécute."
-              },
-              "expired": {
-                "label": "Connexion expirée",
-                "message": "L'utilisation de Claude a expiré. Démarrez Claude dans ce compte pour l'actualiser."
               }
             },
             "remoteOwnerNotConfigured": "Non configuré sur {{server}}",
@@ -17013,6 +17011,11 @@
             "copyImageAddress": "Copier l’adresse de l’image",
             "searchSelection": "Rechercher « {{value1}} » avec {{value0}}",
             "inspect": "Inspecter",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "Ancrer à droite",
+            "devToolsDockBottom": "Ancrer en bas",
+            "devToolsUndock": "Ouvrir dans une fenêtre séparée",
+            "devToolsClose": "Fermer les DevTools",
             "1ded0d3168": "Copier la capture d'écran",
             "f30d2d35a7": "Capture effectuée",
             "fa6ea61de3": "Annuler",
@@ -18521,7 +18524,8 @@
             "clipboard": "Presse-papiers",
             "windowManagement": "Gestion des fenêtres",
             "midi": "Appareils MIDI",
-            "idleDetection": "Utilisation de l'appareil"
+            "idleDetection": "Utilisation de l'appareil",
+            "localNetwork": "Réseau local"
           },
           "allow": "Autoriser",
           "block": "Bloquer",
@@ -18533,7 +18537,8 @@
             "camera": "Utiliser votre caméra",
             "midi": "Utiliser vos appareils MIDI",
             "location": "Accéder à votre position",
-            "idleDetection": "Détecter quand vous utilisez cet appareil"
+            "idleDetection": "Détecter quand vous utilisez cet appareil",
+            "localNetwork": "Accéder aux applications de cet appareil et aux appareils de votre réseau local"
           },
           "fileTitle": "Ce fichier souhaite",
           "localFiles": "Fichiers locaux",
@@ -18779,8 +18784,8 @@
         "claudeAccountSetupFailed": "Le compte Claude sélectionné n'a pas pu être configuré. Réessayez ou choisissez un autre compte.",
         "agentCommandNotRunnable": "{{agent}} : la Commande dans Paramètres → Agents doit être le chemin ou le nom d'un programme qu'Orca peut trouver, sans arguments ni variables. Modifiez-la ou réinitialisez-la.",
         "runtimeNotInstalled": "{{agent}} n'est pas installé sur l'ordinateur qui exécute ce chat. Installez-le depuis le chat dans une version récente d'Orca.",
-        "conversationOpenElsewhere": "Codex garde cette conversation ouverte ailleurs. Fermez-la à cet endroit, puis réessayez.",
-        "conversationOpenInTerminal": "Orca ne peut pas confirmer que {{agent}} a quitté son terminal. Arrêtez ce qui s'y exécute ou fermez le terminal, puis réessayez.",
+        "conversationOpenElsewhere": "Codex maintient encore cette conversation ouverte. Réessayez dans un instant ou fermez les autres terminaux Codex.",
+        "conversationOpenInTerminal": "{{agent}} exécute déjà cette conversation dans un autre terminal. Quittez {{agent}} là-bas ou fermez ce terminal pour continuer ici.",
         "chooseClaudeAccount": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude.",
         "chooseClaudeAccountThenRunCommand": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude, puis relancez /{{command}}.",
         "chooseClaudeAccountThenSend": "Choisissez-en un ou ajoutez-en un dans les paramètres Comptes Claude, puis renvoyez votre message.",
@@ -19172,8 +19177,8 @@
       "resumeInNewChat": {
         "notSavedYet": "{{agent}} n'a pas encore enregistré cette conversation. Réessayez après sa réponse.",
         "cannotResume": "Cette conversation {{agent}} ne peut pas être reprise dans un chat natif.",
-        "exitUnconfirmedFromTerminal": "Orca ne peut pas confirmer que {{agent}} s’est arrêté dans son terminal. Arrêtez ce qui s’y exécute ou fermez le terminal, puis ouvrez cette conversation depuis l’historique des sessions.",
-        "exitUnconfirmed": "Orca ne peut pas confirmer que {{agent}} s’est arrêté dans son terminal. Arrêtez ce qui s’y exécute ou fermez le terminal, puis réessayez."
+        "exitUnconfirmedFromTerminal": "{{agent}} exécute déjà cette conversation dans un autre terminal. Quittez {{agent}} là-bas ou fermez ce terminal, puis ouvrez cette conversation depuis l’historique des sessions.",
+        "exitUnconfirmed": "{{agent}} exécute déjà cette conversation dans un autre terminal. Quittez {{agent}} là-bas ou fermez ce terminal, puis ouvrez cette conversation depuis l’historique des sessions."
       },
       "state": {
         "loading": {
