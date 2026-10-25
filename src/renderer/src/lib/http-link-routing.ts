@@ -31,8 +31,10 @@ import {
 
 export type OpenHttpLinkOptions = {
   worktreeId?: string | null
-  /** Terminal-only opt-in for routing a remote-owned source through its managed browser. */
+  /** Opt-in for routing a remote-owned source through its managed browser. */
   allowRemoteInApp?: boolean
+  /** Preserve a source surface's existing desktop-browser provider for remote documents. */
+  allowClientBrowserFallback?: boolean
   /** Unconditional: always use the system browser regardless of settings. */
   forceSystemBrowser?: boolean
   /** Unconditional for local sources: open inside Orca regardless of settings. */
@@ -96,6 +98,7 @@ type WorkspaceHttpLinkBrowserRequest = HttpLinkBrowserRequestFields & {
   linkContext?: BrowserLinkOpenContext
   expectedRuntimeEnvironmentId?: string
   expectedSshConnectionId?: string
+  allowClientBrowserFallback?: boolean
 }
 
 /** Resolves to the page id when the page renders on this desktop, else null. */
@@ -227,6 +230,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
         intent: { kind: 'url' },
         ...fields,
         linkContext: { linkIntent: null, ...opts.linkContext, canReveal: reveal.canReveal },
+        ...(opts.allowClientBrowserFallback ? { allowClientBrowserFallback: true } : {}),
         ...(effectiveSourceOwner?.kind === 'runtime'
           ? { expectedRuntimeEnvironmentId: effectiveSourceOwner.runtimeEnvironmentId }
           : effectiveSourceOwner?.kind === 'ssh'
