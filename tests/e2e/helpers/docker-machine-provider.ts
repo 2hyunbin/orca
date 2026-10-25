@@ -119,7 +119,7 @@ export function isDockerMachineRunning(containerId: string): boolean {
  * which must show the provider's exact argv.
  */
 export async function installDockerMachineProvider(page: Page, pluginDir: string): Promise<void> {
-  await page.evaluate(async (sourcePath) => {
+  const pluginKey = await page.evaluate(async (sourcePath) => {
     const settings = await window.api.settings.set({
       pluginSystemEnabled: true,
       experimentalEphemeralVms: true
@@ -139,13 +139,14 @@ export async function installDockerMachineProvider(page: Page, pluginDir: string
     state?.openSettingsPage()
   })
   await page.getByRole('tab', { name: /^Installed/ }).click()
-  await page.getByRole('button', { name: 'Docker machines, orca-e2e, Needs review', exact: true }).click()
+  const row = page.locator(`[data-plugin-key="${pluginKey}"]`)
+  await row.getByRole('button', { name: 'Review', exact: true }).click()
   const consent = page.getByRole('article')
   await expect(consent.getByLabel('Docker machines · machine provider command')).toHaveText(
     '"$orca-node" "$plugin/bin/docker-machine-provider.mjs"'
   )
-  await consent.getByRole('button', { name: 'Enable plugin: Docker machines' }).click()
-  await expect(consent.getByRole('switch', { name: 'Disable Docker machines' })).toBeChecked()
+  await consent.getByRole('button', { name: /^Enable plugin/ }).click()
+  await expect(page.locator('[data-plugin-consent]')).toBeHidden()
   await page.evaluate(() => window.__store?.getState().closeSettingsPage())
 
   await expect
