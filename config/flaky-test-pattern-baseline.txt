@@ -1051,7 +1051,6 @@
 3 test-no-wall-clock:src/renderer/src/components/activity/activity-auto-mark-read-loop.react185.test.tsx
 2 test-no-wall-clock:src/renderer/src/components/artifacts/artifact-list-windowing.test.tsx
 2 test-no-wall-clock:src/renderer/src/components/artifacts/ArtifactCollection.test.tsx
-1 test-no-wall-clock:src/renderer/src/components/automations/automation-list-search-rows.test.ts
 7 test-no-wall-clock:src/renderer/src/components/automations/AutomationListLocalRows.test.tsx
 1 test-no-wall-clock:src/renderer/src/components/automations/use-automation-list-search.test.tsx
 1 test-no-wall-clock:src/renderer/src/components/browser-pane/assemble-chrome/browser-workspace-pane.adoption-chrome.test.tsx
