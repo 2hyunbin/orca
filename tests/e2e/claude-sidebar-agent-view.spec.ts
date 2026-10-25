@@ -112,9 +112,9 @@ process.stdin.resume()
   })
   await orcaPage.evaluate(() => {
     const state = window.__store!.getState()
-    state.setWorktreeCardProperties([
-      ...new Set([...state.worktreeCardProperties, 'inline-agents'])
-    ])
+    if (!state.worktreeCardProperties.includes('inline-agents')) {
+      state.setWorktreeCardProperties([...state.worktreeCardProperties, 'inline-agents'])
+    }
   })
   await dismissSetupScriptPrompts(orcaPage)
   const sidebar = orcaPage.locator('[data-worktree-sidebar]').first()
