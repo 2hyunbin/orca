@@ -137,17 +137,22 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     return { alive, killed }
   }
 
-  /** Adopt unopened inventory-only sessions before Sleep so history and folder checkpoints survive relaunch. */
+  /** Recover daemon-only ownership and WSL pane keys before Sleep checkpoints a reopened session. */
   protected async adoptListedSessionForSleep(
     sessionId: string,
     deadlineMs?: number
   ): Promise<void> {
     // Keep seed-failed sessions suspended so a fresh screen cannot overwrite their restore history.
-    if (
-      !this.historyManager ||
-      this.historyManager.hasWriter(sessionId) ||
-      this.activeSessionIds.has(sessionId)
-    ) {
+    const needsAdoption =
+      !!this.historyManager &&
+      !this.historyManager.hasWriter(sessionId) &&
+      !this.activeSessionIds.has(sessionId)
+    const needsPaneKey =
+      process.platform === 'win32' &&
+      !needsAdoption &&
+      !this.wslPaneKeysBySessionId.has(sessionId) &&
+      this.wslDistrosBySessionId.get(sessionId) !== undefined
+    if (!needsAdoption && !needsPaneKey) {
       return
     }
     const result = await this.client.request<ListSessionsResult>(
@@ -156,8 +161,10 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
       remainingDaemonRequestTimeoutMs(deadlineMs)
     )
     const session = result.sessions.find((entry) => entry.sessionId === sessionId && entry.isAlive)
-    if (session) {
+    if (session && needsAdoption) {
       await this.adoptLiveSession(session, { activeOnlyIfReconciled: true })
+    } else if (session?.wslDistro && session.paneKey) {
+      this.wslPaneKeysBySessionId.set(sessionId, session.paneKey)
     }
   }
 

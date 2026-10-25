@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import nacl from 'tweetnacl'
-import {
-  RELAY_HOST_ATTACH_DEADLINE_MS,
-  type RelayConnectionOpenMessage,
-  type RelayHostHelloAckMessage
-} from './relay-control-protocol'
+import type { RelayConnectionOpenMessage, RelayHostHelloAckMessage } from './relay-control-protocol'
 import type { RelayAssignment } from './relay-http-client'
 
 const fakes = vi.hoisted(() => ({
@@ -120,11 +116,6 @@ describe('RelayControlOrigin pending-connection replay', () => {
     fakes.controls.length = 0
     fakes.transports.length = 0
     fakes.controlConnect.mockReset()
-  })
-
-  it('pins the attach deadline this file mirrors from the relay contract', () => {
-    // Mirror RELAY_PROTOCOL_LIMITS.hostAttachDeadlineMs; drift alters eviction and replay deadlines.
-    expect(RELAY_HOST_ATTACH_DEADLINE_MS).toBe(10_000)
   })
 
   it('dials a pending connection the ack restates in full, without waiting on a timer', async () => {

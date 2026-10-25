@@ -11,6 +11,7 @@ import {
 import { shouldWritePtyOutputForeground } from './foreground-output-scan'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
+import type { PendingHiddenOutputRestoreChunk } from './pending-hidden-output-restore-chunk'
 
 export function bindHiddenOutputRestoreDrain(session: ConnectPanePtySession): void {
   // 'drained' = painted all queued bytes; 'overflow' = queue blew its cap (stream outran fetch+replay); 'refetch' = offsets unmappable, need a fresher snapshot.
@@ -128,13 +129,22 @@ export function bindHiddenOutputRestoreDrain(session: ConnectPanePtySession): vo
       ) {
         return
       }
-      // A snapshot already painted before awaiting fit still covers ACK backlog; retain its baseline when live overflow triggers abandonment.
-      const replayed = session.hiddenOutputRestorePendingOverflow
-        ? session.hiddenOutputRestoreReplayingSnapshot
-        : null
+      // A painted snapshot awaiting fit proves recovery answered, regardless of live queue size.
+      const replayed = session.hiddenOutputRestoreReplayingSnapshot
       if (replayed) {
         session.setRestoredSnapshotBaseline(ptyId, replayed, replayed.paintsContent === true)
-        session.noteHiddenOutputRestoreFloodBackpressure()
+        if (
+          session.hiddenOutputRestorePendingOverflow ||
+          session.hiddenOutputRestoreFreshSnapshotNeeded ||
+          (session.hiddenOutputRestoreUnhideSeq !== null &&
+            replayed.seq < session.hiddenOutputRestoreUnhideSeq) ||
+          session.hiddenOutputRestorePendingChunks.some(
+            (chunk: PendingHiddenOutputRestoreChunk) =>
+              session.getChunkDataAfterSnapshot(chunk, replayed.seq) === null
+          )
+        ) {
+          session.noteHiddenOutputRestoreFloodBackpressure()
+        }
       }
       session.abandonHiddenOutputRestoreAndDrainPendingForeground(ptyId, {
         quiet: replayed !== null

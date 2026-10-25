@@ -29,7 +29,7 @@ import type * as NativeChatProseModule from '../../../../shared/native-chat-pros
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import { projectStructuredAgentSessionMessages } from '../../../../shared/structured-agent-session-message-projection'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
-import type * as UnifiedPatchModule from '../../../../shared/native-chat-unified-patch'
+import type * as UnifiedPatchModule from '../../../../shared/native-chat/tools/native-chat-unified-patch'
 import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { installNativeChatMessageListTestViewport } from './native-chat-message-list-test-viewport'
 
@@ -47,20 +47,23 @@ vi.mock('../../../../shared/native-chat-prose', async (importOriginal) => {
 })
 
 const patchCalls = vi.hoisted(() => ({ detailed: 0, summary: 0 }))
-vi.mock('../../../../shared/native-chat-unified-patch', async (importOriginal) => {
-  const actual = await importOriginal<typeof UnifiedPatchModule>()
-  return {
-    ...actual,
-    editLinesFromUnifiedPatch: (...args: Parameters<typeof actual.editLinesFromUnifiedPatch>) => {
-      patchCalls.detailed += 1
-      return actual.editLinesFromUnifiedPatch(...args)
-    },
-    summarizeUnifiedPatch: (...args: Parameters<typeof actual.summarizeUnifiedPatch>) => {
-      patchCalls.summary += 1
-      return actual.summarizeUnifiedPatch(...args)
+vi.mock(
+  '../../../../shared/native-chat/tools/native-chat-unified-patch',
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof UnifiedPatchModule>()
+    return {
+      ...actual,
+      editLinesFromUnifiedPatch: (...args: Parameters<typeof actual.editLinesFromUnifiedPatch>) => {
+        patchCalls.detailed += 1
+        return actual.editLinesFromUnifiedPatch(...args)
+      },
+      summarizeUnifiedPatch: (...args: Parameters<typeof actual.summarizeUnifiedPatch>) => {
+        patchCalls.summary += 1
+        return actual.summarizeUnifiedPatch(...args)
+      }
     }
   }
-})
+)
 
 // Count work-run derivations because rebuilt member arrays can defeat row memoization.
 const entriesCalls = vi.hoisted(() => ({ count: 0 }))

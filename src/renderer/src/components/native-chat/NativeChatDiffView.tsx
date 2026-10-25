@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { DiffLine } from './native-chat-diff'
+import type { NativeChatDiffLine as DiffLine } from '../../../../shared/native-chat/tools/native-chat-diff'
 
 export function NativeChatDiffView({ lines }: { lines: DiffLine[] }): React.JSX.Element {
   return (
