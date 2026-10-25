@@ -13,6 +13,7 @@ import {
   expectTerminalAnswers,
   launchManagedWorkspace,
   openTerminalTab,
+  relaunchManagedApp,
   skipUnlessManagedDockerHost,
   typeInTerminal,
   withManagedHost
@@ -55,15 +56,17 @@ test('Quick Open finds a file in a monorepo-sized managed workspace', async (// 
   })
 })
 
-for (const acrossReconnect of [false, true]) {
-  test(`a managed host reports its listener, and an SSH forward reaches it${acrossReconnect ? ' across a reconnect' : ''}`, async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
+for (const across of ['', 'reconnect', 'restart'] as const) {
+  test(`a managed host reports its listener, and an SSH forward reaches it${across ? ` across a ${across}` : ''}`, async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
   {}, testInfo) => {
     test.setTimeout(10 * 60_000)
     const remotePort = 7860
     const marker = `ORCA_FORWARD_${Date.now()}`
     const reservation = await reserveLocalPort()
     await withManagedHost(testInfo, async (fixture) => {
-      const { page, seeded, environmentId } = await launchManagedWorkspace(fixture)
+      const launched = await launchManagedWorkspace(fixture)
+      const { seeded, environmentId } = launched
+      let page = launched.page
       const script = `require('node:http').createServer((_q, r) => r.end(${JSON.stringify(marker)})).listen(${remotePort}, '127.0.0.1')`
       // Started from the workspace so the scan attributes it to this workspace.
       fixture.host.exec!(
@@ -93,8 +96,13 @@ for (const acrossReconnect of [false, true]) {
       }
       await expect.poll(fetchMarker, { timeout: 30_000 }).toBe(marker)
       let forwardId = forward.id
-      if (acrossReconnect) {
-        await reconnect(page, seeded.targetId)
+      if (across) {
+        if (across === 'reconnect') {
+          await reconnect(page, seeded.targetId)
+        } else {
+          // #32484: the saved forward must come back after a restart, not only after a reconnect.
+          page = await relaunchManagedApp(fixture)
+        }
         await expect.poll(fetchMarker, { timeout: 60_000 }).toBe(marker)
         // The restored forward is a new entry for the same saved port.
         const restored = await page.evaluate(
