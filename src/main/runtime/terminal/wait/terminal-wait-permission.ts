@@ -207,7 +207,7 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     })
   }
 
-  // Claude keeps its `✳` rest title under AskUserQuestion, so only the hook row shows the dialog.
+  // Claude keeps its `✳` rest title under AskUserQuestion; without OSC 7501 only the hook shows it.
   protected isPtyAwaitingUserInput(ptyId: string): boolean {
     const join = this.readHookRowJoinForPty(ptyId)
     const row = join ? selectNewestExplicitAgentStatusRow(join) : null
