@@ -11,6 +11,7 @@ import {
 import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import type { GitPushTarget } from '../../../shared/worktree/types'
+import { worktreeCopyOwnerKey } from '@/store/slices/worktrees/metadata/worktree-copy-review-clear'
 import { runtimeTargetForWorkspaceOwner } from './resolve-owner'
 import {
   getConnectionIdForWorktreeCopy,
@@ -102,12 +103,15 @@ export function worktreeCopyPushTarget(
   worktreeId: string,
   hostId: ExecutionHostId | null
 ): GitPushTarget | undefined {
-  if (hostId) {
-    return selectWorkspaceByHostTarget(state, hostWorktreeTarget({ id: worktreeId, hostId }))
-      ?.pushTarget
+  const placed = hostId
+    ? selectWorkspaceByHostTarget(state, hostWorktreeTarget({ id: worktreeId, hostId }))
+    : undefined
+  if (placed) {
+    return placed.pushTarget
   }
+  // Why the lone-copy fallback: the host index files an unstamped row only under `local`.
   const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
     (row) => row.id === worktreeId
   )
-  return rows.length === 1 ? rows[0].pushTarget : undefined
+  return new Set(rows.map(worktreeCopyOwnerKey)).size === 1 ? rows[0].pushTarget : undefined
 }
