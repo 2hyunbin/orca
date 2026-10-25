@@ -27,8 +27,14 @@ export const terminalWaitBlockedSentinelRe = compiledFromActiveAgentStateRules(
 // Twelve lines cover 4–8-line Codex dialogs plus wrapped commands/hooks.
 const LIVE_PROMPT_TAIL_LINES = 12
 
-export function findTerminalWaitBlockedSignal(fullTail: string): BlockedTextSignal | null {
-  const windowStart = startOfLastNonBlankLines(fullTail, LIVE_PROMPT_TAIL_LINES)
+/** `wholeText` scans every line: a grid holds only what is painted, and a tall dialog's keyword sits above the window. */
+export function findTerminalWaitBlockedSignal(
+  fullTail: string,
+  options: { wholeText?: boolean } = {}
+): BlockedTextSignal | null {
+  const windowStart = options.wholeText
+    ? 0
+    : startOfLastNonBlankLines(fullTail, LIVE_PROMPT_TAIL_LINES)
   const normalized = windowStart === 0 ? fullTail : fullTail.slice(windowStart)
   if (!terminalWaitBlockedSentinelRe().test(normalized)) {
     return null

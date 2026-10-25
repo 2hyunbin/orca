@@ -119,6 +119,18 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
     resetWaitBlockedCarry(state.appended)
   }
 
+  /** Drops a stamp whose dialog the screen proved erased; a newly painted blocker stamps again. */
+  protected clearWaitBlockedStamp(ptyId: string): void {
+    const pty = this.ptysById.get(ptyId)
+    if (pty) {
+      pty.waitBlockedAt = null
+    }
+    // The screen is the whole PTY's evidence, so leaves with a diverged tail clear too.
+    for (const leaf of this.getLeavesForPty(ptyId)) {
+      leaf.waitBlockedAt = null
+    }
+  }
+
   // Prime seeded history without timestamps; only newly gained prompts in live output may stamp waitBlockedAt.
   protected primeWaitBlockedBaselineFromSeededTail(ptyId: string): void {
     const pty = this.ptysById.get(ptyId)

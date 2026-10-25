@@ -87,7 +87,16 @@ vi.stubGlobal(
   }
 )
 
+const mountedRenderers = new Set<ReactTestRenderer>()
+
 afterEach(() => {
+  act(() => {
+    for (const renderer of mountedRenderers) {
+      renderer.unmount()
+    }
+  })
+  mountedRenderers.clear()
+  scrollable.node = null
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -272,6 +281,7 @@ function mount(
   let renderer!: ReactTestRenderer
   act(() => {
     renderer = create(h('div'))
+    mountedRenderers.add(renderer)
   })
   const scroller = page(() => renderer.toJSON())
   scrollable.node = scroller

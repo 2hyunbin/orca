@@ -57,18 +57,17 @@ export function getMaxTerminalPasteBytesForIngestMs(
 // Codex 0.162.1 on a low-spec Win11 host took 5.1 s for 1,849 chars and 21.1 s for 9,249 (~2.3 ms/char).
 const WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR = 3
 
-/** How long a held prompt may still need Enter: an input-record TUI's paste burst, or a launch composer not yet submit-ready. */
+/** How long a held prompt may still need Enter: an input-record TUI's paste burst, or a composer not yet submit-ready. */
 export function getAgentPromptHeldSubmitBudgetMs(
   platform: NodeJS.Platform,
   agent: TerminalAgent | null | undefined,
-  pastePayload: string,
-  composerReady: boolean
+  pastePayload: string
 ): number {
   if (!isTuiAgent(agent)) {
     return 0
   }
   const config = TUI_AGENT_CONFIG[agent]
-  const launchMs = composerReady ? (config.submitRetryBudgetMs ?? 0) : 0
+  const startupMs = config.submitRetryBudgetMs ?? 0
   const pasteBurstMs =
     platform === 'win32' && config.windowsInputRecordPasteNewline
       ? pastePayload.length * WINDOWS_INPUT_RECORD_PASTE_MS_PER_CHAR
@@ -78,7 +77,7 @@ export function getAgentPromptHeldSubmitBudgetMs(
   const capMs =
     AGENT_PROMPT_EFFECT_TIMEOUT_MS -
     2 * getTerminalPasteIngestMs(platform, Buffer.byteLength(pastePayload, 'utf8'))
-  return Math.max(0, Math.min(Math.max(launchMs, pasteBurstMs), capMs))
+  return Math.max(0, Math.min(Math.max(startupMs, pasteBurstMs), capMs))
 }
 
 // Codex dedupes a repeated placeholder label as `[Pasted Content N chars] #2`.

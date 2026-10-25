@@ -181,7 +181,7 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
     }
     const dims = size ?? this.getTerminalSize(ptyId) ?? { cols: 80, rows: 24 }
     const state = this.createPtyHeadlessTerminalState(ptyId, dims)
-    state.outputSequence = this.getPtyOutputSequence(ptyId)
+    const seededSequence = this.getPtyOutputSequence(ptyId)
     this.headlessTerminals.set(ptyId, state)
     this.recordOsc7MetadataForPty(ptyId, data)
     this.recordRecentPtyOutputForPathProvenance(ptyId, data)
@@ -196,6 +196,8 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
         if (this.headlessTerminals.get(ptyId) !== state) {
           return
         }
+        // Why only now: a reader comparing sequences must not take the unseeded grid as current.
+        state.outputSequence = seededSequence
         // Replay kitty flags after seed data for deterministic parsing; both must remain silent to historical queries.
         if (typeof metadata.kittyKeyboardFlags === 'number') {
           await state.emulator.applyKittyKeyboardFlags(metadata.kittyKeyboardFlags)
