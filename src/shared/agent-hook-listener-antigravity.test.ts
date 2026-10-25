@@ -498,10 +498,12 @@ describe('shared agent-hook-listener', () => {
     }
     const parent = {
       conversationId: 'parent-conversation',
+      lastUserInput: 'translate',
       transcriptPath: writeTranscript('parent', 'translate', 'Parent final report')
     }
     const child = {
       conversationId: 'child-conversation',
+      lastUserInput: '',
       transcriptPath: writeTranscript('child', 'translate to fr', 'Subagent report')
     }
     const subagentCall = { name: 'invoke_subagent', args: { TypeName: 'self', Prompt: 'fr' } }
@@ -545,10 +547,34 @@ describe('shared agent-hook-listener', () => {
         state: 'done',
         lastAssistantMessage: 'Parent final report'
       })
-      expect(send('PreInvocation', { conversationId: 'next-conversation' })).toBe('working')
+      expect(
+        send('PreInvocation', { conversationId: 'next-conversation', lastUserInput: 'next' })
+      ).toBe('working')
     } finally {
       rmSync(tmpDir, { recursive: true, force: true })
     }
+  })
+
+  it('tracks a new Antigravity conversation after the parent exits mid-subagent', () => {
+    const send = (hookEventName: string, payload: Record<string, unknown>) =>
+      normalizeHookPayload(
+        state,
+        'antigravity',
+        { paneKey: PANE_KEY, hook_event_name: hookEventName, payload },
+        'production'
+      )?.payload.state ?? null
+    const parent = { conversationId: 'parent-conversation', lastUserInput: 'translate' }
+    send('PreInvocation', parent)
+    send('PreToolUse', { ...parent, toolCall: { name: 'invoke_subagent', args: {} } })
+    expect(send('PreInvocation', { conversationId: 'child', lastUserInput: '' })).toBeNull()
+
+    // agy was quit mid-subagent, so no idle Stop ever closed the parent; the user relaunched it.
+    const next = { conversationId: 'next-conversation', lastUserInput: 'hello' }
+    expect([
+      send('PreInvocation', next),
+      send('PreToolUse', { ...next, toolCall: { name: 'ask_question', args: {} } }),
+      send('Stop', { ...next, fullyIdle: true })
+    ]).toEqual(['working', 'waiting', 'done'])
   })
 
   it('treats Antigravity Stop transcripts as pending result text', () => {

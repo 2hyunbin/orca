@@ -29,8 +29,11 @@ export function normalizeAntigravityEvent(
   const conversationId = readFirstString(hookPayload, ['conversationId', 'conversation_id'])
   const subagentParent = state.antigravitySubagentParentByPaneKey.get(paneKey)
   if (subagentParent && conversationId && conversationId !== subagentParent) {
-    // Subagents run inside the parent agy and fire its hooks under their own conversationId.
-    return null
+    // Subagents run inside the parent agy under their own conversationId and never carry user input.
+    if (!readFirstString(hookPayload, ['lastUserInput'])) {
+      return null
+    }
+    state.antigravitySubagentParentByPaneKey.delete(paneKey)
   }
   const toolName = readAntigravityToolCall(hookPayload).toolName
   if (
