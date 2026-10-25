@@ -87,7 +87,6 @@ export type HookListenerState = {
 }
 
 export type HermesPaneTurn = {
-  sessionId: string
   ended: boolean
   /** `delegate_task` children run their own turns, under their own session ids, inside the parent's. */
   childSessionIds: Set<string>

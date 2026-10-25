@@ -25,9 +25,7 @@ const HERMES_EVENT_STATES: Record<string, 'working' | 'waiting' | 'done'> = {
   post_approval_response: 'working'
 }
 
-/** Why: Hermes' background memory/skill review fork runs after the turn ends and fires
- *  `pre_tool_call`/`post_tool_call` on the parent's session, but never `pre_llm_call` or a
- *  turn-end hook, so admitting those would leave a finished pane stuck on `working`. */
+// Why: Hermes' post-turn memory/skill review fires tool hooks with no turn of its own.
 function admitsHermesEvent(
   state: HookListenerState,
   paneKey: string,
@@ -37,19 +35,15 @@ function admitsHermesEvent(
   const sessionId = typeof hookPayload.session_id === 'string' ? hookPayload.session_id : ''
   const turn = state.hermesTurnByPaneKey.get(paneKey)
   if (eventName === 'pre_llm_call') {
-    if (!turn || turn.ended) {
-      state.hermesTurnByPaneKey.set(paneKey, {
-        sessionId,
-        ended: false,
-        childSessionIds: new Set()
-      })
-    } else if (sessionId !== turn.sessionId) {
+    // `delegate_task` children run as platform "subagent" under their own session ids.
+    if (turn && hookPayload.platform === 'subagent') {
       turn.childSessionIds.add(sessionId)
+    } else {
+      state.hermesTurnByPaneKey.set(paneKey, { ended: false, childSessionIds: new Set() })
     }
     return true
   }
   if (eventName === 'post_llm_call' || eventName === 'on_session_end') {
-    // Why not require turn.sessionId: compression rotates the parent's session id mid-turn.
     if (turn && !turn.childSessionIds.has(sessionId)) {
       turn.ended = true
     }
