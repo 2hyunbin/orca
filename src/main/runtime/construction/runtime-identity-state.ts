@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { preserveTerminalRetirementProofs } from '../mobile-session-terminal-retirement-proof'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
+import { mainBindsUnendedTerminal } from '../terminal/surface/main-pane-verdict'
 import {
   headlessMobileSnapshotContentUnchanged,
   mobileSnapshotIdentityUnchanged
@@ -297,7 +298,7 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
       return null
     }
     const pty = this.ptysById.get(ptyId)
-    const agent = pty?.launchAgent ?? pty?.foregroundAgent ?? null
+    const agent = pty?.launchAgent ?? pty?.foregroundAgent ?? pty?.launchCommandAgent ?? null
     return isTuiAgent(agent) ? agent : null
   }
 
@@ -393,6 +394,10 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
       ...this.tuiIdleEvidenceSource,
       defaultTimeoutMs: TUI_IDLE_DEFAULT_TIMEOUT_MS,
       getLivePty: (handle) => this.getLivePtyForHandle(handle),
+      // An exit event of any code settles the wait, as the switch-off rule did.
+      exitUnsettled: (pty) =>
+        pty.lastExitCode === null &&
+        mainBindsUnendedTerminal(this, pty.ptyId, this.ptyLivenessVerdictByPtyId.get(pty.ptyId)),
       getLiveLeaf: (handle) => this.getLiveLeafForHandle(handle),
       startVisibleReadProbe: (waiter, waiterTimeoutMs, agent) =>
         this.startTuiIdleVisibleReadProbe(waiter, waiterTimeoutMs, agent)

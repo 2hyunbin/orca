@@ -5,8 +5,8 @@ import {
 } from '../../../src/shared/native-chat-empty-state'
 import { isRootAgentJournalItem } from '../../../src/shared/agent-session-journal-producer'
 import { stripNoiseMessages } from '../../../src/shared/native-chat-noise'
-import { nativeChatStreamingMessage } from '../../../src/shared/native-chat-streaming'
-import { isWordlessProviderFrameMessage } from '../../../src/shared/native-chat-provider-frame-summary'
+import { nativeChatStreamingMessage } from '../../../src/shared/native-chat/native-chat-streaming'
+import { isWordlessProviderFrameMessage } from '../../../src/shared/native-chat/native-chat-provider-frame-summary'
 import {
   foldToolMessages,
   isUndrawnProviderFrameMessage
@@ -19,7 +19,7 @@ import {
   type AgentType,
   type NativeChatMessage
 } from '../../../src/shared/native-chat-types'
-import { isImageSourceUserTurn } from './mobile-native-chat-image-transcript-markers'
+import { isImageSourceUserTurn } from '../../../src/shared/native-chat-image-transcript-markers'
 import type { MobileNativeChatStatus } from './use-mobile-native-chat-session'
 
 /** The centered empty-state copy for a chat with no messages, mirroring the

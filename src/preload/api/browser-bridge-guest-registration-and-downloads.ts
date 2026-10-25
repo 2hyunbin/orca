@@ -73,8 +73,16 @@ export const browserGuestRegistrationAndDownloadsApi = {
   },
   respondPagePrompt: (response: BrowserPagePromptResponse): Promise<BrowserPagePromptResult> =>
     ipcRenderer.invoke('browser:respondPagePrompt', response),
-  openDevTools: (args: { browserPageId: string }): Promise<boolean> =>
-    ipcRenderer.invoke('browser:openDevTools', args),
+  openDevTools: (args: {
+    browserPageId: string
+    inspectAt?: { x: number; y: number }
+  }): Promise<boolean> => ipcRenderer.invoke('browser:openDevTools', args),
+  addWordToDictionary: (args: { browserPageId: string; word: string }): Promise<boolean> =>
+    ipcRenderer.invoke('browser:addWordToDictionary', args),
+  copyImageAt: (args: {
+    browserPageId: string
+    point: { x: number; y: number }
+  }): Promise<boolean> => ipcRenderer.invoke('browser:copyImageAt', args),
   setViewportOverride: (args: {
     browserPageId: string
     override: BrowserViewportOverride | null
@@ -90,6 +98,8 @@ export const browserGuestRegistrationAndDownloadsApi = {
     colorScheme: BrowserSiteColorScheme | null
   }): Promise<BrowserPageSiteDisplay | null> =>
     ipcRenderer.invoke('browser:setPageSiteColorScheme', args),
+  setPageAudioMuted: (args: { browserPageId: string; muted: boolean }): Promise<boolean> =>
+    ipcRenderer.invoke('browser:setPageAudioMuted', args),
   reportViewportScrollState: (args: {
     browserPageId: string
     state: {
@@ -126,6 +136,14 @@ export const browserGuestRegistrationAndDownloadsApi = {
     ): void => callback(data)
     ipcRenderer.on('browser:certificate-failure-changed', listener)
     return () => ipcRenderer.removeListener('browser:certificate-failure-changed', listener)
+  },
+  onAudioStateChanged: (callback): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: Parameters<typeof callback>[0]
+    ): void => callback(data)
+    ipcRenderer.on('browser:audio-state-changed', listener)
+    return () => ipcRenderer.removeListener('browser:audio-state-changed', listener)
   },
   proceedCertificate: (args) => ipcRenderer.invoke('browser:proceedCertificate', args),
   onPermissionDenied: (

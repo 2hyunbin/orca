@@ -48,7 +48,9 @@ import {
   setPortForwardManager
 } from './ssh-ipc-context'
 import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
-import { persistPortForwardsWithUnrestored } from './ssh-port-forward-persistence'
+import { persistPortForwards } from './ssh-port-forward-persistence'
+import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
+import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
 import { resetSshShutdownDrain } from './ssh-shutdown-drain'
 import { registerSshTargetCrudHandlers } from './ssh-target-crud-handlers'
@@ -91,7 +93,7 @@ export function registerSshHandlers(
   runtime?: OrcaRuntimeService
 ): { connectionManager: SshConnectionManager; sshStore: SshConnectionStore } {
   initializeSshConnectionGenerationSession()
-  // Why: macOS re-activation re-calls this with a new BrowserWindow; ipcMain.handle() throws on a duplicate channel, so remove prior handlers first.
+  // macOS window recreation re-registers handlers; remove old channels to avoid duplicate registration.
   for (const ch of SSH_IPC_CHANNELS) {
     ipcMain.removeHandler(ch)
   }
@@ -112,7 +114,7 @@ export function registerSshHandlers(
     connectionManager.setCallbacks(callbacks)
   } else {
     setConnectionManager(new SshConnectionManager(callbacks))
-    // Why only here: a window re-registration must not re-gate a host the user already signed in to.
+    // Window re-registration must not re-gate hosts already signed in during this process.
     awaitSignInForCredentialHosts(getSshTargetRegistryStore()!)
   }
   setPortForwardManager(portForwardManager ?? new SshPortForwardManager())
@@ -125,10 +127,12 @@ export function registerSshHandlers(
           }`
         )
       }
-      persistPortForwardsWithUnrestored(entry.connectionId)
+      persistPortForwards(entry.connectionId)
       broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
     }
   })
+  // Every served status restores saved forwards, whichever path brought the host up.
+  setSshHostServedListener((targetId) => void restoreManagedHostPortForwards(targetId))
   registerPowerMonitorReconnect(() => getAppEnvironment().getPath('userData'))
   registerSshBrowseHandler(() => connectionManager)
   setSshConnectionManagerResolver(() => connectionManager)

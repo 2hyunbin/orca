@@ -7,11 +7,11 @@ import { useMobileImageAttachment } from './use-mobile-image-attachment'
 import {
   useMobileNativeChatImageAttachments,
   type MobileNativeChatImageAttachments
-} from './use-mobile-native-chat-image-attachments'
+} from './native-chat/composer/use-mobile-native-chat-image-attachments'
 import {
   useMobileNativeChatFileAttachments,
   type MobileNativeChatFileAttachments
-} from './use-mobile-native-chat-file-attachments'
+} from './native-chat/composer/use-mobile-native-chat-file-attachments'
 
 type CurrentRef<T> = { readonly current: T }
 
@@ -27,6 +27,8 @@ type Args = {
    *  are scoped per tab so a switch can't ride an image into another terminal. */
   readonly nativeChatScopeKey: string | null
   readonly nativeChatInputLeaseReady: boolean
+  /** False when only memory names the agent: the pane may be a bare shell, so images never send. */
+  readonly nativeChatAgentConfirmed: boolean
   readonly getActiveWorktreeConnectionId: () => Promise<string | null>
   readonly beforeTerminalSend: (terminal: string) => Promise<boolean>
   /** Outcome-preserving so an ambiguous ('unknown') delivery after an image
@@ -68,6 +70,7 @@ export function useMobileSessionImageAttachments({
   deviceTokenRef,
   nativeChatScopeKey,
   nativeChatInputLeaseReady,
+  nativeChatAgentConfirmed,
   getActiveWorktreeConnectionId,
   beforeTerminalSend,
   nativeChatBaseSend,
@@ -112,7 +115,9 @@ export function useMobileSessionImageAttachments({
     getActiveWorktreeConnectionId,
     connState,
     scopeKey: nativeChatScopeKey,
-    enabled: structuredNativeChat ? connState === 'connected' : nativeChatInputLeaseReady,
+    enabled: structuredNativeChat
+      ? connState === 'connected'
+      : nativeChatInputLeaseReady && nativeChatAgentConfirmed,
     structuredNativeChat,
     files: nativeChatFiles.files,
     onFilesSent: nativeChatFiles.removeFiles,

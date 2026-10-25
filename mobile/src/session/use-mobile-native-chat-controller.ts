@@ -5,7 +5,7 @@ import type { MobileNativeChatTab } from './mobile-native-chat-eligibility'
 import type { StructuredAgentSessionHostSupport } from './mobile-structured-agent-session-host-support'
 import { useMobileNativeChatAskDismiss } from './use-mobile-native-chat-ask-dismiss'
 import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
-import { useMobileNativeChatFileSearch } from './use-mobile-native-chat-file-search'
+import { useMobileNativeChatFileSearch } from './native-chat/composer/use-mobile-native-chat-file-search'
 import { useMobileNativeChatMessageSend } from './use-mobile-native-chat-message-send'
 import { mobileNativeChatStreamPreview } from './mobile-native-chat-streaming-gate'
 import { useMobileNativeChatSessionOptionController } from './use-mobile-native-chat-session-option-controller'
@@ -60,6 +60,7 @@ export function useMobileNativeChatController(args: {
   } = args
   const {
     activeChatAgent,
+    activeChatAgentConfirmed,
     activeChatAgentRef,
     activeChatResolution,
     activeChatSessionId,
@@ -169,10 +170,11 @@ export function useMobileNativeChatController(args: {
   })
 
   // Every chat write gates on both: the lease proves the input floor is ours, and
-  // `connState` collapses a render before the lease does on disconnect.
+  // `connState` collapses a render before the lease does on disconnect. A remembered-only
+  // agent may have exited to a shell, so it never writes.
   const inputSendable = activeChatStructured
     ? client != null && activeChatSessionId != null && connState === 'connected'
-    : nativeChatInputLeaseReady && connState === 'connected'
+    : nativeChatInputLeaseReady && connState === 'connected' && activeChatAgentConfirmed
 
   const {
     answerAsk: bridgeAnswerAsk,

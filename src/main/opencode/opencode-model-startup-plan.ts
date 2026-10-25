@@ -10,6 +10,10 @@ import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resum
 import type { TuiAgent } from '../../shared/tui-agent'
 import { probeOpenCodeLaunchModelContext } from './opencode-launch-model-context'
 import { resolveOpenCodeLaunchModelConfig } from './opencode-launch-model-config'
+import {
+  isVerifiedOpenCodeConfigModelVersion,
+  isVerifiedOpenCodeLegacyModelVersion
+} from './opencode-model-version-policy'
 import { getTuiAgentLaunchCommand, TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import { applyManagedDataAccountEnvironment } from '../managed-data-accounts/launch-environment'
 import { OrchestrationError } from '../runtime/orchestration/orchestration-error'
@@ -73,10 +77,10 @@ export async function prepareOpenCodeModelStartupInputs(
     env,
     hostIdentity: options.hostIdentity
   }).catch(() => null)
-  if (capabilities?.version?.split('.')[0] === '1') {
+  if (isVerifiedOpenCodeLegacyModelVersion(capabilities?.version)) {
     return { inputs }
   }
-  if (inputs.agentArgs?.trim()) {
+  if (!isVerifiedOpenCodeConfigModelVersion(capabilities?.version) || inputs.agentArgs?.trim()) {
     refuseModel()
   }
   const executable = await resolveOpenCodeDirectModelExecutable({

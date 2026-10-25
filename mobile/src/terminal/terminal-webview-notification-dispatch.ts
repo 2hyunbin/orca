@@ -19,7 +19,6 @@ export function dispatchTerminalWebViewNotification(
   if (msg.type === 'log') {
     // Surface fit-scale diagnostics in the RN/Metro console.
     const tag = typeof msg.tag === 'string' ? msg.tag : '[fit]'
-    // eslint-disable-next-line no-console
     console.log(tag, msg.payload)
   } else if (msg.type === 'error') {
     const message = typeof msg.message === 'string' ? msg.message : 'Unknown terminal error'
@@ -29,6 +28,10 @@ export function dispatchTerminalWebViewNotification(
   } else if (msg.type === 'selection') {
     const text = typeof msg.text === 'string' ? msg.text : ''
     handlers.onSelectionCopy?.(text)
+  } else if (msg.type === 'clipboard-write') {
+    if (typeof msg.text === 'string') {
+      handlers.onClipboardWrite?.(msg.text)
+    }
   } else if (msg.type === 'selection-evicted') {
     handlers.onSelectionEvicted?.()
   } else if (msg.type === 'modes') {
@@ -82,7 +85,6 @@ export function dispatchTerminalWebViewNotification(
       handlers.onTextScaleChange?.(scale)
     }
   } else if (msg.type === 'mobile-clip-cancel-by-pinch') {
-    // eslint-disable-next-line no-console
     console.warn('[mobile-clip] selection cancelled by pinch')
   }
 }

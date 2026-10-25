@@ -18,7 +18,6 @@ import {
   spawnedPtyEnv,
   store
 } from '../orca-runtime-test-fixtures.spec'
-import type { RuntimeStore } from '../runtime-store-contract'
 import { wireHeadlessServeRuntime } from '../orca-runtime-test-scenario-builders.spec'
 
 describe('OrcaRuntimeService', () => {
@@ -58,7 +57,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -149,7 +147,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
     })
@@ -303,7 +300,6 @@ describe('OrcaRuntimeService', () => {
       renameTerminal: vi.fn(),
       focusTerminal: vi.fn(),
       closeTerminal: vi.fn(),
-      sleepWorktree: vi.fn(),
       resumeSleepingAgents: vi.fn(),
       terminalFitOverrideChanged: vi.fn(),
       terminalDriverChanged: vi.fn()
@@ -461,7 +457,6 @@ describe('OrcaRuntimeService', () => {
         renameTerminal: vi.fn(),
         focusTerminal: vi.fn(),
         closeTerminal: vi.fn(),
-        sleepWorktree: vi.fn(),
         terminalFitOverrideChanged: vi.fn(),
         terminalDriverChanged: vi.fn()
       })
@@ -720,8 +715,7 @@ function titledHeadlessRuntime() {
     activeRepoId: TEST_REPO_ID,
     activeWorktreeId: TEST_WORKTREE_ID
   })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture supplies RuntimeStore methods; its legacy Mock return type loses callable signatures.
-  const runtime = new OrcaRuntimeService(runtimeStore as RuntimeStore)
+  const runtime = new OrcaRuntimeService(runtimeStore)
   runtime.setPtyController({
     spawn: vi.fn(async () => ({ id: 'titled-pty' })),
     write: () => true,

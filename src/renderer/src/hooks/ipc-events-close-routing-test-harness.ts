@@ -1,6 +1,3 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for the 4 close-routing ipc-events specs, not shipped code, and it falls
-   outside the *.test / *.spec / tests glob set. The stubs and the hook invocation are one unit; splitting the 11 doMock
-   calls back out would duplicate them into all 4 specs. */
 import type * as ReactModule from 'react'
 import { vi } from 'vitest'
 import type { TerminalSurfaceCloseTarget } from '../../../shared/terminal-surface-close-target'
@@ -216,7 +213,7 @@ export async function useIpcEventsForCloseRouting({
           return () => {}
         },
         respondTerminalTabClose,
-        onSleepWorktree: () => () => {},
+        onWorkspaceSleep: () => () => {},
         onResumeSleepingAgents: () => () => {},
         onNewBrowserTab: () => () => {},
         onNewMarkdownTab: () => () => {},
@@ -261,9 +258,7 @@ export async function useIpcEventsForCloseRouting({
         getZoomLevel: () => 0,
         set: vi.fn()
       },
-      settings: {
-        onChanged: () => () => {}
-      },
+      settings: { onChanged: () => () => {} },
       updater: {
         getStatus: () => Promise.resolve({ state: 'idle' }),
         onStatus: () => () => {},
@@ -272,6 +267,7 @@ export async function useIpcEventsForCloseRouting({
       browser: {
         onGuestLoadFailed: () => () => {},
         onOpenLinkInOrcaTab: () => () => {},
+        onSessionProfilesChanged: () => () => {},
         onNavigationUpdate: () => () => {},
         onActivateView: () => () => {},
         onPaneFocus: () => () => {}

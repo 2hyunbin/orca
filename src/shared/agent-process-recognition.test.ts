@@ -281,55 +281,6 @@ describe('agent process recognition', () => {
     expect(isRecognizedAgentType('muse')).toBe(true)
   })
 
-  it('recognizes Muse by its versioned muse-bin sibling binary', () => {
-    // Why: the `muse` launcher execs `muse-bin-<version>` (a 242MB sibling),
-    // so the live foreground process carries the versioned name — truncated
-    // to `muse-bin-1.0.3-R` in macOS comm output (verified on-device).
-    expect(recognizeAgentProcess('muse-bin-1.0.3-R2198.1')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r2198.1'
-    })
-    expect(recognizeAgentProcess('muse-bin-1.0.3-R')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r'
-    })
-    expect(recognizeAgentProcess('/Users/dev/.local/bin/muse-bin-1.0.3-R2198.1')).toEqual({
-      agent: 'muse',
-      processName: 'muse-bin-1.0.3-r2198.1'
-    })
-  })
-
-  it('does not recognize Muse headless exec commands as interactive agents', () => {
-    expect(recognizeAgentProcessFromCommandLine('muse exec "summarize this diff"')).toBeNull()
-    expect(
-      recognizeAgentProcessFromCommandLine('muse exec --json "review this" > result.jsonl')
-    ).toBeNull()
-    // Why: a bare `exec` token dispatches as the subcommand even past `--`
-    // (verified: `muse -- resume` still resumes), so this errors instead of
-    // hosting a pane — never an interactive agent.
-    expect(recognizeAgentProcessFromCommandLine('muse -- exec "summarize this diff"')).toBeNull()
-    // Why: a whole-prompt `muse 'exec'` takes the exec missing-prompt error
-    // path, not a TUI, so filtering it is correct.
-    expect(recognizeAgentProcessFromCommandLine("muse 'exec'")).toBeNull()
-    // Why: `muse resume` reopens the interactive TUI, so it still hosts a live session.
-    expect(recognizeAgentProcessFromCommandLine('muse resume')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-    // Why: `muse -- resume` still dispatches to the resume subcommand (verified
-    // against muse 1.0.3), which reopens the interactive TUI.
-    expect(recognizeAgentProcessFromCommandLine('muse -- resume')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-    // Why: the prompt is one quoted argv, so it never equals the bare `exec`
-    // token — this is the interactive pane Orca itself launches.
-    expect(recognizeAgentProcessFromCommandLine('muse -- "exec the release notes"')).toEqual({
-      agent: 'muse',
-      processName: 'muse'
-    })
-  })
-
   it('recognizes Mistral Vibe by its installed executable and legacy alias', () => {
     expect(recognizeAgentProcess('/home/dev/.local/bin/vibe')).toEqual({
       agent: 'mistral-vibe',
@@ -442,6 +393,36 @@ describe('agent process recognition', () => {
     'node --require /tmp/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js /tmp/server.js',
     'node --eval "console.log(1)" /tmp/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js'
   ])('does not recognize a Pi entrypoint lookalike or argument: %s', (command) => {
+    expect(recognizeAgentProcessFromCommandLine(command)).toBeNull()
+  })
+
+  it("recognizes an older Claude Code's npm entrypoint, which a pnpm or yarn shim or npx runs", () => {
+    const windowsPath = String.raw`C:\Users\dev\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\cli.js`
+    for (const command of [
+      'node /Users/dev/Library/pnpm/global/5/node_modules/@anthropic-ai/claude-code/cli.js',
+      'node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js --resume abc',
+      `node.exe ${windowsPath}`
+    ]) {
+      expect(recognizeAgentProcessFromCommandLine(command)).toEqual({
+        agent: 'claude',
+        processName: 'claude'
+      })
+    }
+  })
+
+  it('leaves a print-mode run of that entrypoint unrecognized, as it does the native binary', () => {
+    expect(
+      recognizeAgentProcessFromCommandLine(
+        'node /usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js -p "summarize"'
+      )
+    ).toBeNull()
+  })
+
+  it.each([
+    'node /tmp/node_modules/@other/claude-code/cli.js',
+    'node /tmp/node_modules/@anthropic-ai/claude-code/dist/cli.js',
+    'node /tmp/server.js /tmp/node_modules/@anthropic-ai/claude-code/cli.js'
+  ])('does not recognize a Claude Code entrypoint lookalike or argument: %s', (command) => {
     expect(recognizeAgentProcessFromCommandLine(command)).toBeNull()
   })
 
@@ -614,6 +595,13 @@ describe('agent process recognition', () => {
   })
 
   it('does not recognize Muse headless exec runs as interactive agents', () => {
+    expect(recognizeAgentProcessFromCommandLine("muse 'exec'")).toBeNull()
+    for (const command of ['muse resume', 'muse -- resume', 'muse -- "exec the release notes"']) {
+      expect(recognizeAgentProcessFromCommandLine(command)).toEqual({
+        agent: 'muse',
+        processName: 'muse'
+      })
+    }
     expect(recognizeAgentProcessFromCommandLine('muse exec "summarize this diff"')).toBeNull()
     expect(
       recognizeAgentProcessFromCommandLine(

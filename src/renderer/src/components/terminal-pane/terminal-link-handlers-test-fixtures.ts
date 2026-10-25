@@ -1,7 +1,6 @@
 import { vi, type Mock } from 'vitest'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { Tab, TabGroup } from '../../../../shared/tab-types'
-import type { BrowserPage } from '../../../../shared/browser-workspace-types'
 
 export type TerminalLinkStoreSettings = {
   openLinksInApp?: boolean
@@ -36,17 +35,6 @@ export type TerminalLinkStoreState = {
     }[]
   >
   folderWorkspaces: []
-  repos: {
-    id: string
-    displayName: string
-    connectionId?: string | null
-    executionHostId?: ExecutionHostId
-  }[]
-  browserTabsByWorktree: Record<string, { id: string }[]>
-  browserPagesByWorkspace: Record<string, BrowserPage[]>
-  getKnownWorktreeById: (
-    id: string
-  ) => TerminalLinkStoreState['worktreesByRepo'][string][number] | undefined
 }
 
 export type TerminalLinkTestDoubles = {
@@ -117,18 +105,11 @@ export function createTerminalLinkTestDoubles(): TerminalLinkTestDoubles {
     setPendingEditorReveal: setPendingEditorRevealMock,
     setMarkdownViewMode: setMarkdownViewModeMock,
     activeFileIdByWorktree: {} as Record<string, string | null>,
-    openFiles: [] as { filePath: string; worktreeId: string }[],
+    openFiles: [],
     unifiedTabsByWorktree: {},
     groupsByWorktree: {},
     worktreesByRepo: {},
-    folderWorkspaces: [],
-    repos: [],
-    browserTabsByWorktree: {},
-    browserPagesByWorkspace: {},
-    getKnownWorktreeById: (id) =>
-      Object.values(storeState.worktreesByRepo)
-        .flat()
-        .find((worktree) => worktree.id === id)
+    folderWorkspaces: []
   }
 
   return {

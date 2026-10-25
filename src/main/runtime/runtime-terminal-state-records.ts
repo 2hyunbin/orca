@@ -61,18 +61,23 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   runtimeSessionOwned: boolean
   isWsl: boolean | null
   wslDistro: string | null
-  tabId: string | null
-  paneKey: string | null
+  /** Window-owned builds only (L80): read through paneOfPty; layout-owner records never carry it. */
+  tabId?: string | null
+  /** Window-owned builds only (L80): read through paneOfPty; layout-owner records never carry it. */
+  paneKey?: string | null
   /**
-   * `graphSequence` when `paneKey` was last written. A surface recorded since the last graph
-   * statement has not yet been offered one that could contradict it — see
-   * pty-recorded-surface-topology.ts.
+   * Window-owned builds only (L80). `graphSequence` when `paneKey` was last written. A surface
+   * recorded since the last graph statement has not yet been offered one that could contradict
+   * it — see pty-recorded-surface-topology.ts.
    */
-  surfaceRecordedAtGraphSequence: number
+  surfaceRecordedAtGraphSequence?: number
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null
   launchAgent: TuiAgent | null
+  /** The agent a runtime-spawned `--command` names even when flags keep it unmanaged; names the
+   *  pane before any foreground-process read lands. Null for adopted or restored panes. */
+  launchCommandAgent: TuiAgent | null
   agentSessionOwners: AgentSessionOwnerBinding[]
   /** Conversations the `incarnationId` execution reported; a later row can't hide them. In memory only. */
   cliConversations?: {
@@ -100,6 +105,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   } | null
   lastAgentStatusStartedAtEpochMs: number | null
   lastAgentStatusRichInvalidatedAtEpochMs: number | null
+  /** When a replacement process took over this PTY id; earlier hooks describe its predecessor. */
+  providerGenerationResetAtEpochMs?: number
   lastOscTitle: string | null
   lastOscTitleAt: number | null
   lastOscTitleEpochMs: number | null
@@ -112,6 +119,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   controllerTitle: string | null
   title: string | null
   titleUpdatedAt: number | null
+  /** Wall clock for the recorded title; absent on older or unobserved records. */
+  titleObservedAtEpochMs?: number | null
   /** The name a rename gave this terminal: display only, never title evidence (#20626). */
   manualTitle?: string | null
   lastOutputAt: number | null
