@@ -3,6 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const h = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, args: unknown) => unknown>(),
   updateForward: vi.fn(),
+  previous: {
+    id: 'pf-1',
+    connectionId: 't1',
+    localPort: 3000,
+    remoteHost: '127.0.0.1',
+    remotePort: 80
+  },
   persist: vi.fn(),
   broadcast: vi.fn()
 }))
@@ -17,7 +24,7 @@ vi.mock('./ssh-ipc-context', () => ({
   connectionManager: { getConnection: () => ({}) },
   getCurrentMainWindow: () => null,
   persistedStore: null,
-  portForwardManager: { updateForward: h.updateForward }
+  portForwardManager: { updateForward: h.updateForward, listForwards: () => [h.previous] }
 }))
 vi.mock('./ssh-port-forward-persistence', () => ({ persistPortForwards: h.persist }))
 vi.mock('./ssh-renderer-broadcast', () => ({
@@ -56,5 +63,11 @@ describe('ssh:updatePortForward', () => {
     h.updateForward.mockRejectedValue(new Error('port in use'))
     await expect(h.handlers.get('ssh:updatePortForward')!({}, edit)).rejects.toThrow('port in use')
     expect(h.persist).toHaveBeenCalledWith('t1')
+  })
+
+  it('drops only the edited-away forward from the saved list', async () => {
+    h.updateForward.mockResolvedValue({ ...h.previous, localPort: 3001 })
+    await h.handlers.get('ssh:updatePortForward')!({}, edit)
+    expect(h.persist).toHaveBeenCalledWith('t1', h.previous)
   })
 })

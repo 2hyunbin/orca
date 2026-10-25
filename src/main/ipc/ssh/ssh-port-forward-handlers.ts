@@ -61,6 +61,9 @@ export function registerSshPortForwardHandlers(): void {
       if (!conn) {
         throw new Error(`SSH connection "${args.targetId}" not found`)
       }
+      const previous = portForwardManager!
+        .listForwards(args.targetId)
+        .find((forward) => forward.id === args.id)
       try {
         const entry = await portForwardManager!.updateForward(
           args.id,
@@ -70,7 +73,7 @@ export function registerSshPortForwardHandlers(): void {
           args.remotePort,
           args.label
         )
-        persistPortForwards(entry.connectionId)
+        persistPortForwards(entry.connectionId, previous)
         broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
         return entry
       } catch (err) {
@@ -88,7 +91,7 @@ export function registerSshPortForwardHandlers(): void {
   ipcMain.handle('ssh:removePortForward', async (_event, args: { id: string }) => {
     const removed = await portForwardManager!.removeForwardAndWait(args.id)
     if (removed) {
-      persistPortForwards(removed.connectionId)
+      persistPortForwards(removed.connectionId, removed)
       broadcastPortForwards(getCurrentMainWindow, removed.connectionId)
     }
     return removed

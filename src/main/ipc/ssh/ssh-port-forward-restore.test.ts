@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PortForwardEntry, SavedPortForward } from '../../../shared/ssh-types'
 
 const h = vi.hoisted(() => {
-  const conn = { id: 'conn' }
+  const conn = { id: 'conn', generation: 1, getConnectGeneration: () => conn.generation }
   const saved: { portForwards?: SavedPortForward[] } = {}
   const active: PortForwardEntry[] = []
   return {
@@ -15,7 +15,7 @@ const h = vi.hoisted(() => {
         saved.portForwards = update.portForwards
       })
     },
-    connectionManager: { getConnection: vi.fn<() => { id: string } | undefined>(() => conn) },
+    connectionManager: { getConnection: vi.fn<() => typeof conn | undefined>(() => conn) },
     portForwardManager: {
       closeStaleForwards: vi.fn(async () => {}),
       listForwards: vi.fn(() => [...active]),
@@ -45,7 +45,12 @@ const h = vi.hoisted(() => {
         return index !== -1 ? active.splice(index, 1)[0] : null
       })
     },
-    hostServerStatus: vi.fn<() => { kind: 'managed'; environmentId: string } | undefined>(() => ({
+    hostServerStatus: vi.fn<
+      () =>
+        | { kind: 'managed'; environmentId: string }
+        | { kind: 'setting-up'; phase: 'deploying' }
+        | undefined
+    >(() => ({
       kind: 'managed',
       environmentId: 'env-1'
     })),
@@ -67,7 +72,7 @@ vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
   getSshHostServerStatus: h.hostServerStatus
 }))
 
-import { restorePortForwards } from './ssh-port-forward-persistence'
+import { persistPortForwards, restorePortForwards } from './ssh-port-forward-persistence'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
 
 const FORWARD = { localPort: 4100, remoteHost: '127.0.0.1', remotePort: 7860, label: 'app' }
@@ -77,6 +82,8 @@ describe('saved port forward restore', () => {
     vi.clearAllMocks()
     h.active.length = 0
     h.saved.portForwards = [{ ...FORWARD }]
+    // Each case starts on a transport no earlier case restored on.
+    h.conn.generation += 1
   })
 
   it('closes forwards bound to a replaced transport before re-adding the saved ones', async () => {
@@ -141,6 +148,52 @@ describe('saved port forward restore', () => {
     release()
     await Promise.all([first, second])
     expect(h.portForwardManager.closeStaleForwards).toHaveBeenCalledTimes(1)
+    h.hostServerStatus.mockReturnValue({ kind: 'managed', environmentId: 'env-1' })
+  })
+
+  // #32484: after a restart that restored nothing, re-adding one forward used to save only that one.
+  it('keeps unrestored saved forwards when the user adds or removes another', () => {
+    const other = { localPort: 4200, remoteHost: '127.0.0.1', remotePort: 7870, label: 'api' }
+    h.saved.portForwards = [{ ...FORWARD }, { ...other }]
+    const added = {
+      id: 'pf-1',
+      connectionId: 't1',
+      localPort: 4300,
+      remoteHost: 'db',
+      remotePort: 5432
+    }
+    h.active.push(added)
+    persistPortForwards('t1')
+    expect(h.saved.portForwards).toEqual([
+      { localPort: 4300, remoteHost: 'db', remotePort: 5432, label: undefined },
+      FORWARD,
+      other
+    ])
+    h.active.length = 0
+    persistPortForwards('t1', added)
+    expect(h.saved.portForwards).toEqual([FORWARD, other])
+    persistPortForwards('t1', FORWARD)
+    expect(h.saved.portForwards).toEqual([other])
+  })
+
+  it('restores once per transport, and again on a new one', async () => {
+    await restoreManagedHostPortForwards('t1')
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.closeStaleForwards).toHaveBeenCalledTimes(1)
+    h.conn.generation += 1
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.closeStaleForwards).toHaveBeenCalledTimes(2)
+  })
+
+  it('restores over a managed tunnel before any status lands, but never mid-setup', async () => {
+    h.hostServerStatus.mockReturnValue({ kind: 'setting-up', phase: 'deploying' })
+    await restoreManagedHostPortForwards('t1', { tunnelUp: true })
+    expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
+    h.hostServerStatus.mockReturnValue(undefined)
+    await restoreManagedHostPortForwards('t1')
+    expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
+    await restoreManagedHostPortForwards('t1', { tunnelUp: true })
+    expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
     h.hostServerStatus.mockReturnValue({ kind: 'managed', environmentId: 'env-1' })
   })
 })

@@ -152,7 +152,7 @@ describe('SSH IPC handlers', () => {
     { kind: 'managed', environmentId: 'env-test' } as const,
     { kind: 'relay', reason: 'orcad_unavailable', bridged: true } as const
   ])('restores saved forwards whenever a $kind status is published', async (status) => {
-    const conn = { id: 'conn-1' }
+    const conn = { id: 'conn-1', getConnectGeneration: () => 1 }
     mockSshStore.getTarget.mockReturnValue({
       ...target,
       portForwards: [{ localPort: 8080, remoteHost: '127.0.0.1', remotePort: 3000 }]
@@ -181,7 +181,10 @@ describe('SSH IPC handlers', () => {
       ...target,
       portForwards: [{ localPort: 8080, remoteHost: '127.0.0.1', remotePort: 3000 }]
     })
-    mockConnectionManager.getConnection.mockReturnValue({ id: 'conn-1' })
+    mockConnectionManager.getConnection.mockReturnValue({
+      id: 'conn-1',
+      getConnectGeneration: () => 1
+    })
     try {
       setSshHostServerStatus('ssh-1', { kind: 'setting-up', phase: 'deploying' })
       setSshHostServerStatus('ssh-1', { kind: 'relay', reason: 'orcad_unavailable' })

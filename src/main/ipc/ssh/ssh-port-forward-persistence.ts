@@ -4,31 +4,28 @@ import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
 
-function forwardKey(forward: SavedPortForward): string {
+function forwardKey(
+  forward: Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
+): string {
   return `${forward.localPort}:${forward.remoteHost}:${forward.remotePort}`
 }
 
-// User mutations persist the runtime list; failed restores are retained by the separate restore path.
-export function persistPortForwards(targetId: string): void {
-  const active = portForwardManager!.listForwards(targetId)
-  const saved: SavedPortForward[] = active.map((f) => ({
-    localPort: f.localPort,
-    remoteHost: f.remoteHost,
-    remotePort: f.remotePort,
-    label: f.label
-  }))
-  getSshTargetRegistryStore()!.updateTarget(targetId, {
-    portForwards: saved.length > 0 ? saved : undefined
-  })
-}
-
-// Keep failed restores saved so transient errors can retry on reconnect.
-export function persistPortForwardsWithUnrestored(targetId: string): void {
+/**
+ * Saves the live forwards plus every saved one not live, so a forward a restart left unrestored
+ * survives a later add or edit (#32484). `dropped` names the one forward the user removed or edited away.
+ */
+export function persistPortForwards(
+  targetId: string,
+  dropped?: Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
+): void {
   const active = portForwardManager!.listForwards(targetId)
   const activeKeys = new Set(active.map(forwardKey))
+  const droppedKey = dropped ? forwardKey(dropped) : null
 
   const existing = getSshTargetRegistryStore()!.getTarget(targetId)?.portForwards ?? []
-  const unrestored = existing.filter((pf) => !activeKeys.has(forwardKey(pf)))
+  const unrestored = existing.filter(
+    (pf) => !activeKeys.has(forwardKey(pf)) && forwardKey(pf) !== droppedKey
+  )
 
   const saved: SavedPortForward[] = [
     ...active.map((f) => ({
@@ -89,6 +86,6 @@ export async function restorePortForwards(
     }
   }
 
-  persistPortForwardsWithUnrestored(targetId)
+  persistPortForwards(targetId)
   broadcastPortForwards(getMainWindow, targetId)
 }

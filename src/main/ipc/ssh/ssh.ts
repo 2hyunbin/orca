@@ -48,7 +48,7 @@ import {
   setPortForwardManager
 } from './ssh-ipc-context'
 import { registerSshPortForwardHandlers } from './ssh-port-forward-handlers'
-import { persistPortForwardsWithUnrestored } from './ssh-port-forward-persistence'
+import { persistPortForwards } from './ssh-port-forward-persistence'
 import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
 import { setSshHostServedListener } from '../../ssh/ssh-host-server-status'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
@@ -127,7 +127,7 @@ export function registerSshHandlers(
           }`
         )
       }
-      persistPortForwardsWithUnrestored(entry.connectionId)
+      persistPortForwards(entry.connectionId)
       broadcastPortForwards(getCurrentMainWindow, entry.connectionId)
     }
   })
