@@ -57,7 +57,6 @@ function hostLostAfterListing(): void {
   })
 }
 
-/** Clicks and opted-in launches use the same bulk action over their selection. */
 const resumes = {
   click: () => continueNativeChatRestartOffer(['a', 'b']),
   launch: () => continueNativeChatRestartOffer(offered.map((candidate) => candidate.sessionId))
@@ -100,7 +99,6 @@ it('answers an opted-in launch that loses its resume request with one unconfirme
   expect(lastToastShow()).toBeDefined()
 })
 
-// The same toast and copy as a click: the chats it resumed ride along under the one it could not.
 it('answers a mixed opted-in launch with one toast', async () => {
   const failure = { ...offered[1]!, failedAt: 1, outcome: 'refused', reason: 'unknown' }
   let acted = false
@@ -127,7 +125,6 @@ it('answers a mixed opted-in launch with one toast', async () => {
   expect(lastToastShow()).toBeDefined()
 })
 
-// Between the listing and the request every chat moved on by itself: nothing happened to report.
 it('raises no toast when the host had nothing left for an opted-in launch to resume', async () => {
   rpc.mockImplementation(async (_target, method) =>
     method === 'agentSession.restartResumable'
@@ -139,7 +136,6 @@ it('raises no toast when the host had nothing left for an opted-in launch to res
   expect(toast).not.toHaveBeenCalled()
 })
 
-// A withdrawn failure cannot recreate attention, but the unseen run summary stays available.
 it('opens the retained summary from Show after the host withdraws a failure', async () => {
   let failed = [{ ...offered[0]!, failedAt: 1, outcome: 'unconfirmed', reason: 'unknown' }]
   rpc.mockImplementation(async (_target, method) =>

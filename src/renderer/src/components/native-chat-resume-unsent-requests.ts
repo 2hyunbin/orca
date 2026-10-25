@@ -21,8 +21,7 @@ export function createUnsentResumes() {
     sessionIds.forEach((sessionId) => unsentResumes.delete(sessionId))
   }
 
-  /** The host's answer with each unsent resume's chat moved from its offers to its failures. A chat
-   *  the host no longer offers drops its mark, so a host failure row is never shown beside it. */
+  /** Move locally unsent offers into failures; drop local marks when the host no longer offers the chat. */
   function withUnsentResumes<T extends HostAnswer>(answer: T): T {
     const offered = new Set(answer.candidates.map((candidate) => candidate.sessionId))
     for (const sessionId of unsentResumes.keys()) {

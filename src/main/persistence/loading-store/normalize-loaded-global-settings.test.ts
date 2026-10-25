@@ -10,7 +10,6 @@ import { applyAgentPermissionMode } from '../../../shared/tui-agent-permissions'
 import { resolveAgentPermission } from '../../../shared/tui-agent-permission-choice'
 import { resolveTuiAgentLaunchArgs } from '../../../shared/tui-agent-launch-defaults'
 
-// Simulates a profile created before the dedicated Experimental switch was persisted.
 function normalizeLegacyProfile(overrides: Record<string, unknown>): PersistedState['settings'] {
   const defaults = getDefaultPersistedState(homedir())
   const settings: Partial<GlobalSettings> = { ...defaults.settings }
@@ -23,6 +22,22 @@ function normalizeLegacyProfile(overrides: Record<string, unknown>): PersistedSt
   const profile = prepareLoadedProfileSettings(parsed, defaults, noop)
   return normalizeLoadedGlobalSettings(parsed, terminal, profile)
 }
+
+describe('chat worker error preference upgrade', () => {
+  it('defaults a truly missing saved key to on and preserves a saved opt-out', () => {
+    const parsed = getDefaultPersistedState(homedir())
+    delete parsed.settings.orchestrationChatErrorEscalationEnabled
+    const normalize = () =>
+      normalizeLoadedGlobalSettings(
+        parsed,
+        prepareLoadedTerminalSettings(parsed, () => {}),
+        prepareLoadedProfileSettings(parsed, getDefaultPersistedState(homedir()), () => {})
+      )
+    expect(normalize().orchestrationChatErrorEscalationEnabled).toBe(true)
+    parsed.settings.orchestrationChatErrorEscalationEnabled = false
+    expect(normalize().orchestrationChatErrorEscalationEnabled).toBe(false)
+  })
+})
 
 describe('retired setup placement', () => {
   it.each(['split-vertical', 'split-horizontal', 'new-tab', undefined])(
@@ -261,7 +276,6 @@ describe('the new-chat permission setting', () => {
     expect(normalized.nativeChatPermissionMode).toBe(expected)
   })
 
-  // Seeded once: after the next save the setting is the user's, not a mirror of Agent Permissions.
   it('keeps a saved value when Agent Permissions change afterwards', () => {
     const normalized = normalizeLegacyProfile({
       nativeChatPermissionMode: 'ask',
