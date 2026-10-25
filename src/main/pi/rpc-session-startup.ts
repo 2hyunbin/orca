@@ -24,7 +24,7 @@ import { decodePiHistoryClaim, encodePiHistoryClaim } from './rpc-history-journa
 
 export class PiRpcSessionStartup {
   commands?: AgentSessionSlashCommand[]
-  /** Set by an open that left its claim at Pi's current leaf. */
+  /** Continue capture only from a claim reconciled to Pi's current leaf. */
   historyAnchor?: PiHistoryAnchor
 
   constructor(
@@ -38,7 +38,6 @@ export class PiRpcSessionStartup {
     private readonly prepareObservation: () => (options: AgentSessionOptionsResult) => boolean
   ) {}
 
-  /** Ready once Pi reports its state: only an unknown provider fails the start. */
   async run(
     launch: PiRpcResolvedLaunch,
     signal: AbortSignal
@@ -57,7 +56,7 @@ export class PiRpcSessionStartup {
       Date.now()
     )
     this.setState(state)
-    // Only the conversation this open continues can carry the claim; a replacement starts over.
+    // Replacement sessions cannot inherit the prior conversation's history claim.
     const continued = launch.sessionFile !== undefined || launch.forkFile !== undefined
     const history = await this.wait(
       catchUpPiSession({

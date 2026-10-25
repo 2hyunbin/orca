@@ -101,14 +101,12 @@ describe('current model retention beside future launch defaults', () => {
   })
 
   it('never persists a typed model the authoritative list lacks', () => {
-    // `/model <retired>` is tracked for display, but adopting it as the persisted
-    // launch default would recreate the fatal `-m` retirement just cleared.
+    // Typed retired ids may display but must not recreate a fatal launch default.
     const { surface, persisted } = createGrokSurface({ initialModels: discoveredGrok5() })
 
     surface.recordOutgoingCommand('/model grok-4.5')
 
     expect(persisted().grok?.model).toBeUndefined()
-    // A typed id the list does carry still persists as before.
     surface.recordOutgoingCommand('/model grok-5')
     expect(persisted().grok?.model).toBe('grok-5')
   })

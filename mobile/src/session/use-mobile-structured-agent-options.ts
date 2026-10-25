@@ -1,4 +1,4 @@
-import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
+import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session/agent-session-conversation-command'
 import { useMobileStructuredOptionState } from './use-mobile-structured-option-state'
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { isAgentSessionHandleProvider } from '../../../src/shared/agent-session-provider-handle'
@@ -40,26 +40,23 @@ export function useMobileStructuredAgentOptions(args: {
   enabled: boolean
   fence: number | null
   mutate: StructuredAgentSessionMutate
-  /** Moves when the host's status says a session option changed; each move re-reads them. */
   optionStamp?: string
-  /** What the host advertised; null until its status probe answers. */
   hostSupport: Pick<
     StructuredAgentSessionHostSupport,
-    'permissionModes' | 'coherentModelCatalog'
+    'permissionModes' | 'permissionOwn' | 'coherentModelCatalog' | 'statusFeed'
   > | null
 }) {
   const { agent, client, enabled, fence, mutate, optionStamp, sessionId, hostSupport } = args
-  // Every agent's seed, as on the desktop: a built-in list or the provider-default pill.
   const optionCatalog = useMemo(
     () => (agent ? structuredAgentSessionSeedCatalog(agent) : null),
     [agent]
   )
-  // A chat this phone created runs the listed default, as a desktop chat its own view launched does.
   const createdHere = useMemo(
     () => (sessionId ? mobileCreatedStructuredSession(sessionId) : undefined),
     [sessionId]
   )
   const {
+    projectPermission,
     optionState,
     optionStateRef,
     activeOptionRecordRef,
@@ -76,6 +73,7 @@ export function useMobileStructuredAgentOptions(args: {
   } = useMobileStructuredOptionState({
     agent,
     enabled,
+    statusFeed: hostSupport?.statusFeed === true,
     fence,
     optionCatalog,
     sessionId,
@@ -99,7 +97,7 @@ export function useMobileStructuredAgentOptions(args: {
     receiveCatalog
   })
 
-  // A host predating per-chat modes (1.4.224 and older) states none: say what its chats run instead.
+  // Pre-1.4.225 hosts lack per-chat modes; show their actual global agent mode.
   const legacyHostPermissions =
     agent !== null &&
     agentChatPermissionModes(agent) !== null &&
@@ -117,16 +115,29 @@ export function useMobileStructuredAgentOptions(args: {
     interactionReadyRef.current = !awaitingOptions
     lockSnapshotRef.current = lockSnapshot
   })
-  const shown = lockSnapshot(structuredAgentSessionShownSnapshot(optionState))
+  const shown = lockSnapshot(
+    structuredAgentSessionShownSnapshot(
+      projectPermission({
+        ...optionState,
+        permissionOwnSupported: hostSupport ? hostSupport.permissionOwn === true : null
+      })
+    )
+  )
   const optionSnapshot = legacyHostPermissions
     ? [...shown, legacyHostPermissionDescriptor()]
     : shown
 
   const setStructuredOption = useCallback(
     async (id: string, value: SessionOptionValue): Promise<boolean> => {
-      const currentState = optionStateRef.current
+      const currentState = projectPermission({
+        ...optionStateRef.current,
+        permissionOwnSupported: hostSupport ? hostSupport.permissionOwn === true : null
+      })
       const encoded = encodeStructuredAgentSessionOptionValue(id, value)
       if (
+        (id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID &&
+          value === 'own' &&
+          !hostSupport?.permissionOwn) ||
         !isCurrentContext() ||
         pendingOptionRef.current !== null ||
         !client ||
@@ -150,7 +161,6 @@ export function useMobileStructuredAgentOptions(args: {
         isCurrentContext() &&
         activeOptionRecordRef.current === targetRecord &&
         optionMutationGeneration.current === mutationGeneration
-      // Record-only: shown at once, so the picker stays usable while the write waits behind a start.
       const shownAtOnce = id === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
       if (shownAtOnce) {
         updateOptionState((current) =>
@@ -162,7 +172,6 @@ export function useMobileStructuredAgentOptions(args: {
         pendingOptionRef.current = id
         updateOptionState((current) => ({ ...current, pendingId: id }))
       }
-      // A same-fence accepted write, or a shown one that failed, reads back what the host now holds.
       let readsBack = shownAtOnce
       try {
         const result = await mutate<AgentSessionOptionResult>(
@@ -180,9 +189,7 @@ export function useMobileStructuredAgentOptions(args: {
               ? commitStructuredAgentSessionOptionValues(current, committed)
               : current
           )
-          // Only an accepted pick: an `unknown` outcome commits optimistically to the
-          // visible record, and remembering one the provider refused would seed a
-          // launch the user never chose.
+          // Persist only accepted picks; uncertain optimism must not seed future launches with an option the provider may have refused.
           if (agent) {
             void persistMobileStructuredOptionPicks({
               client,
@@ -224,6 +231,8 @@ export function useMobileStructuredAgentOptions(args: {
     [
       agent,
       awaitingOptions,
+      hostSupport?.permissionOwn,
+      projectPermission,
       client,
       createdHere,
       mutate,
@@ -235,7 +244,6 @@ export function useMobileStructuredAgentOptions(args: {
     ]
   )
 
-  // Read, not rendered: what the chat holds when the send goes out.
   const sendSelection = useCallback(
     () => structuredAgentSessionSendSelection(optionStateRef.current),
     []
@@ -246,6 +254,7 @@ export function useMobileStructuredAgentOptions(args: {
       demandModelCatalog,
       setStructuredOption,
       optionStateRef,
+      projectPermission,
       lockSnapshot: (snapshot) => lockSnapshotRef.current(snapshot)
     })
 
@@ -253,7 +262,6 @@ export function useMobileStructuredAgentOptions(args: {
     optionPickerRequest,
     conversationCommands:
       conversationSupport?.sessionId === sessionId ? conversationSupport.commands : NO_COMMANDS,
-    /** The chat takes images, as its options report says; else only Claude and Codex, as before. */
     acceptsImages:
       (imageSupport?.sessionId === sessionId ? imageSupport.acceptsImages : undefined) ??
       (agent !== null && isAgentSessionHandleProvider(agent)),

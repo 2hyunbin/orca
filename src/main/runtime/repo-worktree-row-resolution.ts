@@ -47,20 +47,10 @@ type RepoWorktreeRowStore = Pick<
   | 'removeWorktreeLineage'
 >
 
-/**
- * Per-repo budget for one resolution pass. Why: mobile startup shares this path, so one slow repo
- * degrades its own metadata instead of blocking all session loading.
- *
- * Exported because the Git-admin fingerprint probe derives its own timeout by subtracting a fallback
- * allowance from this, and that invariant only holds with a single source of truth.
- */
+/** Bound each repo independently for mobile startup; fingerprint probes derive their smaller budget from this shared constant. */
 export const RESOLVED_WORKTREE_REPO_TIMEOUT_MS = 5000
 
-/**
- * One repo's resolved row. Builders emit it with the lineage fields empty; `projectResolvedWorktreeLineage`
- * fills them in. `lineage` is nullable rather than `null` so a projected row still types honestly —
- * intersecting a `null` literal would collapse the projected type back to "never has lineage".
- */
+/** Scans start without lineage; keep its type nullable so later projection can fill it. */
 export type RepoWorktreeRow = Worktree & {
   parentWorktreeId: string | null
   childWorktreeIds: string[]
@@ -79,10 +69,7 @@ export type RepoWorktreeRowDeps = {
   listFolderWorkspaces: (repo: Repo, repoOwnerCount: number) => Worktree[]
 }
 
-/**
- * Persisted rows for a repo whose scan is unreachable or stalled, so a degraded host publishes what
- * it last knew instead of an empty catalog. `worktrees:listDetected` does the same for disconnected SSH.
- */
+/** Publish last-known persisted rows on unreachable/stalled scans, matching disconnected SSH listing behavior. */
 export function listStoredWorktreeRowsForRepo(
   store: RepoWorktreeRowStore,
   repo: Repo,
@@ -97,7 +84,7 @@ export function listStoredWorktreeRowsForRepo(
     if (!parsed || parsed.repoId !== repo.id) {
       continue
     }
-    // Why: one repo id can be registered on several execution hosts, so a degraded host must not republish another host's rows (same gate as worktrees.ts).
+    // Same repo ids can belong to several hosts; degraded scans must not publish another owner's metadata.
     if (meta.hostId ? meta.hostId !== expectedHostId : repoOwnerCount > 1) {
       continue
     }
@@ -128,10 +115,7 @@ export async function scanRepoWorktreeRows(
   repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length
 ): Promise<RepoWorktreeRowsScan> {
   const { store } = deps
-  // Why the catch: `withTimeout` resolves its fallback on rejection too, so the rejection must be absorbed
-  // first for `null` to mean "timed out" only. A stall never reached a verdict, so restore persisted rows
-  // instead of publishing a healthy-looking empty catalog; a rejection is a real answer and keeps its
-  // shipped zero-row semantics.
+  // Absorb rejection before withTimeout: rejection preserves shipped empty results, but timeout restores last-known rows.
   const scan: RuntimeWorktreeScanResult = (await withTimeout<RuntimeWorktreeScanResult | null>(
     deps
       .scanRepo(repo, projectRuntimeByRepoId)
@@ -240,10 +224,7 @@ export async function resolveRepoWorktreeRows(
   return joinRepoWorktreeRows(deps, repo, scan, metaById, repoOwnerCount)
 }
 
-/**
- * Resolve one `<repoId>::<path>` id by scanning its owner and only lineage-related repos on that host.
- * Returns `null` on ambiguous ownership, so the caller can use its fleet fallback.
- */
+/** Resolve one id through its host owner and lineage repos; ambiguous ownership returns null for fleet fallback. */
 export async function resolveScopedWorktreeIdRow(
   deps: RepoWorktreeRowDeps,
   worktreeId: string,
@@ -261,8 +242,7 @@ export async function resolveScopedWorktreeIdRow(
         repo.id === parsed.repoId &&
         (requiredHostId === undefined || getRepoExecutionHostId(repo) === requiredHostId)
     )
-  // Why: one repo id can be registered on several execution hosts, and only the fleet scan decides
-  // between unqualified rows. A host qualifier narrows the same-id set without scanning other owners.
+  // Only fleet scans disambiguate multiple unqualified owners; scoped lookup must not guess.
   if (owners.length !== 1) {
     return null
   }
@@ -273,8 +253,7 @@ export async function resolveScopedWorktreeIdRow(
     store.getAllWorktreeMeta() ?? {},
     resolveLocalProjectRuntimesForRepos(store, [repo])
   )
-  // Why (#16243): the scan can spell this id's path differently — the divergence `path:` absorbs.
-  // One equivalent row may stand in; two is an ambiguity a scoped lookup must refuse, not guess.
+  // Accept one normalized equivalent id; multiple path matches remain ambiguous (#16243).
   const comparisonKey = worktreeIdentityKey(worktreeId)
   const exact = ownerRows.find((worktree) => worktree.id === worktreeId)
   const equivalent = ownerRows.filter(

@@ -20,8 +20,7 @@ export function replaceAgentSessionRecordOptions(
     : { ...record, permissionMode: replacement.permissionMode, updatedAt: replacement.now }
 }
 
-/** Saved catalog rows read before a write without starting discovery; none or an unlisted model
- *  is unknown evidence, which admits everything. */
+/** Saved catalog only; missing model evidence permits options without starting discovery. */
 export type AgentSessionAdmissionModels = readonly AgentSessionModelOption[] | undefined
 
 export type AgentSessionOptionPick = {
@@ -43,8 +42,7 @@ export function pickAgentSessionOption(
   })
 }
 
-/** What a turn ran on `model`, each value recorded only where the chat has none saved and only
- *  while the chat's model is that one, so a pick, even one made since, always wins. */
+/** Fill only missing options for the still-current model; explicit picks always win. */
 export type AgentSessionRanOptions = {
   sessionId: string
   fence: number
@@ -59,7 +57,7 @@ export function recordAgentSessionRanOptions(
   { model, options, models: _models, ...at }: AgentSessionRanOptions
 ): AgentSessionRecord {
   const saved = record.options ?? {}
-  // Another model won meanwhile: none of this run's options belong to it.
+  // These run options cannot follow a concurrent model change.
   if (saved.model !== undefined && saved.model !== model) {
     return record
   }

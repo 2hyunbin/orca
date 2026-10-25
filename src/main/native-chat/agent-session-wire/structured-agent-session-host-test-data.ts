@@ -1,3 +1,5 @@
+import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
+import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import type { AgentJournalSnapshot } from '../../../shared/agent-session-journal-types'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
@@ -78,4 +80,46 @@ export function hostTestDrawnRowIds(
   return projectNativeChatTranscriptMessages(
     projectStructuredAgentSessionMessages(snapshot.items, optimistic, snapshot.submissions)
   ).map(({ id }) => id)
+}
+
+export function hostTestSendParams(text: string, clientOperationId = hostTestOperationId()) {
+  const body = hostTestMessage(text)
+  return {
+    envelope: {
+      sessionId: HOST_TEST_SESSION,
+      clientOperationId,
+      expectedRuntimeFence: 1,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.send',
+        sessionId: HOST_TEST_SESSION,
+        fields: { body }
+      })
+    },
+    body
+  }
+}
+
+export function hostTestCancelParams() {
+  return {
+    envelope: {
+      sessionId: HOST_TEST_SESSION,
+      clientOperationId: hostTestOperationId(),
+      expectedRuntimeFence: null,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.cancel',
+        sessionId: HOST_TEST_SESSION,
+        fields: { turnId: 'turn-none' }
+      })
+    },
+    turnId: 'turn-none'
+  }
+}
+
+export async function hostTestSubmission(
+  host: Pick<StructuredAgentSessionHost, 'journalSnapshot'>,
+  id: string
+): Promise<AgentJournalSubmission | undefined> {
+  return (await host.journalSnapshot(HOST_TEST_SESSION)).submissions.find(
+    (entry) => entry.clientMessageId === id
+  )
 }

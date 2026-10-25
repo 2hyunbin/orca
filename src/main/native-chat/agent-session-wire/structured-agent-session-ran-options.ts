@@ -26,7 +26,7 @@ export type StructuredAgentSessionHandedOptions = {
 /** Per-child reports and a handed-over turn awaiting its first model evidence. */
 const childRuns = new WeakMap<
   StructuredAgentSessionProviderChild,
-  { reported?: RanOptions; owed?: StructuredAgentSessionHandedOptions }
+  { reported?: RanOptions; owed?: StructuredAgentSessionHandedOptions; permission?: string | null }
 >()
 
 function currentChild(context: RanOptionsContext, sessionId: string, fence: number) {
@@ -38,6 +38,28 @@ export function structuredAgentSessionChildRan(
   child: StructuredAgentSessionProviderChild
 ): RanOptions | undefined {
   return childRuns.get(child)?.reported
+}
+
+/** The current child's descriptive report; never a saved or applied permission. */
+export function structuredAgentSessionRuntimePermission(
+  child: StructuredAgentSessionProviderChild | undefined
+): { fence: number; mode: string | null } | null {
+  const mode = child && childRuns.get(child)?.permission
+  return child?.phase === 'ready' && mode !== undefined ? { fence: child.fence, mode } : null
+}
+
+export function noteStructuredAgentSessionRuntimePermission(
+  child: StructuredAgentSessionProviderChild,
+  reported: AgentSessionOptionsResult['current'],
+  initial = false
+): void {
+  const previous = childRuns.get(child)
+  if (
+    reported.reportedPermissionMode !== undefined &&
+    (!initial || previous?.permission === undefined)
+  ) {
+    childRuns.set(child, { ...previous, permission: reported.reportedPermissionMode })
+  }
 }
 
 function reportedRan(reported: AgentSessionOptionsResult['current']): RanOptions | null {
@@ -68,7 +90,7 @@ export async function noteStructuredAgentSessionReportedOptions(
     return
   }
   const runs = childRuns.get(child)
-  childRuns.set(child, { reported: ran })
+  childRuns.set(child, { ...runs, reported: ran })
   if (runs?.owed && ran.model) {
     const owed = runs.owed
     await recordStructuredAgentSessionRanOptions(context, sessionId, fence, {
@@ -131,7 +153,7 @@ export async function recordStructuredAgentSessionRanOptions(
   const model = executed
     ? (executed.model ?? message?.model ?? newerModel)
     : (message?.model ?? reported?.model)
-  childRuns.set(child, { ...(reported ? { reported } : {}), ...(model ? {} : { owed: handed }) })
+  childRuns.set(child, { ...childRuns.get(child), owed: model ? undefined : handed })
   if (!model) {
     return
   }

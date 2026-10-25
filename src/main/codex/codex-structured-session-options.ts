@@ -29,6 +29,7 @@ export function reportedCodexSessionOptions(
   const serviceTier = session.options.get('serviceTier')
   return {
     model,
+    reportedPermissionMode: session.reportedOptions.reportedPermissionMode,
     ...(effort ? { effort } : {}),
     ...(serviceTier ? { serviceTier } : {})
   }
@@ -49,7 +50,14 @@ function composeLiveCodexCatalog(
     },
     ...(serviceTier ? { reportedServiceTier: serviceTier, reportedServiceTierKnown: true } : {})
   })
-  return { ...catalog, fastModeSupport: listing.fastModeSupport }
+  return {
+    ...catalog,
+    current: {
+      ...catalog.current,
+      reportedPermissionMode: session.reportedOptions.reportedPermissionMode
+    },
+    fastModeSupport: listing.fastModeSupport
+  }
 }
 
 /** Current options compose only from the installed catalog and exact-child facts. */

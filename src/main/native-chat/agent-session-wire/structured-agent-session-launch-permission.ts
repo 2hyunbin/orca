@@ -8,7 +8,7 @@ import {
   chatPermissionModeNeedsModelSupport,
   effectiveChatPermissionMode,
   savedChatPermissionMode,
-  type AgentChatPermissionMode
+  type AgentChatPermissionChoice
 } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 
@@ -17,7 +17,7 @@ export function structuredAgentSessionPermissionFromCatalog(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents'>,
   record: AgentSessionRecord,
   listing: AgentSessionModelCatalogResult | null | undefined
-): AgentChatPermissionMode | null {
+): AgentChatPermissionChoice | null {
   const support = agentChatPermissionModes(record.provider)
   if (!support || !deps.agents.definition(record.provider)) {
     return null
@@ -34,7 +34,7 @@ export function structuredAgentSessionDisplayPermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents'>,
   record: AgentSessionRecord,
   listing: AgentSessionModelCatalogResult
-): AgentChatPermissionMode | null {
+): AgentChatPermissionChoice | null {
   const support = agentChatPermissionModes(record.provider)
   return listing.origin === 'unknown' && support && deps.agents.definition(record.provider)
     ? savedChatPermissionMode(support, record.permissionMode)
@@ -46,7 +46,7 @@ export async function structuredAgentSessionLaunchPermission(
   deps: Pick<StructuredAgentSessionHostDeps, 'agents' | 'modelCatalog'>,
   record: AgentSessionRecord,
   deadline?: number
-): Promise<AgentChatPermissionMode | null> {
+): Promise<AgentChatPermissionChoice | null> {
   const support = agentChatPermissionModes(record.provider)
   if (!support || !deps.agents.definition(record.provider)) {
     return null

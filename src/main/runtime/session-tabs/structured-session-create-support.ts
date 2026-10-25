@@ -19,6 +19,7 @@ import {
   resolveHostStructuredAgentLaunchEnvironment
 } from '../structured-agent-launch-support'
 import { structuredAgentRuntimeMetadata } from '../structured-agent-runtime-metadata'
+import { structuredAgentChatProgramNeedsInstall } from '../structured-agent-availability'
 import { structuredLaunchSeedOptions } from '../../../shared/native-chat-session-option-defaults'
 import { hasPersistedStructuredAgentSessionStore as hasPersistedStructuredAgentSessionStoreOnDisk } from '../structured-agent-session-runtime'
 import { ensureStructuredAgentSessionHostUnlessRefused } from '../structured-agent-session-host-refusal'
@@ -36,20 +37,29 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
   >
 
+  /** `requireInstalledChatProgram` is for launches with no chat tab to offer Orca's install. */
   async getStructuredAgentSessionCreateSupport(
     worktreeSelector: string,
-    agent: StructuredAgentId
-  ): Promise<{ supported: boolean; reason?: 'agent' | 'remote' | 'wsl' }> {
-    return resolveHostStructuredAgentCreateSupport({
+    agent: StructuredAgentId,
+    options?: { requireInstalledChatProgram?: boolean }
+  ): Promise<{ supported: boolean; reason?: 'agent' | 'remote' | 'wsl' | 'chat-program' }> {
+    const support = await resolveHostStructuredAgentCreateSupport({
       agent,
       worktreeSelector,
       location: await this.resolveStructuredAgentSessionLocation(worktreeSelector),
       runtime: this
     })
+    if (
+      support.supported &&
+      options?.requireInstalledChatProgram &&
+      (await structuredAgentChatProgramNeedsInstall(agent, this))
+    ) {
+      return { supported: false, reason: 'chat-program' }
+    }
+    return support
   }
 
-  /** The definition this runtime registers for `agent`: what its account home pins. Read from the
-   *  registration list, so neither create nor a catalog read installs the host to learn it. */
+  /** Use this runtime's registered definition to pin account home; reads/create must not install the host just to inspect it. */
   protected requireRegisteredStructuredAgent(agent: StructuredAgentId) {
     const definition = structuredAgentRuntimeMetadata(agent)?.definition
     if (!definition) {
@@ -60,8 +70,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     return definition
   }
 
-  /** The saved selection a new chat here starts with. createSupport reports it too, so a client's
-   *  picker shows what create will run; one resolver keeps the two from drifting. */
+  /** Share new-chat selection between create and createSupport so client pickers show what create will run. */
   structuredAgentSessionLaunchSeedOptions(
     agent: StructuredAgentId
   ): Record<string, string> | undefined {
@@ -81,8 +90,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
           selfSessionId: input.envelope.sessionId
         })
       } catch (ownerConflict) {
-        // A switch out of a live terminal refuses as such: the owning chat's first send would
-        // otherwise start a second writer.
+        // Refuse transfer from a live terminal or the chat's first send starts a second writer.
         await this.assertStructuredAdoptionTerminalWritersExited(
           input.agent,
           providerSessionId,
@@ -117,11 +125,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     return hostLaunchDirectory ? { ...resolved, hostLaunchDirectory } : resolved
   }
 
-  /**
-   * The account home a structured launch for this agent would pin right now,
-   * for reads that have no session record to answer from (the model catalog).
-   * Same resolver as the create intent above — never a second copy.
-   */
+  /** Resolve catalog account home through the same host create-intent resolver when no session record exists. */
   async resolveStructuredAgentAccountHome(
     agent: StructuredAgentId
   ): Promise<AgentSessionAccountHome> {
@@ -183,10 +187,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       ? (await this.resolveRuntimeFileTarget(input.worktree)).worktree.path
       : ''
     const selectedAccountHome = await resolveAccountHome({ launchEnv, location })
-    // Adopting pins the account home to wherever the conversation actually lives, which is not
-    // necessarily the one a fresh create would pick: Codex resolves its rollout under
-    // `accountHome.path`, and Claude reads its transcript under `<home>/projects`. Resuming under
-    // the wrong home finds nothing and lands the user in a blank chat wearing the old chat's name.
+    // Adoption pins the transcript's actual account home; fresh-create defaults may open a blank conversation under the old name.
     const adoption =
       resumeFrom && transcriptImport
         ? await resolveStructuredAgentSessionAdoptionForCreate({
@@ -238,8 +239,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     this.structuredAgentSessionTabRestorePromise ??=
       this.restoreStructuredAgentSessionTabsOnce().then(
         () => {
-          // Only a host's answer is final: without one, the next caller restores again, so a journal
-          // that opens later republishes the chats.
+          // Only host answers finalize restoration; without one, retry so journals opened later can publish.
           if (this.structuredAgentSessionInventoryUnverifiable) {
             this.structuredAgentSessionTabRestorePromise = null
           }
@@ -265,8 +265,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     if (!this.hasPersistedStructuredAgentSessionStore()) {
       return
     }
-    // Durable agent records must exist before daemon inventory can be reconciled against them.
-    // A refused host is no host: startup goes on, and only structured requests are refused.
+    // Load durable agent records before reconciling daemon inventory; refused hosts block only structured requests, not app startup.
     await ensureStructuredAgentSessionHostUnlessRefused(() =>
       this.ensureStructuredAgentSessionHost()
     )

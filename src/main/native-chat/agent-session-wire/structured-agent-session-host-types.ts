@@ -12,7 +12,7 @@ import type {
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
-import type { AgentSessionSpawnTokenScan } from '../../runtime/agent-session-spawn-token-process-scan'
+import type { AgentSessionSpawnTokenScan } from '../../runtime/agent-session/ownership/agent-session-spawn-token-process-scan'
 import type { JournalHostDatabase } from '../agent-session-journal/journal-host-database'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { DeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -30,7 +30,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionStartupLimits } from './structured-agent-session-startup-attempt-contract'
-import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 
 export type StructuredAgentSessionCaller = { callerKey: string }
 
@@ -70,8 +70,7 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   /** Immutable, memory-only opening send ID; distinguishes its restart from another start. */
   readonly startedFor?: string
   /** Launch-time permission mode, memory-only. */
-  readonly permissionMode?: AgentChatPermissionMode
-  /** The adapter's `heldSends` for this conversation, read at each decision. */
+  readonly permissionMode?: AgentChatPermissionChoice
   /** The launch source that may publish observations for this child. */
   readonly catalogSource?: AgentModelCatalogSource
   readonly heldSends?: () => ReadonlySet<string> | undefined
@@ -146,7 +145,10 @@ export type StructuredAgentSessionHostDeps = {
   hasOpenDispatch?: (record: AgentSessionRecord) => boolean
   /** Advisory tab-hidden notice; failures are logged. */
   onSessionTabHidden?: (sessionId: string) => void
-  /** Required to report failures that never reach the UI. */
+  /** Throws while a terminal may still write the record's head conversation; run before a spawn. */
+  assertNoTerminalWriter?: (record: AgentSessionRecord) => Promise<void>
+  /** Where every failure the host carries on past is reported. Required: a host without one would
+   *  drop exactly the failures nobody sees in the UI. */
   logger: StructuredAgentSessionLogger
   onRequestFailure?: (failure: StructuredAgentSessionRequestFailure) => void
   /** replay distinguishes restored/projected state from fresh journal events. */

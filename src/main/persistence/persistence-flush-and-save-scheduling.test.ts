@@ -18,6 +18,8 @@ import {
 } from './persistence-test-harness'
 import { makeTerminalTab, TEST_LEAF_1, TEST_LEAF_2 } from './persistence-session-fixtures'
 
+import { ProfileStateSqliteAuthority } from './profile-state/profile-state-sqlite-authority'
+
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { _resetTracerForTests, setActiveSink } from '../observability/tracer'
@@ -61,6 +63,19 @@ vi.mock('../telemetry/client', () => ({
 vi.mock('../telemetry/cohort-classifier', () => ({
   getCohortAtEmit: getCohortAtEmitMock
 }))
+
+function persistedRevision(): number {
+  const reader = new ProfileStateSqliteAuthority(
+    join(testState.dir, 'profile-state.db'),
+    'persistence-test'
+  )
+  try {
+    reader.readSerializedState()
+    return reader.revision
+  } finally {
+    reader.close()
+  }
+}
 
 describe('Store', () => {
   beforeEach(() => {
@@ -150,6 +165,7 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000)
       await store.waitForPendingWrite()
       const stateBefore = readPersistedStateJson(dataFile())
+      const revisionBefore = persistedRevision()
 
       store.updateUI({ sidebarWidth: 500 })
       store.updateUI({ sidebarWidth: 400 })
@@ -157,6 +173,7 @@ describe('Store', () => {
       await store.waitForPendingWrite()
 
       expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+      expect(persistedRevision()).toBe(revisionBefore)
     } finally {
       vi.useRealTimers()
     }
@@ -170,10 +187,12 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000)
       await store.waitForPendingWrite()
       const stateBefore = readPersistedStateJson(dataFile())
+      const revisionBefore = persistedRevision()
 
       store.flush()
 
       expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+      expect(persistedRevision()).toBe(revisionBefore)
     } finally {
       vi.useRealTimers()
     }
@@ -236,10 +255,12 @@ describe('Store', () => {
     }
     await store.persistPtyBinding(binding)
     const stateBefore = readPersistedStateJson(dataFile())
+    const revisionBefore = persistedRevision()
 
     await store.persistPtyBinding(binding)
 
     expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+    expect(persistedRevision()).toBe(revisionBefore)
   })
 
   it('garbage-collects stale local worktreeMeta at load with a 30-day grace', async () => {
@@ -336,6 +357,7 @@ describe('Store', () => {
       vi.advanceTimersByTime(1000)
       await store.waitForPendingWrite()
       const stateBefore = readPersistedStateJson(dataFile())
+      const revisionBefore = persistedRevision()
       expect((readDataFile() as { githubCache?: unknown }).githubCache).toBeUndefined()
 
       store.setGitHubCache({ pr: { 'o/r#1': { fetchedAt: 123 } as never }, issue: {} })
@@ -343,6 +365,7 @@ describe('Store', () => {
       await store.waitForPendingWrite()
 
       expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+      expect(persistedRevision()).toBe(revisionBefore)
     } finally {
       vi.useRealTimers()
     }
@@ -441,6 +464,7 @@ describe('Store', () => {
         store.setWorkspaceSession(boundSession(), hostId)
         expect(await store.persistPtyBinding(binding, hostId)).toBe(true)
         const stateBefore = readPersistedStateJson(dataFile())
+        const revisionBefore = persistedRevision()
         const durableGenerationBefore = runtimeCounters(store).lastDurableWriteGeneration
         const cloneSpy = vi.spyOn(globalThis, 'structuredClone')
 
@@ -449,6 +473,7 @@ describe('Store', () => {
         expect(runtimeCounters(store).lastDurableWriteGeneration).toBe(durableGenerationBefore)
         expect(cloneSpy).not.toHaveBeenCalled()
         expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+        expect(persistedRevision()).toBe(revisionBefore)
       }
     )
 
@@ -480,6 +505,7 @@ describe('Store', () => {
       store.setWorkspaceSession(boundSession())
       await store.persistPtyBinding(binding)
       const stateBefore = readPersistedStateJson(dataFile())
+      const revisionBefore = persistedRevision()
       // Advance the write generation without changing binding content.
       store.setWorkspaceSession({ ...store.getWorkspaceSession() })
       const durableGenerationBefore = runtimeCounters(store).lastDurableWriteGeneration
@@ -489,6 +515,7 @@ describe('Store', () => {
         durableGenerationBefore
       )
       expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+      expect(persistedRevision()).toBe(revisionBefore)
 
       // Hash-matched flushes must advance durability or the next identical bind would flush again.
       expect(await store.persistPtyBinding(binding)).toBe(true)
@@ -739,12 +766,14 @@ describe('Store', () => {
       store.addRepo(makeRepo())
       store.flushOrThrow()
       const stateBefore = readPersistedStateJson(dataFile())
+      const revisionBefore = persistedRevision()
       const after = runtimeCounters(store)
       expect(after.lastDurableWriteGeneration).toBe(after.writeGeneration)
 
       store.flushOrThrow()
 
       expect(readPersistedStateJson(dataFile())).toBe(stateBefore)
+      expect(persistedRevision()).toBe(revisionBefore)
       const counters = runtimeCounters(store)
       expect(counters.writeGeneration).toBe(after.writeGeneration + 1)
       expect(counters.lastDurableWriteGeneration).toBe(counters.writeGeneration)

@@ -173,7 +173,10 @@ export async function readStructuredAgentSessionOptions(
       confirmed,
       ...(options.current.fastModeState ? { fastModeState: options.current.fastModeState } : {}),
       ...(confirmed?.length ? { confirmed } : {}),
-      ...(permissionMode ? { permissionMode } : {})
+      ...(permissionMode ? { permissionMode } : {}),
+      ...(live && options.current.reportedPermissionMode !== undefined
+        ? { reportedPermissionMode: options.current.reportedPermissionMode }
+        : { reportedPermissionMode: undefined })
     },
     rewind:
       phase === 'prepared' || phase === 'provider-succeeded'

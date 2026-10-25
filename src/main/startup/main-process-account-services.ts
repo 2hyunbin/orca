@@ -62,8 +62,7 @@ export function initializeMainProcessAccountServices(): void {
   state.claudeRuntimeAuth = services.claudeRuntimeAuth
   state.claudeAccounts = services.claudeAccounts
   void startCodexStateDbBackfillRecoveryInBackground(getOrcaManagedCodexHomePath())
-  // Why: migrate historical shared-home sessions after startup; compatibility
-  // launches re-arm the non-destructive pass for new rollouts (#4444, #8612, #12480).
+  // Defer shared-home migration; compatibility launches re-arm non-destructive scans for new rollouts (#4444, #8612, #12480).
   state.codexSessionMigration.scheduleInitialRun()
   store.onSettingsChanged((updates) => {
     // An account switch would otherwise leave the next chat's picker on a cold catalog.

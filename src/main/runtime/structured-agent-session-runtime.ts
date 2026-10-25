@@ -1,17 +1,6 @@
-// Where the structured agent-session wire becomes a live host on this runtime.
-//
-// Built on the first `agentSession.*` call rather than at startup: the record
-// store and the journal live under the profile's user-data path, which is not
-// final until Electron is ready, and a runtime that never serves a structured
-// session should not pay for a store it will never read. The slot the RPC layer
-// reads is module-level for the same reason the registry is — the runtime
-// service is already far past its size budget.
-//
-// A process whose journal will not open installs none and answers every
-// structured request with the refusal that says why.
+// Install lazily after Electron finalizes the profile path; runtimes without structured requests need no store. Journal-open failures install a refusal.
 
 import { bindAtRestCommandContexts } from '../native-chat/agent-session-wire/at-rest-command-context'
-import { existsSync } from 'node:fs'
 import type { AgentSessionResumeTrigger } from '../../shared/agent-session-resume-marker'
 import {
   structuredAgentSessionTeardownTrigger,
@@ -32,8 +21,6 @@ import {
   releaseAgentSessionRecordStore,
   type OpenedAgentSessionRecordStore
 } from './agent-session-record-store-slot'
-import { journalDatabasePath } from '../native-chat/agent-session-journal/journal-host-database'
-import { journalDatabaseHoldsAgentSessions } from '../native-chat/agent-session-journal/journal-database'
 import {
   createStructuredAgentSessionOwnerProbe,
   createStructuredAgentSessionOwnerProbes
@@ -51,46 +38,23 @@ import { modelCatalogHostDeps } from './structured-agent-model-catalog-wiring'
 import { migrateLegacyNativeChatVisualsFolders } from '../native-chat/native-chat-scratch-folder-migration'
 import { scheduleNativeChatVisualsSweep } from '../native-chat/native-chat-visuals-sweep'
 
-/** Whether this profile holds a structured chat: a record or tab in the journal database. */
-export function hasPersistedStructuredAgentSessionStore(
-  stateDirectory: string,
-  fileExists: (path: string) => boolean = existsSync
-): boolean {
-  const databasePath = journalDatabasePath(stateDirectory)
-  if (!fileExists(databasePath)) {
-    return false
-  }
-  try {
-    return journalDatabaseHoldsAgentSessions(databasePath)
-  } catch {
-    // A database that cannot be read cannot say it is empty.
-    return true
-  }
-}
+export { hasPersistedStructuredAgentSessionStore } from './agent-session-record-store-slot'
 
 export type { StructuredAgentSessionRuntimeDeps } from './structured-agent-session-runtime-contract'
 import type { StructuredAgentSessionRuntimeDeps } from './structured-agent-session-runtime-contract'
 
 let installing: Promise<InstalledRuntime> | null = null
 
-/** Thrown when the host is installed without a Claude auth policy resolver. */
 export const CLAUDE_STRUCTURED_AUTH_POLICY_REQUIRED =
   'structured agent-session host requires a Claude auth policy resolver'
 
 export const STRUCTURED_AGENT_LAUNCH_ARGS_REQUIRED =
   'structured agent-session host requires a launch arguments resolver'
 
-/** Thrown when the host is installed without a logger: every failure it carries on past would
- *  otherwise reach nobody. */
 export const STRUCTURED_AGENT_SESSION_LOGGER_REQUIRED =
   'structured agent-session host requires a logger'
 
-/**
- * Runtimes whose teardown did not finish. `installing` is cleared regardless so
- * nothing new attaches, but dropping the runtime as well would strand every
- * conversation the host kept indexed for a retry — and the journal connection,
- * which closes only once they are settled — so a later stop retries them here.
- */
+/** Keep failed teardowns after clearing the install slot so later stops retry their indexed conversations and journal connection. */
 const pendingTeardown = new Set<InstalledRuntime>()
 
 export function ensureStructuredAgentSessionHost(
@@ -104,23 +68,13 @@ export function ensureStructuredAgentSessionHost(
   return installing.then((installed) => installed.host)
 }
 
-/** Resolves once every provider exit observed so far has been published by its
- *  adapter and reconciled by the host. Nothing is installed, nothing to wait on.
- *
- *  This is the only handle onto that barrier: reconciliation is driven by exit
- *  callbacks, so a caller that needs the settled lease — rather than the one the
- *  exit is still being reconciled out of — has no other way to know it landed. */
+/** Wait until observed exits publish and host reconciliation settles; callbacks alone cannot tell callers when lease updates land. */
 export async function waitForStructuredAgentSessionRecovery(): Promise<void> {
   const installed = await installing?.catch(() => null)
   await installed?.waitForRecovery()
 }
 
-/** Drops the host and reaps every Codex child under it. Runtime teardown and
- *  test isolation take the same path, so neither can leave a live app-server.
- *
- *  A teardown that fails is RETRIED by the next stop rather than forgotten: the
- *  host keeps every conversation it could not settle, and this is the only handle
- *  onto that host once the module slot is cleared. */
+/** Stop every provider child; retain failed teardowns for retry after the install slot clears. */
 export async function stopStructuredAgentSessionRuntime(options?: {
   trigger?: AgentSessionResumeTrigger
 }): Promise<void> {
@@ -252,6 +206,7 @@ async function installOnJournal(
     ...(deps.hasOpenDispatch ? { hasOpenDispatch: deps.hasOpenDispatch } : {}),
     ...(deps.startupLimits ? { startupLimits: deps.startupLimits } : {}),
     ...(deps.onSessionTabHidden ? { onSessionTabHidden: deps.onSessionTabHidden } : {}),
+    ...(deps.assertNoTerminalWriter ? { assertNoTerminalWriter: deps.assertNoTerminalWriter } : {}),
     ...(await modelCatalogHostDeps({
       store,
       agents,
@@ -263,7 +218,6 @@ async function installOnJournal(
   if (deps.attentionDelivery) {
     const installed = host
     const delivery = deps.attentionDelivery
-    // Lives exactly as long as the host: teardown drops the host and its subscribers together.
     installed.subscribeTurnCompletions({
       id: 'host-attention-delivery',
       includePrompts: true,
@@ -278,7 +232,7 @@ async function installOnJournal(
       onState: delivery.reconcile
     })
   }
-  // The host starts with its runtime, local or remote, so this is the runtime-start listing.
+  // Prewarm catalogs at runtime start for local and remote hosts.
   const modelCatalog = host.deps.modelCatalog
   void modelCatalog?.prewarm()
   installAgentSessionAttachments({

@@ -60,7 +60,6 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
     handler: async ({ target, accountId }) =>
       getAntigravityAccountService(target).removeAccount(accountId)
   }),
-  // The sign-in runs on this execution host, whichever client asks, as its chats do.
   defineMethod({
     name: 'accounts.antigravityChatSignInStart',
     permission: 'accounts-admin',
@@ -68,7 +67,6 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
     handler: async (_, ctx) =>
       startAntigravityChatSignIn(chatSignInHost(ctx.runtime), signInOwner(ctx))
   }),
-  // A full snapshot on subscribe, then one per revision, until the transport closes.
   defineStreamingMethod({
     name: 'accounts.antigravityChatSignInSubscribe',
     permission: 'accounts-admin',
@@ -93,7 +91,6 @@ export const ANTIGRAVITY_ACCOUNT_METHODS = [
     params: AntigravityChatSignInFlowParams,
     handler: async ({ flowId }, ctx) => cancelAntigravityChatSignIn(signInOwner(ctx), flowId)
   }),
-  // The address a browser on another computer ended on, sent to the listener on this host.
   defineMethod({
     name: 'accounts.antigravityChatSignInComplete',
     permission: 'accounts-admin',
