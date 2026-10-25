@@ -11,6 +11,8 @@ import { isUnresolvedSshHostAlias } from '../shared/git-remote-host-alias'
 import { getProjectProviderIdentity } from '../shared/project-host-setup-projection'
 import { getStoredRepoExecutionHostId } from './repo-execution-host'
 import { probeGitRemoteIdentity } from './repo-git-remote-identity'
+import { getWorktreeCreatePrefetchGitOptions } from './project-runtime-git-options'
+import type { ProjectRuntimeResolutionStore } from './local-project-runtime-resolution'
 import { isWslMoveRepoBlocked } from './persistence/moving-wsl-projects/wsl-move-background-backoff'
 
 const NO_IDENTITY_RETRY_TTL_MS = 5 * 60 * 1000
@@ -21,7 +23,7 @@ const RESOLVED_IDENTITY_REFRESH_STARTUP_DELAY_MS = 5 * 60 * 1000
 // Bound speculative probes so large repo lists do not stall a sweep.
 const MAX_IDENTITY_REFRESHES_PER_SWEEP = 4
 
-type RepoIdentityStore = {
+type RepoIdentityStore = ProjectRuntimeResolutionStore & {
   getRepos(): Repo[]
   getRepo?(id: string, hostId?: ExecutionHostId): Repo | undefined
   updateRepo(
@@ -160,7 +162,9 @@ async function enrichRepoGitRemoteIdentity(store: RepoIdentityStore, repo: Repo)
   const controller = new AbortController()
   const promise = (async () => {
     const result = await probeGitRemoteIdentity(repo.path, hostId, {
-      signal: controller.signal
+      signal: controller.signal,
+      // A local project's runtime may run its Git in a distro, whatever its path.
+      ...getWorktreeCreatePrefetchGitOptions(store, repo)
     })
     // Aborted probes resolve as unavailable; prevent retired probes from re-seeding deadlines.
     if (controller.signal.aborted) {
