@@ -5,10 +5,7 @@ import type { CreatePrIntentRunToken } from './create-pr-intent-flow'
 import type { SourceControlOperationTarget } from '../listing/operation-target'
 import type { SourceControlWorktreeOperationState } from '../panel/use-worktree-operation-state'
 
-/**
- * Tracks what the user is currently looking at so an in-flight Create PR run can tell whether the
- * panel has since moved on, and pins each of the run's git calls to the host it started from.
- */
+/** Track foreground ownership and pin in-flight Git calls to their original host. */
 export function useSourceControlCreatePrIntentTarget({
   activeRepoId,
   activeWorktreeId,
