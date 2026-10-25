@@ -3,9 +3,79 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OPENCODE_AGENT_ROW_GRACE_MS } from '../../shared/opencode-agent-row-scanner'
 import {
+  deliverStartupFollowupPrompt,
   waitForWorktreeStartupDraft,
   type WorktreeStartupReadinessHost
 } from './runtime-worktree-startup-readiness'
+
+describe('startup follow-up prompt', () => {
+  afterEach(() => vi.useRealTimers())
+
+  function fixture(foreground: string, hostProvesAgent: boolean) {
+    const write = vi.fn()
+    const host: WorktreeStartupReadinessHost = {
+      getPtyId: () => 'pty-1',
+      getForegroundProcess: async () => foreground,
+      hasChildProcesses: async () => false,
+      subscribeToData: () => () => {},
+      readRecentOutput: () => undefined,
+      write
+    }
+    const sendTerminalAgentPrompt = vi.fn(async (handle: string) => ({
+      handle,
+      accepted: true,
+      bytesWritten: 12
+    }))
+    const waitForFreshWorkerComposer = vi.fn(async () => ({ satisfied: true, status: 'running' }))
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: delivery reaches only these runtime methods; any other would throw.
+    const runtime = {
+      waitForFreshWorkerComposer,
+      waitForTerminal: vi.fn(async () => ({ satisfied: true, status: 'idle' })),
+      sendTerminalAgentPrompt,
+      readLaunchedAgentForeground: vi.fn(async () => 'agent'),
+      subscribeToTerminalData: vi.fn(() => () => {}),
+      launchedAgentHostProvesAgent: vi.fn(() => hostProvesAgent),
+      launchedAgentHostProvesShellAlone: vi.fn(() => !hostProvesAgent)
+    } as unknown as Parameters<typeof deliverStartupFollowupPrompt>[0]
+    return { host, write, runtime, sendTerminalAgentPrompt, waitForFreshWorkerComposer }
+  }
+
+  // Kimi is in front before its TUI reads input; text typed then is echoed and lost (#10336).
+  it('pastes and submits through composer readiness, never typing raw input', async () => {
+    const f = fixture('kimi', true)
+
+    await expect(
+      deliverStartupFollowupPrompt(f.runtime, f.host, 'term-1', {
+        agent: 'kimi',
+        prompt: 'fix the flaky test'
+      })
+    ).resolves.toBe(true)
+    expect(f.waitForFreshWorkerComposer).toHaveBeenCalled()
+    expect(f.sendTerminalAgentPrompt).toHaveBeenCalledWith(
+      'term-1',
+      'fix the flaky test',
+      expect.objectContaining({ inputKind: 'launch', composerReady: true })
+    )
+    expect(f.write).not.toHaveBeenCalled()
+  })
+
+  it('writes nothing on a Windows host while the shell stays in front', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const f = fixture('pwsh', false)
+
+    const delivered = deliverStartupFollowupPrompt(f.runtime, f.host, 'term-1', {
+      agent: 'kimi',
+      prompt: 'fix the flaky test'
+    })
+    await vi.advanceTimersByTimeAsync(30 * 150)
+
+    await expect(delivered).resolves.toBe(false)
+    expect(f.sendTerminalAgentPrompt).not.toHaveBeenCalled()
+    expect(f.write).not.toHaveBeenCalled()
+    warn.mockRestore()
+  })
+})
 
 describe('fresh worker composer readiness', () => {
   afterEach(() => vi.useRealTimers())

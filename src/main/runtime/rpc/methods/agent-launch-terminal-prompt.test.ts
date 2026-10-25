@@ -1,11 +1,7 @@
 /** A closed composer proves no write; stalled submission proves text was written despite unobserved progress. Receipts must distinguish them to avoid duplicate turns. */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import {
-  deliverStartupFollowupPrompt,
-  deliverTerminalAgentLaunchPrompt
-} from './agent-launch-terminal-prompt'
-import type { WorktreeStartupReadinessHost } from '../../runtime-worktree-startup-readiness'
+import { deliverTerminalAgentLaunchPrompt } from './agent-launch-terminal-prompt'
 import { AGENT_PROMPT_STALLED_ERROR } from '../../agent-prompt-submission-verification'
 
 type SendResult = { handle: string; accepted: boolean; bytesWritten: number }
@@ -27,6 +23,8 @@ function runtimeStub(overrides: {
   foreground?: 'agent' | 'shell' | 'unknown'
   /** False on a host that cannot find the agent in front (Windows); default: it can. */
   hostProvesAgent?: boolean
+  /** True on a local non-WSL Windows pane, whose lone shell is provable; default: not. */
+  hostProvesShellAlone?: boolean
 }) {
   const queued = [...(overrides.waits ?? [])]
   const waitForTerminal = vi.fn(
@@ -42,6 +40,7 @@ function runtimeStub(overrides: {
   const readLaunchedAgentForeground = vi.fn(async () => overrides.foreground ?? 'agent')
   const subscribeToTerminalData = vi.fn(() => () => {})
   const launchedAgentHostProvesAgent = vi.fn(() => overrides.hostProvesAgent ?? true)
+  const launchedAgentHostProvesShellAlone = vi.fn(() => overrides.hostProvesShellAlone ?? false)
   const sendTerminalAgentPrompt = vi.fn<SendFn>(
     overrides.send ?? (async () => ({ handle: 'term_1', accepted: true, bytesWritten: 12 }))
   )
@@ -57,7 +56,8 @@ function runtimeStub(overrides: {
       sendTerminalAgentPrompt,
       readLaunchedAgentForeground,
       subscribeToTerminalData,
-      launchedAgentHostProvesAgent
+      launchedAgentHostProvesAgent,
+      launchedAgentHostProvesShellAlone
     } as unknown as Parameters<typeof deliverTerminalAgentLaunchPrompt>[0]['runtime']
   }
 }
@@ -426,6 +426,40 @@ describe('writing a launch prompt into a terminal agent', () => {
   })
 })
 
+// WSL's wsl.exe and SSH-to-Windows read as unknown even when a shell is alone, so only local Windows may write on unknown.
+describe('write-if-shell-provable', () => {
+  it.each([
+    ['writes on a local Windows pane whose lone shell is provable', 'unknown', true, true],
+    ['refuses a shell proven alone', 'shell', true, false],
+    ['refuses an unknown WSL or SSH-to-Windows pane', 'unknown', false, false]
+  ] as const)('%s', async (_label, foreground, hostProvesShellAlone, expected) => {
+    const stub = runtimeStub({
+      composerSignal: true,
+      foreground,
+      hostProvesAgent: false,
+      hostProvesShellAlone
+    })
+    stub.sendTerminalAgentPrompt.mockImplementation(async (handle, _text, options) => {
+      const { beforeWrite } = options
+      if (typeof beforeWrite === 'function') {
+        await beforeWrite('pty-1')
+      }
+      return { handle, accepted: true, bytesWritten: 12 }
+    })
+
+    await expect(
+      deliverTerminalAgentLaunchPrompt({
+        runtime: stub.runtime,
+        handle: 'term_1',
+        agent: 'kimi',
+        freshLaunch: true,
+        text: 'fix the flaky test',
+        unprovableHost: 'write-if-shell-provable'
+      })
+    ).resolves.toBe(expected)
+  })
+})
+
 describe('cancelling a launch prompt', () => {
   it('pastes nothing when cancelled during the readiness wait, and forwards the signal', async () => {
     const controller = new AbortController()
@@ -558,42 +592,3 @@ function fakeClock() {
     }
   }
 }
-
-describe('a startup follow-up prompt', () => {
-  function readinessHost() {
-    const write = vi.fn()
-    const host: WorktreeStartupReadinessHost = {
-      getPtyId: () => 'pty-1',
-      getForegroundProcess: async () => 'kimi',
-      subscribeToData: () => () => {},
-      readRecentOutput: () => undefined,
-      write
-    }
-    return { host, write }
-  }
-
-  // Kimi is in front before its TUI reads input; text typed then is echoed and lost (#10336).
-  it('pastes and submits through composer readiness once the agent is in front', async () => {
-    const stub = runtimeStub({ composerSignal: true })
-    const { host, write } = readinessHost()
-
-    await expect(
-      deliverStartupFollowupPrompt(stub.runtime, host, 'term_1', {
-        agent: 'kimi',
-        prompt: 'fix the flaky test'
-      })
-    ).resolves.toBe(true)
-    expect(stub.waitForFreshWorkerComposer).toHaveBeenCalledWith(
-      'term_1',
-      'kimi',
-      expect.any(Number),
-      expect.objectContaining({ requireComposerMarker: false })
-    )
-    expect(stub.sendTerminalAgentPrompt).toHaveBeenCalledWith(
-      'term_1',
-      'fix the flaky test',
-      expect.objectContaining({ inputKind: 'launch', composerReady: true })
-    )
-    expect(write).not.toHaveBeenCalled()
-  })
-})

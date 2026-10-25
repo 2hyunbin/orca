@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
+  mockInspectRuntimeTerminalProcess,
   mockPasteDraftToAgentPtyWhenReady,
   mockShowAutomationPromptNotSentToast,
   mockTrack,
@@ -8,6 +9,7 @@ const {
   storeListeners,
   startupLeafId
 } = vi.hoisted(() => ({
+  mockInspectRuntimeTerminalProcess: vi.fn(),
   mockPasteDraftToAgentPtyWhenReady: vi.fn(),
   mockShowAutomationPromptNotSentToast: vi.fn(),
   mockTrack: vi.fn(),
@@ -66,6 +68,10 @@ vi.mock('@/store', () => ({
       }
     }
   }
+}))
+
+vi.mock('@/runtime/runtime-terminal-inspection', () => ({
+  inspectRuntimeTerminalProcess: mockInspectRuntimeTerminalProcess
 }))
 
 vi.mock('@/lib/agent-paste-draft', () => ({
@@ -262,6 +268,10 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
         identity: { tabId: 'tab-1', leafId: startupLeafId, launchToken: 'launch-token-1' }
       }
     }
+    mockInspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'aider',
+      hasChildProcesses: true
+    })
     mockPasteDraftToAgentPtyWhenReady.mockResolvedValue(true)
   })
 
@@ -270,7 +280,7 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
     resetAgentStartupDelayedDeliveryForTests()
   })
 
-  it('pastes and submits a follow-up prompt once the agent composer is ready', async () => {
+  it('sends a follow-up prompt through the terminal runtime without renderer telemetry', async () => {
     await ensureAgentStartupInTerminal({
       worktreeId: 'wt-1',
       startup: {
@@ -292,7 +302,7 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
     expect(mockTrack).not.toHaveBeenCalledWith('agent_prompt_sent', expect.anything())
   })
 
-  it('surfaces the not-sent toast when a follow-up prompt is dropped', async () => {
+  it('does not track when follow-up prompt delivery is rejected by the terminal runtime', async () => {
     mockPasteDraftToAgentPtyWhenReady.mockResolvedValue(false)
 
     await ensureAgentStartupInTerminal({
@@ -306,8 +316,29 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
       }
     })
 
-    expect(mockShowAutomationPromptNotSentToast).toHaveBeenCalledWith('aider')
     expect(mockTrack).not.toHaveBeenCalledWith('agent_prompt_sent', expect.anything())
+  })
+
+  it('surfaces the not-sent toast when a follow-up prompt is dropped', async () => {
+    // No recognized agent or live child means readiness times out without delivering text.
+    mockInspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'zsh',
+      hasChildProcesses: false
+    })
+
+    await ensureAgentStartupInTerminal({
+      worktreeId: 'wt-1',
+      startup: {
+        agent: 'aider',
+        launchCommand: 'aider',
+        expectedProcess: 'aider',
+        followupPrompt: 'fix the spinner',
+        launchConfig: { agentArgs: '', agentEnv: {} }
+      }
+    })
+
+    expect(mockPasteDraftToAgentPtyWhenReady).not.toHaveBeenCalled()
+    expect(mockShowAutomationPromptNotSentToast).toHaveBeenCalledWith('aider')
   })
 
   it('does not toast when a follow-up prompt is delivered', async () => {
@@ -344,6 +375,25 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
     expect(call?.onTimeout).toBeTypeOf('function')
     call?.onTimeout?.()
     expect(mockShowAutomationPromptNotSentToast).toHaveBeenCalledWith('claude')
+  })
+
+  it('does not track when follow-up prompt delivery rejects', async () => {
+    mockPasteDraftToAgentPtyWhenReady.mockRejectedValue(new Error('runtime timeout'))
+
+    await expect(
+      ensureAgentStartupInTerminal({
+        worktreeId: 'wt-1',
+        startup: {
+          agent: 'aider',
+          launchCommand: 'aider',
+          expectedProcess: 'aider',
+          followupPrompt: 'fix the spinner',
+          launchConfig: { agentArgs: '', agentEnv: {} }
+        }
+      })
+    ).resolves.toBeUndefined()
+
+    expect(mockTrack).not.toHaveBeenCalledWith('agent_prompt_sent', expect.anything())
   })
 
   it('does not track draft prompt delivery as a sent prompt', async () => {
@@ -727,6 +777,30 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
     for (const listener of storeListeners) {
       listener(store, store)
     }
+
+    expect(mockPasteDraftToAgentPtyWhenReady).not.toHaveBeenCalled()
+  })
+
+  it('does not write a delayed follow-up prompt on readiness timeout', async () => {
+    vi.useFakeTimers()
+    mockInspectRuntimeTerminalProcess.mockResolvedValue({
+      foregroundProcess: 'zsh',
+      hasChildProcesses: false
+    })
+
+    const delivery = ensureAgentStartupInTerminal({
+      worktreeId: 'wt-1',
+      startup: {
+        agent: 'aider',
+        launchCommand: 'aider',
+        expectedProcess: 'aider',
+        followupPrompt: 'fix the spinner',
+        launchConfig: { agentArgs: '', agentEnv: {} }
+      }
+    })
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await delivery
 
     expect(mockPasteDraftToAgentPtyWhenReady).not.toHaveBeenCalled()
   })

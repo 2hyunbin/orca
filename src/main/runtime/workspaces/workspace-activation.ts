@@ -30,6 +30,7 @@ import type {
 } from '../../../shared/worktree/lineage-types'
 import { recordCreatedWorktreeLineage as recordCreatedWorktreeLineageState } from '../runtime-worktree-lineage-recording'
 import {
+  deliverStartupFollowupPrompt,
   pasteWorktreeStartupDraftWhenReady,
   waitForWorktreeStartupDraft,
   type WorktreeStartupReadinessHost
@@ -42,11 +43,12 @@ import {
 import { readFreshComposerHold } from '../launched-agent-composer-readiness'
 import { buildTerminalWaitText } from '../terminal-wait-tail-state'
 import {
+  describeLaunchedAgentHost,
   readLaunchedAgentForeground,
-  type LaunchedAgentForeground
+  type LaunchedAgentForeground,
+  type LaunchedAgentHost
 } from '../launched-agent-foreground'
 import { worktreeRowTarget } from '../../persistence/host-qualified-worktree-meta'
-import { deliverStartupFollowupPrompt } from '../rpc/methods/agent-launch-terminal-prompt'
 
 export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListManagedWorktrees {
   protected abstract toAgentSessionOptions(
@@ -270,12 +272,8 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
 
   /** What holds the terminal a launch started its agent in, read fresh from the execution host. */
   readLaunchedAgentForeground(ptyId: string, agent: TuiAgent): Promise<LaunchedAgentForeground> {
-    return readLaunchedAgentForeground(
-      this.ptyController,
-      this.launchedAgentHost(ptyId),
-      ptyId,
-      agent
-    )
+    const host = this.launchedAgentHost(ptyId)
+    return readLaunchedAgentForeground(this.ptyController, host, ptyId, agent)
   }
 
   /** Whether the pane's execution host can find a launched agent in front: a Windows one cannot. */
@@ -283,23 +281,26 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     return !this.launchedAgentHost(ptyId).windows
   }
 
-  private launchedAgentHost(ptyId: string): { remote: boolean; windows: boolean } {
+  launchedAgentHostProvesShellAlone(ptyId: string): boolean {
+    return this.launchedAgentHost(ptyId).shellAloneProvable
+  }
+
+  private launchedAgentHost(ptyId: string): LaunchedAgentHost {
     const pty = this.ptysById.get(ptyId)
-    const remote = !!pty?.connectionId
-    // A local WSL pane still runs on a Windows host, whose process reads cannot see into it.
-    return {
-      remote,
-      windows: remote ? this.pathFlavorForPty(pty) === 'win32' : process.platform === 'win32'
-    }
+    return describeLaunchedAgentHost(pty, () => this.pathFlavorForPty(pty))
   }
 
   protected sendStartupFollowupWhenReady(handle: string, followup: WorktreeStartupFollowup): void {
     void this.deliverStartupFollowup(handle, followup)
   }
 
-  deliverStartupFollowup(handle: string, followup: WorktreeStartupFollowup): Promise<boolean> {
+  deliverStartupFollowup(
+    handle: string,
+    followup: WorktreeStartupFollowup,
+    signal?: AbortSignal
+  ): Promise<boolean> {
     const host = this.getWorktreeStartupReadinessHost()
-    return deliverStartupFollowupPrompt(this, host, handle, followup)
+    return deliverStartupFollowupPrompt(this, host, handle, followup, signal)
   }
 
   async provisionManagedWorktreeTerminals(

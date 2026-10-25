@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import { pasteDraftToAgentPtyWhenReady } from '@/lib/agent-paste-draft'
+import { sendFollowupPromptWhenAgentReady } from '@/lib/agent-followup-delivery'
 import { showAutomationPromptNotSentToast } from '@/lib/agent-background-session-timeout-toast'
 import type { AgentStartupPlan } from '@/lib/tui-agent-startup'
 import type { LinkedWorkItemContext } from '@/lib/linked-work-item-context'
@@ -226,14 +227,13 @@ async function deliverAgentStartupToTerminal(
   startup: AgentStartupPlan
 ): Promise<void> {
   const draftPrompt = startup.draftPrompt ?? null
-  // Why: stdin-after-start agents read input only once their composer is up, not when their process is in front (#10336).
+  // Legacy stdin-after-start agents need live typed/submitted prompts; wait for agent ownership before writing.
   if (startup.followupPrompt) {
-    const delivered = await pasteDraftToAgentPtyWhenReady({
+    const delivered = await sendFollowupPromptWhenAgentReady({
       ptyId,
-      content: startup.followupPrompt,
       agent: startup.agent,
-      submit: true,
-      forcePaste: true
+      expectedProcess: startup.expectedProcess,
+      prompt: startup.followupPrompt
     })
     // Report dropped follow-ups so users know to open the workspace and paste manually.
     if (!delivered) {

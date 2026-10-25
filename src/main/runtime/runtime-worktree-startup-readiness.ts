@@ -8,7 +8,14 @@ import { resolveDraftPasteReadyTimeoutMs } from '../../shared/draft-paste-ready-
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
-import type { WorktreeStartupDraftPaste } from './runtime-worktree-agent-startup'
+import type {
+  WorktreeStartupDraftPaste,
+  WorktreeStartupFollowup
+} from './runtime-worktree-agent-startup'
+import {
+  deliverTerminalAgentLaunchPrompt,
+  type TerminalPromptRuntime
+} from './rpc/methods/agent-launch-terminal-prompt'
 
 const BRACKETED_PASTE_BEGIN = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
@@ -41,6 +48,40 @@ export function pasteWorktreeStartupDraftWhenReady(
       host.write(ptyId, `${BRACKETED_PASTE_BEGIN}${draft.content}${BRACKETED_PASTE_END}`, 'launch')
     })
     .catch((error) => console.warn('[worktree-create] failed to paste startup draft:', error))
+}
+
+/** A post-start agent's first prompt: its process in front can still drop typed text (#10336). */
+export async function deliverStartupFollowupPrompt(
+  runtime: TerminalPromptRuntime,
+  host: WorktreeStartupReadinessHost,
+  handle: string,
+  { agent, prompt }: WorktreeStartupFollowup,
+  signal?: AbortSignal
+): Promise<boolean> {
+  try {
+    const ptyId = host.getPtyId(handle)
+    // Where no read proves the agent in front (Windows), its process must be seen first: a lone shell's prompt also reads as ready.
+    if (
+      ptyId &&
+      runtime.launchedAgentHostProvesAgent?.(ptyId) === false &&
+      !(await waitForWorktreeStartupFollowup(host, handle, TUI_AGENT_CONFIG[agent].expectedProcess))
+    ) {
+      console.warn('[agent-startup] agent did not come to the front; its prompt was not delivered')
+      return false
+    }
+    return await deliverTerminalAgentLaunchPrompt({
+      runtime,
+      handle,
+      agent,
+      freshLaunch: true,
+      text: prompt,
+      unprovableHost: 'write-if-shell-provable',
+      ...(signal ? { signal } : {})
+    })
+  } catch (error) {
+    console.warn('[agent-startup] failed to deliver the startup prompt:', error)
+    return false
+  }
 }
 
 export async function waitForWorktreeStartupFollowup(
