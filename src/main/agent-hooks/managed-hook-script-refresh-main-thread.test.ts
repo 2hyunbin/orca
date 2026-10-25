@@ -37,6 +37,10 @@ vi.mock('node:os', async (importOriginal) => {
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-user-data' } }))
 
 import { MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS } from './managed-agent-hook-registry'
+import { ClaudeAgentViewService } from '../claude/agent-view-service'
+import { reconcileClaudeAgentViewConfig } from '../claude/agent-view-config'
+import { ensureClaudeAgentViewPluginAsync } from '../claude/agent-view-plugin'
+import { listClaudeProfileHomesAsync } from '../claude-accounts/claude-profile-homes'
 
 function syncCallsUnderHome(): string[] {
   return state.syncCalls
@@ -146,5 +150,37 @@ describe('managed hook script refresh stays off the main thread', () => {
     } finally {
       Object.defineProperty(process, 'platform', platform)
     }
+  })
+
+  it('prepares and disables navigation asynchronously and serves spawn cache reads without HOME I/O', async () => {
+    const config = join(state.home, '.claude')
+    const service = new ClaudeAgentViewService(join(state.home, 'user-data'), {
+      reconcileConfig: reconcileClaudeAgentViewConfig,
+      ensurePlugin: ensureClaudeAgentViewPluginAsync,
+      listProfiles: listClaudeProfileHomesAsync,
+      loginEnv: async () => ({ CLAUDE_CONFIG_DIR: config })
+    })
+    await Promise.all(
+      Array.from({ length: 100 }, () =>
+        service.reconcile({ claudeSubagentNavigationEnabled: true })
+      )
+    )
+    const root = service.read()?.pluginDir
+    expect(root).toBeTruthy()
+    expect(await readFile(join(root!, 'hooks', 'register.js'), 'utf8')).toContain('$.ui.view(')
+    for (let pane = 0; pane < 100; pane++) {
+      await service.ready()
+      expect(service.read()?.pluginDir).toBe(root)
+    }
+    await Promise.all(
+      Array.from({ length: 100 }, () =>
+        service.reconcile({ claudeSubagentNavigationEnabled: false })
+      )
+    )
+    expect(JSON.parse(await readFile(join(config, 'keybindings.json'), 'utf8')).bindings).toEqual(
+      []
+    )
+    expect(service.read()).toBeUndefined()
+    expect(syncCallsUnderHome()).toEqual([])
   })
 })

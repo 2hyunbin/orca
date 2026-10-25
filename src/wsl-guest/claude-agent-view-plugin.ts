@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import {
   ensureClaudeAgentViewPlugin,
-  installClaudeAgentView
+  installClaudeAgentView,
+  removeClaudeAgentView
 } from '../main/claude/agent-view-install'
 
 export class RelayClaudeAgentViewPlugin {
@@ -20,7 +21,11 @@ export class RelayClaudeAgentViewPlugin {
     instance: string,
     configDir = join(this.homeDir, '.claude')
   ): { pluginDir: string; configDir: string } | undefined {
-    if (!this.source || !installClaudeAgentView(join(configDir, 'settings.json'))) {
+    if (!this.source) {
+      removeClaudeAgentView(join(configDir, 'settings.json'))
+      return undefined
+    }
+    if (!installClaudeAgentView(join(configDir, 'settings.json'))) {
       return undefined
     }
     const id = createHash('sha256').update(instance).digest('hex').slice(0, 32)

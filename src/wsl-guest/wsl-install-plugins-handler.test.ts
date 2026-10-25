@@ -51,7 +51,13 @@ describe.skipIf(process.platform === 'win32')('createInstallPluginsHandler (gues
         .claudeAgentView
       expect(second).not.toBe(first)
       expect(readFileSync(join(first, 'hooks', 'register.js'), 'utf8')).toBe(source)
+      expect(install({ claudeAgentViewSource: '' }).overlayDirs.claudeAgentView).toBeUndefined()
+      expect(JSON.parse(readFileSync(join(config, 'keybindings.json'), 'utf8')).bindings).toEqual(
+        []
+      )
+      expect(install({ claudeAgentViewSource: source }).overlayDirs.claudeAgentView).toBe(first)
       writeFileSync(join(config, 'keybindings.json'), '{"bindings": []}')
+      install({ claudeAgentViewSource: '' })
       expect(install({ claudeAgentViewSource: source }).overlayDirs.claudeAgentView).toBeUndefined()
       expect(readFileSync(join(config, 'keybindings.json'), 'utf8')).toBe('{"bindings": []}')
     })

@@ -1,3 +1,4 @@
+import { getClaudeAgentViewService } from '../claude/agent-view-service'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -252,6 +253,9 @@ export class ClaudeProfileRouter {
       hooks,
       claudeVersion: claudeVersion ?? undefined
     })
+    if (report.outcome === 'prepared') {
+      await getClaudeAgentViewService(this.args.dataRoot).prepareProfile(profile.home)
+    }
     if (report.outcome === 'refused' || report.warnings.length > 0) {
       console.warn('[claude-profile] Account setup was incomplete:', report)
     }

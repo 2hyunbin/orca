@@ -266,6 +266,6 @@ it.each([false, true])(
     }
     expect(existsSync(legacy)).toBe(false)
     expect(JSON.parse(readFileSync(bindings, 'utf8')).bindings).toEqual([])
-    expect(installClaudeAgentView(join(root, 'settings.json'))).toBe(!malformed)
+    expect(installClaudeAgentView(join(root, 'settings.json'))).toBe(true)
   }
 )

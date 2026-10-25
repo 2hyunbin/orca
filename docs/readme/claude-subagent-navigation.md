@@ -30,9 +30,18 @@ JSONC comments and existing shortcuts are preserved. A per-config
 `orca-agent-view.json` ownership record remembers setup: deleting or editing
 the shortcut does not cause Orca to add it again. To restore navigation after
 removing it, manually bind one of those chords to `command:orca-agent-view`.
-Turning the setting off stops mod loading in new panes. Removing status hooks
-also removes the recorded owned shortcut from the default config and account
-profiles; reused user bindings remain untouched.
+Turning the setting off removes the recorded owned shortcut from the default
+config and account profiles and stops mod loading in new panes. The ownership
+record distinguishes this removal from a shortcut you deleted yourself:
+re-enabling restores shortcuts removed by Orca; your deletions stay deleted.
+Reused user bindings remain untouched. Removing status hooks has the same
+owned-shortcut cleanup behavior.
+
+Setup runs asynchronously at startup, when navigation settings change, and
+when a new account profile is provisioned. Reconciliation is serialized and
+PTY spawns use the cached plugin folder without reading or writing HOME.
+With navigation off, Orca leaves `CLAUDE_CODE_PLUGIN_DIRS` untouched unless it
+must strip a previously inherited Orca plugin path.
 
 The previous owned `skills/orca-agent-view` installation is retired from the
 default config and account profiles during asynchronous refresh. SSH/WSL hook

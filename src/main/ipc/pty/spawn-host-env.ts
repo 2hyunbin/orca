@@ -1,3 +1,4 @@
+import { getClaudeAgentViewService } from '../../claude/agent-view-service'
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import { getAppEnvironment } from '../../../shared/app-environment'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
@@ -207,6 +208,7 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
       launchCommand
     })
+    await getClaudeAgentViewService().ready()
     buildPtyHostEnv(sessionId, env, {
       isPackaged: getAppEnvironment().isPackaged(),
       resourcesPath: process.resourcesPath,

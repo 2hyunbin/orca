@@ -1,3 +1,7 @@
+import {
+  getClaudeSubagentNavigationTitle,
+  getClaudeSubagentNavigationDescription
+} from './claude-subagent-navigation-copy'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { getLocalExecutionHostLabel } from '../../../../shared/execution-host'
 import { useAppStore } from '@/store'
@@ -82,15 +86,15 @@ export function AgentsPane({
         />
         <AgentStatusHooksSetting settings={settings} updateSettings={updateSettings} />
         <SettingsSwitchRow
-          label="Claude subagent navigation"
-          description="Open Claude subagents from the sidebar. Adds a shortcut to Claude’s keybindings.json and loads an Orca mod in new Orca panes. Requires Claude 2.1.300+ and status hooks. Removed shortcuts stay removed."
+          label={getClaudeSubagentNavigationTitle()}
+          description={getClaudeSubagentNavigationDescription()}
           checked={settings.claudeSubagentNavigationEnabled === true}
           onChange={() =>
             updateSettings({
               claudeSubagentNavigationEnabled: settings.claudeSubagentNavigationEnabled !== true
             })
           }
-          ariaLabel="Claude subagent navigation"
+          ariaLabel={getClaudeSubagentNavigationTitle()}
         />
         {!isPairedWebClientWindow() ? (
           <>

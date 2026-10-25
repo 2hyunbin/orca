@@ -1,3 +1,7 @@
+import {
+  getClaudeSubagentNavigationTitle,
+  getClaudeSubagentNavigationDescription
+} from './claude-subagent-navigation-copy'
 import { getAgentCatalog } from '@/lib/agent-catalog'
 import {
   getAgentAwakeDescription,
@@ -126,8 +130,8 @@ const getAllAgentsPaneSearchEntries = createLocalizedCatalog(() => [
   },
   {
     id: 'claude-subagent-navigation',
-    title: 'Claude subagent navigation',
-    description: 'Opt in to the sidebar mod and Claude keyboard shortcut',
+    title: getClaudeSubagentNavigationTitle(),
+    description: getClaudeSubagentNavigationDescription(),
     keywords: ['claude', 'subagent', 'navigation', 'plugin', 'mod', 'shortcut']
   },
   {

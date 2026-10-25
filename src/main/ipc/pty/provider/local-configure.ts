@@ -1,3 +1,4 @@
+import { getClaudeAgentViewService } from '../../../claude/agent-view-service'
 import { inheritOmpLaunchEnvironment } from '../host-env/omp-launch-environment'
 import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
@@ -79,6 +80,7 @@ export function configureLocalPtyProvider(args: {
         launchAgent: ctx?.launchAgent,
         launchCommand: ctx?.command
       })
+      await getClaudeAgentViewService().ready()
       const env = buildPtyHostEnv(id, baseEnv, {
         isPackaged: getAppEnvironment().isPackaged(),
         resourcesPath: process.resourcesPath,
