@@ -218,9 +218,14 @@ export function getPiTitlebarExtensionSource(kind: PiAgentKind = 'pi'): string {
     '  })',
     '',
     '  // Reset/reload hides dialogs without resolving promises; both session boundaries clear the missing close.',
-    "  on('session_start', async () => {",
+    "  on('session_start', async (_event, ctx) => {",
     '    clearOwnedTimers()',
     '    resetPromptState()',
+    // Why: branded Pi forks never title `π - ` before the first turn; OMP keeps its native `π >`
+    // so readiness still waits out its setup wizard, which opens after session_start.
+    ...(kind === 'pi'
+      ? ['    if (!isOmpRuntime()) paintTitle(resolvePainter(ctx), () => getBaseTitle(pi))']
+      : []),
     '  })',
     '',
     '  // Modern Pi can emit agent_end mid-run; prefer agent_settled while retaining the legacy fallback.',

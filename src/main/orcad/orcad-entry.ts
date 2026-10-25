@@ -24,10 +24,8 @@ import { bindOrcadStopTerminalAdmission } from './orcad-stop-terminal-admission'
 import type { OrcadHandle, OrcadOptions } from './orcad-start-contract'
 import { beginOrcadIdleExit, bindOrcadIdleShutdown } from './orcad-managed-idle-exit-host'
 import { orcadAutomationsKeepHostBusy, startOrcadAutomations } from './orcad-automations'
-import {
-  changedAiVaultSearchSettings,
-  type AiVaultSearchSettings
-} from '../../shared/ai-vault-search-settings'
+import { changedAiVaultSearchSettings } from '../../shared/ai-vault-search-settings'
+import type { AiVaultSearchSettings } from '../../shared/ai-vault-search-settings'
 import { stampRuntimeSourceEnv } from '../../shared/runtime-source-env'
 import { adoptWslHostLoginEnvironment } from './orcad-wsl-host-login-environment'
 import { installOrcadProcessErrorGuards } from './orcad-process-error-guards'
@@ -194,7 +192,8 @@ async function startOrcadRuntime(
     clientCodexHomes: codexAccountHomes
   })
 
-  const { loadAgentSessionClaimSigner } = await import('../runtime/agent-session-claim-identity')
+  const { loadAgentSessionClaimSigner } =
+    await import('../runtime/agent-session/ownership/agent-session-claim-identity')
   const runtime = new OrcaRuntimeService(profileStore, stats, {
     // Persistent signatures let restarted runtimes adopt PTYs owned before restart.
     agentSessionClaimSigner: loadAgentSessionClaimSigner(runtimeUserDataPath, runtimeUserDataPath),

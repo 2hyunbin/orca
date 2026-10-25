@@ -149,7 +149,8 @@ export type AgentStatusEntry = {
   promptInteractionKey?: string
   /** Live OSC 7501 facet never decides state; read through resolveProgramStatusPresentation beside the state owner. */
   programStatus?: ProgramStatusFacet
-  /** Hydrated nonterminal state is immediately stale: transitions may have happened without a receiver. Any accepted live event clears this. */
+  /** Hydrated nonterminal rows are immediately stale; accepted live events clear this flag.
+   * Hosts also use it for pre-process evidence: preserve identity without claiming current status. */
   restoredUnconfirmed?: boolean
 } & AgentStatusRowFacets
 

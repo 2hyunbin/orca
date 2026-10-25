@@ -4,9 +4,9 @@ import {
   probeAgentSessionProcessIdentities,
   probeAgentSessionProcessIdentity,
   probeAgentSessionReservation
-} from './agent-session-process-identity-probe'
-import { findAgentSessionSpawnTokenProcesses } from './agent-session-spawn-token-process-scan'
-import { readEchoedAgentSessionSpawnToken } from './agent-session-spawn-token-readback'
+} from './agent-session/ownership/agent-session-process-identity-probe'
+import { findAgentSessionSpawnTokenProcesses } from './agent-session/ownership/agent-session-spawn-token-process-scan'
+import { readEchoedAgentSessionSpawnToken } from './agent-session/ownership/agent-session-spawn-token-readback'
 
 /** Probe previous owners with PID-reuse-safe evidence; unresolved ownership remains indeterminate. */
 export function createStructuredAgentSessionOwnerProbe(

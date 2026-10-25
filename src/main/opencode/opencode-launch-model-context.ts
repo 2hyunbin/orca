@@ -70,7 +70,7 @@ export function parseOpenCodeLaunchModelContext(options: {
   ) {
     return null
   }
-  // Installed 2.0.16 lists the selected default first; newer source orders differently.
+  // OpenCode 2.x `agent.list` returns the selected default agent first.
   const primary = agents.data.data.find((item) => item.mode !== 'subagent' && !item.hidden)
   const configured = config.data.reduce<string | undefined>(
     (value, entry) => entry.info?.default_agent ?? value,

@@ -337,14 +337,16 @@ describe('headless hook agent-status projection (#11761)', () => {
     }
   })
 
-  it('lets a shell title retire a restored turn as done', async () => {
+  // STA-12043: the retired turn keeps its identity but no state, so no Done sits beside the shell.
+  it('lets a shell title retire a restored turn to identity only', async () => {
     const agentStatus = await projectAgentStatus(
       [hookRow({ state: 'working', interactivePrompt: undefined, restoredUnconfirmed: true })],
       (runtime) => observePaneTitle(runtime, 'bash')
     )
 
-    expect(agentStatus === undefined || agentStatus.state === 'done').toBe(true)
-    expect(agentStatus).not.toHaveProperty('restoredUnconfirmed')
+    expect(agentStatus).toEqual(
+      expect.objectContaining({ state: 'done', prompt: '', restoredUnconfirmed: true })
+    )
   })
 
   it('projects the OSC turn that replaced the hook row in the store', async () => {

@@ -152,7 +152,9 @@ describe('paired client sleep/wake with several remote terminal tabs', () => {
       PANE_COUNT
     )
     for (const pane of panes) {
-      expect(pane.transport.getPtyId(), `pane ${pane.hostTabId} lost its handle`).not.toBeNull()
+      expect(pane.transport.getPtyId(), `pane ${pane.hostTabId} bound the wrong handle`).toBe(
+        `remote:env-1@@${hostHandleByTabId.get(pane.hostTabId)}`
+      )
       pane.transport.destroy?.()
     }
   })
@@ -173,7 +175,9 @@ describe('paired client sleep/wake with several remote terminal tabs', () => {
     const evidence = `resubscribes: ${JSON.stringify(afterReconnect)}`
     expect(afterReconnect, evidence).toContain(`${parked}-respawned`)
     for (const pane of panes) {
-      expect(pane.transport.getPtyId(), `pane ${pane.hostTabId} lost its handle`).not.toBeNull()
+      expect(pane.transport.getPtyId(), `pane ${pane.hostTabId} bound the wrong handle`).toBe(
+        `remote:env-1@@${hostHandleByTabId.get(pane.hostTabId)}`
+      )
       pane.transport.destroy?.()
     }
   })

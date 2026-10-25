@@ -451,7 +451,7 @@ describe('restoreScrollbackBuffers over a parked live TUI', () => {
 })
 
 describe('collectLeafIdsInReplayCreationOrder', () => {
-  it('matches replayTerminalLayout pane creation order for nested left splits', () => {
+  it('visits the outer right leaf before the inner left split continuation', () => {
     const layout: TerminalPaneLayoutNode = {
       type: 'split',
       direction: 'vertical',
@@ -468,7 +468,7 @@ describe('collectLeafIdsInReplayCreationOrder', () => {
     expect(collectLeafIdsInReplayCreationOrder(layout)).toEqual(['A', 'C', 'B'])
   })
 
-  it('matches replayTerminalLayout pane creation order for nested right splits', () => {
+  it('visits the inner right split after the outer left leaf', () => {
     const layout: TerminalPaneLayoutNode = {
       type: 'split',
       direction: 'vertical',

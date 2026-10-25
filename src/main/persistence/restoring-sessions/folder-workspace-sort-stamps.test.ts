@@ -48,6 +48,7 @@ describe('folder workspace sort stamps', () => {
 
     operations.updateFolderWorkspace(id, { smartTier: undefined, smartAt: undefined })
     expect(operations.getFolderWorkspace(id)?.smartTier).toBeUndefined()
+    expect(operations.getFolderWorkspace(id)?.smartAt).toBeUndefined()
     operations.updateFolderWorkspace(id, { smartTier: 'working', smartAt: 10 })
     operations.updateFolderWorkspace(id, { comment: 'x' })
     expect(operations.getFolderWorkspace(id)).toMatchObject({ smartTier: 'working', smartAt: 10 })
