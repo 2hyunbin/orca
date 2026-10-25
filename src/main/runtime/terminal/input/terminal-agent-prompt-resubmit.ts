@@ -44,7 +44,8 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
     let gatedResubmits = 0
     try {
       do {
-        if (await agentPromptSettledWithin(held, retryDelayMs, options.signal)) {
+        const waitMs = blind ? retryDelayMs : Math.min(retryDelayMs, deadline - Date.now())
+        if (await agentPromptSettledWithin(held, Math.max(0, waitMs), options.signal)) {
           return resubmits
         }
         this.assertAgentPromptGeneration(ptyId, generation)
@@ -66,11 +67,12 @@ export abstract class OrcaRuntimeWithResubmitHeldAgentPrompt extends OrcaRuntime
         }
         await options.beforeWrite?.(ptyId)
         // Why again: the guard can yield while the agent takes the prompt, opens an approval or
-        // the user types, so the decision is remade right before the write.
-        if (await agentPromptSettledWithin(held, 0, options.signal)) {
+        // the user types, so the decision is remade right before the write — the slow screen
+        // read first, then the deadline and turn checks with nothing awaited after them.
+        if (!blind && (!(await holdsPrompt()) || Date.now() >= deadline)) {
           return resubmits
         }
-        if (!blind && (Date.now() >= deadline || !(await holdsPrompt()))) {
+        if (await agentPromptSettledWithin(held, 0, options.signal)) {
           return resubmits
         }
         if (!this.ptyController?.write(ptyId, AGENT_PROMPT_SUBMIT, options.inputKind)) {
