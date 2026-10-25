@@ -15,7 +15,6 @@ import {
 } from '../../shared/wsl-move/wsl-move-driver-types'
 import { agentHookServer } from '../agent-hooks/server'
 import { getDaemonHistoryDir } from '../daemon/daemon-launch-paths'
-import { setDaemonWslSleepCwdReader } from '../daemon/daemon-wsl-sleep-cwd'
 import {
   countInProcessFallbackTerminals,
   listLiveDaemonSessions
@@ -67,29 +66,13 @@ import { listRemoteOrcadFolderCatalog } from '../ssh/orcad-server-folder-workspa
 import { makeTerminalScrollbackSnapshotRef } from '../terminal-scrollback-snapshots'
 import { pauseWorkspacesForProjectMove } from '../window/project-move-pause'
 import { getWslHostService } from '../wsl/wsl-host-service-instance'
-import { readWslGuestPaneProcesses } from '../wsl/wsl-guest-pane-processes'
-import { wslHostsGateOpen } from '../wsl/wsl-host-gate'
+import { readWslGuestProcessTable } from '../wsl/wsl-guest-process-table'
 import { isWslDistroRegistered } from '../wsl/wsl-distro-registry-id'
 import { defaultWslOrcadEnvironmentId } from '../wsl/wsl-orcad-deploy'
 import { ptyPaneKey } from './pty/pane/key-state'
 import { tryGetProviderForPty } from './pty/provider/registry'
 import { getRuntimeEnvironmentStatus } from './runtime-environments/runtime-environment-status-probe'
 import { getTrustedUIRendererWindow } from './ui'
-
-/**
- * Lets a sleeping bridge WSL pane keep its shell's folder, so a later move (or wake) reopens it
- * there. Only with the internal WSL hosts gate open, and only on Windows, where the bridge runs.
- */
-export function registerWslSleepShellCwdReader(): void {
-  if (process.platform !== 'win32' || !wslHostsGateOpen()) {
-    return
-  }
-  setDaemonWslSleepCwdReader(async (sessionId, distro) => {
-    const paneKey = ptyPaneKey.get(sessionId)
-    const rows = paneKey ? await readWslGuestPaneProcesses(distro) : null
-    return paneKey && rows ? readWslGuestPaneShellCwd(rows, paneKey) : null
-  })
-}
 
 /** Each live bridge pane's shell folder, one process read per distro. */
 async function readWslMovePaneShellCwds(
@@ -98,7 +81,7 @@ async function readWslMovePaneShellCwds(
   const cwds = new Map<string, string>()
   const distros = new Set(panes.flatMap((pane) => (pane.wslDistro ? [pane.wslDistro] : [])))
   for (const distro of distros) {
-    const rows = await readWslGuestPaneProcesses(distro)
+    const rows = await readWslGuestProcessTable(distro)
     for (const pane of panes) {
       const cwd =
         rows && pane.wslDistro === distro ? readWslGuestPaneShellCwd(rows, pane.paneKey) : null
@@ -133,7 +116,7 @@ export function createWslMoveDriverDeps(
     ...(process.platform === 'win32'
       ? {
           guestForegrounds: async (distro: string, paneKeys: readonly string[]) => {
-            const rows = await readWslGuestPaneProcesses(distro)
+            const rows = await readWslGuestProcessTable(distro)
             if (!rows) {
               console.warn('[wsl-move] Could not list processes in', distro)
               return new Map()

@@ -115,9 +115,19 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     // Sleep may precede the first periodic checkpoint; persist the screen before killing.
     if (opts.keepHistory) {
       const sleepWslDistro = this.wslDistrosBySessionId.get(id)
-      const sleepCwd = sleepWslDistro
-        ? await readDaemonWslSleepCwd(id, sleepWslDistro, opts.deadlineMs)
-        : null
+      const sleepPaneKey = this.wslPaneKeysBySessionId.get(id)
+      const sleepCwd =
+        sleepWslDistro && sleepPaneKey
+          ? await readDaemonWslSleepCwd(
+              {
+                paneKey: sleepPaneKey,
+                wslDistro: sleepWslDistro,
+                // A live pane's own wsl.exe keeps its distro running.
+                live: this.activeSessionIds.has(id)
+              },
+              opts.deadlineMs
+            )
+          : null
       const committed = await this.runExclusiveCheckpoint(
         async () => {
           // Set inside: a caller past its deadline leaves this checkpoint running without it.
@@ -196,6 +206,7 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
     this.stopCheckpointTimerIfIdle()
     this.initialCwds.delete(id)
     this.wslDistrosBySessionId.delete(id)
+    this.wslPaneKeysBySessionId.delete(id)
     // Explicit close removes history; sleep preserves it for wake-time recovery.
     if (this.historyManager && !opts.keepHistory) {
       await this.historyManager

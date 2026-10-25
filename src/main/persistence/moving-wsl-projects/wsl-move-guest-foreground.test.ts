@@ -123,38 +123,59 @@ describe('readWslGuestPaneShellCwd', () => {
   })
 })
 
+const table = (stats: string[], tagged: string[]) =>
+  [
+    'ORCA_PROCESS_TABLE_BEGIN',
+    ...stats,
+    'ORCA_PROCESS_TABLE_TAGGED',
+    ...tagged,
+    'ORCA_PROCESS_TABLE_END',
+    ''
+  ].join('\n')
+
 describe('parseWslGuestPaneProcesses', () => {
-  it('reads the folder last, keeping a tab in it and dropping a removed one', () => {
+  it('reads every stat line and adds pane key, argc and folder to the tagged ones', () => {
     expect(
       parseWslGuestPaneProcesses(
-        `10\t1\t10\t1\tbash\t${KEY_A}\t/home/a\tb\n11\t1\t11\t1\tbash\t\t/gone (deleted)\n`
+        table(
+          ['10 (bash) S 1 10 10 0', '11 (my (odd) prog) S 10 11 10 0', '12 (zsh) S 1 12 12 0'],
+          [`10\t1\t${KEY_A}\t/home/a\tb`, '12\t2\t\t/gone (deleted)']
+        )
       )
     ).toEqual([
       { pid: 10, ppid: 1, sid: 10, argc: 1, comm: 'bash', paneKey: KEY_A, cwd: '/home/a\tb' },
-      { pid: 11, ppid: 1, sid: 11, argc: 1, comm: 'bash', paneKey: null }
+      { pid: 11, ppid: 10, sid: 10, argc: null, comm: 'my (odd) prog', paneKey: null },
+      { pid: 12, ppid: 1, sid: 12, argc: 2, comm: 'zsh', paneKey: null }
     ])
   })
 
-  it('keeps comm with spaces and drops malformed lines', () => {
-    expect(
-      parseWslGuestPaneProcesses(
-        `10\t1\t10\t1\tmy prog\t${KEY_A}\nbad line\n11\t10\t10\t     2\tbash\t\n`
-      )
-    ).toEqual([
-      { pid: 10, ppid: 1, sid: 10, argc: 1, comm: 'my prog', paneKey: KEY_A },
-      { pid: 11, ppid: 10, sid: 10, argc: 2, comm: 'bash', paneKey: null }
+  it('drops malformed lines, and a table missing a fence counts as unread', () => {
+    expect(parseWslGuestPaneProcesses(table(['bad line', '10 (bash) S 1 10 10'], []))).toEqual([
+      { pid: 10, ppid: 1, sid: 10, argc: null, comm: 'bash', paneKey: null }
     ])
+    expect(parseWslGuestPaneProcesses('ORCA_PROCESS_TABLE_BEGIN\n10 (bash) S 1 10 10\n')).toBeNull()
+  })
+
+  // Review of #33398: a job started without the pane key must still keep its pane busy.
+  it('keeps a pane busy for a job in its session that carries no pane key', () => {
+    const rows = parseWslGuestPaneProcesses(
+      table(
+        [`${RELAY} (init) S 1 1 1`, '100 (bash) S 10 100 100', '200 (sleep) S 100 200 100'],
+        [`100\t1\t${KEY_A}\t/home/a`]
+      )
+    )
+    expect(classifyWslGuestPaneForeground(rows ?? [], KEY_A)).toBe('process-running')
   })
 })
 
 describe.runIf(process.platform === 'linux')('WSL_GUEST_PANE_PROCESS_SCRIPT on Linux', () => {
-  it('lists processes as pid, ppid, sid, argc, comm and pane key', () => {
+  it('lists every process with pid, ppid and sid', () => {
     const out = execFileSync('sh', ['-c', WSL_GUEST_PANE_PROCESS_SCRIPT], { encoding: 'utf8' })
-    const rows = parseWslGuestPaneProcesses(out)
+    const rows = parseWslGuestPaneProcesses(out) ?? []
+    expect(rows.length).toBeGreaterThan(1)
     for (const row of rows) {
       expect(row.pid).toBeGreaterThan(0)
     }
-    expect(rows.some((row) => row.cwd?.startsWith('/'))).toBe(true)
   })
 })
 

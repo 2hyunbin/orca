@@ -25,53 +25,82 @@ export type WslGuestProcessRow = {
   ppid: number
   /** Session id. */
   sid: number
-  /** Arguments in /proc/<pid>/cmdline: an interactive shell has one, a script or `-c` more. */
-  argc: number
+  /**
+   * Arguments in /proc/<pid>/cmdline: an interactive shell has one, a script or `-c` more. Read
+   * for pane processes only; null for the rest, which a shell then counts as busy.
+   */
+  argc: number | null
   paneKey: string | null
   comm: string
-  /** The process's working directory, from /proc/<pid>/cwd; absent when it could not be read. */
+  /** The process's working directory, from /proc/<pid>/cwd; read for pane processes only. */
   cwd?: string
 }
 
+const BEGIN = 'ORCA_PROCESS_TABLE_BEGIN'
+const TAGGED = 'ORCA_PROCESS_TABLE_TAGGED'
+const END = 'ORCA_PROCESS_TABLE_END'
+
 /**
- * One line per process: pid, ppid, sid, argc, comm, the pane key and the cwd, tab-separated. Fields
- * come after the last `)` of /proc/<pid>/stat because comm may hold spaces or parens. POSIX sh and
- * BusyBox tools only.
+ * Every process's /proc/<pid>/stat in one `cat`, then the pane key, argc and cwd of the Orca pane
+ * processes one `grep` over every environ finds. Untagged processes stay in the table, so a job
+ * started without the key (`env -i`) still keeps its pane busy; the per-process work follows the
+ * pane processes, not the distro's process count. POSIX sh and BusyBox tools only.
  */
 export const WSL_GUEST_PANE_PROCESS_SCRIPT = [
-  'for d in /proc/[0-9]*; do',
-  '  p=${d#/proc/}',
-  '  s=$(cat "$d/stat" 2>/dev/null) || continue',
-  '  r=${s##*) }',
-  '  set -- $r',
-  '  c=$(cat "$d/comm" 2>/dev/null)',
+  `echo ${BEGIN}`,
+  'cat /proc/[0-9]*/stat 2>/dev/null',
+  `echo ${TAGGED}`,
+  "for e in $(grep -l -s 'ORCA_PANE_KEY=' /proc/[0-9]*/environ); do",
+  '  d=${e%/environ}',
+  `  k=$(tr '\\0' '\\n' < "$e" 2>/dev/null | sed -n 's/^ORCA_PANE_KEY=//p' | head -n 1)`,
   `  n=$(tr '\\0' '\\n' < "$d/cmdline" 2>/dev/null | wc -l)`,
-  `  k=$(tr '\\0' '\\n' < "$d/environ" 2>/dev/null | sed -n 's/^ORCA_PANE_KEY=//p' | head -n 1)`,
   '  w=$(readlink "$d/cwd" 2>/dev/null)',
-  `  printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$p" "$2" "$4" "$n" "$c" "$k" "$w"`,
-  'done'
+  `  printf '%s\\t%s\\t%s\\t%s\\n' "\${d#/proc/}" "$n" "$k" "$w"`,
+  'done',
+  `echo ${END}`
 ].join('\n')
 
-export function parseWslGuestPaneProcesses(stdout: string): WslGuestProcessRow[] {
-  const rows: WslGuestProcessRow[] = []
-  for (const line of stdout.split('\n')) {
-    // The cwd is last and may itself hold a tab.
-    const [pid, ppid, sid, argc, comm, paneKey, ...cwd] = line.split('\t')
-    const numbers = [pid, ppid, sid, argc].map((value) => Number(value?.trim()))
-    if (comm === undefined || numbers.some((value) => !Number.isInteger(value))) {
+/** The table between its fences; null unless all three are there, so a cut-off table never counts. */
+export function parseWslGuestPaneProcesses(stdout: string): WslGuestProcessRow[] | null {
+  const lines = stdout.split('\n').map((line) => line.replace(/\r$/, ''))
+  const begin = lines.indexOf(BEGIN)
+  const tagged = lines.indexOf(TAGGED)
+  const end = lines.lastIndexOf(END)
+  if (begin === -1 || tagged <= begin || end <= tagged) {
+    return null
+  }
+  const rows = new Map<number, WslGuestProcessRow>()
+  for (const line of lines.slice(begin + 1, tagged)) {
+    // comm may hold spaces and parens; the fields after it start past its last `)`.
+    const open = line.indexOf(' (')
+    const close = line.lastIndexOf(')')
+    const pid = Number(line.slice(0, open))
+    const [, ppid, , sid] = line
+      .slice(close + 2)
+      .split(' ')
+      .map(Number)
+    if (open <= 0 || close < open || ![pid, ppid, sid].every(Number.isInteger)) {
       continue
     }
-    rows.push({
-      pid: numbers[0],
-      ppid: numbers[1],
-      sid: numbers[2],
-      argc: numbers[3],
-      comm: comm.trim(),
-      paneKey: paneKey?.trim() || null,
-      ...(readableCwd(cwd.join('\t')) ? { cwd: cwd.join('\t') } : {})
+    const comm = line.slice(open + 2, close)
+    rows.set(pid, { pid, ppid, sid, argc: null, paneKey: null, comm })
+  }
+  for (const line of lines.slice(tagged + 1, end)) {
+    // The cwd is last and may itself hold a tab.
+    const [pid, argc, paneKey, ...cwd] = line.split('\t')
+    const row = rows.get(Number(pid))
+    if (!row || paneKey === undefined) {
+      continue
+    }
+    const folder = cwd.join('\t')
+    rows.set(row.pid, {
+      ...row,
+      argc: Number.isInteger(Number(argc?.trim())) ? Number(argc.trim()) : null,
+      paneKey: paneKey.trim() || null,
+      ...(readableCwd(folder) ? { cwd: folder } : {})
     })
   }
-  return rows
+  return [...rows.values()]
 }
 
 /** A pane whose shell cannot be found is unverifiable, never idle. */
@@ -99,7 +128,10 @@ export function classifyWslGuestPaneForeground(
       members.set(row.pid, row)
     }
   }
-  const busy = [...members.values()].filter((row) => !isShellProcess(row.comm) || row.argc > 1)
+  // A shell whose arguments were not read may be running a script: never idle.
+  const busy = [...members.values()].filter(
+    (row) => !isShellProcess(row.comm) || (row.argc ?? 2) > 1
+  )
   if (busy.length === 0) {
     return 'shell-idle'
   }

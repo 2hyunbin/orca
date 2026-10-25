@@ -1,55 +1,44 @@
 /**
  * The folder a bridge WSL pane's shell is in when it sleeps. Bash on the bridge reports no folder
- * (no OSC 7), so without this the final checkpoint keeps the spawn folder and both wake and a move
- * reopen the pane at the workspace root. Main registers the reader; with none nothing changes.
+ * (no OSC 7), so without this the final checkpoint keeps the spawn folder and wake reopens the
+ * pane at the workspace root. Windows only; any failure keeps that old behaviour.
  */
 import { toWindowsWslUncPath } from '../../shared/wsl-paths'
-
-export type DaemonWslSleepCwdReader = (
-  sessionId: string,
-  wslDistro: string
-) => Promise<string | null>
+import {
+  readWslGuestPaneProcesses,
+  readWslGuestPaneShellCwd
+} from '../wsl/wsl-guest-pane-processes'
 
 // Sleep waits on this; a distro that does not answer must not eat the teardown budget, which
 // the final checkpoint and the kill still need.
 const READ_BUDGET_MS = 3_000
 const READ_SHARE_OF_DEADLINE = 0.25
 
-let reader: DaemonWslSleepCwdReader | null = null
-
-export function setDaemonWslSleepCwdReader(next: DaemonWslSleepCwdReader | null): void {
-  reader = next
-}
-
-/** The shell's folder in the bridge's UNC spelling, which wake and the move both read; else null. */
+/** The shell's folder in the bridge's UNC spelling, which wake reads; else null. */
 export async function readDaemonWslSleepCwd(
-  sessionId: string,
-  wslDistro: string,
+  pane: { paneKey: string; wslDistro: string; live: boolean },
   deadlineMs?: number
 ): Promise<string | null> {
-  const read = reader
-  const budget = Math.min(
-    READ_BUDGET_MS,
-    deadlineMs === undefined ? READ_BUDGET_MS : (deadlineMs - Date.now()) * READ_SHARE_OF_DEADLINE
+  const budget = Math.floor(
+    Math.min(
+      READ_BUDGET_MS,
+      deadlineMs === undefined ? READ_BUDGET_MS : (deadlineMs - Date.now()) * READ_SHARE_OF_DEADLINE
+    )
   )
-  if (!read || budget <= 0) {
+  if (process.platform !== 'win32' || budget <= 0) {
     return null
   }
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    const cwd = await Promise.race([
-      read(sessionId, wslDistro),
+    const rows = await Promise.race([
+      readWslGuestPaneProcesses(pane.wslDistro, budget, { running: pane.live }),
       new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), budget)
         timer.unref?.()
       })
     ])
-    if (!cwd || !/^\/(?!\/)/.test(cwd)) {
-      // awin verify-5: an open pane reopened at its root; this says whether the read was the gap.
-      console.info('[wsl-sleep-cwd] No shell folder read for a sleeping WSL pane:', sessionId)
-      return null
-    }
-    return toWindowsWslUncPath(cwd, wslDistro)
+    const cwd = rows ? readWslGuestPaneShellCwd(rows, pane.paneKey) : null
+    return cwd && /^\/(?!\/)/.test(cwd) ? toWindowsWslUncPath(cwd, pane.wslDistro) : null
   } catch {
     return null
   } finally {
