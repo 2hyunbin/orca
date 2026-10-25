@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import { applyWorktreeUpdates } from '../../worktree-helpers'
+import { clearTwinCopyReviewLinks, worktreeCopyOwnerKey } from './worktree-twin-copy'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
@@ -31,8 +32,8 @@ export const hostedReviewLinkClearTombstonesByWorktreeId = new Map<
     branchIdentity: string
     generation: number
     head?: string
-    /** Set for a same-id twin: only that host's copy is guarded. */
-    hostId?: ExecutionHostId
+    /** Set for a same-id twin: only the copy with this {@link worktreeCopyOwnerKey} is guarded. */
+    owner?: string
   }
 >()
 export const hostedReviewLinkWorktreeIdAliases = new Map<string, string>()
@@ -175,20 +176,30 @@ export function rememberHostedReviewLinkClear(
   branch: string,
   generation: number,
   head?: string,
-  hostId?: ExecutionHostId
+  owner?: string
 ): void {
   hostedReviewLinkClearTombstonesByWorktreeId.set(worktreeId, {
     branch,
     branchIdentity: canonicalHostedReviewBranchIdentity(branch),
     generation,
     head,
-    ...(hostId ? { hostId } : {})
+    ...(owner !== undefined ? { owner } : {})
   })
 }
 
 export function sanitizeHostedReviewLinksForBranchClear<
   T extends Pick<Worktree, 'id' | 'branch'> &
-    Partial<Pick<Worktree, HostedReviewLinkKey | 'pushTarget' | 'head' | 'linkedItems' | 'hostId'>>
+    Partial<
+      Pick<
+        Worktree,
+        | HostedReviewLinkKey
+        | 'pushTarget'
+        | 'head'
+        | 'linkedItems'
+        | 'hostId'
+        | 'runtimeOwnerEnvironmentId'
+      >
+    >
 >(worktree: T, currentWorktrees?: readonly T[]): T {
   const hostedReviewWorktreeId = resolveHostedReviewLinkWorktreeId(worktree.id)
   const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(hostedReviewWorktreeId)
@@ -199,13 +210,13 @@ export function sanitizeHostedReviewLinksForBranchClear<
     !tombstone ||
     tombstone.generation !== getHostedReviewLinkMutationGeneration(hostedReviewWorktreeId) ||
     !hasBranchScopedContext ||
-    (tombstone.hostId !== undefined && worktree.hostId !== tombstone.hostId)
+    (tombstone.owner !== undefined && worktreeCopyOwnerKey(worktree) !== tombstone.owner)
   ) {
     return worktree
   }
   const current = currentWorktrees?.find(
     (entry) =>
-      (tombstone.hostId === undefined || entry.hostId === tombstone.hostId) &&
+      (tombstone.owner === undefined || worktreeCopyOwnerKey(entry) === tombstone.owner) &&
       (entry.id === worktree.id ||
         resolveHostedReviewLinkWorktreeId(entry.id) === hostedReviewWorktreeId)
   )
@@ -243,29 +254,25 @@ export function sanitizeHostedReviewLinksForBranchClears<
 export function applyHostedReviewLinkClear(
   set: Parameters<StateCreator<AppState, [], [], WorktreeSlice>>[0],
   worktreeId: string,
-  /** The physical host of the copy to clear; omitted clears every row with the id. */
-  executionHostId?: ExecutionHostId
+  /** One twin copy to clear; omitted clears every row with the id. */
+  copy?: { owner: string; hostId: ExecutionHostId | undefined }
 ): void {
   set((s) => {
-    const nextWorktrees = applyWorktreeUpdates(
-      s.worktreesByRepo,
-      worktreeId,
-      CLEARED_HOSTED_REVIEW_LINK_UPDATES,
-      executionHostId
-    )
+    const byRepo = s.worktreesByRepo
+    const nextWorktrees = copy
+      ? clearTwinCopyReviewLinks(byRepo, worktreeId, copy.owner)
+      : applyWorktreeUpdates(byRepo, worktreeId, CLEARED_HOSTED_REVIEW_LINK_UPDATES)
     const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
       s.detectedWorktreesByRepo,
       worktreeId,
-      CLEARED_HOSTED_REVIEW_LINK_UPDATES
+      CLEARED_HOSTED_REVIEW_LINK_UPDATES,
+      copy?.hostId
     )
-    if (
-      nextWorktrees === s.worktreesByRepo &&
-      nextDetectedWorktrees === s.detectedWorktreesByRepo
-    ) {
+    if (nextWorktrees === byRepo && nextDetectedWorktrees === s.detectedWorktreesByRepo) {
       return s
     }
     return {
-      ...(nextWorktrees !== s.worktreesByRepo
+      ...(nextWorktrees !== byRepo
         ? { worktreesByRepo: nextWorktrees, sortEpoch: s.sortEpoch + 1 }
         : {}),
       ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo

@@ -118,6 +118,32 @@ describe('a twin review-clear tombstone', () => {
   })
 })
 
+describe('a provenance twin review-clear tombstone', () => {
+  it('spares the sibling another paired server publishes under the same SSH host id', () => {
+    const shared = { hostId: 'ssh:shared' as const, branch: 'refs/heads/stack/one' }
+    const store = storeWith(
+      { ...shared, runtimeOwnerEnvironmentId: 'hub-a', linkedPR: 1 },
+      { ...shared, runtimeOwnerEnvironmentId: 'hub-b', linkedPR: 2 }
+    )
+    store
+      .getState()
+      .updateWorktreeGitIdentity(id, { branch: 'refs/heads/stack/two' }, 'runtime:hub-a')
+
+    const [sibling] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({
+        id,
+        repoId: 'repo1',
+        ...shared,
+        runtimeOwnerEnvironmentId: 'hub-b',
+        linkedPR: 2
+      })
+    ])
+
+    expect(sibling.linkedPR).toBe(2)
+    expect(store.getState().worktreesByRepo.repo1[1].linkedPR).toBe(2)
+  })
+})
+
 describe('updateWorktreeGitIdentity host matching', () => {
   it("reaches a paired server's SSH checkout through its runtime alias", () => {
     const store = storeWith({
