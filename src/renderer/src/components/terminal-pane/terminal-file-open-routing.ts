@@ -1,7 +1,6 @@
 import { downloadAndOpenRemoteTerminalFile } from './terminal-remote-file-download-open'
 import { findWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
-import { canClientOsOpenWorkspaceFile } from '@/lib/workspace-file-host-routing'
 import { isMissingRuntimePathError } from '@/runtime/runtime-file-metadata-client'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorkspace, activateAndRevealWorktree } from '@/lib/worktree-activation'
@@ -12,8 +11,8 @@ import {
 import {
   getTerminalFileContext,
   mapTerminalFilePath,
-  terminalLinkWslDistro,
-  type TerminalFileContext
+  shouldOpenTerminalFileWithSystemDefault,
+  terminalLinkWslDistro
 } from './terminal-file-path-mapping'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -37,6 +36,7 @@ import { isExplicitEditorScopeKept, openLinkedFileInEditor } from './terminal-fi
 export {
   getTerminalFileContext,
   mapTerminalFilePath,
+  shouldOpenTerminalFileWithSystemDefault,
   terminalLinkWslDistro,
   terminalPathWslDistro,
   type TerminalFileContext
@@ -73,11 +73,6 @@ type TerminalFileOpenDeps = {
   openInSourceGroup?: boolean
   /** Opt-in menu request; the legacy flag remains editor-only. */
   openInSourceGroupSurface?: 'internal' | 'browser'
-}
-
-export function shouldOpenTerminalFileWithSystemDefault(fileContext: TerminalFileContext): boolean {
-  // Why: an unresolved owner has no connectionId either, which would otherwise read as local.
-  return fileContext.sourceHostResolved && canClientOsOpenWorkspaceFile(fileContext)
 }
 
 export function openDetectedFilePath(
