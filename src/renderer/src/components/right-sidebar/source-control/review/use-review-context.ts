@@ -33,7 +33,6 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
     isFolder,
     remoteStatus,
     settings,
-    worktreeMap,
     worktreePath
   } = panelState
 
@@ -81,12 +80,10 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
   })
   const createPrIntentTarget = useSourceControlCreatePrIntentTarget({
     activeRepoId,
-    activeRepoTarget,
     activeWorktreeId,
     branchName,
     createPrIntentCurrentTargetRef,
     effectiveBaseRef,
-    worktreeMap,
     worktreePath
   })
   const linkedReviews = useSourceControlLinkedReviews({

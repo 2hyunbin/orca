@@ -1,7 +1,11 @@
 import { useCallback, useEffect } from 'react'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { toast } from 'sonner'
-import { resolveWorktreeGitCopyNow, useWorktreeGitCopyHostId } from '@/lib/worktree-git-copy'
+import {
+  resolveWorktreeGitCopyNow,
+  useWorktreeGitCopyHostId,
+  worktreeCopyPushTarget
+} from '@/lib/worktree-git-copy'
 import { getLocalPathOpenOwnerForRoute, isLocalPathOpenBlocked } from '@/lib/local-path-open-guard'
 import {
   beginHugeRepoWarningProbe,
@@ -30,8 +34,7 @@ export function useSourceControlStatusRefresh({
   isFolder,
   repositoryHuge,
   activeConnectionId,
-  activeWorktreeInstanceId,
-  worktreeMap
+  activeWorktreeInstanceId
 }: {
   activeRepoTarget: RuntimeClientTarget | null
   activeWorktreeId: string | null
@@ -41,7 +44,6 @@ export function useSourceControlStatusRefresh({
   repositoryHuge: { limit: number } | null | undefined
   activeConnectionId: string | null
   activeWorktreeInstanceId?: string
-  worktreeMap: ReadonlyMap<string, { pushTarget?: GitPushTarget }>
 }): SourceControlStatusRefresh {
   const setGitStatus = useAppStore((s) => s.setGitStatus)
   const updateWorktreeGitIdentity = useAppStore((s) => s.updateWorktreeGitIdentity)
@@ -178,7 +180,11 @@ export function useSourceControlStatusRefresh({
           worktreeId: context.worktreeId,
           worktreePath: context.worktreePath,
           connectionId: context.connectionId,
-          pushTarget: worktreeMap.get(context.worktreeId)?.pushTarget,
+          pushTarget: worktreeCopyPushTarget(
+            useAppStore.getState(),
+            context.worktreeId,
+            context.ownerHostId ?? null
+          ),
           deps: {
             setGitStatus,
             updateWorktreeGitIdentity,
@@ -190,14 +196,7 @@ export function useSourceControlStatusRefresh({
         console.warn('[SourceControl] post-generation git status refresh failed', error)
       }
     },
-    [
-      fetchUpstreamStatus,
-      isFolder,
-      setGitStatus,
-      setUpstreamStatus,
-      updateWorktreeGitIdentity,
-      worktreeMap
-    ]
+    [fetchUpstreamStatus, isFolder, setGitStatus, setUpstreamStatus, updateWorktreeGitIdentity]
   )
 
   return {

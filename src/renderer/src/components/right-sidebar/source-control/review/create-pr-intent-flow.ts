@@ -34,7 +34,7 @@ export type CreatePrIntentRunToken = {
    * The worktree copy the run started on, pinned with its transport: a same-path twin on another
    * host shares the id, and re-resolving later could land on it. Null refuses every call.
    */
-  pinnedCopy?: WorktreeGitCopy | null
+  pinnedCopy: WorktreeGitCopy | null
   startedAt: number
 }
 

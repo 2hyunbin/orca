@@ -4,6 +4,13 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { parseRoutableExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { getKnownExecutionHostIdForWorktree } from './worktree-runtime-owner'
 import { getActiveWorkspaceExecutionHostId } from './active-workspace-host'
+import {
+  selectWorkspaceByHostTarget,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
+import type { GitPushTarget } from '../../../shared/worktree/types'
 import { runtimeTargetForWorkspaceOwner } from './resolve-owner'
 import {
   getConnectionIdForWorktreeCopy,
@@ -84,4 +91,23 @@ export function resolveWorktreeGitCopyNow(
 /** The selected copy's host, for a callback that must keep answering for it after a switch. */
 export function useWorktreeGitCopyHostId(worktreeId: string | null): ExecutionHostId | null {
   return useAppStore((state) => (worktreeId ? placedHostId(state, worktreeId) : null))
+}
+
+/**
+ * The publish target of one copy. Ids repeat across hosts, so an id-keyed lookup could hand a Create
+ * PR or refresh the other copy's remote and branch; with no host, only a lone copy answers.
+ */
+export function worktreeCopyPushTarget(
+  state: AppState,
+  worktreeId: string,
+  hostId: ExecutionHostId | null
+): GitPushTarget | undefined {
+  if (hostId) {
+    return selectWorkspaceByHostTarget(state, hostWorktreeTarget({ id: worktreeId, hostId }))
+      ?.pushTarget
+  }
+  const rows = (selectWorktreesByRepo(state)[getRepoIdFromWorktreeId(worktreeId)] ?? []).filter(
+    (row) => row.id === worktreeId
+  )
+  return rows.length === 1 ? rows[0].pushTarget : undefined
 }

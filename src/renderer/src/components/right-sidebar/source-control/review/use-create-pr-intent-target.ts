@@ -1,8 +1,8 @@
 import { useCallback, useEffect } from 'react'
-import { getConnectionId } from '@/lib/connection-context'
+import { useAppStore } from '@/store'
+import { worktreeCopyPushTarget } from '@/lib/worktree-git-copy'
 import type { CreatePrIntentRunToken } from './create-pr-intent-flow'
 import type { SourceControlOperationTarget } from '../listing/operation-target'
-import type { SourceControlWorktreeContext } from '../listing/use-worktree-context'
 import type { SourceControlWorktreeOperationState } from '../panel/use-worktree-operation-state'
 
 /**
@@ -11,21 +11,17 @@ import type { SourceControlWorktreeOperationState } from '../panel/use-worktree-
  */
 export function useSourceControlCreatePrIntentTarget({
   activeRepoId,
-  activeRepoTarget,
   activeWorktreeId,
   branchName,
   createPrIntentCurrentTargetRef,
   effectiveBaseRef,
-  worktreeMap,
   worktreePath
 }: {
   activeRepoId: string | null
-  activeRepoTarget: SourceControlWorktreeContext['activeRepoTarget']
   activeWorktreeId: string | null
   branchName: string
   createPrIntentCurrentTargetRef: SourceControlWorktreeOperationState['createPrIntentCurrentTargetRef']
   effectiveBaseRef: string | null
-  worktreeMap: SourceControlWorktreeContext['worktreeMap']
   worktreePath: string | null
 }) {
   useEffect(() => {
@@ -47,12 +43,16 @@ export function useSourceControlCreatePrIntentTarget({
 
   const getCreatePrIntentOperationTarget = useCallback(
     (token: CreatePrIntentRunToken): SourceControlOperationTarget =>
-      createPrIntentOperationTarget(token, {
-        activeRepoTarget,
-        pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget,
-        bareConnectionId: getConnectionId
-      }),
-    [activeRepoTarget, worktreeMap]
+      createPrIntentOperationTarget(
+        token,
+        // Why the pinned copy's row: a same-path twin's push target names another remote and branch.
+        worktreeCopyPushTarget(
+          useAppStore.getState(),
+          token.worktreeId,
+          token.pinnedCopy?.hostId ?? null
+        )
+      ),
+    []
   )
 
   return { getCreatePrIntentOperationTarget }
@@ -65,28 +65,13 @@ export function useSourceControlCreatePrIntentTarget({
  */
 export function createPrIntentOperationTarget(
   token: CreatePrIntentRunToken,
-  deps: {
-    activeRepoTarget: SourceControlWorktreeContext['activeRepoTarget']
-    pushTarget: SourceControlOperationTarget['pushTarget']
-    bareConnectionId: (worktreeId: string) => string | null | undefined
-  }
+  pushTarget: SourceControlOperationTarget['pushTarget']
 ): SourceControlOperationTarget {
-  const base = {
-    worktreeId: token.worktreeId,
-    worktreePath: token.worktreePath,
-    pushTarget: deps.pushTarget
-  }
-  if (token.pinnedCopy === undefined) {
-    return {
-      ...base,
-      target: deps.activeRepoTarget,
-      connectionId: deps.bareConnectionId(token.worktreeId) ?? undefined,
-      ownerHostId: null
-    }
-  }
   const copy = token.pinnedCopy
   return {
-    ...base,
+    worktreeId: token.worktreeId,
+    worktreePath: token.worktreePath,
+    pushTarget,
     target: copy?.transport ?? null,
     connectionId: copy?.connectionId,
     ownerHostId: copy?.hostId ?? null
