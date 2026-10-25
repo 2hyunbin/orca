@@ -1,4 +1,3 @@
-// Takeover RPCs have their own send-site integration tests; these fixtures script PTY acknowledgements.
 vi.mock('../terminal/worker-terminal-takeover-report', () => ({
   reportWorkerTerminalUserInput: vi.fn()
 }))
@@ -51,8 +50,6 @@ describe('useMobileNativeChatAnswerSend', () => {
   let mountedClient: RpcClient | null = null
   let mountedOnSendError: ((message: string) => void) | null = null
   let mountedAgent: AgentType = 'claude'
-  // The route sends through useNativeChatAcceptedAction, whose accepted callback
-  // retires the shared send-error banner (use-mobile-native-chat-controller.ts).
   let acceptedAnswerAsk: AnswerSend['answerAsk'] | null = null
   let onAccepted = vi.fn()
 
@@ -191,7 +188,6 @@ describe('useMobileNativeChatAnswerSend', () => {
     const timeouts: number[] = []
     const sendRequest = vi.fn(async (_method: string, _params?: unknown, options?: unknown) => {
       timeouts.push((options as { timeoutMs: number }).timeoutMs)
-      // A slow write must eat into what the rest of the answer has left.
       vi.advanceTimersByTime(6_000)
       return acceptedResponse()
     })
@@ -215,8 +211,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     })
 
     await expect(result).resolves.toBe(true)
-    // 15s total transport, minus 6s per completed write; the 1s pacing steps are
-    // deliberate and are added back, so they never shrink the budget.
+    // Credit deliberate pacing back to the 15s budget; transport still spends 6s per completed write.
     expect(timeouts).toEqual([15_000, 9_000, 3_000])
   })
 
@@ -226,7 +221,6 @@ describe('useMobileNativeChatAnswerSend', () => {
 
     let result: Promise<boolean> | undefined
     await act(async () => {
-      // A newline in raw keystrokes would submit early — must collapse to space.
       result = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [], other: 'zeta\nspaces' }])
     })
     await act(async () => {
@@ -304,7 +298,6 @@ describe('useMobileNativeChatAnswerSend', () => {
     await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'grok')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
-    // Grok's question tool commits the pasted answer: label text + one Enter.
     expect(sendRequest).toHaveBeenCalledTimes(1)
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({ text: 'Spaces', enter: true })
   })
@@ -312,12 +305,10 @@ describe('useMobileNativeChatAnswerSend', () => {
   it('clears an orphaned image paste before an answer that commits with Enter (#10228)', async () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
     await mount({ sendRequest } as unknown as RpcClient, vi.fn(), 'grok')
-    // An earlier image send left its path on this terminal's composer line.
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
-    // Without the leading clear, the pasted label + Enter would submit
-    // "<image path>Spaces" as one prompt.
+    // A stale image path would join the answer without the leading clear.
     expect(sendRequest).toHaveBeenCalledTimes(2)
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({ text: '\x15', enter: false })
     expect(sendRequest.mock.calls[1]?.[1]).toMatchObject({ text: 'Spaces', enter: true })
@@ -330,9 +321,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
-    // A single-select answer is a bare option digit against a live overlay: the
-    // clear would be swallowed but still acked, burning the marker and leaving the
-    // paste to corrupt the next real message. Only the digit may go.
+    // Active overlays swallow clears while acknowledging them; retain the stale marker for the next actual message.
     expect(sendRequest).toHaveBeenCalledTimes(1)
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({ text: '2', enter: false })
     expect(isMobileNativeChatInputStale('terminal')).toBe(true)
@@ -350,7 +339,6 @@ describe('useMobileNativeChatAnswerSend', () => {
     markMobileNativeChatInputStale('terminal')
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
-    // Only the clear was attempted; the answer must not ride on a dirty line.
     expect(sendRequest).toHaveBeenCalledTimes(1)
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({ text: '\x15', enter: false })
     expect(onSendError).toHaveBeenCalledWith('Answer not sent')
@@ -375,8 +363,7 @@ describe('useMobileNativeChatAnswerSend', () => {
   it('does not call a budget-truncated multi-question answer a definite non-send', async () => {
     const onSendError = vi.fn()
     const sendRequest = vi.fn(async () => {
-      // A slow relay: the first group lands, then the shared budget is gone and the
-      // next write short-circuits to 'rejected' without reaching the wire.
+      // After the first group lands, budget exhaustion must prevent another write.
       vi.advanceTimersByTime(16_000)
       return acceptedResponse()
     })
@@ -397,8 +384,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     })
 
     await expect(result).resolves.toBe(false)
-    // The first group DID land, so the remote selector is half-stepped — telling the
-    // user nothing was sent invites a retry on top of the advanced state.
+    // A partial answer advanced the selector; definite failure would invite an unsafe replay.
     expect(onSendError).toHaveBeenCalledWith('Answer partly sent — check chat before retrying')
   })
 
@@ -451,13 +437,11 @@ describe('useMobileNativeChatAnswerSend', () => {
     const sendRequest = vi.fn().mockResolvedValue(acceptedResponse())
     await mount({ sendRequest } as unknown as RpcClient, onSendError)
 
-    // An image paste sequence is mid-flight into the same PTY.
     expect(acquireMobileNativeChatTerminalWrite('terminal')).toBe(true)
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(false)
     expect(sendRequest).not.toHaveBeenCalled()
     expect(onSendError).toHaveBeenCalledWith('Answer not sent')
 
-    // Once that sequence releases, answers flow again.
     releaseMobileNativeChatTerminalWrite('terminal')
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
   })
@@ -468,10 +452,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     await mount({ sendRequest } as unknown as RpcClient, onSendError)
 
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [0] }])).resolves.toBe(true)
-    // A landed answer resolves its turn FALSE — correct for a queued successor,
-    // fatal if the turn outlives the chain. Leaving it parked in the slot fences
-    // every later answer on this handle for the life of the hook, not just an
-    // overlapping one, so the ask card dies after its first use.
+    // A completed chain must vacate its turn slot or all later answers stay fenced.
     await expect(answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])).resolves.toBe(true)
     expect(sendRequest).toHaveBeenCalledTimes(2)
     expect(onSendError).not.toHaveBeenCalled()
@@ -492,8 +473,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     await act(async () => {
       first = answerSend?.answerAsk(prompt, [{ indices: [0] }, { indices: [0] }])
     })
-    // The first digit already advanced Claude to q2. Replaying a from-q1 key
-    // plan now would answer the wrong question.
+    // The first digit advanced the question; replaying a fresh from-q1 plan would answer the wrong step.
     await act(async () => {
       second = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])
     })
@@ -504,7 +484,6 @@ describe('useMobileNativeChatAnswerSend', () => {
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
     expect(sendRequest).toHaveBeenCalledTimes(1)
-    // Both chains unwound: the terminal is free for the next composed write.
     expect(acquireMobileNativeChatTerminalWrite('terminal')).toBe(true)
     releaseMobileNativeChatTerminalWrite('terminal')
   })
@@ -539,7 +518,6 @@ describe('useMobileNativeChatAnswerSend', () => {
       await Promise.resolve()
     })
 
-    // The successor is queued behind the in-flight key, not racing it.
     expect(sendRequest).toHaveBeenCalledTimes(1)
     await act(async () => {
       resolveFirst(acceptedResponse())
@@ -581,7 +559,6 @@ describe('useMobileNativeChatAnswerSend', () => {
       await Promise.resolve()
     })
 
-    // Nothing landed, so the selector never moved — the successor is safe.
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(true)
     expect(sendRequest).toHaveBeenCalledTimes(2)
@@ -618,9 +595,7 @@ describe('useMobileNativeChatAnswerSend', () => {
 
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
-    // The card re-enables on a false result, so an unreported fence looks exactly
-    // like a dead button. The superseded chain stays quiet — the newest answer
-    // owns the error surface, and it is the one the user is waiting on.
+    // Only the newest chain reports the fence; silence would leave its re-enabled card looking dead.
     expect(onSendError).toHaveBeenCalledTimes(1)
     expect(onSendError).toHaveBeenCalledWith('Answer not sent — check chat before retrying')
   })
@@ -646,8 +621,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       second = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [0] }])
       await Promise.resolve()
     })
-    // A transport blip, not a user cancel: unlike Stop and ask-cancel, the lost
-    // input lease writes no Escape, so the card stays up with Submit re-enabled.
+    // Lease loss writes no Escape, unlike Stop/cancel, so the prompt can remain retryable.
     await setEnabled(false)
     await act(async () => {
       settle[0]!(acceptedResponse())
@@ -657,8 +631,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     expect(sendRequest).toHaveBeenCalledTimes(1)
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
-    // The first option key LANDED, so the live selector already moved. Reporting
-    // nothing invites a retry that double-steps it.
+    // A landed key moved the selector; reporting nothing permits an unsafe double step.
     expect(onSendError).toHaveBeenCalledTimes(1)
     expect(onSendError).toHaveBeenCalledWith('Answer not sent — check chat before retrying')
   })
@@ -685,14 +658,12 @@ describe('useMobileNativeChatAnswerSend', () => {
     })
     expect(sendRequest).toHaveBeenCalledTimes(1)
 
-    // Nothing landed, so the successor is cleared to write.
     await act(async () => {
       settle[0]!({ ...acceptedResponse(), result: { send: { accepted: false } } })
       await Promise.resolve()
     })
     expect(sendRequest).toHaveBeenCalledTimes(2)
-    // The successor's key is on the wire. The superseded chain unwinding behind it
-    // must NOT free the terminal, or an image paste interleaves into this sequence.
+    // The old chain must retain the shared lock while its successor writes or image paste can interleave.
     expect(acquireMobileNativeChatTerminalWrite('terminal')).toBe(false)
 
     await act(async () => {
@@ -726,8 +697,6 @@ describe('useMobileNativeChatAnswerSend', () => {
       second = acceptedAnswerAsk?.(TABS_OR_SPACES, [{ indices: [1] }])
       await Promise.resolve()
     })
-    // The healthy path: the first answer LANDS, which is also the case that fences
-    // hardest — its key moved the live selector.
     await act(async () => {
       settle[0]!(acceptedResponse())
       await Promise.resolve()
@@ -736,8 +705,7 @@ describe('useMobileNativeChatAnswerSend', () => {
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
     expect(onSendError).toHaveBeenCalledWith('Answer not sent — check chat before retrying')
-    // A superseded chain reporting success would clear the banner it just raised —
-    // the accepted hook runs after the fence, so the user would see nothing at all.
+    // Superseded success would clear the successor’s fence banner.
     expect(onAccepted).not.toHaveBeenCalled()
     expect(sendRequest).toHaveBeenCalledTimes(1)
   })
@@ -768,8 +736,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       await Promise.resolve()
     })
 
-    // The pasted shape commits with Enter, so a superseded chain is doubly unsafe
-    // to report as accepted — the answer it committed is not the one on screen.
+    // Pasted Enter already committed an answer; superseded success would hide the new refusal.
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
     expect(onAccepted).not.toHaveBeenCalled()
@@ -792,17 +759,13 @@ describe('useMobileNativeChatAnswerSend', () => {
       first = acceptedAnswerAsk?.(TABS_OR_SPACES, [{ indices: [1] }])
       await Promise.resolve()
     })
-    // Stop, an ask cancel, and a dropped input lease all bump the generation with
-    // NO successor chain behind them.
     await act(async () => {
       answerSend?.cancelPending()
       settle[0]!(acceptedResponse())
       await Promise.resolve()
     })
 
-    // The key is on the PTY and nobody else owns the surface. Calling that a
-    // non-send leaves the card up and silent (fail() never runs on an accepted
-    // write), and the retry double-steps the selector this key already moved.
+    // Without a successor, landed keys remain successful; calling them unsent invites a double step.
     await expect(first).resolves.toBe(true)
     expect(onAccepted).toHaveBeenCalledTimes(1)
     expect(onSendError).not.toHaveBeenCalled()
@@ -830,8 +793,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       await Promise.resolve()
     })
 
-    // The pasted shape already committed with Enter, so suppressing the success
-    // strands an answered card the user is invited to submit a second time.
+    // An Enter-committed answer must dismiss its card rather than offer a duplicate submit.
     await expect(first).resolves.toBe(true)
     expect(onAccepted).toHaveBeenCalledTimes(1)
     expect(onSendError).not.toHaveBeenCalled()
@@ -872,10 +834,8 @@ describe('useMobileNativeChatAnswerSend', () => {
     await expect(first).resolves.toBe(false)
     await expect(second).resolves.toBe(false)
     await expect(third).resolves.toBe(false)
-    // The middle chain sent nothing, so only the verdict it INHERITED can stop the
-    // third from replaying a from-scratch plan onto the advanced selector.
+    // The middle chain sent nothing; inherited ambiguity must still block the third from replaying an advanced selector.
     expect(sendRequest).toHaveBeenCalledTimes(1)
-    // Only the newest chain owns the error surface.
     expect(onSendError).toHaveBeenCalledTimes(1)
     expect(onSendError).toHaveBeenCalledWith('Answer not sent — check chat before retrying')
   })
@@ -901,7 +861,6 @@ describe('useMobileNativeChatAnswerSend', () => {
       second = answerSend?.answerAsk(TABS_OR_SPACES, [{ indices: [1] }])
       await Promise.resolve()
     })
-    // Nothing landed, so the successor is cleared and puts its own key on the wire.
     await act(async () => {
       settle[0]!({ ...acceptedResponse(), result: { send: { accepted: false } } })
       await Promise.resolve()
@@ -913,8 +872,7 @@ describe('useMobileNativeChatAnswerSend', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
-    // The first chain unwound while the second was mid-write: it must not have
-    // dropped the second's turn, or this one writes into the same PTY concurrently.
+    // A newer chain must not lose its lock when the earlier one finishes.
     expect(sendRequest).toHaveBeenCalledTimes(2)
 
     await act(async () => {

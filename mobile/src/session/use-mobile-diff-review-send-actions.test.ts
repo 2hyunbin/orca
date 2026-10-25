@@ -13,7 +13,6 @@ import {
 } from './mobile-native-chat-stale-input'
 import { useMobileDiffReviewSendActions } from './use-mobile-diff-review-send-actions'
 
-// A connected client whose only behaviour is the scripted `sendRequest`.
 function requestPortRpcClient(sendRequest: RpcClient['sendRequest']): RpcClient {
   return {
     sendRequest,
@@ -31,8 +30,7 @@ function requestPortRpcClient(sendRequest: RpcClient['sendRequest']): RpcClient 
 type SendActions = ReturnType<typeof useMobileDiffReviewSendActions>
 
 vi.mock('../platform/haptics', () => ({ triggerSuccess: vi.fn() }))
-// Resolving `true`, which is what the pasteboard answers when it took the text: the seam reads
-// that boolean, and a mock resolving `undefined` put every copy down the refusal arm unseen.
+// Return the pasteboard’s real success boolean; undefined would exercise only refusal unnoticed.
 const clipboardMock = vi.hoisted(() => ({ setStringAsync: vi.fn() }))
 vi.mock('expo-clipboard', () => clipboardMock)
 
@@ -75,7 +73,6 @@ function launchedReply(promptOutcome: 'handed-to-terminal' | 'not-delivered', wa
   })
 }
 
-// Answers the agent loader's reads and the launch, by method.
 function launchClient(
   promptOutcome: 'handed-to-terminal' | 'not-delivered',
   launchReply: () => Promise<RpcResponse> = async () => launchedReply(promptOutcome)
@@ -156,7 +153,6 @@ describe('useMobileDiffReviewSendActions', () => {
     })
   }
 
-  /** Copying reaches no client, so the cases below mount without one rather than stubbing it. */
   async function mountWithoutClient(): Promise<void> {
     mountedClient = null
     await act(async () => {
@@ -176,8 +172,7 @@ describe('useMobileDiffReviewSendActions', () => {
   })
 
   it('reports a refused copy instead of claiming it copied', async () => {
-    // The pasteboard answering `false` is the case the seam exists to surface: on the web the verb
-    // is refused when the route was not granted it, and the only caller is a floating promise.
+    // Web clipboard refusal rejects a fire-and-forget caller, so feedback must settle without an unhandled rejection.
     clipboardMock.setStringAsync.mockResolvedValue(false)
     await mountWithoutClient()
     await act(async () => {
@@ -196,15 +191,13 @@ describe('useMobileDiffReviewSendActions', () => {
     })
 
     expect(sendRequest).toHaveBeenCalledTimes(2)
-    // Order matters: the Ctrl+U clear must land before the enter-carrying write,
-    // or the orphaned paste is submitted with the notes.
+    // Clear before the Enter-carrying notes write so an orphaned paste cannot join the prompt.
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({
       terminal: 'terminal-1',
       text: '\x15',
       enter: false
     })
     expect(sendRequest.mock.calls[1]?.[1]).toMatchObject({ terminal: 'terminal-1', enter: true })
-    // The second call is the notes themselves, not another clear.
     expect(String(sendRequest.mock.calls[1]?.[1]?.text)).toContain('rename this')
     expect(isMobileNativeChatInputStale('terminal-1')).toBe(false)
     expect(setActionError).toHaveBeenCalledWith('Review notes sent')
@@ -222,13 +215,11 @@ describe('useMobileDiffReviewSendActions', () => {
 
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).message).toBe('Failed to send notes')
-    // Only the failed clear — never the notes.
     expect(sendRequest).toHaveBeenCalledTimes(1)
     expect(sendRequest.mock.calls[0]?.[1]).toMatchObject({ text: '\x15', enter: false })
     expect(saveCommentsAndReviewState).not.toHaveBeenCalled()
     expect(setActionError).not.toHaveBeenCalled()
     expect(sheets.closeSheet).not.toHaveBeenCalled()
-    // Marker survives for the next attempt.
     expect(isMobileNativeChatInputStale('terminal-1')).toBe(true)
   })
 
