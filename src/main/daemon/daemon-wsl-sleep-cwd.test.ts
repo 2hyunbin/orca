@@ -12,12 +12,10 @@ vi.mock('../wsl/wsl-guest-pane-processes', async (importOriginal) => ({
 
 const { readDaemonWslSleepCwd } = await import('./daemon-wsl-sleep-cwd')
 
-const pane = { paneKey: 'tab-1:leaf-1', wslDistro: 'Ubuntu' }
+const pane = { paneKey: 'tab-1:leaf-1', wslDistro: 'Ubuntu', live: true }
 const shell: WslGuestProcessRow = {
   pid: 10,
   ppid: 1,
-  sid: 10,
-  argc: 1,
   comm: 'bash',
   paneKey: pane.paneKey,
   cwd: '/home/a/deep'
@@ -39,7 +37,8 @@ describe('readDaemonWslSleepCwd', () => {
   it("answers the shell's folder in the bridge's UNC spelling", async () => {
     readRows.mockResolvedValue([shell])
     expect(await readDaemonWslSleepCwd(pane)).toBe('\\\\wsl.localhost\\Ubuntu\\home\\a\\deep')
-    expect(readRows).toHaveBeenCalledWith('Ubuntu', 3_000)
+    // A live pane's distro is running: no separate running check.
+    expect(readRows).toHaveBeenCalledWith('Ubuntu', 3_000, { running: true })
   })
 
   it('gives the read at most a quarter of what is left of the Sleep, capped at 3 s', async () => {

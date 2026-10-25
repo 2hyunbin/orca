@@ -1,5 +1,5 @@
 /**
- * Every process in a running distro with its Orca pane key and folder, read inside the distro.
+ * The Orca pane processes of a running distro with their pane key and folder, read inside it.
  * On Windows a bridge WSL pane's own process is `wsl.exe`, and bash there reports no folder
  * (no OSC 7), so this is the only place a pane's shell folder can be learned. Each guest process
  * of a pane inherits `ORCA_PANE_KEY`.
@@ -11,10 +11,6 @@ import { runWslProcess } from './wsl-runner'
 export type WslGuestProcessRow = {
   pid: number
   ppid: number
-  /** Session id. */
-  sid: number
-  /** Arguments in /proc/<pid>/cmdline: an interactive shell has one, a script or `-c` more. */
-  argc: number
   paneKey: string | null
   comm: string
   /** The process's working directory, from /proc/<pid>/cwd; absent when it could not be read. */
@@ -25,22 +21,23 @@ const BEGIN = 'ORCA_PANE_PROCESSES_BEGIN'
 const END = 'ORCA_PANE_PROCESSES_END'
 
 /**
- * One line per process between two fence lines: pid, ppid, sid, argc, comm, the pane key and the
- * cwd, tab-separated. Fields come after the last `)` of /proc/<pid>/stat because comm may hold
- * spaces or parens. POSIX sh and BusyBox tools only.
+ * One line per Orca pane process between two fence lines: pid, ppid, comm, the pane key and the
+ * cwd, tab-separated. One `grep` over every environ finds the tagged processes, so
+ * the cost follows the panes, not the distro's process count. Fields come after the last `)` of
+ * /proc/<pid>/stat because comm may hold spaces or parens. POSIX sh and BusyBox tools only.
  */
 export const WSL_GUEST_PANE_PROCESS_SCRIPT = [
   `echo ${BEGIN}`,
-  'for d in /proc/[0-9]*; do',
+  "for e in $(grep -l -s 'ORCA_PANE_KEY=' /proc/[0-9]*/environ); do",
+  '  d=${e%/environ}',
   '  p=${d#/proc/}',
   '  s=$(cat "$d/stat" 2>/dev/null) || continue',
   '  r=${s##*) }',
   '  set -- $r',
   '  c=$(cat "$d/comm" 2>/dev/null)',
-  `  n=$(tr '\\0' '\\n' < "$d/cmdline" 2>/dev/null | wc -l)`,
-  `  k=$(tr '\\0' '\\n' < "$d/environ" 2>/dev/null | sed -n 's/^ORCA_PANE_KEY=//p' | head -n 1)`,
+  `  k=$(tr '\\0' '\\n' < "$e" 2>/dev/null | sed -n 's/^ORCA_PANE_KEY=//p' | head -n 1)`,
   '  w=$(readlink "$d/cwd" 2>/dev/null)',
-  `  printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' "$p" "$2" "$4" "$n" "$c" "$k" "$w"`,
+  `  printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$p" "$2" "$c" "$k" "$w"`,
   'done',
   `echo ${END}`
 ].join('\n')
@@ -56,16 +53,14 @@ export function parseWslGuestPaneProcesses(stdout: string): WslGuestProcessRow[]
   const rows: WslGuestProcessRow[] = []
   for (const line of lines.slice(begin + 1, end)) {
     // The cwd is last and may itself hold a tab.
-    const [pid, ppid, sid, argc, comm, paneKey, ...cwd] = line.split('\t')
-    const numbers = [pid, ppid, sid, argc].map((value) => Number(value?.trim()))
+    const [pid, ppid, comm, paneKey, ...cwd] = line.split('\t')
+    const numbers = [pid, ppid].map((value) => Number(value?.trim()))
     if (comm === undefined || numbers.some((value) => !Number.isInteger(value))) {
       continue
     }
     rows.push({
       pid: numbers[0],
       ppid: numbers[1],
-      sid: numbers[2],
-      argc: numbers[3],
       comm: comm.trim(),
       paneKey: paneKey?.trim() || null,
       ...(readableCwd(cwd.join('\t')) ? { cwd: cwd.join('\t') } : {})
@@ -82,7 +77,9 @@ const readsInFlight = new Map<string, Promise<WslGuestProcessRow[] | null>>()
  */
 export function readWslGuestPaneProcesses(
   distro: string,
-  timeoutMs: number
+  timeoutMs: number,
+  /** The caller has a live process in the distro, so it is running and needs no check. */
+  opts: { running?: boolean } = {}
 ): Promise<WslGuestProcessRow[] | null> {
   // WSL resolves distro names case-insensitively.
   const key = distro.toLowerCase()
@@ -91,7 +88,7 @@ export function readWslGuestPaneProcesses(
     return inFlight
   }
   const read = (async () => {
-    if (!(await isWslDistroRunning(distro))) {
+    if (!opts.running && !(await isWslDistroRunning(distro))) {
       return null
     }
     const result = await runWslProcess({

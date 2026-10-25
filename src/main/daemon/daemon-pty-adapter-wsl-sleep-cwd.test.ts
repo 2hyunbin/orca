@@ -11,7 +11,13 @@ import type * as GuestProcessesModule from '../wsl/wsl-guest-pane-processes'
 import * as startupCwdProbe from '../ipc/pty/host-env/startup-cwd-directory-exists'
 
 const readRows = vi.hoisted(() =>
-  vi.fn(async (_distro: string, _timeoutMs: number): Promise<WslGuestProcessRow[] | null> => null)
+  vi.fn(
+    async (
+      _distro: string,
+      _timeoutMs: number,
+      _opts?: { running?: boolean }
+    ): Promise<WslGuestProcessRow[] | null> => null
+  )
 )
 vi.mock('../wsl/wsl-guest-pane-processes', async (importOriginal) => ({
   ...(await importOriginal<typeof GuestProcessesModule>()),
@@ -23,8 +29,8 @@ const WSL_CWD = '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo'
 
 function shellIn(cwd: string): WslGuestProcessRow[] {
   return [
-    { pid: 10, ppid: 1, sid: 10, argc: 1, comm: 'bash', paneKey: PANE_KEY, cwd },
-    { pid: 11, ppid: 10, sid: 10, argc: 1, comm: 'sleep', paneKey: PANE_KEY, cwd: '/tmp' }
+    { pid: 10, ppid: 1, comm: 'bash', paneKey: PANE_KEY, cwd },
+    { pid: 11, ppid: 10, comm: 'sleep', paneKey: PANE_KEY, cwd: '/tmp' }
   ]
 }
 
@@ -37,6 +43,7 @@ describe('a sleeping bridge WSL pane keeps its shell folder', () => {
   let adapter: DaemonPtyAdapter | undefined
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')
   const spawnCwds: (string | undefined)[] = []
+  const deletedCwds = new Set<string>()
   let lastSubprocess: ReturnType<typeof createMockSubprocess>
 
   beforeEach(async () => {
@@ -44,8 +51,12 @@ describe('a sleeping bridge WSL pane keeps its shell folder', () => {
     readRows.mockReset()
     readRows.mockResolvedValue(shellIn('/home/jin/repo/deep/er'))
     spawnCwds.length = 0
+    deletedCwds.clear()
     const harness = await startDaemonAdapterHarness((opts) => {
       spawnCwds.push(opts.cwd)
+      if (opts.cwd && deletedCwds.has(opts.cwd)) {
+        throw new Error(`Working directory "${opts.cwd}" does not exist. It may have been deleted.`)
+      }
       lastSubprocess = createMockSubprocess()
       return lastSubprocess
     })
@@ -82,7 +93,7 @@ describe('a sleeping bridge WSL pane keeps its shell folder', () => {
 
     await adapter.shutdown(id, { immediate: true, keepHistory: true })
 
-    expect(readRows).toHaveBeenCalledWith('Ubuntu', expect.any(Number))
+    expect(readRows).toHaveBeenCalledWith('Ubuntu', expect.any(Number), { running: true })
     expect(checkpointCwd(id)).toBe(`${WSL_CWD}\\deep\\er`)
   })
 
@@ -103,7 +114,7 @@ describe('a sleeping bridge WSL pane keeps its shell folder', () => {
 
     await adapter.shutdown(id, { immediate: true, keepHistory: true })
 
-    expect(readRows).toHaveBeenCalledWith('Ubuntu', expect.any(Number))
+    expect(readRows).toHaveBeenCalledWith('Ubuntu', expect.any(Number), { running: true })
     expect(checkpointCwd(id)).toBe(`${WSL_CWD}\\deep\\er`)
   })
 
@@ -126,6 +137,29 @@ describe('a sleeping bridge WSL pane keeps its shell folder', () => {
     await spawn()
 
     expect(spawnCwds.at(-1)).toBe(`${WSL_CWD}\\deep\\er`)
+  })
+
+  it('wakes at the folder it was asked for when the one it slept in was deleted', async () => {
+    // The guest cannot say whether the folder exists, so the spawn itself finds it gone.
+    vi.spyOn(startupCwdProbe, 'probeRecoveredStartupCwdDirectory').mockResolvedValue(null)
+    adapter = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir() })
+    const spawn = () =>
+      adapter!.spawn({
+        cols: 80,
+        rows: 24,
+        cwd: WSL_CWD,
+        env: { ORCA_PANE_KEY: PANE_KEY },
+        sessionId: 'repo::/repo@@deleted'
+      })
+    const { id } = await spawn()
+    lastSubprocess._simulateData('$ cd deep/er\r\n')
+    await adapter.shutdown(id, { immediate: true, keepHistory: true })
+    deletedCwds.add(`${WSL_CWD}\\deep\\er`)
+
+    const woken = await spawn()
+
+    expect(spawnCwds.slice(-2)).toEqual([`${WSL_CWD}\\deep\\er`, WSL_CWD])
+    expect(woken.coldRestore).toBeTruthy()
   })
 
   it('keeps the spawn folder when the distro cannot be read', async () => {

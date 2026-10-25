@@ -119,7 +119,12 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
       const sleepCwd =
         sleepWslDistro && sleepPaneKey
           ? await readDaemonWslSleepCwd(
-              { paneKey: sleepPaneKey, wslDistro: sleepWslDistro },
+              {
+                paneKey: sleepPaneKey,
+                wslDistro: sleepWslDistro,
+                // A live pane's own wsl.exe keeps its distro running.
+                live: this.activeSessionIds.has(id)
+              },
               opts.deadlineMs
             )
           : null

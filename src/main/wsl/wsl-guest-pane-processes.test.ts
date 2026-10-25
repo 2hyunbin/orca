@@ -25,7 +25,7 @@ const KEY = 'tab-1:leaf-1'
 const fenced = (...lines: string[]) =>
   ['ORCA_PANE_PROCESSES_BEGIN', ...lines, 'ORCA_PANE_PROCESSES_END', ''].join('\n')
 const row = (pid: number, ppid: number, comm: string, key: string, cwd: string) =>
-  [pid, ppid, pid, 1, comm, key, cwd].join('\t')
+  [pid, ppid, comm, key, cwd].join('\t')
 
 describe('the guest process table', () => {
   beforeEach(() => {
@@ -37,7 +37,7 @@ describe('the guest process table', () => {
   it('reads only between its fences, and nothing from a list that was cut off', () => {
     const stdout = fenced(row(10, 1, 'bash', KEY, '/home/a/deep'))
     expect(parseWslGuestPaneProcesses(`banner\n${stdout}`)).toEqual([
-      { pid: 10, ppid: 1, sid: 10, argc: 1, comm: 'bash', paneKey: KEY, cwd: '/home/a/deep' }
+      { pid: 10, ppid: 1, comm: 'bash', paneKey: KEY, cwd: '/home/a/deep' }
     ])
     expect(
       parseWslGuestPaneProcesses(`ORCA_PANE_PROCESSES_BEGIN\n${row(10, 1, 'bash', KEY, '/')}`)
@@ -71,6 +71,18 @@ describe('the guest process table', () => {
     isWslDistroRunning.mockResolvedValue(false)
     expect(await readWslGuestPaneProcesses('Ubuntu', 3_000)).toBeNull()
     expect(runWslProcess).not.toHaveBeenCalled()
+  })
+
+  it('skips the running check for a distro the caller has a live process in', async () => {
+    runWslProcess.mockResolvedValue({
+      environmentResolved: true,
+      code: 0,
+      stdout: fenced(),
+      stderr: '',
+      timedOut: false
+    })
+    expect(await readWslGuestPaneProcesses('Ubuntu', 3_000, { running: true })).toEqual([])
+    expect(isWslDistroRunning).not.toHaveBeenCalled()
   })
 
   it('runs one fixed script with no login shell, shared by callers asking at once', async () => {

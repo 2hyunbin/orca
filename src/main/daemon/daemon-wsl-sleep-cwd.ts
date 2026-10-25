@@ -16,7 +16,7 @@ const READ_SHARE_OF_DEADLINE = 0.25
 
 /** The shell's folder in the bridge's UNC spelling, which wake reads; else null. */
 export async function readDaemonWslSleepCwd(
-  pane: { paneKey: string; wslDistro: string },
+  pane: { paneKey: string; wslDistro: string; live: boolean },
   deadlineMs?: number
 ): Promise<string | null> {
   const budget = Math.floor(
@@ -31,7 +31,7 @@ export async function readDaemonWslSleepCwd(
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const rows = await Promise.race([
-      readWslGuestPaneProcesses(pane.wslDistro, budget),
+      readWslGuestPaneProcesses(pane.wslDistro, budget, { running: pane.live }),
       new Promise<null>((resolve) => {
         timer = setTimeout(() => resolve(null), budget)
         timer.unref?.()
