@@ -2,7 +2,6 @@ import { isAbsolute } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as WslPaths from '../../../shared/wsl-paths'
 import type * as BundledRipgrepPath from '../../ripgrep/bundled-ripgrep-path'
 
 const {
@@ -41,10 +40,6 @@ vi.mock('../../git/runner', () => ({
 
 vi.mock('../../wsl', () => ({
   parseWslPath: parseWslPathMock,
-  toWindowsWslPath: toWindowsWslPathMock
-}))
-vi.mock('../../../shared/wsl-paths', async (importOriginal) => ({
-  ...(await importOriginal<typeof WslPaths>()),
   toWindowsWslPath: toWindowsWslPathMock
 }))
 
