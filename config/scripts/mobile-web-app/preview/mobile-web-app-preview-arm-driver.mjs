@@ -208,7 +208,7 @@ export async function openPreviewArm(
       if (!artifactFrame || artifactFrame.isDetached()) {
         throw new Error('The loaded preview frame is missing before its action')
       }
-      await waitForFrameInputRouting(page, clip, signal)
+      await waitForFrameInputRouting(page, clip, signal, arm)
       await act({ page, frame: artifactFrame }).catch((error) => {
         actError = String(error).split('\n')[0]
       })
