@@ -17,6 +17,7 @@ Never steal monitor focus or reveal test windows: no `show()`, `showInactive()`,
 Rebuild modified launch-policy code before running an app; stale build wrappers are not safe.
 
 Use the `$electron` skill and Playwright CDP for rendered Orca UI checks. Do not use computer-use for Orca UI validation.
+Screenshot presentational components without Electron: `pnpm fixtures:shot <id>` ([fixtures](docs/reference/component-fixtures.md)).
 
 # Code Style
 

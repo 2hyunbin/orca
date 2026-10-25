@@ -1,6 +1,6 @@
 # Native chat typography and color
 
-Read before changing anything under `src/renderer/src/components/native-chat/`. Core rules: [`docs/STYLEGUIDE.md`](../STYLEGUIDE.md). `pnpm lint` enforces the type scale, softened-foreground, and focus-ring rules below (`config/oxlint-plugins/native-chat-design-tokens.mjs`).
+Read before changing anything under `src/renderer/src/components/native-chat/`. Core rules: [`docs/STYLEGUIDE.md`](../STYLEGUIDE.md). `pnpm lint` enforces the type scale, softened-foreground, and focus-ring rules below (`config/ast-grep/rules/native-chat-*.yml`).
 
 ## Chat type scale
 
