@@ -25,39 +25,24 @@ const HERMES_EVENT_STATES: Record<string, 'working' | 'waiting' | 'done'> = {
   post_approval_response: 'working'
 }
 
-/**
- * Admits only an event whose turn has not already ended on this pane. Hermes sends its own
- * `pre_tool_call`/`post_tool_call`/`post_approval_response` hooks over an async channel that
- * does not guarantee delivery order against the turn-end hook; a tool-call event that logically
- * preceded the turn's end can still arrive seconds after it. Without this gate that late
- * delivery is mapped straight to `working` and silently reopens a pane the user already saw
- * finish (status regression: "done" flips back to "working" seconds later, with no new turn).
- *
- * `pre_llm_call`/`on_session_start` open a new turn and clear the latch; every other `done`
- * event (`post_llm_call` and the session-end/finalize/reset trio) closes the current turn.
- * Every remaining event is admitted only while the current turn is still open.
- */
-const HERMES_TURN_OPEN_EVENTS = new Set(['pre_llm_call', 'on_session_start'])
-const HERMES_TURN_CLOSE_EVENTS = new Set([
-  'post_llm_call',
-  'on_session_end',
-  'on_session_finalize',
-  'on_session_reset'
-])
-
-function admitsHermesEvent(state: HookListenerState, paneKey: string, eventName: string): boolean {
-  const current = state.hermesTurnByPaneKey.get(paneKey)
-  if (HERMES_TURN_OPEN_EVENTS.has(eventName)) {
-    state.hermesTurnByPaneKey.set(paneKey, { turnKey: (current?.turnKey ?? 0) + 1, ended: false })
+/** Why: Hermes' background memory/skill review fork runs after the turn ends and fires
+ *  `pre_tool_call`/`post_tool_call` on the parent's session, but never `pre_llm_call` or a
+ *  turn-end hook, so admitting those would leave a finished pane stuck on `working`. */
+function admitsHermesEvent(
+  state: HookListenerState,
+  paneKey: string,
+  eventName: unknown,
+  stateName: 'working' | 'waiting' | 'done'
+): boolean {
+  if (stateName === 'done') {
+    state.hermesTurnEndedPaneKeys.add(paneKey)
     return true
   }
-  if (HERMES_TURN_CLOSE_EVENTS.has(eventName)) {
-    if (current) {
-      state.hermesTurnByPaneKey.set(paneKey, { ...current, ended: true })
-    }
+  if (eventName === 'pre_llm_call') {
+    state.hermesTurnEndedPaneKeys.delete(paneKey)
     return true
   }
-  return current?.ended !== true
+  return !state.hermesTurnEndedPaneKeys.has(paneKey)
 }
 
 export function normalizeHermesEvent(
@@ -73,9 +58,7 @@ export function normalizeHermesEvent(
     return null
   }
 
-  // Why: a stale sub-turn event (see admitsHermesEvent) restates activity that already ended;
-  // it must not resurrect `working` over the `done` already shown for this turn.
-  if (typeof eventName === 'string' && !admitsHermesEvent(state, paneKey, eventName)) {
+  if (!admitsHermesEvent(state, paneKey, eventName, stateName)) {
     return null
   }
 
