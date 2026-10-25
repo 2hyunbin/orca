@@ -22,6 +22,11 @@ export function prepareClaudePermissionObservation(
   if (readFirstString(hook, ['agent_id', 'agentId'])) {
     return hook
   }
+  // An MCP dialog owns a separate wait, so the displaced permission can no longer settle it.
+  if (eventName === 'Elicitation') {
+    state.claudePermissionObservationByPaneKey.delete(paneKey)
+    return hook
+  }
   if (eventName !== 'PermissionRequest') {
     return hook
   }
@@ -278,6 +283,7 @@ export function claudeWaitingRequestIdentity(
   const lead = state.claudeLeadStateByPaneKey.get(paneKey)
   if (
     source !== 'claude' ||
+    eventName === 'Elicitation' ||
     lead?.state !== 'waiting' ||
     previous?.payload.state !== 'waiting' ||
     (previous.hookEventName !== 'PermissionRequest' && previous.hookEventName !== 'PreToolUse') ||

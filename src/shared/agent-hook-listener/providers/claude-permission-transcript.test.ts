@@ -426,3 +426,49 @@ it('retires unanchored gap proof without a status write or retained retry debt',
   expect(h.state.claudePermissionObservationByPaneKey.has(paneKey)).toBe(false)
   expect(h.state.lastStatusByPaneKey.get(paneKey)).toBe(h.original)
 })
+
+it('keeps MCP elicitation independent of pending and settled permission transcript results', () => {
+  for (const order of ['pending', 'settled', 'unbound'] as const) {
+    const h = proofHarness(order === 'unbound')
+    const post = (hook_event_name: string) => {
+      const event = normalizeHookPayload(
+        h.state,
+        'claude',
+        {
+          paneKey,
+          payload: {
+            session_id: sessionId,
+            hook_event_name,
+            mcp_server_name: 'server',
+            action: 'accept'
+          }
+        },
+        'production'
+      )
+      if (!event) {
+        throw new Error('missing elicitation event')
+      }
+      expect(cacheRelayLegacyAgentStatus(h.state, event, 256, () => {})).toBe(true)
+      return event
+    }
+    appendFileSync(h.transcript, `${h.lines.slice(1).join('\n')}\n`)
+    const queued = pollClaudePermissionTranscript(h.state, h.original)
+    if (order === 'settled') {
+      expect(applyClaudePermissionTranscript(h.state, h.original, h.apply)?.payload.state).toBe(
+        'done'
+      )
+    }
+    const waiting = post('Elicitation')
+    expect(waiting.hookEventName).toBe('Elicitation')
+    expect(waiting.toolUseId).toBeUndefined()
+    expect(waiting.payload.state).toBe('waiting')
+    expect(queued?.onAccepted()).not.toBe(true)
+    expect(pollClaudePermissionTranscript(h.state, h.original)).toBeUndefined()
+    expect(h.state.claudeLeadStateByPaneKey.get(paneKey)?.state).toBe('waiting')
+    const resumed = post('ElicitationResult')
+    expect(resumed.hookEventName).toBe('ElicitationResult')
+    expect(resumed.toolUseId).toBeUndefined()
+    expect(resumed.payload.state).toBe(order === 'settled' ? 'done' : 'working')
+    expect(resumed.claudeSettledRequests).toBeUndefined()
+  }
+})
