@@ -26,7 +26,10 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { structuredAgentSessionTabId } from '../../../../shared/structured-agent-session-projection'
 import { hasStructuredAgentSessionLaunchCancellationTombstone } from '@/lib/structured-agent-session-launch-registry'
 import { withPendingPaneTitleRenames } from '../pending-pane-title-renames'
-import { environmentIdsMirroringLocalTab } from './tracking-mappings'
+import {
+  isMirroredTerminalOfAnotherEnvironment,
+  type MirrorRowOwnershipState
+} from './mirror-row-ownership'
 
 export function isReadyTerminalTab(
   tab: RuntimeMobileSessionTabsResult['tabs'][number]
@@ -240,29 +243,8 @@ export function chooseRemoteTerminalLayout(
   })
 }
 
-/**
- * A workspace can hold mirrors from several paired runtimes at once — an SSH host's server for its
- * terminals and another desktop's app for a browser tab it hosts there (#31983). A mirror whose
- * pane bindings, or failing those the last applied frames, name only other runtimes is theirs.
- */
-function isMirroredTerminalTabOfAnotherEnvironment(
-  tab: TerminalTab,
-  environmentId: string,
-  persistedLeafPtyIds: Readonly<Record<string, string>> | undefined
-): boolean {
-  const bindingOwners = new Set(
-    [tab.ptyId, ...Object.values(persistedLeafPtyIds ?? {})]
-      .map((ptyId) => (ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null))
-      .filter((owner): owner is string => owner !== null)
-  )
-  if (bindingOwners.size > 0) {
-    return !bindingOwners.has(environmentId)
-  }
-  const frameOwners = environmentIdsMirroringLocalTab(tab.worktreeId, tab.id)
-  return frameOwners.size > 0 && !frameOwners.has(environmentId)
-}
-
 export function shouldReplaceTerminalTab(
+  state: MirrorRowOwnershipState,
   tab: TerminalTab,
   environmentId: string,
   nextRemotePtyIds: ReadonlySet<string>,
@@ -279,7 +261,7 @@ export function shouldReplaceTerminalTab(
     // Why: host snapshots are authoritative for their own mirrored tabs; replace them even when the next surface still awaits a stream handle, else parity drifts.
     return (
       nextMirroredTerminalIds.has(tab.id) ||
-      !isMirroredTerminalTabOfAnotherEnvironment(tab, environmentId, persistedLeafPtyIds)
+      !isMirroredTerminalOfAnotherEnvironment(state, tab, environmentId)
     )
   }
   if (tab.pendingActivationSpawn && tab.ptyId === null && nextRemotePtyIds.size > 0) {

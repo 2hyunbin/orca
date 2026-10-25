@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import type {
+  RuntimeMobileSessionTabsRemovedResult,
+  RuntimeMobileSessionTabsResult
+} from '../../../shared/runtime-types'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import type { WebSessionTabsSyncState } from './web-session-tabs-sync/state'
+import type { MirrorRowOwnershipState } from './web-session-tabs-sync/mirror-row-ownership'
 import {
   LEAF_ID,
   NOW,
@@ -53,7 +57,8 @@ function serverTerminal(
         parentTabId: hostTabId,
         leafId: LEAF_ID,
         isActive: true,
-        status: 'pending-handle'
+        status: 'pending-handle',
+        terminal: null
       }
 }
 
@@ -180,6 +185,37 @@ describe('a workspace mirrored from two paired runtimes', () => {
 
     state = apply(state, desktopABrowserSnapshot([desktopAPage], 1), DESKTOP_A_ENV, NOW + 1000)
     expect(chatIds(state)).toEqual(['codex-1'])
+  })
+
+  it("keeps the server's terminals when the other runtime retracts the workspace", () => {
+    let state = apply(makeState(), makeSnapshot([serverTerminal('agent-1', true)]), SERVER_ENV, NOW)
+    state = apply(state, desktopABrowserSnapshot([desktopAPage], 1), DESKTOP_A_ENV, NOW + 1000)
+    const retraction: RuntimeMobileSessionTabsRemovedResult = {
+      ...desktopABrowserSnapshot([], 2),
+      removed: true,
+      activeGroupId: null,
+      activeTabId: null,
+      activeTabType: null,
+      tabs: []
+    }
+    state = apply(state, retraction, DESKTOP_A_ENV, NOW + 2000)
+    expect(terminalIds(state)).toEqual(['web-terminal-agent-1'])
+    expect(state.browserTabsByWorktree[WT] ?? []).toEqual([])
+  })
+
+  it('lets any runtime retire rows of a runtime that was removed', () => {
+    let state = apply(makeState(), makeSnapshot([serverTerminal('agent-1', true)]), SERVER_ENV, NOW)
+    const withServerRemoved: MirrorRowOwnershipState = {
+      ...state,
+      removedRuntimeEnvironmentIds: new Set([SERVER_ENV])
+    }
+    state = apply(
+      withServerRemoved,
+      desktopABrowserSnapshot([desktopAPage], 1),
+      DESKTOP_A_ENV,
+      NOW + 1000
+    )
+    expect(terminalIds(state)).toEqual([])
   })
 
   it('still retires a terminal the server itself stops publishing', () => {

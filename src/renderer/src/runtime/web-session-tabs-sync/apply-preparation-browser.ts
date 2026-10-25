@@ -22,6 +22,7 @@ import {
 } from './state-equality-files'
 import { shouldRetainStructuredAgentSessionLaunchTab } from '@/lib/structured-agent-session-launch-registry'
 import { executionHostIdForSessionTabsOwner } from '../local-structured-session-owner'
+import { isAgentSessionTabOfAnotherHost } from './mirror-row-ownership'
 import { isUnlistedCreatedChat } from '@/lib/structured-agent-session-unlisted-created-chats'
 
 export function prepareWebSessionTabsSnapshotBrowser(
@@ -189,7 +190,7 @@ export function prepareWebSessionTabsSnapshotBrowser(
   const retainedUnifiedTabs = currentUnifiedTabs.filter((tab) => {
     if (tab.contentType === 'agent-session') {
       // Another runtime's chat in this workspace; only its own host's frames speak for it (#31983).
-      if (tab.executionHostId && tab.executionHostId !== snapshotExecutionHostId) {
+      if (isAgentSessionTabOfAnotherHost(state, tab, snapshotExecutionHostId)) {
         return true
       }
       // A matching host row is authoritative; retaining the provisional tab beside its mirror
