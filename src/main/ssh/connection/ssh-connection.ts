@@ -745,7 +745,7 @@ export class SshConnection {
         this.hostKeyFingerprint = fingerprint
       }
     })
-    if (verdict.pinnedByOrcaStore) {
+    if (verdict.pinnedByOrcaStore && isCurrentAttempt()) {
       this.orcaStorePinnedGeneration = connectGeneration
     }
     return runSsh2Handshake(config, {
