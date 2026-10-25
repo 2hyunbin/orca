@@ -3,7 +3,13 @@ import { expect, it, vi } from 'vitest'
 import { CLAUDE_AGENT_VIEW_MOD_SOURCE } from './agent-view-mod-source'
 
 it('registers the new session after clear and refuses commands belonging to the ending session', async () => {
-  type Hook = (api: unknown, event: object, next: () => Promise<object>) => Promise<unknown>
+  type SessionEvent = {
+    isInteractive?: boolean
+    surface?: 'terminal'
+    reason?: 'clear' | 'resume'
+    sessionId?: string
+  }
+  type Hook = (api: unknown, event: SessionEvent, next: () => Promise<object>) => Promise<unknown>
   type On = (event: string, matcherOrHook: { command: string } | Hook, hook?: Hook) => void
   const handlers = new Map<string, Hook>()
   const register: (on: On) => void = runInNewContext(
@@ -74,7 +80,7 @@ it('registers the new session after clear and refuses commands belonging to the 
       }
     }
   }
-  const invoke = async (name: string, event: object = {}) => {
+  const invoke = async (name: string, event: SessionEvent = {}) => {
     const handler = handlers.get(name)
     if (!handler) {
       throw new Error(`Missing handler: ${name}`)
