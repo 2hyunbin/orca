@@ -23,6 +23,7 @@ import { shouldUseSystemSshTransport } from '../ssh-transport-selection'
 import { resolveWithSshG } from '../config/ssh-g-config-resolution'
 import { writeFileViaSystemSsh } from '../system-transport/system-ssh-file-transfer'
 import { CONNECT_TIMEOUT_MS } from './ssh-connection-timing'
+import { initSshHostKeyStoreFile, trustHostKey } from '../ssh-host-key-store'
 import type { SshTarget } from '../../../shared/ssh-types'
 import {
   createOpenSshPrivateKeyFixture,
@@ -364,12 +365,36 @@ describe('SshConnection', () => {
       createTarget({ host: 'cert.example.com', label: 'Cert host' }),
       createCallbacks()
     )
-    const privateConn = conn as unknown as {
-      attemptConnect: () => Promise<void>
-    }
 
-    await expect(privateConn.attemptConnect()).rejects.toThrow('No system ssh binary found')
+    await expect(conn.connect()).rejects.toThrow('No system ssh binary found')
     expect(conn.usesSystemSshTransport()).toBe(false)
+  })
+
+  it('keeps a host pinned in the Orca key store on ssh2 when negotiation fails', async () => {
+    const storeDir = mkdtempSync(join(tmpdir(), 'orca-ssh-pinned-store-'))
+    try {
+      initSshHostKeyStoreFile(join(storeDir, 'orca.json'))
+      await trustHostKey({
+        host: 'cert.example.com',
+        port: 22,
+        keyType: 'ssh-ed25519',
+        key: Buffer.from(
+          'AAAAC3NzaC1lZDI1NTE5AAAAIKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+          'base64'
+        )
+      })
+      ssh2Mock.connectBehavior = 'error'
+      ssh2Mock.connectErrorMessage = 'Handshake failed: no matching host key format'
+      const conn = new SshConnection(
+        createTarget({ host: 'cert.example.com', label: 'Cert host' }),
+        createCallbacks()
+      )
+
+      await expect(conn.connect()).rejects.toThrow('no matching host key format')
+      expect(spawnSystemSshCommandMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(storeDir, { recursive: true, force: true })
+    }
   })
 })
 
