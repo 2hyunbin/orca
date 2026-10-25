@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { isLayoutOracleSource } from './pr-layout-oracle-route.mjs'
 import {
+  isCloudTestRunnerInput,
   isWindowsProcessProbePath,
   LINUX_PACKAGE_TESTS,
   WINDOWS_PACKAGE_TESTS
@@ -107,7 +108,7 @@ const CODEX_INDEX_HEAL_CONTRACT_PREFIXES = [
   'src/main/codex/codex-app-server-session',
   'src/main/codex/codex-state-db',
   'src/main/sqlite/sync-database',
-  'src/main/codex/codex-app-server-capability-signal',
+  'src/main/codex/app-server/codex-app-server-capability-signal',
   'src/main/provider-process/provider-process-exit-deadline',
   'src/main/provider-process/provider-process-launch',
   'src/main/provider-process/provider-record-reader',
@@ -626,10 +627,7 @@ function isWindowsPackagePath(file) {
 }
 
 function isProductBundlePath(file, extraPrefixes) {
-  if (isTestFile(file)) {
-    return false
-  }
-  return file.startsWith('src/') || matchesPrefix(file, extraPrefixes)
+  return !isTestFile(file) && (file.startsWith('src/') || matchesPrefix(file, extraPrefixes))
 }
 
 // These shared fixtures are consumed only by unit tests.
@@ -659,7 +657,9 @@ function isDesktopIrrelevantPath(file) {
 function isStaticAnalysisScannedPath(file) {
   // Fail closed: roots we failed to parse must keep the gate, not silently drop it.
   return (
-    STATIC_ANALYSIS_SCAN_PREFIXES.length === 0 || matchesPrefix(file, STATIC_ANALYSIS_SCAN_PREFIXES)
+    STATIC_ANALYSIS_SCAN_PREFIXES.length === 0 ||
+    matchesPrefix(file, STATIC_ANALYSIS_SCAN_PREFIXES) ||
+    isCloudTestRunnerInput(file)
   )
 }
 

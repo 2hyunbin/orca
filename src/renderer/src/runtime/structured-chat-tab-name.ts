@@ -1,5 +1,5 @@
 import type { Tab } from '../../../shared/tab-types'
-import { isAgentSessionConversationName } from '../../../shared/agent-session-conversation-name'
+import { isAgentSessionConversationName } from '../../../shared/agent-session/agent-session-conversation-name'
 import type { AppState } from '@/store/types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {

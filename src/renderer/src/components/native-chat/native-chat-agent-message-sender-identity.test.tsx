@@ -11,7 +11,7 @@ import {
   foldAgentSessionConversationNames,
   type AgentSessionConversationNames
 } from '../../../../shared/agent-session-conversation-names'
-import type { AgentMessageSource } from '../../../../shared/agent-session-message-source'
+import type { AgentMessageSource } from '../../../../shared/agent-session/agent-session-message-source'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { testOrcaSessionId } from '../../../../shared/orca-session-address-test-fixture'
 import type { Tab } from '../../../../shared/tab-types'
