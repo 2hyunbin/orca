@@ -123,10 +123,12 @@ export function useComposerSubmitOrchestration(
   const quickSubmitAction = useQuickSubmitAction({
     effectiveLinkedPR: target.derivedComposerState.effectiveLinkedPR,
     executeQuickCreation: quickCreationExecution.executeQuickCreation,
+    parentWorktreeId: target.workspaceIdentityState.parentWorktreeId,
     fallbackCreatureName: target.derivedComposerState.fallbackCreatureName,
     isProjectGroupTarget: target.runtimeTargetSelection.isProjectGroupTarget,
     isSubmissionCancelled: target.composerTargetStore.isSubmissionCancelled,
     linkedPR: target.workspaceIdentityState.linkedPR,
+    linkedWorkItem: target.sourceContextState.linkedWorkItem,
     name: target.sourceContextState.name,
     onCreated: target.composerTargetStore.onCreated,
     parsedLinkedIssueNumber: target.derivedComposerState.parsedLinkedIssueNumber,
@@ -143,7 +145,9 @@ export function useComposerSubmitOrchestration(
     showProjectRequiredError: source.branchStartPointActions.showProjectRequiredError,
     sourceIntentBlocksCreate: target.workspaceIdentityState.sourceIntentBlocksCreate,
     sparseError: target.derivedComposerState.sparseError,
-    submitFolderTarget: folderSubmitOrchestration.submitFolderTarget
+    submitFolderTarget: folderSubmitOrchestration.submitFolderTarget,
+    taskSourceContext: target.sourceContextState.taskSourceContext,
+    telemetrySource: target.composerTargetStore.telemetrySource
   })
   return {
     folderSubmitOrchestration,

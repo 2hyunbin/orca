@@ -3,6 +3,7 @@ import type { ComposerModel } from './composer-model'
 type WorkspaceIdentityStateInput = Pick<
   ComposerModel,
   | 'initialBaseBranch'
+  | 'initialParentWorktreeId'
   | 'initialLinearBranchName'
   | 'initialLinkedWorkItem'
   | 'linkedWorkItem'
@@ -43,6 +44,7 @@ export function resolveDraftBaseBranchNamesWorkspace(args: {
 export function useWorkspaceIdentityState(input: WorkspaceIdentityStateInput) {
   const {
     initialBaseBranch,
+    initialParentWorktreeId,
     initialLinearBranchName,
     initialLinkedWorkItem,
     linkedWorkItem,
@@ -121,7 +123,9 @@ export function useWorkspaceIdentityState(input: WorkspaceIdentityStateInput) {
     initialLinearBranchName
   )
 
-  const [parentWorktreeId, setParentWorktreeId] = useState<string | null>(null)
+  const [parentWorktreeId, setParentWorktreeId] = useState<string | null>(
+    initialParentWorktreeId ?? null
+  )
 
   const [branchNameOverridePreservesNameEdits, setBranchNameOverridePreservesNameEdits] = useState(
     Boolean(initialLinearBranchName)

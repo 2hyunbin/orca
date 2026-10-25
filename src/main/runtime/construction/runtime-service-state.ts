@@ -42,6 +42,8 @@ import { RuntimeTerminalStreamConsumers } from '../runtime-terminal-stream-consu
 import type { RecentPtyOutputBuffer } from '../recent-pty-output-buffer'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { mainListsEveryPane } from '../terminal/surface/main-terminal-surfaces'
+import { TUI_IDLE_QUIESCENCE_MS } from '../orca-runtime-postlude'
+import { screenClearsBlockedTail } from '../blocked-tail-screen-clear'
 
 export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWithRuntimeId {
   protected readonly stopRequestedPtyIds = new Set<string>()
@@ -208,7 +210,22 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getExplicitStatus: (handle) => this.getFreshExplicitAgentStatusForHandle(handle),
     getLifecycleStatus: (ptyId) => this.agentPromptLifecycleByPtyId.get(ptyId),
     isRunning: (handle) => this.isTerminalRunningAgent(handle),
-    getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId)
+    getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
+    flushPendingBlockedStamp: (ptyId) => this.flushPendingWaitBlockedCheck(ptyId),
+    readScreenClearingBlockedTail: (ptyId, lastOutputAt) => {
+      // Why quiet: a frame caught mid-paint can drop a dialog row the next chunk restores.
+      // No output timestamp counts as quiet; a clear can only remove a block.
+      if (lastOutputAt !== null && Date.now() - lastOutputAt < TUI_IDLE_QUIESCENCE_MS) {
+        return null
+      }
+      const screen = this.readCaughtUpRuledScreen(ptyId)
+      if (!screen || !screenClearsBlockedTail(this.getPaneAgentForTuiIdle(ptyId), screen.lines)) {
+        return null
+      }
+      // Why drop the stamp: our own paste echo ends the quiet, and the tail must not re-block on it.
+      this.clearWaitBlockedStamp(ptyId)
+      return screen.lines.join('\n')
+    }
   })
 
   protected _orchestrationDb: OrchestrationDb | null = null
@@ -244,8 +261,8 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getLeafKey: (tabId, leafId) => this.getLeafKey(tabId, leafId),
     getLiveLeafForHandle: (handle) => this.getLiveLeafForHandle(handle).leaf,
     isAgentSettledForDelivery: (leaf) => this.checkDeliverySettledAndArmRecheck(leaf),
+    isPtyAwaitingUserInput: (ptyId) => this.isPtyAwaitingUserInput(ptyId),
     getMessageWaiters: (mailboxHandle) => this.messageWaiters.get(mailboxHandle),
-    getTabTitle: (tabId) => this.tabs.get(tabId)?.title,
     getCliCommand: (terminalHandle) => this.getTerminalOrchestrationCliCommand(terminalHandle),
     getTerminalHandleForLeafKey: (leafKey) => this.handleByLeafKey.get(leafKey),
     resolveSubmitTarget: (leaf, ptyId) => this.resolveOrchestrationPointerSubmitTarget(leaf, ptyId),

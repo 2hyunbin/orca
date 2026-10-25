@@ -43,6 +43,10 @@ type Dependencies = {
   ): { status: AgentStatus | null; updatedAt: number } | null | undefined
   isRunning(handle: string): Promise<boolean>
   getTitleDisplayClear(ptyId: string): TitleDisplayClear | null
+  /** Stamps blocked text the PTY's throttled scan has not yet judged. */
+  flushPendingBlockedStamp(ptyId: string): void
+  /** The settled screen when it proves blocked tail text was erased; null keeps the tail. */
+  readScreenClearingBlockedTail(ptyId: string, lastOutputAt: number | null): string | null
 }
 
 export class RuntimeTerminalAgentStatusQuery {
@@ -171,6 +175,7 @@ export class RuntimeTerminalAgentStatusQuery {
     expectedPtyId: string,
     displayClear: TitleDisplayClear | null = null
   ): RuntimeTerminalAgentStatusSnapshot {
+    this.deps.flushPendingBlockedStamp(expectedPtyId)
     const live = this.deps.getLivePty(handle)
     if (live) {
       if (!live.pty.connected || live.pty.ptyId !== expectedPtyId) {
@@ -191,13 +196,8 @@ export class RuntimeTerminalAgentStatusQuery {
           { title: pty.pty.title, updatedAt: pty.pty.titleUpdatedAt },
           { title: pty.pty.lastOscTitle, updatedAt: pty.pty.lastOscTitleAt }
         )
-      const waitText = buildTerminalWaitText(
-        pty.pty.tailBuffer,
-        pty.pty.tailPartialLine,
-        pty.pty.preview
-      )
       return {
-        waitText,
+        waitText: this.readWaitText(expectedPtyId, pty.pty),
         waitBlockedAt: pty.pty.waitBlockedAt,
         title: ptyTitle?.title ?? null,
         titleStatus: ptyTitle
@@ -223,12 +223,28 @@ export class RuntimeTerminalAgentStatusQuery {
       { title: this.deps.getTabTitle(leaf.tabId), updatedAt: 0 }
     )
     return {
-      waitText: buildTerminalWaitText(leaf.tailBuffer, leaf.tailPartialLine, leaf.preview),
+      waitText: this.readWaitText(expectedPtyId, leaf),
       waitBlockedAt: leaf.waitBlockedAt,
       title: title?.title ?? null,
       titleStatus: title ? detectAgentStatusFromTitle(title.title) : leaf.lastAgentStatus,
       titleStatusIsLive: (title?.updatedAt ?? 0) > 0
     }
+  }
+
+  // Why the screen may only clear: the line tail keeps a dialog the TUI erased in place (#24187).
+  private readWaitText(
+    ptyId: string,
+    record: Pick<RuntimeLeafRecord, 'tailBuffer' | 'tailPartialLine' | 'preview' | 'lastOutputAt'>
+  ): string {
+    const tailText = buildTerminalWaitText(
+      record.tailBuffer,
+      record.tailPartialLine,
+      record.preview
+    )
+    if (detectTerminalWaitBlockedReason(tailText) === null) {
+      return tailText
+    }
+    return this.deps.readScreenClearingBlockedTail(ptyId, record.lastOutputAt) ?? tailText
   }
 
   private async terminalHasShellForegroundProcess(handle: string, ptyId: string): Promise<boolean> {

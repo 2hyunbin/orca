@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { foldToolMessages, pairToolBlocks } from '../../../src/shared/native-chat-tool-fold'
+import { foldToolMessages } from '../../../src/shared/native-chat/tools/native-chat-tool-fold'
+import { pairToolBlocks } from '../../../src/shared/native-chat/tools/native-chat-tool-pairs'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 
 function msg(
@@ -75,7 +76,7 @@ describe('pairToolBlocks', () => {
     expect(pairs[1]).toEqual({ call: call2, result: result2 })
   })
 
-  it('retains the last result while bounding rendered pairs', () => {
+  it('keeps the first completed pairs at the rendering limit', () => {
     const blocks = Array.from({ length: 20 }, (_unused, index) => [
       { type: 'tool-call' as const, name: 'Bash', input: { index } },
       { type: 'tool-result' as const, output: String(index) }

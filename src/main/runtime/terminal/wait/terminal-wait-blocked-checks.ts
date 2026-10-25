@@ -74,6 +74,17 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
     }
   }
 
+  /** Runs a pending trailing-edge scan now, so a reader never judges blocked text its stamp lags. */
+  protected flushPendingWaitBlockedCheck(ptyId: string): void {
+    const state = this.waitBlockedCheckStateByPtyId.get(ptyId)
+    if (!state?.timer) {
+      return
+    }
+    clearTimeout(state.timer)
+    state.timer = null
+    this.runWaitBlockedCheck(ptyId, state, Date.now())
+  }
+
   protected runWaitBlockedCheck(ptyId: string, state: WaitBlockedCheckState, at: number): void {
     const pty = this.ptysById.get(ptyId)
     if (!pty) {
@@ -98,11 +109,30 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
       )
     ) {
       pty.waitBlockedAt = at
+      // Why: a trailing-edge stamp lands after onPtyData copied this PTY's stamp to its mirroring
+      // leaves, and a pane-backed wait reads the leaf's, so a blocker painted last went unstamped.
+      for (const leaf of this.getLeavesForPty(ptyId)) {
+        if (leaf.tailBuffer === pty.tailBuffer) {
+          leaf.waitBlockedAt = at
+        }
+      }
       this.recordAgentPromptPermissionObservation(ptyId)
     }
     state.lastAt = at
     state.lastWaitState = nextWaitState
     resetWaitBlockedCarry(state.appended)
+  }
+
+  /** Drops a stamp whose dialog the screen proved erased; a newly painted blocker stamps again. */
+  protected clearWaitBlockedStamp(ptyId: string): void {
+    const pty = this.ptysById.get(ptyId)
+    if (pty) {
+      pty.waitBlockedAt = null
+    }
+    // The screen is the whole PTY's evidence, so leaves with a diverged tail clear too.
+    for (const leaf of this.getLeavesForPty(ptyId)) {
+      leaf.waitBlockedAt = null
+    }
   }
 
   // Why: the scanner's first run after a restore seed compares against a null
