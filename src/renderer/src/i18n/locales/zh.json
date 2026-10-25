@@ -317,6 +317,7 @@
     "view": "查看",
     "reload": "重新加载",
     "forceReload": "强制重新加载",
+    "toggleDevTools": "切换开发者工具",
     "resetSize": "重置缩放",
     "zoomIn": "放大",
     "zoomOut": "缩小",
@@ -4228,10 +4229,6 @@
               "waiting": {
                 "label": "运行 Claude 时更新",
                 "message": "Claude 用量将在下次运行 Claude 时更新。"
-              },
-              "expired": {
-                "label": "登录已过期",
-                "message": "Claude 用量已过期。请在此账户中启动 Claude 以刷新。"
               }
             },
             "remoteOwnerNotConfigured": "未在 {{server}} 上配置",
@@ -16945,7 +16942,12 @@
             "copyImage": "复制图片",
             "copyImageAddress": "复制图片地址",
             "searchSelection": "使用 {{value0}} 搜索“{{value1}}”",
-            "inspect": "检查"
+            "inspect": "检查",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "停靠到右侧",
+            "devToolsDockBottom": "停靠到底部",
+            "devToolsUndock": "在单独窗口中打开",
+            "devToolsClose": "关闭 DevTools"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "取消",

@@ -560,6 +560,7 @@
     "view": "View",
     "reload": "Reload",
     "forceReload": "Force Reload",
+    "toggleDevTools": "Toggle Developer Tools",
     "resetSize": "Reset Size",
     "zoomIn": "Zoom In",
     "zoomOut": "Zoom Out",
@@ -4566,10 +4567,6 @@
               "waiting": {
                 "label": "Updates when Claude runs",
                 "message": "Claude usage updates the next time Claude runs."
-              },
-              "expired": {
-                "label": "Sign-in expired",
-                "message": "Claude usage has expired. Start Claude in this account to refresh it."
               }
             }
           },
@@ -17289,7 +17286,12 @@
             "copyImage": "Copy Image",
             "copyImageAddress": "Copy Image Address",
             "searchSelection": "Search {{value0}} for “{{value1}}”",
-            "inspect": "Inspect"
+            "inspect": "Inspect",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "Dock to right",
+            "devToolsDockBottom": "Dock to bottom",
+            "devToolsUndock": "Open in separate window",
+            "devToolsClose": "Close DevTools"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "Cancel",

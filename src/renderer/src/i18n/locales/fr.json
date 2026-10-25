@@ -457,6 +457,7 @@
     "view": "Affichage",
     "reload": "Recharger",
     "forceReload": "Forcer le rechargement",
+    "toggleDevTools": "Afficher/Masquer les outils de développement",
     "resetSize": "Réinitialiser la taille",
     "zoomIn": "Zoom avant",
     "zoomOut": "Zoom arrière",
@@ -4392,10 +4393,6 @@
               "waiting": {
                 "label": "Se met à jour quand Claude s'exécute",
                 "message": "L'utilisation de Claude se met à jour la prochaine fois que Claude s'exécute."
-              },
-              "expired": {
-                "label": "Connexion expirée",
-                "message": "L'utilisation de Claude a expiré. Démarrez Claude dans ce compte pour l'actualiser."
               }
             },
             "remoteOwnerNotConfigured": "Non configuré sur {{server}}",
@@ -17020,6 +17017,11 @@
             "copyImageAddress": "Copier l’adresse de l’image",
             "searchSelection": "Rechercher « {{value1}} » avec {{value0}}",
             "inspect": "Inspecter",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "Ancrer à droite",
+            "devToolsDockBottom": "Ancrer en bas",
+            "devToolsUndock": "Ouvrir dans une fenêtre séparée",
+            "devToolsClose": "Fermer les DevTools",
             "1ded0d3168": "Copier la capture d'écran",
             "f30d2d35a7": "Capture effectuée",
             "fa6ea61de3": "Annuler",

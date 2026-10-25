@@ -317,6 +317,7 @@
     "view": "表示",
     "reload": "リロード",
     "forceReload": "強制リロード",
+    "toggleDevTools": "開発者ツールの切り替え",
     "resetSize": "サイズをリセット",
     "zoomIn": "ズームイン",
     "zoomOut": "ズームアウト",
@@ -4228,10 +4229,6 @@
               "waiting": {
                 "label": "Claude の実行時に更新",
                 "message": "Claude の使用状況は、次に Claude を実行したときに更新されます。"
-              },
-              "expired": {
-                "label": "サインインの有効期限切れ",
-                "message": "Claude の使用状況が期限切れです。このアカウントで Claude を起動して更新してください。"
               }
             },
             "remoteOwnerNotConfigured": "{{server}} では未構成",
@@ -16945,7 +16942,12 @@
             "copyImage": "画像をコピー",
             "copyImageAddress": "画像アドレスをコピー",
             "searchSelection": "{{value0}} で「{{value1}}」を検索",
-            "inspect": "検証"
+            "inspect": "検証",
+            "devToolsTitle": "DevTools",
+            "devToolsDockRight": "右側にドッキング",
+            "devToolsDockBottom": "下部にドッキング",
+            "devToolsUndock": "別ウィンドウで開く",
+            "devToolsClose": "DevTools を閉じる"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "キャンセル",
