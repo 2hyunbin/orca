@@ -59,6 +59,48 @@ describe('CodexRuntimeHomeService', () => {
     )
   })
 
+  it('keeps the Codex app bundled marketplace loadable from the managed home', async () => {
+    const systemCodexHome = getSystemCodexHomePath()
+    const systemMarketplace = join(
+      systemCodexHome,
+      '.tmp',
+      'bundled-marketplaces',
+      'openai-bundled'
+    )
+    mkdirSync(systemMarketplace, { recursive: true })
+    const userMarketplace = join(testState.fakeHomeDir, 'marketplaces', 'mine')
+    const canonicalConfig = [
+      '[marketplaces.openai-bundled]',
+      'source_type = "local"',
+      `source = '${systemMarketplace}'`,
+      '',
+      '[marketplaces.mine]',
+      'source_type = "local"',
+      `source = '${userMarketplace}'`,
+      ''
+    ].join('\n')
+    writeFileSync(join(systemCodexHome, 'config.toml'), canonicalConfig, 'utf-8')
+    const store = createStore(createSettings())
+    const { CodexRuntimeHomeService } = await import('./runtime-home-service')
+    const service = new CodexRuntimeHomeService(store as never)
+
+    service.prepareForCodexLaunch()
+    service.prepareForCodexLaunch()
+
+    // Codex rejects openai-bundled unless its source is under the active CODEX_HOME.
+    const runtimeMarketplace = join(
+      getRuntimeCodexHomePath(),
+      '.tmp',
+      'bundled-marketplaces',
+      'openai-bundled'
+    )
+    const runtimeConfig = readFileSync(join(getRuntimeCodexHomePath(), 'config.toml'), 'utf-8')
+    expect(runtimeConfig).toContain(`source = '${runtimeMarketplace}'`)
+    expect(runtimeConfig).toContain(`source = '${userMarketplace}'`)
+    expect(existsSync(runtimeMarketplace)).toBe(true)
+    expect(readFileSync(join(systemCodexHome, 'config.toml'), 'utf-8')).toBe(canonicalConfig)
+  })
+
   it('launches the system-default custom provider without requiring OAuth auth', async () => {
     const systemCodexHome = getSystemCodexHomePath()
     const canonicalConfigPath = join(systemCodexHome, 'config.toml')
