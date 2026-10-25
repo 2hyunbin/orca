@@ -82,8 +82,15 @@ export type HookListenerState = {
   opencodeSessionPaneBySessionId: Map<string, OpenCodeSessionBinding>
   /** Last launch token seen per pane; a rewritten shared-server post needs the bound pane's live token to pass its fence. */
   lastLaunchTokenByPaneKey: Map<string, string>
-  /** Hermes panes whose turn ended; its background review fork fires tool hooks after the turn. */
-  hermesTurnEndedPaneKeys: Set<string>
+  /** Hermes turn per pane, so tool hooks from its post-turn background review can be ignored. */
+  hermesTurnByPaneKey: Map<string, HermesPaneTurn>
+}
+
+export type HermesPaneTurn = {
+  sessionId: string
+  ended: boolean
+  /** `delegate_task` children run their own turns, under their own session ids, inside the parent's. */
+  childSessionIds: Set<string>
 }
 
 export type MusePaneState = {
@@ -139,7 +146,7 @@ export function createHookListenerState(
     musePaneStateByPaneKey: new Map(),
     opencodeSessionPaneBySessionId: new Map(),
     lastLaunchTokenByPaneKey: new Map(),
-    hermesTurnEndedPaneKeys: new Set()
+    hermesTurnByPaneKey: new Map()
   }
   legacyStatusAdapterByState.set(state, adapter)
   return state
@@ -233,7 +240,7 @@ export function clearPaneCacheState(state: HookListenerState, paneKey: string): 
   state.musePaneStateByPaneKey.delete(paneKey)
   unbindOpenCodeSessionsOfPane(state, paneKey)
   deletePaneScopedCacheEntry(state.lastLaunchTokenByPaneKey, paneKey)
-  state.hermesTurnEndedPaneKeys.delete(paneKey)
+  state.hermesTurnByPaneKey.delete(paneKey)
 }
 
 /** Does this pane still hold anything that can ASSERT a state — a stored row, or a Claude latch that
@@ -288,7 +295,7 @@ export function movePaneCacheState(
   movePaneScopedMapEntries(state.musePaneStateByPaneKey, fromPaneKey, toPaneKey)
   moveOpenCodeSessionBindings(state, fromPaneKey, toPaneKey)
   movePaneScopedMapEntries(state.lastLaunchTokenByPaneKey, fromPaneKey, toPaneKey)
-  movePaneScopedSetEntries(state.hermesTurnEndedPaneKeys, fromPaneKey, toPaneKey)
+  movePaneScopedMapEntries(state.hermesTurnByPaneKey, fromPaneKey, toPaneKey)
 }
 
 export function clearPaneTurnCacheState(state: HookListenerState, paneKey: string): void {
@@ -327,5 +334,5 @@ export function clearAllListenerCaches(state: HookListenerState): void {
   state.musePaneStateByPaneKey.clear()
   state.opencodeSessionPaneBySessionId.clear()
   state.lastLaunchTokenByPaneKey.clear()
-  state.hermesTurnEndedPaneKeys.clear()
+  state.hermesTurnByPaneKey.clear()
 }

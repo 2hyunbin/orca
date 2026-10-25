@@ -32,17 +32,31 @@ function admitsHermesEvent(
   state: HookListenerState,
   paneKey: string,
   eventName: unknown,
-  stateName: 'working' | 'waiting' | 'done'
+  hookPayload: Record<string, unknown>
 ): boolean {
-  if (stateName === 'done') {
-    state.hermesTurnEndedPaneKeys.add(paneKey)
-    return true
-  }
+  const sessionId = typeof hookPayload.session_id === 'string' ? hookPayload.session_id : ''
+  const turn = state.hermesTurnByPaneKey.get(paneKey)
   if (eventName === 'pre_llm_call') {
-    state.hermesTurnEndedPaneKeys.delete(paneKey)
+    if (!turn || turn.ended) {
+      state.hermesTurnByPaneKey.set(paneKey, {
+        sessionId,
+        ended: false,
+        childSessionIds: new Set()
+      })
+    } else if (sessionId !== turn.sessionId) {
+      turn.childSessionIds.add(sessionId)
+    }
     return true
   }
-  return !state.hermesTurnEndedPaneKeys.has(paneKey)
+  if (eventName === 'post_llm_call' || eventName === 'on_session_end') {
+    // Why not require turn.sessionId: compression rotates the parent's session id mid-turn.
+    if (turn && !turn.childSessionIds.has(sessionId)) {
+      turn.ended = true
+    }
+    return true
+  }
+  const isToolEvent = eventName === 'pre_tool_call' || eventName === 'post_tool_call'
+  return !(isToolEvent && turn?.ended)
 }
 
 export function normalizeHermesEvent(
@@ -58,7 +72,7 @@ export function normalizeHermesEvent(
     return null
   }
 
-  if (!admitsHermesEvent(state, paneKey, eventName, stateName)) {
+  if (!admitsHermesEvent(state, paneKey, eventName, hookPayload)) {
     return null
   }
 
