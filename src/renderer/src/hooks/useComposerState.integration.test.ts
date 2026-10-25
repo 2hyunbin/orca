@@ -253,7 +253,11 @@ describe('useComposerState integrated lifecycle', () => {
       })
     )
     render(createElement(NewWorkspaceComposerModal))
-    act(() => card().onParentWorktreeIdChange(parentToken))
+    const onParentWorktreeIdChange = card().onParentWorktreeIdChange
+    if (!onParentWorktreeIdChange) {
+      throw new Error('The composer card must expose parent selection')
+    }
+    act(() => onParentWorktreeIdChange(parentToken))
     expect(card().selectedRepoPath).toBe('/local')
     expect(card().createDisabled).toBe(false)
     await act(async () => {

@@ -412,6 +412,7 @@ describe('RuntimeManagedWorktreeQueries.listDetected overtaken scan', () => {
   })
 })
 
+// Real-source VM instrumentation spans 3 shapes at 100/1000 rows across 3 publication/listing routes.
 it('bounds publication and listing to base work plus one linear nesting pass', async () => {
   const home = mkdtempSync(join(tmpdir(), 'orca-pr29328-contract-'))
   const root = process.cwd()

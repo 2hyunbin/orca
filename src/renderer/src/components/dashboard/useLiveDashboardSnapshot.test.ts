@@ -269,15 +269,13 @@ it('publishes real chat options to main and popout, retaining card candidates an
   const lastSnapshot = (): DashboardSnapshot => publishSnapshot.mock.calls.at(-1)![0]
   const check = (snapshot: DashboardSnapshot, parentId: string | undefined, name = folder.name) => {
     for (const rows of [snapshot.cards, snapshot.workspaces ?? []]) {
-      expect.soft(rows.find((row) => row.worktreeId === folderId)?.worktreeName).toBe(name)
-      expect.soft(rows.find((row) => row.worktreeId === folderId)?.parentWorktreeId).toBe(parentId)
+      expect(rows.find((row) => row.worktreeId === folderId)?.worktreeName).toBe(name)
+      expect(rows.find((row) => row.worktreeId === folderId)?.parentWorktreeId).toBe(parentId)
     }
   }
-  const settlePublication = () =>
-    act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300))
-    })
-  await settlePublication()
+  const settlePublication = (parentId: string | undefined, name = folder.name) =>
+    vi.waitFor(() => check(lastSnapshot(), parentId, name))
+  await settlePublication(undefined)
   const edge = makeLineage({
     worktreeId: folderId,
     worktreeInstanceId: folderId,
@@ -293,17 +291,17 @@ it('publishes real chat options to main and popout, retaining card candidates an
     })
   )
   expect(useAppStore.getState().worktreesByRepo).toBe(worktreesBefore)
-  await settlePublication()
+  await settlePublication(parent.id)
   expect.soft(publishSnapshot.mock.calls.length).toBeGreaterThan(beforeSet)
   check(view.result.current, parent.id)
   act(requestSnapshot)
   check(lastSnapshot(), parent.id)
   act(() => useAppStore.setState({ folderWorkspaces: [{ ...folder, name: 'Renamed folder' }] }))
-  await settlePublication()
+  await settlePublication(parent.id, 'Renamed folder')
   check(view.result.current, parent.id, 'Renamed folder')
   check(lastSnapshot(), parent.id, 'Renamed folder')
   act(() => useAppStore.setState({ worktreesByRepo: { 'repo-1': [external] } }))
-  await settlePublication()
+  await settlePublication(undefined, 'Renamed folder')
   act(requestSnapshot)
   check(view.result.current, undefined, 'Renamed folder')
   check(lastSnapshot(), undefined, 'Renamed folder')
@@ -315,7 +313,7 @@ it('publishes real chat options to main and popout, retaining card candidates an
     external.savedLineage
   )
   act(() => useAppStore.setState({ worktreesByRepo: { 'repo-1': [parent, external] } }))
-  await settlePublication()
+  await settlePublication(parent.id, 'Renamed folder')
   const beforeClear = publishSnapshot.mock.calls.length
   act(() =>
     applyWorktreeLineageUpdate(useAppStore.setState, folderId, {
@@ -325,7 +323,7 @@ it('publishes real chat options to main and popout, retaining card candidates an
     })
   )
   expect(useAppStore.getState().worktreesByRepo).toEqual({ 'repo-1': [parent, external] })
-  await settlePublication()
+  await settlePublication(undefined, 'Renamed folder')
   expect.soft(publishSnapshot.mock.calls.length).toBeGreaterThan(beforeClear)
   check(view.result.current, undefined, 'Renamed folder')
   act(requestSnapshot)
