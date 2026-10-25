@@ -134,6 +134,7 @@ function partitionedSessionApi(partitions: Record<string, WorkspaceSessionState>
 }
 const stops: (() => void)[] = []
 beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
   useAppStore.setState(useAppStore.getInitialState(), true)
   mock.activates.mockClear()
   mock.deactivates.mockClear()
@@ -146,6 +147,7 @@ afterEach(() => {
   stops.splice(0).forEach((stop) => stop())
   mock.snapshot.clear()
   mock.paired.clear()
+  vi.restoreAllMocks()
 })
 
 it('migrates an inactive restored alias after reconnect and clears both saved copies only after acknowledgment', async () => {

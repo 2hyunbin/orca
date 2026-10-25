@@ -17,6 +17,7 @@ import {
   store
 } from '../../../src/main/runtime/rpc/methods/structured-chat-tab-table.test-fixture'
 
+// Cold CI may materialize the pinned release checkout before importing its client modules.
 it('a released client reads the current saved name from tabs and each fresh History query', async () => {
   const checkout = await materializeReleaseCheckout('v1.4.222')
   const [tabs, history, protocol] = await Promise.all(
