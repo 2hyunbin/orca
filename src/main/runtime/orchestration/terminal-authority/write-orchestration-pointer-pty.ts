@@ -23,7 +23,6 @@ import { mainPaneVerdict } from '../../terminal/surface/main-pane-verdict'
 
 export abstract class OrcaRuntimeWithWriteOrchestrationPointerPty extends OrcaRuntimeWithRefreshFloatingWorkspacePtyLiveness {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
-import { resolveLaunchCommandPaneAgent } from '../../runtime-agent-launch-resolution'
 
   protected writeOrchestrationPointerPty(
     ptyId: string,
@@ -170,7 +169,7 @@ import { resolveLaunchCommandPaneAgent } from '../../runtime-agent-launch-resolu
       ...(leaf.lastExitCause ? { exitCause: leaf.lastExitCause } : {}),
       ...this.terminalExecutionHostField(leaf.ptyId, leaf.worktreeId),
       ...this.resolvePaneAgentIdentityField(
-        pty?.launchAgent ?? resolveLaunchCommandPaneAgent(pty?.launchCommandLine),
+        pty?.launchAgent ?? pty?.launchCommandAgent,
         pty?.foregroundAgent,
         title,
         isTerminalLeafId(leaf.leafId) ? makePaneKey(leaf.tabId, leaf.leafId) : null

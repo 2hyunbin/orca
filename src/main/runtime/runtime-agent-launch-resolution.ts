@@ -15,7 +15,7 @@ import {
   TUI_AGENT_CONFIG
 } from '../../shared/tui-agent-config'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
-import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
+import { recognizeAgentLaunchCommand } from '../../shared/agent-command-line-intent'
 
 export function mergeTerminalEnvDeletionKeys(
   first: readonly string[] | undefined,
@@ -91,11 +91,9 @@ export function resolveBareAgentLaunchCommand(args: {
   return null
 }
 
-/** Why: flags make a launch unmanaged (never rewritten, no spawn launchAgent), but the pane is
- *  still that agent's — tui-idle ranking and published identity read this before any
- *  foreground-process read lands. */
+/** Why: flags keep `omp --model x` unmanaged, but the pane is still omp's for tui-idle and identity. */
 export function resolveLaunchCommandPaneAgent(command: string | null | undefined): TuiAgent | null {
-  const recognized = recognizeAgentProcessFromCommandLine(command)
+  const recognized = recognizeAgentLaunchCommand(command)
   return recognized && isTuiAgent(recognized.agent) ? recognized.agent : null
 }
 

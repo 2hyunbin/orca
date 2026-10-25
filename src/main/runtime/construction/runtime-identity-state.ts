@@ -15,7 +15,6 @@ import type { RuntimeAutomationController } from '../runtime-automation-controll
 import { RuntimeArtifactController } from '../runtime-artifact-controller'
 import type { OrchestrationEnvironmentTransport } from '../orchestration/environment-transport'
 import type { RuntimeOrchestrationFederation } from '../runtime-orchestration-federation'
-import { resolveLaunchCommandPaneAgent } from '../runtime-agent-launch-resolution'
 import type {
   RuntimeGraphStatus,
   RuntimeMobileSessionCreateTerminalResult,
@@ -299,11 +298,7 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
       return null
     }
     const pty = this.ptysById.get(ptyId)
-    const agent =
-      pty?.launchAgent ??
-      pty?.foregroundAgent ??
-      resolveLaunchCommandPaneAgent(pty?.launchCommandLine) ??
-      null
+    const agent = pty?.launchAgent ?? pty?.foregroundAgent ?? pty?.launchCommandAgent ?? null
     return isTuiAgent(agent) ? agent : null
   }
 
