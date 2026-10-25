@@ -17,6 +17,47 @@ describe('web preload runtime calls', () => {
     vi.doUnmock('./web-runtime-client')
   })
 
+  it('opts both native-chat requests into the same source-order representation', async () => {
+    const call = vi.fn(async (method: string) => ({
+      id: method,
+      ok: true,
+      result: { messages: [] },
+      _meta: { runtimeId: 'source-order-runtime' }
+    }))
+    const subscribe = vi.fn(async () => ({ unsubscribe: vi.fn(), sendBinary: vi.fn() }))
+    vi.doMock('./web-runtime-client', () => ({
+      WebRuntimeClient: class {
+        call = call
+        subscribe = subscribe
+        close(): void {}
+      }
+    }))
+    const globals = installBrowserGlobals('Linux')
+    writeStoredRuntimeEnvironment(globals.storage, 'web-server-source-order')
+    const { installWebPreloadApi } = await import('./web-preload-api')
+    installWebPreloadApi()
+    await globals.window.api.nativeChat.readSession('claude', 'session', 40)
+    const stop = globals.window.api.nativeChat.subscribe(
+      { agent: 'claude', sessionId: 'session', subscriptionId: 'source-order' },
+      () => {}
+    )
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledOnce())
+    expect(call).toHaveBeenCalledWith(
+      'nativeChat.readSession',
+      expect.objectContaining({ capabilities: { transcriptSourceOrder: 1 } }),
+      expect.anything()
+    )
+    expect(subscribe).toHaveBeenCalledWith(
+      'nativeChat.subscribe',
+      expect.objectContaining({ capabilities: { transcriptPending: 1, transcriptSourceOrder: 1 } }),
+      expect.anything(),
+      expect.anything()
+    )
+    if (typeof stop === 'function') {
+      stop()
+    }
+  })
+
   it('preserves success and failure envelopes while persisting response runtime metadata', async () => {
     vi.doMock('./web-runtime-client', () => ({
       WebRuntimeClient: class {
