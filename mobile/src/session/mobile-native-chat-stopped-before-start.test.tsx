@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { AlertTriangle } from 'lucide-react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../../src/shared/agent-session-journal-item-key'
@@ -181,7 +182,7 @@ describe('a send a Stop took back before the agent started it, on the phone', ()
       expect(
         renderer!.root.findAll((node) => String(node.type) === 'Text').map((node) => node.children)
       ).toEqual([[AGENT_SESSION_GOAL_CONTROL_COPY[stopNotice]]])
-      expect(renderer!.root.findAllByType('AlertTriangle')).toHaveLength(1)
+      expect(renderer!.root.findAllByType(AlertTriangle)).toHaveLength(1)
     }
   )
 
