@@ -248,7 +248,11 @@ beforeEach(async () => {
     writeFileSync(
       join(path, '.credentials.json'),
       JSON.stringify({
-        claudeAiOauth: { accessToken: `synthetic-${id}`, expiresAt: 1900000000000 }
+        claudeAiOauth: {
+          accessToken: `synthetic-${id}`,
+          refreshToken: `synthetic-refresh-${id}`,
+          expiresAt: 1900000000000
+        }
       })
     )
   }
