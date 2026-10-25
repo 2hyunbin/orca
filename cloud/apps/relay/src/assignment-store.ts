@@ -510,11 +510,6 @@ const ROLL_ISOLATED_ADMISSION: CellAdmissionState = 'migration-only'
 // park would reactivate. Both want the same answer, and it is the pre-existing
 // one: keep the pin and let the host retry its own cell.
 const ROLL_ISOLATION_STAMP_MAX_AGE_MS = 2 * 60 * 60_000
-// A same-cap roll never sets enabled = 0, so its committed fence counts while the stamp is
-// current; aliases `cell` and `admission`, one `?` = now - ROLL_ISOLATION_STAMP_MAX_AGE_MS.
-const FENCE_HONOURING_ADMISSION = `(cell.enabled = 0 OR (
-  admission.admission_state = '${ROLL_ISOLATED_ADMISSION}' AND admission.roll_isolated_at > ?
-))`
 const REGION_PREFERENCE_RETENTION_MS = 30 * 24 * 60 * 60_000
 const REGIONAL_REHOME_UNREGISTERED_REFRESH_MS = 5 * 60_000
 const REGIONAL_REHOME_MAX_REFRESH_MS = 24 * 60 * 60_000
@@ -2387,7 +2382,7 @@ export class RelayAssignmentStore {
         ])
       )[0]
       if (!cell) throw new Error('cell_not_found')
-      await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
+      if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
       const runtime = (
         await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
           input.cellId
@@ -2648,7 +2643,7 @@ export class RelayAssignmentStore {
           ])
         )[0]
         if (!cell) throw new Error('cell_not_found')
-        await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
+        if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
         const runtime = (
           await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
             input.cellId
@@ -2698,7 +2693,7 @@ export class RelayAssignmentStore {
         ])
       )[0]
       if (!cell) throw new Error('cell_not_found')
-      await this.assertCellFenceAdmission(transaction, cell, input.cellId, now)
+      if (integer(cell, 'enabled') !== 0) throw new Error('cell_fence_admission_enabled')
       const runtime = (
         await transaction.queryLocked(`SELECT * FROM relay_cell_runtime WHERE cell_id = ?`, [
           input.cellId
@@ -3443,7 +3438,6 @@ export class RelayAssignmentStore {
          ON attempt.attempt_id = committed.attempt_id
        LEFT JOIN relay_cell_fences fence ON fence.cell_id = assignment.cell_id
        LEFT JOIN relay_cell_runtime runtime ON runtime.cell_id = cell.cell_id
-       LEFT JOIN relay_cell_admission admission ON admission.cell_id = cell.cell_id
        WHERE (runtime.cell_id IS NULL OR runtime.ready != ? OR runtime.last_heartbeat_at <= ?)
          AND (
            (
@@ -3467,7 +3461,7 @@ export class RelayAssignmentStore {
              )
            )
            OR (
-             ${FENCE_HONOURING_ADMISSION}
+             cell.enabled = 0
              AND (
                EXISTS (
                  SELECT 1 FROM relay_cell_connection_limits limits
@@ -3498,15 +3492,7 @@ export class RelayAssignmentStore {
          )
          AND assignment.cell_id IN (${cellIds.map(() => '?').join(', ')})
        ORDER BY assignment.user_id, assignment.relay_host_id LIMIT ?`,
-      [
-        1,
-        cutoff,
-        this.now() - ROLL_ISOLATION_STAMP_MAX_AGE_MS,
-        this.now(),
-        this.now(),
-        ...cellIds,
-        limit
-      ]
+      [1, cutoff, this.now(), this.now(), ...cellIds, limit]
     )
     let moved = 0
     for (const row of rows) {
@@ -3544,7 +3530,6 @@ export class RelayAssignmentStore {
        LEFT JOIN relay_cell_fence_attempts attempt ON attempt.attempt_id = committed.attempt_id
        LEFT JOIN relay_cell_fences fence ON fence.cell_id = cell.cell_id
        LEFT JOIN relay_cell_runtime runtime ON runtime.cell_id = cell.cell_id
-       LEFT JOIN relay_cell_admission admission ON admission.cell_id = cell.cell_id
        WHERE (runtime.cell_id IS NULL OR runtime.ready != ? OR runtime.last_heartbeat_at <= ?)
          AND (
            (
@@ -3555,7 +3540,7 @@ export class RelayAssignmentStore {
              )
            )
            OR (
-             ${FENCE_HONOURING_ADMISSION}
+             cell.enabled = 0
              AND attempt.completed_at IS NOT NULL
              AND attempt.aborted_at IS NULL
              AND committed.cell_incarnation = runtime.cell_incarnation
@@ -3566,7 +3551,7 @@ export class RelayAssignmentStore {
            )
          )
        ORDER BY cell.cell_id`,
-      [1, cutoff, now - ROLL_ISOLATION_STAMP_MAX_AGE_MS, now, now]
+      [1, cutoff, now, now]
     )
     return rows.map((row) => text(row, 'cell_id'))
   }
@@ -8257,7 +8242,6 @@ export class RelayAssignmentStore {
     if (await this.assignmentStrandedOnUnservedCell(database, identity, existing, now, pinned?.state)) {
       return false
     }
-    const live = await this.cellIsLive(database, cellId, now)
     if (
       !(await this.incumbentCellIsolatedForRoll(
         database,
@@ -8270,7 +8254,10 @@ export class RelayAssignmentStore {
     ) {
       return false
     }
-    return live || (await this.isolatedCellRestartedSinceRoll(database, cellId, now))
+    return (
+      (await this.cellIsLive(database, cellId, now)) ||
+      (await this.isolatedCellRestartedSinceRoll(database, cellId, now))
+    )
   }
 
   private async unlockedCell(database: RelayDatabase, cellId: string): Promise<CellRow> {
@@ -8708,18 +8695,6 @@ export class RelayAssignmentStore {
     )
   }
 
-  // The attempt chain's writers take the same admission the reader honours.
-  private async assertCellFenceAdmission(
-    transaction: RelayDatabase,
-    cell: SqlRow,
-    cellId: string,
-    now: number
-  ): Promise<void> {
-    if (integer(cell, 'enabled') === 0) return
-    if (rollIsolationIsCurrent(await this.pinnedCellAdmission(transaction, cellId), now)) return
-    throw new Error('cell_fence_admission_enabled')
-  }
-
   private async cellHasCommittedFence(
     database: RelayDatabase,
     cellId: string,
@@ -8733,17 +8708,16 @@ export class RelayAssignmentStore {
        JOIN relay_cell_fences fence ON fence.cell_id = committed.cell_id
        JOIN relay_cell_runtime runtime ON runtime.cell_id = committed.cell_id
        JOIN relay_cells cell ON cell.cell_id = committed.cell_id
-       LEFT JOIN relay_cell_admission admission ON admission.cell_id = committed.cell_id
        WHERE committed.cell_id = ?
          AND attempt.completed_at IS NOT NULL
          AND attempt.aborted_at IS NULL
-         AND ${FENCE_HONOURING_ADMISSION}
+         AND cell.enabled = 0
          AND committed.cell_incarnation = runtime.cell_incarnation
          AND fence.cell_incarnation = committed.cell_incarnation
          AND committed.attested_at >= runtime.last_heartbeat_at
          AND committed.expires_at > ?
          AND fence.expires_at > ?`,
-      [cellId, now - ROLL_ISOLATION_STAMP_MAX_AGE_MS, now, now]
+      [cellId, now, now]
     )
     return rows.length === 1
   }
