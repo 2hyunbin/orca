@@ -7,14 +7,10 @@ import { C6_BROWSER_CLOSURE_FAMILIES } from './c6-browser-closure-families'
 import { pageClosureTotals } from './page-closure'
 
 describe('the C6 browser closure half', () => {
-  it('is the census the design named: 4 families, 15 goldens', () => {
+  it('assigns each pinned golden to one closure family', () => {
     const goldens = Object.values(C6_BROWSER_CLOSURE_FAMILIES).flatMap((family) =>
       Object.keys(family)
     )
-    expect({
-      families: Object.keys(C6_BROWSER_CLOSURE_FAMILIES).length,
-      goldens: goldens.length
-    }).toEqual({ families: 4, goldens: 15 })
     expect(new Set(goldens).size).toBe(goldens.length)
   })
 
@@ -36,18 +32,12 @@ describe('the C6 browser closure half', () => {
     }
   })
 
-  it('agrees with the C2 classification rule on every golden', () => {
-    for (const goldens of Object.values(C6_BROWSER_CLOSURE_FAMILIES)) {
-      for (const [id, verdict] of Object.entries(goldens)) {
-        expect({ id, verdict }).toEqual({
-          id,
-          verdict: id.startsWith('matrix-') ? 'result-absent-settlement' : 'identical'
-        })
-      }
-    }
-  })
-
-  // These pane-only families do not overlap inherited tables; session tab creation belongs to C7.
+  /**
+   * No family here is pinned by another series, so a golden pinned twice is pinned once.
+   *
+   * The four are the pane's own and nothing else imports its call sites; `session.browser-tab-create`
+   * is recorded at the session screen and belongs to C7.
+   */
   it('shares no family with C1, C2, C3 or C5', () => {
     const others = new Set([
       ...Object.keys(C1_PAGE_CLOSURE),

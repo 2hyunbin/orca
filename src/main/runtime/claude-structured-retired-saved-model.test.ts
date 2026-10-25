@@ -125,6 +125,12 @@ describe("a Claude chat whose saved model the CLI says doesn't exist", () => {
     await host.flushStreamedEvents(SESSION)
 
     expect(host.deps.store.getRecord(SESSION)?.options?.model).toBe(RETIRED)
+    const live = await host.deps.adapter.readOptions?.({
+      sessionId: SESSION,
+      fence: host.deps.store.getRecord(SESSION)!.lease.runtimeFence
+    })
+    expect(live).toMatchObject({ current: { model: RETIRED } })
+    expect(claude.child(SESSION).calls).not.toContain('set_model')
   })
 
   // A concurrent user pick outranks the launch model's failure.

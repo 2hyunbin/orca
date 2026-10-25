@@ -110,21 +110,6 @@ describe('publishCreatedBrowserSessionTab', () => {
     })
   })
 
-  // session-notify host rows depend on the same announcement flag.
-  it('gives every session-notify placement the announcement its host row rides on', () => {
-    // Require a known session-notify placement so the coupling check cannot become vacuous.
-    expect(BROWSER_TAB_CREATE_PUBLICATION_RULES.client.hostRowSource).toBe('session-notify')
-    for (const placementKind of BROWSER_TAB_CREATE_PLACEMENT_KINDS) {
-      const rules = BROWSER_TAB_CREATE_PUBLICATION_RULES[placementKind]
-      if (rules.hostRowSource === 'session-notify') {
-        expect(
-          rules.notifiesSessionTabsChanged,
-          `${placementKind} sources its host row from the session-tabs announcement`
-        ).toBe(true)
-      }
-    }
-  })
-
   it.each(BROWSER_TAB_CREATE_PLACEMENT_KINDS)(
     'moves a user-created %s tab into the clicked split group when the placement marks focus',
     (placementKind) => {

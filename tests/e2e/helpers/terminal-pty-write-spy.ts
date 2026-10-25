@@ -46,14 +46,12 @@ export async function installTerminalPtyWriteSpy(app: ElectronApplication): Prom
 }
 
 export async function clearTerminalPtyWriteLog(app: ElectronApplication): Promise<void> {
-  await retryTransientMainEvaluate(() =>
-    app.evaluate(() => {
-      const global = globalThis as unknown as { __terminalPtyWriteLog?: PtyWriteLogEntry[] }
-      if (global.__terminalPtyWriteLog) {
-        global.__terminalPtyWriteLog.length = 0
-      }
-    })
-  )
+  await app.evaluate(() => {
+    const global = globalThis as unknown as { __terminalPtyWriteLog?: PtyWriteLogEntry[] }
+    if (global.__terminalPtyWriteLog) {
+      global.__terminalPtyWriteLog.length = 0
+    }
+  })
 }
 
 export async function readTerminalPtyWrites(app: ElectronApplication): Promise<string[]> {

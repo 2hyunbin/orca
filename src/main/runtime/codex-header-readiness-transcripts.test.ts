@@ -363,7 +363,7 @@ describe('Codex launched composer readiness', () => {
   }
 
   describe('launch readiness for a freshly launched Codex', () => {
-    it('codex-0158-fresh-home-greeting: reads the live chat as ready, so the prompt is pasted', async () => {
+    it('codex-0158-fresh-home-greeting: reads the live chat as ready for launch', async () => {
       const data = greetingBeforeStarfield()
       expect(data).toContain('GPT-6-Astra default')
       expect(data).not.toMatch(/48;2;30;30;30m[⠀-⣿]/)
@@ -374,7 +374,7 @@ describe('Codex launched composer readiness', () => {
       })
     }, 15_000)
 
-    it('codex-0157-plain-ready: reads the live chat as ready, so the prompt is pasted', async () => {
+    it('codex-0157-plain-ready: reads the live chat as ready for launch', async () => {
       const pane = await launchedCodexPane(readRuntimeFixture('codex-0157-plain-ready'))
       await expect(waitForCodexComposer(pane, 8_000)).resolves.toMatchObject({
         condition: 'tui-idle',

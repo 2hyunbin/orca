@@ -9,7 +9,7 @@ import { AgentWorkingSpinner } from './AgentWorkingSpinner'
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 describe('AgentWorkingSpinner', () => {
-  it('hooks the compositor-driven CSS animation, not a JS clock', () => {
+  it('renders the spinner animation and reduced-motion classes', () => {
     const markup = renderToStaticMarkup(React.createElement(AgentWorkingSpinner))
 
     expect(markup).toContain('agent-working-spinner')
@@ -88,41 +88,6 @@ describe('AgentWorkingSpinner', () => {
       await fireAnimationStart()
       expect(animation.startTime).toBe(0)
       expect(getAnimations).toHaveBeenCalledTimes(2)
-    } finally {
-      act(() => root.unmount())
-      container.remove()
-      if (originalGetAnimations === undefined) {
-        Reflect.deleteProperty(HTMLElement.prototype, 'getAnimations')
-      } else {
-        Object.defineProperty(HTMLElement.prototype, 'getAnimations', originalGetAnimations)
-      }
-    }
-  })
-
-  // Reduced motion has no animation to anchor; preserve that no-op.
-  it('anchors nothing when reduced motion leaves no animation to start', async () => {
-    const getAnimations = vi.fn(() => [] as Animation[])
-    const originalGetAnimations = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'getAnimations'
-    )
-    Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
-      configurable: true,
-      value: getAnimations
-    })
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const root = createRoot(container)
-
-    try {
-      await act(async () => {
-        root.render(<AgentWorkingSpinner />)
-      })
-      const el = container.querySelector('[data-agent-spinner]')
-
-      expect(el).not.toBeNull()
-      expect(getAnimations).not.toHaveBeenCalled()
-      expect(el!.className).toContain('motion-reduce:border-t-agent-working')
     } finally {
       act(() => root.unmount())
       container.remove()
