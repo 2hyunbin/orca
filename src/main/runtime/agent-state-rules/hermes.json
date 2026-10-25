@@ -6,7 +6,7 @@
   "rules": [
     {
       "id": "composer_ready",
-      "why": "Hermes 0.21 and 0.22 paint a ready status row above the input composer after startup, session slash acknowledgements and completed turns. The elapsed-time row keeps repainting at rest, so quiet is not required. Startup and running turns replace ready; drafts occupy the composer. An empty composer shows one of the English placeholders in ui-tui/src/i18n/en/chrome.ts, after a named profile's prefix (ui-tui/src/lib/prompt.ts); an enabled battery read-out precedes ready. A draft typed identical to a placeholder still reads as empty.",
+      "why": "Hermes 0.21 and 0.22 paint a ready status row above the input composer after startup, session slash acknowledgements and completed turns. The elapsed-time row keeps repainting at rest, so quiet is not required. Startup and running turns replace ready; drafts occupy the composer. An empty composer shows one of the English placeholders in ui-tui/src/i18n/en/chrome.ts, after a named profile's prefix (ui-tui/src/lib/prompt.ts) or skin symbol (hermes_cli/skin_engine.py); an enabled battery read-out precedes ready. A draft typed identical to a placeholder still reads as empty.",
       "priority": 500,
       "when": {
         "region": "screen",
@@ -15,10 +15,10 @@
           {
             "any": [
               {
-                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?❯(?: Ask me anything…| Try \"/help\" for commands)?$"
+                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦)(?: Ask me anything…| Try \"/help\" for commands)?$"
               },
               {
-                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?❯ Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\"$"
+                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦) Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\"$"
               }
             ]
           }
@@ -36,10 +36,10 @@
           {
             "any": [
               {
-                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?❯(?: Ask me anything…| Try \"/help\" for commands)?$"
+                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦)(?: Ask me anything…| Try \"/help\" for commands)?$"
               },
               {
-                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?❯ Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\"$"
+                "regex": "^(?:[a-z0-9][a-z0-9_-]{0,63} )?(?:❯|⚔|Ψ|◉|✦) Try \"(?:explain this codebase|write a test for…|refactor the auth module|fix the lint errors|how does the config loader work\\?)\"$"
               }
             ]
           },

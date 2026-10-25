@@ -311,6 +311,15 @@ describe('Hermes readiness with the battery read-out', () => {
     await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
   })
 
+  // Built-in skins (hermes_cli/skin_engine.py) replace ❯ with their own prompt symbol.
+  it.each(['⚔', 'Ψ', '◉', '✦'])(
+    'settles on a ready composer drawn with the %s skin',
+    async (symbol) => {
+      const pane = await paneShowing(['─ ready │ example-model │ 1s', `${symbol} Ask me anything…`])
+      await expect(waitForTranscriptIdle(pane, 550)).resolves.toMatchObject({ satisfied: true })
+    }
+  )
+
   it.each([
     ['starting', '─ 🔋 80% │ summoning hermes… │  │ voice off', '❯ Ask me anything…'],
     ['busy', '─ 🔋 80% │ (｡•́︿•̀｡) analyzing… · 1s │ example-model', '❯ Ctrl+C to interrupt…'],

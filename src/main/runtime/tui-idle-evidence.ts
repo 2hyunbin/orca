@@ -202,11 +202,15 @@ function rankTuiIdleEvidence(input: TuiIdleEvaluationInput): TuiIdleVerdict {
       hasFreshWorkingFirstPartyStatus(input.firstPartyStatus) ||
       input.record.lastAgentStatus === 'working'
     ) {
-      return input.agent === 'hermes' &&
+      // Hermes' blocked/waiting hooks leave the decision to the screen.
+      if (
+        input.agent === 'hermes' &&
         input.firstPartyStatus?.state !== 'working' &&
         input.record.lastAgentStatus !== 'working'
-        ? { kind: 'pending', quietForeground: 'closed' }
-        : WORKING
+      ) {
+        return { kind: 'pending', quietForeground: 'closed' }
+      }
+      return WORKING
     }
     return input.readPositiveBodyEvidence()
       ? READY_STRONG

@@ -149,16 +149,22 @@ function recognizePythonEntrypoint(
 }
 
 // Hermes' installed launcher execs `python -I -c '<bootstrap>'` (hermes_cli/_launchers.py), so argv names no hermes entrypoint.
-function isHermesInlineBootstrap(
-  tokens: readonly string[],
-  firstNormalized: string,
-  commandLine: string
-): boolean {
-  return (
-    PYTHON_PROCESS_RE.test(firstNormalized) &&
-    tokens.includes('-c') &&
-    /\bimport hermes_bootstrap\b/.test(commandLine)
-  )
+function isHermesInlineBootstrap(tokens: readonly string[], firstNormalized: string): boolean {
+  if (!PYTHON_PROCESS_RE.test(firstNormalized)) {
+    return false
+  }
+  let index = 1
+  while (index < tokens.length && tokens[index] !== '-c') {
+    if (tokens[index] === '-X' || tokens[index] === '-W') {
+      index += 2
+    } else if (/^-[bBdEiIOqRsSuvx]+$/.test(tokens[index])) {
+      index += 1
+    } else {
+      return false
+    }
+  }
+  // ps flattens argv, so the -c program runs to the end of the line there.
+  return /\bimport hermes_bootstrap\b/.test(tokens.slice(index + 1).join(' '))
 }
 
 // Muse's versioned binary needs a scoped prefix match; generic suffix matching would misclassify names such as ante-obsidian.
@@ -224,7 +230,7 @@ export function recognizeAgentProcessFromCommandLine(
   if (directRecognition) {
     return directRecognition
   }
-  if (isHermesInlineBootstrap(tokens, firstNormalized, commandLine)) {
+  if (isHermesInlineBootstrap(tokens, firstNormalized)) {
     return recognizedAgentForProcess('hermes')
   }
   const entrypoint = findInterpreterEntrypointToken(tokens, firstNormalized)
