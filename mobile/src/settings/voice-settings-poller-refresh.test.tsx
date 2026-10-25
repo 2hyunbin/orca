@@ -4,9 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import VoiceSettingsScreen from './voice-settings-screen'
 import type { VoiceSettingsOperations } from './voice-settings-operations'
 
-// Why: the sibling state test stubs the poller, so it can only prove the screen's local
-// machine. This one runs the real useDictationSetupPoller, whose refreshNow is gated on
-// visible && foreground, to prove rejected-save recovery reaches the load operation.
+// Use the real focus-gated poller to verify rejected saves trigger a load; the sibling state test stubs it.
 vi.mock('react-native', () => ({
   View: 'View',
   Text: 'Text',
@@ -82,8 +80,7 @@ describe('voice settings poller integration', () => {
         createElement(VoiceSettingsScreen, { operations, focused: false, onBack: vi.fn() })
       )
     })
-    // The poller is gated on focus, so no read runs and only the initial flag decides
-    // this paint. Base started it false and flashed the error card here.
+    // Unfocused polling cannot start a read; initial state must prevent an error-card flash.
     expect(operations.load).not.toHaveBeenCalled()
     expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(1)
     expect(JSON.stringify(renderer.toJSON())).not.toContain('Failed to load voice settings')
@@ -103,7 +100,6 @@ describe('voice settings poller integration', () => {
     await act(async () => {
       renderer = create(createElement(VoiceSettingsScreen, { operations, focused: true, onBack }))
     })
-    // The failed read leaves the error card up, exactly as base did.
     expect(JSON.stringify(renderer.toJSON())).toContain('Desktop unavailable')
     expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(0)
 
@@ -114,7 +110,7 @@ describe('voice settings poller integration', () => {
       renderer.update(createElement(VoiceSettingsScreen, { operations, focused: true, onBack }))
     })
     expect((operations.load as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2)
-    // Base re-showed the spinner on re-entry; the stale error must not sit there during the retry.
+    // Re-entry retry must replace the stale error with a spinner.
     expect(renderer.root.findAllByType('ActivityIndicator')).toHaveLength(1)
     expect(JSON.stringify(renderer.toJSON())).not.toContain('Desktop unavailable')
   })
@@ -154,7 +150,6 @@ describe('voice settings poller integration', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
-    // The controller's visible && foreground gate is base's behaviour, preserved here.
     expect((operations.load as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       loadsBeforeRejection
     )
