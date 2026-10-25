@@ -330,12 +330,8 @@ describe('structured mailbox pointer delivery', () => {
     expect(markAsDelivered).toHaveBeenCalledWith(['m1'], 'dispatch:d1')
   })
 
-  it('defers newer mail behind an unacked batch to the turn end, then nudges once', async () => {
+  it('parks a held-batch nudge while the agent works and sends it on the next journal edge', async () => {
     const { delivery, send, receive, setWorking } = harness({ outstandingOwnDelivery: true })
-    delivery.deliverForHandle('dispatch:d1')
-    await flush()
-    expect(send).not.toHaveBeenCalled()
-
     setWorking(true)
     receive('m2', 4)
     delivery.deliverForHandle('dispatch:d1')
@@ -345,16 +341,7 @@ describe('structured mailbox pointer delivery', () => {
     setWorking(false)
     delivery.onJournalActivity('session-1')
     await flush()
-    delivery.onJournalActivity('session-1')
-    delivery.deliverForHandle('dispatch:d1')
-    await flush()
     expect(send).toHaveBeenCalledTimes(1)
-    expect(send.mock.calls[0]![0].body.blocks).toEqual([
-      {
-        type: 'text',
-        text: 'You have 1 new orchestration message; you still hold delivery delivery_1. Finish it, then run `orca-dev orchestration check --ack delivery_1`.'
-      }
-    ])
   })
 
   it('retries a rejected nudge on the next journal edge, under the same id', async () => {

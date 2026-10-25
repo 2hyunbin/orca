@@ -841,34 +841,37 @@ describe('orchestration notification mailbox consistency', () => {
     const db = new OrchestrationDb(':memory:')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Outstanding Delivery Run')
-    const firstMessage = db.insertMessage({
-      from: 'term_worker',
-      to: `run:${run.id}`,
-      subject: 'First status',
-      runId: run.id
-    })
+    const insert = (subject: string) =>
+      db.insertMessage({ from: 'term_worker', to: `run:${run.id}`, subject, runId: run.id })
+    const firstMessage = insert('First status')
     const firstDelivery = await checkBoundMailbox(harness.runtime)
-    const newerMessage = db.insertMessage({
-      from: 'term_worker',
-      to: `run:${run.id}`,
-      subject: 'Newer status',
-      runId: run.id
-    })
+    const newerMessage = insert('Newer status')
 
+    const enters = () => harness.write.mock.calls.filter(([, payload]) => payload === '\r').length
     await driveToLiveIdle(harness.runtime)
-    await vi.advanceTimersByTimeAsync(500)
     const pointers = harness.write.mock.calls.filter(([, payload]) => isMailboxPointer(payload))
     expect(pointers).toHaveLength(1)
     expect(String(pointers[0]![1])).toContain(
-      `you still hold delivery ${firstDelivery.deliveryId}. Finish it, then run \`${localOrchestrationCliCommand()} orchestration check --run ${run.id} --ack ${firstDelivery.deliveryId}\``
+      `after delivery ${firstDelivery.deliveryId}, which you have not acknowledged. If you no longer have it, run \`${localOrchestrationCliCommand()} orchestration check --run ${run.id}\` to see it again; once it is handled, run \`${localOrchestrationCliCommand()} orchestration check --run ${run.id} --ack ${firstDelivery.deliveryId}\``
     )
-    expect(db.getMessageById(newerMessage.id)?.delivered_at).toEqual(expect.any(String))
 
+    // A turn that starts inside the Enter delay keeps the reminder until it ends.
     harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 3)
+    await harness.runtime.serializeMainTerminalBuffer(PTY_ID)
+    await vi.advanceTimersByTimeAsync(500)
+    expect(enters()).toBe(0)
     harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 4)
     await harness.runtime.serializeMainTerminalBuffer(PTY_ID)
     await vi.advanceTimersByTimeAsync(500)
+    expect(enters()).toBe(1)
+    expect(db.getMessageById(newerMessage.id)?.delivered_at).toEqual(expect.any(String))
+
+    harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 5)
+    harness.runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 6)
+    await harness.runtime.serializeMainTerminalBuffer(PTY_ID)
+    await vi.advanceTimersByTimeAsync(500)
     expect(pointerCount(harness.write)).toBe(1)
+    expect(enters()).toBe(1)
 
     const replayed = await checkBoundMailbox(harness.runtime)
     expect(replayed.messages).toEqual([expect.objectContaining({ id: firstMessage.id })])

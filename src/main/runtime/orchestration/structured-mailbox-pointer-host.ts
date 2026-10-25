@@ -116,9 +116,10 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
             operationId: input.operationId,
             expectedRuntimeFence: input.expectedRuntimeFence,
             beforeRun: () => {
+              const work = host.currentWork(input.sessionId)
               if (
                 input.body.from?.orchestration?.message === 'mail-notice' &&
-                host.currentWork(input.sessionId)?.hasActionablePrompt()
+                (work?.hasActionablePrompt() || (input.holdWhileWorking && work?.working()))
               ) {
                 throw new StructuredMailHeldError()
               }

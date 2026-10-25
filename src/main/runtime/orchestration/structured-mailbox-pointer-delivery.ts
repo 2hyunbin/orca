@@ -57,6 +57,8 @@ export type StructuredMailboxPointerHost = {
     expectedRuntimeFence: number
     /** Names its senders as `from`. */
     body: AgentJournalMessageItem
+    /** Hold rather than steer when a turn is running at admission. */
+    holdWhileWorking: boolean
   }) => Promise<StructuredPointerSendOutcome>
   /** Current lease fence; `null` when no record backs the session any more. */
   currentFence: (sessionId: string) => number | null
@@ -156,7 +158,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
         if (batch.messages.length === 0) {
           return
         }
-        // A mid-turn ack takes newer mail itself; nudge a held batch only once the turn has ended.
+        // A mid-turn steer stamps delivered_at, so one an unacked turn ignores would spend this
+        // mail's only nudge; the send's admission rechecks this, as a turn can start meanwhile.
         if (batch.heldDeliveryId && this.deps.host.isWorkingNow(current.sessionId)) {
           this.retain(mailboxHandle, current.sessionId, 'turn-unsettled', currentReservedTypes)
           return
@@ -185,7 +188,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
         )
         while (
           attempt === 'held' &&
-          this.deps.host.hasActionablePromptNow(current.sessionId) === false
+          this.deps.host.hasActionablePromptNow(current.sessionId) === false &&
+          !(batch.heldDeliveryId && this.deps.host.isWorkingNow(current.sessionId))
         ) {
           attempt = await this.attempt(
             db,
@@ -305,7 +309,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       dispatchId: target.dispatchId,
       operationId: operation.operationId,
       expectedRuntimeFence: fence,
-      body
+      body,
+      holdWhileWorking: batch.heldDeliveryId !== undefined
     })
     if (outcome.kind === 'held') {
       return 'held'

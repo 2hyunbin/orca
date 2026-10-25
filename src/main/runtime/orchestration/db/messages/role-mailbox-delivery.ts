@@ -188,15 +188,16 @@ export function getOutstandingMailboxDelivery(
   this: OrchestrationDb,
   mailboxHandle: string
 ): { id: string; messageIds: string[] } | undefined {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: id is the generated TEXT primary key and message_ids is NOT NULL TEXT.
   const row = this.db
     .prepare('SELECT id, message_ids FROM outstanding_deliveries WHERE mailbox_handle = ? LIMIT 1')
-    .get(mailboxHandle) as Pick<DeliveryRow, 'id' | 'message_ids'> | undefined
-  if (!row) {
+    .get(mailboxHandle)
+  if (typeof row?.id !== 'string' || typeof row.message_ids !== 'string') {
     return undefined
   }
-  const messageIds: string[] = JSON.parse(row.message_ids)
-  return { id: row.id, messageIds }
+  const messageIds: unknown = JSON.parse(row.message_ids)
+  return Array.isArray(messageIds) && messageIds.every((id): id is string => typeof id === 'string')
+    ? { id: row.id, messageIds }
+    : undefined
 }
 
 export function fenceUnacknowledgedMailboxDeliveries(
