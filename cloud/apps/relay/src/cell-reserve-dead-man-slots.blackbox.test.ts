@@ -21,22 +21,24 @@ async function until(check: () => Promise<boolean> | boolean, timeoutMs = 10_000
 
 const ticks = (count: number) => new Promise((resolve) => setTimeout(resolve, count * 1_100))
 
-// Another reserve cell whose dead-man already tripped: it holds a slot while it heartbeats.
-async function trippedPeer(database: RelayDatabase, cellId: string, at: number): Promise<(at: number) => Promise<void>> {
+// Another reserve cell whose dead-man already tripped. Only that cell writes its row, so with
+// every director gone (no heartbeats reach Postgres) it still holds its slot.
+async function trippedPeer(database: RelayDatabase, cellId: string, at: number) {
   await database.query(`INSERT INTO relay_cell_admit_modes (cell_id, admit_mode, updated_at) VALUES (?, 'reserve', ?)`, [cellId, at])
-  await database.query(
-    `INSERT INTO relay_cell_runtime
-     (cell_id, cell_url, cell_incarnation, started_at, ready, observed_requests, last_heartbeat_at, updated_at)
-     VALUES (?, ?, 'peer-incarnation', ?, 1, 0, ?, ?)`,
-    [cellId, `https://${cellId}.example.com`, at, at, at]
-  )
   await database.query(
     `INSERT INTO relay_cell_admit_effective (cell_id, cell_incarnation, mode, updated_at)
      VALUES (?, 'peer-incarnation', 'db', ?)`,
     [cellId, at]
   )
-  return async (heartbeatAt) => {
-    await database.query(`UPDATE relay_cell_runtime SET last_heartbeat_at = ? WHERE cell_id = ?`, [heartbeatAt, cellId])
+  return {
+    refresh: async (refreshedAt: number) =>
+      await database.query(`UPDATE relay_cell_admit_effective SET updated_at = ? WHERE cell_id = ?`, [refreshedAt, cellId]),
+    // Restarted or re-armed: its new process writes reserve.
+    rearm: async (rearmedAt: number) =>
+      await database.query(
+        `UPDATE relay_cell_admit_effective SET mode = 'reserve', updated_at = ? WHERE cell_id = ?`,
+        [rearmedAt, cellId]
+      )
   }
 }
 
@@ -69,14 +71,13 @@ describe('dead-man trip slots', () => {
     let now = Date.now()
     const { database, reserve } = await cell(() => now)
     reserve.setAdmitMode('reserve', { deadManTripSlots: 1 })
-    const heartbeat = await trippedPeer(database, 'production-gce-c90', now)
+    const peer = await trippedPeer(database, 'production-gce-c90', now)
     const seated = await reserve.bookedHost(3)
     const returning = await reserve.bookedHost(4, { row: 'never' })
     await until(async () => (await reserve.admitEffectiveRow())?.mode === 'reserve')
 
     // The director goes away. Past this cell's window, c90 still holds the only slot.
     now += reserveDeadManWindowMs(reserve.config.cellId) + 1_000
-    await heartbeat(now)
     await ticks(2)
     expect(reserve.relay.sessions.inReserveMode()).toBe(true)
     expect(logged('orca_relay_cell_reserve_dead_man_held')).toHaveLength(1)
@@ -91,8 +92,16 @@ describe('dead-man trip slots', () => {
     const back = await reserve.connect(returning.identity, 4)
     expect(back.ack.type).toBe('host-hello-ack')
 
-    // c90 stops heartbeating: its slot frees, and this cell takes it on its next claim.
-    now += Math.max(DEAD_MAN_SLOT_CLAIM_RETRY_MS, 60_000)
+    // Still held after several claims, as long as c90 keeps its own row fresh.
+    for (let claim = 0; claim < 3; claim += 1) {
+      now += DEAD_MAN_SLOT_CLAIM_RETRY_MS
+      await peer.refresh(now)
+      await ticks(2)
+    }
+    expect(reserve.relay.sessions.inReserveMode()).toBe(true)
+    // c90 restarts and writes reserve: its slot frees, and this cell takes it on its next claim.
+    await peer.rearm(now)
+    now += DEAD_MAN_SLOT_CLAIM_RETRY_MS
     await until(() => !reserve.relay.sessions.inReserveMode())
     expect(logged('orca_relay_cell_reserve_dead_man_tripped')).toHaveLength(1)
     expect((await reserve.admitEffectiveRow())?.mode).toBe('db')

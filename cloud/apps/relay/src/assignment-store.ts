@@ -817,11 +817,7 @@ export class RelayAssignmentStore {
     cellIncarnation: string
     slots: number
   }): Promise<boolean> {
-    return await claimDeadManTripSlot(this.database, {
-      ...input,
-      now: this.now(),
-      heartbeatTtlMs: this.heartbeatTtlMs
-    })
+    return await claimDeadManTripSlot(this.database, { ...input, now: this.now() })
   }
 
   // Break glass flips only a cell that has stopped heartbeating, ready or not.
