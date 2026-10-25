@@ -1,3 +1,7 @@
+import {
+  setStructuredJournalReadiness,
+  structuredJournalBackgroundReady
+} from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime'
@@ -220,12 +224,14 @@ describe('terminal.subscribe registers at admission', () => {
     const { runtime, registry, ptyWaits, spawn } = stubRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
     const firstMessages: string[] = []
+    setStructuredJournalReadiness(() => true)
     const first = dispatcher.dispatchStreaming(
       subscribeRequest(binaryParams),
       (message) => firstMessages.push(message),
       phoneConnection('conn-a')
     )
     await vi.waitFor(() => expect(ptyWaits.waitForLeafPtyId).toHaveBeenCalledTimes(1))
+    expect(structuredJournalBackgroundReady()).toBe(false)
 
     const second = dispatcher.dispatchStreaming(
       subscribeRequest(binaryParams),
@@ -245,9 +251,11 @@ describe('terminal.subscribe registers at admission', () => {
       expect(runtime.handleMobileSubscribe).toHaveBeenCalledOnce()
       expect(runtime.handleMobileUnsubscribe).not.toHaveBeenCalled()
       expect(registry.peekCleanup(SUBSCRIPTION_ID)).toBe(replacement)
+      expect(structuredJournalBackgroundReady()).toBe(true)
     } finally {
       registry.cleanupSubscriptionsForConnection('conn-b')
       await second
+      setStructuredJournalReadiness(() => false)
     }
   })
 

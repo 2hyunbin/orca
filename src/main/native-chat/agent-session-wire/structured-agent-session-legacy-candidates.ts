@@ -1,9 +1,10 @@
+import type { JournalLegacyRestCandidate } from '../agent-session-journal/journal-legacy-rest-initializer-dependencies'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 
 /** Each pull examines one record or merges one entry; the background driver owns the yield. */
 export function* orderedLegacyRestCandidates(
   store: Pick<AgentSessionRecordStore, 'iterateRecords' | 'getSessionTabId'>
-): Generator<string | undefined> {
+): Generator<JournalLegacyRestCandidate | undefined> {
   let entries: { id: string; visible: boolean; updatedAt: number }[] = []
   for (const record of store.iterateRecords()) {
     entries.push({
@@ -34,6 +35,6 @@ export function* orderedLegacyRestCandidates(
     entries = merged
   }
   for (const entry of entries) {
-    yield entry.id
+    yield entry
   }
 }

@@ -115,7 +115,13 @@ export abstract class JournalRestWorkProjection extends JournalRestObservation {
             fact,
             item:
               submission || source
-                ? { ...item, sequence: (submission || source).submittedSequence ?? item.sequence }
+                ? // SAFETY: the branch requires one of these two submission records to be present.
+                  {
+                    ...item,
+                    sequence:
+                      ((submission || source) as AgentJournalSubmission).submittedSequence ??
+                      item.sequence
+                  }
                 : item
           }
         : undefined

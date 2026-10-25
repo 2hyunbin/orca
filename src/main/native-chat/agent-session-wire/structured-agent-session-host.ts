@@ -274,7 +274,7 @@ export class StructuredAgentSessionHost {
 
   async flushAllStreamedEvents(options?: { trigger?: 'quit' | 'update' }): Promise<void> {
     this.stopDelivery()
-    this.legacyRest.close()
+    await this.legacyRest.close()
     await flushStructuredAgentSessionHost({
       ...this.lifetimeContext(),
       idleSweep: this.lifetime,

@@ -1,3 +1,11 @@
+import type { PopulationWrap } from './journal-population-method-test-support'
+import {
+  populationMapIterators,
+  type PopulationCollection
+} from './journal-population-observation-test-support'
+import type { JournalSelection } from './journal-selection'
+import type { JournalSelectionTree } from './journal-selection-tree'
+import type { JournalSelectionStorage } from './journal-selection-storage'
 import { vi } from 'vitest'
 import * as sourceBinding from './journal-selection-binding'
 import * as structuralFold from './journal-structural-fold-step'
@@ -13,18 +21,27 @@ import { JournalRestProjection } from './journal-rest-projection'
 import { JournalSelectionGroups } from './journal-selection-groups'
 import type { PopulationCost } from './journal-population-cost-test-support'
 
-type Interceptor = (owner: object, args: unknown[], call: (args: unknown[]) => unknown) => unknown
+type PopulationFactoryResult =
+  | PopulationCollection
+  | JournalSelection
+  | JournalSelectionTree
+  | JournalSelectionStorage
+  | JournalSelectionGroups
+  | JournalSelectionOrder
+  | Pick<JournalKeyedHeap<{ key: string }>, 'count' | 'top'>
+  | WorkBucket
+  | JournalRestProjection
 
 /** Observe actual factory results of pre-defined subclasses; global Map cannot count these. */
 export function instrumentPopulationWrappers(
-  wrap: (owner: object, key: PropertyKey, intercept: Interceptor) => void,
+  wrap: PopulationWrap,
   current: () => PopulationCost | undefined,
-  label: (value: object, name: string) => void
+  label: (value: PopulationCollection, name: string) => void
 ): () => void {
   const observed = new WeakSet<object>()
   const prototypes = new WeakSet<object>()
   const spaces = new WeakMap<object, string>()
-  const record = (value: object, kind: string) => {
+  const record = (value: PopulationFactoryResult, kind: string) => {
     if (!observed.has(value)) {
       observed.add(value)
       const cost = current()
@@ -55,10 +72,10 @@ export function instrumentPopulationWrappers(
     record(result, 'StructuralMap')
     label(result, String(args[0]))
     spaces.set(result, String(args[0]))
-    const prototype = Object.getPrototypeOf(result)
+    const prototype = populationMapIterators(Object.getPrototypeOf(result))
     if (!prototypes.has(prototype)) {
       prototypes.add(prototype)
-      for (const key of ['entries', 'keys', 'values', Symbol.iterator]) {
+      for (const key of ['entries', 'keys', 'values', Symbol.iterator] as const) {
         wrap(prototype, key, (map, values, execute) => {
           const iterator = execute(values)
           if (
@@ -68,8 +85,7 @@ export function instrumentPopulationWrappers(
           ) {
             throw new Error('missing structural iterator')
           }
-          // SAFETY: these are the concrete checked StructuralMap iterable methods.
-          const entries = iterator as Iterable<unknown>
+          const entries = iterator
           return (function* () {
             for (const value of entries) {
               const cost = current()
@@ -101,8 +117,8 @@ export function instrumentPopulationWrappers(
   wrap(LegacyQueueDisplayCorrections.prototype, 'displayState', (_owner, args, call) => {
     const result = call(args)
     if (result !== args[0] && typeof result === 'object' && result !== null) {
-      for (const key of ['items', 'submissions', 'normalizedHandOffs']) {
-        const value: unknown = Reflect.get(result, key)
+      for (const key of ['items', 'submissions', 'normalizedHandOffs'] as const) {
+        const value = result[key]
         if (typeof value !== 'object' || value === null) {
           throw new Error('missing display collection')
         }
@@ -145,8 +161,7 @@ export function instrumentPopulationWrappers(
     if (!result || typeof result !== 'object' || !Reflect.has(result, Symbol.iterator)) {
       throw new Error('missing group iterator')
     }
-    // SAFETY: the checked method is the concrete groups.values string iterator.
-    const values = result as Iterable<string>
+    const values = result
     return (function* () {
       for (const value of values) {
         const cost = current()

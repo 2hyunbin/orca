@@ -90,7 +90,9 @@ export async function runLegacyPopulation(
     database: () => database,
     state: () => state,
     serialize: (run) => {
-      const lane: unknown = Reflect.get(journal, 'queue')
+      const owner: unknown = journal
+      const lane =
+        typeof owner === 'object' && owner !== null && 'queue' in owner ? owner.queue : undefined
       if (!(lane instanceof JournalWriteQueue)) {
         throw new Error('missing real journal lane')
       }

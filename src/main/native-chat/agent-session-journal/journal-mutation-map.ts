@@ -54,12 +54,12 @@ export class JournalMutationMap<K, V> extends Map<K, V> {
   override [Symbol.iterator]() {
     return this.entries()
   }
-  override *values() {
+  override *values(): MapIterator<V> {
     for (const [, value] of this.entries()) {
       yield value
     }
   }
-  override *keys() {
+  override *keys(): MapIterator<K> {
     for (const [key] of this.entries()) {
       yield key
     }

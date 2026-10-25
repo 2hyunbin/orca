@@ -1,3 +1,9 @@
+import { legacyRestScratchPath } from './journal-legacy-rest-scratch'
+vi.mock('./journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } = await import('./journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 import { runJournalPopulationContract } from './journal-population-flow-test-support'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -154,7 +160,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
       'UPDATE journal_sessions SET open_turn_id = NULL, open_turn_since = NULL WHERE session_id = ?'
     )
     .run(sessionId)
-  let scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+  let scratch = new JournalStructuralScratch(legacyRestScratchPath(root, sessionId))
   const failed = vi.fn()
   const initialized = vi.fn()
   const make = () =>
@@ -170,7 +176,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
     const checkpoint = scratch.load<JournalStructuralCheckpoint>()
     return (checkpoint?.cursor ?? 0) <= 1 || scratch.map('items').size === 0
   })
-  prefix.close()
+  await prefix.close()
   const saved = scratch.load<JournalStructuralCheckpoint>()!
   expect(saved.cursor).toBeGreaterThan(1)
   expect(saved.cursor).toBeLessThan(tip)
@@ -184,12 +190,12 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
     })
   const interrupted = make()
   await interrupted.advance(() => true)
-  interrupted.close()
+  await interrupted.close()
   failure.mockRestore()
   expect(failed).toHaveBeenCalledOnce()
   expect(initialized).not.toHaveBeenCalled()
   scratch.close()
-  scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+  scratch = new JournalStructuralScratch(legacyRestScratchPath(root, sessionId))
   expect(scratch.load()).toEqual(saved)
   expect(Array.from(scratch.map('work:active:slots'))).toEqual(relations)
   const cursors: number[] = []
@@ -209,7 +215,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   })
   const resumed = make()
   await resumed.advance(() => true)
-  resumed.close()
+  await resumed.close()
   expect(new Set(cursors).size).toBe(tip - saved.cursor + 1)
   expect(cursors[0]).toBe(saved.cursor)
   expect(cursors.every((cursor) => cursor >= saved.cursor)).toBe(true)
@@ -228,7 +234,7 @@ it('rolls back failed scratch relations and resumes the exact committed index/cu
   const readsBeforeUpgrade = cursors.length
   const oldFormat = make()
   await oldFormat.advance(() => true)
-  oldFormat.close()
+  await oldFormat.close()
   expect(new Set(cursors.slice(readsBeforeUpgrade)).size).toBe(tip + 1)
   expect(cursors[readsBeforeUpgrade]).toBe(0)
   expect(initialized).toHaveBeenCalledTimes(2)

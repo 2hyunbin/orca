@@ -1,7 +1,8 @@
 // One connection per profile; instance locks exclude other processes and host teardown closes it last.
 
 import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { journalDatabasePath } from './journal-database-path'
+export { journalDatabasePath } from './journal-database-path'
 import type Database from '../../sqlite/sync-database'
 import {
   openJournalDatabase,
@@ -10,12 +11,6 @@ import {
 } from './journal-database'
 import { journalOpenRefusalError } from './journal-open-failure'
 import { AgentSessionJournalError } from './journal-write-guards'
-
-const JOURNAL_DATABASE_FILE = 'agent-session-journal.db'
-
-export function journalDatabasePath(stateDirectory: string): string {
-  return join(stateDirectory, JOURNAL_DATABASE_FILE)
-}
 
 export class JournalHostDatabase {
   private connection: Database.Database | null

@@ -1,3 +1,9 @@
+vi.mock('../agent-session-journal/journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } =
+    await import('../agent-session-journal/journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 // Only user-close supplies personal cancellation; host eviction/quit leaves interrupted work reportable.
 // Provider and fallback turn-end writers both derive verdict from the journal Stop event.
 

@@ -1,3 +1,4 @@
+import { beginStructuredJournalForeground } from '../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   TerminalStreamOpcode,
   decodeTerminalStreamJson,
@@ -48,20 +49,24 @@ export function registerTerminalSubscribeBinaryControlFrames(
       if (isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
         return
       }
-      void controls.getDesktopClaimTail().then(async (claimed) => {
-        if (!claimed || isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
-          return
-        }
-        const outcome = await sendTerminalStreamInput(runtime, {
-          terminal: params.terminal,
-          text,
-          client: params.client,
-          isMobile
+      const finishForeground = beginStructuredJournalForeground(args.registration.signal)
+      void controls
+        .getDesktopClaimTail()
+        .then(async (claimed) => {
+          if (!claimed || isTerminalInputLockedForClient(runtime, ptyId, params.client)) {
+            return
+          }
+          const outcome = await sendTerminalStreamInput(runtime, {
+            terminal: params.terminal,
+            text,
+            client: params.client,
+            isMobile
+          })
+          if (!controls.isClosed() && outcome === 'rejected' && supportsWriteUnavailable) {
+            controls.sendFrame(TerminalStreamOpcode.WriteUnavailable)
+          }
         })
-        if (!controls.isClosed() && outcome === 'rejected' && supportsWriteUnavailable) {
-          controls.sendFrame(TerminalStreamOpcode.WriteUnavailable)
-        }
-      })
+        .finally(finishForeground)
       return
     }
     if (frame.opcode === TerminalStreamOpcode.Resize && params.client) {

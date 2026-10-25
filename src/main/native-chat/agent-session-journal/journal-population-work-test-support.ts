@@ -12,8 +12,11 @@ import { WorkBucket } from './journal-work-bucket'
 const identity = (id: string) =>
   ({ provider: 'codex', threadId: 'population-thread', turnId: id, ordinal: 0 }) as const
 
-function activeOf(projection: object): WorkBucket {
-  const active: unknown = Reflect.get(projection, 'active')
+function activeOf(projection: unknown): WorkBucket {
+  const active =
+    typeof projection === 'object' && projection !== null && 'active' in projection
+      ? projection.active
+      : undefined
   if (!(active instanceof WorkBucket)) {
     throw new Error('missing actual projection work bucket')
   }

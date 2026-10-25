@@ -43,21 +43,36 @@ export class JournalStructuralScratch implements JournalStructuralStorage {
     this.save({ cleanup: true, sessionId })
   }
 
-  cleanupStep(limit = 32): boolean {
+  cleanupStep(limit = 32, canWork: () => boolean = () => true): boolean {
+    if (!canWork()) {
+      return false
+    }
     const rows = this.db.prepare('SELECT id FROM relations ORDER BY id LIMIT ?').all(limit)
     const remove = this.db.prepare('DELETE FROM relations WHERE id = ?')
     for (const row of rows) {
+      if (!canWork()) {
+        return false
+      }
       remove.run(row.id)
     }
     if (rows.length !== 0) {
       return false
     }
+    if (!canWork()) {
+      return false
+    }
     const clears = this.db.prepare('SELECT key FROM context_clears ORDER BY key LIMIT ?').all(limit)
     const removeClear = this.db.prepare('DELETE FROM context_clears WHERE key = ?')
     for (const row of clears) {
+      if (!canWork()) {
+        return false
+      }
       removeClear.run(row.key)
     }
     if (clears.length !== 0) {
+      return false
+    }
+    if (!canWork()) {
       return false
     }
     this.db.prepare('DELETE FROM checkpoint WHERE id = 1').run()

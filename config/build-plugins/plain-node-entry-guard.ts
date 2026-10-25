@@ -60,6 +60,7 @@ const PLAIN_NODE_ENTRY_NAMES = [
 // particular sits one import away from a client module that deliberately does
 // require electron.
 const WORKER_THREAD_ENTRY_NAMES = [
+  'journal-legacy-rest-worker-entry',
   'stt-worker',
   'warp-theme-parser-worker',
   'foreign-sqlite-reader-entry',

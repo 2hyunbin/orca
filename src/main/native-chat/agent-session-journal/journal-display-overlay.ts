@@ -30,13 +30,13 @@ export class JournalDisplayOverlay<K, V> extends Map<K, V> {
     return this.entries()
   }
 
-  override *keys() {
+  override *keys(): MapIterator<K> {
     for (const [key] of this) {
       yield key
     }
   }
 
-  override *values() {
+  override *values(): MapIterator<V> {
     for (const [, value] of this) {
       yield value
     }

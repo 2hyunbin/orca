@@ -45,11 +45,8 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
 
   protected noteStartupRestorationReady(windowId: number, startupRestorationReady: boolean): void {
     if (windowId !== HEADLESS_RUNTIME_WINDOW_ID) {
-      const becameReady = startupRestorationReady && !this.startupRestorationReady
       this.startupRestorationReady = startupRestorationReady
-      if (becameReady) {
-        wakeStructuredJournalBackground()
-      }
+      wakeStructuredJournalBackground()
     }
   }
 
@@ -67,6 +64,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
       return
     }
     this.graphStatus = 'unavailable'
+    wakeStructuredJournalBackground()
     this.setTerminalSideEffectConsumerAvailable(false)
     this.rememberDetachedPreAllocatedLeaves()
     this.tabs.clear()
@@ -94,8 +92,11 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
   protected restoreHeadlessGraphAuthority(): void {
     this.rendererGraphEpoch += 1
     this.authoritativeWindowId = HEADLESS_RUNTIME_WINDOW_ID
+    wakeStructuredJournalBackground()
     this.graphStatus = 'ready'
+    wakeStructuredJournalBackground()
     this.rendererGeneration = null
+    wakeStructuredJournalBackground()
     this.noteHeadlessStartupReady()
     this.setTerminalSideEffectConsumerAvailable(false)
     this.tabs.clear()

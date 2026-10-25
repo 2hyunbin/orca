@@ -11,6 +11,7 @@ export type TerminalSubscribeParams = z.infer<typeof TerminalSubscribe>
 export type TerminalSubscriptionEmit = (result: unknown) => void
 
 export type TerminalSubscriptionArgs = {
+  finishJournalSetup?: () => void
   params: TerminalSubscribeParams
   runtime: RpcContext['runtime']
   registration: TerminalSubscriptionRegistration

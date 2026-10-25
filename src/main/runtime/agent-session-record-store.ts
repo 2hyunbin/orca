@@ -63,6 +63,7 @@ import {
 } from './agent-session-reservation-admission'
 import { heldAgentSessionIds, type AgentSessionStoreState } from './agent-session-store-state'
 import {
+  AgentSessionTabMembership,
   agentSessionVisibleTabIndex,
   listVisibleAgentSessionIds,
   setAgentSessionTabVisibility,
@@ -84,6 +85,7 @@ export const AGENT_SESSION_LEASE_TTL_MS = 30_000,
   AGENT_SESSION_LEASE_RENEW_INTERVAL_MS = 10_000
 
 export class AgentSessionRecordStore {
+  private readonly tabMembership = new AgentSessionTabMembership()
   private readonly deathEvidenceListeners = new Set<(sessionId: string) => void>()
   private readonly firstRecordListeners = new Set<() => void>()
   readonly conversationReceipts: ReturnType<typeof createAgentSessionConversationReceipts>
@@ -148,13 +150,17 @@ export class AgentSessionRecordStore {
    * Showing keeps a tab the session already has; `tabId` puts a hidden one back under its old id.
    */
   setSessionTabVisibility(sessionId: string, visible: boolean, tabId?: string): Promise<void> {
-    return this.transact((draft) => setAgentSessionTabVisibility(draft, sessionId, visible, tabId))
+    return this.transact((draft) =>
+      setAgentSessionTabVisibility(draft, sessionId, visible, tabId)
+    ).then(() => this.tabMembership.publish([sessionId]))
   }
 
   /** Shows each session that still has a record, in one write: an index written part way would
    *  read as complete at the next launch and drop the rest. */
   showSessionTabs(sessionIds: readonly string[]): Promise<void> {
-    return this.transact((draft) => showAgentSessionTabs(draft, sessionIds))
+    return this.transact((draft) => showAgentSessionTabs(draft, sessionIds)).then(() =>
+      this.tabMembership.publish(sessionIds)
+    )
   }
 
   listByScope(location: AgentSessionExecutionLocation): AgentSessionRecord[] {
@@ -348,6 +354,8 @@ export class AgentSessionRecordStore {
     this.deathEvidenceListeners.add(listener)
     return () => this.deathEvidenceListeners.delete(listener)
   }
+
+  onTabMembershipChanged = this.tabMembership.listen
 
   /** Told, once committed, when the store records its first chat. Must not throw. */
   onFirstRecord(listener: () => void): () => void {

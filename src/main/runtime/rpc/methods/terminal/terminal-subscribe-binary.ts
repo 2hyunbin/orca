@@ -262,5 +262,6 @@ export async function runTerminalBinarySubscription(args: TerminalSubscriptionAr
     return
   }
   activateTerminalSubscribeBinaryLive(args, state)
+  args.finishJournalSetup?.()
   await streamClosed
 }

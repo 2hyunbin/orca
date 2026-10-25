@@ -1,3 +1,4 @@
+import { beginStructuredJournalForeground } from '../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { InvalidArgumentError } from '../../core'
 import type { RuntimeTerminalSend } from '../../../../../shared/runtime-terminal-send-contract'
 import type { DriverState, OrcaRuntimeService } from '../../../orca-runtime'
@@ -64,35 +65,40 @@ export async function sendTerminalStreamInput(
     requireWriteSettlement?: boolean
   }
 ): Promise<TerminalStreamInputOutcome> {
-  const action = { text: args.text, enter: false, interrupt: false }
-  const clientId = args.isMobile ? args.client?.id : undefined
-  const floorClaim: MobileInputFloorClaimHolder = { current: null }
-  const settlement = args.requireWriteSettlement ? { requireWriteSettlement: true as const } : {}
+  const finishForeground = beginStructuredJournalForeground()
   try {
-    const result = await runtime.sendTerminal(args.terminal, action, {
-      inputKind: 'driving',
-      ...settlement,
-      ...(clientId
-        ? {
-            reserveWrite: (writePtyId: string) => {
-              const claim = runtime.beginMobileInputFloor(writePtyId, clientId)
-              if (!claim) {
-                throw new Error('mobile_input_floor_unavailable')
-              }
-              floorClaim.current = claim
-            },
-            afterWrite: () => commitMobileInputFloorClaim(floorClaim)
-          }
-        : {})
-    })
-    const outcome = streamInputOutcome(result)
-    if (outcome === 'rejected') {
+    const action = { text: args.text, enter: false, interrupt: false }
+    const clientId = args.isMobile ? args.client?.id : undefined
+    const floorClaim: MobileInputFloorClaimHolder = { current: null }
+    const settlement = args.requireWriteSettlement ? { requireWriteSettlement: true as const } : {}
+    try {
+      const result = await runtime.sendTerminal(args.terminal, action, {
+        inputKind: 'driving',
+        ...settlement,
+        ...(clientId
+          ? {
+              reserveWrite: (writePtyId: string) => {
+                const claim = runtime.beginMobileInputFloor(writePtyId, clientId)
+                if (!claim) {
+                  throw new Error('mobile_input_floor_unavailable')
+                }
+                floorClaim.current = claim
+              },
+              afterWrite: () => commitMobileInputFloorClaim(floorClaim)
+            }
+          : {})
+      })
+      const outcome = streamInputOutcome(result)
+      if (outcome === 'rejected') {
+        floorClaim.current?.rollback()
+      }
+      return outcome
+    } catch (error) {
       floorClaim.current?.rollback()
+      return isTerminalStreamInputRejection(error) ? 'rejected' : 'failed'
     }
-    return outcome
-  } catch (error) {
-    floorClaim.current?.rollback()
-    return isTerminalStreamInputRejection(error) ? 'rejected' : 'failed'
+  } finally {
+    finishForeground()
   }
 }
 

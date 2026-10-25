@@ -69,6 +69,7 @@ export function structuredJournalBackgroundReady(): boolean {
 
 export function setStructuredJournalReadiness(read: () => boolean): void {
   currentGraphReady = read
+  wakeStructuredJournalBackground()
 }
 
 export function wakeStructuredJournalBackground(): void {
@@ -76,15 +77,22 @@ export function wakeStructuredJournalBackground(): void {
 }
 
 /** Observation only: actions never wait for background work. */
-export function beginStructuredJournalForeground(): () => void {
+export function beginStructuredJournalForeground(signal?: AbortSignal): () => void {
   foreground++
+  host?.advanceLegacyRest?.()
   let ended = false
-  return () => {
+  const finish = (): void => {
     if (ended) {
       return
     }
     ended = true
     foreground--
+    signal?.removeEventListener('abort', finish)
     host?.advanceLegacyRest?.()
   }
+  signal?.addEventListener('abort', finish, { once: true })
+  if (signal?.aborted) {
+    finish()
+  }
+  return finish
 }

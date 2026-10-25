@@ -1,4 +1,4 @@
-import { classifyRuntimeLongPoll } from '../runtime-rpc/runtime-rpc-long-poll'
+import { passiveJournalWait } from './runtime-rpc-journal-activity'
 import { beginStructuredJournalForeground } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   buildRegistry,
@@ -64,33 +64,41 @@ export class RpcDispatcher {
   }
 
   async dispatch(request: RpcRequest, options?: RpcDispatchStreamingOptions): Promise<RpcResponse> {
-    const meta = this.meta()
-    const pendingAdmission = this.admit(
-      request,
-      options,
-      meta,
-      (method: RpcMethod | RpcStreamingMethod): method is RpcMethod => !isStreamingMethod(method)
-    )
-    const admission =
-      pendingAdmission instanceof Promise ? await pendingAdmission : pendingAdmission
-    if ('rejected' in admission) {
-      return admission.rejected
-    }
-
-    // Why: only the request/response transport probes emulator calls; streaming-unary never did.
-    const probeEmulator = request.method.startsWith('emulator.')
-    if (probeEmulator) {
-      emulatorProbe(`rpc ${request.method}`, request.params)
-    }
+    const finishForeground = beginStructuredJournalForeground(options?.signal)
     try {
-      return successResponse(request.id, meta, await this.invokeForegroundUnary(admission, options))
-    } catch (error) {
-      if (probeEmulator) {
-        emulatorProbeError(`rpc ${request.method}`, error, {
-          params: request.params
-        })
+      const meta = this.meta()
+      const pendingAdmission = this.admit(
+        request,
+        options,
+        meta,
+        (method: RpcMethod | RpcStreamingMethod): method is RpcMethod => !isStreamingMethod(method)
+      )
+      const admission =
+        pendingAdmission instanceof Promise ? await pendingAdmission : pendingAdmission
+      if ('rejected' in admission) {
+        return admission.rejected
       }
-      return mapDispatcherError(request, meta, error)
+
+      if (passiveJournalWait(request)) {
+        finishForeground()
+      }
+      // Why: only the request/response transport probes emulator calls; streaming-unary never did.
+      const probeEmulator = request.method.startsWith('emulator.')
+      if (probeEmulator) {
+        emulatorProbe(`rpc ${request.method}`, request.params)
+      }
+      try {
+        return successResponse(request.id, meta, await this.invokeUnary(admission, options))
+      } catch (error) {
+        if (probeEmulator) {
+          emulatorProbeError(`rpc ${request.method}`, error, {
+            params: request.params
+          })
+        }
+        return mapDispatcherError(request, meta, error)
+      }
+    } finally {
+      finishForeground()
     }
   }
 
@@ -100,55 +108,60 @@ export class RpcDispatcher {
     reply: (response: string) => void,
     options?: RpcDispatchStreamingOptions
   ): Promise<void> {
-    const meta = this.meta()
-    const pendingAdmission = this.admit(
-      rawRequest,
-      options,
-      meta,
-      (_method: RpcMethod | RpcStreamingMethod): _method is RpcMethod | RpcStreamingMethod => true
-    )
-    const admission =
-      pendingAdmission instanceof Promise ? await pendingAdmission : pendingAdmission
-    if ('rejected' in admission) {
-      reply(JSON.stringify(admission.rejected))
-      return
-    }
-    const { method, request, params, caller } = admission
+    const finishForeground = beginStructuredJournalForeground(options?.signal)
+    try {
+      const meta = this.meta()
+      const pendingAdmission = this.admit(
+        rawRequest,
+        options,
+        meta,
+        (_method: RpcMethod | RpcStreamingMethod): _method is RpcMethod | RpcStreamingMethod => true
+      )
+      const admission =
+        pendingAdmission instanceof Promise ? await pendingAdmission : pendingAdmission
+      if ('rejected' in admission) {
+        reply(JSON.stringify(admission.rejected))
+        return
+      }
+      if (passiveJournalWait(rawRequest) || isStreamingMethod(admission.method)) {
+        finishForeground()
+      }
+      const { method, request, params, caller } = admission
 
-    if (!isStreamingMethod(method)) {
+      if (!isStreamingMethod(method)) {
+        try {
+          const result = await this.invokeUnary({ method, request, params, caller }, options)
+          reply(JSON.stringify(successResponse(request.id, meta, result)))
+        } catch (error) {
+          reply(JSON.stringify(mapDispatcherError(request, meta, error)))
+        }
+        return
+      }
+
+      const { emit, recordedFeatureInteractions } = createDispatcherStreamingFeatureEmitter(
+        this.runtime,
+        request,
+        meta,
+        reply
+      )
       try {
-        const result = await this.invokeForegroundUnary(
-          { method, request, params, caller },
-          options
+        const result = await method.handler(
+          params,
+          rpcContextFromTransport(this.runtime, request, options, caller),
+          emit
         )
-        reply(JSON.stringify(successResponse(request.id, meta, result)))
+        recordRuntimeFeatureInteraction(
+          this.runtime,
+          request.method,
+          result,
+          recordedFeatureInteractions,
+          request.params
+        )
       } catch (error) {
         reply(JSON.stringify(mapDispatcherError(request, meta, error)))
       }
-      return
-    }
-
-    const { emit, recordedFeatureInteractions } = createDispatcherStreamingFeatureEmitter(
-      this.runtime,
-      request,
-      meta,
-      reply
-    )
-    try {
-      const result = await method.handler(
-        params,
-        rpcContextFromTransport(this.runtime, request, options, caller),
-        emit
-      )
-      recordRuntimeFeatureInteraction(
-        this.runtime,
-        request.method,
-        result,
-        recordedFeatureInteractions,
-        request.params
-      )
-    } catch (error) {
-      reply(JSON.stringify(mapDispatcherError(request, meta, error)))
+    } finally {
+      finishForeground()
     }
   }
 
@@ -169,21 +182,6 @@ export class RpcDispatcher {
       options,
       isTransportSupported
     )
-  }
-
-  private async invokeForegroundUnary(
-    call: AdmittedUnaryCall,
-    options: RpcDispatchStreamingOptions | undefined
-  ): Promise<unknown> {
-    if (classifyRuntimeLongPoll(call.request)) {
-      return this.invokeUnary(call, options)
-    }
-    const finishForeground = beginStructuredJournalForeground()
-    try {
-      return await this.invokeUnary(call, options)
-    } finally {
-      finishForeground()
-    }
   }
 
   private async invokeUnary(

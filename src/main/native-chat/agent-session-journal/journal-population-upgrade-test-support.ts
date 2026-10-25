@@ -1,8 +1,9 @@
-import { join } from 'node:path'
+import { legacyRestScratchPath } from './journal-legacy-rest-scratch'
+import { assertPopulationQueryPlans } from './journal-population-query-plan-test-support'
 import { serialize } from 'node:v8'
 import { expect, vi } from 'vitest'
 import type { JournalRestFacts } from './journal-row-table'
-import { readJournalRestFacts, readJournalSessionProjection } from './journal-row-table'
+import { readJournalRestFacts } from './journal-row-table'
 import { openTestJournalHostDatabase } from './journal-host-database-test-support'
 import { JournalLegacyRestInitializer } from './journal-legacy-rest-initializer'
 import {
@@ -20,7 +21,7 @@ export async function runPopulationUpgrade(
   flushOutputs: number
 ): Promise<{ cleanupSteps: number; reads: number; cleanupRows: number; checkpoints: number }> {
   const database = openTestJournalHostDatabase(root)
-  const path = join(root, 'journal-rest-upgrade-scratch.db')
+  const path = legacyRestScratchPath(root, sessionId)
   const publications: JournalRestFacts[] = []
   const errors: unknown[] = []
   let owner: string | null = 'population-ended-owner'
@@ -85,9 +86,9 @@ export async function runPopulationUpgrade(
   const cleanup = JournalStructuralScratch.prototype.cleanupStep
   const cleanupSpy = vi
     .spyOn(JournalStructuralScratch.prototype, 'cleanupStep')
-    .mockImplementation(function (limit) {
+    .mockImplementation(function (limit, canWork) {
       cleanupSteps++
-      return cleanup.call(this, limit)
+      return cleanup.call(this, limit, canWork)
     })
   try {
     unknown()
@@ -101,7 +102,7 @@ export async function runPopulationUpgrade(
         (checkpoint.queueRevision ?? 0) < queueBeforeFlush + flushOutputs
       )
     })
-    prefix.close()
+    await prefix.close()
     const interior = saved()!
     expect(interior.pending?.sequence).toBe(tip)
     expect(interior.pending?.phase).toBe('queue')
@@ -133,7 +134,7 @@ export async function runPopulationUpgrade(
       .run(sessionId, tip)
     const changedSource = make()
     await changedSource.advance(() => true)
-    changedSource.close()
+    await changedSource.close()
     expect(errors).toHaveLength(1)
     expect(String(errors[0])).toContain('pending journal source changed')
     expect(publications).toEqual([])
@@ -146,13 +147,13 @@ export async function runPopulationUpgrade(
     const beforePauseReads = reads
     const paused = make()
     await paused.advance(() => false)
-    paused.close()
+    await paused.close()
     expect(reads).toBe(beforePauseReads)
     expect(serialize(saved())).toEqual(checkpointBytes)
     owner = null
     const foreign = make()
     await foreign.advance(() => true)
-    foreign.close()
+    await foreign.close()
     expect(reads).toBe(beforePauseReads)
     expect(readJournalRestFacts(database.db, sessionId)?.known).toBe(false)
     owner = 'population-ended-owner'
@@ -169,7 +170,7 @@ export async function runPopulationUpgrade(
           (checkpoint.queueRevision ?? 0) < queueBeforeFlush + flushOutputs
         )
       })
-      replacement.close()
+      await replacement.close()
     }
     const committed = saved()!
     const beforeFailure = serialize({
@@ -181,7 +182,7 @@ export async function runPopulationUpgrade(
     failNextSave = true
     const failed = make()
     await failed.advance(() => true)
-    failed.close()
+    await failed.close()
     expect(errors).toHaveLength(2)
     expect(String(errors[1])).toContain('population scratch after-save rollback')
     expect(publications).toEqual([])
@@ -197,7 +198,7 @@ export async function runPopulationUpgrade(
     const resumeReads = reads
     const resumed = make()
     await resumed.advance(() => !reader.load<{ cleanup?: boolean }>()?.cleanup)
-    resumed.close()
+    await resumed.close()
     expect(afterSequences[resumeReads]).toBe(committed.cursor)
     expect(afterSequences.slice(resumeReads).every((cursor) => cursor >= committed.cursor)).toBe(
       true
@@ -211,7 +212,7 @@ export async function runPopulationUpgrade(
     const cleanupStepsBeforePause = cleanupSteps
     const firstCleanup = make()
     await firstCleanup.advance(() => cleanupSteps === cleanupStepsBeforePause)
-    firstCleanup.close()
+    await firstCleanup.close()
     const afterCleanup = Number(reader.db.prepare('SELECT COUNT(*) AS n FROM relations').get()?.n)
     expect(beforeCleanup - afterCleanup).toBeGreaterThan(0)
     expect(beforeCleanup - afterCleanup).toBeLessThanOrEqual(32)
@@ -222,72 +223,12 @@ export async function runPopulationUpgrade(
     const beforeRetirementReads = reads
     const retire = make()
     await retire.advance(() => true)
-    retire.close()
+    await retire.close()
     expect(saved()).toBeUndefined()
     expect(reader.db.prepare('SELECT COUNT(*) AS n FROM relations').get()?.n).toBe(0)
     expect(reads).toBe(beforeRetirementReads)
     expect(publications).toHaveLength(1)
-    const pointPlan = reader.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT value FROM relations
-      WHERE space = ? AND key = ?`)
-      .all(serialize('selection:treeNodes'), serialize('node'))
-    expect(pointPlan.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH.*INDEX.*space.*key/i
-    )
-    const rangePlan = reader.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT id,key,value FROM relations
-      WHERE space = ? AND id > ? ORDER BY id LIMIT 1`)
-      .all(serialize('items'), 0)
-    expect(rangePlan.map((row) => String(row.detail)).join(' ')).toMatch(/relation_cursor/i)
-
-    const cleanupPlan = reader.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT id FROM relations
-      ORDER BY id LIMIT ?`)
-      .all(32)
-    expect(cleanupPlan.map((row) => String(row.detail)).join(' ')).toMatch(/SCAN relations/i)
-    expect(cleanupPlan.map((row) => String(row.detail)).join(' ')).not.toMatch(/TEMP B-TREE/i)
-    const clearCleanupPlan = reader.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT key FROM context_clears
-      ORDER BY key LIMIT ?`)
-      .all(32)
-    expect(clearCleanupPlan.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SCAN context_clears USING COVERING INDEX sqlite_autoindex_context_clears_1/i
-    )
-    expect(clearCleanupPlan.map((row) => String(row.detail)).join(' ')).not.toMatch(/TEMP B-TREE/i)
-    const tipPlan = database.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT MAX(seq) AS tip FROM journal_rows
-      WHERE session_id = ? AND epoch = ?`)
-      .all(sessionId, readJournalSessionProjection(database.db, sessionId)!.epoch)
-    expect(tipPlan.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH.*COVERING INDEX.*session_id.*epoch/i
-    )
-    const coveredCursor = reader.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT id FROM relations
-      WHERE space = ? AND id > ? ORDER BY id LIMIT 1`)
-      .all(serialize('items'), 0)
-    expect(coveredCursor.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH.*COVERING INDEX relation_cursor.*space.*id/i
-    )
-    const deletePlan = reader.db
-      .prepare('EXPLAIN QUERY PLAN DELETE FROM relations WHERE id = ?')
-      .all(1)
-    expect(deletePlan.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH relations USING INTEGER PRIMARY KEY/i
-    )
-    const clearDelete = reader.db
-      .prepare('EXPLAIN QUERY PLAN DELETE FROM context_clears WHERE key = ?')
-      .all(serialize('clear'))
-    expect(clearDelete.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH context_clears USING INDEX sqlite_autoindex_context_clears_1.*key/i
-    )
-    const hostCursor = database.db
-      .prepare(`EXPLAIN QUERY PLAN SELECT row_json FROM journal_rows
-      WHERE session_id = ? AND epoch = ? AND seq > ? ORDER BY seq ASC LIMIT 32`)
-      .all(sessionId, readJournalSessionProjection(database.db, sessionId)!.epoch, 0)
-    expect(hostCursor.map((row) => String(row.detail)).join(' ')).toMatch(
-      /SEARCH.*INDEX.*session_id.*epoch.*seq/i
-    )
-    expect(hostCursor.map((row) => String(row.detail)).join(' ')).not.toMatch(/TEMP B-TREE/i)
+    assertPopulationQueryPlans(reader, database, sessionId)
 
     // Guard 5 is a disposable old format, never a reason to trust partial new relations.
     unknown()
@@ -298,14 +239,14 @@ export async function runPopulationUpgrade(
     })
     const oldFormat = make()
     await oldFormat.advance(() => true)
-    oldFormat.close()
+    await oldFormat.close()
     expect(publications).toHaveLength(2)
     expect(publications[1].openTurn).toEqual(expected)
     expect(reader.map('obsolete-format-5').has('old-node')).toBe(false)
     const initializedReads = reads
     const initialized = make()
     await initialized.advance(() => true)
-    initialized.close()
+    await initialized.close()
     expect(reads).toBe(initializedReads)
     expect(errors).toHaveLength(2)
     expect(serialize(interior)).toEqual(checkpointBytes)
@@ -314,7 +255,7 @@ export async function runPopulationUpgrade(
     return { cleanupSteps, reads, checkpoints, cleanupRows: beforeCleanup }
   } finally {
     for (const initializer of initializers) {
-      initializer.close()
+      await initializer.close()
     }
     for (const spy of statementSpies) {
       spy.mockRestore()

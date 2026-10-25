@@ -1,16 +1,15 @@
+import type { PopulationWrap } from './journal-population-method-test-support'
 import { expect } from 'vitest'
 import { deserialize } from 'node:v8'
 import Database from '../../sqlite/sync-database'
 import { populationEncodedBytes, type PopulationCost } from './journal-population-cost-test-support'
 
-type Interceptor = (owner: object, args: unknown[], call: (args: unknown[]) => unknown) => unknown
-
 /** Real statement executions, cardinalities and encoded buffers, including failed executions. */
 export function instrumentPopulationSql(
-  wrap: (target: object, property: PropertyKey, intercept: Interceptor) => void,
+  wrap: PopulationWrap,
   current: () => PopulationCost | undefined
 ): void {
-  const statements = new WeakSet<object>()
+  const statements = new WeakSet<Database.Statement>()
   wrap(Database.prototype, 'exec', (_owner, args, call) => {
     const cost = current()
     if (cost && typeof args[0] === 'string') {
@@ -26,7 +25,7 @@ export function instrumentPopulationSql(
     }
     if (!statements.has(statement)) {
       statements.add(statement)
-      for (const method of ['get', 'all', 'run']) {
+      for (const method of ['get', 'all', 'run'] as const) {
         wrap(statement, method, (_statement, parameters, execute) => {
           const cost = current()
           if (cost) {
@@ -37,7 +36,7 @@ export function instrumentPopulationSql(
               cost.checkpointBytes += bytes
             }
           }
-          let result: unknown
+          let result: ReturnType<Database.Statement[typeof method]>
           try {
             result = execute(parameters)
           } catch (error) {
@@ -49,7 +48,10 @@ export function instrumentPopulationSql(
           if (cost) {
             cost.encodedBytes += populationEncodedBytes(result)
             if (method === 'run' && result && typeof result === 'object') {
-              const changed = Number(Reflect.get(result, 'changes'))
+              if (!('changes' in result)) {
+                throw new Error('missing SQLite changed-row result')
+              }
+              const changed = Number(result.changes)
               cost.changedRows += changed
               if (/\bDELETE\s+FROM\s+relations\b/i.test(sql)) {
                 if (
@@ -77,7 +79,7 @@ export function instrumentPopulationSql(
                 cost.rangeRows += rows
               }
               if (/COUNT\(\*\)/i.test(sql) && result && typeof result === 'object') {
-                const cardinality = Number(Reflect.get(result, 'n') ?? 0)
+                const cardinality = Number(('n' in result ? result.n : undefined) ?? 0)
                 cost.countCardinality += cardinality
                 const space =
                   parameters[0] instanceof Uint8Array

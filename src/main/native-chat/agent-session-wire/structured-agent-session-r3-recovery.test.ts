@@ -1,3 +1,9 @@
+vi.mock('../agent-session-journal/journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } =
+    await import('../agent-session-journal/journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -293,7 +299,7 @@ it.each([32, 320])(
     expect(readJournalRestFacts(db, retry)?.known).toBe(false)
     expect(classified).toEqual([visible, recent, target])
     expect(maxTaskWork).toBeLessThanOrEqual(34)
-    expect(ordered).toHaveBeenCalledTimes(records.length)
+    expect(ordered).toHaveBeenCalledTimes(records.length + 1)
     const exhausted = {
       probes: sql.mock.calls.length,
       owners: owners.mock.calls.length,
@@ -314,7 +320,7 @@ it.each([32, 320])(
     })
     await advance.mock.results.findLast((result) => result.value)?.value
     expect(readJournalRestFacts(db, retry)?.known).toBe(true)
-    expect(ordered).toHaveBeenCalledTimes(records.length)
+    expect(ordered).toHaveBeenCalledTimes(records.length + 1)
   }
 )
 
@@ -466,4 +472,161 @@ it('publishes committed legacy initialization after ordinary open at its origina
   current.advanceLegacyRest()
   await advance.mock.results.findLast((result) => result.value)?.value
   expect({ trusted, broadcast }).toEqual(before)
+})
+
+it('hands committed priorities and retiring foreground wakes to the same background lifetime', async () => {
+  const shown = 'shown-after-capture'
+  const recent = 'recent-hidden'
+  const hidden = 'hidden-after-capture'
+  const ties = ['stable-first', 'stable-second']
+  const late = 'late-committed'
+  const beforeA = 'updated-before-first-pull'
+  const beforeB = 'shown-before-first-pull'
+  const eligible = [shown, recent, hidden, ...ties]
+  const ids = [
+    beforeA,
+    beforeB,
+    ...eligible,
+    late,
+    ...Array.from({ length: 56 }, (_, i) => `discovery-${i}`)
+  ]
+  const records = ids.map((id) => {
+    const r = record(id)
+    return {
+      ...r,
+      updatedAt: id === recent || id === beforeB ? 200 : id === hidden ? 300 : 100,
+      lease: {
+        ...r.lease,
+        claimStatus: 'released' as const,
+        unreconciled: false,
+        ownerProcess: null,
+        reservedSpawnToken: null
+      }
+    }
+  })
+  const current = await create(records)
+  const store = current.deps.store
+  const { db } = current.deps.journalDatabase
+  const clear = db.prepare(
+    'UPDATE journal_sessions SET open_turn_id = NULL, open_turn_since = NULL WHERE session_id = ?'
+  )
+  for (const id of [beforeA, beforeB, ...eligible]) {
+    await seed(id)
+    clear.run(id)
+  }
+  const published: string[] = []
+  current.deps.statusSink = { publish: (row) => published.push(row.sessionId), forget: () => {} }
+  const captured = Promise.withResolvers<void>()
+  const snapshots: string[] = []
+  let discovering = false
+  let releaseDiscovery = () => {}
+  const tabId = store.getSessionTabId.bind(store)
+  const ordered = vi.spyOn(store, 'getSessionTabId').mockImplementation((id) => {
+    const result = tabId(id)
+    if (discovering && snapshots.length < ids.length) {
+      snapshots.push(id)
+      if (snapshots.length === ids.length) {
+        releaseDiscovery = beginStructuredJournalForeground()
+        captured.resolve()
+      }
+    }
+    return result
+  })
+  const iterate = store.iterateRecords.bind(store)
+  const scans = vi.spyOn(store, 'iterateRecords').mockImplementation(() => {
+    discovering = true
+    return iterate()
+  })
+  const advance = vi.spyOn(JournalLegacyRestInitializer.prototype, 'advance')
+  setStructuredAgentSessionHost(current)
+  await store.setSessionTabVisibility(hidden, true, 'hidden-tab')
+  await store.setSessionTabVisibility(beforeB, true, 'before-b-tab')
+  await store.setSessionTabVisibility(beforeA, true, 'before-a-tab')
+  const beforeClock = vi.spyOn(Date, 'now').mockReturnValue(NOW + 2)
+  try {
+    await store.setConversationName(beforeA, 'new title before discovery')
+  } finally {
+    beforeClock.mockRestore()
+  }
+  expect(store.getRecord(beforeA)?.updatedAt).toBe(NOW + 2)
+  expect(scans).not.toHaveBeenCalled()
+  expect(ordered).toHaveBeenCalledTimes(3)
+  // Make only this first wait already due, so its fulfilled continuation precedes release.
+  const initialDue = vi.spyOn(performance, 'now').mockReturnValueOnce(Number.MAX_SAFE_INTEGER)
+  try {
+    setStructuredJournalReadiness(() => true)
+  } finally {
+    initialDue.mockRestore()
+  }
+  const retiring = advance.mock.results.at(-1)?.value
+  expect(retiring).toBeInstanceOf(Promise)
+  const finish = beginStructuredJournalForeground()
+  let releasedLifetime: Promise<void> | undefined
+  let stopWatching = () => {}
+  try {
+    // The fulfilled wait continuation observes the hold before this finite release runs.
+    await Promise.resolve().then(() => {
+      finish()
+      releasedLifetime = advance.mock.results.at(-1)?.value
+    })
+    expect(releasedLifetime).toBe(retiring)
+    await captured.promise
+    expect(snapshots).toEqual(ids)
+    expect(ordered).toHaveBeenCalledTimes(ids.length + 3)
+    expect(published).toEqual([])
+    await store.setSessionTabVisibility(shown, true, 'shown-tab')
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW + 1)
+    try {
+      await store.setConversationName(hidden, 'committed priority update')
+    } finally {
+      clock.mockRestore()
+    }
+    await store.setSessionTabVisibility(hidden, false)
+    // Reverse notification order must not reverse original equal-priority discovery ties.
+    await store.showSessionTabs([ties[1], ties[0]])
+    expect(store.getRecord(hidden)?.updatedAt).toBe(NOW + 1)
+    expect(ordered).toHaveBeenCalledTimes(ids.length + 7)
+    releaseDiscovery()
+    await advance.mock.results.at(-1)?.value
+    expect(published).toEqual([beforeA, beforeB, shown, ...ties, hidden, recent])
+    for (const id of [beforeA, beforeB, ...eligible]) {
+      expect(readJournalRestFacts(db, id)).toMatchObject({
+        known: true,
+        openTurn: { since: savedAt }
+      })
+    }
+    expect(scans).toHaveBeenCalledOnce()
+    expect(ordered).toHaveBeenCalledTimes(ids.length + 13)
+    // This already-discovered record had no source. A real new source is now committed.
+    await seed(late, false)
+    clear.run(late)
+    let committedLifetime: Promise<void> | undefined
+    stopWatching = store.onTabMembershipChanged((id) => {
+      if (id === late) {
+        committedLifetime = advance.mock.results.at(-1)?.value
+      }
+    })
+    // Queue the store commit before the empty run's fulfilled wait. Its committed listener
+    // runs after that run returns but before catch/finally clears the running lifetime.
+    const committed = store.setSessionTabVisibility(late, true, 'late-tab')
+    const exhaustedDue = vi.spyOn(performance, 'now').mockReturnValueOnce(Number.MAX_SAFE_INTEGER)
+    try {
+      current.advanceLegacyRest()
+    } finally {
+      exhaustedDue.mockRestore()
+    }
+    const exhausted = advance.mock.results.at(-1)?.value
+    expect(exhausted).toBeInstanceOf(Promise)
+    await committed
+    expect(committedLifetime).toBe(exhausted)
+    await exhausted
+    expect(published).toEqual([beforeA, beforeB, shown, ...ties, hidden, recent, late])
+    expect(readJournalRestFacts(db, late)).toMatchObject({ known: true, openTurn: null })
+    expect(scans).toHaveBeenCalledOnce()
+    expect(ordered).toHaveBeenCalledTimes(ids.length + 14)
+  } finally {
+    finish()
+    releaseDiscovery()
+    stopWatching()
+  }
 })

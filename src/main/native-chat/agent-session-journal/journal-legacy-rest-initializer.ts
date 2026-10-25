@@ -1,309 +1,274 @@
-import { createHash } from 'node:crypto'
-import { join } from 'node:path'
-import { setImmediate as yieldToForeground } from 'node:timers/promises'
-import { stepStructuralJournalRow } from './journal-structural-fold-step'
-import { parseJournalRow } from './journal-row-schema'
-import {
-  readJournalRestFacts,
-  readJournalRowsAfter,
-  readJournalSessionProjection
-} from './journal-row-table'
-import type { JournalHostDatabase } from './journal-host-database'
-import {
-  JournalStructuralScratch,
-  structuralJournalState,
-  type JournalStructuralCheckpoint
-} from './journal-structural-scratch'
+import type { JournalLegacyRestCandidate } from './journal-legacy-rest-initializer-dependencies'
+import { JournalKeyedHeap } from './journal-keyed-heap'
+import { readJournalSessionProjection } from './journal-row-table'
+import { JournalLegacyRestWorker } from './journal-legacy-rest-worker'
+import { LegacyRestSourceOwner, type LegacyRestDeps } from './journal-legacy-rest-source'
+import type { LegacyRestRequest, LegacyRestExecutor } from './journal-legacy-rest-worker-protocol'
 
-/** One first-upgrade candidate, resumed from atomically saved derived relations and cursor. */
+type Candidate = {
+  key: string
+  visible: boolean
+  updatedAt: number
+  order: number
+  orphan: boolean
+}
+
+/** Main owns admission and publication; all history and disposable storage run in one worker. */
 export class JournalLegacyRestInitializer {
-  private scratch?: JournalStructuralScratch
-  private running: Promise<void> | undefined
-  private stopped = false
+  private readonly control = new Int32Array(new SharedArrayBuffer(8))
+  private readonly worker: LegacyRestExecutor
+  private readonly sources: LegacyRestSourceOwner
+  private readonly pending = new JournalKeyedHeap<Candidate>(
+    (a, b) =>
+      Number(b.visible) - Number(a.visible) || b.updatedAt - a.updatedAt || a.order - b.order
+  )
   private readonly attempted = new Set<string>()
-  private discovery?: Iterator<string | undefined>
-  private readonly reconsidered = new Set<string>()
-  private candidate?: string
-  constructor(
-    private readonly deps: {
-      database: JournalHostDatabase
-      candidates: () => Iterable<string | undefined>
-      /** Ordinary open can commit the pair before its cold unknown presentation completes. */
-      needsPublication?: (sessionId: string) => boolean
-      /** Null means an owner is still live/foreign/unproved; a stable value is its actual source guard. */
-      owner: (sessionId: string) => string | null
-      initialized: (
-        sessionId: string,
-        facts: NonNullable<ReturnType<typeof readJournalRestFacts>>
-      ) => void
-      failed: (sessionId: string, error: unknown) => void
-    }
-  ) {}
+  private readonly cleanup = new Set<string>()
+  private discovery?: Iterator<string | JournalLegacyRestCandidate | undefined>
+  private discovered = false
+  private scratchDiscovered = false
+  private order = 0
+  private running?: Promise<void>
+  private pendingAdvance?: () => boolean
+  private stopped = false
+  private refused = false
+  private faults = 0
+  private workerDue = 0
+  private mainDue = 0
+  private wake?: () => void
 
-  /** Existing committed owner proof can make a formerly foreign candidate eligible. */
+  constructor(private readonly deps: LegacyRestDeps) {
+    this.sources = new LegacyRestSourceOwner(deps)
+    this.worker = new JournalLegacyRestWorker(deps.database, this.control, (ms) => this.charge(ms))
+  }
+
   reconsider(sessionId: string): void {
-    this.reconsidered.add(sessionId)
+    Atomics.add(this.control, 1, 1)
+    this.measure(() => this.enqueue(sessionId))
+  }
+
+  /** Synchronous shared control; an action never waits for a native primitive or retirement. */
+  pause(): void {
+    this.pendingAdvance = undefined
+    Atomics.store(this.control, 0, 1)
+    Atomics.add(this.control, 1, 1)
+    this.wake?.()
   }
 
   advance(canWork: () => boolean): Promise<void> | undefined {
-    if (this.running || this.stopped || this.deps.database.readOnly || !canWork()) {
+    if (this.stopped || this.refused || this.deps.database.readOnly || !canWork()) {
+      this.pause()
       return
     }
-    this.running = this.run(canWork)
-      .catch((error: unknown) => this.deps.failed('', error))
-      .finally(() => {
-        this.running = undefined
-        if (this.stopped) {
-          this.scratch?.close()
-          this.scratch = undefined
-        }
-      })
+    Atomics.store(this.control, 0, 0)
+    if (this.running) {
+      this.pendingAdvance = canWork
+    } else {
+      this.running = this.run(canWork)
+        .catch((error: unknown) => this.deps.failed('', error))
+        .finally(() => {
+          this.running = undefined
+          const pending = this.pendingAdvance
+          this.pendingAdvance = undefined
+          return pending ? this.advance(pending) : undefined
+        })
+    }
     return this.running
   }
-  close(): void {
+
+  async close(): Promise<void> {
     this.stopped = true
-    if (!this.running) {
-      this.scratch?.close()
-      this.scratch = undefined
+    this.pause()
+    await this.worker.close()
+    await this.running
+  }
+
+  private charge(ms: number): void {
+    this.mainDue = Math.max(this.mainDue, performance.now()) + ms * 11.5
+  }
+
+  private measure<T>(run: () => T): T {
+    const start = performance.now()
+    try {
+      return run()
+    } finally {
+      this.charge(performance.now() - start)
     }
   }
-  private source(sessionId: string) {
-    const { db } = this.deps.database
-    const projection = readJournalSessionProjection(db, sessionId)
-    const owner = this.deps.owner(sessionId)
-    if (!projection || owner === null) {
-      return null
-    }
-    const known = projection.pair[0] !== null || projection.pair[1] === 0
-    if (
-      known
-        ? !this.deps.needsPublication?.(sessionId)
-        : projection.pair[0] !== null || projection.pair[1] !== null
-    ) {
-      return null
-    }
-    const tip = Number(
-      db
-        .prepare('SELECT MAX(seq) AS tip FROM journal_rows WHERE session_id = ? AND epoch = ?')
-        .get(sessionId, projection.epoch)?.tip ?? 0
-    )
-    if (tip < 1) {
-      return null
-    }
-    return {
-      ...projection,
-      known,
-      tip,
-      guard: JSON.stringify([6, sessionId, projection, tip, owner])
-    }
+
+  private enqueue(id: string, supplied?: JournalLegacyRestCandidate): void {
+    const previous = this.pending.get(id)
+    const priority =
+      supplied && previous && this.deps.priority
+        ? this.deps.priority(id)
+        : (supplied ?? this.deps.priority?.(id))
+    this.pending.update(id, {
+      key: id,
+      visible: priority?.visible ?? false,
+      updatedAt: priority?.updatedAt ?? 0,
+      // Discovery owns stable ties; a collided key reads current committed metadata.
+      order: supplied ? this.order++ : (previous?.order ?? this.order++),
+      orphan: !!this.deps.priority && !priority
+    })
   }
-  private publishKnown(sessionId: string, guard: string): void {
-    const facts = readJournalRestFacts(this.deps.database.db, sessionId)
-    if (facts?.known && this.source(sessionId)?.guard === guard) {
-      this.deps.initialized(sessionId, facts)
-    }
-    if (this.scratch?.load<JournalStructuralCheckpoint>()?.sessionId === sessionId) {
-      this.scratch.beginCleanup(sessionId)
-    }
-  }
-  private async run(canWork: () => boolean): Promise<void> {
-    await yieldToForeground()
-    if (this.stopped || !canWork()) {
+
+  private async wait(): Promise<void> {
+    const delay = Math.max(this.mainDue, this.workerDue) - performance.now()
+    if (delay <= 0) {
       return
     }
-    const scratch = (this.scratch ??= new JournalStructuralScratch(
-      join(this.deps.database.stateDirectory, 'journal-rest-upgrade-scratch.db')
-    ))
-    if (!this.discovery) {
-      this.discovery = this.deps.candidates()[Symbol.iterator]()
-      this.candidate = scratch.load<JournalStructuralCheckpoint>()?.sessionId
-    }
-    let examined = 0
-    while (!this.stopped) {
-      if (examined++ === 32) {
-        examined = 1
-        await yieldToForeground()
+    await new Promise<void>((resolve) => {
+      const finish = (): void => {
+        clearTimeout(timer)
+        this.wake = undefined
+        resolve()
       }
-      if (!canWork()) {
-        return
-      }
-      const cleanup = scratch.load<{ cleanup?: boolean; sessionId: string }>()
-      if (cleanup?.cleanup) {
-        scratch.db.exec('BEGIN IMMEDIATE')
-        try {
-          scratch.cleanupStep()
-          scratch.db.exec('COMMIT')
-        } catch (error) {
-          scratch.db.exec('ROLLBACK')
-          throw error
-        }
-        await yieldToForeground()
-        continue
-      }
-      if (!this.candidate) {
-        const retry = this.reconsidered.values().next()
-        if (!retry.done) {
-          this.reconsidered.delete(retry.value)
-          this.candidate = retry.value
-        } else {
-          const next = this.discovery.next()
-          if (next.done) {
-            return
-          }
-          this.candidate = next.value
-        }
-      }
-      const sessionId = this.candidate
-      if (sessionId === undefined) {
-        continue
-      }
-      const source = this.source(sessionId)
-      if (!source || this.attempted.has(source.guard)) {
-        if (!source && scratch.load<JournalStructuralCheckpoint>()?.sessionId === sessionId) {
-          scratch.beginCleanup(sessionId)
-        }
-        this.candidate = undefined
-        continue
-      }
-      if (source.known) {
-        this.publishKnown(sessionId, source.guard)
-        this.candidate = undefined
-        continue
-      }
-      let saved = scratch.load<JournalStructuralCheckpoint>()
-      if (saved && (saved.guard !== source.guard || saved.selection?.format !== 6)) {
-        scratch.beginCleanup(sessionId)
-        continue
-      }
-      const state = structuralJournalState(scratch, sessionId, source.epoch, saved)
-      let completed = saved?.cursor ?? 0
-      let pending = saved?.pending
-      try {
-        while (!this.stopped) {
-          await yieldToForeground()
-          if (this.stopped || !canWork()) {
-            return
-          }
-          const current = this.source(sessionId)
-          if (current?.guard !== source.guard) {
-            if (current?.known) {
-              this.publishKnown(sessionId, current.guard)
-            }
-            return
-          }
-          const started = performance.now()
-          let bytes = 0
-          let rows = 0
-          let finished = false
-          scratch.db.exec('BEGIN IMMEDIATE')
-          try {
-            let steps = 0
-            let entry: ReturnType<typeof readJournalRowsAfter>[number] | undefined
-            let sourceHash: string | undefined
-            let row: Extract<ReturnType<typeof parseJournalRow>, { ok: true }>['row'] | undefined
-            while (
-              rows < 32 &&
-              steps < 32 &&
-              bytes < 256 * 1024 &&
-              performance.now() - started < 8 &&
-              canWork()
-            ) {
-              if (!entry || !row) {
-                entry = readJournalRowsAfter(
-                  this.deps.database.db,
-                  sessionId,
-                  source.epoch,
-                  completed,
-                  1
-                )[0]
-                if (!entry || entry.seq > source.tip) {
-                  finished = true
-                  break
-                }
-                const parsed = parseJournalRow(entry.rowJson)
-                if (
-                  !parsed.ok ||
-                  parsed.row.epoch !== source.epoch ||
-                  parsed.row.seq !== entry.seq ||
-                  entry.seq !== completed + 1 ||
-                  (entry.seq === 1 && parsed.row.kind !== 'epoch') ||
-                  (pending && pending.sequence !== entry.seq)
-                ) {
-                  throw new Error('legacy journal is incomplete, damaged or newer')
-                }
-                sourceHash = createHash('sha256').update(entry.rowJson).digest('hex')
-                row = parsed.row
-                bytes += Buffer.byteLength(entry.rowJson)
-              }
-              pending = stepStructuralJournalRow(state, row, entry.ts, sourceHash!, pending)
-              steps++
-              if (!pending) {
-                completed = entry.seq
-                rows++
-                entry = undefined
-                row = undefined
-              }
-            }
-            scratch.save({
-              sessionId,
-              guard: source.guard,
-              cursor: completed,
-              pending,
-              selection: state.selection.checkpoint(),
-              agent: state.agent,
-              rest: state.rest.checkpoint(),
-              scope: state.derivedTurnScope.checkpoint(),
-              latestAcceptedTurnSequence: state.latestAcceptedTurnSequence,
-              queueRevision: state.queue.revision
-            } satisfies JournalStructuralCheckpoint)
-            scratch.db.exec('COMMIT')
-          } catch (error) {
-            scratch.db.exec('ROLLBACK')
-            throw error
-          }
-          if (!finished) {
-            continue
-          }
-          const fact = state.rest.fact()
-          const committed = this.deps.database.transaction((db) => {
-            if (this.source(sessionId)?.guard !== source.guard) {
-              return false
-            }
-            const result = db
-              .prepare(`UPDATE journal_sessions SET open_turn_id = ?, open_turn_since = ?
-              WHERE session_id = ? AND epoch = ? AND open_turn_id IS NULL AND open_turn_since IS NULL
-              AND (SELECT COALESCE(MAX(seq),0) FROM journal_rows WHERE session_id = ? AND epoch = ?) = ?`)
-              .run(
-                fact?.itemId ?? null,
-                fact?.since ?? 0,
-                sessionId,
-                source.epoch,
-                sessionId,
-                source.epoch,
-                source.tip
-              )
-            if (result.changes !== 1) {
-              throw new Error('legacy projection CAS did not initialize its candidate')
-            }
-            return true
-          })
-          if (committed) {
-            const facts = readJournalRestFacts(this.deps.database.db, sessionId)
-            if (facts) {
-              this.deps.initialized(sessionId, facts)
-            }
-          }
-          this.attempted.add(source.guard)
-          scratch.beginCleanup(sessionId)
+      const timer = setTimeout(finish, delay)
+      timer.unref?.()
+      this.wake = finish
+    })
+  }
+
+  private next(): Omit<LegacyRestRequest, 'id' | 'generation'> | undefined {
+    if (!this.discovered) {
+      this.discovery ??= this.deps.candidates()[Symbol.iterator]()
+      // Each iterator pull is an existing bounded collect/merge step; finish priority discovery first.
+      for (let n = 0; n < 32; n++) {
+        const item = this.discovery.next()
+        if (item.done) {
+          this.discovered = true
           break
         }
-      } catch (error) {
-        this.attempted.add(source.guard)
-        this.deps.failed(sessionId, error)
+        if (item.value !== undefined) {
+          if (typeof item.value === 'string') {
+            this.enqueue(item.value)
+          } else {
+            this.enqueue(item.value.id, item.value)
+          }
+        }
       }
-      this.candidate = undefined
-      if (this.stopped) {
+      return undefined
+    }
+    if (!this.scratchDiscovered) {
+      return { mode: 'discover', sessionId: '' }
+    }
+    const candidate = this.pending.top()
+    if (candidate) {
+      const sessionId = candidate.key
+      const source = this.sources.source(sessionId)
+      if (!source || this.attempted.has(source.guard)) {
+        this.pending.update(sessionId, undefined)
+        const projection = readJournalSessionProjection(this.deps.database.db, sessionId)
+        if (
+          candidate.orphan ||
+          !projection ||
+          projection.pair[0] !== null ||
+          projection.pair[1] === 0
+        ) {
+          this.cleanup.add(sessionId)
+        }
+        return undefined
+      }
+      if (source.known) {
+        this.sources.publishKnown(sessionId, source.guard)
+        this.pending.update(sessionId, undefined)
+        this.cleanup.add(sessionId)
+        return undefined
+      }
+      return { mode: 'replay', sessionId, source }
+    }
+    const id = this.cleanup.values().next().value
+    return id === undefined ? undefined : { mode: 'cleanup', sessionId: id }
+  }
+
+  private async run(canWork: () => boolean): Promise<void> {
+    while (!this.stopped && !this.refused && canWork()) {
+      await this.wait()
+      if (this.stopped || !canWork()) {
         return
+      }
+      const request = this.measure(() => this.next())
+      if (!request) {
+        if (
+          this.discovered &&
+          this.scratchDiscovered &&
+          !this.pending.top() &&
+          !this.cleanup.size
+        ) {
+          return
+        }
+        continue
+      }
+      const generation = Atomics.load(this.control, 1)
+      try {
+        const response = await this.worker.grant({ ...request, generation }, canWork)
+        this.workerDue = performance.now() + response.occupiedMs / 3
+        this.faults = 0
+        this.measure(() => {
+          if (generation !== Atomics.load(this.control, 1) || this.stopped || !canWork()) {
+            return
+          }
+          const { sessionId, source } = request
+          if (response.status === 'failed') {
+            if (source) {
+              this.attempted.add(source.guard)
+              this.pending.update(sessionId, undefined)
+            } else if (request.mode === 'cleanup') {
+              this.cleanup.delete(sessionId)
+            } else {
+              this.scratchDiscovered = true
+              this.refused = true
+            }
+            this.deps.failed(sessionId, new Error(response.error ?? 'legacy execution failed'))
+          } else if (request.mode === 'discover') {
+            this.scratchDiscovered = response.status === 'exhausted'
+            if (response.candidate && !this.pending.get(response.candidate)) {
+              this.enqueue(response.candidate)
+            }
+          } else if (request.mode === 'cleanup') {
+            if (response.status === 'clean') {
+              this.cleanup.delete(sessionId)
+            }
+          } else if (response.status === 'complete' && source) {
+            if (this.sources.source(sessionId)?.guard === source.guard) {
+              try {
+                if (!this.sources.commit(sessionId, source, response.fact ?? null)) {
+                  return
+                }
+              } catch (error) {
+                this.attempted.add(source.guard)
+                this.pending.update(sessionId, undefined)
+                const saved = readJournalSessionProjection(this.deps.database.db, sessionId)
+                if (saved && (saved.pair[0] !== null || saved.pair[1] === 0)) {
+                  this.enqueue(sessionId)
+                  this.cleanup.add(sessionId)
+                }
+                this.deps.failed(sessionId, error)
+                return
+              }
+              this.attempted.add(source.guard)
+              this.pending.update(sessionId, undefined)
+              this.cleanup.add(sessionId)
+            }
+          }
+        })
+      } catch (error) {
+        if (this.stopped) {
+          return
+        }
+        this.faults++
+        try {
+          await this.worker.retire()
+        } catch (retirementError) {
+          this.refused = true
+          this.deps.failed(request.sessionId, retirementError)
+          return
+        }
+        this.workerDue = performance.now() + 1000
+        if (this.faults >= 2) {
+          this.refused = true
+          this.deps.failed(request.sessionId, error)
+        }
       }
     }
   }

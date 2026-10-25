@@ -1,3 +1,4 @@
+import type { SubmissionSource } from './journal-selection-source'
 import { legacyRawDependency, legacyAttemptDependency } from './journal-legacy-dependencies'
 import {
   updateSelectedJournalItem,
@@ -20,21 +21,6 @@ import { JournalSelectionStorage } from './journal-selection-storage'
 import { JournalSelectionTree } from './journal-selection-tree'
 import { JournalSelectionGroups } from './journal-selection-groups'
 import { JournalSelectionOrder } from './journal-selection-order'
-
-type SubmissionSource = {
-  ordinal: number
-  address: string
-  fingerprint: string
-  rank: number
-  time: number
-  queued?: string
-  sequence: number
-  inDoubt: boolean
-  eligible: boolean
-  signature: string
-  rawSignature: string
-  attemptSignature: string
-}
 
 /** Required derived endpoints, maintained at the original accepted source transitions. */
 export class JournalSelection {

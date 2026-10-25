@@ -1,3 +1,10 @@
+import { sendTerminalStreamInput } from './methods/terminal/terminal-input-delivery'
+vi.mock('../../native-chat/agent-session-journal/journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } =
+    await import('../../native-chat/agent-session-journal/journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 import './unused-default-rpc-methods.test-fixture'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -22,7 +29,7 @@ import { RuntimeTerminalWait } from '../terminal/wait/terminal-wait'
 import { RuntimeTerminalWaiterRegistry } from '../terminal/wait/terminal-waiter-registry'
 import { RuntimeTerminalIdlePolls } from '../terminal/wait/terminal-idle-polls'
 import { RpcDispatcher } from './dispatcher'
-import { defineMethod, type RpcRequest } from './core'
+import { defineMethod, defineStreamingMethod, type RpcRequest } from './core'
 import { TERMINAL_LIFECYCLE_METHODS } from './methods/terminal/terminal-lifecycle-methods'
 
 let root: string
@@ -187,7 +194,113 @@ it.each(['dispatch', 'streaming'] as const)(
       shortFinish.resolve()
       abort.abort()
       expect(await pending).toMatchObject({ ok: false })
-      initializer.close()
+      await initializer.close()
     }
   }
 )
+
+it.each(['dispatch', 'streaming'] as const)(
+  'holds before asynchronous admission, releases failures and observes finite launch over %s',
+  async (transport) => {
+    const runtime = new OrcaRuntimeService()
+    runtime.syncWindowGraph(1, {
+      tabs: [],
+      leaves: [],
+      rendererGeneration: 'admission',
+      startupRestorationReady: true
+    })
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const dispatcher = new RpcDispatcher({
+      runtime,
+      methods: [
+        defineMethod({
+          name: 'agent.launch',
+          permission: 'workspace',
+          params: z.object({ prompt: z.string() }),
+          handler: async () => {
+            expect(structuredJournalBackgroundReady()).toBe(false)
+            entered.resolve()
+            await release.promise
+            throw new Error('finite launch failure')
+          }
+        })
+      ]
+    })
+    const call = (request: RpcRequest) =>
+      transport === 'dispatch'
+        ? dispatcher.dispatch(request)
+        : dispatcher.dispatchStreaming(request, () => undefined)
+    const pending = call({
+      id: 'launch',
+      method: 'agent.launch',
+      params: { prompt: 'recorded fixture' }
+    })
+    expect(structuredJournalBackgroundReady()).toBe(false)
+    await entered.promise
+    expect(structuredJournalBackgroundReady()).toBe(false)
+    release.resolve()
+    await pending
+    expect(structuredJournalBackgroundReady()).toBe(true)
+    await call({ id: 'reject', method: 'agent.launch', params: {} })
+    expect(structuredJournalBackgroundReady()).toBe(true)
+  }
+)
+
+it('releases passive streaming admission before the persistent receive phase', async () => {
+  const runtime = new OrcaRuntimeService()
+  runtime.syncWindowGraph(1, {
+    tabs: [],
+    leaves: [],
+    rendererGeneration: 'passive',
+    startupRestorationReady: true
+  })
+  const entered = Promise.withResolvers<void>()
+  const closed = Promise.withResolvers<void>()
+  const dispatcher = new RpcDispatcher({
+    runtime,
+    methods: [
+      defineStreamingMethod({
+        name: 'layout.subscribe',
+        permission: 'workspace',
+        params: z.object({}),
+        handler: async () => {
+          entered.resolve()
+          await closed.promise
+        }
+      })
+    ]
+  })
+  const pending = dispatcher.dispatchStreaming(
+    { id: 'persistent', method: 'layout.subscribe', params: {} },
+    () => undefined
+  )
+  await entered.promise
+  expect(structuredJournalBackgroundReady()).toBe(true)
+  closed.resolve()
+  await pending
+})
+
+it('observes finite terminal input through settlement and releases a failed write', async () => {
+  const runtime = new OrcaRuntimeService()
+  setStructuredJournalReadiness(() => true)
+  const entered = Promise.withResolvers<void>()
+  const finish = Promise.withResolvers<void>()
+  const send = vi.spyOn(runtime, 'sendTerminal').mockImplementation(async () => {
+    entered.resolve()
+    await finish.promise
+    throw new Error('actual write failed')
+  })
+  const input = sendTerminalStreamInput(runtime, {
+    terminal: 'term_probe',
+    text: 'recorded input',
+    client: undefined,
+    isMobile: false
+  })
+  await entered.promise
+  expect(structuredJournalBackgroundReady()).toBe(false)
+  finish.resolve()
+  expect(await input).toBe('failed')
+  expect(structuredJournalBackgroundReady()).toBe(true)
+  expect(send).toHaveBeenCalledOnce()
+})

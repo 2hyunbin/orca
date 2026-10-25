@@ -1,3 +1,9 @@
+import { legacyRestScratchPath } from './journal-legacy-rest-scratch'
+vi.mock('./journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } = await import('./journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -172,14 +178,14 @@ it.each([64, 640])(
         initialized: published,
         failed
       })
-    const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+    const scratch = new JournalStructuralScratch(legacyRestScratchPath(root, sessionId))
     const savedItems = scratch.map('items')
     expect(scratch.load()).toBeUndefined()
     expect(savedItems.size).toBe(0)
     const first = make()
     await first.advance(() => !scratch.load<JournalStructuralCheckpoint>() || savedItems.size === 0)
     expect(facts()?.known).toBe(false)
-    first.close()
+    await first.close()
     const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
     expect(checkpoint.sessionId).toBe(sessionId)
     expect(checkpoint.cursor).toBeGreaterThan(0)
@@ -212,7 +218,7 @@ it.each([64, 640])(
     const count = reads.length
     await resumed.advance(() => true)
     expect(reads).toHaveLength(count)
-    resumed.close()
+    await resumed.close()
     sql.mockRestore()
     const reopened = await open()
     expect(reopened.restFact()).toEqual(expected)
@@ -284,10 +290,10 @@ it('preserves equal-time claimant order through a dispatch checkpoint and implic
       initialized: published,
       failed
     })
-  const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+  const scratch = new JournalStructuralScratch(legacyRestScratchPath(root, sessionId))
   const first = make()
   await first.advance(() => (scratch.load<JournalStructuralCheckpoint>()?.cursor ?? 0) < dispatched)
-  first.close()
+  await first.close()
   const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
   expect(checkpoint.cursor).toBeGreaterThanOrEqual(dispatched)
   expect(checkpoint.cursor).toBeLessThan(echoed)
@@ -303,7 +309,7 @@ it('preserves equal-time claimant order through a dispatch checkpoint and implic
   closeTestJournalHostDatabases()
   const resumed = make()
   await resumed.advance(() => true)
-  resumed.close()
+  await resumed.close()
   expect(failed).not.toHaveBeenCalled()
   expect(published).toHaveBeenCalledOnce()
   expect(published.mock.calls[0]?.[1]).toMatchObject({ known: true, openTurn: null })
@@ -382,7 +388,7 @@ it.each(['owner', 'tip', 'pair', 'epoch', 'core-failure', 'newer', 'gap'])(
         .run(sessionId)
     }
     await initializer.advance(() => true)
-    initializer.close()
+    await initializer.close()
     expect(publish).not.toHaveBeenCalled()
     expect(facts()?.known).toBe(race === 'pair')
     if (['core-failure', 'newer', 'gap'].includes(race)) {
@@ -409,15 +415,29 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
           depth--
         }
       })
-    const keyed = (['get', 'set', 'delete'] as const).map((method) => {
-      const original = Map.prototype[method]
-      return vi.spyOn(Map.prototype, method).mockImplementation(function (...args) {
+    const originalGet = Map.prototype.get
+    const originalSet = Map.prototype.set
+    const originalDelete = Map.prototype.delete
+    const keyed = [
+      vi.spyOn(Map.prototype, 'get').mockImplementation(function (...args) {
         if (depth) {
           indexOperations++
         }
-        return Reflect.apply(original, this, args)
+        return originalGet.apply(this, args)
+      }),
+      vi.spyOn(Map.prototype, 'set').mockImplementation(function (...args) {
+        if (depth) {
+          indexOperations++
+        }
+        return originalSet.apply(this, args)
+      }),
+      vi.spyOn(Map.prototype, 'delete').mockImplementation(function (...args) {
+        if (depth) {
+          indexOperations++
+        }
+        return originalDelete.apply(this, args)
       })
-    })
+    ]
     const execPrototype = Object.getPrototypeOf(openTestJournalHostDatabase(root).db)
     const originalExec = execPrototype.exec
     const allExec = vi.spyOn(execPrototype, 'exec')
@@ -492,7 +512,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
     await journal.close()
     unknown()
     const database = openTestJournalHostDatabase(root)
-    const scratch = new JournalStructuralScratch(join(root, 'journal-rest-upgrade-scratch.db'))
+    const scratch = new JournalStructuralScratch(legacyRestScratchPath(root, sessionId))
     const initialized = vi.fn()
     const failed = vi.fn()
     const make = () =>
@@ -505,7 +525,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
       })
     const first = make()
     await first.advance(() => (scratch.load<JournalStructuralCheckpoint>()?.cursor ?? 0) < prefix)
-    first.close()
+    await first.close()
     const checkpoint = scratch.load<JournalStructuralCheckpoint>()!
     const cursor = checkpoint.cursor
     expect(checkpoint.rest.active.head?.fact).toEqual(expectedAt.get(prefix))
@@ -581,7 +601,7 @@ it('bounds independent linked request retirement and checkpoint replay at N and 
     expect(indexOperations).toBeLessThanOrEqual(32 * updates * levels)
     // Includes reducer relations, setup/checkpoint/reopen, not just heap cursor reads.
     expect(structuralSql + structuralExec).toBeLessThanOrEqual(256 * (updates + tip) * levels)
-    resumed.close()
+    await resumed.close()
     scratch.close()
     expect(failed).not.toHaveBeenCalled()
     expect(initialized).toHaveBeenCalledOnce()

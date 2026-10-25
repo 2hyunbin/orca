@@ -1,3 +1,4 @@
+import { beginStructuredJournalForeground } from '../../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   decodeTerminalStreamText,
   type TerminalStreamFrame
@@ -25,29 +26,34 @@ export function handleMultiplexInputFrame(
   // Why 'applied' for locked or unclaimed input: it is dropped by policy, and a replay must not run it later.
   // Empty sequenced input is how a client fills the slot of input it gave up, so later input can follow.
   const deliver = async (): Promise<TerminalInputWriteOutcome> => {
-    if (!text || isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
-      return 'applied'
+    const finishForeground = beginStructuredJournalForeground()
+    try {
+      if (!text || isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
+        return 'applied'
+      }
+      const claimed = await inputClaimTail
+      if (!claimed || isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
+        return 'applied'
+      }
+      const outcome = await sendTerminalStreamInput(runtime, {
+        terminal: stream.terminal,
+        text,
+        client: stream.client,
+        isMobile: stream.isMobile,
+        // Why: an ack drops the client's replay copy, so it must wait for the provider's handoff.
+        requireWriteSettlement: sequenced
+      })
+      if (!sequenced) {
+        state.notifyStreamWriteUnavailable(stream, outcome)
+      }
+      return outcome === 'delivered'
+        ? 'applied'
+        : outcome === 'rejected'
+          ? 'refused'
+          : 'delivery-unknown'
+    } finally {
+      finishForeground()
     }
-    const claimed = await inputClaimTail
-    if (!claimed || isTerminalInputLockedForClient(runtime, stream.ptyId, stream.client)) {
-      return 'applied'
-    }
-    const outcome = await sendTerminalStreamInput(runtime, {
-      terminal: stream.terminal,
-      text,
-      client: stream.client,
-      isMobile: stream.isMobile,
-      // Why: an ack drops the client's replay copy, so it must wait for the provider's handoff.
-      requireWriteSettlement: sequenced
-    })
-    if (!sequenced) {
-      state.notifyStreamWriteUnavailable(stream, outcome)
-    }
-    return outcome === 'delivered'
-      ? 'applied'
-      : outcome === 'rejected'
-        ? 'refused'
-        : 'delivery-unknown'
   }
   if (inputSessionId === null) {
     void deliver()

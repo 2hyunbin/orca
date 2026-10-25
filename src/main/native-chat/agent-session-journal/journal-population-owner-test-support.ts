@@ -4,7 +4,9 @@ import { JournalSelection } from './journal-selection'
 import { JournalRowWriter } from './journal-row-writer'
 
 export function populationState(journal: AgentSessionJournal): JournalReducerState {
-  const state: unknown = Reflect.get(journal, 'state')
+  const owner: unknown = journal
+  const state =
+    typeof owner === 'object' && owner !== null && 'state' in owner ? owner.state : undefined
   if (!isPopulationState(state)) {
     throw new Error('real journal state is unavailable')
   }
@@ -15,13 +17,19 @@ function isPopulationState(value: unknown): value is JournalReducerState {
   return (
     typeof value === 'object' &&
     value !== null &&
-    Reflect.get(value, 'selection') instanceof JournalSelection &&
-    typeof Reflect.get(value, 'epoch') === 'string'
+    'selection' in value &&
+    value.selection instanceof JournalSelection &&
+    'epoch' in value &&
+    typeof value.epoch === 'string'
   )
 }
 
 export function populationWriter(journal: AgentSessionJournal): JournalRowWriter {
-  const writer: unknown = Reflect.get(journal, 'rowWriter')
+  const owner: unknown = journal
+  const writer =
+    typeof owner === 'object' && owner !== null && 'rowWriter' in owner
+      ? owner.rowWriter
+      : undefined
   if (!(writer instanceof JournalRowWriter)) {
     throw new Error('real journal writer is unavailable')
   }

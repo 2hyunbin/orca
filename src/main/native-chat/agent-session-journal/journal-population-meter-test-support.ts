@@ -1,3 +1,12 @@
+import { populationMethodWrapper } from './journal-population-method-test-support'
+import {
+  isPopulationIterable,
+  populationSource,
+  populationRestCollections,
+  populationRestObserver,
+  type PopulationCollection
+} from './journal-population-observation-test-support'
+import type { JournalMutationSet } from './journal-mutation-set'
 import { instrumentPopulationWrappers } from './journal-population-wrapper-test-support'
 import { instrumentPopulationSql } from './journal-population-sql-test-support'
 import { instrumentPopulationStaging } from './journal-population-stage-test-support'
@@ -18,8 +27,12 @@ export class JournalPopulationMeter {
   private readonly constructedCOW = new WeakSet<object>()
   private readonly restores: (() => void)[] = []
 
+  private readonly wrap = populationMethodWrapper(this.restores)
+
   constructor() {
-    const recordCOW = (value: object) => {
+    const recordCOW = <Key, Value>(
+      value: JournalMutationMap<Key, Value> | JournalMutationSet<Key>
+    ) => {
       if (!this.constructedCOW.has(value)) {
         this.constructedCOW.add(value)
         if (this.current) {
@@ -30,15 +43,21 @@ export class JournalPopulationMeter {
     this.restores.push(instrumentPopulationStaging(recordCOW, (state) => this.label(state)))
     const NativeMap = Map
     const NativeSet = Set
-    const mapSize = Object.getOwnPropertyDescriptor(NativeMap.prototype, 'size')!.get!
-    const setSize = Object.getOwnPropertyDescriptor(NativeSet.prototype, 'size')!.get!
-    for (const method of ['get', 'has', 'set', 'delete']) {
+    // SAFETY: these are the native collection size getters, invoked on their original owners.
+    const mapSize = Object.getOwnPropertyDescriptor(NativeMap.prototype, 'size')!.get as (
+      this: PopulationCollection
+    ) => number
+    // SAFETY: this is the native Set size getter, with the same receiver contract.
+    const setSize = Object.getOwnPropertyDescriptor(NativeSet.prototype, 'size')!.get as (
+      this: PopulationCollection
+    ) => number
+    for (const method of ['get', 'has', 'set', 'delete'] as const) {
       this.wrap(NativeMap.prototype, method, (owner, args, call) => {
         this.point(owner)
         return call(args)
       })
     }
-    for (const method of ['has', 'add', 'delete']) {
+    for (const method of ['has', 'add', 'delete'] as const) {
       this.wrap(NativeSet.prototype, method, (owner, args, call) => {
         this.point(owner)
         return call(args)
@@ -48,10 +67,10 @@ export class JournalPopulationMeter {
       [NativeMap.prototype, mapSize],
       [NativeSet.prototype, setSize]
     ] as const) {
-      for (const method of ['entries', 'keys', 'values', Symbol.iterator]) {
+      for (const method of ['entries', 'keys', 'values', Symbol.iterator] as const) {
         this.wrap(prototype, method, (owner, args, call) => {
           const result = call(args)
-          if (!isIterable(result)) {
+          if (!isPopulationIterable(result)) {
             throw new Error('collection returned a non-iterator')
           }
           return this.iterate(result, owner)
@@ -59,7 +78,7 @@ export class JournalPopulationMeter {
       }
       this.wrap(prototype, 'clear', (owner, args, call) => {
         if (this.current) {
-          this.current.clears += Reflect.apply(size, owner, [])
+          this.current.clears += size.call(owner)
         }
         return call(args)
       })
@@ -68,10 +87,17 @@ export class JournalPopulationMeter {
         if (typeof callback !== 'function') {
           throw new Error('invalid collection callback')
         }
+        // SAFETY: native Map/Set forEach both pass exactly value, key and the actual collection.
+        const invoke = callback as (
+          this: unknown,
+          value: unknown,
+          key: unknown,
+          collection: PopulationCollection
+        ) => void
         return call([
-          (...values: unknown[]) => {
+          (...values: [unknown, unknown, PopulationCollection]) => {
             this.iterated(owner)
-            Reflect.apply(callback, receiver, values)
+            invoke.apply(receiver, values)
           }
         ])
       })
@@ -107,8 +133,10 @@ export class JournalPopulationMeter {
       return result
     })
     this.wrap(JournalRestProjection.prototype, 'beginObservation', (owner, args, call) => {
-      for (const name of ['requests', 'clears', 'cuts', 'cutAt', 'predecessors']) {
-        const rows: unknown = Reflect.get(owner, name)
+      for (const [name, rows] of populationRestCollections(owner)) {
+        if (!['requests', 'clears', 'cuts', 'cutAt', 'predecessors'].includes(name)) {
+          continue
+        }
         if (rows instanceof NativeMap) {
           this.names.set(rows, `rest:${name}`)
         }
@@ -116,28 +144,32 @@ export class JournalPopulationMeter {
       return call(args)
     })
     this.wrap(WorkBucket.prototype, 'update', (owner, args, call) => {
-      const rows: unknown = Reflect.get(owner, 'entries')
+      const rows = owner.entries
       if (rows instanceof NativeMap) {
         this.names.set(rows, 'workEntries')
       }
       return call(args)
     })
-    this.wrap(JournalRestProjection.prototype, 'observeOne', (_owner, args, call) => {
-      const result = call(args)
-      const state = args[0]
-      if (this.current && typeof state === 'object' && state !== null) {
-        const selection: unknown = Reflect.get(state, 'selection')
-        if (selection instanceof JournalSelection) {
-          const signature = selection.storage
-            .map<string, string>('restDependencies')
-            .get(String(args[1]))
-          this.current.sourceEncodedBytes += signature
-            ? Buffer.from(signature, 'base64').byteLength
-            : 0
+    this.wrap(
+      populationRestObserver(JournalRestProjection.prototype),
+      'observeOne',
+      (_owner, args, call) => {
+        const result = call(args)
+        const state = args[0]
+        if (this.current) {
+          const selection = state.selection
+          if (selection instanceof JournalSelection) {
+            const signature = selection.storage
+              .map<string, string>('restDependencies')
+              .get(String(args[1]))
+            this.current.sourceEncodedBytes += signature
+              ? Buffer.from(signature, 'base64').byteLength
+              : 0
+          }
         }
+        return result
       }
-      return result
-    })
+    )
     this.wrap(JournalSelection.prototype, 'submissionChanged', (owner, args, call) => {
       const result = call(args)
       if (this.current && args[1] !== undefined && owner instanceof JournalSelection) {
@@ -163,32 +195,6 @@ export class JournalPopulationMeter {
     )
   }
 
-  private wrap(
-    target: object,
-    property: PropertyKey,
-    intercept: (owner: object, args: unknown[], call: (args: unknown[]) => unknown) => unknown
-  ): void {
-    const descriptor = Object.getOwnPropertyDescriptor(target, property)
-    const original: unknown = Reflect.get(target, property)
-    if (typeof original !== 'function') {
-      throw new Error(`missing measured method ${String(property)}`)
-    }
-    Object.defineProperty(target, property, {
-      configurable: true,
-      writable: true,
-      value: function (this: object, ...args: unknown[]) {
-        return intercept(this, args, (values) => Reflect.apply(original, this, values))
-      }
-    })
-    this.restores.push(() => {
-      if (descriptor) {
-        Object.defineProperty(target, property, descriptor)
-      } else {
-        Reflect.deleteProperty(target, property)
-      }
-    })
-  }
-
   label(state: JournalReducerState): void {
     for (const [name, collection] of [
       ['items', state.items],
@@ -197,7 +203,7 @@ export class JournalPopulationMeter {
       ['cards', state.queue.cards],
       ['settlements', state.appliedSettlementIds]
     ] as const) {
-      const source: unknown = Reflect.get(collection, 'source')
+      const source = populationSource(collection)
       this.names.set(collection, name)
       if (typeof source === 'object' && source !== null) {
         this.names.set(source, name)
@@ -205,7 +211,7 @@ export class JournalPopulationMeter {
     }
   }
 
-  private point(collection: object): void {
+  private point(collection: PopulationCollection): void {
     const cost = this.current
     if (cost) {
       cost.points++
@@ -217,7 +223,7 @@ export class JournalPopulationMeter {
     }
   }
 
-  private iterated(collection: object): void {
+  private iterated(collection: PopulationCollection): void {
     const cost = this.current
     if (cost) {
       cost.iteratorSteps++
@@ -232,7 +238,7 @@ export class JournalPopulationMeter {
     }
   }
 
-  private *iterate<T>(input: Iterable<T>, collection: object): IterableIterator<T> {
+  private *iterate<T>(input: Iterable<T>, collection: PopulationCollection): IterableIterator<T> {
     for (const value of input) {
       this.iterated(collection)
       yield value
@@ -278,12 +284,4 @@ export class JournalPopulationMeter {
     }
     vi.unstubAllGlobals()
   }
-}
-
-function isIterable(value: unknown): value is Iterable<unknown> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof Reflect.get(value, Symbol.iterator) === 'function'
-  )
 }

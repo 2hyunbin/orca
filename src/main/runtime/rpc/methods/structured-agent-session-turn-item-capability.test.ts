@@ -1,3 +1,7 @@
+import {
+  setStructuredJournalReadiness,
+  structuredJournalBackgroundReady
+} from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import '../unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
@@ -21,8 +25,14 @@ import {
   projectTurnItemHistory
 } from './structured-agent-session-turn-item-capability'
 
-beforeEach(installStructuredHostStub)
-afterEach(clearStructuredHostStub)
+beforeEach(() => {
+  installStructuredHostStub()
+  setStructuredJournalReadiness(() => true)
+})
+afterEach(() => {
+  clearStructuredHostStub()
+  setStructuredJournalReadiness(() => false)
+})
 
 // A turn the host watched finish that the provider nonetheless failed: the arm
 // and the verdict disagree on purpose, which is the shape this surface has to
@@ -88,7 +98,12 @@ describe('turn item capability at the RPC boundary', () => {
   it.each(['snapshot', 'batch', 'reset'] as const)(
     'downgrades the %s stream only for a legacy reader',
     async (type) => {
-      hostCalls.subscribe.mockImplementation((input: AgentSessionSubscribeInput) => {
+      const entered = Promise.withResolvers<void>()
+      const release = Promise.withResolvers<void>()
+      hostCalls.subscribe.mockImplementation(async (input: AgentSessionSubscribeInput) => {
+        expect(structuredJournalBackgroundReady()).toBe(false)
+        entered.resolve()
+        await release.promise
         const base = { sessionId: SESSION, fence: 1 }
         if (type === 'batch') {
           input.emit({
@@ -114,7 +129,12 @@ describe('turn item capability at the RPC boundary', () => {
         [STRUCTURED_CLIENT, LEGACY_STATUS_ITEM],
         [CURRENT_CLIENT, TURN_ITEM]
       ] as const) {
-        const reply = await call('agentSession.subscribe', { sessionId: SESSION }, client)
+        const opening = call('agentSession.subscribe', { sessionId: SESSION }, client)
+        await entered.promise
+        expect(structuredJournalBackgroundReady()).toBe(false)
+        release.resolve()
+        const reply = await opening
+        expect(structuredJournalBackgroundReady()).toBe(true)
         const event = (reply.ok ? reply.result : null) as AgentSessionSubscribeEvent
         const items =
           event.type === 'batch' ? event.batch.items : 'page' in event ? event.page.items : []

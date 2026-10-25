@@ -1,3 +1,4 @@
+import { wakeStructuredJournalBackground } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState as TransitionGraphReloadToTerminalStateMethods } from './session-graph-authority'
 import type { OrcaRuntimeWithBindPtyIncarnationHandle as BindPtyIncarnationHandleMethods } from '../terminal/identity/terminal-handle-bindings'
 import type { OrcaRuntimeWithResolveWaiter as ResolveWaiterMethods } from '../orca-runtime-resolve-waiter'
@@ -103,7 +104,9 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
     // Why: the rebuilt graph decides whether an incarnation survived; do not stale proven process identities before that comparison.
     this.rendererGraphEpoch += 1
     this.graphStatus = 'reloading'
+    wakeStructuredJournalBackground()
     this.startupRestorationReady = false
+    wakeStructuredJournalBackground()
     const revision = this.graphReloadLifecycle.begin(windowId)
     this.setTerminalSideEffectConsumerAvailable(false)
     this.rememberDetachedPreAllocatedLeaves()
@@ -147,6 +150,7 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
       const restoresPublishedInventory =
         this.sessionTabsInventoryPublicationEpoch === this.rendererGraphEpoch - 1
       this.graphStatus = 'ready'
+      wakeStructuredJournalBackground()
       this.setTerminalSideEffectConsumerAvailable(true)
       for (const leaf of this.leaves.values()) {
         this.adoptPreAllocatedHandle(leaf)
@@ -172,6 +176,7 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
       this.pendingHeadlessPromotionWindowId = null
     }
     this.graphStatus = 'ready'
+    wakeStructuredJournalBackground()
     this.setTerminalSideEffectConsumerAvailable(windowId !== HEADLESS_RUNTIME_WINDOW_ID)
     this.refreshWritableFlags()
   }
@@ -217,8 +222,10 @@ export abstract class OrcaRuntimeWithHasTerminalsForWorktree extends OrcaRuntime
       this.rendererGraphEpoch += 1
     }
     this.graphStatus = 'unavailable'
+    wakeStructuredJournalBackground()
     this.setTerminalSideEffectConsumerAvailable(false)
     this.authoritativeWindowId = null
+    wakeStructuredJournalBackground()
     this.rememberDetachedPreAllocatedLeaves()
     for (const [ptyId, handle] of this.handleByPtyId) {
       if (this.handleByPtyIncarnation.get(ptyId)?.handle === handle) {

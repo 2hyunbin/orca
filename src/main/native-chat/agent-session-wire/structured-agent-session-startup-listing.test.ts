@@ -1,3 +1,9 @@
+vi.mock('../agent-session-journal/journal-legacy-rest-worker', async () => {
+  const { InProcessLegacyRestWorker } =
+    await import('../agent-session-journal/journal-legacy-rest-replay-test-support')
+  return { JournalLegacyRestWorker: InProcessLegacyRestWorker }
+})
+
 import { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { publishHeadlessRuntimeGraph } from '../../runtime/headless-runtime-graph'
 import { createOrchestrationRpcHarness } from '../../runtime/rpc/methods/orchestration/rpc-test-harness'
