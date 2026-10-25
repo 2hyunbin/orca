@@ -145,7 +145,13 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     sessionId: string,
     deadlineMs?: number
   ): Promise<void> {
-    if (!this.historyManager || this.historyManager.hasWriter(sessionId)) {
+    // Why active too: a session this client suspended after a seed failure must stay suspended,
+    // or its fresh-only screen would replace the history it was restored from.
+    if (
+      !this.historyManager ||
+      this.historyManager.hasWriter(sessionId) ||
+      this.activeSessionIds.has(sessionId)
+    ) {
       return
     }
     const result = await this.client.request<ListSessionsResult>(
@@ -155,13 +161,18 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     )
     const session = result.sessions.find((entry) => entry.sessionId === sessionId && entry.isAlive)
     if (session) {
-      await this.adoptLiveSession(session)
+      await this.adoptLiveSession(session, { activeOnlyIfReconciled: true })
     }
   }
 
-  private async adoptLiveSession(session: SessionInfo): Promise<void> {
+  private async adoptLiveSession(
+    session: SessionInfo,
+    opts: { activeOnlyIfReconciled?: boolean } = {}
+  ): Promise<void> {
     // Include background sessions in the final disconnect checkpoint.
-    this.activeSessionIds.add(session.sessionId)
+    if (!opts.activeOnlyIfReconciled) {
+      this.activeSessionIds.add(session.sessionId)
+    }
     // Sleep reads a WSL shell's folder by what only the daemon still knows about the pane.
     if (session.wslDistro) {
       this.wslDistrosBySessionId.set(session.sessionId, session.wslDistro)
@@ -172,6 +183,10 @@ export abstract class DaemonPtyProcessInspection extends DaemonPtyBufferSnapshot
     await this.reconcileLiveSessionHistory(session).catch((err) =>
       console.warn('[history] live-session reconciliation failed:', session.sessionId, err)
     )
+    // Why after: an exit seen during the reconcile closed the writer; that session is not live.
+    if (opts.activeOnlyIfReconciled && this.historyManager?.hasWriter(session.sessionId)) {
+      this.activeSessionIds.add(session.sessionId)
+    }
   }
 
   protected async reconcileLiveSessionHistory(session: SessionInfo): Promise<void> {
