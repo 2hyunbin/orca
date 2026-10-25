@@ -14,6 +14,7 @@ import { isTerminalLeafId, makePaneKey } from '../../shared/stable-pane-id'
 import { resolveTerminalTabTitle } from '../../shared/tab-title-resolution'
 import { indexAgentStatusRowsByPaneKey } from '../agent-hooks/agent-status-pane-index'
 import {
+  demoteRuntimeMobileAgentStatus,
   renewRuntimeMobileAgentStatusFromPtyTitle,
   selectRuntimeHookAgentRowForPane
 } from './runtime-mobile-agent-status-projection'
@@ -26,6 +27,7 @@ import {
   getPtyDisplayRecord,
   terminalTitleBlocksExplicitAgentStatus
 } from './runtime-worktree-status-projection'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 export function projectRuntimeMobileSessionTabs(
   snapshot: RuntimeMobileSessionTabsSnapshot,
@@ -241,20 +243,7 @@ export function projectRuntimeMobileSessionTabs(
       : // Why: idle live title → drop stale "working" (no spinner) but keep agent identity so native chat can still address the transcript.
         normalizedTabAgentStatus?.agentType != null
         ? {
-            agentStatus: {
-              state: 'done' as const,
-              prompt: '',
-              updatedAt: statusPty?.lastOscTitleEpochMs ?? normalizedTabAgentStatus.updatedAt,
-              stateStartedAt:
-                statusPty?.lastAgentStatusStartedAtEpochMs ??
-                normalizedTabAgentStatus.stateStartedAt,
-              paneKey: normalizedTabAgentStatus.paneKey,
-              stateHistory: [],
-              agentType: normalizedTabAgentStatus.agentType,
-              ...(normalizedTabAgentStatus.providerSession
-                ? { providerSession: normalizedTabAgentStatus.providerSession }
-                : {})
-            }
+            agentStatus: demoteRuntimeMobileAgentStatus(normalizedTabAgentStatus, statusPty)
           }
         : null
     // Why: web/mobile clients hold handles across renderer graph syncs; leaf handles are epoch-bound but PTY handles stay streamable.
@@ -269,7 +258,8 @@ export function projectRuntimeMobileSessionTabs(
     const projectedAgentStatus =
       agentStatus ??
       host.buildPtyStatus(
-        mobileStatusPty,
+        // Switch point: main's layout gives the pane a live leaf, whose terminal holds the status.
+        ORCA_LAYOUT_OWNER_IS_MAIN ? (liveLeafPty ?? mobileStatusPty) : mobileStatusPty,
         tab,
         terminalHandle,
         retainedAgentStatus,

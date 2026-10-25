@@ -12,13 +12,13 @@ import type {
   RuntimeOrchestrationEnvelope,
   RuntimeRpcResponse
 } from '../../../shared/runtime-rpc-envelope'
-import { RemoteRuntimeRequestConnection } from '../../../shared/remote-runtime-request-connection'
-import { RemoteRuntimeSharedControlConnection } from '../../../shared/remote-runtime-shared-control-connection'
+import { RemoteRuntimeRequestConnection } from '../../../shared/remote-runtime/requests/remote-runtime-request-connection'
+import { RemoteRuntimeSharedControlConnection } from '../../../shared/remote-runtime/control/remote-runtime-shared-control-connection'
 import { probeAllRemoteRuntimeSocketsNow } from '../../../shared/remote-runtime-socket-liveness'
 import type {
   RemoteRuntimeSharedConnectionDiagnostics,
   RemoteRuntimeSharedSubscription
-} from '../../../shared/remote-runtime-shared-control-types'
+} from '../../../shared/remote-runtime/control/remote-runtime-shared-control-types'
 import { isRuntimeEnvironmentManuallyDisconnected } from './runtime-environment-manual-disconnect'
 import { publishRuntimeEnvironmentDiagnostics } from './runtime-environment-diagnostics-broadcast'
 import { sharedControlEnvironmentPolicy } from './runtime-environment-shared-control-policy'
@@ -160,10 +160,7 @@ export function sendRemoteRuntimeSharedControlRequest<TResult>(
   )
 }
 
-/**
- * Sends only on the shared socket whose own `status.get` named `expectedRuntimeId`; null when it
- * did not, or the socket changed before sending. Nothing is sent to another runtime either way.
- */
+/** Send only on the shared socket that proved expectedRuntimeId; return null if it changed or is unproven. */
 export async function sendRemoteRuntimeSharedControlRequestOnRuntime<TResult>(
   environmentId: string,
   pairedConnection: PairedRuntimeConnection,
@@ -247,10 +244,6 @@ export function reconnectRemoteRuntimeSharedControlConnection(environmentId: str
   sharedControlConnections.get(environmentId)?.connection.reconnectNow()
 }
 
-export function retryRemoteRuntimeSharedControlConnectionNow(environmentId: string): void {
-  sharedControlConnections.get(environmentId)?.connection.retryNow()
-}
-
 export function pauseRemoteRuntimeSharedControlRetry(environmentId: string): void {
   sharedControlConnections.get(environmentId)?.connection.pauseStandingRetry()
 }
@@ -268,8 +261,7 @@ export function retryRemoteRuntimeSharedControlConnectionsNow(): void {
   for (const { connection } of sharedControlConnections.values()) {
     connection.retryNow()
   }
-  // Why: a socket that still reads OPEN after wake arms no reconnect timer, so retryNow finds
-  // nothing; probing every socket (shared control and per-stream) settles a dead path quickly (#9092).
+  // OPEN sockets can be dead after suspend with no reconnect timer; probe every socket (#9092).
   probeAllRemoteRuntimeSocketsNow()
 }
 
@@ -291,7 +283,7 @@ function getSharedControlConnection(
         environmentId,
         clientCapabilities: ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES,
         ...sharedControlEnvironmentPolicy(environmentId),
-        // Why wall clock: it advances across a suspend, so a pre-sleep answer reads as stale.
+        // Wall-clock time includes suspend, expiring pre-sleep answers.
         onAnswered: () => {
           answeredAt = Date.now()
         },
@@ -319,8 +311,8 @@ function getSharedControlConnection(
     }
     sharedControlConnections.set(environmentId, cached)
     const entry = cached
-    // Why ready is enough: a socket reaches ready only on its own server frame, which stamps it.
-    setSharedControlAnswerSource(environmentId, () =>
+    // Ready requires this socket's own server frame, which stamps its answer time.
+    setSharedControlAnswerSource(environmentId, entry.connection, () =>
       entry.connection.getDiagnostics().state === 'ready' ? entry.answeredAt() : null
     )
   }

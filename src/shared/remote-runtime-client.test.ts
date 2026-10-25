@@ -15,7 +15,7 @@ import {
   publicKeyFromBase64,
   publicKeyToBase64
 } from './e2ee-crypto'
-import { RemoteRuntimeSharedControlConnection } from './remote-runtime-shared-control-connection'
+import { RemoteRuntimeSharedControlConnection } from './remote-runtime/control/remote-runtime-shared-control-connection'
 import { sendRemoteRuntimeRequest, subscribeRemoteRuntimeRequest } from './remote-runtime-client'
 import { remoteRuntimeClientCapabilities } from './remote-runtime-client-capabilities'
 import { MAX_TIMER_DELAY_MS } from './timer-delay'

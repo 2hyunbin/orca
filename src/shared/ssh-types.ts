@@ -89,6 +89,9 @@ export type SshTarget = {
   /** Reuse a system OpenSSH connection across setup commands. Undefined means
    *  enabled; false is an explicit per-target compatibility opt-out. */
   systemSshConnectionReuse?: boolean
+  /** Windows only: hold one loopback tunnel through a ProxyCommand/ProxyJump and run later
+   *  commands over it. Opt-in; undefined means off. */
+  systemSshProxyConnectionReuse?: boolean
   /** Relay runtime for this host; undefined means pinned-node. */
   remoteRuntime?: SshRemoteRuntime
   /** Main-owned ladder cache; renderer updates never set it. */
@@ -116,7 +119,7 @@ export type SshTarget = {
   managedServerUpdateFailure?: { reason: string; appVersion: string }
   orcadFence?: {
     environmentId: string
-    /** An older build changed the retained source rows: the host stays on the relay until moved again. */
+    /** The retained source holds projects no move took: the host is unserved until moved again. */
     sourceChangedAt?: string
   }
 }

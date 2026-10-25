@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { PUSH_LIMITS, type PushNotification } from '@orca-cloud/push-contract'
 import { WORKER_DRAINS } from './push-worker-concurrency.js'
 import type { PushDatabase, SqlRow } from './push-database.js'
+import { limitPushDatabaseConcurrency } from './push-background-database.js'
 
 const RETENTION_MS = 24 * 60 * 60_000
 // accept() caps expires_at at due_at + TTL, so older due_at is expired: scans skip an unpruned backlog.
@@ -26,12 +27,17 @@ export type QueuedPushDelivery = {
 }
 
 export class DurablePushStore {
+  private readonly claims: PushDatabase
+
   constructor(
     private readonly database: PushDatabase,
     private readonly now = Date.now,
     // Claim, finish and prune traffic; accept() and renew() stay on the request-path database.
     private readonly background = database
-  ) {}
+  ) {
+    // Wait outside the background pool so competing claims leave room for lease completion.
+    this.claims = limitPushDatabaseConcurrency(background, 3)
+  }
 
   async accept(
     host: string,
@@ -100,8 +106,9 @@ export class DurablePushStore {
     })
   }
 
-  async claim(): Promise<QueuedPushDelivery | null> {
-    return this.background.transaction(async (tx) => {
+  async claim(canClaim?: () => boolean): Promise<QueuedPushDelivery | null> {
+    return this.claims.transaction(async (tx) => {
+      if (canClaim && !canClaim()) return null
       // The previous revision's claim holds this key exclusively; sharing it makes that claim snapshot
       // only after our leases commit. Drop one release after every worker runs this revision.
       if (!(await tx.tryLockSharedScope('push-worker-claim'))) return null

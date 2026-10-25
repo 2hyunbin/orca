@@ -195,10 +195,8 @@ function launchAgentInNewTabInternal(args: LaunchAgentInNewTabArgs): LaunchAgent
   const { resolvedLaunchPlatform, isRemote, queuedShell } = executionContext
   const cmdOverrides = store.settings?.agentCmdOverrides ?? {}
   const effectiveAgentArgs =
-    agentArgs !== undefined
-      ? agentArgs
-      : resolveTuiAgentLaunchArgs(agent, store.settings?.agentDefaultArgs)
-  const agentEnv = resolveTuiAgentLaunchEnv(agent, store.settings?.agentDefaultEnv)
+    agentArgs !== undefined ? agentArgs : resolveTuiAgentLaunchArgs(agent, store.settings)
+  const agentEnv = resolveTuiAgentLaunchEnv(agent, store.settings, resolvedLaunchPlatform)
   const startupPlanBase = {
     agent,
     cmdOverrides,

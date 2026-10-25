@@ -78,7 +78,7 @@ export async function registerPlacedDesktopProject(
     ...(repoKind === 'git'
       ? {
           externalWorktreeVisibilityLegacy: false,
-          // Why: new Add Project imports are explicit ready host setups; 'legacy-repo' is reserved for older records/projection.
+          // Explicit imports are ready host setups; legacy-repo is reserved for migrated records.
           projectHostSetupMethod: 'imported-existing-folder' as const
         }
       : {})
