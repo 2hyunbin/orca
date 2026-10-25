@@ -176,6 +176,14 @@ function reportHttpLinkBrowserOpenFailure(error: unknown): void {
   )
 }
 
+async function openSystemHttpLink(url: string): Promise<void> {
+  try {
+    await window.api.shell.openUrl(url)
+  } catch {
+    reportHttpLinkBrowserOpenFailure(null)
+  }
+}
+
 export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void {
   if (opts.linkContext?.isCurrentRequest?.() === false) {
     return
@@ -283,14 +291,14 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
 
   const localhostRoute = state ? localhostLabelRouteForHttpLink(url, state, sourceOwner) : null
   if (!localhostRoute) {
-    void window.api.shell.openUrl(url)
+    void openSystemHttpLink(url)
     return
   }
   void openLabeledLocalhostLink(url, localhostRoute, (labeledUrl) => {
     if (opts.linkContext?.isCurrentRequest?.() === false) {
       return
     }
-    void window.api.shell.openUrl(labeledUrl)
+    void openSystemHttpLink(labeledUrl)
   })
 }
 

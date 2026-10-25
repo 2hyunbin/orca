@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ipcRenderer } from 'electron'
+import { docPreviewApi } from '../../../../../preload/api/doc-preview-bridge'
+import { DOC_PREVIEW_EXTERNAL_LINK_CHANNEL } from '../../../../../shared/doc-preview-scheme'
 import type { ConfirmationDialogContextValue } from '@/components/confirmation-dialog-context'
 import type { DocPreviewExternalLink } from '../../../../../shared/doc-preview-scheme'
 import type { DocPreviewGrantOwner } from '../../../../../preload/api/doc-preview-api'
@@ -8,6 +11,7 @@ import {
 } from '@/lib/http-link-routing'
 
 const mocks = vi.hoisted(() => ({ getState: vi.fn(), toastError: vi.fn() }))
+vi.mock('electron', async () => ({ ipcRenderer: new (await import('node:events')).EventEmitter() }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.getState() } }))
 
@@ -75,6 +79,7 @@ function installSubscription(
 
 beforeEach(() => {
   vi.clearAllMocks()
+  openUrl.mockResolvedValue(undefined)
   openBrowser.mockResolvedValue('opened-page')
   state.settings = { openLinksInApp: true, openLinksInAppModifierInverts: false }
   mocks.getState.mockReturnValue(state)
@@ -88,6 +93,41 @@ afterEach(() => {
 })
 
 describe('document preview external-link confirmation', () => {
+  it.each([10, 100])(
+    'bounds delivery to one equality check per preview at %s listeners',
+    async (count) => {
+      vi.stubGlobal('window', { api: { shell: { openUrl }, docPreview: docPreviewApi } })
+      const confirm = vi.fn<ConfirmationDialogContextValue>().mockResolvedValue(true)
+      const baseline = ipcRenderer.listenerCount(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL)
+      const disposers = Array.from({ length: count }, (_, index) =>
+        subscribeDocPreviewExternalLinkConfirmation(confirm, {
+          grantId: `grant-${index}`,
+          owner: runtimeOwner,
+          worktreeId: 'source-workspace',
+          browserWorkspaceId: 'browser-1'
+        })
+      )
+      let comparisons = 0
+      const payload = {
+        url: 'https://example.com/',
+        get grantId() {
+          comparisons += 1
+          return 'grant-0'
+        }
+      }
+      mocks.getState.mockClear()
+      ipcRenderer.emit(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL, {}, payload)
+      await vi.waitFor(() => expect(openBrowser).toHaveBeenCalledOnce())
+      expect(comparisons).toBe(count)
+      expect(confirm).toHaveBeenCalledOnce()
+      expect(mocks.getState).toHaveBeenCalledOnce()
+      expect(ipcRenderer.listenerCount(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL)).toBe(baseline + count)
+      disposers.forEach((dispose) => dispose())
+      expect(ipcRenderer.listenerCount(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL)).toBe(baseline)
+      ipcRenderer.emit(DOC_PREVIEW_EXTERNAL_LINK_CHANNEL, {}, payload)
+      expect(comparisons).toBe(count)
+    }
+  )
   it('confirms the exact URL and captures its source before awaiting the answer', async () => {
     let answer: ((confirmed: boolean) => void) | undefined
     const confirm = vi.fn<ConfirmationDialogContextValue>(
@@ -192,5 +232,19 @@ describe('document preview external-link confirmation', () => {
     await vi.waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith('Unable to open URL.')
     )
+  })
+
+  it('reports a rejected system open once without exposing OS errors or retrying', async () => {
+    state.settings.openLinksInApp = false
+    openUrl.mockRejectedValue(new Error('private OS provider details'))
+    const { emit } = installSubscription(
+      vi.fn<ConfirmationDialogContextValue>().mockResolvedValue(true)
+    )
+    emit()
+    await vi.waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith('Unable to open URL.')
+    )
+    expect(openUrl).toHaveBeenCalledOnce()
+    expect(openBrowser).not.toHaveBeenCalled()
   })
 })

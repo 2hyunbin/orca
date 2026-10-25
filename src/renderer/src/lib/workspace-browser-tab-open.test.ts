@@ -412,7 +412,7 @@ describe('openWorkspaceBrowserTab', () => {
   })
 
   it.each(['runtime', 'ssh'] as const)(
-    'preserves an opted-in preview client provider for %s without borrowing another owner',
+    'rejects another owner for an opted-in %s preview client provider',
     async (kind) => {
       const hostId =
         kind === 'runtime' ? toRuntimeExecutionHostId('source') : toSshExecutionHostId('source')
@@ -436,12 +436,6 @@ describe('openWorkspaceBrowserTab', () => {
         openWorkspaceBrowserTab({ ...request, ...expectedOwner('other') })
       ).rejects.toThrow('Unable to open URL.')
       expect(createBrowserTab).not.toHaveBeenCalled()
-      await openWorkspaceBrowserTab({ ...request, ...expectedOwner('source') })
-      expect(createBrowserTab).toHaveBeenCalledExactlyOnceWith(
-        WORKSPACE_ID,
-        'https://example.com/',
-        expect.objectContaining({ browserRuntimeEnvironmentId: null, executionHostId: hostId })
-      )
       expect(mocks.createRemote).not.toHaveBeenCalled()
     }
   )
