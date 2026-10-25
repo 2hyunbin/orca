@@ -4,7 +4,7 @@ import {
   readAgentMessageSource,
   type AgentMessageSource
 } from './agent-session-message-source'
-import { testOrcaSessionId } from './orca-session-address-test-fixture'
+import { testOrcaSessionId } from '../orca-session-address-test-fixture'
 
 const SESSION = '4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
 

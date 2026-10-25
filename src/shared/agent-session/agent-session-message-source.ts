@@ -3,9 +3,9 @@
 
 import { z } from 'zod'
 import { normalizeAgentSessionConversationName } from './agent-session-conversation-name'
-import { isOrcaSessionId, type OrcaSessionId } from './orca-session-address'
-import type { OrchestrationPartyIdentity } from './orchestration-party-identity'
-import { openEnum, salvagedField, salvagedOptional, salvagingArray } from './zod-salvage'
+import { isOrcaSessionId, type OrcaSessionId } from '../orca-session-address'
+import type { OrchestrationPartyIdentity } from '../orchestration-party-identity'
+import { openEnum, salvagedField, salvagedOptional, salvagingArray } from '../zod-salvage'
 
 /**
  * An agent a message is from, named by the orchestration database of the host that stores the
