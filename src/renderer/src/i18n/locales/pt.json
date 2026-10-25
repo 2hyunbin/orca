@@ -19779,8 +19779,8 @@
       },
       "transcriptLabel": "Conversa",
       "resumeInNewChat": {
-        "exitUnconfirmedFromTerminal": "O Orca não consegue confirmar se o {{agent}} foi encerrado no terminal. Pare o que estiver em execução lá ou feche o terminal e abra esta conversa no Histórico de sessões.",
-        "exitUnconfirmed": "O Orca não consegue confirmar se o {{agent}} foi encerrado no terminal. Pare o que estiver em execução lá ou feche o terminal e tente novamente.",
+        "exitUnconfirmedFromTerminal": "{{agent}} já está executando esta conversa em outro terminal. Encerre o {{agent}} lá ou feche esse terminal e abra esta conversa no Histórico de sessões.",
+        "exitUnconfirmed": "{{agent}} já está executando esta conversa em outro terminal. Encerre o {{agent}} lá ou feche esse terminal e abra esta conversa no Histórico de sessões.",
         "notSavedYet": "O {{agent}} ainda não salvou esta conversa. Tente novamente depois que ele responder.",
         "cannotResume": "Esta conversa do {{agent}} não pode ser retomada em um chat nativo."
       },

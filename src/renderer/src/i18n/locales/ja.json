@@ -18674,8 +18674,8 @@
         "claudeAccountSetupFailed": "選択した Claude アカウントを設定できませんでした。もう一度試すか、別のアカウントを選択してください。",
         "agentCommandNotRunnable": "[設定] → [Agent] にある {{agent}} の [コマンド] には、Orca が見つけられるプログラムのパスまたは名前を、引数や変数なしで指定する必要があります。変更するか、[リセット] してください。",
         "runtimeNotInstalled": "{{agent}} はこのチャットを実行しているコンピューターにインストールされていません。最新バージョンの Orca でチャットからインストールしてください。",
-        "conversationOpenElsewhere": "Codex はまだ別の場所でこの会話を開いています。そこで閉じてから、もう一度お試しください。",
-        "conversationOpenInTerminal": "Orca は {{agent}} がターミナルで終了したことを確認できません。そこで実行中のものを停止するかターミナルを閉じてから、もう一度お試しください。",
+        "conversationOpenElsewhere": "Codex がまだこの会話を開いたままにしています。少し待ってからもう一度試すか、ほかの Codex ターミナルを閉じてください。",
+        "conversationOpenInTerminal": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じて、ここで続けてください。",
         "chooseClaudeAccount": "Claude アカウントの設定で選択または追加してください。",
         "chooseClaudeAccountThenRunCommand": "Claude アカウントの設定で選択または追加してから、/{{command}} をもう一度実行してください。",
         "chooseClaudeAccountThenSend": "Claude アカウントの設定で選択または追加してから、メッセージをもう一度送信してください。",
@@ -19067,8 +19067,8 @@
       "resumeInNewChat": {
         "notSavedYet": "{{agent}} はまだこの会話を保存していません。応答してから再度お試しください。",
         "cannotResume": "この {{agent}} の会話はネイティブチャットで再開できません。",
-        "exitUnconfirmedFromTerminal": "Orca は {{agent}} がターミナルで終了したことを確認できません。実行中の処理を停止するかターミナルを閉じてから、セッション履歴でこの会話を開いてください。",
-        "exitUnconfirmed": "Orca は、{{agent}} がターミナルで終了したことを確認できません。そこで実行されているものを停止するか、ターミナルを閉じてから、もう一度試してください。"
+        "exitUnconfirmedFromTerminal": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。",
+        "exitUnconfirmed": "{{agent}} は別のターミナルですでにこの会話を実行しています。そちらの {{agent}} を終了するか、そのターミナルを閉じてから、セッション履歴でこの会話を開いてください。"
       },
       "state": {
         "loading": {

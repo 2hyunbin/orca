@@ -79,9 +79,9 @@ export const AGENT_SESSION_FAILURE_COPY = {
   runtimeNotInstalled:
     "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
   conversationOpenElsewhere:
-    'Codex still has this conversation open somewhere else. Close it there, then try again.',
+    'Codex is still holding this conversation open. Try again in a moment, or close other Codex terminals.',
   conversationOpenInTerminal:
-    "Orca can't confirm {{agent}} has exited in its terminal. Stop what's running there or close the terminal, then try again.",
+    '{{agent}} is already running this conversation in another terminal. Quit {{agent}} there or close that terminal to continue here.',
   chooseClaudeAccount: 'Choose or add one in Claude Accounts settings.',
   chooseClaudeAccountThenRunCommand:
     'Choose or add one in Claude Accounts settings, then run /{{command}} again.',

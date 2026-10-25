@@ -18644,8 +18644,8 @@
         "claudeAccountSetupFailed": "No se pudo configurar la cuenta de Claude seleccionada. Vuelva a intentarlo o elija otra cuenta.",
         "agentCommandNotRunnable": "{{agent}}: el Comando en Ajustes → Agentes debe ser la ruta o el nombre de un programa que Orca pueda encontrar, sin argumentos ni variables. Cámbielo o restablézcalo con Reiniciar.",
         "runtimeNotInstalled": "{{agent}} no está instalado en el equipo que ejecuta este chat. Instálelo desde el chat en una versión actual de Orca.",
-        "conversationOpenElsewhere": "Codex aún tiene esta conversación abierta en otro lugar. Ciérrela allí y vuelva a intentarlo.",
-        "conversationOpenInTerminal": "Orca no puede confirmar que {{agent}} haya salido en su terminal. Detenga lo que se esté ejecutando allí o cierre la terminal y vuelva a intentarlo.",
+        "conversationOpenElsewhere": "Codex sigue manteniendo abierta esta conversación. Inténtalo de nuevo en un momento o cierra otras terminales de Codex.",
+        "conversationOpenInTerminal": "{{agent}} ya está ejecutando esta conversación en otra terminal. Sal de {{agent}} allí o cierra esa terminal para continuar aquí.",
         "chooseClaudeAccount": "Elija o agregue una en la configuración de Cuentas de Claude.",
         "chooseClaudeAccountThenRunCommand": "Elija o agregue una en la configuración de Cuentas de Claude y vuelva a ejecutar /{{command}}.",
         "chooseClaudeAccountThenSend": "Elija o agregue una en la configuración de Cuentas de Claude y vuelva a enviar su mensaje.",
@@ -19037,8 +19037,8 @@
       "resumeInNewChat": {
         "notSavedYet": "{{agent}} aún no ha guardado esta conversación. Inténtalo de nuevo cuando responda.",
         "cannotResume": "Esta conversación de {{agent}} no se puede reanudar en un chat nativo.",
-        "exitUnconfirmed": "Orca no puede confirmar que {{agent}} haya salido de su terminal. Detenga lo que se está ejecutando allí o cierre la terminal y vuelva a intentarlo.",
-        "exitUnconfirmedFromTerminal": "Orca no puede confirmar que {{agent}} haya salido de su terminal. Detenga lo que se está ejecutando allí o cierre la terminal, luego abra esta conversación desde el Historial de sesiones."
+        "exitUnconfirmed": "{{agent}} ya está ejecutando esta conversación en otra terminal. Sal de {{agent}} allí o cierra esa terminal; luego abre esta conversación desde el Historial de sesiones.",
+        "exitUnconfirmedFromTerminal": "{{agent}} ya está ejecutando esta conversación en otra terminal. Sal de {{agent}} allí o cierra esa terminal; luego abre esta conversación desde el Historial de sesiones."
       },
       "state": {
         "loading": {
