@@ -1,6 +1,7 @@
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import {
   LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
@@ -19,6 +20,10 @@ export function worktreeCopyOwnerKey(
 ): string {
   // Why local folds into unstamped: discovery backfills `hostId: 'local'` on the same checkout.
   const hostId = row.hostId === LOCAL_EXECUTION_HOST_ID ? undefined : row.hostId
+  // A `runtime:` host is its own server, so backfilled provenance must not change the key.
+  if (parseExecutionHostId(hostId)?.kind === 'runtime') {
+    return `${hostId}\0`
+  }
   return `${hostId ?? ''}\0${row.runtimeOwnerEnvironmentId ?? ''}`
 }
 
