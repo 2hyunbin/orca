@@ -1,4 +1,4 @@
-// The words for a usage limit an agent hit: which limit, when it resets, and how to continue.
+// The words for a usage limit an agent hit: which limit and when it resets.
 
 import {
   sayAgentSessionFailureEnglish,
@@ -30,19 +30,13 @@ export function usageLimitWords(
   limit: AgentSessionUsageLimit | undefined,
   context: {
     resetWords?: AgentSessionUsageLimitResetWords
-    /** The surface offers its own Continue, so the words leave out sending a message. */
-    continueControl?: boolean
   }
 ): string {
   const lead = limit?.window
     ? say('usageLimitReachedNamed', { ...agent, window: say(WINDOW_COPY[limit.window]) })
     : say('usageLimitReached', agent)
   const reset = limit?.resetsAt !== undefined ? context.resetWords?.(limit.resetsAt) : null
-  return joinSentences([
-    lead,
-    ...(reset ? [say('usageLimitResetsAt', { when: reset })] : []),
-    ...(context.continueControl ? [] : [say('usageLimitSendAfterReset')])
-  ])
+  return joinSentences([lead, ...(reset ? [say('usageLimitResetsAt', { when: reset })] : [])])
 }
 
 /** A usage-limit line for a reader that has no agent name to reword it with (the phone): the host's

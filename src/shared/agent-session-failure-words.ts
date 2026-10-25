@@ -285,8 +285,7 @@ const FAILURE_SENTENCES = {
       : providerRetryWords(say, agent(say, context), retry),
   usageLimitReached: (context, { usageLimit }, _surface, say) =>
     usageLimitWords(say, agent(say, context), usageLimit, {
-      resetWords: context.usageLimitReset,
-      continueControl: context.retryControl
+      resetWords: context.usageLimitReset
     }),
   previousExitUnverifiable: namingAgent('previousExitUnverifiable'),
   sessionNotRestored: namingAgent('sessionNotRestored')

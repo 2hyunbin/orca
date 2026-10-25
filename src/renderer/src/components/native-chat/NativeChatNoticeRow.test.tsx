@@ -236,28 +236,52 @@ describe('the row a usage limit leaves', () => {
     )
   }
 
-  it('says when the limit resets in this clock, and continues the turn it ended', () => {
+  it.each([
+    ['future', resetsAt],
+    ['past', new Date(2026, 9, 18, 10, 0).getTime()],
+    ['unknown', undefined]
+  ] as const)('shows a %s reset without a continuation action or instruction', (_state, reset) => {
     vi.useFakeTimers({ now: new Date(2026, 9, 18, 12, 30), toFake: ['Date'] })
-    const continueUsageLimit = vi.fn()
-    renderStatus(row, null, false, false, 'Claude', {
-      ...NO_OFFER,
-      usageLimitTurnItemId: 'cut-turn',
-      continueUsageLimit
-    })
-    vi.useRealTimers()
-    const clock = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(
-      resetsAt
-    )
-    expect(
-      screen.getByText(`Claude hit its session limit. It resets at ${clock}.`)
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    expect(continueUsageLimit).toHaveBeenCalledTimes(1)
+    try {
+      renderStatus(
+        {
+          kind: 'status',
+          tone: 'warning',
+          ...agentSessionFailureWords(
+            agentSessionFailureFact('usageLimitReached', {
+              usageLimit: { window: 'session', ...(reset === undefined ? {} : { resetsAt: reset }) }
+            }),
+            { agentName: 'Claude', surface: 'row' }
+          )
+        },
+        null,
+        false,
+        false,
+        'Claude',
+        { ...NO_OFFER, usageLimitTurnItemId: 'cut-turn', continueUsageLimit: vi.fn() }
+      )
+      const clock =
+        reset === undefined
+          ? null
+          : new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(reset)
+      expect(
+        screen.getByText(
+          clock === null
+            ? 'Claude hit its session limit.'
+            : `Claude hit its session limit. It resets at ${clock}.`
+        )
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+      expect(screen.queryByText(/Send a message once it resets/)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('tells a chat that has no Continue to send a message', () => {
+  it('keeps historical usage-limit notices free of continuation guidance', () => {
     renderStatus(row, null, false, false, 'Claude')
-    expect(screen.getByText(/Send a message once it resets to continue\.$/)).toBeInTheDocument()
+    expect(screen.getByText(/Claude hit its session limit\. It resets at/)).toBeInTheDocument()
+    expect(screen.queryByText(/Send a message once it resets/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
   })
 })
