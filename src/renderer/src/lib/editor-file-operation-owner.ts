@@ -103,12 +103,15 @@ export function resolveEditorOwnerRoute(
   }
   // Neither workspace focus nor the Active Server focus can replace a file's catalog owner.
   const ownerState = { ...state, activeWorktreeId: null, activeWorkspaceExecutionHostId: null }
-  const explicit = resolveExplicitWorktreeOperationRouteResult(ownerState, worktreeId)
+  const scope = parseWorkspaceKey(worktreeId)
+  const explicit: WorktreeOperationRouteResolution =
+    scope?.type === 'folder'
+      ? { kind: 'missing' }
+      : resolveExplicitWorktreeOperationRouteResult(ownerState, worktreeId)
   if (explicit.kind !== 'missing') {
     return { ...explicit, ownershipProjection: 'explicit' }
   }
   let route = resolveWorktreeOperationRoute(ownerState, worktreeId)
-  const scope = parseWorkspaceKey(worktreeId)
   if (!route && scope?.type === 'folder' && folderHostId) {
     // Same-id folders may use a host qualifier only when the catalog confirms that owner.
     const folder = findFolderWorkspaceOwner(ownerState, scope.folderWorkspaceId, folderHostId)
