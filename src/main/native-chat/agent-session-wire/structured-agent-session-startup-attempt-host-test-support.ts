@@ -42,8 +42,8 @@ export let acquire: Mock<StructuredAgentSessionAdapter['acquire']>
 export let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 export let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
-export const providerStarted = vi.fn()
-export const recordLiveListing = vi.fn()
+export const providerStarted: Mock = vi.fn()
+export const recordLiveListing: Mock = vi.fn()
 const openGates = new Map<string, (model: string) => void>()
 
 export async function proveOpen(model = 'default'): Promise<void> {
