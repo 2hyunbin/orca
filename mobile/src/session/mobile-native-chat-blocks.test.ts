@@ -76,7 +76,7 @@ describe('pairToolBlocks', () => {
     expect(pairs[1]).toEqual({ call: call2, result: result2 })
   })
 
-  it('retains the last result while bounding rendered pairs', () => {
+  it('keeps the first completed pairs at the rendering limit', () => {
     const blocks = Array.from({ length: 20 }, (_unused, index) => [
       { type: 'tool-call' as const, name: 'Bash', input: { index } },
       { type: 'tool-result' as const, output: String(index) }
