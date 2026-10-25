@@ -4,7 +4,7 @@ import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { RetainedAgentEntry } from '@/store/slices/agent-status'
-import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
+import { buildDashboardSnapshot } from './build-dashboard-snapshot'
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 
 const NOW = 1_000_000_000
@@ -62,7 +62,7 @@ function entry(paneKey: string, tabId: string, worktreeId: string): AgentStatusE
   }
 }
 
-function baseState(): DashboardSnapshotState {
+function baseState(): Parameters<typeof buildDashboardSnapshot>[0] {
   return {
     repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: [worktree('w1'), worktree('w2')] },
@@ -91,6 +91,7 @@ function baseState(): DashboardSnapshotState {
     ptyIdsByTabId: { tab1: ['pty-tab1'], tab2: ['pty-tab2'] },
     runtimePaneTitlesByTabId: { tab1: { 0: 'shell' }, tab2: { 0: 'shell' } },
     acknowledgedAgentsByPaneKey: {},
+    ptyProcessMetadataById: {},
     settings: null
   }
 }
@@ -133,7 +134,7 @@ describe('buildDashboardSnapshot rows cache', () => {
       buildDashboardSnapshot(first, NOW)
     )
 
-    const titleWrite: DashboardSnapshotState = {
+    const titleWrite: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...first,
       runtimePaneTitlesByTabId: { ...first.runtimePaneTitlesByTabId, tab2: { 0: 'sh' } }
     }
@@ -147,14 +148,14 @@ describe('buildDashboardSnapshot rows cache', () => {
 
   it('recomputes only the worktree whose pane foreground process changed', () => {
     const cache = createWorktreeAgentRowsCache()
-    const state: DashboardSnapshotState = {
+    const state: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...baseState(),
       agentStatusByPaneKey: { [PANE_1]: entry(PANE_1, 'tab1', 'w1') },
       runtimePaneTitlesByTabId: { tab1: { 0: 'shell' }, tab2: { 0: 'demo-repo' } }
     }
     buildDashboardSnapshot(state, NOW, { rowsCache: cache, rowsGeneration: 1 })
 
-    const codexStarted: DashboardSnapshotState = {
+    const codexStarted: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...state,
       paneForegroundAgentByPaneKey: {
         [PANE_2]: { agent: 'codex', agentEvidence: 'process-read', shellForeground: false }
@@ -175,7 +176,7 @@ describe('buildDashboardSnapshot rows cache', () => {
     const before = buildDashboardSnapshot(state, NOW, { rowsCache: cache, rowsGeneration: 1 })
     expect(before.cards.find((card) => card.paneKey === PANE_1)?.unseen).toBe(true)
 
-    const acked: DashboardSnapshotState = {
+    const acked: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...state,
       acknowledgedAgentsByPaneKey: { [PANE_1]: NOW }
     }
@@ -208,7 +209,7 @@ describe('buildDashboardSnapshot rows cache', () => {
       agentType: 'claude',
       startedAt: NOW - 10_000
     }
-    const initial: DashboardSnapshotState = {
+    const initial: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...baseState(),
       tabsByWorktree: { w1: [retainedTab], w2: [tab('tab2', 'w2')] },
       agentStatusByPaneKey: { [PANE_2]: entry(PANE_2, 'tab2', 'w2') },
@@ -220,7 +221,7 @@ describe('buildDashboardSnapshot rows cache', () => {
       )?.conversationName
     ).toBeUndefined()
 
-    const titled: DashboardSnapshotState = {
+    const titled: Parameters<typeof buildDashboardSnapshot>[0] = {
       ...initial,
       tabsByWorktree: {
         ...initial.tabsByWorktree,

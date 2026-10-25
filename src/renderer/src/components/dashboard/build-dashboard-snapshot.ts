@@ -79,7 +79,7 @@ export type DashboardSnapshotState = Pick<
  * own terminal stay folded into their spawning card.
  */
 export function buildDashboardSnapshot(
-  state: DashboardSnapshotState,
+  state: DashboardSnapshotState & Pick<AppState, 'ptyProcessMetadataById'>,
   now: number,
   options: {
     includeCardDetails?: boolean

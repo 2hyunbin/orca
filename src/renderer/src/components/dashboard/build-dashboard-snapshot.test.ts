@@ -104,9 +104,11 @@ function worktree(id = 'w1', displayName = 'wt-one'): Worktree {
   }
 }
 
-function baseState(overrides: Partial<DashboardSnapshotState>): DashboardSnapshotState {
+function baseState(
+  overrides: Partial<Parameters<typeof buildDashboardSnapshot>[0]>
+): Parameters<typeof buildDashboardSnapshot>[0] {
   return {
-    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000' }],
+    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: [worktree()] },
     tabsByWorktree: { w1: [tab()] },
     agentStatusByPaneKey: {},
@@ -117,14 +119,17 @@ function baseState(overrides: Partial<DashboardSnapshotState>): DashboardSnapsho
       [TAB_ID]: {
         root: { type: 'leaf', leafId: LEAF_ID },
         activeLeafId: LEAF_ID,
+        expandedLeafId: null,
         ptyIdsByLeafId: { [LEAF_ID]: 'pty1' }
       }
     },
     ptyIdsByTabId: { [TAB_ID]: ['pty1'] },
     runtimePaneTitlesByTabId: {},
     acknowledgedAgentsByPaneKey: {},
+    ptyProcessMetadataById: {},
+    settings: null,
     ...overrides
-  } as unknown as DashboardSnapshotState
+  }
 }
 
 describe('buildDashboardSnapshot', () => {

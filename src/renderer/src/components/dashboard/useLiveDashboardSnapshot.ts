@@ -29,6 +29,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
     (s) => s.runtimeAgentOrchestrationByPaneKey
   )
   const terminalLayoutsByTabId = useAppStore((s) => s.terminalLayoutsByTabId)
+  const ptyProcessMetadataById = useAppStore((s) => s.ptyProcessMetadataById)
   const ptyIdsByTabId = useAppStore((s) => s.ptyIdsByTabId)
   const runtimePaneTitlesByTabId = useAppStore((s) => s.runtimePaneTitlesByTabId)
   const acknowledgedAgentsByPaneKey = useAppStore((s) => s.acknowledgedAgentsByPaneKey)
@@ -84,6 +85,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
           runtimeAgentOrchestrationByPaneKey,
           terminalLayoutsByTabId,
           ptyIdsByTabId,
+          ptyProcessMetadataById,
           runtimePaneTitlesByTabId,
           acknowledgedAgentsByPaneKey,
           hostedReviewCache,
@@ -127,6 +129,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
       runtimeAgentOrchestrationByPaneKey,
       terminalLayoutsByTabId,
       ptyIdsByTabId,
+      ptyProcessMetadataById,
       runtimePaneTitlesByTabId,
       acknowledgedAgentsByPaneKey,
       hostedReviewCache,

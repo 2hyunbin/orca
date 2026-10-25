@@ -77,7 +77,7 @@ function entry(): AgentStatusEntry {
   }
 }
 
-function state(): DashboardSnapshotState {
+function state(): Parameters<typeof buildDashboardSnapshot>[0] {
   return {
     repos: [],
     worktreesByRepo: {},
@@ -99,8 +99,9 @@ function state(): DashboardSnapshotState {
     ptyIdsByTabId: { [TAB_ID]: ['pty-folder'] },
     runtimePaneTitlesByTabId: {},
     acknowledgedAgentsByPaneKey: {},
+    ptyProcessMetadataById: {},
     settings: null
-  } as unknown as DashboardSnapshotState
+  }
 }
 
 describe('buildDashboardSnapshot folder workspaces', () => {

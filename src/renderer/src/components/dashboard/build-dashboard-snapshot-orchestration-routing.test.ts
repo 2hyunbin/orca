@@ -15,7 +15,7 @@ vi.mock('../sidebar/worktree-agent-orchestration-batch', () => ({
   selectRuntimeAgentOrchestrationBatch: batchMocks.select
 }))
 
-import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-dashboard-snapshot'
+import { buildDashboardSnapshot } from './build-dashboard-snapshot'
 
 function worktree(index: number): Worktree {
   return {
@@ -55,10 +55,10 @@ function tab(index: number): TerminalTab {
 function state(
   worktreeCount: number,
   runtimeAgentOrchestrationByPaneKey: Record<string, AgentStatusOrchestrationContext>
-): DashboardSnapshotState {
+): Parameters<typeof buildDashboardSnapshot>[0] {
   const worktrees = Array.from({ length: worktreeCount }, (_, index) => worktree(index))
   return {
-    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000' }],
+    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: worktrees },
     tabsByWorktree: Object.fromEntries(
       worktrees.map((currentWorktree, index) => [currentWorktree.id, [tab(index)]])
@@ -70,8 +70,10 @@ function state(
     terminalLayoutsByTabId: {},
     ptyIdsByTabId: {},
     runtimePaneTitlesByTabId: {},
-    acknowledgedAgentsByPaneKey: {}
-  } as unknown as DashboardSnapshotState
+    acknowledgedAgentsByPaneKey: {},
+    ptyProcessMetadataById: {},
+    settings: null
+  }
 }
 
 describe('buildDashboardSnapshot orchestration routing', () => {
