@@ -1,9 +1,10 @@
+import { Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { getKeepLocalMainUpToDateTitle } from '@/components/settings/keep-local-main-up-to-date-setting'
 import { translate } from '@/i18n/i18n'
 import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
-import { runCommandInNewTerminalTab } from '@/lib/run-command-in-new-terminal-tab'
 import type { AppState } from '@/store/types'
 import type { LocalBaseRefRefreshResult } from '../../../../../../shared/worktree/base-ref-drift-types'
 import type { Worktree } from '../../../../../../shared/worktree/types'
@@ -169,25 +170,47 @@ export function showLocalBaseRefRefreshToast(
         <p className="text-sm leading-5 text-popover-foreground/80">
           {refreshFailureDescription(result, worktreeName)}
         </p>
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={translate(
+                  'auto.store.slices.worktrees.localBaseRefRefreshTurnOffHelp',
+                  'What Disable Check does'
+                )}
+                className="rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <Info className="size-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" sideOffset={6} className="max-w-72">
+              {translate(
+                'auto.store.slices.worktrees.localBaseRefRefreshTurnOffTooltip',
+                'Turns off the Orca setting {{value0}}. Orca will stop updating local {{value1}} when you create a workspace, and this warning will stop appearing. New workspaces are unaffected. Turn it back on anytime in Settings › Git.',
+                { value0: getKeepLocalMainUpToDateTitle(), value1: result.localBranch }
+              )}
+            </TooltipContent>
+          </Tooltip>
           <Button
             size="sm"
             variant="outline"
             onClick={() => stopRefreshingLocalBaseRef(id, result.localBranch, updateSettings)}
           >
-            {translate(
-              'auto.store.slices.worktrees.localBaseRefRefreshTurnOff',
-              'Stop updating local {{value0}}',
-              { value0: result.localBranch }
-            )}
+            {translate('auto.store.slices.worktrees.localBaseRefRefreshTurnOff', 'Disable Check')}
           </Button>
           {result.shallowHistory && createdWorktree ? (
             <Button
               size="sm"
               onClick={() => {
-                if (runCommandInNewTerminalTab(createdWorktree.id, unshallowCommand(result))) {
-                  toast.dismiss(id)
-                }
+                // Why lazy: the terminal launcher imports the store, which imports this slice.
+                void import('@/lib/run-command-in-new-terminal-tab').then(
+                  ({ runCommandInNewTerminalTab }) => {
+                    if (runCommandInNewTerminalTab(createdWorktree.id, unshallowCommand(result))) {
+                      toast.dismiss(id)
+                    }
+                  }
+                )
               }}
             >
               {translate('auto.store.slices.worktrees.localBaseRefUnshallow', 'Unshallow')}

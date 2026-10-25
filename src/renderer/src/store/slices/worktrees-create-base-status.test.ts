@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../types'
 import type { LocalBaseRefRefreshResult } from '../../../../shared/worktree/base-ref-drift-types'
 import { toast } from 'sonner'
+import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import type { RuntimeEnvironmentCallRequest } from '../../runtime/runtime-compatibility-test-fixture'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
 import { TEST_REPO, makeWorkspaceLineage, makeWorktree } from './worktrees-slice-test-fixtures'
@@ -792,7 +794,9 @@ describe('createWorktree base status merge', () => {
 // Creation routes by the project row's own host, so every test seeds that row.
 function lastWarningDescriptionText(): string {
   const description = vi.mocked(toast.warning).mock.calls.at(-1)?.[1]?.description
-  return renderToStaticMarkup(typeof description === 'function' ? description() : description)
+  const node = typeof description === 'function' ? description() : description
+  // Why the provider: the app mounts the Toaster inside TooltipProvider.
+  return renderToStaticMarkup(createElement(TooltipProvider, null, node))
 }
 
 function seedRepoHost(store: ReturnType<typeof createTestStore>, hostId: ExecutionHostId): void {
