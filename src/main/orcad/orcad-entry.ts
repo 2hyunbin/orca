@@ -323,6 +323,7 @@ async function startOrcadRuntime(
     agentStates: () => agentHookServer.getStatusSnapshot(),
     hasStagedMigration: () => profileStore.hasStagedOrcadMigrationCatalog(),
     automationsBusy: () => orcadAutomationsKeepHostBusy(profileStore),
+    emulatorsBusy: () => runtime.getEmulatorBridge()?.hasManagedSessions() ?? false,
     registerCleanup
   })
   return { readiness }
