@@ -1,6 +1,8 @@
 import { createWebRuntimeSessionBrowserTab } from '@/runtime/web-runtime-browser-creation'
+import { resolveWebRuntimeBrowserClientTargetGroup } from '@/runtime/web-runtime-browser-client-target-group'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
+import { resolveNewBrowserTabProfile } from '@/store/slices/browser/browser-new-tab-profile'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
@@ -10,6 +12,7 @@ import type { SearchEngine } from '../../../shared/browser-url'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 import { BROWSER_SCREENCAST_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import type { BrowserClientHostPlacementPreference } from '../../../shared/browser-client-host-placement'
+import type { TabSplitTarget } from '@/store/slices/tabs/tabs-slice-contract'
 import {
   getClientCreationActionPolicy,
   runtimeHostsPagesOnThisDesktop,
@@ -29,6 +32,8 @@ export type WorkspaceBrowserTabIntent = { kind: 'url' } | { kind: 'search'; engi
 export type OpenWorkspaceBrowserTabRequest = {
   workspaceId: string
   targetGroupId?: string
+  /** Opens the tab in a new split beside this group instead of targetGroupId. */
+  split?: TabSplitTarget
   /** Client-local unified tab id of the source; a source-following open omits targetGroupId. */
   afterTabId?: string
   url: string
@@ -71,8 +76,7 @@ function isExpectedRuntimeBrowserRoute(
   )
 }
 
-// Why: a managed server reached over SSH has no browser of its own, so its links open on this
-// desktop, whose page the SSH-routed browser gate sends through that host (as new tabs do).
+// SSH-deployed managed servers have no browsers; host links on this desktop through that SSH route, as new tabs do.
 function isSshDeploymentClientBrowserRoute(
   state: AppState,
   availability: ClientCreationActionAvailability,
@@ -170,23 +174,22 @@ function createClientBrowserTab(
   request: OpenWorkspaceBrowserTabRequest,
   hostId: ExecutionHostId,
   presentation: { error: string; title: string },
-  // Why: a desktop-hosted page in a runtime workspace stays owned by that runtime, or the
-  // unified tab is disowned from its worktree (palette and activation skip it).
+  // Desktop-rendered pages in runtime workspaces keep runtime ownership or palette/activation disowns their tabs.
   ownerHostId: ExecutionHostId = hostId
-): void {
+): string | null {
   try {
-    state.createBrowserTab(request.workspaceId, request.url, {
+    const created = state.createBrowserTab(request.workspaceId, request.url, {
       activate: request.focusOnCreate !== false,
       browserRuntimeEnvironmentId: null,
       focusAddressBar: false,
       executionHostId: ownerHostId,
-      sessionProfileId:
-        state.defaultBrowserSessionProfileIdByHostId[hostId] ??
-        state.defaultBrowserSessionProfileId,
+      ...resolveNewBrowserTabProfile(state, request.workspaceId, hostId),
       targetGroupId: request.targetGroupId,
+      ...(request.split ? { split: request.split } : {}),
       ...(request.afterTabId ? { afterTabId: request.afterTabId } : {}),
       title: presentation.title
     })
+    return created.activePageId ?? null
   } catch (error) {
     throw openFailure(presentation.error, 'client tab creation rejected', error)
   }
@@ -201,9 +204,10 @@ function assertManagedBrowserEnabled(
   }
 }
 
+/** Resolves to the page id when the page renders on this desktop, else null. */
 export async function openWorkspaceBrowserTab(
   request: OpenWorkspaceBrowserTabRequest
-): Promise<void> {
+): Promise<string | null> {
   const presentation = intentPresentation(request.intent, request.url)
   if (!validateTarget(request.url)) {
     throw openFailure(presentation.error, 'target is not an http(s) URL')
@@ -264,8 +268,7 @@ export async function openWorkspaceBrowserTab(
     if (!host || host.kind === 'runtime') {
       throw openFailure(presentation.error, `unresolved client host: ${route.executionHostId}`)
     }
-    createClientBrowserTab(state, request, host.id, presentation)
-    return
+    return createClientBrowserTab(state, request, host.id, presentation)
   }
   if (
     route.executionHostId &&
@@ -276,9 +279,7 @@ export async function openWorkspaceBrowserTab(
       `host ${route.executionHostId} does not own runtime ${environmentId}`
     )
   }
-  // An asserted runtime owns links opened from remote panes; provider policy may describe the
-  // viewing client's generic browser surface rather than that pane's execution host. The one
-  // exception is an SSH-deployed server, whose links this desktop hosts on the SSH route.
+  // Remote-pane links pin execution-host ownership over client-generic provider policy, except SSH-deployed servers whose pages this desktop hosts on SSH routes.
   if (
     (expectedEnvironmentId === null || sshDeploymentClientRoute) &&
     availability.provider === 'local-client'
@@ -286,8 +287,7 @@ export async function openWorkspaceBrowserTab(
     const localHostId = host && host.kind !== 'runtime' ? host.id : LOCAL_EXECUTION_HOST_ID
     const ownerHostId =
       host?.kind === 'runtime' && route.executionHostId ? route.executionHostId : localHostId
-    createClientBrowserTab(state, request, localHostId, presentation, ownerHostId)
-    return
+    return createClientBrowserTab(state, request, localHostId, presentation, ownerHostId)
   }
   let created = false
   try {
@@ -295,17 +295,14 @@ export async function openWorkspaceBrowserTab(
       worktreeId: request.workspaceId,
       environmentId,
       url: request.url,
-      targetGroupId: request.targetGroupId,
-      // Client placement survives older hosts publishing a page before the create response.
-      ...(request.targetGroupId ? { clientTargetGroupId: request.targetGroupId } : {}),
+      ...resolveWebRuntimeBrowserClientTargetGroup(state, request, environmentId),
       ...(request.afterTabId ? { clientAfterTabId: request.afterTabId } : {}),
       // Owner-pinned links need the host tab published before client reconciliation.
       ...(expectedEnvironmentId !== null ? { waitForRegistration: true } : {}),
       ...(request.placementPreference !== undefined
         ? { placementPreference: request.placementPreference }
         : {}),
-      // Why: the tab is opened from this workspace's tab bar, so surface that
-      // workspace — otherwise a background worktree looks like nothing happened.
+      // Tab-bar opens must surface their workspace or background creates appear to do nothing.
       ...(request.focusOnCreate !== undefined ? { focusOnCreate: request.focusOnCreate } : {}),
       selectWorktree: request.selectWorktree !== false,
       stagedTitle: presentation.title,
@@ -318,4 +315,5 @@ export async function openWorkspaceBrowserTab(
   if (!created) {
     throw openFailure(presentation.error, 'runtime browser tab creation was unavailable')
   }
+  return null
 }

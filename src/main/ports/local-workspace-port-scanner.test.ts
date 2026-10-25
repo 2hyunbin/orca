@@ -444,8 +444,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     runPortScanCommandMock.mockReset()
   })
 
-  // Regression for #11161: an endpoint-security hook makes CreateProcessW take
-  // seconds, so the command's own budget must not be charged for the spawn.
+  // EDR spawn delay must not consume the command execution budget (#11161).
   it('does not report a command timeout when only process creation was delayed', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     runPortScanCommandMock.mockResolvedValue({ stdout: LSOF_LISTEN_OUTPUT, spawnMs: 4_200 })
@@ -468,8 +467,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     expect(scan.ports).toHaveLength(1)
   })
 
-  // Regression for #11161 review: a metadata-less scan must not be reconciled as
-  // "the listener vanished" — that evicts advertised URLs only a PTY can restore.
+  // Missing metadata cannot prove listener absence; eviction would lose PTY-only URL evidence (#11161).
   it('does not reconcile advertised URLs for a scan that skipped metadata', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     runPortScanCommandMock.mockResolvedValue({ stdout: LSOF_LISTEN_OUTPUT, spawnMs: 4_200 })
@@ -514,8 +512,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(3)
   })
 
-  // Regression for #11161 review: the skip parity is driven by the 30s poller,
-  // so a one-shot user action would otherwise land on a random parity.
   it('keeps probing metadata for callers that require attribution', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     mockStalledDarwinScan()
@@ -528,8 +524,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
 
   it('does not let a required-metadata scan reset the background skip parity', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
-    // Why a fresh pid each cycle: a listener the previous scan already resolved is served from the
-    // remembered metadata, so a stable pid would hide whether this scan skipped the probe or not.
+    // Fresh PIDs prevent metadata reuse from hiding whether this cycle probed.
     let listenerPid = 123
     runPortScanCommandMock.mockImplementation(async (command: string, args: string[]) => {
       if (command === '/usr/sbin/lsof' && args.includes('-iTCP')) {
@@ -546,7 +541,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     await scanWorkspacePorts(worktrees, urlWatcherStub(), { requireMetadata: true })
     await scanWorkspacePorts(worktrees, urlWatcherStub())
 
-    // 1 skipped + 3 required + 3 recovered; a reset parity would skip twice.
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(7)
   })
 
@@ -567,7 +561,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
 
     const second = await scanWorkspacePorts(worktrees, urlWatcherStub())
 
-    // Only the listening scan itself runs; the two metadata commands are served from the cache.
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(4)
     expect(second.ports).toEqual(first.ports)
   })
@@ -601,8 +594,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     await scanWorkspacePorts(worktrees, urlWatcherStub())
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(3)
 
-    // One socket is replaced and the process has since moved, so this pid must be re-derived for
-    // BOTH its rows — serving one from cache would report two different workspaces for one process.
+    // One replaced socket invalidates every cached row for the PID; mixed cwd evidence would split ownership.
     secondSocket = 'd0xcccc'
     cwd = '/elsewhere'
     const scan = await scanWorkspacePorts(worktrees, urlWatcherStub())
@@ -626,10 +618,9 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     await scanWorkspacePorts(worktrees, urlWatcherStub())
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(3)
     await scanWorkspacePorts(worktrees, urlWatcherStub())
-    // Warm cache: the background poll is served without the metadata commands.
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(4)
 
-    // Why: this is the SIGTERM authorization re-scan; a remembered cwd must never authorize a kill.
+    // SIGTERM authorization cannot trust remembered cwd.
     await scanWorkspacePorts(worktrees, urlWatcherStub(), { requireMetadata: true })
 
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(7)
@@ -654,7 +645,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     await scanWorkspacePorts(worktrees, urlWatcherStub())
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(6)
 
-    // Same pid and address, different process: the remembered metadata must not be reused.
     processName = 'python3'
     await scanWorkspacePorts(worktrees, urlWatcherStub())
 
@@ -678,7 +668,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     await scanWorkspacePorts(worktrees, urlWatcherStub())
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(4)
 
-    // Same pid, name and address but a new kernel socket: a restarted process, not the cached one.
+    // A changed kernel socket detects process restart despite matching PID/name/address.
     socketId = '0x2'
     await scanWorkspacePorts(worktrees, urlWatcherStub())
 
@@ -704,7 +694,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
       const cached = await scanWorkspacePorts(worktrees, urlWatcherStub())
       expect(cached.ports[0]).toMatchObject({ owner: { worktreeId: 'repo::/repo' } })
     }
-    // 3 for the first scan, then one listening command per cached scan.
     expect(runPortScanCommandMock).toHaveBeenCalledTimes(12)
 
     const reprobed = await scanWorkspacePorts(worktrees, urlWatcherStub())
@@ -715,6 +704,7 @@ describe('scanWorkspacePorts with delayed process creation', () => {
     })
   })
 
+  // Skipped metadata cycles must retain attribution instead of moving workspace ports into External (#11161).
   it('keeps remembered workspace labels on fresh holders through a slow-spawn skip and recovery', async () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     let slow = false
@@ -776,7 +766,6 @@ describe('scanWorkspacePorts with delayed process creation', () => {
   })
 })
 
-/** Darwin scan where every spawn stalls past the metadata-skip threshold. */
 function mockStalledDarwinScan(): void {
   runPortScanCommandMock.mockImplementation(async (command: string, args: string[]) => {
     if (command === '/usr/sbin/lsof' && args.includes('-iTCP')) {

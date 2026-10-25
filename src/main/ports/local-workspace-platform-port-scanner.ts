@@ -37,7 +37,7 @@ export function parseLsofListeningOutput(output: string): RawListeningPort[] {
     } else if (tag === 'c') {
       processName = value
     } else if (tag === 'f') {
-      socketId = undefined // each file record restarts; a socket without `d` must not inherit one
+      socketId = undefined // A file record lacking d must not inherit the preceding socket identity.
     } else if (tag === 'd') {
       socketId = value || undefined
     } else if (tag === 'n') {
@@ -136,8 +136,7 @@ async function scanDarwinLsofPorts(
         '-iTCP',
         '-sTCP:LISTEN',
         '-F',
-        // Why `d`: the socket's kernel identity is free on this command and lets the metadata cache
-        // tell a recycled pid on the same port apart from the process it remembered.
+        // Socket identity distinguishes PID reuse on the same port for metadata caching.
         'pcnd'
       ],
       'attribution'
@@ -146,8 +145,7 @@ async function scanDarwinLsofPorts(
     if (shouldSkipMetadataCommands(spawnMs, options)) {
       return { ports: ports.map(recallListenerMetadata), metadataAvailable: false }
     }
-    // Why: on a quiet machine the same servers keep listening, so the two metadata commands — the
-    // expensive half of the scan — would re-derive answers the last scan already has.
+    // Reuse unchanged listener metadata to avoid the two expensive follow-up commands.
     const { hydrated, pidsNeedingMetadata } = partitionListenersNeedingMetadata(ports, options)
     if (pidsNeedingMetadata.size === 0) {
       return { ports: hydrated, metadataAvailable: true }
@@ -279,10 +277,7 @@ async function loadWindowsProcessMetadata(
     return result
   }
   try {
-    // Why the native snapshot: attributing ports used to fork a powershell.exe
-    // per scan just to turn PIDs into names. That is a ~700ms cold start, a
-    // conhost window, and one more thing a Group Policy can block -- for data
-    // the panel treats as optional anyway.
+    // Native snapshots avoid ~700ms PowerShell startup, visible conhost windows and Group Policy failures.
     for (const row of await readWindowsProcessTable()) {
       if (pids.has(row.pid)) {
         result.set(row.pid, {

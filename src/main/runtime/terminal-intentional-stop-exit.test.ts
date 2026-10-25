@@ -52,9 +52,7 @@ afterEach(() => {
   }
 })
 
-/** A real store and runtime with one bound pane, and main's exit delivery to a renderer stub.
- *  `lateProviderExit`: the kill's reply overtakes the exit, so main synthesizes one and the
- *  provider's own exit arrives later through its listener. */
+/** Use real store/runtime with renderer stub; lateProviderExit lets the kill reply overtake the provider exit and force a synthetic one. */
 function createHarness(opts: { lateProviderExit?: boolean; folder?: boolean } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'orca-intentional-stop-'))
   directories.push(directory)
@@ -282,12 +280,7 @@ describe('intentional stops keep the pane through the exit', () => {
   it('never reads the exit of a later process on the same id as the stop', async () => {
     const harness = createHarness({ lateProviderExit: true })
     await stopRendererOwnedPty(harness.deps, { id: PTY_ID, keepHistory: true })
-    harness.runtime.registerPty(PTY_ID, WORKTREE_ID, null, {
-      tabId: TAB_ID,
-      leafId: LEAF_ID,
-      incarnationId: LATER_INCARNATION_ID
-    })
-    ptyIncarnationById.set(PTY_ID, LATER_INCARNATION_ID)
+    // The later process's commit binds its pane before it registers, as the spawn commit does.
     await harness.store.persistPtyBinding({
       worktreeId: WORKTREE_ID,
       tabId: TAB_ID,
@@ -296,6 +289,12 @@ describe('intentional stops keep the pane through the exit', () => {
       incarnationId: LATER_INCARNATION_ID,
       origin: 'reattach'
     })
+    harness.runtime.registerPty(PTY_ID, WORKTREE_ID, null, {
+      tabId: TAB_ID,
+      leafId: LEAF_ID,
+      incarnationId: LATER_INCARNATION_ID
+    })
+    ptyIncarnationById.set(PTY_ID, LATER_INCARNATION_ID)
 
     harness.emitProviderExit(LATER_INCARNATION_ID)
 
