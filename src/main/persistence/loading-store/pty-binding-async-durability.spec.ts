@@ -199,13 +199,14 @@ export function registerPtyBindingAsyncDurabilityTests(): void {
       }
       layout.ptyIdsByLeafId = { ...layout.ptyIdsByLeafId, [TEST_LEAF_2]: 'new-root-pty' }
       tab.ptyId = 'new-root-pty'
+      const expectedRoot = structuredClone(layout.root)
       gate.finish.reject(
         new ProfileStateWriterError('test-disk-failure', 'disk refused', 'known-failure')
       )
       await rejected
       await store.flushPendingOrThrowAsync()
       const persisted = readState().workspaceSession
-      expect(persisted.terminalLayoutsByTabId[binding.tabId].root).toEqual(layout.root)
+      expect(persisted.terminalLayoutsByTabId[binding.tabId].root).toEqual(expectedRoot)
       expect(persisted.terminalLayoutsByTabId[binding.tabId].ptyIdsByLeafId).toEqual({
         [binding.leafId]: binding.ptyId,
         [TEST_LEAF_2]: 'new-root-pty'
