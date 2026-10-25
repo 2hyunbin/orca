@@ -249,6 +249,7 @@
   },
   "settings": {
     "chat": {
+      "permissionsAgentsLink": "Settings → Agents",
       "permissionsTitle": "Permissions for new chats",
       "permissionsDescription": "New chats only. Agent-specific defaults are in Settings → Agents.",
       "description": "Choose how chats look and behave.",
@@ -279,7 +280,7 @@
         "antigravityAccount": "Account",
         "antigravitySignInNeeded": "Chats need an Antigravity sign-in, separate from your agy terminal account."
       },
-      "permissionsDescriptionOwnAgents": "New chats of agents set to their own settings in Settings → Agents. Other agents start chats in their permission there."
+      "permissionsDescriptionOwnAgents": "New chats follow each agent’s permission in Settings → Agents."
     },
     "terminal": {
       "optionLayoutAlt": "ABC or U.S. — Option sends Alt/Esc sequences",
@@ -516,7 +517,8 @@
       "permissionFromArgsTerminals": "{{agent}} set to {{mode}} in terminals.",
       "permissionOwnAgent": "Use {{agent}}'s own settings",
       "permissionOwnAll": "Agents' own settings",
-      "permissionOwnDescription": "Orca adds no permission flag in terminals; chats use Settings → Chat.",
+      "permissionOwnLegacyDescription": "Orca adds no permission flag in terminals; chats use Settings → Chat.",
+      "permissionOwnDescription": "Terminals and chats follow the agent’s own permission settings.",
       "permissionChoiceDescription": "Applies where each agent supports this mode. Change one agent below.",
       "permissionOwnShort": "Own settings",
       "permissionWithoutAuto": "Agents without Approve for me",
@@ -19785,6 +19787,10 @@
           "editors": "Close all editor tabs?",
           "description": "The selected tabs will be closed. Pinned tabs will stay open.",
           "confirm": "Close tabs"
+        },
+        "chatRename": {
+          "empty": "A chat name can't be empty",
+          "failed": "Couldn't rename this chat"
         }
       }
     },

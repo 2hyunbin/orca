@@ -102,5 +102,6 @@ export const WORK_METHODS = [
   { method: 'agentSession.switchToTerminal', params: { sessionId: SESSION } },
   { method: 'agentSession.switchToChat', params: { sessionId: SESSION } },
   { method: 'agentSession.regenerateName', params: { sessionId: SESSION } },
+  { method: 'agentSession.rename', params: { sessionId: SESSION, name: 'Release notes' } },
   { method: 'agentSession.subscribeStatus', params: null }
 ] as const
