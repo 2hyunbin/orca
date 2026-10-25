@@ -1,10 +1,45 @@
 import { describe, expect, it, vi } from 'vitest'
+import { readRecord } from './codex-item-field-readers'
 import { CodexAppliedSettings } from './codex-structured-applied-settings'
 import { CodexAppServerRequestError } from './app-server/codex-app-server-request-error'
 import { changeCodexThreadGoal, codexThreadGoalRequests } from './codex-structured-thread-goal'
 import type { CodexSession } from './codex-structured-session-state'
 
 const THREAD = 'thread-1'
+
+type AcquiredSettingsTestSeam = {
+  settings: CodexAppliedSettings
+  pending: Set<unknown>
+  listeners: Set<unknown>
+  readonly snapshot: Record<string, unknown>
+}
+
+function acquiredSettingsTestSeam(adapter: unknown): AcquiredSettingsTestSeam {
+  const sessions = readRecord(adapter).sessions
+  if (!(sessions instanceof Map)) {
+    throw new Error('missing acquired sessions')
+  }
+  const settings = readRecord(sessions.get('session-1')).appliedSettings
+  if (!(settings instanceof CodexAppliedSettings)) {
+    throw new Error('missing acquired settings')
+  }
+  const state = readRecord(settings)
+  if (!(state.pending instanceof Set) || !(state.listeners instanceof Set)) {
+    throw new Error('missing acquired settings collections')
+  }
+  return {
+    settings,
+    pending: state.pending,
+    listeners: state.listeners,
+    get snapshot() {
+      const snapshot = readRecord(settings).snapshot
+      if (typeof snapshot !== 'object' || snapshot === null) {
+        throw new Error('missing acquired settings snapshot')
+      }
+      return readRecord(snapshot)
+    }
+  }
+}
 
 function session(request: (...args: unknown[]) => Promise<unknown>) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the goal path reads only these two fields.
@@ -160,12 +195,8 @@ describe('direct goal settings application', () => {
         replacesGoal: false,
         executionOptions: { model, ...(effort ? { effort } : {}) }
       })
-    const sessions = Reflect.get(adapter, 'sessions')
-    const settings = sessions.get('session-1')?.appliedSettings
-    if (!(settings instanceof CodexAppliedSettings)) {
-      throw new Error('missing acquired settings')
-    }
-    return { codex, adapter, apply, goal, settings }
+    const state = acquiredSettingsTestSeam(adapter)
+    return { codex, adapter, apply, goal, settings: state.settings, state }
   }
 
   it('retains authoritative A after a definitely rejected turn B, so a no-op Resume A needs no notification', async () => {
@@ -192,7 +223,7 @@ describe('direct goal settings application', () => {
   it.each(['success', 'rejection', 'stale'] as const)(
     'rechecks current application after its RPC reply, preserving pre-reply evidence (%s)',
     async (mode) => {
-      const { codex, adapter, apply, goal, settings } = await fixture(10)
+      const { codex, adapter, apply, goal, state } = await fixture(10)
       vi.useFakeTimers()
       try {
         const answer = Promise.withResolvers<unknown>()
@@ -220,7 +251,7 @@ describe('direct goal settings application', () => {
         expect(codex.connections[0].calls.some((r) => r.method === 'thread/goal/set')).toBe(
           mode === 'success'
         )
-        expect(Reflect.get(settings, 'listeners').size).toBe(0)
+        expect(state.listeners.size).toBe(0)
         expect(vi.getTimerCount()).toBe(0)
       } finally {
         vi.useRealTimers()
@@ -305,7 +336,7 @@ describe('direct goal settings application', () => {
       retained: 1
     }
   ])('$name', async ({ writes, observed, query, ok, retained }) => {
-    const { adapter, apply, goal, settings } = await fixture(10)
+    const { adapter, apply, goal, settings, state } = await fixture(10)
     vi.useFakeTimers()
     try {
       apply('S', 'medium')
@@ -313,15 +344,14 @@ describe('direct goal settings application', () => {
         settings.attempt(write)
       }
       apply(observed[0], observed[1])
-      expect(Reflect.get(settings, 'pending').size).toBe(retained)
+      expect(state.pending.size).toBe(retained)
       const result = goal(query[0], query[1])
       if (!ok) {
         await vi.advanceTimersByTimeAsync(10)
       }
       expect(await result).toMatchObject({ ok })
-      expect(Reflect.get(settings, 'listeners').size).toBe(0)
+      expect(state.listeners.size).toBe(0)
       expect(vi.getTimerCount()).toBe(0)
-      expect(Reflect.get(settings, 'listeners').size).toBe(0)
     } finally {
       vi.useRealTimers()
       await adapter.closeAll()
@@ -335,19 +365,25 @@ describe('direct goal settings application', () => {
   )(
     'bounds actual unresolved evidence/trigger work at $n $pattern controls and clears recovery/end',
     async ({ n, pattern }) => {
-      const { codex, adapter, apply, settings } = await fixture(10)
+      const { codex, adapter, apply, settings, state } = await fixture(10)
       vi.useFakeTimers()
       try {
         apply('S', 'medium')
-        const pending = Reflect.get(settings, 'pending')
-        if (!(pending instanceof Set)) {
-          throw new Error('missing pending set')
-        }
+        const pending = state.pending
         let fields = 0,
           visits = 0
         const add = pending.add.bind(pending)
         vi.spyOn(pending, 'add').mockImplementation((write) => {
-          const { model, effort } = write
+          if (typeof write !== 'object' || write === null) {
+            throw new Error('invalid settings attempt')
+          }
+          const { model, effort } = readRecord(write)
+          if (
+            (model !== undefined && typeof model !== 'string') ||
+            (effort !== undefined && effort !== null && typeof effort !== 'string')
+          ) {
+            throw new Error('invalid settings projection')
+          }
           Object.defineProperties(write, {
             model: {
               get: () => {
@@ -400,7 +436,7 @@ describe('direct goal settings application', () => {
         const q = { model: 'unique-final-C', effort: 'high' }
         const install = settings.install(codex.connections[0], 'thread-abc', q, 10)
         await Promise.resolve()
-        expect(Reflect.get(settings, 'listeners').size).toBe(1)
+        expect(state.listeners.size).toBe(1)
         expect(vi.getTimerCount()).toBe(1)
         fields = 0
         visits = 0
@@ -422,7 +458,7 @@ describe('direct goal settings application', () => {
         })
         expect(codex.connections[0].calls).toHaveLength(calls)
         expect({ fields, visits }).toEqual({ fields: 0, visits: 0 })
-        expect(Reflect.get(settings, 'listeners').size).toBe(0)
+        expect(state.listeners.size).toBe(0)
         expect(vi.getTimerCount()).toBe(0)
         for (let i = 0; i < n; i++) {
           settings.attempt({ model: `unended-${i}` })
@@ -442,8 +478,8 @@ describe('direct goal settings application', () => {
           retainedAfterProof: 0,
           retainedAtEnd: pending.size
         })
-        expect(Reflect.get(settings, 'snapshot')).toEqual({})
-        expect(Reflect.get(settings, 'listeners').size).toBe(0)
+        expect(state.snapshot).toEqual({})
+        expect(state.listeners.size).toBe(0)
         expect(vi.getTimerCount()).toBe(0)
       } finally {
         vi.useRealTimers()
@@ -453,7 +489,7 @@ describe('direct goal settings application', () => {
   )
 
   it('keeps an earlier unknown token when a retry reuses the same choice object and is definitely rejected', async () => {
-    const { codex, adapter, apply, settings } = await fixture(10)
+    const { codex, adapter, apply, settings, state } = await fixture(10)
     apply('S', 'medium')
     const choice = { model: 'B', effort: 'high' }
     settings.attempt(choice)
@@ -463,12 +499,12 @@ describe('direct goal settings application', () => {
     expect(await settings.install(codex.connections[0], 'thread-abc', choice, 10)).toMatchObject({
       ok: false
     })
-    expect(Reflect.get(settings, 'pending').size).toBe(1)
+    expect(state.pending.size).toBe(1)
     await adapter.closeAll()
   })
 
   it('bounds an acknowledged but unapplied update, and cancels its waiter on connection end', async () => {
-    const { codex, adapter, goal, apply, settings } = await fixture(10)
+    const { codex, adapter, goal, apply, state } = await fixture(10)
     vi.useFakeTimers()
     try {
       const pending = goal('model-b', 'high')
@@ -478,7 +514,7 @@ describe('direct goal settings application', () => {
         rejected: expect.stringContaining('did not confirm')
       })
       expect(codex.connections[0].calls.some((r) => r.method === 'thread/goal/set')).toBe(false)
-      expect(Reflect.get(settings, 'listeners').size).toBe(0)
+      expect(state.listeners.size).toBe(0)
       expect(vi.getTimerCount()).toBe(0)
       apply('model-b', null)
       // Null is known provider state; an omitted effort is no override.
@@ -507,10 +543,7 @@ it('stops a settings wait as a definite pre-goal rejection without leaving an ac
     fence: 7,
     spawnToken: 'spawn'
   })
-  const settings = Reflect.get(adapter, 'sessions').get('session-1')?.appliedSettings
-  if (!(settings instanceof CodexAppliedSettings)) {
-    throw new Error('missing settings')
-  }
+  const state = acquiredSettingsTestSeam(adapter)
   vi.useFakeTimers()
   try {
     const signal = new AbortController()
@@ -527,9 +560,9 @@ it('stops a settings wait as a definite pre-goal rejection without leaving an ac
       ok: false,
       rejected: expect.stringContaining('This goal change was not sent.')
     })
-    expect(Reflect.get(settings, 'listeners').size).toBe(0)
+    expect(state.listeners.size).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
-    expect(Reflect.get(settings, 'pending').size).toBe(1)
+    expect(state.pending.size).toBe(1)
     codex.connections[0].handlers.onNotification?.('thread/settings/updated', {
       threadId: 'thread-abc',
       threadSettings: { model: 'new-model', effort: null }
