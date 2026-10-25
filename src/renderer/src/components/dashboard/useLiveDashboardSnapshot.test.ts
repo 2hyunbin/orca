@@ -129,6 +129,7 @@ describe('useLiveDashboardSnapshot', () => {
       Omit<Parameters<typeof buildDashboardSnapshot>[0], 'ptyProcessMetadataById'>
     >().not.toExtend<Parameters<typeof buildDashboardSnapshot>[0]>()
     vi.stubGlobal('navigator', { userAgent: 'Windows' })
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(NOW)
     try {
       seed({ tabAutoGenerateTitle: false })
       useAppStore.setState({
@@ -140,7 +141,7 @@ describe('useLiveDashboardSnapshot', () => {
       const before = useAppStore.getState()
       const rowsCache = createWorktreeAgentRowsCache()
       const options = { rowsCache, rowsGeneration: before.agentStatusEpoch }
-      const popoutBefore = buildDashboardSnapshot(before, Date.now(), options)
+      const popoutBefore = buildDashboardSnapshot(before, NOW, options)
       const { result } = renderHook(() => useLiveDashboardSnapshot())
       expect(result.current.cards).toHaveLength(1)
       expect(result.current.cards[0].ptyId).toBe('pty-1')
@@ -168,7 +169,7 @@ describe('useLiveDashboardSnapshot', () => {
       expect(after.tabsByWorktree).toBe(before.tabsByWorktree)
       expect(after.agentStatusByPaneKey).toBe(before.agentStatusByPaneKey)
       expect(after.terminalLayoutsByTabId).toBe(before.terminalLayoutsByTabId)
-      const popoutAfter = buildDashboardSnapshot(after, Date.now(), options)
+      const popoutAfter = buildDashboardSnapshot(after, NOW, options)
       expect(result.current.cards).toHaveLength(1)
       expect(result.current.cards[0].ptyId).toBe('pty-1')
       expect(result.current.cards[0].terminalInput).toMatchObject({
@@ -181,6 +182,7 @@ describe('useLiveDashboardSnapshot', () => {
       expect(rowsCache.lastComputedWorktreeIds).toEqual([])
       expect(rowsCache.byWorktree.get('wt-1')).toBe(cachedRows)
     } finally {
+      clock.mockRestore()
       vi.unstubAllGlobals()
     }
   })

@@ -102,7 +102,15 @@ describe('buildDashboardSnapshot rows cache', () => {
     try {
       const { dashboardSnapshotInputsChanged } = await import('./useDashboardPopoutBridge')
       const cache = createWorktreeAgentRowsCache()
-      const state = { ...baseState(), agentStatusEpoch: 1, ptyProcessMetadataById: {} }
+      const state = {
+        ...baseState(),
+        activeRepoId: 'r1',
+        activeWorkspaceExecutionHostId: 'local',
+        activeWorktreeId: 'w1',
+        projects: [],
+        agentStatusEpoch: 1,
+        ptyProcessMetadataById: {}
+      } satisfies Parameters<typeof dashboardSnapshotInputsChanged>[0]
       state.tabsByWorktree.w1[0].shellOverride = 'wsl.exe'
       const before = buildDashboardSnapshot(state, NOW, { rowsCache: cache, rowsGeneration: 1 })
       expect(before.cards.find((card) => card.tabId === 'tab1')?.terminalInput).toMatchObject({
