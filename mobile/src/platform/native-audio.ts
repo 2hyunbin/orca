@@ -76,7 +76,7 @@ type Capture = {
   readonly ring: NativeAudioRing
   readonly stopListening: () => void
   recording: boolean
-  // Keep one pending interruption; all end capture alike, and a queue could replay stale state.
+  // Keep only the latest pending interruption so reads cannot replay stale OS state.
   interruption: BridgeAudioInterruption | null
 }
 
