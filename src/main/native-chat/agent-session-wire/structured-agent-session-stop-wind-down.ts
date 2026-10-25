@@ -44,7 +44,9 @@ export async function endStoppedStructuredAgentSession(
       await ctx.adapter
         .awaitStoppedRequestEnd?.(ctx.sessionId, windDown.stoppedAt)
         .catch((error: unknown) => {
-          windDown.outcome?.errors.push(error)
+          if (windDown.outcome?.errors.length === 0) {
+            windDown.outcome.errors.push(error)
+          }
           onError(error)
         })
     }
@@ -52,7 +54,9 @@ export async function endStoppedStructuredAgentSession(
     await windDown.stopNoteWrite?.catch(onError)
   } catch (error) {
     onError(error)
-    windDown.outcome?.errors.push(error)
+    if (windDown.outcome?.errors.length === 0) {
+      windDown.outcome.errors.push(error)
+    }
     failedOn = structuredAgentSessionFailedStopMark(
       contextStructuredAgentSessionCurrentWork(ctx),
       ctx.journal

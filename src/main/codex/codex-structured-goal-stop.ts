@@ -53,6 +53,7 @@ export async function stopCodexGoal(input: {
       if (
         codexMethodUnavailable(error, 'thread/goal/get') ||
         (isCodexAppServerRequestError(error) &&
+          error.method === 'thread/goal/get' &&
           /(?:^|: )goals feature is disabled[.!]?$/i.test(error.message))
       ) {
         facts.pause = 'not-needed'

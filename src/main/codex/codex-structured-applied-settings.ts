@@ -14,6 +14,7 @@ export function codexMethodUnavailable(error: unknown, method: string): boolean 
   }
   return (
     isCodexAppServerRequestError(error) &&
+    error.method === method &&
     (error.code === -32601 ||
       (error.message.includes(method) &&
         /(?:method|capability).*(?:unavailable|unsupported|not found)/i.test(error.message)))

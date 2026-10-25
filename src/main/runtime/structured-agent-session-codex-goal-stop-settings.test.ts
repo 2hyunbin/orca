@@ -217,9 +217,76 @@ it.each([null, 'complete'] as const)(
   }
 )
 
+it.each(['disabled', 'unavailable'] as const)(
+  'keeps an initially %s goal read inapplicable',
+  async (mode) => {
+    const child = codexScriptedChild({
+      'thread/goal/get': () => {
+        throw new CodexAppServerRequestError(
+          'thread/goal/get',
+          mode === 'disabled' ? -32600 : -32601,
+          mode === 'disabled' ? 'goals feature is disabled' : 'Method not found'
+        )
+      }
+    })
+    const host = await openChat(child)
+    expect(await stop(host)).toMatchObject({ ok: true })
+    await settleStop(host)
+    expect(
+      child
+        .requests()
+        .filter((r) => r.method.startsWith('thread/goal/'))
+        .map((r) => r.method)
+    ).toEqual(['thread/goal/get'])
+    expect(child.closes()).toBe(1)
+    expect(await rows(host)).not.toContain(COPY.pauseUnconfirmed)
+    expect(await rows(host)).not.toContain(COPY.stopUnconfirmed)
+  }
+)
+
+it.each(['no-observer', 'replacement'] as const)(
+  'keeps missing captured-close evidence unproven for %s',
+  async (mode) => {
+    const child = codexScriptedChild({ 'thread/goal/get': () => ({ goal: null }) })
+    const host = await openChat(child)
+    const session = host.collaboratorsForTests().sessions.get(SESSION)!
+    const captured = session.child!
+    const cancel = host.deps.adapter.cancelTurn.bind(host.deps.adapter)
+    let outcome: Awaited<ReturnType<typeof cancel>>['stop']
+    vi.spyOn(host.deps.adapter, 'cancelTurn').mockImplementation(async (input) => {
+      const result = await cancel(input)
+      outcome = result.stop
+      if (mode === 'replacement') {
+        session.child = { ...captured, generation: 'replacement', close: undefined }
+      }
+      return result
+    })
+    const dispose = vi.spyOn(host.deps.adapter, 'disposeSession').mockResolvedValue(true)
+    expect(await stop(host)).toMatchObject({ ok: true })
+    await settleStop(host)
+    expect(outcome).toMatchObject({
+      pause: 'acknowledged',
+      root: 'unproven',
+      workload: 'unproven',
+      errors: []
+    })
+    expect(await rows(host)).toContain(COPY.stopUnconfirmed)
+    if (mode === 'replacement') {
+      expect(dispose).not.toHaveBeenCalled()
+      expect(session.child).toMatchObject({ generation: 'replacement' })
+      expect(session.child?.close).toBeUndefined()
+      session.child = captured
+    } else {
+      expect(dispose).toHaveBeenCalledOnce()
+    }
+  }
+)
+
 it.each([
   'pause',
   'first-pause',
+  'unavailable-pause',
+  'disabled-pause',
   'interrupt',
   'disabled-interrupt',
   'workload',
@@ -245,6 +312,13 @@ it.each([
         return { goal: { status: 'active' } }
       },
       'thread/goal/set': () => {
+        if (failure === 'unavailable-pause' || failure === 'disabled-pause') {
+          throw new CodexAppServerRequestError(
+            'thread/goal/set',
+            failure === 'unavailable-pause' ? -32601 : -32600,
+            failure === 'disabled-pause' ? 'goals feature is disabled' : 'Method not found'
+          )
+        }
         if (
           failure === 'pause' ||
           failure === 'note' ||
@@ -254,7 +328,9 @@ it.each([
         }
         return { goal: { status: 'paused' } }
       },
-      ...(failure === 'named-root' ? { 'turn/interrupt': () => ({}) } : {}),
+      ...(['named-root', 'unavailable-pause', 'disabled-pause'].includes(failure)
+        ? { 'turn/interrupt': () => ({}) }
+        : {}),
       ...(failure === 'interrupt' || failure === 'disabled-interrupt'
         ? {
             'turn/interrupt': () => {
@@ -264,7 +340,13 @@ it.each([
         : {})
     })
     const host = await openChat(child)
-    if (failure === 'interrupt' || failure === 'disabled-interrupt' || failure === 'named-root') {
+    if (
+      failure === 'interrupt' ||
+      failure === 'disabled-interrupt' ||
+      failure === 'named-root' ||
+      failure === 'unavailable-pause' ||
+      failure === 'disabled-pause'
+    ) {
       child.notify('turn/started', { threadId: THREAD, turn: { id: 'autonomous' } })
     }
     if (failure === 'workload') {
@@ -306,10 +388,22 @@ it.each([
       expect(await stopCurrent(host)).toMatchObject({ ok: true })
       await settleStop(host)
       expect(await rows(host)).toContain(
-        failure === 'pause' || failure === 'first-pause'
+        failure === 'pause' ||
+          failure === 'first-pause' ||
+          failure === 'unavailable-pause' ||
+          failure === 'disabled-pause'
           ? COPY.pauseUnconfirmed
           : COPY.stopUnconfirmed
       )
+      if (failure === 'unavailable-pause' || failure === 'disabled-pause') {
+        expect(
+          child
+            .requests()
+            .filter((r) => r.method.startsWith('thread/goal/'))
+            .map((r) => r.method)
+        ).toEqual(['thread/goal/get', 'thread/goal/set', 'thread/goal/get', 'thread/goal/set'])
+        expect(child.requests().filter((r) => r.method === 'turn/interrupt')).toHaveLength(1)
+      }
       if (rootFailure) {
         expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.close).toBeDefined()
         const before = (await host.journalSnapshot(SESSION)).items.filter(
@@ -319,8 +413,45 @@ it.each([
         const firstOutcome = host.collaboratorsForTests().sessions.get(SESSION)?.child
           ?.close?.stopOutcome
         const controls = child.requests().length
-        expect(await stopCurrent(host)).toMatchObject({ ok: true })
-        await settleStop(host)
+        const firstErrors = firstOutcome?.errors.slice()
+        const attempts = failure === 'root' ? 100 : 1000
+        const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+        const appended = vi.spyOn(journal, 'appendLifecycleBatch')
+        const logged = vi.spyOn(host.deps.logger, 'warn').mockImplementation(() => {})
+        const operations = new Set<string>()
+        for (let retry = 0; retry < attempts; retry++) {
+          const request = {
+            envelope: envelope(
+              host,
+              'agentSession.cancel',
+              failure === 'named-root' ? { turnId: 'autonomous' } : {}
+            ),
+            ...(failure === 'named-root' ? { turnId: 'autonomous' } : {})
+          }
+          operations.add(request.envelope.clientOperationId)
+          expect(await host.cancel(CALLER, request)).toMatchObject({ ok: true, replayed: false })
+          await settleStop(host)
+          expect(
+            host.deps.store.readCommandReceipt(
+              { kind: 'caller', callerKey: CALLER.callerKey },
+              request.envelope.clientOperationId
+            ).verdict
+          ).toBe('readable')
+          expect(firstOutcome?.errors).toEqual(firstErrors)
+          expect(firstOutcome?.errors[0]).toBe(firstErrors?.[0])
+        }
+        expect(operations.size).toBe(attempts)
+        const settlements = appended.mock.calls
+          .map(([batch]) => batch.settlementId)
+          .filter((id) => id.startsWith('stop-outcome:'))
+        expect(new Set(settlements).size).toBe(attempts)
+        expect(
+          logged.mock.calls.filter(
+            ([message]) => message === "ending a stopped chat's provider session failed"
+          )
+        ).toHaveLength(attempts)
+        expect(firstErrors).toHaveLength(1)
+        expect(firstErrors?.[0]).toMatchObject({ method: 'thread/goal/set', message: 'refused' })
         expect((await rows(host)).filter((text) => text === COPY.stopUnconfirmed)).toHaveLength(1)
         expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.close?.stopOutcome).toBe(
           firstOutcome
@@ -340,12 +471,13 @@ it.each([
           root: 'exited',
           workload: 'exited'
         })
-        expect(firstOutcome?.errors.length).toBeGreaterThan(0)
+        expect(firstOutcome?.errors).toEqual(firstErrors)
       } else {
         expect(child.closes()).toBe(1)
       }
     }
-  }
+  },
+  60_000
 )
 
 it('pauses before resolving an autonomous turn and interrupts before the final goal read', async () => {
