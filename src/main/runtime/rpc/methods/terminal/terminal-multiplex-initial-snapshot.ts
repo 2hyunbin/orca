@@ -1,5 +1,4 @@
 import {
-  DESKTOP_PAIRED_SNAPSHOT_DEPTH,
   isTerminalSnapshotForcedUnavailable,
   sendSnapshotFrames,
   serializeBudgetedMobileSnapshot
@@ -30,8 +29,7 @@ export async function publishMultiplexInitialSnapshot(
   const forcedInitialSnapshotTruncated =
     process.env.ORCA_E2E_FORCE_REMOTE_TERMINAL_INITIAL_SNAPSHOT_TRUNCATED === '1'
   let read = await runtime.readTerminal(request.terminal)
-  const depth = isMobile ? undefined : DESKTOP_PAIRED_SNAPSHOT_DEPTH
-  let serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId, undefined, depth)
+  let serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
   if (!isMultiplexStreamAttached(state, stream)) {
     return null
   }
@@ -41,7 +39,7 @@ export async function publishMultiplexInitialSnapshot(
     stream.pendingOutputBytes = 0
     stream.pendingOutputOverflowed = false
     read = await runtime.readTerminal(request.terminal)
-    serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId, undefined, depth)
+    serialized = await serializeBudgetedMobileSnapshot(runtime, ptyId)
     if (!isMultiplexStreamAttached(state, stream)) {
       return null
     }
