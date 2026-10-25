@@ -1,8 +1,6 @@
 name: Mobile Android Release
 
-# Why a separate workflow from iOS: iOS releases go through App Store review,
-# which can take days. Decoupling the triggers lets an Android release ship
-# immediately without waiting on iOS, and vice versa.
+# Release Android independently so App Store review cannot block its shipping cadence.
 on:
   push:
     tags:
@@ -23,10 +21,7 @@ jobs:
   android-build:
     runs-on: ubuntu-latest
 
-    # Why: the "Create GitHub Release" step below uses the default GITHUB_TOKEN
-    # to call `gh release create`, which requires contents:write. Without this,
-    # the job builds the APK fine but fails at release time with
-    # "HTTP 403: Resource not accessible by integration".
+    # Grant contents:write for gh release create; build success alone does not authorize publication.
     permissions:
       contents: write
 
@@ -75,10 +70,7 @@ jobs:
       - name: Build Android release APK
         run: cd android && ./gradlew assembleRelease
 
-      # Why: an install that fails with a missing certificate or a package-parse error is
-      # usually a download that died near the end, and the signature block sits in the last
-      # ~100 KB. Publishing the size and digest is what lets a reporter tell a truncated
-      # download apart from a bad build without anyone re-deriving them from the asset.
+      # Publish size/digest to distinguish truncated downloads (missing tail signature block) from bad APK builds.
       - name: Checksum the APK
         id: apk
         run: |
@@ -222,8 +214,7 @@ jobs:
               "${{ steps.apk.outputs.checksum }}"
           fi
 
-  # Why a separate job: the release is already published here, so a failed bump only leaves
-  # the site's APK download on the previous release and must not fail the release run.
+  # Keep site bump advisory after publication; failure only leaves its download link on the prior APK.
   bump-apk-download:
     needs: android-build
     if: needs.android-build.outputs.publish_release == 'true'

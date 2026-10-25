@@ -1,22 +1,6 @@
 name: Cut Release
 
-# Why: single entry point for manually cutting releases.
-# Replaces the old local `pnpm release:*` scripts and the standalone scheduled
-# RC workflow so releases are always reproducible from CI and can never be
-# accidentally tagged against an uncommitted or non-main working tree.
-#
-# Flow:
-#   1. Resolve `ref` to a SHA.
-#   2. Read the latest stable release from GitHub.
-#   3. Compute the next version from `kind` (rc | patch | minor | major).
-#   4. For stable kinds, REFUSE if the new version is <= the latest stable.
-#      This is the only guard electron-updater actually needs — it compares
-#      semver within a channel, so a regressing "latest" is the one thing
-#      that breaks auto-update for fresh installs.
-#   5. Write package.json, commit (detached), tag, push tag.
-#   6. If ref was the tip of origin/main, try to fast-forward its version;
-#      a pull-request-only rule leaves main unchanged and still pushes the tag.
-#   7. Build and publish artifacts from the tag.
+# Resolve ref/latest stable, compute next kind, reject stable version regression, commit/tag detached and build/publish from tag. Fast-forward main’s version only when source was its tip and policy permits; PR-only rules leave main unchanged. CI replaces local/scheduled release paths to avoid accidental working-tree releases.
 
 on:
   workflow_dispatch:
@@ -61,10 +45,7 @@ concurrency:
 
 jobs:
   cut:
-    # Why: this job bumps package.json and fast-forwards main. On a fork with
-    # Actions enabled, the scheduled cut would run against the fork's main and
-    # diverge it (version line) every slot, conflicting every PR back upstream.
-    # Gate to the canonical repo so the workflow no-ops on forks.
+    # Limit version/tag mutations to canonical repo; fork schedules must not diverge their main and conflict upstream.
     if: github.repository == 'stablyai/orca'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -81,13 +62,7 @@ jobs:
       source_short_sha: ${{ steps.resolve.outputs.short_sha }}
       ships_orcad_template: ${{ steps.orcad-template-support.outputs.ships }}
     steps:
-      # Why inlined (not m-s-abeer/update-gha-summary-with-workflow-inputs):
-      # this job runs with contents:write and secret scope, so avoid executing
-      # any external (mutable @v1) action here. Surfaces every
-      # workflow_dispatch input as a table for audit; the resolved commit /
-      # branch / tag enrichment is written later in "Resolve ref SHA".
-      # Inputs are passed as JSON via env and parsed by jq as data — never
-      # interpolated into the shell — to avoid injection from dispatch values.
+      # Render dispatch audit summary locally rather than run mutable external action beside write token/secrets; parse env JSON with jq as data.
       - name: Summarize workflow inputs
         if: github.event_name == 'workflow_dispatch'
         env:
@@ -110,9 +85,7 @@ jobs:
           fetch-depth: 0
           # Version recovery needs complete history and tags, but not historical file contents.
           filter: blob:none
-          # Why: version math recovers unpublished tags; checkout's default
-          # fetch-tags:false hides them, so a patch cut recreates vX.Y.Z and
-          # `git push` overwrites the existing tag.
+          # Fetch unpublished tags for version recovery; hidden tags can recreate/overwrite an existing version.
           fetch-tags: true
 
       # Why: a relay-era ref (before #27215) needs the Windows relay addon this build no longer compiles.
@@ -138,9 +111,7 @@ jobs:
       - name: Resolve ref SHA
         id: resolve
         env:
-          # Why: keep the caller's ref as data (env) so we can label it in the
-          # summary without shell-interpolating a dispatch-controlled string
-          # into the script body.
+          # Keep caller ref in env data so summary labels cannot inject shell.
           INPUT_REF: ${{ github.event_name == 'schedule' && 'main' || inputs.ref }}
           REPO: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
@@ -334,8 +305,7 @@ jobs:
 
       - name: Publish complete release-cut RC drafts from prior runs
         id: publish_drafts
-        # Why: a manual RC dispatch should unstick any complete RC draft before
-        # deciding whether to cut another tag.
+        # Recover complete RC drafts before deciding whether manual dispatch needs another tag.
         if: steps.window.outputs.allowed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -343,9 +313,7 @@ jobs:
 
       - name: Compute next version
         id: version
-        # Why: if an RC run only had complete drafts to publish, stop there
-        # instead of immediately cutting another RC after the recovered one.
-        # Stable dispatches should still cut the requested stable release.
+        # Stop after RC-only draft recovery; stable dispatch still cuts its requested version.
         if: steps.window.outputs.allowed == 'true' && steps.existing.outputs.already_ran != 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) && !((github.event_name == 'schedule' || inputs.kind == 'rc') && steps.publish_drafts.outputs.published_count != '0' && steps.publish_drafts.outputs.skipped_count == '0')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -924,10 +892,7 @@ jobs:
           npm install -g node-gyp@11.5.0
           echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
 
-      # Why: this install runs lifecycle scripts, so node-gyp rebuilds
-      # native/windows-registry and fetches that Node version's headers from
-      # nodejs.org. One `read ECONNRESET` there failed this blocking gate and the
-      # whole cut. Retry like the release build's install below.
+      # Retry node-gyp header fetch ECONNRESET so transient install failures cannot fail the whole release.
       - name: Install dependencies
         uses: nick-fields/retry@v4
         with:
@@ -939,10 +904,7 @@ jobs:
       - name: Build Electron app for platform golden
         run: npx electron-vite build --mode e2e
 
-      # Why: this job is defined on the dispatch ref (usually main) but checks
-      # out the release tag. Cherry-pick / hotfix tags can predate a golden
-      # script that main already calls; --if-present keeps those cuts green
-      # instead of failing with ERR_PNPM_NO_SCRIPT.
+      # Use --if-present for golden scripts absent from older hotfix/cut tags, despite newer dispatch YAML.
       - name: Run terminal rendering golden on Linux
         if: runner.os == 'Linux'
         run: |
@@ -1186,9 +1148,7 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Design D2: every desktop build ships the orcad template (server JS plus every target's
-  # addons), merged from the node-server lanes that qualified each slot at this tag. It needs no
-  # signing quota, so it runs beside the release gates instead of behind them.
+  # Build every target’s qualified orcad slot at the tag beside release gates; unsigned template consumes no signing quota.
   orcad-template:
     needs: cut
     if: needs.cut.outputs.should_release == 'true' && needs.cut.outputs.ships_orcad_template == 'true'
@@ -1200,9 +1160,7 @@ jobs:
       ref: refs/tags/${{ needs.cut.outputs.tag }}
       fast_runners: false
 
-  # Why: artifact jobs submit Windows binaries to SignPath. Keep every
-  # quota-consuming build behind all blocking release gates so a late test
-  # failure cannot create signing requests that can never be published.
+  # Gate SignPath artifact requests behind blocking tests to avoid approvals for unpublishable builds.
   release-preflight:
     needs:
       - cut
@@ -1285,9 +1243,7 @@ jobs:
               ~/.cache/electron-builder
 
     runs-on: ${{ matrix.os }}
-    # Why: hosted runners hard-cap jobs at 6h; the Windows SignPath waits
-    # (1h inner + 4h installer) are budgeted to fit under this with the
-    # build itself, so a slow approval can't kill the job mid-flow.
+    # Fit 1h inner+4h installer SignPath waits and build under hosted runner’s 6h cap.
     timeout-minutes: 360
 
     permissions:
@@ -1310,16 +1266,9 @@ jobs:
           echo "Windows artifact/signing steps are disabled on reruns (attempt $GITHUB_RUN_ATTEMPT)."
           echo "Existing signed release assets must be reused; dispatch a fresh release only when a rebuild is required." >> "$GITHUB_STEP_SUMMARY"
 
-      # Why: `uses: ./…` resolves from the checked-out tag, not from the workflow
-      # ref, so cutting from an older/off-main ref whose tree predates a composite
-      # action would fail the step with "Can't find 'action.yml'". Restore the
-      # actions directory from the commit this workflow file itself came from.
-      # Not Windows-only: every platform now consumes install-mobile-dependencies, so
-      # any of them can be the one whose cut ref predates the action.
+      # Restore composite actions from workflow commit: uses:./ resolves checked-out tag, which may predate mobile/dependency actions.
       - name: Restore draft-publish scripts from the workflow ref
-        # Why: this job checks out the release tag, so a cut from an older SHA
-        # still has electron-builder releaseType:release and no re-draft helper.
-        # The workflow YAML is from main; restore the scripts it invokes.
+        # Restore current workflow helper scripts when old cut tags still publish live and lack re-draft support.
         shell: bash
         env:
           WORKFLOW_SHA: ${{ github.workflow_sha }}
@@ -1370,23 +1319,14 @@ jobs:
             pnpm-lock.yaml
             mobile/pnpm-lock.yaml
 
-      # Why: release builds hit the same native-module postinstall path as
-      # PR CI, so keep the pinned node-gyp override here too instead of
-      # relying on pnpm's bundled copy. Scoped to Linux via runner.os (not
-      # a specific matrix image) because the failing postinstall has only
-      # been observed on Linux runners — see run 25081763129. The macOS
-      # and Windows release jobs exercise the same pnpm install path and
-      # have not reproduced it, so keep the gate narrow until we know why.
-      # Using runner.os instead of matrix.os == 'ubuntu-latest' means the
-      # gate still works if another Linux matrix entry is added later.
+      # Override non-executable pnpm node-gyp only on Linux (run 25081763129); runner.os keeps future Linux entries covered.
       - name: Use external node-gyp to avoid pnpm's bundled copy (Linux only)
         if: runner.os == 'Linux'
         run: |
           npm install -g node-gyp@11.5.0
           echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >> "$GITHUB_ENV"
 
-      # Cache the Electron binary + electron-builder tool downloads
-      # (winCodeSign, nsis, squirrel, AppImage). Saves ~30-90s per job.
+      # Cache Electron and builder downloads (winCodeSign/NSIS/Squirrel/AppImage), saving ~30–90s per job.
       - name: Cache electron-builder downloads
         uses: actions/cache@v5
         with:
@@ -1405,12 +1345,7 @@ jobs:
           # The release cache above restores the same tools, so this only needs to save on a miss.
           lookup-only: true
 
-      # Why: pnpm install triggers electron's postinstall, which downloads the
-      # Electron binary from GitHub release assets. GitHub's download CDN
-      # occasionally returns 504s that fail the whole release. Retry on
-      # failure so transient network errors don't require a manual re-run.
-      # Why host-only: this job packages only for its own runner OS and
-      # architecture, so the default host-scoped install is deliberate.
+      # Retry transient Electron CDN 504s during install; keep host-scoped native dependencies for this platform’s package.
       - name: Install dependencies
         uses: nick-fields/retry@v4
         with:
@@ -1419,28 +1354,15 @@ jobs:
           retry_wait_seconds: 30
           command: pnpm install --frozen-lockfile
 
-      # Why here: electron-builder's beforePack requires out/mobile-web, and the bundle
-      # build resolves React Native and Expo from mobile/node_modules.
+      # Build required out/mobile-web from mobile’s React Native/Expo dependencies.
       - uses: ./.github/actions/install-mobile-dependencies
 
-      # Why: `pnpm build:release` verifies the Linux computer-use provider by
-      # importing AT-SPI bindings, which are runtime package deps but are not
-      # present on stock GitHub Ubuntu release runners.
-      # Why: `rpm` is needed by electron-builder's fpm backend to produce the
-      # .rpm artifact. Stock Ubuntu runners do not ship it.
+      # Install AT-SPI runtime bindings for Linux provider verification and rpm for builder’s fpm backend; stock Ubuntu lacks them.
       - name: Install Linux computer-use provider dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool rpm
 
-      # Why: telemetry's transport gate (`src/main/telemetry/client.ts:IS_OFFICIAL_BUILD`)
-      # requires the build identity to be the literal string `stable` or `rc`,
-      # substituted by electron-vite's `define` block at build time. Derive
-      # that identity from the release tag here — `stable` for plain semver
-      # (`vX.Y.Z`), `rc` for prerelease (`vX.Y.Z-rc.N`). The strict regex is
-      # a safety net: this workflow only fires on cut-tags that already match
-      # one of those shapes, but if a future change ever loosens that, we
-      # refuse to ship rather than let an unclassified build go out with
-      # `BUILD_IDENTITY = null`.
+      # Derive literal stable/rc telemetry identity from strict tag shape; refuse unclassified builds rather than ship silent null identity (#1385 follow-up).
       - name: Classify release tag for telemetry build identity
         id: tag-classify
         shell: bash
@@ -1462,10 +1384,7 @@ jobs:
           echo "identity=$identity" >>"$GITHUB_OUTPUT"
           echo "Classified $TAG as $identity"
 
-      # Why an explicit step rather than trusting the runner image: the packaged
-      # CLI launcher is a native Rust binary, and a Windows host without cargo
-      # fails deep inside electron-builder's native hook instead of here. Real
-      # Windows dev machines do not have it by default either.
+      # Require cargo before builder invokes the packaged Rust launcher hook.
       - name: Ensure the Rust toolchain for the Windows CLI launcher
         if: matrix.platform == 'win'
         shell: pwsh
@@ -1519,10 +1438,7 @@ jobs:
           node config/scripts/runtime-file-watcher-fault-harness.mjs
           ELECTRON_RUN_AS_NODE=1 pnpm exec electron config/scripts/runtime-file-watcher-fault-harness.mjs
 
-      # Why: main ships minified with sourcemap:'hidden' and packaging drops
-      # out/**/*.map from app.asar, so a crash trace from a released build is
-      # otherwise undecodable. The main bundle is platform-independent, so one
-      # leg publishes the maps for the whole release.
+      # Publish hidden main sourcemaps separately because app.asar drops maps; one platform suffices for platform-independent main bundle.
       - name: Bundle main-process source maps
         id: bundle-main-sourcemaps
         if: matrix.platform == 'linux-x64'
@@ -1596,16 +1512,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # The release command prepares and verifies this host's Electron native modules first.
           ORCA_REUSE_PREPARED_NATIVE_RUNTIME: '1'
-          # Why: the NSIS uninstaller only exists inside electron-builder's
-          # uninstaller pass, which deletes it right after embedding it. The sign
-          # hook in config/scripts/windows-uninstaller-signing.cjs copies it out
-          # here so it can ride the inner-binaries SignPath request below.
-          # Why runner.temp and never the workspace: `files` in
-          # config/electron-builder.config.cjs is all-negation, so app-builder
-          # prepends `**/*` and packs whatever is left in the checkout root. This
-          # step retries up to 3 times; attempt 1 writes the file after packing,
-          # but attempts 2 and 3 would then pack the unsigned uninstaller into
-          # app.asar - the exact defect this chain exists to remove.
+          # Capture NSIS uninstaller in sign hook before builder embeds/deletes it, including it in inner-binary signing. Keep capture under runner.temp: all-negation files includes checkout leftovers, and retry would pack unsigned uninstaller into app.asar.
           ORCA_WIN_UNINSTALLER_EXPORT_PATH: ${{ runner.temp }}\uninstaller-signing\unsigned\orca-uninstaller.exe
 
       - name: Verify Windows node-pty ConPTY runtime
@@ -1630,18 +1537,9 @@ jobs:
         if: matrix.platform == 'win' && github.run_attempt == 1
         uses: ./.github/actions/install-signpath-module
 
-      # ── Windows inner-binary signing (issue #7785) ─────────────────────
-      # Why: SignPath cannot deep-sign inside NSIS installers, so inner PE
-      # files (Orca.exe, node-pty *.node, DLLs) are signed via a separate zip
-      # request, then the installer is rebuilt from the signed tree before the
-      # existing installer signing request below. The NSIS uninstaller rides
-      # this same request (it is the MDE update cluster: old-uninstaller.exe /
-      # Uninstall Orca.exe), captured through electron-builder's sign hook and
-      # swapped back in during the rebuild — no third approval wait. Production
-      # releases require the entire signing chain to succeed (#23383).
+      # #7785/#23383: sign inner PE zip, including captured NSIS uninstaller, then rebuild/sign installer; SignPath cannot deep-sign inside NSIS and this avoids a third approval.
 
-      # Why: only unsigned PE files go to SignPath. Files that already carry a
-      # valid signature (Microsoft's OpenConsole.exe) must keep their signer.
+      # Stage only unsigned PE files; preserve existing vendor signatures such as Microsoft OpenConsole.
       - name: Stage unsigned inner PE files for signing
         id: stage-inner
         if: matrix.platform == 'win' && github.run_attempt == 1
@@ -1822,9 +1720,7 @@ jobs:
           New-Item -ItemType Directory -Path signed-inner -Force
           Expand-Archive -Path signed-inner.zip -DestinationPath signed-inner -Force
 
-      # Why: copy back strictly by the staged list so a layout mismatch in the
-      # returned artifact fails before publication instead of silently
-      # shipping a mix of signed and unsigned binaries.
+      # Copy back only staged paths; layout mismatch must fail before mixed signed/unsigned assets ship.
       - name: Restore signed inner binaries into unpacked app
         id: restore-signed-inner
         if: matrix.platform == 'win' && github.run_attempt == 1 && steps.download-signed-inner.outcome == 'success'
@@ -1858,8 +1754,7 @@ jobs:
             throw "Signed inner artifact did not round-trip cleanly ($($failures.Count) failures)."
           }
 
-      # Why: SignPath rewrote the template's Windows binaries, and the client materializer checks
-      # each file against the template manifest, so it must record the signed bytes.
+      # Recompute template checksums after SignPath rewrites Windows binaries so materialization validates signed bytes.
       - name: Reseal the orcad template over its signed binaries
         id: reseal-orcad-template
         if: matrix.platform == 'win' && github.run_attempt == 1 && steps.restore-signed-inner.outcome == 'success' && needs.cut.outputs.ships_orcad_template == 'true'
@@ -1891,21 +1786,7 @@ jobs:
           Copy-Item -LiteralPath $signed.FullName -Destination (Join-Path $signedDir 'orca-uninstaller.exe') -Force
           Write-Host ("{0,-14} uninstaller  <{1}>" -f $signature.Status, $signature.SignerCertificate.Subject)
 
-      # Why this step exists: electron-builder's CopyElevateHelper re-copies a
-      # pristine elevate.exe from its download cache over resources\elevate.exe
-      # on EVERY nsis pack — including the --prepackaged rebuild below — which
-      # clobbered the SignPath signature in v1.4.129-rc.4. There is no supported
-      # way to disable just the copy, so we overwrite the cache's copy with our
-      # signed one (identical bytes plus signature) so the clobber becomes a
-      # no-op. Known quirk: the cache persists across releases via actions/cache,
-      # so later runs may see elevate.exe as already signed and skip staging it —
-      # that is fine (the signature is timestamped) and the evidence gate checks
-      # elevate.exe in the shipped installer unconditionally.
-      #
-      # The cache lookup lives in a script because the inline path this step used
-      # (`<cache>\nsis`) matches no app-builder-lib layout, and `SilentlyContinue`
-      # plus `exit 0` turned that miss into a green step — v1.4.193 and v1.4.194
-      # shipped an unsigned elevate.exe that way. A miss now fails the step.
+      # Builder recopies cached elevate.exe on every NSIS pack, clobbering signature in v1.4.129-rc.4; replace cache copy with signed bytes before rebuild. Persisted timestamped signatures may skip later staging; shipped-installer evidence still checks them. Scripted lookup fails missing cache paths: old nonexistent <cache>/nsis plus silent success shipped unsigned elevate.exe in v1.4.193/v1.4.194.
       - name: Replace cached elevate.exe with the signed copy
         id: sign-elevate-cache
         if: matrix.platform == 'win' && github.run_attempt == 1 && steps.restore-signed-inner.outcome == 'success'
@@ -2107,9 +1988,7 @@ jobs:
           }
           $signature.SignerCertificate | Format-List Subject,Issuer,NotBefore,NotAfter,Thumbprint
 
-      # Why: evidence gate for inner-binary signing (issue #7785, supersedes
-      # PR #7170's Orca.exe-only gate — this covers every staged .exe/.dll/.node
-      # by extracting the shipped installer). Unsigned binaries block publication.
+      # #7785 evidence extracts every staged exe/dll/node from shipped installer, superseding #7170’s Orca.exe-only gate; unsigned assets block publish.
       - name: Verify Windows inner binary signatures
         if: matrix.platform == 'win' && github.run_attempt == 1
         shell: pwsh
@@ -2329,28 +2208,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify release remains draft after artifact upload
-        # Why: electron-builder `--publish always` can create a public release
-        # as soon as this platform uploads. Re-draft immediately, then fail, so
-        # /releases/latest never keeps serving a missing Windows exe.
-        # Why bash: the Windows matrix defaults to pwsh, which does not expand
-        # "$TAG" into argv.
+        # Re-draft immediately if publish:always exposed a partial release, then fail so latest cannot keep missing Windows assets. Use bash for $TAG expansion.
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}
         run: node config/scripts/assert-github-release-is-draft.mjs "${{ needs.cut.outputs.tag }}"
 
-      # Why post-pack for Linux: electron-builder packs and uploads in one
-      # `--publish always` invocation. The previous step re-drafts if that
-      # upload flipped the GitHub release public; this telemetry check still
-      # blocks `publish-release` from undrafting a bad binary.
-      #
-      # Why this guards against: a misconfigured CI run where
-      # `ORCA_POSTHOG_WRITE_KEY` is unset or the tag fails to classify
-      # would otherwise produce a binary with `BUILD_IDENTITY = null` and
-      # `WRITE_KEY = null`, which silently disables transport
-      # (`IS_OFFICIAL_BUILD === false`) — the exact failure mode flagged
-      # in PR #1385's deferred follow-up.
+      # Check Linux telemetry after inseparable pack/upload, then block final undraft. Reject null identity/key transport from missing configuration (#1385); prior step re-drafts premature publication.
       - name: Verify telemetry constants present in app.asar
         run: node config/scripts/verify-telemetry-constants.mjs
 
@@ -2371,9 +2236,7 @@ jobs:
       needs.release-javascript.result == 'success' &&
       (needs.orcad-template.result == 'success' ||
         (needs.orcad-template.result == 'skipped' && needs.cut.outputs.ships_orcad_template == 'false'))
-    # Why: SignPath requires every job in this signing workflow to be
-    # GitHub-hosted. The actual mac build runs in release-mac-build.yml so
-    # Blacksmith stays outside Windows artifact provenance.
+    # Keep every SignPath workflow job GitHub-hosted; separate release-mac-build allows Blacksmith outside Windows provenance.
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -2496,22 +2359,14 @@ jobs:
           fi
 
       - name: Verify release assets complete
-        # Why: publish-release is the only intended draft -> published
-        # transition. Refuse to un-draft until every updater manifest and
-        # referenced installer asset is present on GitHub.
+        # Only undraft after every updater manifest and referenced installer exists.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}
         run: node config/scripts/verify-release-required-assets.mjs "$TAG"
 
       - name: Publish release
-        # Why: derive `--prerelease` from the tag shape (not from whatever
-        # electron-builder left the release flagged as). On 2026-04-27,
-        # electron-builder's publish step flipped `prerelease` back to
-        # `false` on -rc.N releases, which caused an RC to be marked as
-        # GitHub's "latest" release and broke release-cut.yml's math.
-        # Re-asserting here means the final release state is determined
-        # by the tag — a ground truth electron-builder can't rewrite.
+        # Reassert prerelease from tag: on 2026-04-27 builder flipped RC to false/latest and broke release math; builder output is not authoritative.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}

@@ -1,18 +1,4 @@
-﻿# Windows inner-binary signing rehearsal.
-#
-# Why: SignPath cannot deep-sign inside NSIS installers, so shipping signed
-# inner binaries (Orca.exe, node-pty *.node, DLLs — see issue #7785) requires
-# a two-request flow: sign the unpacked PE files first, then build the NSIS
-# installer from the signed tree, then sign the installer. The NSIS uninstaller
-# rides that same first request — it is captured through electron-builder's sign
-# hook and swapped back in during the rebuild — so it adds no third approval.
-# This workflow rehearses that entire flow from a branch, end to end, without
-# publishing anything — so the release pipeline on main is never at risk.
-#
-# Runs only via manual dispatch. Use the test-signing policy for iteration
-# (auto-approved test certificate) and release-signing to rehearse the
-# production flow (requires manual SignPath approvals). Rehearsed successfully
-# with test-signing (run 28987534795) and release-signing (run 28988432001).
+﻿# Rehearse #7785 inner-PE/uninstaller signing then rebuilt installer signing without publication. SignPath cannot deep-sign NSIS; captured uninstaller shares first request. Manual test-signing auto-approves; release-signing needs production review. Proven runs 28987534795/28988432001.
 name: Windows signing rehearsal
 
 on:
@@ -93,16 +79,11 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
-      # Why a full --win build and not --dir: the NSIS uninstaller only exists
-      # inside the installer build, and it is the file the MDE update cluster
-      # flags. --dir would never produce it, so the rehearsal would not rehearse
-      # the uninstaller leg at all. This mirrors release-cut's first Windows pass.
+      # Build full --win: --dir never creates the NSIS uninstaller needed for MDE evidence.
       - name: Package Windows app and export the NSIS uninstaller
         shell: pwsh
         env:
-          # runner.temp, never the workspace: the all-negation `files` list in
-          # config/electron-builder.config.cjs packs whatever is left in the
-          # checkout root into app.asar.
+          # Keep capture under runner.temp; all-negation files would include checkout leftovers in app.asar.
           ORCA_WIN_UNINSTALLER_EXPORT_PATH: ${{ runner.temp }}\uninstaller-signing\unsigned\orca-uninstaller.exe
         run: |
           node config/scripts/ensure-native-runtime.mjs --runtime=electron
@@ -116,9 +97,7 @@ jobs:
             throw "The sign hook did not export the NSIS uninstaller to $env:ORCA_WIN_UNINSTALLER_EXPORT_PATH"
           }
 
-      # Why: only unsigned PE files go to SignPath. Files that already carry a
-      # valid signature (Microsoft's OpenConsole.exe, signed vendor DLLs) must
-      # keep their original signer, so they are excluded from the request.
+      # Sign only unsigned PE files; retain vendor signatures such as Microsoft OpenConsole.
       - name: Stage unsigned PE files for inner signing
         id: stage-inner
         shell: pwsh
@@ -206,9 +185,7 @@ jobs:
           New-Item -ItemType Directory -Path signed-inner -Force
           Expand-Archive -Path signed-inner.zip -DestinationPath signed-inner -Force
 
-      # Why: copy back strictly by the staged list so a layout mismatch in the
-      # returned artifact fails loudly instead of silently shipping a mix of
-      # signed and unsigned binaries.
+      # Copy back strictly by staged list so mismatches fail instead of shipping mixed signing.
       - name: Restore signed inner binaries into unpacked app
         shell: pwsh
         env:
@@ -343,10 +320,7 @@ jobs:
           $latestYml = $latestYml -replace '(?m)^    blockMapSize: \d+$', "    blockMapSize: $($blockmap.Length)"
           Set-Content -Path 'dist/latest.yml' -Value $latestYml -NoNewline
 
-      # Why: this is the pass/fail heart of the rehearsal — the same evidence
-      # check that will later gate releases (see PR #7170). Test certificates
-      # do not chain to a trusted root, so Status=Valid is only required for
-      # release-signing runs; test-signing runs require a present signature.
+      # Use production evidence gate (#7170); require trusted Status=Valid only for release signing, signature presence for test certs.
       - name: Verify signatures end to end
         shell: pwsh
         env:
