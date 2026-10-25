@@ -205,7 +205,11 @@ async function readPane(page: Page, webTabId: string): Promise<PaneProbe> {
       banner:
         document
           .querySelector('[data-terminal-remote-runtime-reconnect-banner]')
-          ?.getAttribute('data-terminal-remote-runtime-reconnect-banner') ?? null
+          ?.getAttribute('data-terminal-remote-runtime-reconnect-banner') ??
+        document
+          .querySelector('[data-remote-server-outage-notice]')
+          ?.getAttribute('data-remote-server-outage-notice') ??
+        null
     }
   }, webTabId)
 }
