@@ -72,8 +72,7 @@ export function buildAgentStartupPlan(args: {
   }
   const launchCommand =
     agent === 'omp' ? withFreshOmpLaunch(baseCommand.command, shell) : baseCommand.command
-  // Why: a Hermes query launch splices agentArgs in itself, so its base command lacks them; the
-  // recorded command must still carry them like every other agent's or a resume drops them.
+  // Hermes query launches splice agentArgs themselves; record them anyway so a resume keeps them.
   const recordedCommand = usesQuery
     ? resolveAgentLaunchCommand({
         agent,

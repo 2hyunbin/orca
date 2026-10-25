@@ -56,7 +56,7 @@ describe('agent session resume metadata', () => {
     ['jcode', { sessionId: 'session_jc_2' }, { key: 'session_id', id: 'session_jc_2' }],
     [
       'hermes',
-      { session_id: '20261020_221305_5e3a1c', transcript_path: '/tmp/ignored.jsonl' },
+      { session_id: '20261020_221305_5e3a1c' },
       { key: 'session_id', id: '20261020_221305_5e3a1c' }
     ]
   ] as const)('extracts %s provider session ids', (source, payload, expected) => {
