@@ -60,7 +60,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
         | 'preview'
         | 'tabId'
         | 'paneKey'
-        | 'envPaneKey'
+        | 'spawnPaneKey'
         | 'surfaceRecordedAtGraphSequence'
         | 'title'
         | 'connectionId'
@@ -109,7 +109,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
                 state.surfaceRecordedAtGraphSequence ?? this.graphSequence
               )
             }),
-        ...(state.envPaneKey ? { envPaneKey: state.envPaneKey } : {}),
+        ...(state.spawnPaneKey ? { spawnPaneKey: state.spawnPaneKey } : {}),
         launchConfig: null,
         launchToken: null,
         launchIncarnationId: null,
@@ -223,8 +223,8 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
         state.surfaceRecordedAtGraphSequence ?? SURFACE_CLAIM_WITHOUT_STANDING
       )
     }
-    if (state.envPaneKey !== undefined) {
-      pty.envPaneKey = state.envPaneKey
+    if (state.spawnPaneKey !== undefined) {
+      pty.spawnPaneKey = state.spawnPaneKey
     }
     if (state.connected !== undefined) {
       pty.connected = state.connected

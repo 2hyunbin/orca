@@ -172,7 +172,7 @@ export abstract class OrcaRuntimeWithRefreshPtyWorktreeRecordsWithControllerInve
           connected: true,
           ...(session.incarnationId ? { incarnationId: session.incarnationId } : {}),
           agentSessionOwners: session.incarnationId ? (session.agentSessionOwners ?? []) : [],
-          envPaneKey: session.paneKey ?? null,
+          spawnPaneKey: session.paneKey ?? null,
           ...(session.wslDistro !== undefined
             ? { isWsl: Boolean(session.wslDistro), wslDistro: session.wslDistro }
             : {}),

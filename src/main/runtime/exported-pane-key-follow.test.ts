@@ -67,13 +67,13 @@ function showSurvivorInNewTab(runtime: InstanceType<typeof OrcaRuntimeService>):
   showSurvivorIn(runtime, NEW_TAB, NEW_LEAF)
 }
 
-function listedSurvivor(envPaneKey?: string): PtyProcessInfo {
+function listedSurvivor(spawnPaneKey?: string): PtyProcessInfo {
   return {
     id: SURVIVOR,
     cwd: TEST_WORKTREE_PATH,
     title: 'shell',
     worktreeId: TEST_WORKTREE_ID,
-    ...(envPaneKey ? { envPaneKey } : {})
+    ...(spawnPaneKey ? { paneKey: spawnPaneKey } : {})
   }
 }
 

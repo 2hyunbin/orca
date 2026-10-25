@@ -68,7 +68,7 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
   /** Window-owned L80 graphSequence when paneKey was recorded; newer surfaces have no graph statement that could contradict them (pty-recorded-surface-topology.ts). */
   surfaceRecordedAtGraphSequence?: number
   /** The ORCA_PANE_KEY the execution host reports this PTY's env exported; absent when unreported. */
-  envPaneKey?: string | null
+  spawnPaneKey?: string | null
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null
