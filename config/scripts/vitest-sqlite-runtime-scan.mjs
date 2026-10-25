@@ -88,7 +88,7 @@ function readCache(version) {
 
 /** Unit tests that load Node SQLite through a direct import, as repo-relative paths. */
 export function findSqliteRuntimeTests() {
-  // Why: reading every test costs about a second; unchanged files reuse their last verdict.
+  // Reuse unchanged verdicts; full test-source scan costs about a second.
   const version = createHash('sha256')
     .update(readFileSync(import.meta.filename))
     .digest('hex')
@@ -120,7 +120,7 @@ export function findSqliteRuntimeTests() {
       mkdirSync(dirname(CACHE_FILE), { recursive: true })
       const temporary = `${CACHE_FILE}.${process.pid}`
       writeFileSync(temporary, JSON.stringify({ version, files }))
-      // Why: parallel runs each rename a whole file, so a reader never sees a partial write.
+      // Atomic whole-file rename prevents concurrent runs from exposing partial cache.
       renameSync(temporary, CACHE_FILE)
     } catch {
       // The cache only saves time; the verdicts above are already complete.
