@@ -385,7 +385,6 @@
 1 test-no-real-time-wait:src/main/runtime/workspaces/persisted-surfaces/restored-terminal-placement.test.ts
 4 test-no-real-time-wait:src/main/runtime/worktree-teardown-unstopped-pty.test.ts
 3 test-no-real-time-wait:src/main/skills/skill-bundle-process-termination.integration.test.ts
-1 test-no-real-time-wait:src/main/skills/skill-candidate-concurrency.test.ts
 1 test-no-real-time-wait:src/main/skills/skill-cloud-direct-upload.test.ts
 1 test-no-real-time-wait:src/main/skills/skill-process-contention-child.test.ts
 1 test-no-real-time-wait:src/main/skills/skill-process-contention.integration.test.ts
