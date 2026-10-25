@@ -1,9 +1,5 @@
-/**
- * Per-id regression labels for the History page closure. The ten History goldens use exhaustive
- * residual certification; inherited and other unchanged labels retain their legacy baseline
- * meaning, without claiming complete causal parity. History's five normal controls are strictly
- * ordinal-only, and its five matrices require exact malformed-exchange attribution.
- */
+// History goldens require complete residual certification; unchanged families retain their legacy labels.
+// Measure the .web entry; its native sibling imports shell-only bundle operations that the page never loads.
 
 import type { PageClosurePins } from './page-closure'
 

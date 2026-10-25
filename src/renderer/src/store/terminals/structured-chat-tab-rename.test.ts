@@ -18,8 +18,6 @@ const { hostRename, hostSavesNames } = vi.hoisted(() => ({
   hostSavesNames: vi.fn(async () => true)
 }))
 
-// Main's answer to the window's layout commands, as a switch-on build sends them; the chat's host
-// answers its rename.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
   const client = (
     await import('@/runtime/layout-apply-test-transport.test-fixture')

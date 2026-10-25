@@ -32,8 +32,7 @@ function stateWithTabs(
   activeTabId: string,
   hydratingTabIds: string[] = []
 ): AppState {
-  // Why: only tabs the group actually holds — a group tab missing from tabOrder is a hydration
-  // race the strip repairs by appending, so listing extras here would not model "one tab open".
+  // Include only actual group tabs; extra tabs absent from tabOrder would be appended by strip reconciliation.
   const tabs = [
     tab('tab-a', 'file-a', 'A'),
     tab('tab-b', 'file-b', 'B'),

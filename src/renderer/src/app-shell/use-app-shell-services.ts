@@ -29,11 +29,7 @@ import { useVisibleReviewRefreshReporting } from './use-visible-review-refresh-r
 import { useVisibleHostedReviewRefresh } from './use-visible-hosted-review-refresh'
 import { useProfileStateSaveDelayNotice } from './use-profile-state-save-delay-notice'
 
-/**
- * App-level subscriptions that must outlive any individual surface. Each one is here because
- * the component that consumes its result unmounts (right sidebar, explorer, terminal) or is
- * absent entirely on the landing path.
- */
+/** Keep subscriptions above surfaces that unmount or never appear on Landing. */
 export function useAppShellServices(): void {
   const workspaceSessionReady = useAppStore((s) => s.workspaceSessionReady)
   const persistedUIReady = useAppStore((s) => s.persistedUIReady)
@@ -48,7 +44,6 @@ export function useAppShellServices(): void {
   useHostStructuredAgentsSync()
   useLegacyChatRenameMigration()
   useHostModelCatalogSnapshotsSync()
-  // Subscribe to IPC push events
   useIpcEvents()
   useProfileStateSaveDelayNotice()
   useRemoteRuntimeRecoveryTriggers()
@@ -56,9 +51,9 @@ export function useAppShellServices(): void {
   useVisibleHostedReviewRefresh({ enabled: workspaceSessionReady })
   useTerminalViewerColorPublication()
   useAutomationDispatchEvents()
-  // Why: git polling lives at App level (RightSidebar unmounts when closed, stranding stale Rebasing/Merging badges); gate on workspaceSessionReady so it doesn't compete with first paint.
+  // Poll above the removable sidebar to keep rebase/merge badges fresh; wait for session readiness to protect first paint.
   useGitStatusPolling({ enabled: workspaceSessionReady })
-  // Why: wire file-change watching at App level so the editor keeps hearing FS changes when Explorer unmounts (right-sidebar switches to Source Control/Checks).
+  // Watch files above Explorer so editor changes still arrive on Source Control/Checks.
   useEditorExternalWatch()
   useReadOnScreenAttention()
   useAppMenuPaste()

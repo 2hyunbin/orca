@@ -29,6 +29,7 @@ import {
 import { useAiVaultAssociationObservation } from './ai-vault-association-observation'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 
+// Share the forced-rescan budget across remounts so session creation cannot amplify full scans.
 import {
   claimAiVaultForcedRescan,
   aiVaultForcedRescanDelay,
@@ -42,8 +43,7 @@ export function resetAiVaultForcedRescanThrottleForTest(): void {
   resetAiVaultSessionResultCacheForTest()
 }
 
-// Desktop IPC reports cancellation as a result, but the web/runtime RPC path
-// still rejects, so both shapes have to be recognised.
+// Desktop IPC resolves cancellations; web/runtime RPC rejects, so recognize both.
 export const isAiVaultScanCancellation = isAiVaultScanCancelledError
 
 type AiVaultRefreshArgs = { force?: boolean; background?: boolean; reuseLoadedDepth?: boolean }
@@ -137,8 +137,7 @@ export function useAiVaultSessionRefresh(
         })
         setLoading(false)
       }
-      // A scope change during an in-flight scan must not be dropped; queue one more
-      // scan so the current scoped view is refreshed after the older scan settles.
+      // Queue scope changes during an in-flight scan so the new view still refreshes.
       if (refreshInFlightRef.current) {
         pendingRefreshRef.current = true
         pendingForceRef.current ||= args.force === true
@@ -154,14 +153,11 @@ export function useAiVaultSessionRefresh(
       refreshInFlightRef.current = true
       const refreshId = refreshIdRef.current + 1
       refreshIdRef.current = refreshId
-      // A manual force scan counts against the throttle so an auto rescan right
-      // after the button press doesn't trigger a second full scan.
+      // Count manual refresh against the throttle to prevent an immediate automatic full scan.
       if (args.force === true) {
         claimAiVaultForcedRescan(true)
       }
-      // Background (refocus) refreshes usually resolve from the main-process
-      // cache; suppressing the loading flag avoids a spinner flash on every
-      // return to the app.
+      // Background cache hits must not flash a loading spinner on every refocus.
       if (args.background !== true && !cachedResult) {
         setLoading(true)
       }
@@ -184,8 +180,7 @@ export function useAiVaultSessionRefresh(
           { force: args.force, requestToken: requestTokenRef.current },
           previous?.scopeKey === scanKey ? previous : undefined
         )
-        // A superseded scan resolves cancelled rather than rejecting, so the
-        // main-process log stays clean; its empty body must not be painted.
+        // Reject superseded or old-scope replies before they can repaint History.
         if (!requestCurrent()) {
           return
         }
@@ -205,9 +200,7 @@ export function useAiVaultSessionRefresh(
           }
         })
       } catch (err) {
-        // A cancelled scan is not a failure: another caller's forced refresh
-        // preempts the shared scan, and painting its abort would replace the
-        // list with an error the incoming scan is about to make obsolete.
+        // Cancellation means another shared scan superseded this one; do not replace its incoming list with an error.
         if (requestCurrent()) {
           setTerminalScopeKey(scanKey)
           if (!isAiVaultScanCancellation(err)) {
@@ -232,16 +225,12 @@ export function useAiVaultSessionRefresh(
           void refresh({ force, background })
         }
       }
-      // Deps intentionally avoid changing scope values: refresh reads them
-      // through refs and recurses on itself, so its identity must stay stable.
+      // Read changing scope through refs; recursion requires a stable refresh identity.
     },
     [applyScan, currentScanScopeKey]
   )
 
-  // Forced rescans triggered by new agent sessions run
-  // immediately when the throttle allows, otherwise once as soon as it frees
-  // up — dropping the event would leave a just-started session invisible
-  // until some unrelated later trigger.
+  // Defer throttled new-session rescans until budget frees so sessions cannot remain invisible indefinitely.
   const forcedRescanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestForcedRescan = useCallback(() => {
     if (claimAiVaultForcedRescan()) {
@@ -304,21 +293,10 @@ export function useAiVaultSessionRefresh(
     [associations, refresh]
   )
 
-  // Why: this panel can query the relay before it is ready — at startup, and again for the window
-  // in which a reconnect leaves the session not-ready — and the query throws 'SSH relay is not
-  // ready'. Nothing else here retries: the remaining triggers are mount, window refocus and a new
-  // agent session id, so a user whose workspace is otherwise working sits on that error
-  // indefinitely. The file explorer already recovers this way for the same reason
-  // (use-file-explorer-tree-load-effects.ts); this panel simply never did.
-  //
-  // Gated on a prior error so a local workspace, or one that already listed fine, does not rescan
-  // every time some other host connects.
+  // Retry prior relay-readiness errors on host events; otherwise startup/reconnect failures can persist indefinitely.
   useAiVaultSessionHostRefreshEvents(error, refresh)
 
-  // Sessions started inside Orca never blur the window, so refocus alone
-  // can't surface them. Agent hooks already report provider sessions; re-scan
-  // only when a session id we haven't seen appears — state transitions are
-  // deliberately ignored, they fire constantly while agents work.
+  // In-app launches never blur; rescan on new provider session IDs, avoiding frequent state transitions.
   const agentSessionIdsKey = useAppStore((s) => getAgentSessionIdsKey(s.agentStatusByPaneKey))
   const seenAgentSessionIdsRef = useRef<Set<string> | null>(null)
   useEffect(() => {
