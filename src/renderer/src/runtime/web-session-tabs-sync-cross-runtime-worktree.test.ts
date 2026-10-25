@@ -224,6 +224,20 @@ describe('a workspace mirrored from two paired runtimes', () => {
     expect(terminalIds(state)).toEqual(['web-terminal-shared'])
   })
 
+  it('retires a shared terminal once both runtimes have dropped it', () => {
+    let state = apply(makeState(), makeSnapshot([serverTerminal('shared', true)]), SERVER_ENV, NOW)
+    state = apply(
+      state,
+      makeSnapshot([serverTerminal('shared', true)], { publicationEpoch: 'desktop-a-epoch' }),
+      DESKTOP_A_ENV,
+      NOW + 1000
+    )
+    state = apply(state, desktopABrowserSnapshot([], 2), DESKTOP_A_ENV, NOW + 2000)
+    expect(terminalIds(state)).toEqual(['web-terminal-shared'])
+    state = apply(state, makeSnapshot([], { snapshotVersion: 2 }), SERVER_ENV, NOW + 3000)
+    expect(terminalIds(state)).toEqual([])
+  })
+
   it('lets any runtime retire rows of a runtime that was removed', () => {
     let state = apply(makeState(), makeSnapshot([serverTerminal('agent-1', true)]), SERVER_ENV, NOW)
     const withServerRemoved: MirrorRowOwnershipState = {

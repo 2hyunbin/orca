@@ -33,25 +33,27 @@ function isLiveEnvironment(state: MirrorRowOwnershipState, environmentId: string
 }
 
 /**
- * Pane bindings and the frames that last published a mirrored terminal name the runtimes it
- * belongs to. While any other live runtime still claims it, this frame may not retire it — a row
- * two runtimes share stays until neither claims it. With no claim at all it is this frame's.
+ * The runtimes whose last applied frames published a mirrored terminal claim it; before any frame
+ * this session (a reload, a re-subscribe) its pane bindings name them. While another live runtime
+ * claims it, this frame may not retire it, so a row two runtimes share stays until neither does.
  */
 export function isMirroredTerminalOfAnotherEnvironment(
   state: MirrorRowOwnershipState,
   tab: TerminalTab,
   environmentId: string
 ): boolean {
-  const owners = new Set(environmentIdsMirroringLocalTab(tab.worktreeId, tab.id))
-  for (const ptyId of [
-    tab.ptyId,
-    ...Object.values(state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {})
-  ]) {
-    const owner = ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null
-    if (owner) {
-      owners.add(owner)
+  const claims = environmentIdsMirroringLocalTab(tab.worktreeId, tab.id)
+  if (claims.size === 0) {
+    for (const ptyId of [
+      tab.ptyId,
+      ...Object.values(state.terminalLayoutsByTabId[tab.id]?.ptyIdsByLeafId ?? {})
+    ]) {
+      const owner = ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null
+      if (owner) {
+        claims.add(owner)
+      }
     }
   }
-  owners.delete(environmentId)
-  return [...owners].some((owner) => isLiveEnvironment(state, owner))
+  claims.delete(environmentId)
+  return [...claims].some((owner) => isLiveEnvironment(state, owner))
 }

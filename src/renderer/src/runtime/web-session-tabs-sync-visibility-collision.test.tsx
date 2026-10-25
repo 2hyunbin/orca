@@ -409,7 +409,7 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
     hook.unmount()
   })
 
-  it("retires an omitted host's rows without waiting for a survivor's pending frame", async () => {
+  it('waits for a newer surviving-host frame before repairing shared state', async () => {
     const hook = renderHook(() => useWebSessionTabsSync())
     await act(settle)
     await publish(findGlobalSubscription(ENV_A), {
@@ -440,8 +440,14 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
       authoritative: true
     })
     const tabId = toWebTerminalSurfaceTabId('host-tab-b')
-    expect(useAppStore.getState().tabsByWorktree[WORKTREE]?.map((tab) => tab.id)).toEqual([tabId])
-    expect(_getWebSessionTabsTrackingCountsForTest().freshness).toBe(1)
+    // Each host's rows are its own, so A's wait with the deferred repair instead of being wiped by B.
+    expect(
+      useAppStore
+        .getState()
+        .tabsByWorktree[WORKTREE]?.map((tab) => tab.id)
+        .sort()
+    ).toEqual([toWebTerminalSurfaceTabId('host-tab-a'), tabId])
+    expect(_getWebSessionTabsTrackingCountsForTest().freshness).toBe(2)
 
     newerRecovery.resolve(makeTerminalSnapshot('-b', 2))
     await act(settle)
@@ -504,7 +510,6 @@ describe('useWebSessionTabsSync visibility collision recovery', () => {
 
     slowInventoryRecovery.resolve(unrelatedSnapshot)
     await act(settle)
-    expect(terminalTabIds()).toEqual([hostBTabId])
     await publish(findGlobalSubscription(ENV_A, 1), {
       type: 'updated',
       ...makeTerminalSnapshot('-a', 3)

@@ -56,6 +56,7 @@ export function buildVisibilityResumeBatch(args: {
         environments: resumed,
         pendingInventoryCount: resumed.size,
         pendingMissingByWorktree: new Map(),
+        deferredRepairWorktrees: new Set(),
         trackedWorktreeIds,
         reapplyableSnapshotsByKey: new Map()
       }
