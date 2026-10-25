@@ -72,7 +72,8 @@ const ASK_PREVIEW_NOTES = 'n'
  *  - multi-select        → each option number TOGGLES its checkbox, then a step
  *    to the Submit tab
  *  - preview single-select → the option number focuses it, free text becomes a
- *    note on that row (the first row when none is picked), and Enter commits
+ *    note on that row (a "(notes only)" answer when none is picked), and Enter
+ *    commits
  *  - a multi-question prompt (and a lone multi-select) finishes on a Submit
  *    confirmation, so it ends with one Enter
  *
@@ -93,7 +94,10 @@ export function buildAskAnswerKeys(
 
     if (q.hasPreviews && (other || (sel?.indices.length ?? 0) > 0)) {
       const index = sel?.indices[0]
-      if (index !== undefined) {
+      if (index === 0 && other && q.options.length > 1) {
+        // Why: a note commits its row only once focus has moved, and row 1 starts focused.
+        groups.push({ raw: '2' }, { raw: '1' })
+      } else if (index !== undefined) {
         groups.push({ raw: String(index + 1) })
       }
       if (other) {

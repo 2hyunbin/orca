@@ -306,6 +306,18 @@ describe('buildAskAnswerKeys', () => {
       { raw: '1' },
       { raw: '\r' }
     ])
+    // Claude drops the pick on an unmoved first row, answering "(notes only)".
+    expect(buildAskAnswerKeys(prompt, [{ indices: [0], other: 'wider' }, { indices: [] }])).toEqual(
+      [
+        { raw: '2' },
+        { raw: '1' },
+        { raw: 'n' },
+        { text: 'wider' },
+        { raw: '\r' },
+        { raw: '\x1b[C' },
+        { raw: '\r' }
+      ]
+    )
   })
 })
 
