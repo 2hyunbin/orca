@@ -150,9 +150,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          # Why the optional trailing identifier: suffixed side-branch RCs
-          # (vX.Y.Z-rc.N.perf) are rc-channel prerelease builds — same telemetry
-          # identity as plain RCs.
+          # Suffixed vX.Y.Z-rc.N.perf builds keep the same rc-channel telemetry identity.
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+(\.[0-9A-Za-z]+)?$ ]]; then
             identity=rc
           elif [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -203,8 +201,7 @@ jobs:
 
       - name: Gate runtime file-watcher process isolation
         run: |
-          # Why: #8212 is a native-process crash contract. Prove both the Node
-          # host and the exact Electron runtime survive SIGSEGV before packaging.
+          # #8212: require Node and the exact Electron runtime to survive native SIGSEGV before packaging.
           node config/scripts/runtime-file-watcher-fault-harness.mjs
           ELECTRON_RUN_AS_NODE=1 pnpm exec electron config/scripts/runtime-file-watcher-fault-harness.mjs
 

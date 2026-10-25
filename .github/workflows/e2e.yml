@@ -463,8 +463,7 @@ jobs:
           slot="$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots "$slot"
-          # The headless oracle's orcad host must hold the same layout owner as the Electron host,
-          # and so must the template `orca serve` materializes its server from.
+          # The orcad host and its materialized template must use the Electron host’s layout owner.
           if [ -n "$LAYOUT_OWNER" ]; then
             export ORCA_LAYOUT_OWNER="$LAYOUT_OWNER"
             pnpm build:orcad

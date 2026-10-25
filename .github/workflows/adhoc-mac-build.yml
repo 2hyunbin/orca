@@ -56,17 +56,12 @@ jobs:
               exit 1
               ;;
           esac
-          # Bare: a work-tree repo refuses to fetch over its own checked-out
-          # branch. tree:0 keeps the fetch to the commit graph — no trees, no
-          # blobs — so this stays cheap next to the build it fronts. reftable
-          # because this repo has branches that differ only in casing, and the
-          # files backend cannot store both on a case-insensitive runner disk —
-          # it fails the entire fetch, not just the one ref.
+          # Bare avoids fetching over a checked-out branch; tree:0 fetches only the commit graph.
+          # Reftable preserves case-only branch names that make the files backend fail on case-insensitive disks.
           scratch="$RUNNER_TEMP/vet-requested-ref"
           git init -q --bare --ref-format=reftable "$scratch"
           git -C "$scratch" fetch -q --filter=tree:0 "$REPO_URL" '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
-          # Branch first to keep actions/checkout's old tie-break: bare
-          # rev-parse would prefer the tag when a branch shares its name.
+          # Resolve branches before tags, matching actions/checkout’s tie-break.
           sha=""
           case "$REQUESTED_REF" in
             refs/heads/*|refs/tags/*) candidates=("$REQUESTED_REF") ;;
@@ -88,10 +83,7 @@ jobs:
             echo "::error::'$REQUESTED_REF' does not resolve to a branch, tag, or commit of stablyai/orca."
             exit 1
           fi
-          # The object resolving locally is not proof a branch or tag reaches
-          # it: a partial clone can lazily fetch a bare SHA on demand, and
-          # GitHub serves PR-only commits by SHA. Reachability is the actual
-          # trust test.
+          # Lazy-fetchable SHAs can be PR-only; require reachability from a trusted branch/tag, not local object presence.
           if [[ -z "$(git -C "$scratch" for-each-ref --count=1 --format='%(refname)' --contains "$sha" refs/heads refs/tags)" ]]; then
             echo "::error::Commit $REQUESTED_REF is not reachable from any branch or tag of stablyai/orca; refusing to build it with release credentials."
             exit 1
@@ -157,20 +149,15 @@ jobs:
           MAIN_REPO_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Why this check: the version scripts are read from the branch being built,
-          # not from main, so a branch cut before the adhoc channel landed has no
-          # copy of them. Say that plainly instead of failing with a module-not-found.
+          # Old branch refs may predate adhoc version scripts; report that explicitly.
           for script in adhoc-build-version dev-channel-base-version; do
             if [[ ! -f "config/scripts/$script.mjs" ]]; then
               echo "::error::$REF has no config/scripts/$script.mjs; rebase it onto a main that has the adhoc channel."
               exit 1
             fi
           done
-          # Why git tags, not GitHub releases: unpublishing a buggy cut deletes the
-          # GitHub release and leaves the tag, which still owns that number.
-          # Releases-only let adhoc sit on a number already taken, so the updater
-          # would not install it. Empty on failure — the script then falls back
-          # to package.json.
+          # Unpublishing deletes releases but leaves version-owning tags; use tags to prevent updater regression.
+          # On lookup failure the script falls back to package.json.
           published="$(GH_TOKEN="$MAIN_REPO_TOKEN" gh api \
             "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
             --jq '.[].ref | sub("^refs/tags/"; "")' || true)"
@@ -240,15 +227,8 @@ jobs:
         run: |
           set -euo pipefail
           short_sha="${SHA:0:12}"
-          # Why create it up front: electron-builder then uploads into a known tag
-          # rather than inferring one from package.json.
-          #
-          # Why --draft: everything between here and the manifest check is a window
-          # where the release exists but has no installable assets. A draft is
-          # absent from the releases list and from listReleaseBuilds, so a job that
-          # dies in that window — including a hard kill by the job timeout, which
-          # runs no cleanup step at all — leaves something invisible rather than a
-          # tag the picker offers and the download 404s on.
+          # Precreate a known tag as draft so builder cannot infer it from package.json.
+          # Keep incomplete assets invisible until manifest verification, even if timeout kills the job without cleanup.
           gh release create "$TAG" \
             --repo "$ADHOC_REPO" \
             --title "$NAME" \
@@ -594,9 +574,7 @@ jobs:
           NAME: ${{ needs.orcad-template-support.outputs.name }}
         run: |
           set -euo pipefail
-          # --title again: electron-builder resolves this draft by tag and may
-          # rewrite its title on upload. Re-asserting here means the name the
-          # picker reads is the one composed above, whatever it did in between.
+          # Reassert the picker title after electron-builder may rewrite the tag’s draft on upload.
           gh release edit "$TAG" --repo "$ADHOC_REPO" --draft=false --prerelease --title "$NAME"
           echo "Published $TAG as \"$NAME\""
 
@@ -626,21 +604,12 @@ jobs:
           TAG: ${{ needs.prepare-adhoc-mac-release.outputs.tag }}
         run: |
           set -euo pipefail
-          # Why compute the cutoff in bash rather than with jq's `now`: this runs
-          # once per dispatch, and a fixed epoch makes the threshold visible in the
-          # log when someone asks where their build went.
+          # Fix/log the cutoff epoch once per dispatch so retention decisions remain auditable.
           cutoff=$(( $(date -u +%s) - ADHOC_RETAIN_DAYS * 86400 ))
           echo "Pruning adhoc releases published before $(date -u -d "@$cutoff" '+%Y-%m-%dT%H:%M:%SZ')"
-          # --cleanup-tag so pruning does not leave orphan tags with no release or
-          # assets attached. Drafts are excluded: a stale draft is the failure
-          # path's business, not the retention window's.
-          #
-          # Age comes from publishedAt, never createdAt. GitHub reports createdAt
-          # as the date of the *commit* a release's tag points at, and every tag
-          # here is cut from this repo's one seed commit — so all of them carry
-          # that same createdAt, and the day the window rolled past it the entire
-          # channel expired at once and a single run deleted it. A release with no
-          # publishedAt is kept rather than aged by guesswork.
+          # --cleanup-tag removes release-less tags; failure cleanup owns drafts, which retention excludes.
+          # Use publishedAt: GitHub’s createdAt is the seed commit’s date for every tag. Aging by it once
+          # expired the entire channel in one run; retain releases with unknown publishedAt.
           jq_filter='map(select(.isDraft | not))'
           if [[ -n "${TAG:-}" ]]; then
             jq_filter+=" | map(select(.tagName != \"${TAG//\"/\\\"}\"))"

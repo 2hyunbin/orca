@@ -147,8 +147,7 @@ jobs:
           cp "$CASK_PATH" "tap/$CASK_PATH"
 
           cd tap
-          # Why: commit author must match the buf0-bot app so commits are
-          # attributed to the bot in the tap's history / PR UI.
+          # Match the buf0-bot App’s commit author for tap history/PR attribution.
           git config user.name  "buf0-bot[bot]"
           git config user.email "252831055+buf0-bot[bot]@users.noreply.github.com"
 
@@ -163,8 +162,7 @@ jobs:
           git commit -m "$TITLE"
           git push -u origin "$branch" --force
 
-          # Why: repeated backfills can race an existing PR branch, so edit
-          # the PR title if creation reports that one already exists.
+          # Backfills can race an existing branch; update its PR title when creation finds one.
           gh pr create \
             --title "$TITLE" \
             --body "Automated bump of $CASK_PATH from stablyai/orca release $TAG." \
@@ -172,8 +170,5 @@ jobs:
             --head "$branch" \
             || gh pr edit "$branch" --title "$TITLE"
 
-          # Why: squash-merge immediately rather than --auto. The tap has no
-          # required checks or branch protection, and `gh pr merge --auto`
-          # only activates when there's something to wait on — on a repo
-          # with no gates it silently no-ops, leaving the PR open forever.
+          # Squash immediately: this tap has no gates, so gh pr merge --auto silently no-ops.
           gh pr merge "$branch" --squash --delete-branch

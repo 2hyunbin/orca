@@ -119,12 +119,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          # Why HEAD^1 and not --merge-base: HEAD is the pull request merge commit, so its first
-          # parent is the base side already. Computing a merge base instead would require the
-          # payload base SHA to be in the graph, which is what forced a full-history checkout.
+          # PR merge HEAD’s first parent is the base; --merge-base would require the payload SHA/full history.
           DIFF_BASE="$(node config/scripts/git-pull-request-diff-base.mjs "$BASE_SHA")"
-          # Why --no-renames: name-only rename detection can report only the destination.
-          # A code file moved under docs/ must still expose its code-side deletion.
+          # --no-renames retains code-side deletions when files move into docs.
           CHANGED="$(git diff --name-only --no-renames --diff-filter=ACDMR "$DIFF_BASE" HEAD)"
           echo "Changed paths:"
           printf '%s\n' "$CHANGED"
@@ -147,13 +144,11 @@ jobs:
           if git diff --quiet --no-renames --diff-filter=ACDRTUXB "$DIFF_BASE" HEAD; then
             E2E_SCOPE_ARGS=(--daemon-init-test-support)
           fi
-          # Source routes are executable contracts so a test can prove exact
-          # authorities, exclusions, and sentinels without evaluating workflow shell.
+          # Executable routes let tests prove authorities/exclusions/sentinels without evaluating shell.
           TEST_FILES_JSON="$(printf '%s\n' "$CHANGED" | node config/scripts/pr-e2e-source-routing.mjs "${E2E_SCOPE_ARGS[@]}")"
           echo "test_files=$TEST_FILES_JSON" >> "$GITHUB_OUTPUT"
           printf '%s\n' "$TEST_FILES_JSON" | node config/scripts/ci-e2e-job-selection.mjs --job-outputs >> "$GITHUB_OUTPUT"
-          # Why its own signal: the real-IME lane is a whole ibus session, not a spec, so it must
-          # trigger on IME source rather than on a spec name in some route's list.
+          # Real IME runs an entire IBus session; route it by IME source, independently of spec lists.
           NATIVE_IME_SOURCE_CHANGED="$(printf '%s\n' "$CHANGED" | node config/scripts/pr-e2e-source-routing.mjs --native-ime-source)"
           echo "native_ime_source_changed=$NATIVE_IME_SOURCE_CHANGED" >> "$GITHUB_OUTPUT"
           WSL_CHANGED="$(git diff --name-only --no-renames --diff-filter=ACDMR "$DIFF_BASE" HEAD)"
@@ -572,8 +567,7 @@ jobs:
             "alpine/git:edge-2.38.1|2.38.1"
             "alpine/git:v2.49.1|2.49.1"
           )
-          # Why pull up front: a lane's first `docker run` otherwise pulls its image
-          # while the sibling lane is mid-test, and that stall is charged to the test.
+          # Pull before tests so a sibling’s timed lane cannot be stalled by the first image download.
           for spec in "${specs[@]}"; do
             docker pull --quiet "${spec%%|*}"
           done

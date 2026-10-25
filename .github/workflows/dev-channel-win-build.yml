@@ -105,8 +105,7 @@ jobs:
           REPO_URL: https://github.com/${{ github.repository }}
         run: |
           set -euo pipefail
-          # workflow_call takes channel as a free-text string, so the set is
-          # enforced here rather than by the input type.
+          # workflow_call inputs are free text; validate the channel set here.
           case "$CHANNEL" in
             hourly|daily|adhoc) ;;
             *)
@@ -118,24 +117,18 @@ jobs:
             echo "::error::ref must be a full 40-character commit SHA, got '$REQUESTED_SHA'. The dispatching workflow passes the commit it resolved."
             exit 1
           fi
-          # The tag must name the version being packaged, or the artifacts would
-          # land in a release describing a different build.
+          # Bind the tag to the packaged version so assets cannot describe a different build.
           if [[ "$TAG" != "v$VERSION" ]]; then
             echo "::error::tag '$TAG' does not match version '$VERSION'."
             exit 1
           fi
-          # And the version must carry the channel's own prerelease identifier,
-          # so an hourly artifact can never be uploaded into an adhoc release.
+          # Require the channel’s prerelease identifier so hourly assets cannot enter adhoc releases.
           if [[ "$VERSION" != *"-$CHANNEL."* ]]; then
             echo "::error::version '$VERSION' is not a $CHANNEL version."
             exit 1
           fi
-          # Reachability is the trust test: GitHub serves PR-only commits by SHA,
-          # so resolving the object is not proof a branch or tag of this repo
-          # reaches it. Bare + tree:0 keeps this to the commit graph; reftable
-          # because branches that differ only in casing cannot both be stored by
-          # the files backend on a case-insensitive runner disk, which fails the
-          # entire fetch rather than the one ref.
+          # Trust requires branch/tag reachability; GitHub serves PR-only SHAs too. Bare/tree:0 limits fetch to
+          # the commit graph; reftable avoids case-only refs failing the entire fetch on case-insensitive disks.
           scratch="$RUNNER_TEMP/vet-requested-ref"
           git init -q --bare --ref-format=reftable "$scratch"
           git -C "$scratch" fetch -q --filter=tree:0 "$REPO_URL" '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
