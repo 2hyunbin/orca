@@ -120,6 +120,8 @@ describe('useNativeChatLiveSession — file watcher pagination composition', () 
       sessionId: SESSION,
       runtimeEnvironmentId: 'env-history'
     })
+    const initialSnapshotCommitted = Promise.withResolvers<void>()
+    const appendCommitted = Promise.withResolvers<void>()
     const subscription = await subscribeNativeChatTranscript({
       agent: AGENT,
       sessionId: SESSION,
@@ -128,30 +130,30 @@ describe('useNativeChatLiveSession — file watcher pagination composition', () 
       initialLimit: 300,
       debounceMs: 5,
       reconciliationIntervalMs: 20,
-      onInitialSnapshot: (messages, hasMore) =>
-        act(() => transport.emit({ type: 'snapshot', messages, hasMore })),
-      onAppend: (messages) => act(() => transport.emit({ type: 'appended', messages })),
+      onInitialSnapshot: (messages, hasMore) => {
+        void act(async () => {
+          transport.emit({ type: 'snapshot', messages, hasMore })
+        }).then(initialSnapshotCommitted.resolve, initialSnapshotCommitted.reject)
+      },
+      onAppend: (messages) => {
+        void act(async () => {
+          transport.emit({ type: 'appended', messages })
+        }).then(appendCommitted.resolve, appendCommitted.reject)
+      },
       onReplace: (messages, hasMore) =>
         act(() => transport.emit({ type: 'replacement', messages, hasMore }))
     })
     try {
-      await expect
-        .poll(async () => {
-          await flush()
-          return session().messages.length
-        })
-        .toBe(300)
+      await initialSnapshotCommitted.promise
+      expect(ids()).toEqual(Array.from({ length: 300 }, (_, i) => String(i + 201).padStart(4, '0')))
       await act(async () => {
-        await session().loadEarlier()
+        await expect(session().loadEarlier()).resolves.toBe('applied')
       })
+      expect(transport.readSession).toHaveBeenLastCalledWith(AGENT, SESSION, 500, undefined)
       expect(ids()).toEqual(Array.from({ length: 500 }, (_, i) => String(i + 1).padStart(4, '0')))
       await appendFile(filePath, line(501))
-      await expect
-        .poll(async () => {
-          await flush()
-          return session().messages.length
-        })
-        .toBe(501)
+      await appendCommitted.promise
+      expect(ids()).toEqual(Array.from({ length: 501 }, (_, i) => String(i + 1).padStart(4, '0')))
       expect(ids().at(-1)).toBe('0501')
       expect(transport.subscribe).toHaveBeenCalledOnce()
     } finally {
