@@ -2,6 +2,8 @@ import { vi } from 'vitest'
 import { resetAgentStartupDelayedDeliveryForTests } from '@/lib/agent-startup-delayed-delivery'
 import * as agentStatusStartupSnapshot from '@/hooks/ipc-events/agent-status-startup-snapshot'
 import { drainFakeTimerWork, flushAsyncTicks } from './pty-connection-test-async'
+import { takeTerminalTestPanes } from './pty-connection-test-pane-fixtures'
+import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
 
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame
 const originalCancelAnimationFrame = globalThis.cancelAnimationFrame
@@ -118,6 +120,13 @@ export async function restoreTerminalTestGlobals(): Promise<void> {
   await drainFakeTimerWork()
   vi.useRealTimers()
   // Flush real-promise settle continuations while window still exists; fake timers postpone them beyond teardown (orca#14728).
+  await flushAsyncTicks(20)
+  const { cancelPendingSafeFitContinuations } =
+    await import('@/lib/pane-manager/pane-fit-continuation-registry')
+  for (const pane of takeTerminalTestPanes()) {
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fixture panes provide the fit and terminal members read during cancellation.
+    cancelPendingSafeFitContinuations(pane as unknown as ManagedPane)
+  }
   await flushAsyncTicks(20)
   statusSnapshot?.dispose()
   resetStatusSnapshot?.dispose()

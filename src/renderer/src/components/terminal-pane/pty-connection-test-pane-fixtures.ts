@@ -140,6 +140,12 @@ export type MockPane = {
   }
 }
 
+const testPanes: MockPane[] = []
+
+export function takeTerminalTestPanes(): MockPane[] {
+  return testPanes.splice(0)
+}
+
 export function createPane(paneId: number): MockPane {
   const leafId = leafIdForPane(paneId)
   const activeBuffer = {
@@ -203,7 +209,7 @@ export function createPane(paneId: number): MockPane {
       registerOscHandler: vi.fn(() => ({ dispose: vi.fn() }))
     }
   }
-  return {
+  const pane: MockPane = {
     id: paneId,
     leafId,
     stablePaneId: leafId,
@@ -214,6 +220,8 @@ export function createPane(paneId: number): MockPane {
       proposeDimensions: vi.fn(() => ({ cols: terminal.cols, rows: terminal.rows }))
     }
   }
+  testPanes.push(pane)
+  return pane
 }
 
 export function terminalWriteText(data: string | Uint8Array): string {
