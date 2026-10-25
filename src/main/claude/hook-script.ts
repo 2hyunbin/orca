@@ -44,7 +44,7 @@ export function getManagedScript(
       ...buildWindowsScrubSafeEnvRestoreLines(),
       // Refresh endpoint coordinates for PTYs surviving an Orca restart.
       'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
-      // Guard abandoned stdin before any skip path can drain it.
+      // Outside an Orca pane the caller may abandon stdin; exit before owning it (#11549).
       ...buildWindowsHookEnvironmentGuardLines(),
       WINDOWS_CLAUDE_BACKGROUND_JOB_GUARD,
       ...(options.skipWhenGrokImportsClaude ? buildWindowsGrokReplayGuardLines() : []),
