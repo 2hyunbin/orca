@@ -19,10 +19,8 @@ import {
 } from './agent-session-failure-copy'
 import { START_REFUSAL_RESUMABLE } from './agent-session-start-refusal-resumable'
 import { providerRetryWords, withRetryCause } from './agent-session-provider-retry-words'
-import {
-  usageLimitWords,
-  type AgentSessionUsageLimitResetWords
-} from './agent-session-usage-limit-words'
+import { usageLimitWords } from './agent-session-usage-limit-words'
+import type { AgentSessionUsageLimitResetWords } from './agent-session-usage-limit-words'
 import { commandRefusedByReason } from './agent-session-command-refusal-words'
 import { attachmentProblemSentence } from './agent-session-attachment-failure-words'
 import { joinSentences } from './sentence-joining'
@@ -195,6 +193,8 @@ const FAILURE_SENTENCES = {
   claudeAccountSetupFailed: (_context, _fact, _surface, say) => say('claudeAccountSetupFailed'),
   agentCommandNotRunnable: namingAgent('agentCommandNotRunnable'),
   runtimeNotInstalled: namingAgent('runtimeNotInstalled'),
+  conversationOpenInTerminal: namingAgent('conversationOpenInTerminal'),
+  conversationOpenElsewhere: (_context, _fact, _surface, say) => say('conversationOpenElsewhere'),
   managedAccountUnsupported: (context, _fact, _surface, say) =>
     joinSentences([
       say('managedAccountUnsupported'),

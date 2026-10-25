@@ -1,8 +1,5 @@
 // Commit pending/settlement around an external provider call so concurrent sends remain acceptable.
 
-import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
-import type { StructuredAgentSessionProviderChildIdentity } from './structured-agent-session-host-types'
-import type { StructuredAgentSessionStartReadiness } from './structured-agent-session-startup-attempt'
 import {
   agentSessionFailureFact,
   providerDiagnosticOf
@@ -14,7 +11,6 @@ import { isAbortSignalReason } from '../../../shared/abort-signal-reason'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type {
-  AgentJournalCursor,
   AgentJournalMessageItem,
   AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
@@ -36,17 +32,6 @@ import {
   beginStructuredAgentSessionHandover,
   whileStructuredAgentSessionHandingOver
 } from './structured-agent-session-handing-over'
-
-export type StructuredAgentSessionPreparedDelivery =
-  | 'stop'
-  | 'continue'
-  | { start: StructuredAgentSessionStartClaim; acceptedBy: AgentJournalCursor }
-  | {
-      ok: true
-      awaited: StructuredAgentSessionProviderChildIdentity
-      readiness: StructuredAgentSessionStartReadiness | null
-      before: Promise<void>
-    }
 
 export type AgentSessionHandoverContext = StructuredAgentSessionCommandHandoverContext & {
   acquireAborts?: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
