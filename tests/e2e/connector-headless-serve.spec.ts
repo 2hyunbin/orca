@@ -2,9 +2,9 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnProcess } from '@orca/process-host'
 import { z } from 'zod'
 import { expect, test } from './helpers/orca-app'
+import { orcaCliResult, runCompiledOrcaCli } from './helpers/compiled-orca-cli'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
@@ -20,9 +20,6 @@ import type { RuntimeWorktreePsSummary } from '../../src/shared/runtime-worktree
 
 test.skip(process.platform === 'win32', 'the scripted Claude runs its hooks through sh')
 
-type CliRun = { status: number | null; stdout: string; stderr: string }
-
-const CliResult = z.object({ result: z.unknown() })
 const PromptRead = z.object({
   prompt: z
     .object({
@@ -44,31 +41,17 @@ const WatchRead = z.object({
   )
 })
 
-/** Runs the compiled CLI against the host's profile and resolves once it exits. */
-function runCli(userDataDir: string, args: string[]): Promise<CliRun> {
-  const child = spawnProcess({
-    program: process.execPath,
-    args: [path.join(process.cwd(), 'out', 'cli', 'index.js'), 'connector', ...args, '--json'],
-    env: { ...process.env, ORCA_USER_DATA_PATH: userDataDir, ORCA_DEV_CLI_INVOCATION: '1' },
-    timeoutMs: null
-  })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')))
-  child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')))
-  return new Promise((resolve) =>
-    child.once('exit', (status) => resolve({ status, stdout, stderr }))
-  )
-}
+const connectorCli = (userDataDir: string, args: string[], timeoutMs?: number) =>
+  orcaCliResult<unknown>(userDataDir, ['connector', ...args], timeoutMs)
 
-function resultOf(run: CliRun, label: string): unknown {
-  expect(run.status, `orca connector ${label}: ${run.stdout}${run.stderr}`).toBe(0)
-  return CliResult.parse(JSON.parse(run.stdout)).result
+/** A command the host refuses; returns its error code. */
+async function refusedCode(userDataDir: string, args: string[]): Promise<string | undefined> {
+  const run = await runCompiledOrcaCli(userDataDir, ['connector', ...args, '--json'])
+  return run.json?.error?.code
 }
 
 function conversationCli(userDataDir: string, conversation: string) {
-  const call = async (args: string[]): Promise<unknown> =>
-    resultOf(await runCli(userDataDir, args), args.join(' '))
+  const call = (args: string[]) => connectorCli(userDataDir, args)
   const on = ['--conversation', conversation]
   return {
     start: async (deliveryId: string, prompt: string, worktree: string) =>
@@ -160,26 +143,36 @@ async function waitForApproval(cli: ReturnType<typeof conversationCli>): Promise
 test('a connector conversation runs end to end on a headless serve host', async ({
   testRepoPath
 }) => {
+  // Two serve launches (the restart) plus about thirty CLI round trips.
   test.setTimeout(240_000)
   const fakeDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-connector-'))
   const claude = writeFakeClaude(fakeDir)
   const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
   const { userDataDir } = host
   const c1 = conversationCli(userDataDir, 'c1')
-  const typedSince = (from: number): string[] => claude.ledger().slice(from)
+  /** What the agent read since a ledger mark, joined across PTY chunk boundaries, and what it did. */
+  const since = (mark: number) => {
+    const lines = claude.ledger().slice(mark)
+    const keys = lines.filter((line) => line.startsWith('keys:'))
+    return {
+      typed: keys.map((line) => JSON.parse(line.slice('keys:'.length))).join(''),
+      did: lines.filter((line) => !line.startsWith('keys:'))
+    }
+  }
+  const nothing = { typed: '', did: [] }
   try {
     await host.client.call('settings.mutateAgentLaunch', {
       type: 'command',
       agent: 'claude',
       value: claude.command
     })
-    expect((await runCli(userDataDir, ['prompt', '--conversation', 'c1'])).stdout).toContain(
+    expect(await refusedCode(userDataDir, ['prompt', '--conversation', 'c1'])).toBe(
       'connectors_disabled'
     )
     await host.client.call('settings.update', { experimentalConnectors: true })
-    const worktree = await openWorkspace(host, testRepoPath)
     // Disabling connectors ends the window, so the watch returns everything seen until then.
-    const watching = runCli(userDataDir, ['watch', '--for-ms', '600000'])
+    const watching = connectorCli(userDataDir, ['watch', '--for-ms', '600000'], 660_000)
+    const worktree = await openWorkspace(host, testRepoPath)
 
     // Start, then a retried delivery that must not type again.
     expect(await c1.start('d1', 'hello', worktree)).toEqual({ outcome: 'accepted' })
@@ -203,7 +196,7 @@ test('a connector conversation runs end to end on a headless serve host', async 
     const beforeHeld = claude.ledger().length
     const held = c1.send('d4', 'after approval')
     await expect.poll(() => receiptState(userDataDir, 'c1', 'd4')).toBe('pending')
-    expect(typedSince(beforeHeld)).toEqual([])
+    expect(since(beforeHeld)).toEqual(nothing)
     expect(await c1.answer('p_not_this_one', 'allow_once')).toEqual({
       outcome: 'refused',
       reason: 'prompt_not_pending'
@@ -215,14 +208,11 @@ test('a connector conversation runs end to end on a headless serve host', async 
     expect(await c1.answer(promptId, 'allow_once')).toEqual({ outcome: 'accepted' })
     expect(await held).toEqual({ outcome: 'accepted' })
     await expect
-      .poll(() => typedSince(beforeHeld))
-      .toEqual([
-        'keys:"1"',
-        'approved',
-        'keys:"\\u001b[200~after approval\\u001b[201~"',
-        'keys:"\\r"',
-        'turn:after approval'
-      ])
+      .poll(() => since(beforeHeld))
+      .toEqual({
+        typed: '1\x1b[200~after approval\x1b[201~\r',
+        did: ['approved', 'turn:after approval']
+      })
     expect(await c1.answer(promptId, 'allow_once')).toEqual({
       outcome: 'refused',
       reason: 'prompt_not_pending'
@@ -232,7 +222,7 @@ test('a connector conversation runs end to end on a headless serve host', async 
     await expect.poll(() => c1.working()).toBe(false)
     const beforeIdleCancel = claude.ledger().length
     expect(await c1.cancel('k1')).toEqual({ outcome: 'accepted' })
-    expect(typedSince(beforeIdleCancel)).toEqual([])
+    expect(since(beforeIdleCancel)).toEqual(nothing)
 
     // Cancel while working sends one Escape, and the host settles the turn as cancelled.
     expect(await c1.send('d5', `long job ${FAKE_CLAUDE_KEEPS_WORKING}`)).toEqual({
@@ -241,7 +231,9 @@ test('a connector conversation runs end to end on a headless serve host', async 
     await expect.poll(() => turns(claude).at(-1)).toBe(`long job ${FAKE_CLAUDE_KEEPS_WORKING}`)
     const beforeBusyCancel = claude.ledger().length
     expect(await c1.cancel('k2')).toEqual({ outcome: 'accepted' })
-    await expect.poll(() => typedSince(beforeBusyCancel)).toEqual(['keys:"\\u001b"', 'interrupted'])
+    await expect
+      .poll(() => since(beforeBusyCancel))
+      .toEqual({ typed: '\x1b', did: ['interrupted'] })
     await expect.poll(() => c1.working()).toBe(false)
 
     // Cancel during an approval rejects it and drops the follow-up held behind it.
@@ -254,11 +246,13 @@ test('a connector conversation runs end to end on a headless serve host', async 
     await expect.poll(() => receiptState(userDataDir, 'c1', 'd7')).toBe('pending')
     expect(await c1.cancel('k3')).toEqual({ outcome: 'accepted' })
     expect(await dropped).toEqual({ outcome: 'refused', reason: 'conversation_cancelled' })
-    await expect.poll(() => typedSince(beforeReject)).toEqual(['keys:"\\u001b"', 'rejected'])
+    await expect.poll(() => since(beforeReject)).toEqual({ typed: '\x1b', did: ['rejected'] })
     expect(await c1.prompt()).toBeNull()
 
     await host.client.call('settings.update', { experimentalConnectors: false })
-    const { events } = WatchRead.parse(resultOf(await watching, 'watch'))
+    const { snapshot, events } = WatchRead.parse(await watching)
+    // Subscribing precedes the snapshot, so an empty one proves no event before the start was missed.
+    expect(snapshot.conversations).toEqual([])
     expect(
       events.map((event) =>
         event.kind === 'turn-ended'
@@ -283,8 +277,8 @@ test('a connector conversation runs end to end on a headless serve host', async 
       'turn-ended::cancellation'
     ])
     expect(
-      (await runCli(userDataDir, ['cancel', '--conversation', 'c1', '--delivery-id', 'k4'])).stdout
-    ).toContain('connectors_disabled')
+      await refusedCode(userDataDir, ['cancel', '--conversation', 'c1', '--delivery-id', 'k4'])
+    ).toBe('connectors_disabled')
 
     // A delivery still held when the host stops reads unknown after restart, never redelivered.
     await host.client.call('settings.update', { experimentalConnectors: true })
@@ -293,7 +287,8 @@ test('a connector conversation runs end to end on a headless serve host', async 
     })
     await waitForApproval(c1)
     // The CLI's own call dies with the host; only the host's receipt matters here.
-    const interrupted = runCli(userDataDir, [
+    const interrupted = runCompiledOrcaCli(userDataDir, [
+      'connector',
       'send',
       '--conversation',
       'c1',

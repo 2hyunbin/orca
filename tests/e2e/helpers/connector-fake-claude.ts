@@ -65,11 +65,11 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('\\r\\nInterrupted\\r\\n')
     return idle()
   }
-  pending += data
   // Show the cursor once a paste lands, so the writer's render gate settles before its 8 s cap.
-  if (data.includes('\\x1b[201~')) {
+  if ((pending.slice(-5) + data).includes('\\x1b[201~')) {
     process.stdout.write('\\x1b[?25h')
   }
+  pending += data
   // Claude submits a bracketed paste on the Enter that follows it.
   const submitted = /\\x1b\\[200~([\\s\\S]*?)\\x1b\\[201~\\r/.exec(pending)
   if (submitted) {
