@@ -49,6 +49,9 @@ const store = {
   sshConnectionStates: new Map(),
   sshStateByEnvironment: new Map(),
   runtimeStatusByEnvironmentId: new Map([['web-runtime', { status: { hostPlatform: 'linux' } }]]),
+  runtimeDetectedAgentIds: {},
+  runtimeAgentDetectionNeedsServerUpdate: {},
+  runtimeAgentInventoryOutcome: () => 'pending' as const,
   transientClearedAgentStatusConnectionIds: {},
   allWorktrees: vi.fn(() => store.worktreesByRepo['repo-1']),
   createTab: mocks.createTab,
@@ -224,6 +227,7 @@ describe('launchAgentInNewTab paired web runtime', () => {
         status === 'created' ? { kind: 'terminal' } : { kind: 'cancelled', sessionId: null }
       )
       expect(mocks.toastInfo).toHaveBeenCalledTimes(status === 'created' ? 1 : 0)
+      expect(mocks.closeTab).not.toHaveBeenCalled()
     }
   )
 })
