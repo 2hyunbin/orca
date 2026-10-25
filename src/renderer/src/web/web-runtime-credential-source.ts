@@ -52,7 +52,7 @@ export type WebRuntimeCredentialEnvironment = {
   hostPublicKeyB64: string
   deviceToken: string
   pairingRevision: number
-  /** Persisted pairings retain legacy token fallback when keys are unavailable; session pairings stay memory-only. */
+  /** Persisted localStorage pairings retain legacy token fallback when keys are unavailable; session pairings stay memory-only. */
   storage: 'persisted' | 'session'
 }
 
