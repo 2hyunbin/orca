@@ -39,18 +39,20 @@ export function waitsForCodexTurnOptions(
     return false
   }
   const handed = journal.submissions().filter((submission) => submission.handedOverAt !== undefined)
+  const opener = handed.find(
+    (submission) => agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
+  )
+  const onChild = handed.filter((submission) => submission.fence === child.fence)
+  // An unechoed send may own this turn; joining it first would reorder the thread.
+  if (!opener && onChild.some((submission) => submission.dispatchState === 'pending')) {
+    return true
+  }
   const active =
-    handed.find(
-      (submission) => agentJournalSubmissionKey(submission.clientMessageId) === turn.userItemId
-    ) ??
+    opener ??
     // Goal continuations have no opener and run on this child's last turn/start choices.
-    handed
-      .filter(
-        (submission) =>
-          submission.fence === child.fence &&
-          // A send rejected after its turn opened still set the thread's choices.
-          (submission.dispatchState !== 'rejected' || Boolean(submission.answeredInTurn))
-      )
+    onChild
+      // A send rejected after its turn opened still set the thread's choices.
+      .filter((submission) => submission.dispatchState !== 'rejected' || submission.answeredInTurn)
       .reduce<AgentJournalSubmission | undefined>(
         (newest, submission) =>
           newest && (newest.handedOverAt ?? 0) > (submission.handedOverAt ?? 0)
