@@ -26,6 +26,7 @@ import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { structuredAgentSessionTabId } from '../../../../shared/structured-agent-session-projection'
 import { hasStructuredAgentSessionLaunchCancellationTombstone } from '@/lib/structured-agent-session-launch-registry'
 import { withPendingPaneTitleRenames } from '../pending-pane-title-renames'
+import { environmentIdsMirroringLocalTab } from './tracking-mappings'
 
 export function isReadyTerminalTab(
   tab: RuntimeMobileSessionTabsResult['tabs'][number]
@@ -239,6 +240,28 @@ export function chooseRemoteTerminalLayout(
   })
 }
 
+/**
+ * A workspace can hold mirrors from several paired runtimes at once — an SSH host's server for its
+ * terminals and another desktop's app for a browser tab it hosts there (#31983). A mirror whose
+ * pane bindings, or failing those the last applied frames, name only other runtimes is theirs.
+ */
+function isMirroredTerminalTabOfAnotherEnvironment(
+  tab: TerminalTab,
+  environmentId: string,
+  persistedLeafPtyIds: Readonly<Record<string, string>> | undefined
+): boolean {
+  const bindingOwners = new Set(
+    [tab.ptyId, ...Object.values(persistedLeafPtyIds ?? {})]
+      .map((ptyId) => (ptyId ? getRemoteRuntimePtyEnvironmentId(ptyId) : null))
+      .filter((owner): owner is string => owner !== null)
+  )
+  if (bindingOwners.size > 0) {
+    return !bindingOwners.has(environmentId)
+  }
+  const frameOwners = environmentIdsMirroringLocalTab(tab.worktreeId, tab.id)
+  return frameOwners.size > 0 && !frameOwners.has(environmentId)
+}
+
 export function shouldReplaceTerminalTab(
   tab: TerminalTab,
   environmentId: string,
@@ -253,8 +276,8 @@ export function shouldReplaceTerminalTab(
     return true
   }
   if (isMirroredTerminalSurfaceId(tab.id)) {
-    // Why: host snapshots are authoritative for mirrored tabs; replace old mirrors even when the next surface still awaits a stream handle, else parity drifts.
-    return true
+    // Why: host snapshots are authoritative for their own mirrored tabs; replace them even when the next surface still awaits a stream handle, else parity drifts.
+    return !isMirroredTerminalTabOfAnotherEnvironment(tab, environmentId, persistedLeafPtyIds)
   }
   if (tab.pendingActivationSpawn && tab.ptyId === null && nextRemotePtyIds.size > 0) {
     // Why: a fresh placeholder has no identity, so the host's first terminal takes it over. A
