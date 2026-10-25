@@ -1,5 +1,6 @@
 import { vi } from 'vitest'
 import type { Mock } from 'vitest'
+import type { NotificationDispatchResult } from '../../shared/notification-settings-types'
 
 // Split suites load mock state dynamically because hoisted factories cannot capture imports.
 
@@ -101,11 +102,15 @@ function findRegisteredHandler(channel: string): unknown {
   return call[1]
 }
 
-export function getDispatchHandler(): (event: unknown, args: unknown) => unknown {
+export function getDispatchHandler(): (
+  event: unknown,
+  args: unknown
+) => NotificationDispatchResult | Promise<NotificationDispatchResult> {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this exact channel returns the delivery service's typed result.
   return findRegisteredHandler('notifications:dispatch') as (
     event: unknown,
     args: unknown
-  ) => unknown
+  ) => NotificationDispatchResult | Promise<NotificationDispatchResult>
 }
 
 export function getDismissHandler(): (event: unknown, ...args: unknown[]) => unknown {
