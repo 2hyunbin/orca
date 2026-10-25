@@ -245,7 +245,6 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     getLiveLeafForHandle: (handle) => this.getLiveLeafForHandle(handle).leaf,
     isAgentSettledForDelivery: (leaf) => this.checkDeliverySettledAndArmRecheck(leaf),
     getMessageWaiters: (mailboxHandle) => this.messageWaiters.get(mailboxHandle),
-    getTabTitle: (tabId) => this.tabs.get(tabId)?.title,
     getCliCommand: (terminalHandle) => this.getTerminalOrchestrationCliCommand(terminalHandle),
     getTerminalHandleForLeafKey: (leafKey) => this.handleByLeafKey.get(leafKey),
     resolveSubmitTarget: (leaf, ptyId) => this.resolveOrchestrationPointerSubmitTarget(leaf, ptyId),
