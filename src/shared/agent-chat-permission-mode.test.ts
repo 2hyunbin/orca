@@ -3,8 +3,6 @@ import {
   AGENT_CHAT_PERMISSION_MODES,
   agentChatPermissionModes,
   chatModelSupportsAutoMode,
-  chatPermissionModeNeedsModelSupport,
-  effectiveChatPermissionMode,
   loadedChatPermissionSetting,
   newChatPermissionMode,
   offeredChatPermissionModes
@@ -30,7 +28,7 @@ describe('agent chat permission modes', () => {
   it('seeds a new chat from the host setting, narrowed to what its agent offers', () => {
     expect(newChatPermissionMode('codex', 'accept-edits')).toBe('ask')
     expect(newChatPermissionMode('claude', 'accept-edits')).toBe('accept-edits')
-    // Claude's auto is narrowed at launch by the model, so the chat keeps its choice.
+    // Claude itself narrows auto by model, so the chat keeps its choice.
     expect(newChatPermissionMode('claude', 'auto')).toBe('auto')
     expect(newChatPermissionMode('codex', 'full-access')).toBe('full-access')
     expect(newChatPermissionMode('claude', 'retired-mode')).toBe('ask')
@@ -41,29 +39,7 @@ describe('agent chat permission modes', () => {
   })
 })
 
-describe('the mode a chat runs', () => {
-  it('runs Claude auto only on a model listed as supporting it', () => {
-    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', true)).toBe('auto')
-    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'auto', false)).toBe('ask')
-    expect(chatPermissionModeNeedsModelSupport(CLAUDE_CHAT_PERMISSION_MODES, 'auto')).toBe(true)
-    expect(chatPermissionModeNeedsModelSupport(CLAUDE_CHAT_PERMISSION_MODES, 'ask')).toBe(false)
-  })
-
-  it('runs Codex auto on any model', () => {
-    expect(effectiveChatPermissionMode(CODEX_CHAT_PERMISSION_MODES, 'auto', false)).toBe('auto')
-    expect(chatPermissionModeNeedsModelSupport(CODEX_CHAT_PERMISSION_MODES, 'auto')).toBe(false)
-  })
-
-  it('asks for a chat saved before modes existed, or with a value its agent cannot run', () => {
-    expect(effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, undefined, true)).toBe('ask')
-    expect(effectiveChatPermissionMode(CODEX_CHAT_PERMISSION_MODES, 'accept-edits', true)).toBe(
-      'ask'
-    )
-    expect(
-      effectiveChatPermissionMode(CLAUDE_CHAT_PERMISSION_MODES, 'bypassPermissions', true)
-    ).toBe('ask')
-  })
-
+describe('the modes a chat offers', () => {
   it('offers Approve for me only where the model runs it', () => {
     expect(offeredChatPermissionModes(CLAUDE_CHAT_PERMISSION_MODES, false)).toEqual([
       'ask',

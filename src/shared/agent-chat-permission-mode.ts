@@ -70,25 +70,6 @@ export function chatModelSupportsAutoMode(
   return row?.supportsAutoMode === true
 }
 
-export function chatPermissionModeNeedsModelSupport(
-  support: AgentChatPermissionModeSupport,
-  intent: unknown
-): boolean {
-  return (
-    support.autoNeedsModelSupport === true && savedChatPermissionMode(support, intent) === 'auto'
-  )
-}
-
-/** Saved choice, with `auto` on a model not listed for it read as Ask; never written back. */
-export function effectiveChatPermissionMode(
-  support: AgentChatPermissionModeSupport,
-  intent: unknown,
-  autoSupported: boolean
-): AgentChatPermissionMode {
-  const mode = savedChatPermissionMode(support, intent)
-  return mode === 'auto' && support.autoNeedsModelSupport && !autoSupported ? 'ask' : mode
-}
-
 export function offeredChatPermissionModes(
   support: AgentChatPermissionModeSupport,
   autoSupported: boolean
