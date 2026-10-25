@@ -150,8 +150,6 @@ const STRUCTURED_RUNTIME_PASSTHROUGH_CODES: ReadonlySet<string> = new Set([
   'terminal_is_coordinator',
   'worker_cannot_coordinate_own_run',
   'worker_cannot_take_over_run',
-  'run_coordinator_live',
-  'run_binding_changed',
   'request_mismatch',
   'mutation_ledger_full',
   'legacy_read_only',

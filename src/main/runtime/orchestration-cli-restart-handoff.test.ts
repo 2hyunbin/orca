@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-it('retains CLI work and mail across restart, refuses takeover, and completes a separate Run handoff', async () => {
+it("retains CLI work and mail across restart, refuses a worker's own Run, and completes a separate Run handoff", async () => {
   const home = mkdtempSync(join(tmpdir(), 'orca-cli-restart-handoff-'))
   for (const name of [
     'HOME',
@@ -71,15 +71,10 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
   const predecessor = 'term_predecessor'
   const predecessorTab = '55555555-5555-4555-8555-555555555555'
   const predecessorLeaf = '66666666-6666-4666-8666-666666666666'
-  const predecessorPane = `${predecessorTab}:${predecessorLeaf}`
-  let predecessorPresence: 'live' | 'exited' = 'live'
   let db = new OrchestrationDb(join(home, 'orchestration.db'))
 
   function runtimeForDatabase() {
-    const { runtime } = fixture.createRuntime(db, {
-      checkHookAgentPresence: async (pane) =>
-        pane === predecessorPane ? predecessorPresence : 'live'
-    })
+    const { runtime } = fixture.createRuntime(db)
     fixture.registerSecondPane(runtime)
     registerBoundPty(runtime, 'pty-predecessor', fixture.WORKTREE_ID, null, {
       tabId: predecessorTab,
@@ -187,10 +182,6 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
     expect(await cli(coord, ['check', '--ack', retainedBatch.deliveryId])).toMatchObject({
       result: { acknowledged: retainedBatch.deliveryId, count: 0 }
     })
-    expect(await cli(worker, ['run-use', '--id', separate], 1)).toMatchObject({
-      error: { code: 'run_coordinator_live', data: { effectsApplied: false } }
-    })
-    predecessorPresence = 'exited'
     expect(await cli(worker, ['run-use', '--id', separate])).toMatchObject({
       result: { run: { id: separate } }
     })

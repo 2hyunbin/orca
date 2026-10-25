@@ -28,7 +28,6 @@ export const ORCHESTRATION_RUN_HANDLERS: Record<string, CommandHandler> = {
     }>(client, flags, 'orchestration.runUse', {
       id: getRequiredStringFlag(flags, 'id'),
       from,
-      ...(flags.has('takeover') ? { takeover: true } : {}),
       ...(flags.has('takeover-legacy') ? { takeoverLegacy: true } : {})
     })
     printResult(result, json, (r) => `Using Run ${r.run.id}: ${r.run.objective}`)

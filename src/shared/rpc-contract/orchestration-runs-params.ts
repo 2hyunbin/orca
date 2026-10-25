@@ -10,8 +10,7 @@ export const RunCreateParams = z.object({
 export const RunUseParams = z.object({
   id: requiredString('Missing --id'),
   from: requiredString('Missing coordinator terminal'),
-  takeoverLegacy: OptionalBoolean,
-  takeover: OptionalBoolean
+  takeoverLegacy: OptionalBoolean
 })
 
 export const RunCurrentParams = z.object({ from: requiredString('Missing coordinator terminal') })
