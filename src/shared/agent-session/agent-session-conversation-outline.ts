@@ -10,15 +10,15 @@ import type {
   AgentJournalCursor,
   AgentJournalRenderItem,
   AgentJournalSubmission
-} from './agent-session-journal-types'
-import type { NativeChatBlock, NativeChatMessage } from './native-chat-types'
-import { deriveNativeChatRowContent, nativeChatRowRendersContent } from './native-chat-row-content'
-import { iterateProcessOutputLines } from './process-output-field-scanner'
-import { agentJournalSubmissionKey } from './agent-session-journal-item-key'
-import { dispatchWasWithdrawn } from './structured-agent-session-dispatch-rejection'
-import { projectStructuredAgentSessionMessages } from './structured-agent-session-message-projection'
-import { projectNativeChatTranscriptMessages } from './native-chat-transcript-projection'
-import { nativeChatTurnMembership } from './native-chat-turn-membership'
+} from '../agent-session-journal-types'
+import type { NativeChatBlock, NativeChatMessage } from '../native-chat-types'
+import { deriveNativeChatRowContent, nativeChatRowRendersContent } from '../native-chat-row-content'
+import { iterateProcessOutputLines } from '../process-output-field-scanner'
+import { agentJournalSubmissionKey } from '../agent-session-journal-item-key'
+import { dispatchWasWithdrawn } from '../structured-agent-session-dispatch-rejection'
+import { projectStructuredAgentSessionMessages } from '../structured-agent-session-message-projection'
+import { projectNativeChatTranscriptMessages } from '../native-chat-transcript-projection'
+import { nativeChatTurnMembership } from '../native-chat-turn-membership'
 
 /** Previews are cut on the host: the rail clamps to two lines, so a whole prompt
  *  would cross the wire only to be hidden. */

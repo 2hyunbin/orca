@@ -5,7 +5,7 @@
 // here rather than trusted: a name carrying a newline or a bidi override is not
 // something the record should ever hold.
 
-import { sliceAtCodeUnitLimit } from './surrogate-safe-text-slice'
+import { sliceAtCodeUnitLimit } from '../surrogate-safe-text-slice'
 
 /** Well past any provider's own cap, short enough that a pasted essay cannot enter the record. */
 export const AGENT_SESSION_CONVERSATION_NAME_MAX_LENGTH = 200
