@@ -6,6 +6,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync
 } from 'node:fs'
@@ -101,4 +102,24 @@ describe('MimoCodeHookService buildPtyEnv', () => {
       }
     }
   )
+
+  it('carries a login made under the old Orca MIMOCODE_HOME over once, owner-only, never overwriting', () => {
+    const legacyData = join(userDataDir, 'mimocode-hooks', 'shared', 'data')
+    mkdirSync(legacyData, { recursive: true })
+    writeFileSync(join(legacyData, 'auth.json'), '{"legacy":true}')
+    const xdgData = join(userDataDir, 'xdg-data')
+    const service = new MimoCodeHookService()
+
+    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
+    const auth = join(xdgData, 'mimocode', 'auth.json')
+    expect(readFileSync(auth, 'utf8')).toBe('{"legacy":true}')
+    if (process.platform !== 'win32') {
+      expect(statSync(auth).mode & 0o777).toBe(0o600)
+    }
+
+    writeFileSync(auth, '{"canonical":true}')
+    service.carryOverLegacyAuth({ XDG_DATA_HOME: xdgData })
+    expect(readFileSync(auth, 'utf8')).toBe('{"canonical":true}')
+    expect(existsSync(join(legacyData, 'auth.json'))).toBe(true)
+  })
 })

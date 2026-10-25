@@ -104,13 +104,15 @@ export function buildPtyHostEnv(
     overlay: 'ORCA_MIMOCODE_HOME',
     source: 'ORCA_MIMOCODE_SOURCE_HOME'
   })
-  const mimoSourceConfigDir = resolveMimocodeSourceConfigDir(baseEnv)
   restoreOrStripOverlayEnv(baseEnv, {
     primary: 'MIMOCODE_CONFIG_DIR',
     overlay: 'ORCA_MIMOCODE_CONFIG_DIR',
-    source: 'ORCA_MIMOCODE_SOURCE_CONFIG_DIR'
+    source: 'ORCA_MIMOCODE_SOURCE_CONFIG_DIR',
+    preserveExplicitPrimary: true
   })
+  const mimoSourceConfigDir = resolveMimocodeSourceConfigDir(baseEnv)
   if (opts.agentStatusHooksEnabled && isMimoLaunchCommand(launchCommandHint)) {
+    mimoCodeHookService.carryOverLegacyAuth({ ...process.env, ...baseEnv })
     const overlay = mimoCodeHookService.buildPtyEnv(id, mimoSourceConfigDir).MIMOCODE_CONFIG_DIR
     if (overlay && overlay !== mimoSourceConfigDir) {
       baseEnv.MIMOCODE_CONFIG_DIR = overlay

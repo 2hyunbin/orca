@@ -1,14 +1,32 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import { join } from 'node:path'
-import { existsSync, lstatSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import {
+  chmodSync,
+  constants,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { getOpenCodeFamilyPluginSource } from '../opencode/hook-service'
 import { sourceOverlayDirName } from '../opencode/overlay-dir-names'
-import { isSafeDescendCandidate, mirrorEntry, safeRemoveTree } from '../pty/overlay-mirror'
+import {
+  clearOpenCodeOverlayManifestEntries,
+  readOpenCodeOverlayManifest,
+  writeOpenCodeOverlayManifest,
+  type OpenCodeOverlayManifest
+} from '../opencode/opencode-overlay-manifest'
+import { isSafeDescendCandidate, mirrorEntry, safeRemoveOverlay } from '../pty/overlay-mirror'
 
 const ORCA_MIMOCODE_PLUGIN_FILE = 'orca-mimocode-status.js'
 const MIMOCODE_HOOKS_DIR = 'mimocode-hooks'
 const PLUGIN_ONLY_CONFIG_DIR = 'config'
 const SOURCE_CONFIG_OVERLAYS_DIR = 'config-overlays'
+const LEGACY_SHARED_HOME = 'shared'
 
 function isDirectoryFollowingLinks(path: string): boolean {
   try {
@@ -18,22 +36,44 @@ function isDirectoryFollowingLinks(path: string): boolean {
   }
 }
 
+function mirrorInto(sourcePath: string, targetDir: string, name: string): void {
+  // MiMo may have created a same-named file in the overlay since the last launch.
+  safeRemoveOverlay(join(targetDir, name), targetDir)
+  mirrorEntry(sourcePath, join(targetDir, name))
+}
+
+// Keep MiMo-written overlay files (installed plugin deps); replace only what was mirrored last time.
 function mirrorConfigDir(sourceConfigDir: string, targetConfigDir: string): void {
+  clearOpenCodeOverlayManifestEntries(
+    targetConfigDir,
+    readOpenCodeOverlayManifest(targetConfigDir),
+    ORCA_MIMOCODE_PLUGIN_FILE
+  )
+  const manifest: OpenCodeOverlayManifest = {
+    topLevelEntries: [],
+    pluginEntries: [],
+    sourceConfigDir
+  }
   for (const entry of readdirSync(sourceConfigDir, { withFileTypes: true })) {
     const sourcePath = join(sourceConfigDir, entry.name)
     // A linked plugins dir must not be linked through, or Orca's plugin lands in the user's folder.
     if (entry.name === 'plugins' && isDirectoryFollowingLinks(sourcePath)) {
       const overlayPlugins = join(targetConfigDir, 'plugins')
-      mkdirSync(overlayPlugins, { recursive: true })
+      if (!ensureRealDirectory(overlayPlugins)) {
+        throw new Error('MiMo overlay plugins folder is not a real directory')
+      }
       for (const pluginName of readdirSync(sourcePath)) {
         if (pluginName !== ORCA_MIMOCODE_PLUGIN_FILE) {
-          mirrorEntry(join(sourcePath, pluginName), join(overlayPlugins, pluginName))
+          mirrorInto(join(sourcePath, pluginName), overlayPlugins, pluginName)
+          manifest.pluginEntries.push(pluginName)
         }
       }
       continue
     }
-    mirrorEntry(sourcePath, join(targetConfigDir, entry.name))
+    mirrorInto(sourcePath, targetConfigDir, entry.name)
+    manifest.topLevelEntries.push(entry.name)
   }
+  writeOpenCodeOverlayManifest(targetConfigDir, manifest)
 }
 
 function ensureRealDirectory(path: string): boolean {
@@ -56,8 +96,6 @@ export class MimoCodeHookService {
         return fallback
       }
       if (existingConfigDir && existsSync(existingConfigDir)) {
-        safeRemoveTree(overlay)
-        mkdirSync(overlay, { recursive: true })
         mirrorConfigDir(existingConfigDir, overlay)
       }
       const pluginsDir = join(overlay, 'plugins')
@@ -72,6 +110,32 @@ export class MimoCodeHookService {
       return fallback
     }
     return { MIMOCODE_CONFIG_DIR: overlay }
+  }
+
+  /** Older builds kept MiMo data under Orca's MIMOCODE_HOME; carry a login made there over once. */
+  carryOverLegacyAuth(env: Record<string, string | undefined>): void {
+    const legacyAuth = join(
+      getAppEnvironment().getPath('userData'),
+      MIMOCODE_HOOKS_DIR,
+      LEGACY_SHARED_HOME,
+      'data',
+      'auth.json'
+    )
+    // Mirrors MiMo's Global.Path.data resolution (xdg-basedir, or MIMOCODE_HOME/data).
+    const dataDir = env.MIMOCODE_HOME
+      ? join(env.MIMOCODE_HOME, 'data')
+      : join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'mimocode')
+    const auth = join(dataDir, 'auth.json')
+    try {
+      if (!existsSync(legacyAuth) || existsSync(auth)) {
+        return
+      }
+      mkdirSync(dataDir, { recursive: true })
+      copyFileSync(legacyAuth, auth, constants.COPYFILE_EXCL)
+      chmodSync(auth, 0o600)
+    } catch {
+      // A failed carry-over leaves MiMo logged out, as before; never block the launch.
+    }
   }
 }
 

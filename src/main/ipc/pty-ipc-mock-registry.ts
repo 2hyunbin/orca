@@ -124,6 +124,7 @@ export const openCodeHookServiceModuleMock = () => ({
 
 export const mimoHookServiceModuleMock = () => ({
   mimoCodeHookService: {
+    carryOverLegacyAuth: vi.fn(),
     buildPtyEnv: mimoCodeBuildPtyEnvMock
   }
 })

@@ -134,7 +134,9 @@ export function getInheritedAgentHookEnvKeysToDelete(
     ...AGENT_HOOK_RUNTIME_ENV_KEYS,
     'ORCA_OPENCODE_AGENT',
     'ORCA_OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_SOURCE_CONFIG_DIR'
+    'ORCA_OPENCODE_SOURCE_CONFIG_DIR',
+    'ORCA_MIMOCODE_CONFIG_DIR',
+    'ORCA_MIMOCODE_SOURCE_CONFIG_DIR'
   ].filter((key) => env[key] === undefined)
 }
 
@@ -153,20 +155,19 @@ export function isMimoLaunchCommand(launchCommand: string | undefined): boolean 
   return getAgentLaunchExecutableName(launchCommand) === 'mimo'
 }
 
+/** Call after the overlay env is restored: an explicit pane value wins over inherited markers. */
 export function resolveMimocodeSourceConfigDir(
-  baseEnv: Record<string, string>
+  baseEnv: Record<string, string>,
+  inheritedEnv: NodeJS.ProcessEnv = process.env
 ): string | undefined {
-  const sourceDir =
-    baseEnv.ORCA_MIMOCODE_SOURCE_CONFIG_DIR ?? process.env.ORCA_MIMOCODE_SOURCE_CONFIG_DIR
-  if (sourceDir) {
-    return sourceDir
+  if (baseEnv.MIMOCODE_CONFIG_DIR) {
+    return baseEnv.MIMOCODE_CONFIG_DIR
   }
-  const configDir = baseEnv.MIMOCODE_CONFIG_DIR ?? process.env.MIMOCODE_CONFIG_DIR
-  const orcaDir = baseEnv.ORCA_MIMOCODE_CONFIG_DIR ?? process.env.ORCA_MIMOCODE_CONFIG_DIR
-  if (configDir && orcaDir && configDir === orcaDir) {
-    return undefined
+  if (inheritedEnv.ORCA_MIMOCODE_SOURCE_CONFIG_DIR) {
+    return inheritedEnv.ORCA_MIMOCODE_SOURCE_CONFIG_DIR
   }
-  return configDir
+  const configDir = inheritedEnv.MIMOCODE_CONFIG_DIR
+  return configDir && configDir === inheritedEnv.ORCA_MIMOCODE_CONFIG_DIR ? undefined : configDir
 }
 
 export function resolveOpenCodeSourceConfigDir(
