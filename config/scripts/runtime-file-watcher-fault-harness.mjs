@@ -70,9 +70,7 @@ async function main() {
     throw new Error(`Missing ${ENTRY_PATH}; run pnpm run build:electron-vite first`)
   }
 
-  // Why: mkdtemp/realpath/bundle/construction can fail before the body runs.
-  // Keep cleanup in finally from the first successful mkdtemp onward, and clean
-  // the original temp path if realpath never succeeds.
+  // Start finally at first mkdtemp: realpath/bundle/construction may fail; remove original temp path if canonicalization never completes.
   let createdRootPath
   let bundleDir
   let rootPath
@@ -90,8 +88,7 @@ async function main() {
   try {
     createdRootPath = await mkdtemp(join(tmpdir(), 'orca-runtime-watcher-fault-'))
     bundleDir = await mkdtemp(join(tmpdir(), 'orca-runtime-watcher-harness-'))
-    // Parcel reports canonical event paths on macOS, where tmpdir() may use the
-    // /var symlink spelling. Keep the oracle in the same path domain.
+    // Match Parcel’s canonical event paths; macOS tmpdir may use /var symlink spelling.
     rootPath = await realpath(createdRootPath)
     const WatcherProcessSupervisor = await loadSupervisor(bundleDir)
     supervisor = new WatcherProcessSupervisor()
@@ -107,8 +104,7 @@ async function main() {
       rootPath,
       (error, events) => {
         if (error) {
-          // Why: throws from the async watcher callback escape main()'s try/finally
-          // and skip teardown. Surface failures through a harness promise instead.
+          // Surface watcher-callback errors through harness promise; async throws escape main’s cleanup.
           rejectWatcherError(error)
           return
         }
