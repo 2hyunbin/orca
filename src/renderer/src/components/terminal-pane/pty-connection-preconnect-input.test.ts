@@ -195,6 +195,46 @@ describe('connectPanePty pre-connect input', () => {
     binding.dispose()
   })
 
+  it('stops releasing held keys once a resume source lands before the first bind', async () => {
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane()
+    const release = createdTransportOptions[0]?.releasePreconnectInput
+    expect(typeof release).toBe('function')
+    expect(typeof release === 'function' && release()).toBe(true)
+
+    const paneKey = makePaneKey('tab-1', leafIdForPane(1))
+    mockStoreState.agentStatusByPaneKey[paneKey] = {
+      state: 'working',
+      prompt: '',
+      agentType: 'claude',
+      paneKey,
+      updatedAt: 1_000,
+      stateStartedAt: 1_000,
+      stateHistory: [],
+      providerSession: { key: 'session_id', id: 'session-1' }
+    }
+
+    expect(typeof release === 'function' && release()).toBe(false)
+    binding.dispose()
+  })
+
+  it('keeps releasing a deferred split’s held keys as before when startup work appears', async () => {
+    transportFactoryQueue.push(createMockTransport())
+
+    const binding = connectPlainPane({ cwdPromise: new Promise<string>(() => {}) })
+    const release = createdTransportOptions[0]?.releasePreconnectInput
+    const paneKey = makePaneKey('tab-1', leafIdForPane(1))
+    mockStoreState.sleepingAgentSessionsByPaneKey[paneKey] = {
+      paneKey,
+      tabId: 'tab-1',
+      worktreeId: 'wt-1'
+    }
+
+    expect(typeof release === 'function' && release()).toBe(true)
+    binding.dispose()
+  })
+
   it('drops keys typed into a deliberately slept pane instead of replaying them on wake', async () => {
     markWorktreeSleepIntent('wt-1')
     const transport = Object.assign(createMockTransport(), { abandonPreconnectInput: vi.fn() })

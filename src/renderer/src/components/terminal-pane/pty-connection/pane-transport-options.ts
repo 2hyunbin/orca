@@ -37,7 +37,13 @@ export function buildPaneTransportOptions(session: ConnectPanePtySession): IpcPt
     terminalKittyKeyboardProtocol:
       session.pane.terminal.options.vtExtensions?.kittyKeyboard === true,
     cwd: session.deps.cwd,
-    ...(holdsInputUntilConnect(session) ? { bufferInputUntilConnect: true } : {}),
+    ...(holdsInputUntilConnect(session)
+      ? {
+          bufferInputUntilConnect: true,
+          // Why: a resume source can land between mount and bind; keys must not flush ahead of it.
+          releasePreconnectInput: () => holdsInputUntilConnect(session)
+        }
+      : {}),
     ...(session.deps.preconnectInput?.length
       ? { preconnectInput: session.deps.preconnectInput }
       : {}),
