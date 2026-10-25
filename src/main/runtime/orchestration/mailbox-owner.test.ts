@@ -68,8 +68,7 @@ function attachRemoteDispatch(
 }
 
 describe('OrchestrationMailboxOwner.resolve', () => {
-  // Why: every idle agent title re-resolves its pane's mailbox, so a statement the SQLite cache
-  // refuses (a `SELECT *`) recompiles on each title while output streams.
+  // Idle titles re-resolve mailbox ownership; wildcard queries must not recompile on every title.
   it.each([
     ['a plain pane', false],
     ['a pane with a remote Dispatch', true]

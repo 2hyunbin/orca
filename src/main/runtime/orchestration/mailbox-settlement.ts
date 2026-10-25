@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from 'node:util'
-import type { OrchestrationMailNotice } from '../../../shared/agent-session-message-source'
+import type { OrchestrationMailNotice } from '../../../shared/agent-session/agent-session-message-source'
 import type {
   AgentJournalSubmission,
   AgentJournalTurnLifecycle
