@@ -1,5 +1,5 @@
-import type { AgentType } from './agent-status-types'
-import { formatAgentTypeLabel } from './agent-type-label'
+import type { AgentType } from '../agent-status-types'
+import { formatAgentTypeLabel } from '../agent-type-label'
 
 /** Placeholder tab label for a structured chat that has no conversation name yet.
  *  Routed through the shared agent-name table so an agent this build does not
