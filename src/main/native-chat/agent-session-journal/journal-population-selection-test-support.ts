@@ -16,6 +16,8 @@ import { stageJournalMutation } from './journal-mutation-stage'
 const turnIdentity = (id: string) =>
   ({ provider: 'codex', threadId: 'population-thread', turnId: id, ordinal: 0 }) as const
 
+type PopulationTurnIdentity = typeof turnIdentity
+
 export function exercisePopulationSelection(state: JournalReducerState): void {
   const a = state.submissions.get('echo-0')!
   const b = state.submissions.get('echo-1')!
@@ -107,7 +109,7 @@ export async function exercisePopulationEchoContext(input: {
   count: number
   fingerprint: string
   text: AgentJournalMessageItem
-  turnIdentity: typeof turnIdentity
+  turnIdentity: PopulationTurnIdentity
   measure: <T>(name: string, run: () => T | Promise<T>) => Promise<T>
 }): Promise<void> {
   const { current, state, count, fingerprint, text, turnIdentity, measure } = input
