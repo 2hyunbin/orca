@@ -62,10 +62,6 @@ src/settings/native-notification-delivery-settings.test.tsx
 src/settings/notification-display-test.test.tsx
 src/settings/settings-screen-state.test.tsx
 src/settings/voice-settings-poller-refresh.test.tsx
-src/source-control/mobile-create-pr-action.test.ts
-src/source-control/mobile-git-status.test.ts
-src/source-control/mobile-hosted-review-create-intent-runner.test.ts
-src/source-control/use-mobile-hosted-review-eligibility.test.ts
 src/tasks/source-workspace-create.test.ts
 src/tasks/task-source-search-reply-schema.test.ts
 src/terminal/buffered-terminal-draft-restoration.test.ts

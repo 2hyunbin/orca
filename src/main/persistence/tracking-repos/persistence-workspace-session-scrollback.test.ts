@@ -104,7 +104,7 @@ describe('Store', () => {
     expect(store.getWorkspaceSession()).toEqual(session)
   })
 
-  it('patches workspace session without replacing unchanged slices', async () => {
+  it('preserves unchanged slice contents when patching workspace session', async () => {
     const store = await createStore()
     const tabsByWorktree = {
       wt1: [makeTerminalTab({ id: 'tab1', ptyId: null, worktreeId: 'wt1' })]

@@ -413,7 +413,7 @@ describe('Store', () => {
   })
 
   describe('concurrent write serialization', () => {
-    it('chains debounced writes via pendingWrite so they run sequentially', async () => {
+    it('persists both repo additions across debounced writes', async () => {
       vi.useFakeTimers()
       try {
         const store = await createStore()
