@@ -27,6 +27,26 @@ export async function probePreviewPixel(page, clip) {
   return `${png.data[0]},${png.data[1]},${png.data[2]}`
 }
 
+/** Long enough for a loaded runner to composite a parsed frame; a frame that never paints still reds. */
+const PAINT_MS = 10_000
+
+/**
+ * The pixel once the frame has painted `expected`, or the last reading when it never does.
+ *
+ * Parsed is not painted: Chromium runs the sandboxed frame in its own process, and the embedder
+ * composites that process's surface a frame or more after the document is complete. CI read the
+ * frame's unpainted white as `pixelBefore` there with the marker already present.
+ */
+export async function waitForPaintedPreview(page, clip, expected, signal) {
+  const started = Date.now()
+  let pixel = await probePreviewPixel(page, clip)
+  while (pixel !== expected && !signal?.aborted && Date.now() - started < PAINT_MS) {
+    await page.waitForTimeout(25)
+    pixel = await probePreviewPixel(page, clip)
+  }
+  return pixel
+}
+
 /** What the toolbar emits into the DOM, not what the component was handed: react-native-web
  *  forwards `aria-*` and drops `accessibilityState` on the floor, so a selected state that reads
  *  fine in the test renderer can reach a screen reader as nothing at all. */

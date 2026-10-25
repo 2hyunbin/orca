@@ -152,6 +152,42 @@ export async function waitForLoadedFrame(
   return previewFrame(page)
 }
 
+/** How long a painted frame may go on handing its input to the embedder before the arm gives up. */
+const INPUT_ROUTING_MS = 10_000
+
+/**
+ * Returns once a pointer over the frame reaches the frame rather than the embedder.
+ *
+ * Painted is not routed either. Chromium sends input into the frame's own process only once the
+ * browser holds that frame's hit-test region, and until then an event at the frame's coordinates
+ * is the embedder's, targeted at its `<iframe>` element. Playwright's checks all pass inside the
+ * frame, so its click reports landing while nothing in the artifact is activated: measured on a
+ * failing arm, the embedder had received mousemove, mousedown, mouseup and click on IFRAME, and on
+ * passing arms it receives none.
+ *
+ * So the pointer is moved onto the frame until the embedder's own count of events on an `<iframe>`
+ * stops rising. Two alternating points, because a move to where the pointer already is need not
+ * dispatch anything. An engine that keeps the frame in-process never shows the embedder those
+ * events, so it passes on the first move.
+ */
+export async function waitForFrameInputRouting(page, clip, signal) {
+  const started = Date.now()
+  const embedderSaw = async () => await page.evaluate(() => window.__embedderFramePointer ?? 0)
+  for (let step = 0; !signal?.aborted; step += 1) {
+    const before = await embedderSaw()
+    await page.mouse.move(clip.x + (step % 2), clip.y)
+    if ((await embedderSaw()) === before) {
+      return
+    }
+    if (Date.now() - started > INPUT_ROUTING_MS) {
+      throw new Error(
+        `[html-preview-render] the embedder still received pointer input over the frame after ${String(Date.now() - started)}ms`
+      )
+    }
+    await abandonAfter(POLL_MS)
+  }
+}
+
 /** The two the widened `img-src` admits; the font beside them stays an absence. */
 const ADMITTED_IMAGE_PATHS = ['/css-bg.png', '/img.png']
 
