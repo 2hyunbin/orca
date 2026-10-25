@@ -6,6 +6,7 @@ import {
 } from './delivery-messages.js'
 import { ConnectorEventSchema, ConnectorReplyResponseSchema } from './event-messages.js'
 import { ConnectorHelloRequestSchema } from './hello-messages.js'
+import { ConnectorHostSessionResponseSchema } from './host-auth-messages.js'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
 import { ConnectorSignInPollResponseSchema } from './sign-in-messages.js'
 
@@ -36,37 +37,31 @@ describe('poll response', () => {
       'cancel'
     ])
     expect(result.data?.deliveries[0]).not.toHaveProperty('addedLater')
-    expect(result.data?.unsettled).toEqual([])
     expect(result.data?.control).toBeUndefined()
   })
 
-  it('settles a kind or shape the machine does not know as unsupported', () => {
+  it('rejects a delivery the cloud must never send', () => {
     for (const delivery of [
-      { ...base, kind: 'rewind', steps: 2 },
+      { ...base, kind: 'rewind' },
       { ...start, prompt: '' },
+      { deliveryId: base.deliveryId },
       { ...base, conversation: { source: 'linear', externalId: 'L1' }, kind: 'cancel' }
     ]) {
-      expect(ConnectorDeliverySchema.parse(delivery)).toEqual({
-        deliveryId: base.deliveryId,
-        kind: 'unsupported'
-      })
+      expect(ConnectorDeliverySchema.safeParse(delivery).success).toBe(false)
     }
   })
 
-  it('ignores an unknown control but keeps known ones', () => {
-    expect(poll([], { control: { migrate: 'eu' } }).data?.control).toBeUndefined()
+  it('carries one control at a time', () => {
     expect(poll([], { control: { stop: 'host_revoked' } }).data?.control).toEqual({
       stop: 'host_revoked'
     })
-    expect(poll([], { control: { pausedForMs: 300_000 } }).data?.control).toEqual({
-      pausedForMs: 300_000
-    })
+    expect(poll([], { control: { pausedForMs: 0 } }).success).toBe(false)
   })
 
   it('bounds the batch and the hold', () => {
     const tooMany = Array.from({ length: CONNECTOR_LIMITS.maxDeliveriesPerPoll + 1 }, () => start)
     expect(poll(tooMany).success).toBe(false)
-    expect(poll([], { holdMs: CONNECTOR_LIMITS.pollTimeoutMs + 1 }).success).toBe(false)
+    expect(poll([], { holdMs: CONNECTOR_LIMITS.pollTimeoutMs }).success).toBe(false)
   })
 })
 
@@ -131,6 +126,18 @@ describe('events', () => {
         ]
       }).success
     ).toBe(true)
+  })
+})
+
+describe('host session', () => {
+  it('names the host once and tolerates added fields', () => {
+    const session = ConnectorHostSessionResponseSchema.parse({
+      sessionToken: Buffer.alloc(32, 3).toString('base64url'),
+      expiresAt: 1_793_003_600_000,
+      hostId: 'D20lU_8MD0R64gLt',
+      addedLater: 1
+    })
+    expect(Object.keys(session)).toEqual(['sessionToken', 'expiresAt', 'hostId'])
   })
 })
 

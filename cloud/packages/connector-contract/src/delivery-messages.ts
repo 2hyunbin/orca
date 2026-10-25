@@ -12,7 +12,8 @@ const DeliveryBase = {
   conversation: ConnectorConversationSchema
 }
 
-const KnownDeliverySchema = z.discriminatedUnion('kind', [
+// What the cloud sends. The machine settles a kind or shape it cannot read as {outcome:'unsupported'}.
+export const ConnectorDeliverySchema = z.discriminatedUnion('kind', [
   z.object({
     ...DeliveryBase,
     kind: z.literal('start'),
@@ -30,33 +31,23 @@ const KnownDeliverySchema = z.discriminatedUnion('kind', [
   z.object({ ...DeliveryBase, kind: z.literal('cancel') })
 ])
 
-// A kind or shape this machine does not know settles as unsupported instead of failing the whole poll.
-const UnsupportedDeliverySchema = z
-  .object({ deliveryId: OpaqueIdSchema })
-  .transform(({ deliveryId }) => ({ deliveryId, kind: 'unsupported' as const }))
-
-export const ConnectorDeliverySchema = z.union([KnownDeliverySchema, UnsupportedDeliverySchema])
-
-// An unknown control is ignored, never fatal.
-const PollControlSchema = z
-  .union([
-    z.object({ stop: z.string().min(1) }),
-    z.object({ pausedForMs: z.number().int().positive() }),
-    z.object({ reconnect: z.literal(true) })
-  ])
-  .optional()
-  .catch(undefined)
+// The machine ignores a control it cannot read.
+const PollControlSchema = z.union([
+  z.object({ stop: z.string().min(1) }),
+  z.object({ pausedForMs: z.number().int().positive() }),
+  z.object({ reconnect: z.literal(true) })
+])
 
 export const ConnectorPollResponseSchema = z.object({
   v: z.literal(1),
   serverNow: EpochMsSchema,
-  holdMs: z.number().int().nonnegative().max(CONNECTOR_LIMITS.pollTimeoutMs),
+  holdMs: z.number().int().nonnegative().lt(CONNECTOR_LIMITS.pollTimeoutMs),
   // First poll of a session only: deliveries received by an earlier process but never done.
   unsettled: z
     .array(z.object({ deliveryId: OpaqueIdSchema, conversation: ConnectorConversationSchema }))
-    .default([]),
+    .optional(),
   deliveries: z.array(ConnectorDeliverySchema).max(CONNECTOR_LIMITS.maxDeliveriesPerPoll),
-  control: PollControlSchema
+  control: PollControlSchema.optional()
 })
 
 export const ConnectorDeliveryResultSchema = z.discriminatedUnion('outcome', [

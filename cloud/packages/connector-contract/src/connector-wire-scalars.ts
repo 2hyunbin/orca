@@ -1,7 +1,7 @@
 import { OpaqueIdSchema, PushHostFingerprintSchema } from '@orca-cloud/push-contract'
 import { z } from 'zod'
 
-/** The host key fingerprint, as push's session reply names it `hostFingerprint`. */
+/** The host key fingerprint, derived as push derives `hostFingerprint`. */
 export const ConnectorHostIdSchema = PushHostFingerprintSchema
 
 /** Opaque to the cloud: the machine encodes [repoHostId, repoId], or a folder's project group. */

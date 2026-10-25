@@ -5,7 +5,6 @@ export const CONNECTOR_PATHS = {
   signInStart: '/v1/host/auth/start',
   signInPoll: '/v1/host/auth/poll',
   signOut: '/v1/host/auth/unbind',
-  // Push's challenge/session shapes (@orca-cloud/push-contract) under the connector domains.
   hostChallenge: '/v1/host/challenge',
   hostSession: '/v1/host/session',
   hello: '/v1/connector/hello',
