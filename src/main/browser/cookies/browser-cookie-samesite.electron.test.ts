@@ -186,7 +186,7 @@ async function runFixture(): Promise<{
   const sourceCookieRows = readSourceCookieRows(sourceDbPath)
   writeFileSync(
     bundleEntryPath,
-    `export { importCookiesFromBrowser } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/browser-cookie-import.ts'))}`
+    `export { importCookiesFromBrowser } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/cookies/browser-cookie-import.ts'))}`
   )
   await buildVite({
     configFile: false,

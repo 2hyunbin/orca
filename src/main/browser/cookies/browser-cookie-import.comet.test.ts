@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
   session: { fromPartition: sessionFromPartitionMock }
 }))
 
-import { BROWSER_FAMILY_LABELS } from '../../shared/constants'
+import { BROWSER_FAMILY_LABELS } from '../../../shared/constants'
 
 function slashPath(pathValue: string): string {
   return pathValue.replaceAll('\\', '/')

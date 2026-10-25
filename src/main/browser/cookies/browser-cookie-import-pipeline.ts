@@ -3,7 +3,7 @@ import { summarizePartitionSkips } from './browser-cookie-partition-summary'
 import type {
   BrowserCookieImportResult,
   BrowserCookieImportSummary
-} from '../../shared/browser-workspace-types'
+} from '../../../shared/browser-workspace-types'
 import {
   isGoogleSourceBoundCookie,
   isNonTransplantableCookieDomain,
@@ -34,7 +34,7 @@ import {
   validateCookieEntry,
   type RawCookieEntry,
   type ValidatedCookie
-} from './cookies/sources/browser-cookie-validation'
+} from './sources/browser-cookie-validation'
 
 export type CookieImportSessionStore = CookieClearStore &
   CookieImportWriteStore & { dispose: () => void }

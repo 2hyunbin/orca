@@ -172,7 +172,7 @@ async function runFixture(): Promise<FixtureResult> {
       {
         name: 'stub-browser-session-registry',
         resolveId(source, importer) {
-          return source === './browser-session-registry' &&
+          return source === '../browser-session-registry' &&
             importer?.endsWith('browser-cookie-import.ts')
             ? registryStubPath
             : null
@@ -182,7 +182,7 @@ async function runFixture(): Promise<FixtureResult> {
     build: {
       emptyOutDir: false,
       lib: {
-        entry: join(process.cwd(), 'src/main/browser/browser-cookie-import.ts'),
+        entry: join(process.cwd(), 'src/main/browser/cookies/browser-cookie-import.ts'),
         formats: ['cjs'],
         fileName: () => 'browser-cookie-import.cjs'
       },

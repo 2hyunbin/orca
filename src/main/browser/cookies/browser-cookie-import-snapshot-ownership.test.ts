@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as NodeSqlite from 'node:sqlite'
-import type * as ChromiumCookieSnapshotModule from './chromium-cookie-snapshot'
-import type { DetectedBrowser } from './cookies/sources/browser-cookie-detection-types'
+import type * as ChromiumCookieSnapshotModule from '../chromium-cookie-snapshot'
+import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -39,7 +39,7 @@ vi.mock('electron', () => ({
 vi.mock('@orca/process-host', () => ({
   runProcessSync: runProcessSyncMock
 }))
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
@@ -57,7 +57,7 @@ vi.mock('node:sqlite', async (importOriginal) => {
     }
   }
 })
-vi.mock('./chromium-cookie-snapshot', async (importOriginal) => {
+vi.mock('../chromium-cookie-snapshot', async (importOriginal) => {
   const actual = await importOriginal<typeof ChromiumCookieSnapshotModule>()
   return {
     ...actual,
@@ -95,7 +95,7 @@ vi.mock('./browser-cookie-clear-store', () => ({
   })
 }))
 
-import { importChromiumCookies } from './cookies/chromium/import-cookies'
+import { importChromiumCookies } from './chromium/import-cookies'
 import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
 import { DatabaseSync } from 'node:sqlite'
 

@@ -18,7 +18,7 @@ const {
   writeCookieIdentityMock: vi.fn()
 }))
 
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
@@ -53,7 +53,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { importCookiesFromBrowser, type DetectedBrowser } from './browser-cookie-import'
+import { importCookiesFromBrowser } from './browser-cookie-import'
+import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
+
 import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
 
 /** Seed unrelated sessions so overbroad removal is observable. */

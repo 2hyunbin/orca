@@ -22,7 +22,7 @@ const {
   writeCookieIdentityMock: vi.fn()
 }))
 
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
@@ -72,11 +72,14 @@ import {
   buildChromiumCookieInsertParams,
   importCookiesFromFile,
   importCookiesFromBrowser,
-  detectInstalledBrowsers,
-  summarizeCookieImportError,
-  type ChromiumCookieColumnInfo,
-  type DetectedBrowser
+  detectInstalledBrowsers
 } from './browser-cookie-import'
+import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
+
+import type { ChromiumCookieColumnInfo } from './sources/browser-cookie-sqlite'
+
+import { summarizeCookieImportError } from './browser-cookie-import-diagnostics'
+
 import {
   createChromiumCookieTestDatabase,
   encryptMacChromiumCookie

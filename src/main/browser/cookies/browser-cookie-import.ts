@@ -1,29 +1,22 @@
 import type { BrowserWindow } from 'electron'
-import type { BrowserCookieImportResult } from '../../shared/browser-workspace-types'
+import type { BrowserCookieImportResult } from '../../../shared/browser-workspace-types'
 import {
   detectInstalledBrowsers as detectBrowsers,
   selectBrowserProfile as selectProfile
-} from './cookies/sources/browser-cookie-detection'
-import type {
-  BrowserProfile,
-  DetectedBrowser
-} from './cookies/sources/browser-cookie-detection-types'
+} from './sources/browser-cookie-detection'
+import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
 import {
   pickCookieFile as pickFile,
   importCookiesFromFile as importFile,
   type CookieImportOptions
 } from './browser-cookie-import-pipeline'
-import { importChromiumCookies } from './cookies/chromium/import-cookies'
-import { importCookiesFromFirefox } from './cookies/sources/browser-cookie-firefox-import'
-import { importCookiesFromSafari } from './cookies/sources/browser-cookie-safari-import'
+import { importChromiumCookies } from './chromium/import-cookies'
+import { importCookiesFromFirefox } from './sources/browser-cookie-firefox-import'
+import { importCookiesFromSafari } from './sources/browser-cookie-safari-import'
 import {
   buildChromiumCookieInsertParams as buildInsertParams,
   type ChromiumCookieColumnInfo
-} from './cookies/sources/browser-cookie-sqlite'
-import { summarizeCookieImportError as summarizeError } from './browser-cookie-import-diagnostics'
-
-export type { BrowserProfile, DetectedBrowser, CookieImportOptions, ChromiumCookieColumnInfo }
-export { summarizeError as summarizeCookieImportError }
+} from './sources/browser-cookie-sqlite'
 
 export function detectInstalledBrowsers(): DetectedBrowser[] {
   return detectBrowsers()

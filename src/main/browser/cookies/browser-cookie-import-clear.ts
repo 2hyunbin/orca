@@ -1,5 +1,5 @@
 import type { Cookie, Cookies } from 'electron'
-import { mapSettledWithConcurrency } from '../../shared/map-with-concurrency'
+import { mapSettledWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { ImportedDomainScope } from './browser-cookie-import-policy'
 import {
   cookieRemovalUrl,

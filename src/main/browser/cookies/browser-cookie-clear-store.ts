@@ -1,5 +1,5 @@
 import { BrowserWindow, webContents, type Cookie, type Session } from 'electron'
-import { acquireElectronDebugger } from './electron-debugger-lease'
+import { acquireElectronDebugger } from '../electron-debugger-lease'
 import { normalizeCookieDomain } from './browser-cookie-import-policy'
 import type {
   CookieClearIdentity,
@@ -8,7 +8,7 @@ import type {
   CookieImportWriteStore
 } from './browser-cookie-import-clear'
 import { restoreEveryCookieIdentity } from './browser-cookie-identity-restore'
-import { normalizeCookiePartitionSite } from './cookies/sources/browser-cookie-source-partition'
+import { normalizeCookiePartitionSite } from './sources/browser-cookie-source-partition'
 
 type CdpCookiePartitionKey = {
   topLevelSite?: string

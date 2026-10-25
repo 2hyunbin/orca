@@ -216,8 +216,8 @@ async function runFixture(mode: FixtureMode): Promise<FixtureResult> {
   writeFileSync(
     bundleEntryPath,
     [
-      `export { openCookieClearStore } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/browser-cookie-clear-store.ts'))}`,
-      `export { replaceCookiesForImportedDomains } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/browser-cookie-import-policy.ts'))}`
+      `export { openCookieClearStore } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/cookies/browser-cookie-clear-store.ts'))}`,
+      `export { replaceCookiesForImportedDomains } from ${JSON.stringify(join(process.cwd(), 'src/main/browser/cookies/browser-cookie-import-policy.ts'))}`
     ].join('\n')
   )
   await buildVite({

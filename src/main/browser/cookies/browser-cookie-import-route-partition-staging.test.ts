@@ -18,7 +18,7 @@ const {
   clearPendingCookieImportMock: vi.fn()
 }))
 
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
@@ -60,7 +60,9 @@ vi.mock('./browser-cookie-clear-store', () => ({
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { importCookiesFromBrowser, type DetectedBrowser } from './browser-cookie-import'
+import { importCookiesFromBrowser } from './browser-cookie-import'
+import type { DetectedBrowser } from './sources/browser-cookie-detection-types'
+
 import { createChromiumCookieTestDatabase } from './browser-cookie-import-test-database'
 
 const routePartition = `persist:orca-browser-v1-${'b'.repeat(64)}`

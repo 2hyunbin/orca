@@ -43,16 +43,16 @@ vi.mock('./browser-cookie-clear-store', () => ({
     dispose: () => undefined
   })
 }))
-vi.mock('./browser-session-registry', () => ({
+vi.mock('../browser-session-registry', () => ({
   browserSessionRegistry: {
     setPendingCookieImport: setPendingCookieImportMock,
     clearPendingCookieImport: clearPendingCookieImportMock
   }
 }))
-vi.mock('../codex-accounts/fs-utils', () => ({
+vi.mock('../../codex-accounts/fs-utils', () => ({
   copyFileWithWindowsRetry: copyFileWithWindowsRetryMock
 }))
-vi.mock('../../shared/windows-retry-file-operations', () => ({
+vi.mock('../../../shared/windows-retry-file-operations', () => ({
   copyFileWithWindowsRetry: copyFileWithWindowsRetryMock
 }))
 
