@@ -58,7 +58,9 @@ describe('sendFollowupPromptWhenAgentReady — interpreter-wrapped agents', () =
       const delivered = await delivery
 
       expect(delivered).toBe(true)
-      expect(pasteDraftToAgentPtyWhenReady).toHaveBeenCalledExactlyOnceWith(SUBMITTED_PASTE)
+      expect(pasteDraftToAgentPtyWhenReady).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining(SUBMITTED_PASTE)
+      )
     })
 
     it(`still refuses to type into a bare ${agent} shell foreground`, async () => {
@@ -118,6 +120,27 @@ describe('sendFollowupPromptWhenAgentReady — interpreter-wrapped agents', () =
     })
 
     expect(delivered).toBe(true)
-    expect(pasteDraftToAgentPtyWhenReady).toHaveBeenCalledWith(SUBMITTED_PASTE)
+    expect(pasteDraftToAgentPtyWhenReady).toHaveBeenCalledWith(
+      expect.objectContaining(SUBMITTED_PASTE)
+    )
+  })
+
+  it('pastes nothing when the agent left the terminal during the readiness wait', async () => {
+    vi.mocked(inspectRuntimeTerminalProcess)
+      .mockResolvedValueOnce({ foregroundProcess: 'aider', hasChildProcesses: true })
+      .mockResolvedValue({ foregroundProcess: 'zsh', hasChildProcesses: false })
+    // Run the real last check the paste would make once the composer reads ready.
+    vi.mocked(pasteDraftToAgentPtyWhenReady).mockImplementation(async ({ beforePaste }) =>
+      beforePaste ? await beforePaste() : true
+    )
+
+    const delivered = await sendFollowupPromptWhenAgentReady({
+      ptyId: 'pty-1',
+      agent: 'aider',
+      expectedProcess: 'aider',
+      prompt: 'ship it'
+    })
+
+    expect(delivered).toBe(false)
   })
 })

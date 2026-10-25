@@ -24,7 +24,9 @@ export async function sendFollowupPromptWhenAgentReady(args: {
       content: prompt,
       agent,
       submit: true,
-      forcePaste: true
+      forcePaste: true,
+      // An agent that exited during the readiness wait must not have its prompt pasted into the shell.
+      beforePaste: () => agentHoldsPty(ptyId, expectedProcess, true)
     })
   } catch {
     return false
@@ -37,24 +39,31 @@ async function waitForAgentForeground(ptyId: string, expectedProcess: string): P
     if (attempt > 0) {
       await new Promise((resolve) => globalThis.setTimeout(resolve, 150))
     }
-    try {
-      const process = await inspectRuntimeTerminalProcess(ptyId)
-      const foreground = process.foregroundProcess?.toLowerCase() ?? ''
-      if (isExpectedAgentProcess(foreground, expectedProcess)) {
-        return true
-      }
-      // Wrapped agents may expose only python/node comm locally or over SSH; require a known wrapper plus a live non-shell child.
-      if (
-        attempt >= 4 &&
-        isAgentForegroundWrapperProcess(foreground) &&
-        !isShellProcess(foreground) &&
-        process.hasChildProcesses
-      ) {
-        return true
-      }
-    } catch {
-      // Ignore transient PTY inspection failures and keep polling.
+    if (await agentHoldsPty(ptyId, expectedProcess, attempt >= 4)) {
+      return true
     }
   }
   return false
+}
+
+async function agentHoldsPty(
+  ptyId: string,
+  expectedProcess: string,
+  acceptWrapper: boolean
+): Promise<boolean> {
+  try {
+    const process = await inspectRuntimeTerminalProcess(ptyId)
+    const foreground = process.foregroundProcess?.toLowerCase() ?? ''
+    // Wrapped agents may expose only python/node comm locally or over SSH; require a known wrapper plus a live non-shell child.
+    return (
+      isExpectedAgentProcess(foreground, expectedProcess) ||
+      (acceptWrapper &&
+        isAgentForegroundWrapperProcess(foreground) &&
+        !isShellProcess(foreground) &&
+        process.hasChildProcesses === true)
+    )
+  } catch {
+    // Transient PTY inspection failures prove nothing.
+    return false
+  }
 }

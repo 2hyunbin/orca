@@ -56,18 +56,25 @@ export async function deliverStartupFollowupPrompt(
   host: WorktreeStartupReadinessHost,
   handle: string,
   { agent, prompt }: WorktreeStartupFollowup,
-  signal?: AbortSignal
+  options: { signal?: AbortSignal; agentLaunch?: boolean } = {}
 ): Promise<boolean> {
+  const { signal } = options
   try {
     const ptyId = host.getPtyId(handle)
     // Where no read proves the agent in front (Windows), its process must be seen first: a lone shell's prompt also reads as ready.
-    if (
-      ptyId &&
-      runtime.launchedAgentHostProvesAgent?.(ptyId) === false &&
-      !(await waitForWorktreeStartupFollowup(host, handle, TUI_AGENT_CONFIG[agent].expectedProcess))
-    ) {
-      console.warn('[agent-startup] agent did not come to the front; its prompt was not delivered')
-      return false
+    if (ptyId && runtime.launchedAgentHostProvesAgent?.(ptyId) === false) {
+      const expected = TUI_AGENT_CONFIG[agent].expectedProcess
+      if (!(await waitForWorktreeStartupFollowup(host, handle, expected, signal))) {
+        console.warn(
+          '[agent-startup] agent did not come to the front; its prompt was not delivered'
+        )
+        return false
+      }
+      // WSL and SSH-to-Windows cannot prove a lone shell either: keep their typed follow-up; agent.launch refused there.
+      if (!options.agentLaunch && runtime.launchedAgentHostProvesShellAlone?.(ptyId) !== true) {
+        host.write(ptyId, `${prompt}\r`, 'launch')
+        return true
+      }
     }
     return await deliverTerminalAgentLaunchPrompt({
       runtime,
@@ -87,7 +94,8 @@ export async function deliverStartupFollowupPrompt(
 export async function waitForWorktreeStartupFollowup(
   host: WorktreeStartupReadinessHost,
   handle: string,
-  expectedProcess: string
+  expectedProcess: string,
+  signal?: AbortSignal
 ): Promise<string | null> {
   const ptyId = host.getPtyId(handle)
   if (!ptyId) {
@@ -96,6 +104,9 @@ export async function waitForWorktreeStartupFollowup(
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (attempt > 0) {
       await new Promise((resolve) => setTimeout(resolve, 150))
+    }
+    if (signal?.aborted) {
+      return null
     }
     try {
       const foregroundProcess = await host.getForegroundProcess(ptyId)

@@ -292,13 +292,15 @@ describe('ensureAgentStartupInTerminal prompt delivery', () => {
       }
     })
 
-    expect(mockPasteDraftToAgentPtyWhenReady).toHaveBeenCalledWith({
-      ptyId: 'pty-1',
-      content: 'fix the spinner',
-      agent: 'aider',
-      submit: true,
-      forcePaste: true
-    })
+    expect(mockPasteDraftToAgentPtyWhenReady).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ptyId: 'pty-1',
+        content: 'fix the spinner',
+        agent: 'aider',
+        submit: true,
+        forcePaste: true
+      })
+    )
     expect(mockTrack).not.toHaveBeenCalledWith('agent_prompt_sent', expect.anything())
   })
 
