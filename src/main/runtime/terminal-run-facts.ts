@@ -42,6 +42,7 @@ export class TerminalRunFactsRegister {
   private readonly runsByPtyId = new Map<string, TerminalRunRecord>()
   // Why apart from the run record: input must count on a PTY main adopted without a commit.
   private readonly lastInputAtByPtyId = new Map<string, number>()
+  private readonly lastDrivingInputAtByPtyId = new Map<string, number>()
   private readonly pendingByPtyId = new Map<
     string,
     { incarnationId: string | null; firstInputAt: number | null }
@@ -89,6 +90,7 @@ export class TerminalRunFactsRegister {
       origin === 'reattach' && (incarnationId === null || !previous?.incarnationId)
     if (!sameProcess) {
       this.lastInputAtByPtyId.delete(commit.id)
+      this.lastDrivingInputAtByPtyId.delete(commit.id)
     }
     this.runsByPtyId.set(commit.id, {
       incarnationId,
@@ -116,6 +118,7 @@ export class TerminalRunFactsRegister {
     this.lastInputAtByPtyId.set(ptyId, now)
     const run = this.runsByPtyId.get(ptyId)
     if (inputKind === 'driving') {
+      this.lastDrivingInputAtByPtyId.set(ptyId, now)
       for (const listener of this.inputListeners) {
         listener(ptyId, now)
       }
@@ -135,6 +138,11 @@ export class TerminalRunFactsRegister {
    *  included; null if none has. */
   readLastInputAt(ptyId: string): number | null {
     return this.lastInputAtByPtyId.get(ptyId) ?? null
+  }
+
+  /** Like readLastInputAt, but only driving input, so Orca's own launch writes and drafts don't count. */
+  readLastDrivingInputAt(ptyId: string): number | null {
+    return this.lastDrivingInputAtByPtyId.get(ptyId) ?? null
   }
 
   /** A run main never saw committed reads as not fresh, which keeps today's close-on-exit. */
@@ -163,6 +171,7 @@ export class TerminalRunFactsRegister {
   delete(ptyId: string): void {
     this.runsByPtyId.delete(ptyId)
     this.lastInputAtByPtyId.delete(ptyId)
+    this.lastDrivingInputAtByPtyId.delete(ptyId)
     this.pendingByPtyId.delete(ptyId)
   }
 }

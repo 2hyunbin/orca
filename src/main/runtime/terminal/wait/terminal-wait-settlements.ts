@@ -19,7 +19,7 @@ import {
 } from '../../tui-idle-evidence'
 import { leafTuiIdleEvidence, ptyTuiIdleEvidence } from '../../tui-idle-evidence-source'
 import { TUI_IDLE_QUIESCENCE_MS } from '../../orca-runtime-postlude'
-import { CLAUDE_DIALOG_HOLD_CAP_MS } from '../../claude-open-dialog-hold'
+import { USER_INPUT_HOLD_CAP_MS } from '../../claude-open-dialog-hold'
 import { detectTerminalComposerDraft } from '../../../../shared/terminal-composer-draft'
 
 import type { OrcaRuntimeWithResolveWaiter } from '../../orca-runtime-resolve-waiter'
@@ -232,11 +232,11 @@ export abstract class OrcaRuntimeWithResolveExitWaiters extends OrcaRuntimeWithB
     if (this.isPtyAwaitingUserInput(ptyId)) {
       return true
     }
-    const lastInputAt = this.terminalRunFacts.readLastInputAt(ptyId)
+    const lastInputAt = this.terminalRunFacts.readLastDrivingInputAt(ptyId)
     const state = this.readWholeScreenModel(ptyId)
     return (
       lastInputAt !== null &&
-      Date.now() - lastInputAt <= CLAUDE_DIALOG_HOLD_CAP_MS &&
+      Date.now() - lastInputAt <= USER_INPUT_HOLD_CAP_MS &&
       !!state &&
       detectTerminalComposerDraft(state.emulator.getCursorLineContext()) !== null
     )
