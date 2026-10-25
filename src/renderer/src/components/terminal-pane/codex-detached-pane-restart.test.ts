@@ -536,6 +536,10 @@ describe('codex detached pane restart executor', () => {
 
   it('kills now and defers the Codex respawn to mount when the layout leaf is unknown', async () => {
     seedQueuedRestart({ leafId: null })
+    const command = String.raw`& 'C:\Program Files\Codex\codex.exe'`
+    useAppStore.setState({
+      settings: { ...useAppStore.getState().settings, agentCmdOverrides: { codex: command } }
+    })
 
     await sweepUnclaimedCodexPaneRestarts()
 
@@ -545,7 +549,7 @@ describe('codex detached pane restart executor', () => {
     expect(state.ptyIdsByTabId['tab-1']).toEqual([])
     expect(state.pendingStartupByTabId['tab-1']).toEqual(
       expect.objectContaining({
-        command: 'codex',
+        command,
         startupCommandDelivery: 'shell-ready',
         launchAgent: 'codex'
       })
