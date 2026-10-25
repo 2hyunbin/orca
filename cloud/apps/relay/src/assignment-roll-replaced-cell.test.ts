@@ -46,7 +46,9 @@ const OTHER_REGION: RelayCellConfig = {
 const databases: RelayDatabase[] = []
 
 afterEach(async () => {
-  for (const database of databases.splice(0)) await database.close()
+  for (const database of databases.splice(0)) {
+    await database.close()
+  }
 })
 
 type Beat = {
@@ -84,7 +86,9 @@ async function setup(cells: RelayCellConfig[] = [SOURCE, TARGET]) {
       connectionUnobservedBound: CAPPED.connectionUnobservedBound
     })
   }
-  for (const cell of cells) await heartbeat(cell)
+  for (const cell of cells) {
+    await heartbeat(cell)
+  }
 
   const applySelector = async (
     state: CellAdmissionState,
@@ -124,7 +128,11 @@ async function setup(cells: RelayCellConfig[] = [SOURCE, TARGET]) {
     heartbeat,
     at: async (value: number): Promise<void> => {
       now = value
-      for (const cell of cells) if (cell !== SOURCE) await heartbeat(cell)
+      for (const cell of cells) {
+        if (cell !== SOURCE) {
+          await heartbeat(cell)
+        }
+      }
     },
     isolateForRoll: async () => await applySelector('migration-only', [SOURCE.id]),
     park: async (state: CellAdmissionState) => await applySelector(state)

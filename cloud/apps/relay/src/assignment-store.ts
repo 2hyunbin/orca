@@ -8558,7 +8558,9 @@ export class RelayAssignmentStore {
         [cellId]
       )
     )[0]
-    if (!row) return false
+    if (!row) {
+      return false
+    }
     const rollIsolatedAt = optionalInteger(row, 'roll_isolated_at')
     return (
       rollIsolatedAt !== undefined &&
