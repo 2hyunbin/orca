@@ -18,7 +18,7 @@ describe('the C6 browser closure half', () => {
     expect(new Set(goldens).size).toBe(goldens.length)
   })
 
-  /** The counts a per-id walk cannot see move: a table wrong the same way twice agrees with itself. */
+  // Totals catch a table that is internally consistent but derived incorrectly.
   it('pins six byte-identical goldens and nine in one named class', () => {
     expect(pageClosureTotals(C6_BROWSER_CLOSURE_FAMILIES)).toEqual({
       identical: 6,
@@ -26,10 +26,7 @@ describe('the C6 browser closure half', () => {
     })
   })
 
-  /**
-   * Every family has a byte-identical golden, which is more than C1 or C2 could say of all of
-   * theirs: for these four the pin holds bytes and not only the name of a divergence.
-   */
+  // Each added family must include byte-identical evidence, beyond merely naming its divergence.
   it('leaves no family excluded whole', () => {
     for (const [family, goldens] of Object.entries(C6_BROWSER_CLOSURE_FAMILIES)) {
       expect({ family, identical: Object.values(goldens).includes('identical') }).toEqual({
@@ -39,8 +36,6 @@ describe('the C6 browser closure half', () => {
     }
   })
 
-  /** C2's rule over the new families, which predicted all fifteen; the table is generated, not
-   *  hand-corrected, and this is what says so. */
   it('agrees with the C2 classification rule on every golden', () => {
     for (const goldens of Object.values(C6_BROWSER_CLOSURE_FAMILIES)) {
       for (const [id, verdict] of Object.entries(goldens)) {
@@ -52,12 +47,7 @@ describe('the C6 browser closure half', () => {
     }
   })
 
-  /**
-   * No family here is pinned by another series, so a golden pinned twice is pinned once.
-   *
-   * The four are the pane's own and nothing else imports its call sites; `session.browser-tab-create`
-   * is recorded at the session screen and belongs to C7.
-   */
+  // These pane-only families do not overlap inherited tables; session tab creation belongs to C7.
   it('shares no family with C1, C2, C3 or C5', () => {
     const others = new Set([
       ...Object.keys(C1_PAGE_CLOSURE),
