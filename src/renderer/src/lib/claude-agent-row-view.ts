@@ -53,18 +53,16 @@ export async function viewClaudeAgentFromRow(agent: DashboardAgentRow): Promise<
       },
       { timeoutMs: 8000 }
     )
-    if (view.status === 'viewed' || view.status === 'busy') {
+    if (view.status === 'viewed' || view.status === 'busy' || !child) {
       return
     }
     if (view.status === 'unsupported') {
-      if (child) {
-        toast.info(
-          translate(
-            'auto.lib.claudeAgentRowView.restartRequired',
-            'Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required.'
-          )
+      toast.info(
+        translate(
+          'auto.lib.claudeAgentRowView.restartRequired',
+          'Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required.'
         )
-      }
+      )
     } else if (view.status === 'permission') {
       toast.info(
         translate(

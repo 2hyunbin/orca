@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import type * as NodeOsModule from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
 
 const state = vi.hoisted((): { home: string; syncCalls: { name: string; target: string }[] } => ({
   home: '',
@@ -47,6 +48,7 @@ function syncCallsUnderHome(): string[] {
 describe('managed hook script refresh stays off the main thread', () => {
   beforeEach(async () => {
     state.home = await mkdtemp(join(tmpdir(), 'orca-hook-refresh-main-thread-'))
+    installFakeAppEnvironment({ getPath: () => join(state.home, 'user-data') })
     vi.stubEnv('ORCA_USER_DATA_PATH', join(state.home, 'user-data'))
     vi.stubEnv('GROK_HOME', undefined)
     vi.stubEnv('KIMI_CODE_HOME', undefined)
@@ -77,6 +79,22 @@ describe('managed hook script refresh stays off the main thread', () => {
       'register.js'
     )
     await writeFile(modScript, 'stale', 'utf8')
+    const profileRoot = join(state.home, 'user-data', 'claude-profiles')
+    const profileMods: string[] = []
+    for (const id of ['first', 'second']) {
+      const home = join(profileRoot, id, 'home')
+      installClaudeAgentView(join(home, 'settings.json'))
+      const mod = join(home, 'skills', 'orca-agent-view', 'hooks', 'register.js')
+      await writeFile(mod, 'stale', 'utf8')
+      profileMods.push(mod)
+    }
+    const absent = join(profileRoot, 'absent', 'home')
+    await mkdir(absent, { recursive: true })
+    const unowned = join(profileRoot, 'unowned', 'home', 'skills', 'orca-agent-view')
+    await mkdir(join(unowned, '.claude-plugin'), { recursive: true })
+    await mkdir(join(unowned, 'hooks'))
+    await writeFile(join(unowned, '.claude-plugin', 'orca-managed.json'), '{"owner":"someone"}')
+    await writeFile(join(unowned, 'hooks', 'register.js'), 'user-owned')
     state.syncCalls = []
 
     for (const [, refresh] of MANAGED_AGENT_HOOK_SCRIPT_REFRESHERS) {
@@ -88,6 +106,13 @@ describe('managed hook script refresh stays off the main thread', () => {
     expect(refreshed).not.toBe('stale')
     expect(refreshed).toContain(process.platform === 'win32' ? 'echo {}' : 'printf "{}\\n"')
     expect(await readFile(modScript, 'utf8')).toContain('$.ui.view(')
+    for (const mod of profileMods) {
+      expect(await readFile(mod, 'utf8')).toContain('$.ui.view(')
+    }
+    expect(await readFile(join(unowned, 'hooks', 'register.js'), 'utf8')).toBe('user-owned')
+    await expect(
+      readFile(join(absent, 'skills', 'orca-agent-view', 'hooks', 'register.js'))
+    ).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('keeps the Windows Claude entry and payload refresh off the main thread', async () => {

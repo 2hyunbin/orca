@@ -80,21 +80,46 @@ const manifest = {
 const hooks = { modules: ['./register.js'] }
 const ownership = { owner: 'stablyai/orca/claude-agent-view' }
 
+function claudeAgentViewOwnership(
+  previous: HooksConfig | null,
+  config: HooksConfig,
+  next: HooksConfig
+): HooksConfig {
+  let binding =
+    previous?.owner === ownership.owner &&
+    isPlainObject(previous.binding) &&
+    previous.binding.context === 'Chat' &&
+    typeof previous.binding.chord === 'string'
+      ? { context: 'Chat', chord: previous.binding.chord }
+      : undefined
+  if (config !== next && Array.isArray(next.bindings)) {
+    const block = next.bindings.at(-1)
+    if (isPlainObject(block) && isPlainObject(block.bindings)) {
+      const [chord] = Object.keys(block.bindings)
+      if (chord) {
+        binding = { context: 'Chat', chord }
+      }
+    }
+  }
+  return { ...ownership, ...(binding ? { binding } : {}) }
+}
+
 export function installClaudeAgentView(configPath: string): void {
   const configDir = dirname(configPath)
   const root = join(configDir, 'skills', CLAUDE_AGENT_VIEW_PLUGIN)
   const marker = join(root, '.claude-plugin', 'orca-managed.json')
-  if (existsSync(root) && readHooksJson(marker)?.owner !== ownership.owner) {
+  const previous = readHooksJson(marker)
+  if (existsSync(root) && previous?.owner !== ownership.owner) {
     return
   }
   const keybindings = join(configDir, 'keybindings.json')
   const { raw } = readHooksJsonWithRaw(keybindings)
   const config = raw === null ? readHooksJson(keybindings) : parseClaudeAgentViewBindings(raw)
   const next = config && withClaudeAgentViewShortcut(config)
-  if (!next) {
+  if (!config || !next) {
     return
   }
-  writeHooksJson(marker, ownership)
+  writeHooksJson(marker, claudeAgentViewOwnership(previous, config, next))
   writeHooksJson(join(root, '.claude-plugin', 'plugin.json'), manifest)
   writeHooksJson(join(root, 'hooks', 'hooks.json'), hooks)
   writeManagedScript(join(root, 'hooks', 'register.js'), CLAUDE_AGENT_VIEW_MOD_SOURCE)
@@ -109,17 +134,18 @@ export async function installClaudeAgentViewRemote(
   const root = posix.join(configDir, 'skills', CLAUDE_AGENT_VIEW_PLUGIN)
   const marker = posix.join(root, '.claude-plugin', 'orca-managed.json')
   const existing = await listRemoteDirectory(sftp, root)
-  if (existing !== null && (await readHooksJsonRemote(sftp, marker))?.owner !== ownership.owner) {
+  const previous = await readHooksJsonRemote(sftp, marker)
+  if (existing !== null && previous?.owner !== ownership.owner) {
     return
   }
   const keybindings = posix.join(configDir, 'keybindings.json')
   const raw = await readTextFileRemote(sftp, keybindings)
   const config = parseClaudeAgentViewBindings(raw)
   const next = config && withClaudeAgentViewShortcut(config)
-  if (!next) {
+  if (!config || !next) {
     return
   }
-  await writeHooksJsonRemote(sftp, marker, ownership)
+  await writeHooksJsonRemote(sftp, marker, claudeAgentViewOwnership(previous, config, next))
   await writeHooksJsonRemote(sftp, posix.join(root, '.claude-plugin', 'plugin.json'), manifest)
   await writeHooksJsonRemote(sftp, posix.join(root, 'hooks', 'hooks.json'), hooks)
   await writeManagedScriptRemote(
@@ -150,20 +176,25 @@ export async function refreshClaudeAgentView(configPath: string): Promise<void> 
 export function removeClaudeAgentView(configPath: string): void {
   const configDir = dirname(configPath)
   const root = join(configDir, 'skills', CLAUDE_AGENT_VIEW_PLUGIN)
-  if (readHooksJson(join(root, '.claude-plugin', 'orca-managed.json'))?.owner !== ownership.owner) {
+  const marker = readHooksJson(join(root, '.claude-plugin', 'orca-managed.json'))
+  if (marker?.owner !== ownership.owner) {
     return
   }
   const keybindings = join(configDir, 'keybindings.json')
   const { raw } = readHooksJsonWithRaw(keybindings)
   const config = raw === null ? readHooksJson(keybindings) : parseClaudeAgentViewBindings(raw)
-  if (Array.isArray(config?.bindings)) {
+  const binding = isPlainObject(marker.binding) ? marker.binding : null
+  if (binding && Array.isArray(config?.bindings)) {
     const bindings = config.bindings.map((block) => {
       if (!isPlainObject(block) || !isPlainObject(block.bindings)) {
         return block
       }
       const remaining = Object.fromEntries(
         Object.entries(block.bindings).filter(
-          ([, action]) => action !== `command:${CLAUDE_AGENT_VIEW_COMMAND}`
+          ([chord, action]) =>
+            block.context !== binding.context ||
+            chord !== binding.chord ||
+            action !== `command:${CLAUDE_AGENT_VIEW_COMMAND}`
         )
       )
       return { ...block, bindings: remaining }

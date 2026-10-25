@@ -1,4 +1,6 @@
 import { rmSync } from 'node:fs'
+import { getAppEnvironment } from '../../shared/app-environment'
+import { listClaudeProfileHomesAsync } from '../claude-accounts/claude-profile-homes'
 import type { AgentHookSource } from '../../shared/agent-hook-relay'
 import type { SFTPWrapper } from 'ssh2'
 import type { AgentHookInstallState, AgentHookInstallStatus } from '../../shared/agent-hook-types'
@@ -157,7 +159,14 @@ export class ClaudeHookService {
 
   async refreshManagedScripts(): Promise<void> {
     if (this.options.agent === 'claude') {
-      await refreshClaudeAgentView(getConfigPath(this.options.settings))
+      const profiles = await listClaudeProfileHomesAsync(getAppEnvironment().getPath('userData'))
+      for (const configDir of [undefined, ...profiles]) {
+        await refreshClaudeAgentView(getConfigPath(this.options.settings, configDir)).catch(
+          (error: unknown) => {
+            console.warn('[agent-hooks] Claude agent view refresh failed', error)
+          }
+        )
+      }
     }
     const scriptPath = getManagedScriptPath(this.options.settings)
     const payload = this.managedScript()
@@ -213,7 +222,11 @@ export class ClaudeHookService {
     }
     writeHooksJson(configPath, nextConfig)
     if (this.options.agent === 'claude' && claudeVersionReaches(options.claudeVersion, '2.1.300')) {
-      installClaudeAgentView(configPath)
+      try {
+        installClaudeAgentView(configPath)
+      } catch (error) {
+        console.warn('[agent-hooks] Claude agent view install failed', error)
+      }
     }
     return this.getStatus(options)
   }
@@ -256,7 +269,9 @@ export class ClaudeHookService {
         this.options.agent === 'claude' &&
         claudeVersionReaches(options.claudeVersion, '2.1.300')
       ) {
-        await installClaudeAgentViewRemote(sftp, remoteConfigPath)
+        await installClaudeAgentViewRemote(sftp, remoteConfigPath).catch((error: unknown) => {
+          console.warn('[agent-hooks] Remote Claude agent view install failed', error)
+        })
       }
 
       return {

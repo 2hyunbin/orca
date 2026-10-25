@@ -31,7 +31,7 @@ import {
   type ClaudeAccountSelectionTarget
 } from './runtime-selection'
 import { wslClaudeProfilePointer } from './claude-profile-wsl-paths'
-import { isDirectory, listClaudeProfileHomes } from './claude-profile-installed-router'
+import { isDirectory, listClaudeProfileHomes } from './claude-profile-homes'
 import {
   claudeStateFile,
   readClaudeFolderLogin,

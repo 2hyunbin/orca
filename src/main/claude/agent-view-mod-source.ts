@@ -29,7 +29,11 @@ let viewRevision = 0
       headers: { 'content-type': 'application/json', 'x-orca-agent-hook-token': token },
       body: JSON.stringify({ ...session, action, ...data })
     })
-    return response.ok ? JSON.parse(response.text) : {}
+    if (!response.ok || !response.text) return {}
+    try {
+      const data = JSON.parse(response.text)
+      return data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+    } catch { return {} }
   }
 
   async function announce($) {

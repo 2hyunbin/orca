@@ -36,6 +36,11 @@ it('installs on the remote host and refuses a remote folder with no ownership ma
   expect(
     claudeAgentViewChord(memory.fs.files.get('/home/remote/.claude/keybindings.json') ?? '')
   ).toBe('ctrl+alt+g')
+  const marker = `${root}/.claude-plugin/orca-managed.json`
+  const ownership = memory.fs.files.get(marker)
+  expect(JSON.parse(ownership ?? '{}').binding).toEqual({ context: 'Chat', chord: 'ctrl+alt+g' })
+  await installClaudeAgentViewRemote(memory.sftp, config)
+  expect(memory.fs.files.get(marker)).toBe(ownership)
 })
 
 it('installs alongside other skills and plugins without changing their settings or shortcuts', () => {
@@ -158,4 +163,61 @@ it('never overwrites an unowned skill and removes only its own installation', ()
     { context: 'Chat', bindings: { 'ctrl+a': 'user:action' } },
     { context: 'Chat', bindings: {} }
   ])
+})
+
+it('removes only its recorded binding across reinstalls, preserving other contexts and chords', () => {
+  const root = mkdtempSync(join(tmpdir(), 'orca-agent-view-'))
+  roots.push(root)
+  const settings = join(root, 'settings.json')
+  const path = join(root, 'keybindings.json')
+  installClaudeAgentView(settings)
+  const config = JSON.parse(readFileSync(path, 'utf8'))
+  const userBindings = [
+    { context: 'Global', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } },
+    { context: 'Chat', bindings: { 'ctrl+x': 'command:orca-agent-view' } }
+  ]
+  config.bindings.push(...userBindings)
+  writeFileSync(path, JSON.stringify(config))
+  installClaudeAgentView(settings)
+  removeClaudeAgentView(settings)
+  expect(JSON.parse(readFileSync(path, 'utf8')).bindings).toEqual([
+    { context: 'Chat', bindings: {} },
+    ...userBindings
+  ])
+})
+
+it.each([false, true])('preserves reused user bindings with a legacy marker: %s', (legacy) => {
+  const root = mkdtempSync(join(tmpdir(), 'orca-agent-view-'))
+  roots.push(root)
+  const settings = join(root, 'settings.json')
+  const path = join(root, 'keybindings.json')
+  const original = JSON.stringify({
+    bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } }]
+  })
+  writeFileSync(path, original)
+  if (legacy) {
+    const markerDir = join(root, 'skills', 'orca-agent-view', '.claude-plugin')
+    mkdirSync(markerDir, { recursive: true })
+    writeFileSync(
+      join(markerDir, 'orca-managed.json'),
+      '{"owner":"stablyai/orca/claude-agent-view"}'
+    )
+  }
+  installClaudeAgentView(settings)
+  installClaudeAgentView(settings)
+  removeClaudeAgentView(settings)
+  expect(readFileSync(path, 'utf8')).toBe(original)
+})
+
+it('does not claim an existing remote binding', async () => {
+  const memory = createAgentHookMemorySftp({
+    '/home/remote/.claude/keybindings.json': JSON.stringify({
+      bindings: [{ context: 'Chat', bindings: { 'ctrl+alt+g': 'command:orca-agent-view' } }]
+    })
+  })
+  await installClaudeAgentViewRemote(memory.sftp, '/home/remote/.claude/settings.json')
+  const marker = memory.fs.files.get(
+    '/home/remote/.claude/skills/orca-agent-view/.claude-plugin/orca-managed.json'
+  )
+  expect(JSON.parse(marker ?? '{}')).toEqual({ owner: 'stablyai/orca/claude-agent-view' })
 })

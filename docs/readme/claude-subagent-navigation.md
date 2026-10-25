@@ -20,7 +20,11 @@ The installer preserves installed plugins, other skills, `enabledPlugins`, and
 `keybindings.json`, trying Ctrl+Alt+G, H, then V. Existing bindings and JSONC
 comments are preserved. An unowned folder with the same name, malformed
 bindings, or all three occupied shortcuts causes installation to be skipped.
-Removing Orca's hooks removes its owned mod and command bindings.
+Removing Orca's hooks removes its owned mod and only the binding recorded as
+added by Orca. Reused user bindings and bindings from older installations without
+ownership metadata stay intact. Optional mod installation failures leave the
+status hooks installed. Managed-script refresh updates owned mods in the default
+config and installed account profiles.
 
 ## Delivery
 
