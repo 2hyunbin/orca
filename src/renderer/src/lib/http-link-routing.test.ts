@@ -96,7 +96,7 @@ describe('openHttpLink', () => {
     storeState.settings = {
       openLinksInApp: true,
       localhostWorktreeLabelsEnabled: true,
-      get activeRuntimeEnvironmentId() {
+      get activeRuntimeEnvironmentId(): never {
         throw new Error('An owned link must not read Active Server')
       }
     }
