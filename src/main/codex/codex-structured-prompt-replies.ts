@@ -105,12 +105,8 @@ function codexMcpElicitationReply(decision: CodexApprovalDecision): Record<strin
       _meta: decision === 'acceptForSession' ? { persist: 'session' } : null
     }
   }
-  // Without this reason Codex cannot tell a user cancel from an interrupted approval.
-  return {
-    action: decision,
-    content: null,
-    _meta: decision === 'cancel' ? { codex_approval_cancellation_reason: 'user' } : null
-  }
+  // Only accept and cancel are offered; the reason separates a user cancel from an interruption.
+  return { action: 'cancel', content: null, _meta: { codex_approval_cancellation_reason: 'user' } }
 }
 
 /** Accumulate answers until Codex's single reply can include every question. */

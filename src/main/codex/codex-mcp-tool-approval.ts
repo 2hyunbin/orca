@@ -6,12 +6,7 @@ export function isCodexMcpToolApproval(params: unknown): boolean {
   if (readRecordString(readRecord(record._meta), 'codex_approval_kind') !== 'mcp_tool_call') {
     return false
   }
-  if (
-    record.mode !== undefined &&
-    record.mode !== 'form' &&
-    record.mode !== 'openai/form' &&
-    record.mode !== 'openaiForm'
-  ) {
+  if (record.mode !== undefined && record.mode !== 'form') {
     return false
   }
   const schema = record.requestedSchema
@@ -30,7 +25,7 @@ export function isCodexMcpToolApproval(params: unknown): boolean {
 
 export type CodexMcpToolApprovalDecision = 'accept' | 'acceptForSession' | 'cancel'
 
-/** Codex's TUI offers no Deny for a tool call, and session reuse only when the request allows it. */
+/** Codex's TUI offers Allow and Cancel, plus Allow for this session only when the request allows it. */
 export function codexMcpToolApprovalDecisions(params: unknown): CodexMcpToolApprovalDecision[] {
   const persist = readRecord(readRecord(params)._meta).persist
   const persistsSession = Array.isArray(persist)

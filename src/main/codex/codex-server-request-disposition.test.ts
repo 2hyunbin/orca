@@ -65,6 +65,28 @@ describe('Codex blocking server request dispositions', () => {
     expect(connection.respondWithError).not.toHaveBeenCalled()
   })
 
+  it('declines an MCP tool-call approval with no turn, since no turn stop could clear it', () => {
+    const { registry, connection } = harness()
+    const result = disposeCodexServerRequest(registry, connection, {
+      id: 7,
+      method: CODEX_MCP_ELICITATION_METHOD,
+      params: {
+        threadId: 'thread-1',
+        turnId: null,
+        message: 'Allow tool?',
+        requestedSchema: { type: 'object', properties: {} },
+        _meta: { codex_approval_kind: 'mcp_tool_call' }
+      }
+    })
+
+    expect(result.kind).toBe('responded')
+    expect(connection.respond).toHaveBeenCalledWith(7, {
+      action: 'decline',
+      content: null,
+      _meta: null
+    })
+  })
+
   it.each([
     [CODEX_MCP_ELICITATION_METHOD, { action: 'decline', content: null, _meta: null }],
     [CODEX_PERMISSIONS_APPROVAL_METHOD, { permissions: {}, scope: 'turn', strictAutoReview: true }],

@@ -67,7 +67,8 @@ function readPromptItemId(
   registryId: string
 ) {
   if (request.method === CODEX_MCP_ELICITATION_METHOD) {
-    return isCodexMcpToolApproval(request.params)
+    // Turn-less approvals escape turn stop and cleanup, so they keep the safe decline.
+    return isCodexMcpToolApproval(request.params) && readString(request.params, 'turnId')
       ? `mcp-elicitation:${registryId}:${request.id}`
       : null
   }

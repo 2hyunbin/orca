@@ -260,7 +260,7 @@ describe('CodexStructuredSessionAdapter prompts', () => {
         method: 'mcpServer/elicitation/request',
         params: {
           threadId: THREAD_ID,
-          turnId: null,
+          turnId: 'turn-1',
           serverName: 'local',
           mode: 'form',
           message: 'Allow local tool?',

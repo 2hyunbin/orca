@@ -352,19 +352,6 @@ describe('MCP tool-call approvals', () => {
     expect(registry.sizes.prompts).toBe(2)
   })
 
-  it('registers a tool-call approval that app-server could not correlate to a turn', () => {
-    const registry = new CodexPromptRegistry()
-    const prompt = registered(
-      registry.register({
-        id: 14,
-        method: 'mcpServer/elicitation/request',
-        params: { threadId: 'thread-1', turnId: null, ...MCP_TOOL_APPROVAL }
-      })
-    )
-
-    expect(prompt.turnId).toBeNull()
-  })
-
   it('refuses session reuse and Deny when the request did not offer them', () => {
     const registry = new CodexPromptRegistry()
     const prompt = registered(
@@ -392,6 +379,7 @@ describe('MCP tool-call approvals', () => {
       elicitationId: 'link-1'
     },
     { mode: 'future-mode', requestedSchema: undefined },
+    { mode: 'openai/form' },
     { requestedSchema: { type: 'object', properties: [] } }
   ])('does not turn unsupported elicitation shapes into approvals: %j', (params) => {
     expect(
