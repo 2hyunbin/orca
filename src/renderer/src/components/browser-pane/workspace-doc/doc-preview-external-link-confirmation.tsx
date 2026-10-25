@@ -1,6 +1,6 @@
 import type { ConfirmationDialogContextValue } from '@/components/confirmation-dialog-context'
 import type { DocPreviewGrantOwner } from '../../../../../preload/api/doc-preview-api'
-import { captureHttpLinkIntent, openHttpLink } from '@/lib/http-link-routing'
+import { captureHttpLinkIntent, openOwnedHttpLink } from '@/lib/http-link-routing'
 import { resolveMarkdownPreviewHttpOpenOptions } from '@/components/editor/markdown-preview-links'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
@@ -67,7 +67,7 @@ export function subscribeDocPreviewExternalLinkConfirmation(
       )
     }).then((confirmed) => {
       if (active && confirmed) {
-        openHttpLink(url, options)
+        openOwnedHttpLink(url, options)
       }
     })
   })

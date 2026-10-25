@@ -185,29 +185,39 @@ async function openSystemHttpLink(url: string): Promise<void> {
 }
 
 export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void {
+  // Ownerless legacy callers retain their default-server classification without asserting an owner.
+  const ownerlessRemoteActive =
+    !opts.sourceOwner && Boolean(storeAccessor?.()?.settings?.activeRuntimeEnvironmentId?.trim())
+  executeHttpLink(url, opts, ownerlessRemoteActive)
+}
+
+export function openOwnedHttpLink(
+  url: string,
+  opts: OpenHttpLinkOptions & { sourceOwner: HttpLinkSourceOwner }
+): void {
+  executeHttpLink(url, opts, false)
+}
+
+function executeHttpLink(
+  url: string,
+  opts: OpenHttpLinkOptions,
+  remoteRuntimeActive: boolean
+): void {
   if (opts.linkContext?.isCurrentRequest?.() === false) {
     return
   }
-  const {
-    worktreeId,
-    allowRemoteInApp,
-    forceSystemBrowser,
-    forceInApp,
-    modifierHeld,
-    sourceOwner
-  } = opts
+  const { worktreeId, allowRemoteInApp, forceSystemBrowser, forceInApp, sourceOwner } = opts
   if (sourceOwner?.kind === 'unknown') {
     return
   }
   const state = storeAccessor?.()
-  const remoteRuntimeActive = Boolean(state?.settings?.activeRuntimeEnvironmentId?.trim())
   const effectiveSourceOwner = sourceOwner
   const sourceIsLocal = effectiveSourceOwner
     ? effectiveSourceOwner.kind === 'local'
     : !remoteRuntimeActive
   const openLinksInApp = state?.settings?.openLinksInApp === true
   const modifier = resolveModifierRouting(
-    Boolean(modifierHeld),
+    Boolean(opts.modifierHeld),
     openLinksInApp,
     state?.settings?.openLinksInAppModifierInverts === true
   )
