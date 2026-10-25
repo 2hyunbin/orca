@@ -278,6 +278,7 @@ async function measureCatchUp(
   return counts
 }
 
+// Real journal I/O across the 20/200 population matrix needs the extended timeout on CI.
 it('bounds actual first/reopened search and repeated source activation at 20 and 200', async () => {
   const populations: {
     n: number
@@ -353,6 +354,7 @@ it('bounds actual first/reopened search and repeated source activation at 20 and
   }
 }, 120000)
 
+// Real journal writes and both projected views at 20/200 entries need the extended CI timeout.
 it('bounds grouped IDs and rejected copies through real empty and committed views', async () => {
   for (const n of [20, 200]) {
     const rig = await openProviderTimelineRig()
@@ -530,6 +532,7 @@ it('keeps Grok timestamp adoption and never enumerates its unread adopted maximu
   }
 })
 
+// Importing and settling real 20/200-entry journals needs the extended timeout on CI.
 it('counts observed-exit provenance passes while preserving imported history at 20 and 200', async () => {
   for (const n of [20, 200]) {
     const rig = await openProviderTimelineRig()
