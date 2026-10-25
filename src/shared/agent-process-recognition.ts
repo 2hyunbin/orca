@@ -148,6 +148,19 @@ function recognizePythonEntrypoint(
   return recognizeAgentProcess(entrypoint) ?? recognizePythonScriptEntrypoint(entrypoint)
 }
 
+// Hermes' installed launcher execs `python -I -c '<bootstrap>'` (hermes_cli/_launchers.py), so argv names no hermes entrypoint.
+function isHermesInlineBootstrap(
+  tokens: readonly string[],
+  firstNormalized: string,
+  commandLine: string
+): boolean {
+  return (
+    PYTHON_PROCESS_RE.test(firstNormalized) &&
+    tokens.includes('-c') &&
+    /\bimport hermes_bootstrap\b/.test(commandLine)
+  )
+}
+
 // Muse's versioned binary needs a scoped prefix match; generic suffix matching would misclassify names such as ante-obsidian.
 export function isExpectedAgentProcess(
   processName: string | null | undefined,
@@ -210,6 +223,9 @@ export function recognizeAgentProcessFromCommandLine(
   const directRecognition = keep ? direct : filterHeadlessOneShotAgentCommand(direct, tokens)
   if (directRecognition) {
     return directRecognition
+  }
+  if (isHermesInlineBootstrap(tokens, firstNormalized, commandLine)) {
+    return recognizedAgentForProcess('hermes')
   }
   const entrypoint = findInterpreterEntrypointToken(tokens, firstNormalized)
   if (!entrypoint) {
