@@ -2,12 +2,12 @@
 // matching dropUnattributableToolResults. Producers must name calls when possible: outputless calls shift positional matches.
 // Call-owned output avoids duplicate Result rows in expanded runs.
 
-import { pairToolBlocks } from './native-chat-tool-fold'
+import { pairToolBlocks } from './native-chat-tool-pairs'
 import type {
   NativeChatBlock,
   NativeChatToolCallBlock,
   NativeChatToolResultBlock
-} from './native-chat-types'
+} from '../../native-chat-types'
 
 export type NativeChatToolPairing = {
   /** The result each call owns. A call still running has none. */

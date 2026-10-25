@@ -115,6 +115,29 @@ describe('shared agent-hook-listener', () => {
     expect(stopped?.providerSession).toMatchObject({ key: 'session_id', id: 'session_abc' })
   })
 
+  // #31311: a resumed Kimi pane must report its session before any prompt, or quit captures nothing.
+  it('lands a resumed Kimi SessionStart as an idle boundary carrying its session', () => {
+    const sessionStart = (source: string) =>
+      normalizeHookPayload(
+        state,
+        'kimi',
+        {
+          paneKey: PANE_KEY,
+          payload: { hook_event_name: 'SessionStart', session_id: 'session_abc', source }
+        },
+        'production'
+      )
+
+    const resumed = sessionStart('resume')
+    expect(resumed?.payload).toMatchObject({
+      agentType: 'kimi',
+      state: 'done',
+      sessionBoundary: true
+    })
+    expect(resumed?.providerSession).toMatchObject({ key: 'session_id', id: 'session_abc' })
+    expect(sessionStart('startup')).toBeNull()
+  })
+
   // Kimi compact/harness events need the same sticky-working guards as Claude (#11352).
   it('ignores harness-injected UserPromptSubmit for Kimi', () => {
     normalizeHookPayload(
