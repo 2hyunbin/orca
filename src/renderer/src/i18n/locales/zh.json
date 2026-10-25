@@ -1,4 +1,11 @@
 {
+  "agentLaunch": {
+    "opencode": {
+      "updateRequired": "此版本的 OpenCode 无法使用所选模型安全启动。请将 OpenCode 更新到受支持的版本，或不指定模型。",
+      "invalidConfig": "OpenCode 无法将所选模型应用到启动配置。请检查 OpenCode 启动配置后重试，或不指定模型。",
+      "unsupportedLaunch": "OpenCode 无法在此次启动中应用所选模型。请使用受支持的启动参数打开新的本地终端，或不指定模型。"
+    }
+  },
   "app": {
     "saving": {
       "delayedTitle": "配置存储操作耗时比平时更长",

@@ -5,6 +5,11 @@ import { probeOpenCodeLaunchCapabilities } from './opencode-launch-capabilities'
 import { resolveOpenCodeDirectModelExecutable } from './opencode-model-executable'
 import { probeOpenCodeLaunchModelContext } from './opencode-launch-model-context'
 import { buildExecutionHostAgentStartupPlan } from './opencode-model-startup-plan'
+import {
+  OPENCODE_MODEL_CONFIG_REFUSAL,
+  OPENCODE_MODEL_TRANSPORT_REFUSAL,
+  OPENCODE_MODEL_VERSION_REFUSAL
+} from '../../shared/agent-launch-model-preferences'
 
 vi.mock('../managed-data-accounts/launch-environment', () => ({
   applyManagedDataAccountEnvironment: vi.fn()
@@ -135,7 +140,8 @@ describe('execution-host OpenCode model startup', () => {
       const options = scope()
       options.inputs.agentArgs = agentArgs
       await expect(buildExecutionHostAgentStartupPlan(options)).rejects.toMatchObject({
-        code: 'capability_unsupported'
+        code: 'capability_unsupported',
+        message: OPENCODE_MODEL_TRANSPORT_REFUSAL
       })
       expect(probeOpenCodeLaunchModelContext).not.toHaveBeenCalled()
     }
@@ -145,9 +151,10 @@ describe('execution-host OpenCode model startup', () => {
     vi.mocked(probeOpenCodeLaunchModelContext).mockResolvedValue(null)
     const plan = await buildExecutionHostAgentStartupPlan(scope())
     expect(plan?.launchCommand).not.toContain('--model')
-    expect(JSON.parse(plan?.env?.OPENCODE_CONFIG_CONTENT ?? 'null').agents.reviewer.model).toBe(
-      preferred
-    )
+    expect(JSON.parse(plan?.env?.OPENCODE_CONFIG_CONTENT ?? 'null')).toEqual({
+      ...JSON.parse(original),
+      model: preferred
+    })
   })
 
   it('refuses remote and WSL execution before touching the local binary', async () => {
@@ -182,10 +189,20 @@ describe('execution-host OpenCode model startup', () => {
       promptMode: 'prefill'
     })
     await expect(buildExecutionHostAgentStartupPlan(scope())).rejects.toMatchObject({
-      code: 'capability_unsupported'
+      code: 'capability_unsupported',
+      message: OPENCODE_MODEL_VERSION_REFUSAL
     })
     expect(probeOpenCodeLaunchModelContext).not.toHaveBeenCalled()
     expect(resolveOpenCodeDirectModelExecutable).not.toHaveBeenCalled()
+  })
+
+  it('keeps invalid inline configuration guidance separate from a version refusal', async () => {
+    const options = scope()
+    options.inputs.agentEnv.OPENCODE_CONFIG_CONTENT = '{'
+    await expect(buildExecutionHostAgentStartupPlan(options)).rejects.toMatchObject({
+      code: 'capability_unsupported',
+      message: OPENCODE_MODEL_CONFIG_REFUSAL
+    })
   })
 
   it('resolves the default bare launch command through the execution host', async () => {

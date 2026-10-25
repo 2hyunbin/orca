@@ -12,6 +12,13 @@ import {
 } from './agent-session-option-launch'
 import type { TuiAgent } from './tui-agent'
 
+export const OPENCODE_MODEL_VERSION_REFUSAL =
+  'OpenCode cannot safely start with a chosen model on this version. Update OpenCode to a supported release, or omit the model choice.'
+export const OPENCODE_MODEL_TRANSPORT_REFUSAL =
+  'OpenCode cannot apply this model choice to this launch. Start a fresh local terminal with supported launch arguments, or omit the model choice.'
+export const OPENCODE_MODEL_CONFIG_REFUSAL =
+  'OpenCode could not apply this model choice to the launch configuration. Check the OpenCode launch configuration and try again, or omit the model choice.'
+
 export type AgentLaunchModelPreferenceRefusal = {
   code: 'invalid_argument' | 'capability_unsupported'
   message: string

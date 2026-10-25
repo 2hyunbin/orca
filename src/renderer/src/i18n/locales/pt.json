@@ -1,4 +1,11 @@
 {
+  "agentLaunch": {
+    "opencode": {
+      "updateRequired": "Esta versão do OpenCode não pode iniciar com segurança com o modelo escolhido. Atualize o OpenCode para uma versão compatível ou omita a escolha do modelo.",
+      "invalidConfig": "O OpenCode não conseguiu aplicar este modelo à configuração de inicialização. Verifique a configuração de inicialização do OpenCode e tente novamente, ou omita a escolha do modelo.",
+      "unsupportedLaunch": "O OpenCode não pode aplicar este modelo a esta inicialização. Abra um novo terminal local com argumentos de inicialização compatíveis ou omita a escolha do modelo."
+    }
+  },
   "common": {
     "retry": "Tentar novamente",
     "cancel": "Cancelar"

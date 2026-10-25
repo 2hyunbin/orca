@@ -19,17 +19,18 @@ export function resolveOpenCodeLaunchModelConfig(options: {
       return null
     }
     const config = parsed.data
-    const primaryAgent =
-      options.primaryAgent ||
-      (typeof config.default_agent === 'string' && config.default_agent) ||
-      'build'
+    const primaryAgent = options.primaryAgent
     return JSON.stringify({
       ...config,
       model: options.model,
-      agents: {
-        ...config.agents,
-        [primaryAgent]: { ...config.agents?.[primaryAgent], model: options.model }
-      }
+      ...(primaryAgent
+        ? {
+            agents: {
+              ...config.agents,
+              [primaryAgent]: { ...config.agents?.[primaryAgent], model: options.model }
+            }
+          }
+        : {})
     })
   } catch {
     return null

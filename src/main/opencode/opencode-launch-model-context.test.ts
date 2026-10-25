@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseOpenCodeLaunchModelContext } from './opencode-launch-model-context'
+import { resolveOpenCodeLaunchModelConfig } from './opencode-launch-model-config'
+import recordedCases from './opencode-resolved-agents.fixture.json'
 
 const directory = '/private/project'
 const snapshot = {
@@ -10,26 +12,71 @@ const snapshot = {
       { id: 'build', mode: 'primary', hidden: false },
       { id: 'reviewer', mode: 'primary' }
     ]
-  },
-  config: [{ type: 'document', info: { default_agent: 'reviewer' } }]
+  }
 }
 
 describe('OpenCode execution-host primary-agent context', () => {
-  it('uses the configured primary independently of ordering and unrelated model metadata', () => {
-    expect(parseOpenCodeLaunchModelContext(snapshot)).toEqual({ primaryAgent: 'reviewer' })
+  it('uses the resolved first selectable primary and leaves absent identity unknown', () => {
+    expect(parseOpenCodeLaunchModelContext(snapshot)).toEqual({ primaryAgent: 'build' })
     expect(
       parseOpenCodeLaunchModelContext({
         ...snapshot,
         agents: { location: { directory }, data: [] }
       })
-    ).toEqual({ primaryAgent: 'reviewer' })
+    ).toBeNull()
   })
 
-  it('tolerates new config kinds, absent model fields and unrelated agent records', () => {
+  it('uses recorded 2.0.19 resolved agents without inventing stale or disabled primaries', () => {
+    for (const capture of recordedCases) {
+      const original = JSON.parse(capture.configContent)
+      const primaryAgent = capture.name === 'stale-default' ? 'build' : 'plan'
+      const context = parseOpenCodeLaunchModelContext({
+        directory: '/qa/project',
+        agents: capture.settled
+      })
+      expect(context).toEqual({ primaryAgent })
+      expect(
+        JSON.parse(
+          resolveOpenCodeLaunchModelConfig({
+            configContent: capture.configContent,
+            primaryAgent: context?.primaryAgent,
+            model: capture.model
+          }) ?? 'null'
+        )
+      ).toEqual({
+        ...original,
+        model: capture.model,
+        agents: { ...original.agents, [primaryAgent]: { model: capture.model } }
+      })
+
+      const initialContext = parseOpenCodeLaunchModelContext({
+        directory: '/qa/project',
+        agents: capture.initial
+      })
+      expect(initialContext).toBeNull()
+      expect(
+        JSON.parse(
+          resolveOpenCodeLaunchModelConfig({
+            configContent: capture.configContent,
+            primaryAgent: initialContext?.primaryAgent,
+            model: capture.model
+          }) ?? 'null'
+        )
+      ).toEqual({ ...original, model: capture.model })
+      expect(
+        resolveOpenCodeLaunchModelConfig({
+          configContent: undefined,
+          primaryAgent: initialContext?.primaryAgent,
+          model: capture.model
+        })
+      ).toBe(JSON.stringify({ model: capture.model }))
+    }
+  })
+
+  it('tolerates absent model fields and unrelated agent records', () => {
     expect(
       parseOpenCodeLaunchModelContext({
         ...snapshot,
-        config: [{ type: 'future' }],
         agents: {
           location: { directory },
           data: [

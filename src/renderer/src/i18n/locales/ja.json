@@ -1,4 +1,11 @@
 {
+  "agentLaunch": {
+    "opencode": {
+      "updateRequired": "このバージョンの OpenCode では、選択したモデルで安全に起動できません。OpenCode を対応バージョンに更新するか、モデルの指定を省略してください。",
+      "invalidConfig": "OpenCode は選択したモデルを起動設定に適用できませんでした。OpenCode の起動設定を確認して再試行するか、モデルの指定を省略してください。",
+      "unsupportedLaunch": "OpenCode はこの起動に選択したモデルを適用できません。対応する起動引数で新しいローカルターミナルを開くか、モデルの指定を省略してください。"
+    }
+  },
   "app": {
     "saving": {
       "delayedTitle": "プロファイルのストレージ処理に通常より時間がかかっています",

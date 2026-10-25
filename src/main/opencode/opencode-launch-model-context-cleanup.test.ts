@@ -103,7 +103,7 @@ describe('OpenCode model probe termination evidence', () => {
           .enum(['model', 'agent', 'model/default', 'config'])
           .parse(input.pathname.slice('/api/'.length))
         const response = snapshot[endpoint]
-        if (closeDuringFetch && endpoint === 'config') {
+        if (closeDuringFetch && endpoint === 'agent') {
           queueMicrotask(close)
         }
         return new Response(JSON.stringify(response), { status: 200 })
@@ -138,7 +138,7 @@ describe('OpenCode model probe termination evidence', () => {
       vi.fn(async () => new Response(new ReadableStream({ cancel }), { status: 200 }))
     )
     expect(await probeOpenCodeLaunchModelContext(options)).toBeNull()
-    expect(cancel).toHaveBeenCalledTimes(2)
+    expect(cancel).toHaveBeenCalledTimes(1)
     expect(child.kill).toHaveBeenCalledWith('SIGTERM')
   })
 

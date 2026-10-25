@@ -20,17 +20,12 @@ const OPENCODE_PREFLIGHT_KILL_SITE = 'opencode-launch-model-preflight'
 const SUPERVISOR_PIPE_CLOSE_MS = 1_000
 
 const agent = z.object({
-  id: z.string(),
+  id: z.string().min(1),
   mode: z.string().optional(),
   hidden: z.boolean().optional()
 })
 const location = z.object({ directory: z.string() })
 const agentResponse = z.object({ location, data: z.unknown().array() })
-const configResponse = z.array(
-  z.object({
-    info: z.object({ default_agent: z.string().optional() }).optional()
-  })
-)
 
 export type OpenCodeLaunchModelContext = {
   primaryAgent: string
@@ -39,25 +34,17 @@ export type OpenCodeLaunchModelContext = {
 export function parseOpenCodeLaunchModelContext(options: {
   directory: string
   agents: unknown
-  config: unknown
 }): OpenCodeLaunchModelContext | null {
   const agents = agentResponse.safeParse(options.agents)
-  const config = configResponse.safeParse(options.config)
   if (agents.success && agents.data.location.directory !== options.directory) {
     return null
   }
-  const configured = config.success
-    ? config.data.reduce<string | undefined>(
-        (value, entry) => entry.info?.default_agent ?? value,
-        undefined
-      )
-    : undefined
   const primary = agents.success
     ? agents.data.data
         .map((item) => agent.safeParse(item))
         .find((item) => item.success && item.data.mode !== 'subagent' && !item.data.hidden)
     : undefined
-  const primaryAgent = configured || (primary?.success ? primary.data.id : undefined)
+  const primaryAgent = primary?.success ? primary.data.id : undefined
   return primaryAgent ? { primaryAgent } : null
 }
 
@@ -155,11 +142,10 @@ export async function probeOpenCodeLaunchModelContext(options: {
             await cancelUnreadResponseBody(response)
           }
         }
-        const [agents, config] = await Promise.all([read('agent'), read('config')])
+        const agents = await read('agent')
         context = parseOpenCodeLaunchModelContext({
           directory: options.cwd,
-          agents,
-          config
+          agents
         })
         break
       }

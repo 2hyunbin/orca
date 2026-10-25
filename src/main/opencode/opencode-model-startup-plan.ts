@@ -19,6 +19,11 @@ import { applyManagedDataAccountEnvironment } from '../managed-data-accounts/lau
 import { OrchestrationError } from '../runtime/orchestration/orchestration-error'
 import { probeOpenCodeLaunchCapabilities } from './opencode-launch-capabilities'
 import { resolveOpenCodeDirectModelExecutable } from './opencode-model-executable'
+import {
+  OPENCODE_MODEL_CONFIG_REFUSAL,
+  OPENCODE_MODEL_TRANSPORT_REFUSAL,
+  OPENCODE_MODEL_VERSION_REFUSAL
+} from '../../shared/agent-launch-model-preferences'
 
 type StartupScope = {
   inputs: AgentStartupPlanInputs
@@ -28,11 +33,36 @@ type StartupScope = {
   signal?: AbortSignal
 }
 
-function refuseModel(): never {
-  throw new OrchestrationError(
-    'capability_unsupported',
-    'OpenCode cannot apply this model choice to this launch. Start a fresh local terminal with supported launch arguments, or omit the model choice.'
-  )
+function refuseModel(message = OPENCODE_MODEL_TRANSPORT_REFUSAL): never {
+  throw new OrchestrationError('capability_unsupported', message)
+}
+
+export async function resolveOpenCodeModelLaunchRoute(
+  options: Pick<StartupScope, 'inputs' | 'cwd' | 'hostIdentity'>
+) {
+  const { inputs } = options
+  const command =
+    inputs.cmdOverrides.opencode ||
+    getTuiAgentLaunchCommand(TUI_AGENT_CONFIG.opencode, inputs.platform)
+  const env: Record<string, string> = {}
+  for (const [key, value] of Object.entries({ ...process.env, ...inputs.agentEnv })) {
+    if (value !== undefined) {
+      env[key] = value
+    }
+  }
+  applyManagedDataAccountEnvironment(env, { launchAgent: 'opencode' })
+  const capabilities = await probeOpenCodeLaunchCapabilities({
+    command,
+    agent: 'opencode',
+    cwd: options.cwd,
+    env,
+    hostIdentity: options.hostIdentity
+  }).catch(() => null)
+  const legacy = isVerifiedOpenCodeLegacyModelVersion(capabilities?.version)
+  if (!legacy && !isVerifiedOpenCodeConfigModelVersion(capabilities?.version)) {
+    refuseModel(OPENCODE_MODEL_VERSION_REFUSAL)
+  }
+  return { command, env, legacy }
 }
 
 export async function prepareOpenCodeModelStartupInputs(
@@ -60,27 +90,11 @@ export async function prepareOpenCodeModelStartupInputs(
   ) {
     refuseModel()
   }
-  const command =
-    inputs.cmdOverrides.opencode ||
-    getTuiAgentLaunchCommand(TUI_AGENT_CONFIG.opencode, inputs.platform)
-  const env: Record<string, string> = {}
-  for (const [key, value] of Object.entries({ ...process.env, ...inputs.agentEnv })) {
-    if (value !== undefined) {
-      env[key] = value
-    }
-  }
-  applyManagedDataAccountEnvironment(env, { launchAgent: 'opencode' })
-  const capabilities = await probeOpenCodeLaunchCapabilities({
-    command,
-    agent: 'opencode',
-    cwd: options.cwd,
-    env,
-    hostIdentity: options.hostIdentity
-  }).catch(() => null)
-  if (isVerifiedOpenCodeLegacyModelVersion(capabilities?.version)) {
+  const { command, env, legacy } = await resolveOpenCodeModelLaunchRoute(options)
+  if (legacy) {
     return { inputs }
   }
-  if (!isVerifiedOpenCodeConfigModelVersion(capabilities?.version) || inputs.agentArgs?.trim()) {
+  if (inputs.agentArgs?.trim()) {
     refuseModel()
   }
   const executable = await resolveOpenCodeDirectModelExecutable({
@@ -102,7 +116,7 @@ export async function prepareOpenCodeModelStartupInputs(
     model
   })
   if (configContent === null) {
-    refuseModel()
+    refuseModel(OPENCODE_MODEL_CONFIG_REFUSAL)
   }
   return {
     inputs: {
