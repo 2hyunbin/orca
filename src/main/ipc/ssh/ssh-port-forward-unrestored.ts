@@ -4,10 +4,12 @@ import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry
 import { portForwardManager } from './ssh-ipc-context'
 
 type ForwardMapping = Pick<SavedPortForward, 'localPort' | 'remoteHost' | 'remotePort'>
-type ForwardFailure = { message: string; attempts: number; retryAt: number }
+type ForwardFailure = { message: string; attempts: number; retryAt: number; startedAt?: number }
 
 const FORWARD_RETRY_BASE_MS = 30_000
 const FORWARD_RETRY_MAX_MS = 10 * 60_000
+// A forward that stays up this long has recovered, so a later exit starts a fresh backoff.
+const FORWARD_HEALTHY_MS = 5 * 60_000
 const failuresByTarget = new Map<string, Map<string, ForwardFailure>>()
 
 export function forwardKey(forward: ForwardMapping): string {
@@ -30,13 +32,24 @@ export function recordForwardFailure(
     failures = new Map()
     failuresByTarget.set(targetId, failures)
   }
-  const attempts = (failures.get(forwardKey(forward))?.attempts ?? 0) + 1
+  const previous = failures.get(forwardKey(forward))
+  const recovered =
+    previous?.startedAt !== undefined && Date.now() - previous.startedAt >= FORWARD_HEALTHY_MS
+  const attempts = (recovered ? 0 : (previous?.attempts ?? 0)) + 1
   failures.set(forwardKey(forward), {
     message: error instanceof Error ? error.message : String(error),
     attempts,
     retryAt:
       Date.now() + Math.min(FORWARD_RETRY_BASE_MS * 2 ** (attempts - 1), FORWARD_RETRY_MAX_MS)
   })
+}
+
+/** A start keeps the failure streak until the forward has stayed up, so a flapping ssh keeps backing off. */
+export function recordForwardStarted(targetId: string, forward: ForwardMapping): void {
+  const failure = failuresByTarget.get(targetId)?.get(forwardKey(forward))
+  if (failure) {
+    failure.startedAt = Date.now()
+  }
 }
 
 export function clearForwardFailure(targetId: string, forward: ForwardMapping): void {

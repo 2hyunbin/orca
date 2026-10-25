@@ -5,10 +5,10 @@ import { connectionManager, portForwardManager } from './ssh-ipc-context'
 import { broadcastPortForwards } from './ssh-renderer-broadcast'
 import { PortForwardTornDownError } from '../../ssh/port-forwarding/ssh-port-forward'
 import {
-  clearForwardFailure,
   forwardKey,
   isForwardBackingOff,
-  recordForwardFailure
+  recordForwardFailure,
+  recordForwardStarted
 } from './ssh-port-forward-unrestored'
 
 /**
@@ -88,7 +88,7 @@ export async function restorePortForwards(
         await portForwardManager!.removeForwardAndWait(entry.id)
         return
       }
-      clearForwardFailure(targetId, saved)
+      recordForwardStarted(targetId, saved)
     } catch (err) {
       // A teardown or reconnect cancelled this start; the next transport retries without a backoff.
       if (

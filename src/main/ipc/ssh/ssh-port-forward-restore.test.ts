@@ -331,20 +331,25 @@ describe('saved port forward restore', () => {
     expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
   })
 
-  it('backs off a forward that started and then exited', async () => {
+  it('keeps backing off a forward whose ssh restarts and exits again', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
+      // Starts, then its ssh dies after the start grace; the close callback records it.
       await restoreManagedHostPortForwards('t1')
-      // The ssh child dies after its start grace, twice; each close counts like a failed start.
       h.active.length = 0
       recordForwardFailure('t1', FORWARD, 'exited unexpectedly')
-      recordForwardFailure('t1', FORWARD, 'exited unexpectedly')
-      vi.setSystemTime(Date.now() + 30_000)
-      await restoreManagedHostPortForwards('t1')
-      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(1)
       vi.setSystemTime(Date.now() + 30_000)
       await restoreManagedHostPortForwards('t1')
       expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+      // The restart succeeds, then dies again: the streak continues, so the wait doubles.
+      h.active.length = 0
+      recordForwardFailure('t1', FORWARD, 'exited unexpectedly')
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(2)
+      vi.setSystemTime(Date.now() + 30_000)
+      await restoreManagedHostPortForwards('t1')
+      expect(h.portForwardManager.addForward).toHaveBeenCalledTimes(3)
     } finally {
       vi.useRealTimers()
     }
