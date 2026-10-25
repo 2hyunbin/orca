@@ -13,13 +13,14 @@ export function createEditorExternalChangeTabReset(store: AppStoreApi): (event: 
     }
 
     const state = store.getState()
-    // Same-record siblings match by path themselves; no separate expansion is needed.
-    const matchingFiles = getOpenFilesForExternalFileChange(state.openFiles, detail, state)
+    // Why no sibling expansion: views of one file share a record, so each matches by path itself.
+    const matchingFiles = getOpenFilesForExternalFileChange(state.openFiles, detail)
     if (matchingFiles.length === 0) {
       return
     }
 
-    // Preserve dirty model drafts, including clean sibling views; mark conflicts if typing began during notification debounce.
+    // Keep model-level dirty drafts on external writes (#7265); clean sibling tabs show the same unsaved model text.
+    // Mark changed-on-disk too for tabs becoming dirty during notify debounce.
     const modelDirty = new Set(
       matchingFiles.filter((file) => isEditorModelDirty(state, file)).map((file) => file.id)
     )
@@ -29,7 +30,7 @@ export function createEditorExternalChangeTabReset(store: AppStoreApi): (event: 
         if (!file.isDirty) {
           continue
         }
-        // Controller notifications bypass watcher verification; filter the app’s own save echoes here.
+        // Why: skip Orca's own-save echo, which routes here bypassing the watch hook's echo verification.
         if (!hasRecentSelfWrite(file.filePath, file.runtimeEnvironmentId)) {
           markFileChangedOnDisk(state, file, {
             connectionId: getConnectionIdForFile(file.worktreeId, file.filePath) ?? undefined,
@@ -38,8 +39,9 @@ export function createEditorExternalChangeTabReset(store: AppStoreApi): (event: 
         }
         continue
       }
-      // Clear dirty state to cancel autosave timers and make queued requests no-op.
+      // Why: going clean drops the autosave timer, and a queued save then finds nothing to write.
       state.markFileDirty(file.id, false)
+      // Why: about to reload fresh disk content, so a stale changed-on-disk mark is resolved.
       if (file.externalMutation === 'changed') {
         state.setExternalMutation(file.id, null)
       }

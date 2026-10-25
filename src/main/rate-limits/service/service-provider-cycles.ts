@@ -13,7 +13,7 @@ export abstract class RateLimitServiceProviderCycles extends RateLimitServiceFul
     const codexTarget = this.codexFetchTarget
     const codexGeneration = this.codexFetchGeneration
     const codexHome = await this.resolveCodexHome(codexTarget)
-    // Skip before publishing fetching; no request will settle it (#STA-4422).
+    // Why: return before the "fetching" mark — a skipped cycle never settles it (#STA-4422).
     if (codexHome.skip) {
       if (
         codexGeneration === this.codexFetchGeneration &&
@@ -85,12 +85,12 @@ export abstract class RateLimitServiceProviderCycles extends RateLimitServiceFul
     if (signal.aborted) {
       return
     }
-    // Automated polling honors Retry-After even while live usage is visible.
-    if (!options?.force && this.shouldSkipAutomatedClaudeFetch(this.state.claude)) {
+    // Why: automated checks must honor the endpoint's Retry-After even when live display is available.
+    if (!options?.force && this.shouldSkipAutomatedFetch('claude', this.state.claude)) {
       return
     }
     const claudeTarget = this.claudeFetchTarget
-    // Capture before await so switches invalidate attribution and result application.
+    // Why: capture before the resolver await so an account switch during it invalidates both the snapshot and the state apply.
     const claudeGeneration = this.claudeFetchGeneration
     const claudeAuthPreparation = await this.claudeAuthPreparationResolver?.(claudeTarget)
     if (signal.aborted) {

@@ -121,7 +121,9 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
     }
     const miniMaxGeneration = this.minimaxFetchGeneration
 
-    const antigravityUsageEnabled = this.antigravityUsageEnabledResolver?.() ?? true
+    const antigravityFetchAllowed =
+      (this.antigravityUsageEnabledResolver?.() ?? true) &&
+      (options?.force || !this.shouldSkipAutomatedFetch('antigravity', previousState.antigravity))
 
     const zcodePlanConfigResult = this.resolveZcodePlanConfig()
     const zcodePlanApiKey = zcodePlanConfigResult.config.apiKey
@@ -154,7 +156,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
         ? this.withFetchingStatus(null, 'opencode-go')
         : this.withFetchingStatus(previousState.opencodeGo, 'opencode-go'),
       kimi: this.withFetchingStatus(previousState.kimi, 'kimi'),
-      antigravity: antigravityUsageEnabled
+      antigravity: antigravityFetchAllowed
         ? this.withFetchingStatus(previousState.antigravity, 'antigravity')
         : (previousState.antigravity ?? antigravityUsageDisabledSnapshot()),
       minimax: miniMaxConfigChanged
@@ -189,7 +191,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
 
     // Hidden meters avoid the CLI spawn; the separate promise keeps other providers responsive.
     const antigravityResultPromise = (
-      antigravityUsageEnabled
+      antigravityFetchAllowed
         ? fetchAntigravityRateLimits({ signal })
         : Promise.resolve(previousState.antigravity ?? antigravityUsageDisabledSnapshot())
     ).then(
@@ -209,7 +211,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
 
     // Live display does not waive automated Retry-After gates.
     const claudeFetchGated =
-      !options?.force && this.shouldSkipAutomatedClaudeFetch(previousState.claude)
+      !options?.force && this.shouldSkipAutomatedFetch('claude', previousState.claude)
 
     const [claudeResult, codexResult, geminiResult, opencodeGoResult, kimiResult, miniMaxResult] =
       await Promise.allSettled([

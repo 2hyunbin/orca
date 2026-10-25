@@ -219,6 +219,45 @@ describe('fetchAntigravityRateLimits', () => {
     expect(result.error).toContain('did not answer in time')
   })
 
+  it('cools down a read that reached agy\u2019s browser sign-in', async () => {
+    // Why pinned: agy 1.4.2 opens this OAuth page and waits 60 s, so Orca's 30 s kill lands first (#26484).
+    const result = await harness({
+      result: processResult({
+        timedOut: true,
+        stderr:
+          'Authentication required. Please visit the URL to log in:\n  https://accounts.google.com/o/oauth2/auth?...\n\nWaiting for authentication (timeout 60s)...\n'
+      })
+    }).fetch()
+
+    expect(result.status).toBe('unavailable')
+    expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
+    expect(result.usageMetadata?.retryAtMs).toBe(1_700_000_000_000 + 60 * 60 * 1000)
+  })
+
+  it('keeps the reading when the browser sign-in completes within the read', async () => {
+    const result = await harness({
+      result: processResult({
+        stdout: USAGE_ENVELOPE,
+        stderr: 'Authentication required. Please visit the URL to log in:\n'
+      })
+    }).fetch()
+
+    expect(result.status).toBe('ok')
+    expect(result.usageMetadata?.retryAtMs).toBeUndefined()
+  })
+
+  it('does not cool down a signed-out read that fails fast without a browser', async () => {
+    const result = await harness({
+      result: processResult({
+        code: 1,
+        stderr: "Error: authentication required. Run 'agy' to log in, then retry.\n"
+      })
+    }).fetch()
+
+    expect(result.usageMetadata?.failureKind).toBe('missing-credentials')
+    expect(result.usageMetadata?.retryAtMs).toBeUndefined()
+  })
+
   it('reports an unreadable payload as a parse failure carrying the exit code', async () => {
     const result = await harness({
       result: processResult({ code: 2, stdout: 'unknown command /usage' })

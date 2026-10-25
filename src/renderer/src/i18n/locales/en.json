@@ -3687,11 +3687,7 @@
             "downloadOpenWithDefaultApp": "Download & open with default app",
             "downloadOpenFailed": "Failed to download '{{value0}}'.",
             "openInThisGroup": "Open in this group",
-            "openInThisGroupRefused": "Couldn't open {{value0}} in this group",
-            "fileInOtherWorkspace": "This file is in {{value0}}",
-            "fileInAnotherWorkspace": "This file is in another workspace",
-            "openInOwningWorkspace": "Open there",
-            "openedHereReadOnly": "Opened here as read-only"
+            "openInThisGroupRefused": "Couldn't open {{value0}} in this group"
           },
           "TerminalSessionStateSaveFailureDialog": {
             "6bee0c8f17": "Open Disk Space Analyzer",
@@ -16276,7 +16272,6 @@
           "6c4f1a8d2e": "Check details are unavailable."
         },
         "EditorPanelHeader": {
-          "readOnlyBadge": "Read-only",
           "fb8331694e": "Open Preview to the Side",
           "4157f3cbf3": "Open Markdown Preview",
           "269ce4842b": "Copy Relative Path",
