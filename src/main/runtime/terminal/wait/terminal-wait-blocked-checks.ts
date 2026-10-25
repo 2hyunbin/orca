@@ -123,6 +123,19 @@ export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntim
     resetWaitBlockedCarry(state.appended)
   }
 
+  /** Drops a stamp whose dialog the screen proved erased; a newly painted blocker stamps again. */
+  protected clearWaitBlockedStamp(ptyId: string): void {
+    const pty = this.ptysById.get(ptyId)
+    if (pty) {
+      pty.waitBlockedAt = null
+    }
+    for (const leaf of this.getLeavesForPty(ptyId)) {
+      if (!pty || leaf.tailBuffer === pty.tailBuffer) {
+        leaf.waitBlockedAt = null
+      }
+    }
+  }
+
   // Why: the scanner's first run after a restore seed compares against a null
   // baseline, so a permission prompt visible only in seeded HISTORY would read
   // as newly gained and stamp waitBlockedAt "now" on the next benign chunk.

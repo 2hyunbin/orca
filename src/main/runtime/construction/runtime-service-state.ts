@@ -214,13 +214,17 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
     flushPendingBlockedStamp: (ptyId) => this.flushPendingWaitBlockedCheck(ptyId),
     readScreenClearingBlockedTail: (ptyId, lastOutputAt) => {
       // Why quiet: a frame caught mid-paint can drop a dialog row the next chunk restores.
+      // No output timestamp counts as quiet; a clear can only remove a block.
       if (lastOutputAt !== null && Date.now() - lastOutputAt < TUI_IDLE_QUIESCENCE_MS) {
         return null
       }
       const screen = this.readCaughtUpRuledScreen(ptyId)
-      return screen && screenClearsBlockedTail(this.getPaneAgentForTuiIdle(ptyId), screen.lines)
-        ? screen.lines.join('\n')
-        : null
+      if (!screen || !screenClearsBlockedTail(this.getPaneAgentForTuiIdle(ptyId), screen.lines)) {
+        return null
+      }
+      // Why drop the stamp: our own paste echo ends the quiet, and the tail must not re-block on it.
+      this.clearWaitBlockedStamp(ptyId)
+      return screen.lines.join('\n')
     }
   })
 

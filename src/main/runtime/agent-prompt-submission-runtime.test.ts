@@ -229,7 +229,10 @@ describe('agent prompt submission runtime', () => {
 
   it('sends to a ready Codex composer whose erased dialog the line tail still holds', async () => {
     const { runtime, handle, writes } = await createPromptRuntime((runtime, data) => {
-      if (data === '\r') {
+      if (data.includes(AGENT_PROMPT_BRACKETED_PASTE_END)) {
+        // Why the echo: it ends the quiet the screen clear needs before the pre-Enter check.
+        runtime.onPtyData('pty-prompt', '\x1b[22;1H› review this', Date.now())
+      } else if (data === '\r') {
         runtime.onPtyData('pty-prompt', '\x1b]0;Codex working\x07', Date.now())
       }
     }, 'codex')
