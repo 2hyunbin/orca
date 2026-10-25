@@ -58,6 +58,7 @@ vi.mock('./native-chat-attachment-upload', async (importOriginal) => ({
   resolveNativeChatAttachmentOwnerForWorktree: () => ({ kind: testState.ownerKind })
 }))
 vi.mock('@/i18n/i18n', () => ({
+  i18n: { language: 'en' },
   translate: (_key: string, fallback: string, values?: Record<string, unknown>) =>
     fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => String(values?.[name]))
 }))
@@ -318,7 +319,9 @@ describe('OS file drops through the real composing chat field', () => {
         finishPreparation = resolve
       })
       prepare.mockImplementationOnce(async ({ paths }) => {
-        if (delayed) await preparation
+        if (delayed) {
+          await preparation
+        }
         return {
           paths: paths.filter((path) => !path.endsWith('/missing.png')),
           failures: [
