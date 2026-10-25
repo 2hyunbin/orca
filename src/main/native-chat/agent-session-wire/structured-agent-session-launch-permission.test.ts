@@ -62,6 +62,18 @@ describe('the permission mode a chat starts with', () => {
     }
   )
 
+  it('delegates saved own settings without consulting the catalog', async () => {
+    for (const provider of ['claude', 'codex']) {
+      const launch = launchPermission(
+        provider,
+        { permissionMode: 'own', model: 'unlisted-model' },
+        new Error('catalog unavailable')
+      )
+      await expect(launch.result).resolves.toBe('own')
+      expect(launch.read).not.toHaveBeenCalled()
+    }
+  })
+
   // Captured saved choices with an alias-only host catalog.
   it('keeps saved Haiku full-ID Auto with the captured alias-only catalog', async () => {
     const launch = launchPermission(

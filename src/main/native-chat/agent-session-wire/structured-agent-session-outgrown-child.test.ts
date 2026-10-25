@@ -14,7 +14,7 @@ import {
   retireOutgrownStructuredAgentSessionChild,
   structuredAgentSessionChildReportedSignedOut
 } from './structured-agent-session-outgrown-child'
-import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
+import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 import type {
   AgentJournalItemBody,
@@ -197,7 +197,7 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
     input: Parameters<typeof conversation>[0],
     work: Partial<typeof idle> = {},
     stopAgent = vi.fn(async () => undefined),
-    launchPermission?: () => Promise<AgentChatPermissionMode | null>
+    launchPermission?: () => Promise<AgentChatPermissionChoice | null>
   ) => {
     const warn = vi.fn()
     await retireOutgrownStructuredAgentSessionChild('session', conversation(input), {
@@ -307,7 +307,7 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
   })
 
   describe('a child launched with another permission mode', () => {
-    const now = (mode: AgentChatPermissionMode) => vi.fn(async () => mode)
+    const now = (mode: AgentChatPermissionChoice) => vi.fn(async () => mode)
     const askChild = { child: childAt({ permissionMode: 'ask' }) }
 
     it('is stopped once, and one launched with the current mode is kept', async () => {
