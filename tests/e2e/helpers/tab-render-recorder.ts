@@ -48,7 +48,8 @@ export async function startRecordingTabRenders(page: Page): Promise<void> {
           }
           const element = host?.stateNode
           const tabId =
-            element instanceof Element
+            // Slot-producing ancestors do not prove that their first tab rendered.
+            element instanceof Element && !element.hasAttribute('data-tab-strip-slot')
               ? element.closest('[data-tab-strip-slot]')?.getAttribute('data-tab-strip-slot')
               : undefined
           if (tabId) {

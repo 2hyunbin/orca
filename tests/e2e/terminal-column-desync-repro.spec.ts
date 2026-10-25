@@ -75,6 +75,21 @@ async function readColumnSnapshot(page: Page, ptyId: string): Promise<ColumnSnap
   return { xtermCols, ptyCols }
 }
 
+// Poll non-atomic xterm/PTY reads through ResizeObserver → rAF fit → resize IPC; dropped resize never converges.
+async function expectColumnsInSync(page: Page, ptyId: string, label: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const snap = await readColumnSnapshot(page, ptyId)
+        return snap.ptyCols === snap.xtermCols
+          ? 'synced'
+          : `pty=${snap.ptyCols} xterm=${snap.xtermCols}`
+      },
+      { timeout: 30_000, message: `${label}: PTY cols should converge to xterm cols` }
+    )
+    .toBe('synced')
+}
+
 async function closeRightSidebarAndFeatureTips(page: Page): Promise<void> {
   await page.evaluate(() => {
     const store = window.__store
@@ -106,28 +121,13 @@ test.describe('Terminal column desync repro', () => {
     await ensureTerminalVisible(orcaPage)
     const ptyId = await settleTerminal(orcaPage)
 
-    // Poll non-atomic xterm/PTY reads through ResizeObserver → rAF fit → resize IPC; dropped resize never converges.
-    const expectColumnsInSync = async (label: string): Promise<void> => {
-      await expect
-        .poll(
-          async () => {
-            const snap = await readColumnSnapshot(orcaPage, ptyId)
-            return snap.ptyCols === snap.xtermCols
-              ? 'synced'
-              : `pty=${snap.ptyCols} xterm=${snap.xtermCols}`
-          },
-          { timeout: 30_000, message: `${label}: PTY cols should converge to xterm cols` }
-        )
-        .toBe('synced')
-    }
-
-    await expectColumnsInSync('baseline')
+    await expectColumnsInSync(orcaPage, ptyId, 'baseline')
 
     await orcaPage.setViewportSize({ width: 760, height: 800 })
-    await expectColumnsInSync('after shrink')
+    await expectColumnsInSync(orcaPage, ptyId, 'after shrink')
 
     await orcaPage.setViewportSize({ width: 1280, height: 800 })
-    await expectColumnsInSync('after widen')
+    await expectColumnsInSync(orcaPage, ptyId, 'after widen')
   })
 
   // Compare getSize to in-PTY columns: intent-only reporting hides dropped resizes from resume/handoff drift correction.
@@ -173,10 +173,7 @@ test.describe('Terminal column desync repro', () => {
     await ensureTerminalVisible(orcaPage)
     const ptyId = await settleTerminal(orcaPage)
     await orcaPage.setViewportSize({ width: 1280, height: 800 })
-    await orcaPage.waitForTimeout(400)
-
-    const baseline = await readColumnSnapshot(orcaPage, ptyId)
-    expect(baseline.ptyCols).toBe(baseline.xtermCols)
+    await expectColumnsInSync(orcaPage, ptyId, 'before hidden resize')
 
     // Resize while hidden so normal forwarding is gated, then test resume correction.
     await switchToWorktree(orcaPage, otherWorktreeId)
@@ -186,14 +183,7 @@ test.describe('Terminal column desync repro', () => {
     await switchToWorktree(orcaPage, homeWorktreeId)
     await ensureTerminalVisible(orcaPage)
     await waitForActiveTerminalManager(orcaPage, 30_000)
-    await orcaPage.waitForTimeout(600)
-
-    const afterReturn = await readColumnSnapshot(orcaPage, ptyId)
-    expect(
-      afterReturn.ptyCols,
-      `after hidden resize + return, PTY cols (${afterReturn.ptyCols}) should equal xterm cols ` +
-        `(${afterReturn.xtermCols}); a stale PTY width is the column-desync bug`
-    ).toBe(afterReturn.xtermCols)
+    await expectColumnsInSync(orcaPage, ptyId, 'after hidden resize + return')
   })
 
   test('PTY columns re-sync after repeated background resizes', async ({ orcaPage }) => {
