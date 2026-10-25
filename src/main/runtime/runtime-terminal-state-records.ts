@@ -76,6 +76,8 @@ export type RuntimePtyWorktreeRecord = RuntimeTerminalTailState & {
     launchToken: string | null
     result: TerminalLaunchResult
   }
+  /** The ORCA_PANE_KEY the execution host reports this PTY's env exported; absent when unreported. */
+  spawnPaneKey?: string | null
   launchConfig: SleepingAgentLaunchConfig | null
   launchToken: string | null
   launchIncarnationId: PtyIncarnationId | null
