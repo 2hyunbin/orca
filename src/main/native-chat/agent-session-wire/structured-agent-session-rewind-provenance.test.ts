@@ -15,6 +15,11 @@ import { createTrackedJournalOpener } from '../agent-session-journal/journal-hos
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import { structuredRewindCut } from './structured-rewind-cut'
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../shared/agent-session-record.test-fixture'
+import { StructuredAgentSessionJournalProjections } from './structured-agent-session-status-journal-projection'
 
 const IDENTITY: AgentSessionJournalIdentity = {
   sessionId: 'session-1',
@@ -240,3 +245,116 @@ it.each(['epoch', 'context'])(
     expect(accepted.sequence).toBeGreaterThan(0)
   }
 )
+
+it('restores the original quit cut after actual rewind under a newer live owner', async () => {
+  const since = 1792842260044
+  const completedAt = 1792842344697
+  const quitAt = 1792842344700
+  const replacementFence = 6
+  const rewindAt = 1792920422530
+  const journal = await journals.open({
+    identity: IDENTITY,
+    stateDirectory: root,
+    now: () => rewindAt
+  })
+  const turnItemId = agentJournalItemKey(TURN)
+  const stop = codexItem('turn-dead', 3)
+  await journal.appendItem(
+    TURN,
+    {
+      kind: 'turn',
+      turnId: 'turn-dead',
+      state: 'interrupted',
+      requestedAt: 1792842260018,
+      startedAt: since,
+      completedAt
+    },
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: 2, ownerFence: 2, observedAt: since }
+  )
+  await journal.appendItem(
+    stop,
+    { kind: 'status', text: '', presentation: 'orca-stop', orcaStop: { cause: 'quit' } },
+    {
+      turnScope: { kind: 'turn', turnItemId },
+      fence: 3,
+      ownerFence: 3,
+      observedAt: quitAt
+    }
+  )
+  const fact = { itemId: turnItemId, since }
+  expect(journal.restFact()).toEqual(fact)
+  const projection = new StructuredAgentSessionJournalProjections()
+  projection.noteRestart(IDENTITY.sessionId, {
+    known: true,
+    interrupted: true,
+    openTurn: fact,
+    lastSequence: journal.cursor().sequence,
+    lastSavedAt: quitAt
+  })
+  const record = agentSessionRecordFixture(
+    agentSessionLeaseFixture({ sessionId: IDENTITY.sessionId, runtimeFence: replacementFence })
+  )
+  record.provider = 'codex'
+  record.providerHandleChain = record.providerHandleChain.map((link) => ({
+    ...link,
+    handle: codexProviderHandle('thread-1')
+  }))
+  const seen = { child: { fence: replacementFence } }
+  await journal.appendItem(UNDONE, UNDONE_BODY, {
+    turnScope: AGENT_JOURNAL_THREAD_SCOPE,
+    fence: replacementFence
+  })
+  await journal.appendItem(
+    codexItem('turn-undone', 1),
+    { kind: 'turn', turnId: 'turn-undone', state: 'completed', outcome: 'success' },
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: replacementFence }
+  )
+  expect(projection.read(journal, record, seen).state.summary.turnOutcome).toBe('success')
+  const epoch = journal.epoch
+  const cut = structuredRewindCut(journal, {
+    itemId: agentJournalItemKey(UNDONE),
+    provider: 'codex',
+    nativeId: 'thread-1'
+  })!
+  expect(cut).toMatchObject({ beforeTurnId: 'turn-undone', keptTurnId: 'turn-dead' })
+  await journal.replaceEpochItems('handle_forked', replacementFence, cut.kept)
+  expect(journal.epoch).not.toBe(epoch)
+  expect(journal.itemBody(agentJournalItemKey(UNDONE))).toBeNull()
+  expect(journal.restFact()).toEqual(fact)
+  expect(journal.item(turnItemId)).toMatchObject({
+    observedAt: since,
+    body: { state: 'interrupted', startedAt: since, completedAt }
+  })
+  expect(journal.item(agentJournalItemKey(stop))).toMatchObject({
+    observedAt: quitAt,
+    body: { orcaStop: { cause: 'quit' } }
+  })
+  expect(journal.itemFence(turnItemId)).toBe(2)
+  expect(journal.itemFence(agentJournalItemKey(stop))).toBe(3)
+  expect(record.lease.deathEvidence).toBeNull()
+  const restored = projection.read(journal, record, seen)
+  expect(restored.liveFence).toBe(replacementFence)
+  expect(restored.state.summary).toMatchObject({
+    status: 'idle',
+    turnOutcome: 'cancellation',
+    restoredInterruption: true,
+    statusStartedAt: since
+  })
+  expect(projection.read(journal, record, seen)).toBe(restored)
+  expect(journal.restFact()).toEqual(fact)
+  const next = codexItem('later-live', 0)
+  await journal.appendItem(
+    next,
+    { kind: 'turn', turnId: 'later-live', state: 'running', startedAt: rewindAt + 1 },
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: replacementFence }
+  )
+  expect(projection.read(journal, record, seen).state.summary.status).toBe('working')
+  await journal.appendItem(
+    next,
+    { kind: 'turn', turnId: 'later-live', state: 'interrupted', startedAt: rewindAt + 1 },
+    { turnScope: AGENT_JOURNAL_THREAD_SCOPE, fence: replacementFence }
+  )
+  const fault = projection.read(journal, record, seen).state.summary
+  expect(fault.turnOutcome).toBe('interruption')
+  expect(fault.restoredInterruption).toBeUndefined()
+})

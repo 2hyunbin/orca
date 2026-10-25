@@ -16,6 +16,7 @@ import {
 } from './structured-agent-session-current-work'
 import { newestAcceptedSendKey } from './structured-agent-session-status-child-work'
 import { structuredAgentSessionStopping } from './structured-agent-session-stopping'
+import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat/native-chat-orca-stop-cut'
 
 export type StructuredAgentSessionStatusState = ReturnType<
   typeof projectStructuredAgentSessionStatusState
@@ -155,7 +156,8 @@ export class StructuredAgentSessionJournalProjections {
         projection.state,
         journal,
         record,
-        seen?.child !== undefined && seen.child !== null
+        seen?.child !== undefined && seen.child !== null,
+        snapshot
       )
       this.byJournal.set(journal, projection)
     }
@@ -165,7 +167,8 @@ export class StructuredAgentSessionJournalProjections {
     state: StructuredAgentSessionStatusState,
     journal: AgentSessionJournal,
     record: AgentSessionRecord | null,
-    liveChild: boolean
+    liveChild: boolean,
+    snapshot: ReturnType<AgentSessionJournal['snapshot']>
   ): StructuredAgentSessionStatusState {
     if (!record) {
       return state
@@ -210,7 +213,11 @@ export class StructuredAgentSessionJournalProjections {
           fence !== undefined &&
           fence !== null &&
           fence <= replaced.fence))
-    return cut && ended && (state.summary.status === 'idle' || state.summary.status === null)
+    return cut &&
+      (state.summary.status === 'idle' || state.summary.status === null) &&
+      (ended ||
+        latestNativeChatOrcaStopCut(snapshot.items, snapshot.submissions)?.turnItemId ===
+          cut.itemId)
       ? {
           ...state,
           summary: {
