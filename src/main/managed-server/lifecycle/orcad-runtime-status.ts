@@ -9,6 +9,9 @@ import {
 import { currentManagedOrcadUpdateDeferral } from './orcad-managed-update-deferrals'
 import { findIncompleteManagedOrcadMigration } from './orcad-managed-migration-status'
 import { collectManagedTerminalCensus } from '../../ssh/orcad-terminal-census-client'
+import { getAppEnvironment } from '../../../shared/app-environment'
+import { bundledManagedOrcadVersion } from './orcad-managed-auto-update'
+import { availableManagedOrcadUpdate } from './orcad-managed-update-decision'
 
 /** Read host records without repairing them. */
 export async function getManagedOrcadRuntimeStatus(
@@ -30,13 +33,20 @@ export async function getManagedOrcadRuntimeStatus(
       environmentId: environment.id,
       sshTargetId: context.target.id,
       activeVersion: record.active,
+      activeAppVersion: record.active ? (record.activeAppVersion ?? null) : null,
       previousVersion: record.previous,
       activatedAt: record.activatedAt,
       rollbackAvailable: Boolean(record.previous && record.snapshot),
       recovery: transaction ? managedRecoveryStatus(transaction) : null,
       terminals: await collectManagedTerminalCensus(userDataPath, environment, record),
       migration: migrationStatus(userDataPath, environment.id),
-      deferredUpdate: currentManagedOrcadUpdateDeferral(environment.id, record.active)
+      deferredUpdate: currentManagedOrcadUpdateDeferral(environment.id, record.active),
+      availableUpdate: availableManagedOrcadUpdate({
+        record,
+        // A local template fault must not hide the host's status; it only hides the offer.
+        candidateVersion: await bundledManagedOrcadVersion(context.serverTarget).catch(() => null),
+        appVersion: getAppEnvironment().getVersion()
+      })
     }
   })
 }

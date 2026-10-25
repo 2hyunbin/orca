@@ -57,6 +57,19 @@ export function terminalCensusLabel(terminals: OrcadManagedRuntimeStatus['termin
   )
 }
 
+/** Copy for Update anyway; it states only what the forced update was verified to keep. */
+export function forceUpdateMessage(liveSessions: number | null): string {
+  return liveSessions === 1
+    ? translate(
+        'auto.components.settings.managedServers.row.forceUpdateOne',
+        '1 terminal is running on this host. It keeps running through the update, and its pane reconnects when Orca’s server restarts.'
+      )
+    : translate(
+        'auto.components.settings.managedServers.row.forceUpdateMany',
+        'Terminals are running on this host. They keep running through the update, and their panes reconnect when Orca’s server restarts.'
+      )
+}
+
 export function conversionBlockerLabel(blocker: OrcadMigrationBlocker): string {
   switch (blocker.code) {
     case 'orcad_migration_target_not_found':

@@ -177,6 +177,10 @@ export type OrcadManagedRuntimeStatus = {
   } | null
   /** The last update this client deferred for this server, cleared once one goes through. */
   deferredUpdate: (OrcadManagedDeferral & { deferredAt: string }) | null
+  /** The Orca release that activated `activeVersion`; absent when unknown or from older desktops. */
+  activeAppVersion?: string | null
+  /** This desktop's bundled build when Update would move the host to it; absent from older desktops. */
+  availableUpdate?: string | null
 }
 
 export type OrcadManagedConversionResult =

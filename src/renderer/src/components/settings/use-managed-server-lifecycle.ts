@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import {
   ORCAD_RECOVERY_CHANGED_STATE_CODE,
+  type OrcadManagedDeferral,
   type OrcadManagedRuntimeStatus
 } from '../../../../shared/orcad-managed-runtime'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
@@ -11,6 +12,7 @@ import { managedServerOutcomeLabel } from './managed-server-copy'
 
 export type ManagedServerAction =
   | 'update'
+  | 'forceUpdate'
   | 'rollback'
   | 'recover'
   | 'restoreSnapshot'
@@ -26,6 +28,9 @@ export type ManagedServerLifecycle = {
   confirmingStop: boolean
   confirmingForget: boolean
   confirmingRestore: boolean
+  /** An Update deferred only by running terminals, which Update anyway restarts past. */
+  confirmingForceUpdate: OrcadManagedDeferral | null
+  setConfirmingForceUpdate: (value: OrcadManagedDeferral | null) => void
   setConfirmingStop: (value: boolean) => void
   setConfirmingForget: (value: boolean) => void
   setConfirmingRestore: (value: boolean) => void
@@ -34,6 +39,20 @@ export type ManagedServerLifecycle = {
 }
 
 /** Turns a refusal or deferral into the one line the user acts on. */
+// Why only this code: the daemon carries these terminals across; other deferrals would strand them.
+const TERMINALS_RUNNING_DEFERRAL_CODE = 'orcad_update_terminals_running'
+
+function forceableTerminalsDeferral(
+  result: { outcome: string } | OrcadManagedDeferral
+): OrcadManagedDeferral | null {
+  return result.outcome === 'deferred' &&
+    'code' in result &&
+    result.forceable === true &&
+    result.code === TERMINALS_RUNNING_DEFERRAL_CODE
+    ? result
+    : null
+}
+
 function outcomeMessage(result: Parameters<typeof managedServerOutcomeLabel>[0]): string | null {
   return result.outcome === 'deferred' ||
     result.outcome === 'refused' ||
@@ -59,6 +78,9 @@ export function useManagedServerLifecycle({
   const [confirmingStop, setConfirmingStop] = useState(false)
   const [confirmingForget, setConfirmingForget] = useState(false)
   const [confirmingRestore, setConfirmingRestore] = useState(false)
+  const [confirmingForceUpdate, setConfirmingForceUpdate] = useState<OrcadManagedDeferral | null>(
+    null
+  )
 
   const loadStatus = useCallback(async () => {
     setBusy('status')
@@ -88,8 +110,8 @@ export function useManagedServerLifecycle({
     try {
       const selector = { selector: environment.id }
       const result =
-        action === 'update'
-          ? await api.update(selector)
+        action === 'update' || action === 'forceUpdate'
+          ? await api.update(action === 'forceUpdate' ? { ...selector, force: true } : selector)
           : action === 'rollback'
             ? await api.rollback(selector)
             : action === 'recover' || action === 'restoreSnapshot'
@@ -102,7 +124,11 @@ export function useManagedServerLifecycle({
                 : action === 'forget'
                   ? await api.forget(selector)
                   : await api.cancelStop(selector)
-      const message = outcomeMessage(result)
+      const forceable = action === 'update' ? forceableTerminalsDeferral(result) : null
+      const message = forceable ? null : outcomeMessage(result)
+      if (mountedRef.current) {
+        setConfirmingForceUpdate(forceable)
+      }
       if (message) {
         toast.message(message)
       }
@@ -134,6 +160,8 @@ export function useManagedServerLifecycle({
     confirmingStop,
     confirmingForget,
     confirmingRestore,
+    confirmingForceUpdate,
+    setConfirmingForceUpdate,
     setConfirmingStop,
     setConfirmingForget,
     setConfirmingRestore,
