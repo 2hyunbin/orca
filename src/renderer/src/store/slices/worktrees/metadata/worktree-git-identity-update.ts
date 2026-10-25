@@ -72,7 +72,7 @@ export function createUpdateWorktreeGitIdentity(
   return (worktreeId, identity, ownerHostId) => {
     let shouldPersistHostedReviewClear = false
     let clearedBranch: string | null = null
-    let twinClearHostId: ExecutionHostId | null | undefined
+    let clearedRowHostId: ExecutionHostId | undefined
     let clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
     const repoId = getRepoIdFromWorktreeId(worktreeId)
     const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
@@ -95,9 +95,9 @@ export function createUpdateWorktreeGitIdentity(
 
       let changed = false
       const targets = gitIdentityTargets(s, worktreeId, ownerHostId)
-      // Why: review-clear tombstones are keyed by bare id, so a twin's copy would clear its sibling's link.
-      const reviewTombstonesAllowed = !targets.isTwin
       const next = current.map((worktree) => {
+        // Why: tombstones share the bare id, so a twin's names its copy and spares the sibling.
+        const tombstoneHostId = targets.isTwin ? worktree.hostId : undefined
         if (!targets.rows.has(worktree)) {
           return worktree
         }
@@ -112,17 +112,22 @@ export function createUpdateWorktreeGitIdentity(
           canonicalHostedReviewBranchIdentity(worktree.branch)
         const shouldClearHostedReviewContext =
           hostedReviewBranchChanged && hasBranchScopedHostedReviewContext(worktree)
-        if (shouldClearHostedReviewContext && !reviewTombstonesAllowed) {
-          // A stale push target would send this branch's commits to the old review branch.
-          twinClearHostId = worktree.hostId ?? null
-        } else if (shouldClearHostedReviewContext) {
+        if (shouldClearHostedReviewContext) {
           shouldPersistHostedReviewClear = true
           clearedBranch = nextBranch
+          clearedRowHostId = tombstoneHostId
           clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
-          rememberHostedReviewLinkClear(worktreeId, nextBranch, clearGeneration, nextHead)
-        } else if (reviewTombstonesAllowed) {
+          rememberHostedReviewLinkClear(
+            worktreeId,
+            nextBranch,
+            clearGeneration,
+            nextHead,
+            tombstoneHostId
+          )
+        } else {
           const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(worktreeId)
-          if (tombstone) {
+          if (tombstone && tombstone.hostId === tombstoneHostId) {
+            clearedRowHostId = tombstoneHostId
             const nextBranchIdentity = canonicalHostedReviewBranchIdentity(nextBranch)
             hostedReviewLinkClearTombstonesByWorktreeId.set(worktreeId, {
               ...tombstone,
@@ -177,23 +182,14 @@ export function createUpdateWorktreeGitIdentity(
         sortEpoch: s.sortEpoch + 1
       }
     })
-    if (twinClearHostId !== undefined && ownerHostId) {
-      // Why direct: the id-keyed retry below would read and write the sibling copy.
-      void Promise.resolve()
-        .then(() =>
-          persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), worktreeId, ownerHostId),
-            worktreeId,
-            CLEARED_HOSTED_REVIEW_LINK_UPDATES,
-            twinClearHostId ?? undefined
-          )
-        )
-        .catch((err) => console.error('Failed to persist a twin review link clear:', err))
-      return
-    }
     if (!shouldPersistHostedReviewClear || clearedBranch === null) {
       return
     }
+    // Why: for a twin every read, clear and save below stays on the copy this answer patched.
+    const rowHostId = clearedRowHostId
+    const ownerForTwin = rowHostId ? (ownerHostId ?? undefined) : undefined
+    const readRow = (id: string) => get().getKnownWorktreeById(id, ownerForTwin)
+    const persistTo = (id: string) => runtimeTargetForWorktreeOwner(get(), id, ownerForTwin)
 
     void Promise.resolve()
       .then(async () => {
@@ -205,7 +201,7 @@ export function createUpdateWorktreeGitIdentity(
             return
           }
           persistedWorktreeIds.add(currentWorktreeId)
-          let current = get().getKnownWorktreeById(currentWorktreeId)
+          let current = readRow(currentWorktreeId)
           if (
             !current ||
             current.branch !== clearedBranch ||
@@ -215,16 +211,17 @@ export function createUpdateWorktreeGitIdentity(
           }
           if (!hostedReviewLinksAreCleared(current as Worktree)) {
             // Why: a refetch can rehydrate stale linked-review metadata before this async clear starts; clear it again.
-            applyHostedReviewLinkClear(set, currentWorktreeId)
-            current = get().getKnownWorktreeById(currentWorktreeId)
+            applyHostedReviewLinkClear(set, currentWorktreeId, rowHostId)
+            current = readRow(currentWorktreeId)
             if (!current || current.branch !== clearedBranch) {
               return
             }
           }
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId),
+            persistTo(currentWorktreeId),
             currentWorktreeId,
-            CLEARED_HOSTED_REVIEW_LINK_UPDATES
+            CLEARED_HOSTED_REVIEW_LINK_UPDATES,
+            rowHostId
           )
           const migratedWorktreeId = resolveHostedReviewLinkWorktreeId(currentWorktreeId)
           if (migratedWorktreeId === currentWorktreeId) {
@@ -233,7 +230,7 @@ export function createUpdateWorktreeGitIdentity(
           // Why: worktree creation can migrate ids mid-IPC; persist the clear under the new durable id too.
           currentWorktreeId = migratedWorktreeId
         }
-        const latest = get().getKnownWorktreeById(currentWorktreeId)
+        const latest = readRow(currentWorktreeId)
         if (
           !latest ||
           latest.branch !== clearedBranch ||
@@ -244,14 +241,15 @@ export function createUpdateWorktreeGitIdentity(
         if (getHostedReviewLinkMutationGeneration(currentWorktreeId) !== clearGeneration) {
           // Why: a delayed branch-switch clear must not win over a newer manual relink.
           await persistWorktreeMeta(
-            runtimeTargetForWorktreeOwner(get(), currentWorktreeId),
+            persistTo(currentWorktreeId),
             currentWorktreeId,
-            getHostedReviewLinkUpdates(latest as Worktree)
+            getHostedReviewLinkUpdates(latest as Worktree),
+            rowHostId
           )
           return
         }
         // Why: a refetch can rehydrate old metadata before the branch-switch clear reaches disk; don't write the stale link back.
-        applyHostedReviewLinkClear(set, currentWorktreeId)
+        applyHostedReviewLinkClear(set, currentWorktreeId, rowHostId)
       })
       .catch((err) => {
         if (isRuntimeSelectorNotFoundError(err)) {

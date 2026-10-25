@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { resetHostedReviewLinkMutationGenerationForTests } from './worktrees'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
+import { sanitizeHostedReviewLinksForBranchClears } from './worktrees/metadata/hosted-review-link-mutation'
 import {
   createTestStore,
   mockApi,
@@ -84,6 +85,36 @@ describe('updateWorktreeGitIdentity with a same-path twin on another host', () =
     const [localAfter, remoteAfter] = store.getState().worktreesByRepo.repo1
     expect(localAfter).toMatchObject({ linkedPR: 7, pushTarget })
     expect(remoteAfter).toMatchObject({ branch: 'refs/heads/stack/two', pushTarget: undefined })
+  })
+})
+
+describe('a twin review-clear tombstone', () => {
+  it("guards only the switching copy's refetched rows, never its sibling's", () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/stack/two', linkedPR: 7 },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/stack/one', linkedPR: 101 }
+    )
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/stack/two' }, 'ssh:box-b')
+
+    const [sibling, staleRefetch] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({
+        id,
+        repoId: 'repo1',
+        hostId: 'local',
+        branch: 'refs/heads/stack/two',
+        linkedPR: 7
+      }),
+      makeWorktree({
+        id,
+        repoId: 'repo1',
+        hostId: 'ssh:box-b',
+        branch: 'refs/heads/stack/one',
+        linkedPR: 101
+      })
+    ])
+
+    expect(sibling.linkedPR).toBe(7)
+    expect(staleRefetch).toMatchObject({ branch: 'refs/heads/stack/two', linkedPR: null })
   })
 })
 

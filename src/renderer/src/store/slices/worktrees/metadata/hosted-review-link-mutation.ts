@@ -3,6 +3,7 @@ import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import { applyWorktreeUpdates } from '../../worktree-helpers'
 import type { Worktree } from '../../../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../../../../shared/workspace-attachments'
 import { applyDetectedWorktreeUpdates } from '../listing/detected-worktree-meta'
@@ -25,7 +26,14 @@ export {
 export const hostedReviewLinkMutationGenerationByWorktreeId = new Map<string, number>()
 export const hostedReviewLinkClearTombstonesByWorktreeId = new Map<
   string,
-  { branch: string; branchIdentity: string; generation: number; head?: string }
+  {
+    branch: string
+    branchIdentity: string
+    generation: number
+    head?: string
+    /** Set for a same-id twin: only that host's copy is guarded. */
+    hostId?: ExecutionHostId
+  }
 >()
 export const hostedReviewLinkWorktreeIdAliases = new Map<string, string>()
 
@@ -166,19 +174,21 @@ export function rememberHostedReviewLinkClear(
   worktreeId: string,
   branch: string,
   generation: number,
-  head?: string
+  head?: string,
+  hostId?: ExecutionHostId
 ): void {
   hostedReviewLinkClearTombstonesByWorktreeId.set(worktreeId, {
     branch,
     branchIdentity: canonicalHostedReviewBranchIdentity(branch),
     generation,
-    head
+    head,
+    ...(hostId ? { hostId } : {})
   })
 }
 
 export function sanitizeHostedReviewLinksForBranchClear<
   T extends Pick<Worktree, 'id' | 'branch'> &
-    Partial<Pick<Worktree, HostedReviewLinkKey | 'pushTarget' | 'head' | 'linkedItems'>>
+    Partial<Pick<Worktree, HostedReviewLinkKey | 'pushTarget' | 'head' | 'linkedItems' | 'hostId'>>
 >(worktree: T, currentWorktrees?: readonly T[]): T {
   const hostedReviewWorktreeId = resolveHostedReviewLinkWorktreeId(worktree.id)
   const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(hostedReviewWorktreeId)
@@ -188,14 +198,16 @@ export function sanitizeHostedReviewLinksForBranchClear<
   if (
     !tombstone ||
     tombstone.generation !== getHostedReviewLinkMutationGeneration(hostedReviewWorktreeId) ||
-    !hasBranchScopedContext
+    !hasBranchScopedContext ||
+    (tombstone.hostId !== undefined && worktree.hostId !== tombstone.hostId)
   ) {
     return worktree
   }
   const current = currentWorktrees?.find(
     (entry) =>
-      entry.id === worktree.id ||
-      resolveHostedReviewLinkWorktreeId(entry.id) === hostedReviewWorktreeId
+      (tombstone.hostId === undefined || entry.hostId === tombstone.hostId) &&
+      (entry.id === worktree.id ||
+        resolveHostedReviewLinkWorktreeId(entry.id) === hostedReviewWorktreeId)
   )
   const currentClean =
     current &&
@@ -230,13 +242,16 @@ export function sanitizeHostedReviewLinksForBranchClears<
 
 export function applyHostedReviewLinkClear(
   set: Parameters<StateCreator<AppState, [], [], WorktreeSlice>>[0],
-  worktreeId: string
+  worktreeId: string,
+  /** The physical host of the copy to clear; omitted clears every row with the id. */
+  executionHostId?: ExecutionHostId
 ): void {
   set((s) => {
     const nextWorktrees = applyWorktreeUpdates(
       s.worktreesByRepo,
       worktreeId,
-      CLEARED_HOSTED_REVIEW_LINK_UPDATES
+      CLEARED_HOSTED_REVIEW_LINK_UPDATES,
+      executionHostId
     )
     const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
       s.detectedWorktreesByRepo,
