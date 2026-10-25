@@ -3,7 +3,7 @@ import {
   listPluginVmRecipeCommands,
   parsePluginVmRecipeArtifact as parseArtifact
 } from './plugin-vm-recipe-artifact'
-import type { OrcaVmRecipe } from '../orca-yaml-hook-types'
+import type { OrcaVmRecipe } from '../../orca-yaml-hook-types'
 
 function parsePluginVmRecipeArtifact(raw: string): OrcaVmRecipe {
   const artifact = parseArtifact(raw)

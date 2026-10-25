@@ -1,7 +1,7 @@
 import type { PluginHostListEntry } from '../../../../../preload/api-types'
 import { PluginReviewSection } from './plugin-review-dialog-layout'
 import { translate } from '@/i18n/i18n'
-import { formatMachineProviderArgv } from '../../../../shared/machine-provider-command'
+import { formatMachineProviderArgv } from '../../../../../shared/machine-provider-command'
 
 type VmRecipePreview = NonNullable<PluginHostListEntry['vmRecipes']>[number]
 
