@@ -13,7 +13,7 @@ import {
   testState,
   makeRepo,
   makeWorktreeLineage
-} from '../../persistence-test-harness'
+} from '../../persistence/persistence-test-harness'
 import {
   hostWorktreeTarget,
   composeWorktreeHostIdentity
