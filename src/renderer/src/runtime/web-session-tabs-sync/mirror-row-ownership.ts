@@ -64,7 +64,7 @@ export function isMirroredTerminalOfAnotherEnvironment(
   return owners.size > 0 && !owners.has(environmentId)
 }
 
-/** A chat names its host; another live paired runtime's chat is that runtime's to keep or retire. */
+/** A chat names its host; this machine's or another live paired runtime's chat is theirs to retire. */
 export function isAgentSessionTabOfAnotherHost(
   state: MirrorRowOwnershipState,
   tab: Pick<Tab, 'executionHostId'>,
@@ -73,6 +73,10 @@ export function isAgentSessionTabOfAnotherHost(
   if (!tab.executionHostId || tab.executionHostId === publisherExecutionHostId) {
     return false
   }
+  // Why: only this machine or a live paired runtime can publish chats; any other stamp is stale.
   const host = parseExecutionHostId(tab.executionHostId)
-  return host?.kind !== 'runtime' || isLiveEnvironment(state, host.environmentId)
+  return (
+    host?.kind === 'local' ||
+    (host?.kind === 'runtime' && isLiveEnvironment(state, host.environmentId))
+  )
 }
