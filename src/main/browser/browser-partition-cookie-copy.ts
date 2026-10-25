@@ -10,7 +10,10 @@ import {
 } from '../../shared/wsl-move/wsl-move-browser-cookie-copy'
 import type { CdpCookie } from './browser-cdp-cookie'
 import { identityFromCdpCookie, openCookieClearStore } from './cookies/browser-cookie-clear-store'
-import { withCookieMutationLock, type CookieClearIdentity } from './cookies/browser-cookie-import-clear'
+import {
+  withCookieMutationLock,
+  type CookieClearIdentity
+} from './cookies/browser-cookie-import-clear'
 import {
   isNonTransplantableCookieDomain,
   normalizeCookieDomain
