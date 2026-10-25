@@ -278,26 +278,29 @@ it.each([
         throw new Error('No live history transport')
       }
       const emit = fixture.journal
-      await act(async () => {
-        emit({
-          id: 'journal',
-          ok: true,
-          _meta: { runtimeId: 'attention-host' },
-          result: {
-            type: 'batch',
-            sessionId: SESSION,
-            batch: {
-              cursor: { epoch: 'journal-a', sequence },
-              items: changed,
-              removedItemIds: [],
-              submissions: []
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        await act(async () => {
+          emit({
+            id: 'journal',
+            ok: true,
+            _meta: { runtimeId: 'attention-host' },
+            result: {
+              type: 'batch',
+              sessionId: SESSION,
+              batch: {
+                cursor: { epoch: 'journal-a', sequence },
+                items: changed,
+                removedItemIds: [],
+                submissions: []
+              }
             }
-          }
+          })
+          await vi.advanceTimersByTimeAsync(STRUCTURED_AGENT_SESSION_CLIENT_COALESCE_MS + 1)
         })
-        await new Promise((resolve) =>
-          setTimeout(resolve, STRUCTURED_AGENT_SESSION_CLIENT_COALESCE_MS + 1)
-        )
-      })
+      } finally {
+        vi.useRealTimers()
+      }
     }
     try {
       screen = render(
