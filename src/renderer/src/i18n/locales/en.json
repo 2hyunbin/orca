@@ -2376,7 +2376,7 @@
         "9b40d7b018": "Copy"
       },
       "NativeChatResumeOnRestartModal": {
-        "serverTitle": "Resume chats on {{machine}}?",
+        "serverTitle": "{{machine}} restarted",
         "serverBody": "These chats were working when Orca on {{machine}} restarted. Resuming restores each one where it stopped and asks the agent to carry on. Your own prompt is not re-sent.",
         "serverDismiss": "Dismiss",
         "serverResumeAll": "Resume all {{count}} on {{machine}}",

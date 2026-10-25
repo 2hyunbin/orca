@@ -29,7 +29,7 @@ export function NativeChatResumeDialogHeader({
               {remote
                 ? translate(
                     'auto.components.NativeChatResumeOnRestartModal.serverTitle',
-                    'Resume chats on {{machine}}?',
+                    '{{machine}} restarted',
                     { machine: machineName }
                   )
                 : translate(

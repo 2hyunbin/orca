@@ -358,7 +358,7 @@ it.each([
     rpc.mockResolvedValue({ sessions: offered })
     await act(async () => remote.observeRuntimeStatus(ready('first')))
     await mount(<NativeChatResumeRuntimeModal store={remote} machineName="Server" offerEnabled />)
-    expect(document.body.textContent).toContain('Resume chats on Server?')
+    expect(document.body.textContent).toContain('Server restarted')
     expect(document.body.textContent).not.toContain("Don't ask again")
     rpc.mockResolvedValue({ sessions: [offered[1]], failed: [failure('a')] })
     await act(async () => button(String(label)).click())
