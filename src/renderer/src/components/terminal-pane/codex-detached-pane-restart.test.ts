@@ -4,6 +4,7 @@ import { registerRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-regis
 import { provideLayoutFrameTerminalPanes } from '@/runtime/layout-frame-terminal-panes'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { PublishedTab } from '../../../../shared/workspace-layout/workspace-layout-published'
+import { getDefaultSettings } from '../../../../shared/constants'
 import { awaitsCodexRestartAnswer, blocksCodexPaneInput } from '../codex-restart-notice-state'
 import { ptyDataHandlers } from './pty-dispatcher'
 import { deliverPtyExitToHandlers } from './pty-exit-delivery'
@@ -58,7 +59,7 @@ function seedQueuedRestart(
 ): void {
   const leafId = opts.leafId === undefined ? LEAF_ID : opts.leafId
   useAppStore.setState({
-    settings: { activeRuntimeEnvironmentId: null } as never,
+    settings: getDefaultSettings('/home/dev'),
     worktreesByRepo: {
       repo1: [{ id: 'wt1', path: '/Users/dev/code/orca' }]
     } as never,
@@ -538,7 +539,7 @@ describe('codex detached pane restart executor', () => {
     seedQueuedRestart({ leafId: null })
     const command = String.raw`& 'C:\Program Files\Codex\codex.exe'`
     useAppStore.setState({
-      settings: { ...useAppStore.getState().settings, agentCmdOverrides: { codex: command } }
+      settings: { ...getDefaultSettings('/home/dev'), agentCmdOverrides: { codex: command } }
     })
 
     await sweepUnclaimedCodexPaneRestarts()
