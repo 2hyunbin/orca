@@ -1,4 +1,7 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
+import recordedWorking from './__fixtures__/opencode2-chat-stop-working.json'
+import { postHookEvent } from '../agent-hooks/server.test-fixtures'
+import { seedLegacyAgentStatusForTests } from '../../shared/agent-hook-listener/listener-state'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { TERMINAL_SEND_METHODS } from './rpc/methods/terminal/terminal-send-method'
 import type { IpcMainInvokeEvent } from 'electron'
@@ -46,7 +49,7 @@ describe('explicit Stop through execution-host input seams', () => {
     ptyOwnership.delete(PTY_ID)
   })
 
-  async function setup(agentType: AgentStatusIpcPayload['agentType'] = 'grok') {
+  async function setup(agentType: AgentStatusIpcPayload['agentType'] = 'grok', seed = true) {
     vi.useFakeTimers()
     vi.setSystemTime(1_700_000_000_000)
     const wiring = makeAgentStatusStoreWiring()
@@ -74,7 +77,9 @@ describe('explicit Stop through execution-host input seams', () => {
         worktreeId: WORKTREE_ID,
         payload: { state, prompt, agentType }
       })
-    ingest()
+    if (seed) {
+      ingest()
+    }
     const ipc = createPtyWriteInput({ runtime })
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_SEND_METHODS })
     const handle = runtime.getTerminalHandleForPaneKey(PANE_KEY)
@@ -373,6 +378,56 @@ describe('explicit Stop through execution-host input seams', () => {
     }
   })
 
+  it('settles a recorded OpenCode 2 working prefix only after both original controls are accepted', async () => {
+    const t = await setup('opencode', false)
+    try {
+      expect(t.row()).toBeUndefined()
+      await t.wiring.statusStore.start({ env: 'development' })
+      for (const record of recordedWorking) {
+        vi.setSystemTime(Date.parse(record.at))
+        expect(
+          (
+            await postHookEvent(
+              t.wiring.statusStore,
+              {
+                ...record.event,
+                paneKey: PANE_KEY,
+                tabId: TAB_ID,
+                worktreeId: WORKTREE_ID
+              },
+              record.route
+            )
+          ).status
+        ).toBe(204)
+      }
+      expect(t.row()).toMatchObject({
+        state: 'working',
+        agentType: 'opencode',
+        prompt: recordedWorking[1].event.payload.text,
+        mainAgent: { state: 'working' }
+      })
+      const infer = vi.spyOn(t.wiring.statusStore, 'inferInterrupt')
+      await t.send(1)
+      t.settle(0)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(infer).not.toHaveBeenCalled()
+      expect(t.row()?.state).toBe('working')
+      await t.send(2)
+      t.settle(0) // Repeating the first proof cannot stand in for the second.
+      expect(infer).not.toHaveBeenCalled()
+      t.settle(1)
+      expect(infer).toHaveBeenCalledOnce()
+      expect(t.row()).toMatchObject({
+        state: 'done',
+        interrupted: true,
+        mainAgent: { state: 'done', outcome: 'cancellation' }
+      })
+      expect(t.physical).toHaveBeenCalledTimes(2)
+    } finally {
+      t.wiring.statusStore.stop()
+    }
+  })
+
   it.each(['working', 'done'] as const)(
     'rejects a same-ms same-text %s replacement without suppressing input',
     async (state) => {
@@ -392,17 +447,23 @@ describe('explicit Stop through execution-host input seams', () => {
     }
   )
 
-  it.each(['expiry', 'index2first', 'supersede', 'binding', 'stop'] as const)(
+  it.each(['expiry', 'index2first', 'binding', 'stop'] as const)(
     'retires stale evidence on %s, leaving late input ordinary',
     async (cause) => {
       const t = await setup()
       try {
+        const original = t.row()
+        const state = t.wiring.statusStore._getStateForTests()
+        const stored = state.lastStatusByPaneKey.get(PANE_KEY)
+        if (!stored) {
+          throw new Error('Original row missing')
+        }
+        const infer = vi.spyOn(t.wiring.statusStore, 'inferInterrupt')
+        const timers = vi.getTimerCount()
         await t.send(cause === 'index2first' ? 2 : 1)
+        expect(vi.getTimerCount() - timers).toBe(1)
         if (cause === 'expiry') {
           await vi.advanceTimersByTimeAsync(37_000)
-        }
-        if (cause === 'supersede') {
-          await t.send(1, 'new')
         }
         if (cause === 'binding') {
           t.runtime.synchronizePtyOutputSequenceFromProvider(
@@ -413,14 +474,26 @@ describe('explicit Stop through execution-host input seams', () => {
         }
         if (cause === 'stop') {
           t.wiring.statusStore.stop({ keepStatus: true })
+          // Shutdown clears legacy rows too; restore the same object to isolate observer retirement.
+          seedLegacyAgentStatusForTests(state, stored)
         }
-        t.ingest()
+        if (cause === 'binding' || cause === 'stop') {
+          expect.soft(vi.getTimerCount() - timers).toBe(0)
+        }
+        expect(state.lastStatusByPaneKey.get(PANE_KEY)).toBe(stored)
         t.settle(0)
+        await vi.advanceTimersByTimeAsync(500)
+        expect(infer).not.toHaveBeenCalled()
+        expect(t.row()).toEqual(original)
+        if (cause === 'expiry') {
+          t.ingest('working', 'replacement after expiry')
+        }
         await t.send(cause === 'index2first' ? 1 : 2)
-        t.settle(cause === 'supersede' ? 2 : 1)
+        t.settle(1)
         await vi.advanceTimersByTimeAsync(500)
         expect(t.row()?.state).toBe('working')
-        expect(t.physical).toHaveBeenCalledTimes(cause === 'supersede' ? 3 : 2)
+        expect(infer).not.toHaveBeenCalled()
+        expect(t.physical).toHaveBeenCalledTimes(2)
       } finally {
         t.wiring.statusStore.stop()
       }

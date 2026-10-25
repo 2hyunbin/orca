@@ -1,0 +1,10 @@
+{
+  "capturedAt": "2026-10-25T21:39:39.143Z",
+  "version": "OpenCode v2.0.21",
+  "command": "opencode",
+  "appSha": "e04f4dc8a9ecf2da598e9393e46cbfb28bfe4d6d",
+  "sourceCaptureSha256": "d9e3db2ed76af11ba5702b28f9a4d2dc335a53f95f30ffb14c3c02c0251b9e72",
+  "selection": "Unchanged records 1..3 (zero-based) from the passive HTTP hook capture: SessionStart, user MessagePart, SessionBusy. New tab -> OpenCode in isolated Orca on macOS.",
+  "identityMapping": "Only paneKey/tabId/worktreeId are mapped to the runtime test fixture at replay; provider payloads, session/message IDs, route, version and opencodeMajor remain captured.",
+  "limitation": "Genuine ordinary working prefix, not a captured Stop. Tests supply accepted Escape settlements and omit later hooks; original SessionIdle was normal completion. Authentication headers/launchToken were excluded by the recorder."
+}

@@ -1,0 +1,54 @@
+[
+  {
+    "at": "2026-10-25T21:39:39.143Z",
+    "route": "/hook/opencode",
+    "event": {
+      "payload": {
+        "hook_event_name": "SessionStart",
+        "sessionID": "ses_e8afebe58ffet9r6gP9CKUThkZ"
+      },
+      "env": "development",
+      "version": "1",
+      "opencodeMajor": 2,
+      "paneKey": "cbe8219b-a835-4b94-a080-8fe537c7a31b:b3c31b29-8633-43cc-8a18-b1c491196b4f",
+      "tabId": "cbe8219b-a835-4b94-a080-8fe537c7a31b",
+      "worktreeId": "aa27111d-4570-4691-bff8-1baeae801746::/Users/m4air/orca-qa/pr33635-ticket2409/project"
+    }
+  },
+  {
+    "at": "2026-10-25T21:39:39.144Z",
+    "route": "/hook/opencode",
+    "event": {
+      "payload": {
+        "hook_event_name": "MessagePart",
+        "role": "user",
+        "text": "Reply with QA2409-OPENCODE2-HOOK-REAL-OUTPUT and one sentence about this project.",
+        "messageID": "msg_1750141a8001ou0rg5LCcG84xH",
+        "sessionID": "ses_e8afebe58ffet9r6gP9CKUThkZ"
+      },
+      "env": "development",
+      "version": "1",
+      "opencodeMajor": 2,
+      "paneKey": "cbe8219b-a835-4b94-a080-8fe537c7a31b:b3c31b29-8633-43cc-8a18-b1c491196b4f",
+      "tabId": "cbe8219b-a835-4b94-a080-8fe537c7a31b",
+      "worktreeId": "aa27111d-4570-4691-bff8-1baeae801746::/Users/m4air/orca-qa/pr33635-ticket2409/project"
+    }
+  },
+  {
+    "at": "2026-10-25T21:39:39.145Z",
+    "route": "/hook/opencode",
+    "event": {
+      "payload": {
+        "hook_event_name": "SessionBusy",
+        "sessionID": "ses_e8afebe58ffet9r6gP9CKUThkZ",
+        "root_state": "working"
+      },
+      "env": "development",
+      "version": "1",
+      "opencodeMajor": 2,
+      "paneKey": "cbe8219b-a835-4b94-a080-8fe537c7a31b:b3c31b29-8633-43cc-8a18-b1c491196b4f",
+      "tabId": "cbe8219b-a835-4b94-a080-8fe537c7a31b",
+      "worktreeId": "aa27111d-4570-4691-bff8-1baeae801746::/Users/m4air/orca-qa/pr33635-ticket2409/project"
+    }
+  }
+]
