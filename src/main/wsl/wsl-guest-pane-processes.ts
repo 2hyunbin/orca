@@ -6,6 +6,7 @@
  */
 import { isShellProcess } from '../../shared/shell-process-detection'
 import { isWslDistroRunning } from '../wsl-background-distro-gate'
+import { peekConfirmedRunningWslDistros } from '../wsl-running-distro-cache'
 import { runWslProcess } from './wsl-runner'
 
 export type WslGuestProcessRow = {
@@ -88,7 +89,12 @@ export function readWslGuestPaneProcesses(
     return inFlight
   }
   const read = (async () => {
-    if (!opts.running && !(await isWslDistroRunning(distro))) {
+    // Why the confirmed list too: a session the client holds as live may sit in a distro that was
+    // terminated since, and reading it would boot it.
+    const knownRunning =
+      opts.running === true &&
+      (peekConfirmedRunningWslDistros() ?? []).some((running) => running.toLowerCase() === key)
+    if (!knownRunning && !(await isWslDistroRunning(distro))) {
       return null
     }
     const result = await runWslProcess({
