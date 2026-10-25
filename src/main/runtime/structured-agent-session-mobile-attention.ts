@@ -1,6 +1,7 @@
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import type { AgentJournalCursor } from '../../shared/agent-session-journal-types'
 // Execution-host delivery for work without a proven connected desktop mirror.
+// Read labels synchronously at the raising commit so alerts cannot outlive prompts; edge ids dedupe delivery and address retirement.
 import type { AgentSessionStatusSummary } from '../../shared/agent-session-wire'
 import {
   agentSessionAttentionKey,
@@ -51,7 +52,7 @@ export type StructuredAttentionMobileDelivery = {
   onTurnStarted?: StructuredAttentionMobileDeliveryDeps['onTurnStarted']
 }
 
-/** The labels the desktop shows for a workspace, from the host's persisted metadata alone. */
+/** Read display labels from persisted host metadata without disk/Git lookups. */
 export function readStructuredAttentionWorkspaceLabels(
   store: Pick<RuntimeStore, 'getRepo' | 'getWorktreeMeta' | 'getFolderWorkspaces'>,
   scope: AgentSessionExecutionLocation
@@ -118,7 +119,7 @@ export function createStructuredAttentionMobileDelivery(
         request,
         getRuntimeDesktopSurface().translateNotification
       )
-      // The same eligibility the desktop's own fan-out applies: these preferences gate the phone too.
+      // Apply the desktop fan-out preferences to phone delivery too.
       const desktopAllowed = settings.enabled && settings.agentTaskComplete
       deps.dispatch({
         type: 'notification',

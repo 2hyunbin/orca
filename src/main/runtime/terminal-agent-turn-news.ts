@@ -1,4 +1,4 @@
-// The source lifetime composes the same completion interpreter as the window.
+// Share desktop completion/input timing and hook rows; phone/connector listeners choose wording and transport.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
 import { agentTurnEndedOnPurpose } from '../../shared/agent-main-agent-verdict'
 import { createHookOnlyCompletionObserver } from '../../renderer/src/components/terminal-pane/agent-completion-hook-only-observer'

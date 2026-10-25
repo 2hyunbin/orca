@@ -142,7 +142,7 @@ export function createAgentCompletionHookObserver({
         return
       }
       clearOriginStampedTail()
-      // Exit identity must not suppress later turns of the same agent.
+      // Clear exit identity on a new turn or agent-only matching would swallow every later Done from that agent.
       clearProcessExitCompletion()
       recordWorkingBoundary(payload.stateStartedAt)
       clearPendingHookDone()

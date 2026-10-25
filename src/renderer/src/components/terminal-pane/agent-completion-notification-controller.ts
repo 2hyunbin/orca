@@ -75,6 +75,7 @@ export function createAgentCompletionNotificationController({
   }
 
   function hookCompletionIdentity(payload: AgentCompletionStatusSnapshot): string | null {
+    // State clocks can remain pinned across turns/done restatements; host turn-end stamps distinguish actual completions.
     const timestamp = selectHookNotificationTimestamp(payload)
     if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
       return null
