@@ -274,7 +274,7 @@ describe('createWorktree parent pick on a remote runtime', () => {
           })
         ]
       }
-    } as Partial<AppState>)
+    })
     return store
   }
 
