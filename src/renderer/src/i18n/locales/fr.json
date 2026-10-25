@@ -12843,8 +12843,7 @@
             "updateOrcaOnHost": "Mettre à jour Orca sur cet hôte",
             "updateAnyway": "Mettre à jour quand même",
             "notNow": "Pas maintenant",
-            "forceUpdateOne": "1 terminal est en cours d’exécution sur cet hôte. Il continue de tourner pendant la mise à jour, et son panneau se reconnecte au redémarrage du serveur Orca.",
-            "forceUpdateMany": "Des terminaux sont en cours d’exécution sur cet hôte. Ils continuent de tourner pendant la mise à jour, et leurs panneaux se reconnectent au redémarrage du serveur Orca."
+            "forceUpdate": "Des terminaux sont en cours d’exécution sur cet hôte. Ils continuent de tourner pendant la mise à jour, et leurs panneaux se reconnectent au redémarrage du serveur Orca."
           },
           "title": "Orca sur vos hôtes SSH",
           "description": "Orca s’installe sur un hôte SSH vide et se maintient à jour.",

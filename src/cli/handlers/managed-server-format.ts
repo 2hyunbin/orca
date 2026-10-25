@@ -24,7 +24,9 @@ export function formatManagedServerStatus(status: OrcadManagedRuntimeStatus): st
     )
   }
   if (status.availableUpdate) {
-    lines.push(`Update available: ${status.availableUpdate}; run \`orca environment update\`.`)
+    lines.push(
+      `Update available: ${status.availableUpdate}; run \`orca environment update --environment ${status.environmentId}\`.`
+    )
   }
   return lines.join('\n')
 }

@@ -8472,8 +8472,7 @@
             "updateOrcaOnHost": "Atualizar Orca neste host",
             "updateAnyway": "Atualizar mesmo assim",
             "notNow": "Agora não",
-            "forceUpdateOne": "1 terminal está em execução neste host. Ele continua em execução durante a atualização, e seu painel se reconecta quando o servidor do Orca reiniciar.",
-            "forceUpdateMany": "Há terminais em execução neste host. Eles continuam em execução durante a atualização, e seus painéis se reconectam quando o servidor do Orca reiniciar."
+            "forceUpdate": "Há terminais em execução neste host. Eles continuam em execução durante a atualização, e seus painéis se reconectam quando o servidor do Orca reiniciar."
           },
           "title": "Orca nos seus hosts SSH",
           "description": "O Orca se instala em um host SSH vazio e se mantém atualizado.",

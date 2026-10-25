@@ -12683,8 +12683,7 @@
             "updateOrcaOnHost": "이 호스트의 Orca 업데이트",
             "updateAnyway": "그래도 업데이트",
             "notNow": "나중에",
-            "forceUpdateOne": "이 호스트에서 터미널 1개가 실행 중입니다. 업데이트 중에도 계속 실행되며, Orca 서버가 다시 시작되면 창이 다시 연결됩니다.",
-            "forceUpdateMany": "이 호스트에서 터미널이 실행 중입니다. 업데이트 중에도 계속 실행되며, Orca 서버가 다시 시작되면 창이 다시 연결됩니다."
+            "forceUpdate": "이 호스트에서 터미널이 실행 중입니다. 업데이트 중에도 계속 실행되며, Orca 서버가 다시 시작되면 창이 다시 연결됩니다."
           },
           "title": "SSH 호스트의 Orca",
           "description": "Orca는 빈 SSH 호스트에 자신을 설치하고 스스로 최신 상태를 유지합니다.",

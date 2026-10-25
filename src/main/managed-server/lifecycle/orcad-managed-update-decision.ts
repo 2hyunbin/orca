@@ -96,27 +96,34 @@ export function orcadUpdateSkipRefusal(
 }
 
 /**
- * The bundled build to advertise as an update for a running host, or null. Requires the host's
- * Orca version: content hashes don't order, so an unnamed or newer host is never offered one.
+ * The bundled build to advertise as an update for a running host, or null. Content hashes don't
+ * order, so it needs the host's Orca version and never offers one to a newer host. A host from
+ * before that field existed is offered only the build this desktop already tried to activate.
  */
 export function availableManagedOrcadUpdate(input: {
   record: OrcadActivationRecord
   candidateVersion: string | null
   appVersion: string
+  /** The build this desktop's last Update or connect deferred on this host. */
+  deferredCandidateVersion: string | null
 }): string | null {
   const { record, candidateVersion, appVersion } = input
   const hostAppVersion = record.activeAppVersion
-  if (
-    !candidateVersion ||
-    record.active === null ||
-    !hostAppVersion ||
-    !isValidAppVersion(hostAppVersion) ||
-    !isValidAppVersion(appVersion) ||
-    compareAppVersions(appVersion, hostAppVersion) < 0
-  ) {
+  if (!candidateVersion || record.active === null || !isValidAppVersion(appVersion)) {
+    return null
+  }
+  const ordered = hostAppVersion
+    ? isValidAppVersion(hostAppVersion) && compareAppVersions(appVersion, hostAppVersion) >= 0
+    : input.deferredCandidateVersion === candidateVersion
+  if (!ordered) {
     return null
   }
   // Connect rules: a build the user rolled back from is not advertised again.
-  const plan = planManagedOrcadAutoUpdate({ ...input, failedBefore: false })
+  const plan = planManagedOrcadAutoUpdate({
+    record,
+    candidateVersion,
+    appVersion,
+    failedBefore: false
+  })
   return plan.action === 'update' ? candidateVersion : null
 }

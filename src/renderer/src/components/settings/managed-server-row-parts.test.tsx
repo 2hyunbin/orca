@@ -210,7 +210,26 @@ describe('managed server row', () => {
     expect(update).toHaveBeenLastCalledWith({ selector: 'env-1' })
     expect(container.textContent).toContain('keep running through the update')
     await act(async () => button(container, 'Update anyway')?.click())
-    expect(update).toHaveBeenLastCalledWith({ selector: 'env-1', force: true })
+    expect(update).toHaveBeenLastCalledWith({
+      selector: 'env-1',
+      pastLiveTerminals: { incumbentVersion: '1.2.0' }
+    })
+  })
+
+  it('drops the Update anyway confirmation once the host runs another build', async () => {
+    let current = {
+      ...status,
+      migration: null,
+      deferredUpdate: null,
+      availableUpdate: '0.1.0+b'
+    }
+    const { container, update } = await render(current, async () => current)
+    await act(async () => button(container, 'Update')?.click())
+    expect(button(container, 'Update anyway')).toBeDefined()
+    current = { ...current, activeVersion: '2.0.0' }
+    await act(async () => button(container, 'Refresh status')?.click())
+    expect(button(container, 'Update anyway')).toBeUndefined()
+    expect(update).toHaveBeenCalledTimes(1)
   })
 
   it('offers no Update without an available build, and no Update anyway past terminals it would strand', async () => {

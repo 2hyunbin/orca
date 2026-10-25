@@ -102,9 +102,11 @@ export function ManagedServerDetailLines({
   )
 }
 
+// Why not during a migration: an update restarting the server would race its cutover.
 function managedServerUpdateOffered(lifecycle: ManagedServerLifecycle): boolean {
   return (
     lifecycle.recovery === null &&
+    !lifecycle.status?.migration &&
     Boolean(lifecycle.status?.availableUpdate) &&
     lifecycle.confirmingForceUpdate === null
   )
@@ -213,7 +215,7 @@ export function ManagedServerConfirmations({
   if (forceUpdate) {
     return (
       <ConfirmStrip
-        message={forceUpdateMessage(lifecycle.status?.terminals.liveSessions ?? null)}
+        message={forceUpdateMessage()}
         confirmLabel={translate(
           'auto.components.settings.managedServers.row.updateAnyway',
           'Update anyway'

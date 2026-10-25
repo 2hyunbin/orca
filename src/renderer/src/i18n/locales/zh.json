@@ -12697,8 +12697,7 @@
             "updateOrcaOnHost": "更新此主机上的 Orca",
             "updateAnyway": "仍然更新",
             "notNow": "暂不",
-            "forceUpdateOne": "此主机上有 1 个终端正在运行。更新期间它会继续运行，Orca 服务器重启后其窗格会重新连接。",
-            "forceUpdateMany": "此主机上有终端正在运行。更新期间它们会继续运行，Orca 服务器重启后其窗格会重新连接。"
+            "forceUpdate": "此主机上有终端正在运行。更新期间它们会继续运行，Orca 服务器重启后其窗格会重新连接。"
           },
           "title": "SSH 主机上的 Orca",
           "description": "Orca 会将自身安装到空的 SSH 主机上，并自动保持最新。",

@@ -20,35 +20,45 @@ export async function getManagedOrcadRuntimeStatus(
   signal?: AbortSignal
 ): Promise<OrcadManagedRuntimeStatus> {
   const { environment, deployment } = requireManagedOrcadEnvironment(userDataPath, selector)
-  return runTargetLifecycle(deployment.sshTargetId, async () => {
-    const context = await resolveLinkedOrcadContext(environment, deployment, signal)
-    const record = context.activationRecord
-    const transaction = await readOrcadActivationTransaction({
-      conn: context.connection,
-      host: context.host,
-      remoteHome: context.remoteHome,
-      signal
-    })
-    return {
-      environmentId: environment.id,
-      sshTargetId: context.target.id,
-      activeVersion: record.active,
-      activeAppVersion: record.active ? (record.activeAppVersion ?? null) : null,
-      previousVersion: record.previous,
-      activatedAt: record.activatedAt,
-      rollbackAvailable: Boolean(record.previous && record.snapshot),
-      recovery: transaction ? managedRecoveryStatus(transaction) : null,
-      terminals: await collectManagedTerminalCensus(userDataPath, environment, record),
-      migration: migrationStatus(userDataPath, environment.id),
-      deferredUpdate: currentManagedOrcadUpdateDeferral(environment.id, record.active),
-      availableUpdate: availableManagedOrcadUpdate({
-        record,
-        // A local template fault must not hide the host's status; it only hides the offer.
-        candidateVersion: await bundledManagedOrcadVersion(context.serverTarget).catch(() => null),
-        appVersion: getAppEnvironment().getVersion()
+  const { status, record, serverTarget } = await runTargetLifecycle(
+    deployment.sshTargetId,
+    async () => {
+      const context = await resolveLinkedOrcadContext(environment, deployment, signal)
+      const record = context.activationRecord
+      const transaction = await readOrcadActivationTransaction({
+        conn: context.connection,
+        host: context.host,
+        remoteHome: context.remoteHome,
+        signal
       })
+      const status: OrcadManagedRuntimeStatus = {
+        environmentId: environment.id,
+        sshTargetId: context.target.id,
+        activeVersion: record.active,
+        activeAppVersion: record.active ? (record.activeAppVersion ?? null) : null,
+        previousVersion: record.previous,
+        activatedAt: record.activatedAt,
+        rollbackAvailable: Boolean(record.previous && record.snapshot),
+        recovery: transaction ? managedRecoveryStatus(transaction) : null,
+        terminals: await collectManagedTerminalCensus(userDataPath, environment, record),
+        migration: migrationStatus(userDataPath, environment.id),
+        deferredUpdate: currentManagedOrcadUpdateDeferral(environment.id, record.active)
+      }
+      return { status, record, serverTarget: context.serverTarget }
     }
-  })
+  )
+  // Outside the host queue: hashing the local template must not hold up host actions.
+  // A local template fault hides only the offer, never the host's status.
+  const candidateVersion = await bundledManagedOrcadVersion(serverTarget).catch(() => null)
+  return {
+    ...status,
+    availableUpdate: availableManagedOrcadUpdate({
+      record,
+      candidateVersion,
+      appVersion: getAppEnvironment().getVersion(),
+      deferredCandidateVersion: status.deferredUpdate?.candidateVersion ?? null
+    })
+  }
 }
 
 function managedRecoveryStatus(

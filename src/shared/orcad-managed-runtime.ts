@@ -27,6 +27,15 @@ export type OrcadManagedDeferral = {
   forceable?: boolean
 }
 
+/** The one deferral Update anyway may pass: counted terminals the daemon carries across. */
+export const ORCAD_UPDATE_TERMINALS_RUNNING_CODE = 'orcad_update_terminals_running'
+
+/**
+ * Update anyway: passes only a counted live-terminal deferral, keeps Update's version admission,
+ * and refuses if the host no longer runs the build the operator confirmed over.
+ */
+export type OrcadManagedPastLiveTerminals = { incumbentVersion: string | null }
+
 export type OrcadManagedDeployResult =
   | {
       outcome: 'created' | 'updated' | 'already-current'
