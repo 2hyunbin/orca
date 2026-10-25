@@ -3,14 +3,12 @@
 import {
   getAgentAnsweredNativeChatCommands,
   getNativeChatAgentProfile
-} from '../../../src/shared/native-chat-agent-profiles'
+} from '../../../../src/shared/native-chat-agent-profiles'
 import {
   classifyNativeChatSend,
   type NativeChatSendClassification,
   type SlashCommandSuggestion
-} from '../../../src/shared/native-chat-slash-commands'
-
-export type { NativeChatSendClassification }
+} from '../../../../src/shared/native-chat-slash-commands'
 
 // Terminal mobile chat lacks desktop-owned command answers and reply rows.
 export function getMobileNativeChatCommands(agent: string): readonly SlashCommandSuggestion[] {

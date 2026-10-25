@@ -1,5 +1,5 @@
-import { latestNativeChatReplyText } from '../../../src/shared/native-chat/native-chat-streaming'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
+import { latestNativeChatReplyText } from '../../../../src/shared/native-chat/native-chat-streaming'
+import type { NativeChatMessage } from '../../../../src/shared/native-chat-types'
 
 // Compare prefixes only after the segment’s captured tail so a previous turn’s identical reply cannot swallow a new preview.
 export type MobileNativeChatStreamingGate = {

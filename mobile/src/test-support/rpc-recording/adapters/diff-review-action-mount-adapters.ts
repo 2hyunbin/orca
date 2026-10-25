@@ -27,8 +27,8 @@ export function diffReviewActionMountAdapters(
         typeof import('../../../session/mobile-diff-review-sheets')
       >('mobile/src/session/mobile-diff-review-sheets.ts')
       const staleInput = modules.load<
-        typeof import('../../../session/mobile-native-chat-stale-input')
-      >('mobile/src/session/mobile-native-chat-stale-input.ts')
+        typeof import('../../../session/native-chat/mobile-native-chat-stale-input')
+      >('mobile/src/session/native-chat/mobile-native-chat-stale-input.ts')
       staleInput.resetMobileNativeChatStaleInputForTests()
       const comment: DiffComment = {
         side: 'modified',

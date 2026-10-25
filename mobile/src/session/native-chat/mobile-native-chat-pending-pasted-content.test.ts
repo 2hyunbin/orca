@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
+import type { NativeChatMessage } from '../../../../src/shared/native-chat-types'
 import { retireLandedMobileNativeChatPending } from './mobile-native-chat-pending-retirement'
 
 const boundary: NativeChatMessage = {

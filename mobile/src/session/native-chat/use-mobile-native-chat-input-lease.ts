@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   NATIVE_CHAT_COMPOSER_PLACEHOLDER,
   NATIVE_CHAT_TURN_STATUS_COPY
-} from '../../../src/shared/native-chat-turn-status'
-import type { MobileNativeChatInputLockReason } from './MobileNativeChatView'
+} from '../../../../src/shared/native-chat-turn-status'
+import type { MobileNativeChatInputLockReason } from '../MobileNativeChatView'
 
 export function useMobileNativeChatInputLease(args: {
   activeHandle: string | null

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
+import type { NativeChatMessage } from '../../../../src/shared/native-chat-types'
 import {
   createMobileNativeChatStreamingGate,
   deriveMobileNativeChatStreaming

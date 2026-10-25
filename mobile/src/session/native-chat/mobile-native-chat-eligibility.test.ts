@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
+import type { AgentStatusEntry } from '../../../../src/shared/agent-status-types'
 import {
   canShowMobileNativeChat,
   isMobileFolderNativeChatReadable,
@@ -8,7 +8,7 @@ import {
   resolveMobileNativeChatSessionId,
   withRememberedNativeChatIdentity
 } from './mobile-native-chat-eligibility'
-import type { MobileSessionTab } from './mobile-session-route-types'
+import type { MobileSessionTab } from '../mobile-session-route-types'
 
 function status(overrides: Partial<AgentStatusEntry> = {}): AgentStatusEntry {
   return {

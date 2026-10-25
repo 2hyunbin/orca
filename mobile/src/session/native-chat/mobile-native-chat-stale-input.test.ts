@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RpcClient } from '../transport/rpc-client'
+import type { RpcClient } from '../../transport/rpc-client'
 import {
   clearMobileNativeChatInputStale,
   healMobileNativeChatStaleInput,

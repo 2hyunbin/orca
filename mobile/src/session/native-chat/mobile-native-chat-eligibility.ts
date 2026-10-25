@@ -1,10 +1,10 @@
-import { isStructuredAgentId } from '../../../src/shared/agent-session-provider-handle'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import { isRuntimeOwnedSshTargetId } from '../../../src/shared/execution-host'
+import { isStructuredAgentId } from '../../../../src/shared/agent-session-provider-handle'
+import type { AgentStatusEntry } from '../../../../src/shared/agent-status-types'
+import { isRuntimeOwnedSshTargetId } from '../../../../src/shared/execution-host'
 import {
   isNativeChatSupportedAgent,
   nativeChatRequiresLocalTranscript
-} from '../../../src/shared/native-chat-agent-support'
+} from '../../../../src/shared/native-chat-agent-support'
 
 // Grok/omp lack hook transcript paths, so gate on serving-host readability when Model-A SSH keeps files remote.
 export function isMobileNativeChatTranscriptReadable(

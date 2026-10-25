@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { RpcClient } from '../transport/rpc-client'
-import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
-import { LogicalClientCutoverError } from '../transport/stable-logical-rpc-client'
+import type { RpcClient } from '../../transport/rpc-client'
+import { markRpcDeliveryUnknown } from '../../transport/rpc-delivery-ambiguity'
+import { LogicalClientCutoverError } from '../../transport/stable-logical-rpc-client'
 import {
   MOBILE_NATIVE_CHAT_SEND_TIMEOUT_MS,
   openMobileNativeChatSendBudget,
@@ -10,7 +10,7 @@ import {
   sendMobileNativeChatMessageWithOutcome,
   typeMobileNativeChatCommandWithOutcome
 } from './mobile-native-chat-send'
-import { buildAgentTuiClearInputForText } from '../../../src/shared/agent-tui-input-clear'
+import { buildAgentTuiClearInputForText } from '../../../../src/shared/agent-tui-input-clear'
 
 afterEach(() => vi.useRealTimers())
 

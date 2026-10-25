@@ -11,9 +11,9 @@ export function nativeChatWriteMountAdapters(
 ): Record<string, MountAdapter> {
   return {
     'nativeChat.terminal-write': ({ client }) => {
-      const send = modules.load<typeof import('../../../session/mobile-native-chat-send')>(
-        'mobile/src/session/mobile-native-chat-send.ts'
-      )
+      const send = modules.load<
+        typeof import('../../../session/native-chat/mobile-native-chat-send')
+      >('mobile/src/session/native-chat/mobile-native-chat-send.ts')
       const outcomes: Record<string, unknown> = {}
       return {
         action(name, args) {

@@ -1,4 +1,4 @@
-import { normalizeNativeChatUserText as normalizeReconcileText } from '../../../src/shared/native-chat-image-transcript-markers'
+import { normalizeNativeChatUserText as normalizeReconcileText } from '../../../../src/shared/native-chat-image-transcript-markers'
 
 export type MobileNativeChatPendingMessage = {
   id: string

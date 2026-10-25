@@ -1,6 +1,6 @@
-import { applyAppend, replaceList } from '../../../src/shared/native-chat-merge'
-import type { NativeChatMerger } from '../../../src/shared/native-chat-merge'
-import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
+import { applyAppend, replaceList } from '../../../../src/shared/native-chat-merge'
+import type { NativeChatMerger } from '../../../../src/shared/native-chat-merge'
+import type { NativeChatMessage } from '../../../../src/shared/native-chat-types'
 
 export type MobileNativeChatStreamFrame = {
   type?: string
