@@ -331,6 +331,81 @@ describe('FontAutocomplete', () => {
     expect(getInput().value).toBe('')
   })
 
+  it.each([{ suggestions: [] }, { suggestions: ['Geist', 'SF Mono'] }])(
+    'preserves an unlisted saved font on focus and Enter with suggestions $suggestions',
+    async ({ suggestions }) => {
+      const change = vi.fn()
+      const preview = vi.fn()
+      await act(async () => {
+        root.render(
+          <FontAutocomplete
+            value="Georgia"
+            suggestions={suggestions}
+            onChange={change}
+            onPreviewFontFamily={preview}
+            defaultOptionLabel="Same as IDE font"
+            commitMode="blur"
+          />
+        )
+      })
+      await act(async () => getInput().focus())
+      expect(preview).toHaveBeenLastCalledWith('Georgia')
+      await act(async () => {
+        getInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      })
+      expect(getInput().value).toBe('Georgia')
+      expect(change).not.toHaveBeenCalled()
+      await act(async () => getInput().blur())
+      expect(change).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    { label: 'Same as IDE font', query: '  SAME AS IDE  ' },
+    { label: 'IDEと同じフォント', query: '同じ' }
+  ])('searches the inherited option by its label: $label', async ({ label, query }) => {
+    const change = vi.fn()
+    await act(async () => {
+      root.render(
+        <FontAutocomplete
+          value="Georgia"
+          suggestions={['Geist', 'Georgia']}
+          onChange={change}
+          defaultOptionLabel={label}
+          commitMode="blur"
+        />
+      )
+    })
+    await act(async () => getInput().focus())
+    await typeIntoInput(getInput(), query)
+    expect(getOptionLabels()).toEqual([label])
+    await act(async () => {
+      getInput().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    expect(change.mock.calls).toEqual([['']])
+    expect(getInput().value).toBe('')
+  })
+
+  it('commits the inherited value when its full label is typed and blurred', async () => {
+    const change = vi.fn()
+    await act(async () => {
+      root.render(
+        <FontAutocomplete
+          value="Georgia"
+          suggestions={['Geist', 'Georgia']}
+          onChange={change}
+          defaultOptionLabel="Same as IDE font"
+          commitMode="blur"
+        />
+      )
+    })
+    await act(async () => getInput().focus())
+    await typeIntoInput(getInput(), '  same as IDE font  ')
+    await act(async () => getInput().blur())
+    expect(change.mock.calls).toEqual([['']])
+    expect(getInput().value).toBe('')
+  })
+
   it('disables the whole picker and discards an open draft without saving', async () => {
     const change = vi.fn()
     const renderPicker = (disabled: boolean) => (

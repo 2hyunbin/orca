@@ -86,13 +86,19 @@ export function FontAutocomplete({
 
   const normalizedQuery = query.trim().toLowerCase()
   const normalizedValue = value.trim().toLowerCase()
-  const allSuggestions = useMemo(
-    () => (defaultOptionLabel ? ['', ...suggestions.filter(Boolean)] : suggestions),
-    [defaultOptionLabel, suggestions]
-  )
+  const allSuggestions = useMemo(() => {
+    if (!defaultOptionLabel) {
+      return suggestions
+    }
+    const fonts = suggestions.filter(Boolean)
+    if (value && !fonts.includes(value)) {
+      fonts.push(value)
+    }
+    return ['', ...fonts]
+  }, [defaultOptionLabel, suggestions, value])
   const filteredSuggestions = useMemo(
-    () => filterFontSuggestions(allSuggestions, query),
-    [allSuggestions, query]
+    () => filterFontSuggestions(allSuggestions, query, defaultOptionLabel),
+    [allSuggestions, query, defaultOptionLabel]
   )
   // Opening with the committed font must still show all fonts rather than filter by its name.
   const visibleSuggestions =
@@ -141,7 +147,11 @@ export function FontAutocomplete({
   }, [visibleSuggestions, highlightedIndex, onPreviewFontFamily, open, disabled, commitMode, query])
 
   const commitValue = (nextValue: string): void => {
-    const committed = commitMode === 'blur' ? nextValue.trim() : nextValue
+    const trimmed = commitMode === 'blur' ? nextValue.trim() : nextValue
+    const committed =
+      defaultOptionLabel && trimmed.toLowerCase() === defaultOptionLabel.trim().toLowerCase()
+        ? ''
+        : trimmed
     setQuery(committed)
     setIsFilteringQuery(false)
     if (commitMode === 'change' || committed !== lastCommittedValueRef.current) {
