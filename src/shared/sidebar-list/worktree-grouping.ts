@@ -21,7 +21,6 @@ import type {
   WorktreeGroupBy
 } from './row-types'
 
-/** Buckets worktrees into their sections and returns them in render order. */
 export function buildOrderedGroups(args: {
   groupBy: WorktreeGroupBy
   naturalWorktrees: readonly Worktree[]
@@ -56,7 +55,7 @@ export function buildOrderedGroups(args: {
   } = args
 
   if (groupBy === 'repo') {
-    // Why shared: the paired phone builds its Project sections with this same function.
+    // Shared with paired-phone Project sections.
     const folderGroups = new Map<string, WorktreeGroupEntry>()
     const gitRows: Worktree[] = []
     for (const row of naturalWorktrees) {
@@ -98,7 +97,7 @@ export function buildOrderedGroups(args: {
     ]
   }
 
-  // Why no lane labels: status and PR headers are named by the section emitter and the client.
+  // Section emitters/clients supply status and PR labels.
   const grouped = new Map<string, WorktreeGroupEntry>()
   for (const w of naturalWorktrees) {
     const key =
@@ -112,9 +111,7 @@ export function buildOrderedGroups(args: {
     group.items.push(w)
     group.repoIds.add(w.repoId)
   }
-  // Why: folder workspaces are not worktrees, so they never appear in the loop
-  // above. Bucketing them here — and creating the lane when no worktree opened
-  // one — is what lets a folder workspace be the sole occupant of a lane (#15362).
+  // Folder workspaces bypass the worktree loop; create their lanes even when they are the only occupants (#15362).
   for (const pair of folderWorkspaces) {
     const key = getFolderWorkspaceLaneKey(pair, groupBy, workspaceStatuses)
     if (!grouped.has(key)) {
@@ -144,8 +141,7 @@ export function buildOrderedGroups(args: {
       }
     }
   } else if (groupBy === 'workspace-status') {
-    // Why: status grouping is opt-in while the board drawer remains the wider
-    // all-lanes drag target; keep the sidebar compact by omitting empty lanes.
+    // Status grouping is opt-in; omit empty sidebar lanes while the board keeps all drag targets.
     for (const status of workspaceStatuses) {
       const key = getWorkspaceStatusGroupKey(status.id)
       const group = grouped.get(key)
@@ -155,8 +151,7 @@ export function buildOrderedGroups(args: {
     }
   } else {
     const entries = orderProjectSections(grouped, repoMap, repoOrder, projectOrderBy)
-    // Why: large imported repo sets can have one group per repo; spreading
-    // those entries into push can exceed V8's argument limit.
+    // Imported repo counts can exceed V8’s argument limit for push(...entries).
     for (const entry of entries) {
       orderedGroups.push(entry)
     }

@@ -72,7 +72,6 @@ export function dropWriteRows(
   }
 }
 
-/** The one place a drop turns status and rank changes into per-row writes, each on its row's host. */
 export function collectDropWrites(args: {
   rowsFor: DropWriteRows
   statusIds: readonly string[]

@@ -53,9 +53,7 @@ export function getWorkspaceDeleteLineage(
 
   return {
     descendants,
-    // Why: if a child workspace physically lives inside the parent directory,
-    // deleting descendants first prevents Git's force-delete path from removing
-    // the child as untracked content under the parent.
+    // Delete nested children first so Git cannot remove them as untracked content under the parent.
     deleteAllTargets: [...childFirstTargets, parent]
   }
 }

@@ -93,9 +93,7 @@ export const WORKTREE_METHODS = [
     permission: 'workspace',
     params: WorktreeCreate,
     handler: async (params, context) =>
-      // Why: a mobile create interrupted by a connection migration is retried with
-      // the same clientMutationId; dedupe so the host returns the in-flight/created
-      // worktree instead of spawning a duplicate. No key (desktop/CLI) runs plainly.
+      // Mobile retries after migration share clientMutationId; return the same pending/created worktree. Desktop/CLI without keys run plainly.
       context.runtime.dedupeWorktreeCreate(params, params.clientMutationId, async () => {
         const { runtime } = context
         const repo = await runtime.showRepo(worktreeCreateRepoSelector(params))
@@ -123,11 +121,9 @@ export const WORKTREE_METHODS = [
             )
           )
           finishAutomationWorkspaceProvenanceRequest(params.automationProvenanceRequest)
-          // Why stamped here: the create's change notification has bumped the generation, so this
-          // names the catalog that contains the new worktree.
+          // Create notification already bumped generation; stamp the catalog containing the new worktree.
           const stamped = { ...result, catalogVersion: getLocalWorktreeCatalogVersion(repo.id) }
-          // Why: agent callers need a stable dispatch target without traversing
-          // terminal-list layout duplicates after creating the worktree.
+          // Agent callers need a stable target without duplicate terminal-list layout entries.
           return params.startupAgent && result.startupTerminal?.handle
             ? { ...stamped, agentTerminalHandle: result.startupTerminal.handle }
             : stamped
@@ -250,9 +246,7 @@ export const WORKTREE_METHODS = [
         params.worktree,
         params.hostId
       )
-      // Older mobile clients omit hostId, so resolve through the ambiguity gate
-      // before pinning removal. An ambiguous selector still fails closed: two
-      // hosts own the id and an unqualified client cannot say which it meant.
+      // Older mobile omits hostId; resolve ambiguity before pinning removal and refuse ids shared by two hosts.
       if (!resolvedHostId) {
         try {
           resolvedHostId = (await runtime.showManagedWorktree(params.worktree)).hostId
@@ -260,17 +254,13 @@ export const WORKTREE_METHODS = [
             throw new Error('worktree.rm could not resolve the workspace host')
           }
         } catch (error) {
-          // 'selector_not_found' is not a failure to attribute — Git simply no
-          // longer lists the path. A delete legitimately arrives in that state and
-          // `removeManagedWorktree` handles it, so a stale workspace stays
-          // deletable by a client that sends no host. Anything else propagates.
+          // Git may omit a stale path: selector_not_found must reach removeManagedWorktree; propagate other resolution failures.
           if (!(error instanceof Error) || error.message !== 'selector_not_found') {
             throw error
           }
         }
       }
-      // Why parsed, not resolved: an `id:` selector (what clients send) names its repo, and a second
-      // resolution costs a scan and throws for an id two hosts share. Other selectors stay unstamped.
+      // Parse id: selectors for repo stamping; resolving again scans and rejects ids shared by hosts. Leave other selectors unstamped.
       const explicitWorktreeId = getExplicitWorktreeIdSelector(params.worktree)
       const repoId = explicitWorktreeId ? splitWorktreeId(explicitWorktreeId)?.repoId : undefined
       const result = await queueWorkspaceDelete(
@@ -281,8 +271,7 @@ export const WORKTREE_METHODS = [
         (removal) =>
           runtime.removeManagedWorktree(params.worktree, {
             ...removal,
-            // Why: only a client that shows the `removing` marker can wait out Git's delete; older
-            // clients get the acceptance and never see the row again.
+            // Wait out Git deletion only for clients showing removing; older clients get acceptance and hide the row.
             ...(readsWorktreeRemovalMarker(context) ? { waitForBackgroundRemoval: true } : {})
           })
       )

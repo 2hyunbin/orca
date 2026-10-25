@@ -76,9 +76,7 @@ export function selectVisibleSidebarWorktrees({
     }
   }
 
-  // Apply cached sort order. Items not yet in the cache (e.g. brand-new
-  // worktrees before the next sortEpoch bump) are appended at the end.
-  // Manual placement belongs to the parent, even when a hidden child has a higher rank.
+  // Append unranked/new rows until the next sortEpoch. Manual placement follows the parent, even if a hidden child ranks higher.
   if (injectLineageAncestors !== false && preserveLineageParentOrder) {
     all = addVisibleLineageAncestors(all, ancestorByIdentity, worktreeLineageById, admitsAncestor)
   }
@@ -100,7 +98,7 @@ function addVisibleLineageAncestors(
 ): Worktree[] {
   const result: Worktree[] = []
   const included = new Set<string>()
-  // The parent nesting puts each row under, so an injected ancestor is the one it nests in.
+  // Use the same parent for ancestor injection and nesting.
   const parentByIdentity = getSidebarLineageParentsByIdentity(lineageById, ancestorByIdentity)
 
   const addWithAncestors = (worktree: Worktree): void => {

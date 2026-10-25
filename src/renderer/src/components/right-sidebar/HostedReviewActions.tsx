@@ -154,8 +154,7 @@ export default function HostedReviewActions({
   const menuDisabled = merging || isUpdatingReviewState
 
   const handleDeleteWorktree = useCallback(() => {
-    // Why: route every UI delete entry point through the shared funnel so
-    // skip-confirm, main-worktree, and child-workspace safeguards cannot drift.
+    // Share the delete funnel so skip-confirm, main-worktree, and child-workspace safeguards cannot drift.
     runWorktreeDelete(worktree.id, {
       expectedIdentity: toWorktreeDeleteIdentities([worktree])[0],
       expectedHostId: worktree.hostId,
@@ -185,8 +184,7 @@ export default function HostedReviewActions({
           <div className={RIGHT_SIDEBAR_SPLIT_ACTION_ROW_CLASS}>
             <Tooltip>
               <TooltipTrigger asChild>
-                {/* Why: wrapping in a <span> so the tooltip trigger receives pointer
-                  events even when the merge button inside is disabled. */}
+                {/* The span receives tooltip pointer events when the merge button is disabled. */}
                 <span
                   className={cn(
                     'inline-flex min-w-0 max-w-full shrink',

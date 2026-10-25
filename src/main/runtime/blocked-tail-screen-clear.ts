@@ -2,11 +2,7 @@ import type { TuiAgent } from '../../shared/tui-agent'
 import { findTerminalWaitBlockedSignal } from './agent-state-rules/blocked-text-layer'
 import { evaluateAgentStateRules } from './agent-state-rules/agent-state-rules-engine'
 
-/**
- * Whether a settled grid proves blocked text in the line tail is an erased dialog (#24187): no
- * blocker anywhere on screen, and the agent's own screen rules see its ready composer. An agent
- * without screen rules never clears here, so the tail decides as before.
- */
+/** Clear stale tail blockers only when the agent's screen rules prove its composer ready (#24187). */
 export function screenClearsBlockedTail(
   agent: TuiAgent | null,
   screenLines: readonly string[]

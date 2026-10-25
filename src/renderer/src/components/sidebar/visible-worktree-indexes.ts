@@ -17,10 +17,7 @@ import type { AppState } from '@/store/types'
 import { mergeWorkspaceLineageRecords } from '../../../../shared/resolved-worktree-lineage'
 export { getWorkspaceLineageRows as getLineageAncestorIndex } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
-/**
- * Rank of each key in the frozen sidebar sort order. Keyed on the array the sort
- * hook already holds identity-stable across unrelated store writes.
- */
+/** Reuse ranks while the frozen sidebar sort array retains its identity. */
 const sortedWorktreeRankIndexCache = new WeakMap<readonly string[], Map<string, number>>()
 
 export function getSortedWorktreeRankIndex(sortedIds: readonly string[]): Map<string, number> {

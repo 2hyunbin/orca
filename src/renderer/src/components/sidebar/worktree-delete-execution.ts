@@ -132,10 +132,7 @@ export async function runWorktreeDeletesInParallel(
             if (dependencies.length > 0) {
               await Promise.all(dependencies.map(([, earlier]) => earlier))
             }
-            // A queued target may be recreated while an earlier repo sibling is deleting.
-            // Why by host (STA-4343): the id-keyed map keeps ONE row per `repoId::path`,
-            // so on a two-host collision it can hand back the other host's row — whose
-            // instanceId never matches, silently dropping a delete the user confirmed.
+            // Recheck the queued instance on its confirmed host; an ID-only lookup can return a twin instead.
             const currentTarget = getRegisteredWorktreeDeleteTarget(
               useAppStore.getState(),
               target.id,
@@ -247,7 +244,5 @@ export async function runWorktreeDeletesInParallel(
     .filter((target) => deletedIdentities.has(getWorktreeLineageSelection(target)))
     .map(toWorktreeRemovalTarget)
 }
-
-/** Shared confirmed and skip-confirm execution with consistent failure recovery. */
 
 export { runWorktreeDeleteWithToast }

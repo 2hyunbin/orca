@@ -91,8 +91,7 @@ export class RuntimeManagedWorktreeQueries {
         (!scopedRepo || worktree.repoId === scopedRepo.id) &&
         this.isVisible(worktree, matchers.get(worktree.repoId), sourceDefaultsSupported)
     )
-    // See `listingKnownHostIds`: a scoped listing must still name the host it was asked about.
-    // A selector may still name a hidden repo; its host must stay out of the scope either way.
+    // Scoped reads must name requested hosts even without rows; hidden retained repos must never reenter scope.
     const knownHostIds = withoutHiddenHosts(
       listingKnownHostIds(scopedRepo, () => this.deps.listKnownHostIds()),
       runtimeHiddenHostIds(this.deps.getStore())
@@ -163,14 +162,9 @@ export class RuntimeManagedWorktreeQueries {
       this.deps.scanRepo(target)
     )
     let workspaceLineage: ReturnType<Store['getAllWorkspaceLineage']> | undefined
-    // Why a still-overtaken scan is published non-authoritative rather than rejected: this method
-    // has no stale reply, and a thrown error makes the client drop the repo's rows. Non-authoritative
-    // rows purge nothing and light no indicator; the overtaking mutation's own change event, sent
-    // after its generation bump, brings the listing that reflects it. Nothing is pruned from rows
-    // that omit a worktree created under the scan.
+    // Publish overtaken scans as non-authoritative: throwing would drop client rows. Prune nothing; the overtaking mutation's event requests a fresh listing.
     if (scan.ok && !scan.superseded) {
-      // Why the runtime sweeps too: the desktop listing that used to own this runs off `ipcMain`,
-      // so a headless host -- which has no renderer -- never pruned its own repos' rows (#17776).
+      // Headless hosts lack ipcMain listings; runtime must sweep its own metadata too (#17776).
       if (scan.metadataPruneExpectation && canPruneAuthoritativeLocalMetadata(store)) {
         await pruneMetadataMissingFromAuthoritativeLocalScan({
           store,
@@ -216,7 +210,7 @@ export class RuntimeManagedWorktreeQueries {
       repoId: repo.id,
       authoritative: scan.ok && !scan.superseded,
       source: scan.ok ? 'git' : 'metadata-fallback',
-      // Why the scan's generation: the rows describe the catalog as of when the scan began.
+      // Stamp the scan's starting generation: that is the catalog its rows describe.
       catalogVersion: localWorktreeCatalogVersionAt(scan.scanGeneration),
       worktrees: projectWorktreeLineageWithHostPeers(
         store,

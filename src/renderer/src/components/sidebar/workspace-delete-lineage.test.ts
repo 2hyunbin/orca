@@ -151,9 +151,6 @@ describe('getWorkspaceDeleteLineage', () => {
     expect(lineage.deleteAllTargets).toEqual([parent])
   })
 
-  // Why (STA-4343): lineage is recorded against the bare `repoId::path` id, so a
-  // colliding child id resolves to one of two hosts. Delete-all must not route a
-  // descendant's removal at the other machine's checkout.
   it('deletes only the child published by its own metadata owner', () => {
     const parent: Worktree = { ...makeWorktree('parent', '/workspaces/parent'), hostId: SSH_HOST }
     const localChild: Worktree = {

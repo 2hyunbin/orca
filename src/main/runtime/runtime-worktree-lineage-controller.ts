@@ -163,7 +163,7 @@ export class RuntimeWorktreeLineageController {
           'Parent selector would create a lineage cycle.'
         )
       }
-      // Why: a loop saved before this walk read saved data must not block unrelated parents.
+      // An unrelated saved loop must not block this parent.
       if (visited.has(cursor)) {
         break
       }

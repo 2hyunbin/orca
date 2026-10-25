@@ -316,7 +316,6 @@ describe('ComposerParentWorktreePicker', () => {
     expect(candidateLabels().join(' ')).toContain('Other project')
   })
 
-  // A worktree with no recorded hostId inherits its repo's host, which is the child's host too.
   it('keeps candidates whose host or project is unrecorded', () => {
     seed([makeWorktree({ id: 'unscoped', displayName: 'Unscoped' })])
 
@@ -411,8 +410,7 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.change(searchInput(), { target: { value: 'Beta' } })
     fireEvent.keyDown(searchInput(), { key: 'Enter', keyCode: 13 })
 
-    // Regression: the highlight used to reset onto the pinned "No parent" row, so the
-    // standard type-then-Enter flow cleared the parent instead of picking the match.
+    // Typing/Enter must pick the top match instead of clearing via No parent.
     expect(onChange).toHaveBeenCalledWith(JSON.stringify(['', null, 'beta', null]))
   })
 

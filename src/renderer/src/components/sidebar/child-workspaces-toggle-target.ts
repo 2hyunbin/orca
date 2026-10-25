@@ -32,7 +32,7 @@ function resolveTargetWorktree(
 ): Worktree | undefined {
   const hovered = getHoveredWorkspaceIdentity(doc)
   if (hovered) {
-    // Why: the card under the pointer wins over the active one, like the delete shortcut.
+    // Hovered cards outrank active ones, matching workspace deletion shortcuts.
     return getAllWorktreesFromState(state).find(
       (worktree) =>
         worktree.id === hovered.workspaceId &&
@@ -59,7 +59,6 @@ function getParentWorktree(
   )
 }
 
-/** Resolves the target's rendered chip, falling back to its same-host parent's chip. */
 export function resolveChildWorkspacesToggleGroupKey(
   state: ChildWorkspacesToggleState,
   renderedChipKeys: ReadonlySet<string>,

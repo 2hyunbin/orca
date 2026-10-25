@@ -105,7 +105,7 @@ describe('OrcaRuntimeService', () => {
         addedAt: 1,
         connectionId: 'ssh-1'
       }),
-      // Why: this process serves no SSH git, so the SSH repo resolves from its stored rows.
+      // No SSH Git provider is installed, so the fixture uses stored rows.
       getAllWorktreeMeta: () => ({
         [`${TEST_REPO_ID}:://Server/Share/Repo`]: makeWorktreeMeta()
       }),
@@ -161,7 +161,7 @@ describe('OrcaRuntimeService', () => {
       createFolderWorkspaceRuntimeStore(folderWorkspace, projectGroup) as never
     )
 
-    // Why: this process serves no SSH filesystem, so the folder path itself is unavailable.
+    // No SSH filesystem provider is installed, so the folder path is unavailable.
     await expect(
       runtime.readFileExplorerDir(`id:${TEST_FOLDER_WORKSPACE_KEY}`, 'src')
     ).rejects.toThrow('folder_workspace_path_unavailable:/srv/platform')
@@ -468,7 +468,7 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('neither skips nor retires a name the user typed', async () => {
-    // Why: the pool contains ordinary words. Retirement only ever applies to generated names.
+    // Only generated names may be retired; the pool also contains ordinary words.
     const addRetiredWorktreeName = vi.fn()
     const runtime = new OrcaRuntimeService({
       ...store,
@@ -484,8 +484,7 @@ describe('OrcaRuntimeService', () => {
     }
     computeWorktreePathMock.mockReturnValue(createdWorktree.path)
     ensurePathWithinWorkspaceMock.mockReturnValue(createdWorktree.path)
-    // Not `...Once`: the shared beforeEach re-stubs the resolved value but cannot drain a queue,
-    // so leftover one-shots would poison later tests in this file.
+    // Avoid queued one-shot stubs: shared beforeEach resets defaults but cannot drain leftovers.
     vi.mocked(listWorktrees).mockResolvedValue([...MOCK_GIT_WORKTREES, createdWorktree])
 
     const result = await runtime.createManagedWorktree({
