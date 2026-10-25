@@ -3,7 +3,7 @@ import { getSshHostServerStatus, isSshHostServed } from '../../ssh/ssh-host-serv
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
 import { restorePortForwards, savedPortForwardsAllLive } from './ssh-port-forward-persistence'
 
-const restoring = new Map<string, Promise<void>>()
+const changes = new Map<string, Promise<void>>()
 /** The transport each host last restored on, so repeat triggers on it stay cheap. */
 const restoredOn = new Map<
   string,
@@ -43,30 +43,42 @@ export function restoreManagedHostPortForwards(
   if (!mayRestore(targetId, options) || alreadyRestored(targetId)) {
     return Promise.resolve()
   }
-  // Serialize restores so concurrent connects cannot bind the same saved port twice.
-  const previous = restoring.get(targetId) ?? Promise.resolve()
-  const next = previous
-    // A queued disconnect may have changed managed status while the previous restore ran.
-    .then(async () => {
-      if (!mayRestore(targetId, options) || alreadyRestored(targetId)) {
-        return
-      }
-      const conn = connectionManager?.getConnection(targetId)
-      const generation = conn?.getConnectGeneration()
-      const complete = await restorePortForwards(targetId, getCurrentMainWindow)
-      // A failed bind (e.g. a port briefly in use) is retried on the same transport, after a pause.
-      if (conn && generation !== undefined && connectionManager?.getConnection(targetId) === conn) {
-        restoredOn.set(targetId, { conn, generation, complete, at: Date.now() })
-      }
-    })
-    .catch((error: unknown) => {
-      console.warn(`[ssh] Could not restore port forwards for ${targetId}:`, error)
-    })
-    .finally(() => {
-      if (restoring.get(targetId) === next) {
-        restoring.delete(targetId)
-      }
-    })
-  restoring.set(targetId, next)
-  return next
+  return serializePortForwardChange(targetId, async () => {
+    // A queued disconnect or edit may have changed the host while earlier work ran.
+    if (!mayRestore(targetId, options) || alreadyRestored(targetId)) {
+      return
+    }
+    const conn = connectionManager?.getConnection(targetId)
+    const generation = conn?.getConnectGeneration()
+    const complete = await restorePortForwards(targetId, getCurrentMainWindow)
+    // A failed bind (e.g. a port briefly in use) is retried on the same transport, after a pause.
+    if (conn && generation !== undefined && connectionManager?.getConnection(targetId) === conn) {
+      restoredOn.set(targetId, { conn, generation, complete, at: Date.now() })
+    }
+  }).catch((error: unknown) => {
+    console.warn(`[ssh] Could not restore port forwards for ${targetId}:`, error)
+  })
+}
+
+/**
+ * Runs one change to a host's forwards after every earlier one. Restores and user edits share it,
+ * so a restore can't bind a saved port twice or reopen a mapping an edit is replacing.
+ */
+export function serializePortForwardChange<T>(
+  targetId: string,
+  change: () => Promise<T>
+): Promise<T> {
+  const previous = changes.get(targetId) ?? Promise.resolve()
+  const result = previous.then(change)
+  const settled = result.then(
+    () => {},
+    () => {}
+  )
+  changes.set(targetId, settled)
+  void settled.finally(() => {
+    if (changes.get(targetId) === settled) {
+      changes.delete(targetId)
+    }
+  })
+  return result
 }

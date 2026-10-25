@@ -73,7 +73,10 @@ vi.mock('../../ssh/ssh-host-server-status', async (importOriginal) => ({
 }))
 
 import { persistPortForwards, restorePortForwards } from './ssh-port-forward-persistence'
-import { restoreManagedHostPortForwards } from './ssh-managed-port-forward-restore'
+import {
+  restoreManagedHostPortForwards,
+  serializePortForwardChange
+} from './ssh-managed-port-forward-restore'
 
 const FORWARD = { localPort: 4100, remoteHost: '127.0.0.1', remotePort: 7860, label: 'app' }
 
@@ -232,5 +235,21 @@ describe('saved port forward restore', () => {
     expect(h.saved.portForwards).toEqual([
       { localPort: FORWARD.localPort, remoteHost: 'db', remotePort: 5432, label: undefined }
     ])
+  })
+
+  it('waits for an edit in progress, so it cannot reopen the mapping being replaced', async () => {
+    let finishEdit: (() => void) | null = null
+    const edit = serializePortForwardChange('t1', async () => {
+      await new Promise<void>((resolve) => (finishEdit = resolve))
+      const moved = { id: 'pf-9', connectionId: 't1', ...FORWARD, localPort: 4999 }
+      h.active.push(moved)
+      persistPortForwards('t1', FORWARD)
+    })
+    await vi.waitFor(() => expect(finishEdit).not.toBeNull())
+    const restore = restoreManagedHostPortForwards('t1')
+    finishEdit!()
+    await Promise.all([edit, restore])
+    expect(h.portForwardManager.addForward).not.toHaveBeenCalled()
+    expect(h.saved.portForwards).toEqual([{ ...FORWARD, localPort: 4999 }])
   })
 })
