@@ -6,17 +6,7 @@ import type { HookListenerState } from '../listener-state'
 import { resolvePrompt, resolveToolState } from '../prompt-fields'
 import { extractToolFields, isNewTurnEvent } from '../provider-event-routing'
 
-/**
- * Kiro CLI hooks live in each agent config (`~/.kiro/agents/<name>.json`) and fire
- * agentSpawn, userPromptSubmit, preToolUse, postToolUse and stop with a Claude-shaped
- * stdin payload (`session_id`, `cwd`, `prompt`, `tool_name`, `tool_input`,
- * `tool_response`, `assistant_response`). There is no permission or notification event,
- * so an approval pause reads as `working` — the agent is mid-tool, not idle.
- * Subagents run under their own config and do not fire the lead's hooks.
- *
- * The opt-in V3 engine (`--v3`) runs a global standalone hooks file instead and sends the
- * same payload under Claude's PascalCase names, plus SessionEnd and no final reply on Stop.
- */
+/** Agent-config Kiro hooks use Claude-shaped fields without permission/notification events; approval pauses remain working. Subagents have their own config/hooks, not the lead's. */
 export function normalizeKiroEvent(
   state: HookListenerState,
   eventName: unknown,

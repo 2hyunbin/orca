@@ -32,7 +32,12 @@ describe('getLocalPathOpenOwnerForRoute', () => {
   it('spells a route as its owning host', () => {
     expect(getLocalPathOpenOwnerForRoute({})).toBe('local')
     expect(getLocalPathOpenOwnerForRoute({ runtimeEnvironmentId: ' env-2 ' })).toBe('runtime:env-2')
+    expect(
+      getLocalPathOpenOwnerForRoute({ runtimeEnvironmentId: 'env-2', connectionId: 'ssh-1' })
+    ).toBe('runtime:env-2')
     expect(getLocalPathOpenOwnerForRoute({ connectionId: 'ssh-1' })).toBe('ssh:ssh-1')
+    expect(getLocalPathOpenOwnerForRoute({ connectionId: ' ssh-1 ' })).toBe('ssh:ssh-1')
+    expect(getLocalPathOpenOwnerForRoute({ connectionId: '  ' })).toBe('local')
     expect(
       getLocalPathOpenOwnerForRoute({ runtimeEnvironmentId: null, ownerUnresolved: true })
     ).toBe('unresolved')

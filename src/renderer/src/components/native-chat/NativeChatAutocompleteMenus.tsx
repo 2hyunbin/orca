@@ -4,7 +4,7 @@ import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
 import type { SkillSourceKind } from '../../../../shared/skills'
 import { FilenameFirstPath } from '@/components/file-path-cursor-tooltip'
-import { getFileTypeIcon } from '@/lib/file-type-icons'
+import { FileTypeIcon } from '@/components/FileTypeIcon'
 import type { ComposerAutocomplete, NativeChatPickerItem } from './native-chat-composer-state'
 import type { NativeChatMentionFiles } from './use-native-chat-mention-files'
 import { LoadingSpinner } from '@/components/LoadingSpinner'
@@ -149,7 +149,7 @@ function getPickerEmptyText(
 
 function PickerGroupHeading({ kind }: { kind: 'commands' | 'skills' }): React.JSX.Element {
   return (
-    <div className="px-2 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+    <div className="px-2 pb-1 pt-1.5 text-2xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">
       {kind === 'commands'
         ? translate('components.native-chat.composer.commands', 'Commands')
         : translate('components.native-chat.composer.skills', 'Skills')}
@@ -199,9 +199,11 @@ function PickerOption({
       ) : null}
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="min-w-0 truncate font-mono font-medium">{item.token}</span>
+          <span className="min-w-0 truncate font-mono text-chat-code font-medium">
+            {item.token}
+          </span>
           {item.kind === 'command' && item.argumentHint ? (
-            <span className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">
+            <span className="min-w-0 truncate font-mono text-2xs text-muted-foreground">
               {item.argumentHint}
             </span>
           ) : null}
@@ -210,11 +212,11 @@ function PickerOption({
           <span className="block truncate text-xs text-muted-foreground">{description}</span>
         ) : null}
         {annotation ? (
-          <span className="block truncate text-[11px] text-muted-foreground">{annotation}</span>
+          <span className="block break-all text-xs text-muted-foreground">{annotation}</span>
         ) : null}
       </span>
       {item.kind === 'skill' ? (
-        <span className="shrink-0 pt-0.5 text-[11px] text-muted-foreground">
+        <span className="shrink-0 pt-0.5 text-2xs text-muted-foreground">
           {scopeLabel(item.sources[0]?.sourceKind)}
         </span>
       ) : null}
@@ -261,15 +263,14 @@ function PickerOptionButton({
       aria-selected={selected}
       type="button"
       onPointerDown={(event) => {
-        // Why: the textarea owns query and caret state, so pointer acceptance
-        // must run before the browser transfers focus to this row.
+        // Accept before focus transfer because the textarea owns query and caret state.
         event.preventDefault()
         if (event.button === 0) {
           onChoose()
         }
       }}
       className={cn(
-        'flex w-full items-start gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-[13px] hover:bg-accent hover:text-accent-foreground',
+        'flex w-full items-start gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground',
         selected && 'border-border bg-accent text-accent-foreground'
       )}
     >
@@ -279,6 +280,9 @@ function PickerOptionButton({
 }
 
 function getPickerAnnotation(item: NativeChatPickerItem): string | null {
+  if (item.kind === 'skill' && item.location) {
+    return item.location
+  }
   if (item.kind === 'command' && item.skillCollision) {
     return translate(
       'components.native-chat.composer.skillCommandCollision',
@@ -286,8 +290,7 @@ function getPickerAnnotation(item: NativeChatPickerItem): string | null {
     )
   }
   if (item.kind === 'skill' && item.sources.length > 1) {
-    // Why: name the interpolation `sourceCount`, not `count` — a `count` option
-    // makes i18next resolve plural-suffixed keys that these locales don't define.
+    // Use sourceCount because i18next treats count as pluralization input and these keys have no plural variants.
     return translate(
       'components.native-chat.composer.skillMultipleSources',
       '{{sourceCount}} sources - agent resolves',
@@ -338,7 +341,6 @@ export const NativeChatMentionMenu = memo(function NativeChatMentionMenu({
   return (
     <PickerListbox id={listboxId}>
       {files.map((path, index) => {
-        const FileIcon = getFileTypeIcon(path)
         return (
           <PickerOptionButton
             key={path}
@@ -347,7 +349,10 @@ export const NativeChatMentionMenu = memo(function NativeChatMentionMenu({
             activeItemRef={activeItemRef}
             onChoose={() => onChoose(path)}
           >
-            <FileIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <FileTypeIcon
+              filePath={path}
+              className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"
+            />
             <FilenameFirstPath path={path} />
           </PickerOptionButton>
         )

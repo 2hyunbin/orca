@@ -13,32 +13,11 @@ import {
   isMultiplexStreamAttached,
   type TerminalMultiplexConnection
 } from './terminal-multiplex-connection'
-import type { SerializedSnapshot, TerminalMultiplexStream } from './terminal-stream-types'
-import type {
-  RemoteTerminalSourceRangeReplacementPublication,
-  RemoteTerminalSourceRangeReplacementReservation
-} from '../../../remote-terminal-source-range-consumer'
-
-const sourceRangeStreamIdentity = (stream: TerminalMultiplexStream) => ({
-  ptyId: stream.ptyId,
-  consumerId: stream.remoteDesktopSubscriptionKey,
-  streamGeneration: stream.streamGeneration
-})
-
-function requireRecoverySourceIdentity(
-  serialized: Pick<NonNullable<SerializedSnapshot>, 'source' | 'seq'>
-): RemoteTerminalSourceRangeReplacementPublication {
-  const { source, seq } = serialized
-  if (source === undefined || typeof seq !== 'number') {
-    throw new Error('Remote terminal recovery snapshot source identity unavailable.')
-  }
-  return { source, seq }
-}
+import type { TerminalMultiplexStream } from './terminal-stream-types'
 
 export function installMultiplexFlowControl(state: TerminalMultiplexConnection): void {
   const { runtime, streams } = state
-  // Why: snapshot frames bypass the ACK window, so only a drained link can afford history;
-  // a recovery on every ACK of a sustained flood would otherwise outgrow the client's intake.
+  // Snapshots bypass ACK windows; restore history only after link drain so sustained floods cannot outrun intake.
   const linkHasRoomForHistory = (stream: TerminalMultiplexStream): boolean =>
     stream.ackInFlightBytes <= TERMINAL_MULTIPLEX_ACK_BATCH_BYTES &&
     state.ackTotalInFlightBytes <= TERMINAL_MULTIPLEX_ACK_BATCH_BYTES
@@ -51,9 +30,8 @@ export function installMultiplexFlowControl(state: TerminalMultiplexConnection):
       return
     }
     stream.ackRecoverySnapshotInFlight = true
-    let replacement: RemoteTerminalSourceRangeReplacementReservation | null = null
     try {
-      // Why history: output was dropped, so the client's own history ends before this screen and must be replaced, not kept.
+      // Replace client history after dropped output; its retained history no longer reaches this screen.
       const carriesHistory = linkHasRoomForHistory(stream)
       const serialized = await serializeBudgetedRequestedSnapshot(
         runtime,
@@ -65,17 +43,6 @@ export function installMultiplexFlowControl(state: TerminalMultiplexConnection):
       }
       if (!serialized) {
         throw new Error('Remote terminal recovery snapshot unavailable.')
-      }
-      const identity = stream.ackOutputSourceRanges
-        ? requireRecoverySourceIdentity(serialized)
-        : null
-      if (identity) {
-        replacement = runtime.reserveRemoteTerminalSourceRangeReplacement(
-          sourceRangeStreamIdentity(stream),
-          identity.seq,
-          'ack-pending-overflow'
-        )
-        stream.sourceRangeReplacement = replacement
       }
       const displayMode = runtime.getMobileDisplayMode(stream.ptyId)
       const publication = sendSnapshotFrames(
@@ -104,24 +71,6 @@ export function installMultiplexFlowControl(state: TerminalMultiplexConnection):
       if (!isMultiplexStreamAttached(state, stream)) {
         throw new Error('Remote terminal recovery snapshot stream detached.')
       }
-      // Why `replacement`: reservation is null when no source-range consumer is attached.
-      const localReplacement =
-        identity && replacement
-          ? stream.sourceRangeLedger?.planSourceRangeReplacement(identity.seq)
-          : null
-      if (replacement && !localReplacement) {
-        throw new Error('Remote terminal recovery source ledger replacement unavailable.')
-      }
-      if (
-        identity &&
-        replacement &&
-        !runtime.commitRemoteTerminalSourceRangeReplacement(replacement, identity)
-      ) {
-        throw new Error('Remote terminal recovery snapshot replacement was not accepted.')
-      }
-      localReplacement?.commit()
-      stream.sourceRangeReplacement = null
-      replacement = null
       if (typeof serialized.seq === 'number') {
         const snapshotSeq = serialized.seq
         const retained = stream.ackPendingOutput.filter(
@@ -136,16 +85,6 @@ export function installMultiplexFlowControl(state: TerminalMultiplexConnection):
       stream.ackPendingOutputOverflowed = false
       stream.ackRecoveryHistoryOwed = !carriesHistory
     } catch (error) {
-      if (replacement) {
-        if (stream.sourceRangeReplacement === replacement) {
-          stream.sourceRangeReplacement = null
-          runtime.rollbackRemoteTerminalSourceRangeReplacement(
-            replacement,
-            'ack-pending-overflow-unpublished'
-          )
-        }
-        replacement = null
-      }
       if (!isMultiplexStreamAttached(state, stream)) {
         return
       }
@@ -234,43 +173,5 @@ export function installMultiplexFlowControl(state: TerminalMultiplexConnection):
     stream.ackInFlightBytes -= acknowledged
     state.ackTotalInFlightBytes = Math.max(0, state.ackTotalInFlightBytes - acknowledged)
     state.flushAllAckPendingOutput()
-  }
-  state.acknowledgeSourceRanges = (
-    stream: TerminalMultiplexStream,
-    streamGeneration: string,
-    ackedEndByte: number
-  ): void => {
-    if (!stream.ackOutputSourceRanges) {
-      return
-    }
-    const result = stream.sourceRangeLedger?.acknowledge(streamGeneration, ackedEndByte)
-    if (!result) {
-      return
-    }
-    if (result.status !== 'accepted') {
-      return
-    }
-    if (result.settled.length > 0) {
-      runtime.settleRemoteTerminalSourceRanges(sourceRangeStreamIdentity(stream), result.settled)
-    }
-    state.acknowledgeOutput(stream, result.acknowledgedBytes)
-  }
-  state.detachSourceRangeConsumer = (stream: TerminalMultiplexStream, reason: string): void => {
-    if (!stream.sourceRangeConsumerAttached) {
-      return
-    }
-    stream.sourceRangeConsumerAttached = false
-    const ledger = stream.sourceRangeLedger
-    stream.sourceRangeLedger = null
-    if (!ledger) {
-      return
-    }
-    const transfer = ledger.beginTransfer()
-    const ranges = transfer.frames.flatMap((frame) => frame.sourceRanges)
-    try {
-      runtime.cancelRemoteTerminalSourceRanges(sourceRangeStreamIdentity(stream), ranges, reason)
-    } finally {
-      transfer.commit()
-    }
   }
 }

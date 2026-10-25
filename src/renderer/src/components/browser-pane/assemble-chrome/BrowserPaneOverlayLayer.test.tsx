@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { Suspense } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -71,6 +71,10 @@ import {
   selectClientHostedBrowserRow
 } from '@/lib/pane-manager/client-hosted-browser-row-state'
 import BrowserPaneOverlayLayer, { RetainedBrowserPaneOverlayLayer } from './BrowserPaneOverlayLayer'
+import {
+  admitBrowserPageMount,
+  releaseBrowserPageMount
+} from '../host-guest/browser-page-mount-admission'
 
 const HOST_ROW = {
   browserPageId: 'page-hosted',
@@ -94,8 +98,7 @@ describe('BrowserPaneOverlayLayer', () => {
 
   afterEach(() => {
     cleanup()
-    // The row store is module-level, so a leftover row would render an extra pane in every
-    // sibling test.
+    // Clear the module-level row store so sibling tests cannot inherit extra panes.
     clearClientHostedBrowserRowSelection()
     applyClientHostedBrowserRows({ worktreeId: 'wt-1', rows: [] })
   })
@@ -412,9 +415,39 @@ describe('BrowserPaneOverlayLayer', () => {
     expect(markup).toContain('data-browser-pane-active="false"')
   })
 
-  // Why the style and not just mountedness: paintability drives the slot's `display`, and
-  // display:none is the exact park that stops Chromium producing frames. A mounted pane inside a
-  // display:none slot still goes dark, so mount assertions alone cannot see this regression.
+  // After background admission ends, return to normal parking rules instead of retaining layout forever.
+  it('mounts an admitted page in a hidden worktree and parks it once the admission ends', () => {
+    admitBrowserPageMount('page-b')
+    try {
+      const view = render(<BrowserPaneOverlayLayer worktreeId="wt-1" isWorktreeActive={false} />)
+      expect(view.container.querySelector('[data-browser-pane-id="browser-b"]')).not.toBeNull()
+
+      act(() => releaseBrowserPageMount('page-b'))
+
+      expect(view.container.querySelector('[data-browser-pane-id="browser-b"]')).toBeNull()
+    } finally {
+      releaseBrowserPageMount('page-b')
+    }
+  })
+
+  it('keeps an admitted page mounted in the visible worktree but stops laying out its slot', () => {
+    admitBrowserPageMount('page-b')
+    try {
+      const view = render(<BrowserPaneOverlayLayer worktreeId="wt-1" isWorktreeActive={true} />)
+      const slot = (): HTMLElement | null =>
+        view.container.querySelector<HTMLElement>('[data-browser-overlay-tab-id="browser-b"]')
+      expect(slot()?.style.display).toBe('flex')
+
+      act(() => releaseBrowserPageMount('page-b'))
+
+      expect(slot()?.style.display).toBe('none')
+      expect(view.container.querySelector('[data-browser-pane-id="browser-b"]')).not.toBeNull()
+    } finally {
+      releaseBrowserPageMount('page-b')
+    }
+  })
+
+  // Assert display, not just mounting: display:none stops Chromium frames even on a mounted pane.
   it('paints the slot of a remotely viewed inactive browser pane', () => {
     expect(slotDisplay('browser-b')).toBe('none')
 
@@ -424,10 +457,7 @@ describe('BrowserPaneOverlayLayer', () => {
     expect(slotDisplay('browser-b')).toBe('flex')
   })
 
-  // Why DOM order and not just presence: the host-row pane carries no guest and paints over
-  // whichever webview the group was showing. Both siblings are absolutely positioned onto the same
-  // anchor, so the only thing putting it on top is being last — a reorder is invisible to every
-  // other assertion here and would bury it under a guest.
+  // The host-row pane shares an absolute anchor with guests; only last-in-DOM order keeps it visible above them.
   it('renders the client-hosted host-row pane after every browser slot', () => {
     applyClientHostedBrowserRows({ worktreeId: 'wt-1', rows: [HOST_ROW] })
     selectClientHostedBrowserRow({

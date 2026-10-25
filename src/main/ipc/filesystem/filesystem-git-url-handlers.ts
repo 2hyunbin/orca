@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
 import { getRemoteCommitUrl, getRemoteFileUrl } from '../../git/repo'
 import { resolveRegisteredWorktreePath } from '../registered-worktree-roots-cache'
-import { validateFullGitObjectId } from '../filesystem-path-containment'
+import { validateFullGitObjectId } from './filesystem-path-containment'
 import type { FilesystemHandlerContext } from './filesystem-handler-context'
 import { requireReachableGitRoute } from '../../providers/execution-host-provider-dispatch'
 import { getConnectionExecutionHostId } from '../../../shared/execution-host'
@@ -15,11 +15,8 @@ export function registerFilesystemGitUrlHandlers(context: FilesystemHandlerConte
       _event,
       args: { worktreePath: string; relativePath: string; line: number; connectionId?: string }
     ): Promise<string | null> => {
-      // Why: remote repos can't read relay-side .git/config locally; delegate URL construction to the SSH provider.
-      const route = requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
-      if (route.kind === 'ssh') {
-        return route.provider.getRemoteFileUrl(args.worktreePath, args.relativePath, args.line)
-      }
+      // Remote URL construction needs the owning SSH host's .git/config.
+      requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
       await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
       return getRemoteFileUrl(worktreePath, args.relativePath, args.line)
@@ -33,11 +30,8 @@ export function registerFilesystemGitUrlHandlers(context: FilesystemHandlerConte
       args: { worktreePath: string; sha: string; connectionId?: string }
     ): Promise<string | null> => {
       const sha = validateFullGitObjectId(args.sha, 'sha')
-      // Why: remote repos can't read relay-side .git/config locally; delegate URL construction to the SSH provider.
-      const route = requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
-      if (route.kind === 'ssh') {
-        return route.provider.getRemoteCommitUrl(args.worktreePath, sha)
-      }
+      // Remote URL construction needs the owning SSH host's .git/config.
+      requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
       await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
       return getRemoteCommitUrl(worktreePath, sha)

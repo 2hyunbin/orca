@@ -1,7 +1,11 @@
+import {
+  pairedRuntimeConnectionFromOffer,
+  type PairedRuntimeConnection
+} from './paired-runtime-connection'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocketClient, { WebSocketServer, type WebSocket } from 'ws'
-import { encodePairingOffer, parsePairingCode, type PairingOffer } from './pairing'
+import { encodePairingOffer, parsePairingCode } from './pairing'
 import {
   decrypt,
   decryptBytes,
@@ -219,10 +223,7 @@ describe('subscribeRemoteRuntimeRequest', () => {
   })
 
   it('closes a half-open subscription socket via client liveness so callers can resubscribe', async () => {
-    // Why: dedicated stream sockets (terminal.multiplex, browser.screencast)
-    // must not hang forever when a tunnel goes half-open — no close frame, no
-    // pongs, no data (#7718). Client liveness surfaces onError/onClose so the
-    // renderer's onTransportClose resubscribe path can run.
+    // Half-open dedicated streams get no close/pongs/data; client liveness must trigger onError/onClose so renderer resubscription runs (#7718).
     const server = await createSubscriptionServer({ disableAutoPong: true })
     const onResponse = vi.fn()
     const onError = vi.fn()
@@ -337,7 +338,12 @@ describe('sendRemoteRuntimeRequest', () => {
     'rejects invalid timer delay %s before reading pairing data',
     async (timeoutMs) => {
       await expect(
-        sendRemoteRuntimeRequest({} as PairingOffer, 'status.get', {}, timeoutMs)
+        sendRemoteRuntimeRequest(
+          pairedRuntimeConnectionFromOffer({ endpoint: '', deviceToken: '', publicKeyB64: '' }),
+          'status.get',
+          {},
+          timeoutMs
+        )
       ).rejects.toMatchObject({ code: 'invalid_argument' })
     }
   )
@@ -521,12 +527,11 @@ describe('sendRemoteRuntimeRequest', () => {
 async function createSubscriptionServer(
   options: {
     sendMismatchedResponseAfterSubscribe?: boolean
-    // Why: half-open simulation — the socket stays open but never answers
-    // protocol pings, like a wedged tunnel that swallows frames silently.
+    // Simulate half-open tunnels by leaving sockets open without pong replies.
     disableAutoPong?: boolean
   } = {}
 ): Promise<{
-  pairing: PairingOffer
+  pairing: PairedRuntimeConnection
   nextBinary: Promise<Uint8Array>
   nextAuth: Promise<unknown>
 }> {
@@ -618,7 +623,7 @@ async function createSubscriptionServer(
   if (!pairing) {
     throw new Error('Failed to create test pairing')
   }
-  return { pairing, nextBinary, nextAuth }
+  return { pairing: pairedRuntimeConnectionFromOffer(pairing), nextBinary, nextAuth }
 }
 
 function sendEncrypted(ws: WebSocket, sharedKey: Uint8Array, message: unknown): void {
@@ -628,7 +633,7 @@ function sendEncrypted(ws: WebSocket, sharedKey: Uint8Array, message: unknown): 
 async function createClosingServer(
   code: number,
   reason: string
-): Promise<{ pairing: PairingOffer }> {
+): Promise<{ pairing: PairedRuntimeConnection }> {
   const serverKeyPair = generateKeyPair()
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
   servers.push(wss)
@@ -649,10 +654,10 @@ async function createClosingServer(
   if (!pairing) {
     throw new Error('Failed to create test pairing')
   }
-  return { pairing }
+  return { pairing: pairedRuntimeConnectionFromOffer(pairing) }
 }
 
-async function createInvalidHandshakeServer(): Promise<{ pairing: PairingOffer }> {
+async function createInvalidHandshakeServer(): Promise<{ pairing: PairedRuntimeConnection }> {
   const serverKeyPair = generateKeyPair()
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
   servers.push(wss)
@@ -673,7 +678,7 @@ async function createInvalidHandshakeServer(): Promise<{ pairing: PairingOffer }
   if (!pairing) {
     throw new Error('Failed to create test pairing')
   }
-  return { pairing }
+  return { pairing: pairedRuntimeConnectionFromOffer(pairing) }
 }
 
 async function createOneShotServer(
@@ -683,7 +688,7 @@ async function createOneShotServer(
     onRequest?: (request: Record<string, unknown>) => void
     sendUndecryptableResponse?: boolean
   } = {}
-): Promise<{ pairing: PairingOffer }> {
+): Promise<{ pairing: PairedRuntimeConnection }> {
   const serverKeyPair = generateKeyPair()
   const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
   servers.push(wss)
@@ -758,5 +763,5 @@ async function createOneShotServer(
   if (!pairing) {
     throw new Error('Failed to create test pairing')
   }
-  return { pairing }
+  return { pairing: pairedRuntimeConnectionFromOffer(pairing) }
 }

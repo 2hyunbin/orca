@@ -38,9 +38,6 @@ vi.mock('@/store', () => ({
     { getState: () => ({ recordFeatureInteraction: vi.fn() }) }
   )
 }))
-vi.mock('@/lib/repo-runtime-owner', () => ({
-  getSettingsForRepoRuntimeOwner: () => ({ activeRuntimeEnvironmentId: null })
-}))
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
 vi.mock('@/components/github/github-duplicate-issue-candidates', () => ({
   useGitHubDuplicateIssueCandidates: () => []
@@ -85,11 +82,11 @@ import { getTaskSourceCacheScope } from '../../src/shared/task-source-context'
 import { listLabels, listAssignableUsers } from '../../src/main/github/issue-field-options'
 import { useRepoLabels, useRepoAssignees } from '../../src/renderer/src/hooks/useIssueMetadata'
 import { updateIssue } from '../../src/main/github/issue-update'
-import { materializeTaskPageItemList } from '../../src/renderer/src/components/task-page-github-work-item-mutations'
+import { materializeTaskPageItemList } from '../../src/renderer/src/components/task-page/github/task-page-github-work-item-mutation-pages'
 import {
   resetTaskPageGitHubMutationRegistryForTests,
   setTaskPageGitHubMutationQueryKey
-} from '../../src/renderer/src/components/task-page-github-work-item-mutation-registry'
+} from '../../src/renderer/src/components/task-page/github/task-page-github-work-item-mutation-registry'
 
 function renderEditSection(props: Parameters<typeof GHEditSection>[0]): void {
   renderToStaticMarkup(createElement(GHEditSection, props))

@@ -36,16 +36,14 @@ describe('useIpcEvents updater integration', () => {
     expect(createFloatingWorkspaceTerminalTab).not.toHaveBeenCalled()
     expect(createWebRuntimeSessionTerminal).toHaveBeenCalledWith({
       worktreeId: 'wt-1',
-      // Why: multi-host scopes the new terminal to the worktree's own runtime
-      // env (null here -> falls back to the active env inside the helper).
+      // Scope creation to the workspace runtime; null here exercises helper fallback.
       environmentId: null,
       activate: true
     })
-    expect(createTab).toHaveBeenCalledWith('wt-1')
+    expect(createTab).toHaveBeenCalledWith('wt-1', undefined, undefined, expect.anything())
     expect(setActiveTabType).toHaveBeenCalledWith('terminal', 'wt-1')
 
-    // Exact regression sequence: Local default -> connect/navigate Windows 2 ->
-    // reveal a local terminal -> restart. Connection and navigation are transient.
+    // Reproduce local default → remote navigation → local reveal → restart; transient connection/navigation must not change durable default.
     storeState.repos.push({
       id: 'windows-2-repo',
       connectionId: null,
@@ -231,7 +229,15 @@ describe('useIpcEvents updater integration', () => {
       activate: false,
       recordInteraction: false,
       launchAgent: 'codex',
-      startupCwd: '/repo/packages/app'
+      startupCwd: '/repo/packages/app',
+      pendingStartup: {
+        command: 'codex',
+        launchConfig: {
+          agentArgs: '--model gpt-5',
+          agentEnv: { CODEX_PROFILE: 'request' }
+        },
+        launchAgent: 'codex'
+      }
     })
     expect(setActiveView).not.toHaveBeenCalled()
     expect(setActiveWorktree).not.toHaveBeenCalled()
@@ -251,14 +257,7 @@ describe('useIpcEvents updater integration', () => {
     expect(setTabCustomTitle).toHaveBeenCalledWith('tab-new', 'Codex', {
       recordInteraction: false
     })
-    expect(queueTabStartupCommand).toHaveBeenCalledWith('tab-new', {
-      command: 'codex',
-      launchConfig: {
-        agentArgs: '--model gpt-5',
-        agentEnv: { CODEX_PROFILE: 'request' }
-      },
-      launchAgent: 'codex'
-    })
+    expect(queueTabStartupCommand).not.toHaveBeenCalled()
     expect(replyTerminalCreate).toHaveBeenCalledWith({
       requestId: 'req-renderer-backed',
       tabId: 'tab-new',
@@ -282,7 +281,8 @@ describe('useIpcEvents updater integration', () => {
 
     expect(createTab).toHaveBeenCalledWith('wt-2', 'group-left', undefined, {
       launchAgent: 'codex',
-      viewMode: 'terminal'
+      viewMode: 'terminal',
+      pendingStartup: { command: 'codex', launchAgent: 'codex' }
     })
     expect(replyTerminalCreate).toHaveBeenCalledWith({
       requestId: 'req-runtime-session',
@@ -444,7 +444,8 @@ describe('useIpcEvents updater integration', () => {
 
     expect(createTab).toHaveBeenCalledWith('wt-2', undefined, undefined, {
       activate: false,
-      recordInteraction: false
+      recordInteraction: false,
+      pendingStartup: { command: 'codex' }
     })
     expect(setActiveView).not.toHaveBeenCalled()
     expect(setActiveWorktree).not.toHaveBeenCalled()

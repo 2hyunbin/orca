@@ -8,9 +8,9 @@ import {
   MANAGED_HOOK_TIMEOUT_MILLISECONDS,
   removeManagedCommands,
   wrapPosixHookCommand,
-  wrapWindowsHookCommand,
   type HookDefinition
 } from '../agent-hooks/installer-utils'
+import { wrapWindowsBatchHookCommand } from '../agent-hooks/windows-direct-cmd-hook-command'
 
 const KIRO_SCRIPT_BASE = 'kiro-hook'
 
@@ -38,10 +38,7 @@ export function isKiroHooksConfigSupported(config: Record<string, unknown>): boo
   )
 }
 
-/**
- * Kiro has no global hook config: hooks live in each agent file, and the built-in
- * `kiro_default` agent has none to edit. So Orca patches every global agent the user owns.
- */
+/** Kiro has no global hook config and no editable built-in agent; patch each user-owned global agent file. */
 export function getKiroAgentsDir(): string {
   return join(resolveKiroHomeDir(), 'agents')
 }
@@ -66,9 +63,9 @@ export function getKiroManagedScriptPath(): string {
 }
 
 export function getKiroManagedCommand(scriptPath: string): string {
-  // Why: Kiro runs hook commands through PowerShell on Windows and sh elsewhere.
+  // Kiro uses PowerShell on Windows, sh elsewhere.
   return process.platform === 'win32'
-    ? wrapWindowsHookCommand(scriptPath)
+    ? wrapWindowsBatchHookCommand(scriptPath)
     : wrapPosixHookCommand(scriptPath)
 }
 
@@ -105,7 +102,7 @@ function hasManagedDefinition(
   )
 }
 
-/** Returns the agent config with exactly one Orca hook per event, user hooks untouched. */
+/** Preserve user hooks while converging to one Orca hook per event. */
 export function applyManagedKiroHooks(
   config: Record<string, unknown>,
   command: string,

@@ -1,7 +1,6 @@
 import type { TerminalReplyQuerySequence } from '../../../../../shared/terminal-reply-query-scan'
 import {
   iterateTerminalOutputFrameChunks,
-  sliceTerminalOutputSourceRanges,
   type TerminalOutputFrameChunk,
   type TerminalOutputMeta
 } from '../../terminal-output-frame-chunks'
@@ -58,12 +57,7 @@ export function getOutputAfterSnapshotSeq(
     bytes: chunk.bytes,
     meta: {
       ...chunk.meta,
-      rawLength: chunk.meta.rawLength - offset,
-      sourceRanges: sliceTerminalOutputSourceRanges(
-        chunk.meta.sourceRanges,
-        offset,
-        chunk.data.length
-      )
+      rawLength: chunk.meta.rawLength - offset
     }
   }
 }
@@ -172,7 +166,7 @@ export function* iterateTerminalStreamTextPayloads(
   if (!data) {
     return
   }
-  for (const chunk of iterateTerminalOutputFrameChunks(data)) {
+  for (const chunk of iterateTerminalOutputFrameChunks(data, undefined, 'text')) {
     yield chunk.bytes
   }
 }
@@ -181,7 +175,7 @@ export function isTerminalReadPayloadIncomplete(read: {
   truncated: boolean
   limited?: boolean
 }): boolean {
-  // Why: a limited preview is an incomplete payload even when the retained buffer wasn't truncated.
+  // Limited preview is incomplete even when retained history was not truncated.
   return read.truncated || read.limited === true
 }
 

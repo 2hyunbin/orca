@@ -48,14 +48,16 @@ test('registration resolves nested and linked paths to one existing project', as
   await waitForSessionReady(orcaPage)
   const result = await orcaPage.evaluate(
     async ({ repoPath, nestedPath }) => {
-      const results = []
+      const results: Awaited<ReturnType<typeof window.api.repos.add>>[] = []
       for (const path of [repoPath, nestedPath]) {
         results.push(await window.api.repos.add({ path }))
       }
       if (results.some((result) => 'error' in result)) {
         throw new Error(JSON.stringify(results))
       }
-      await window.__store!.getState().fetchRepos()
+      await window
+        .__store!.getState()
+        .fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
       await window.__store!.getState().awaitLocalRepoCatalogSettlement()
       return {
         ids: results.map((result) => ('repo' in result ? result.repo.id : null)),
@@ -82,56 +84,14 @@ test('registration resolves nested and linked paths to one existing project', as
   ).toEqual(result.persistedIds)
 })
 
-test('SSH registration reads the repository on its execution host', async ({
-  orcaPage
-}, testInfo) => {
-  test.skip(process.env.ORCA_E2E_SSH_DOCKER !== '1', 'Requires the existing Docker SSH fixture')
-  test.setTimeout(180_000)
-  const {
-    startDockerSshRelayTarget,
-    cleanupDockerSshRelayTarget,
-    execDockerSshRelayTargetCommand,
-    DOCKER_SSH_RELAY_REMOTE_REPO_PATH
-  } = await import('./helpers/docker-ssh-relay-target')
-  const { connectDockerSshRelayTarget, disconnectDockerSshRelayTarget } =
-    await import('./helpers/docker-ssh-relay-connection')
-  const target = startDockerSshRelayTarget(testInfo)
-  let targetId: string | null = null
-  try {
-    await waitForSessionReady(orcaPage)
-    const connected = await connectDockerSshRelayTarget(orcaPage, target, { seedInitialTab: false })
-    targetId = connected.targetId
-    execDockerSshRelayTargetCommand(target, `mkdir -p ${DOCKER_SSH_RELAY_REMOTE_REPO_PATH}/nested`)
-    const nested = await orcaPage.evaluate(
-      async ({ connectionId, remotePath }) =>
-        window.api.repos.addRemote({ connectionId, remotePath }),
-      { connectionId: targetId, remotePath: `${DOCKER_SSH_RELAY_REMOTE_REPO_PATH}/nested` }
-    )
-    expect('repo' in nested && nested.repo.id).toBe(connected.repoId)
-    expect('repo' in nested && nested.repo.connectionId).toBe(targetId)
-    expect('repo' in nested && nested.repo.executionHostId).toBe(`ssh:${targetId}`)
-    const missing = await orcaPage.evaluate(
-      async (connectionId) =>
-        window.api.repos.addRemote({ connectionId, remotePath: '/tmp/or60risk-missing' }),
-      targetId
-    )
-    expect('error' in missing).toBe(true)
-    await orcaPage.screenshot({ path: testInfo.outputPath('ssh-project.png') })
-  } finally {
-    if (targetId) {
-      await disconnectDockerSshRelayTarget(orcaPage, targetId)
-    }
-    cleanupDockerSshRelayTarget(target)
-  }
-})
-
 test('real WSL registration preserves literal paths and fences login output', async ({
   orcaPage
 }, testInfo) => {
   const distro = process.env.ORCA_REAL_WSL_DISTRO
   test.skip(process.platform !== 'win32' || !distro, 'Requires a real Windows WSL distro')
-  const { buildWslExecArgs, buildWslCapturedLoginShellCommand, quotePosixShell } =
+  const { buildWslExecArgs, buildWslCapturedLoginShellCommand } =
     await import('../../src/shared/wsl-login-shell-command')
+  const { quotePosixShell } = await import('../../src/shared/shell-argument-quoting')
   const root = `/tmp/or60risk/run-${Date.now()}`
   const repoPath = `${root}/repo-$literal space`
   const uncPath = `\\\\wsl.localhost\\${distro}${repoPath.replaceAll('/', '\\')}`

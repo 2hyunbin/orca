@@ -65,8 +65,7 @@ export function hostTestAttachParams(
   }
 }
 
-/** The row ids a chat draws from `snapshot`, top to bottom, while its composer still holds `sent`
- *  as dispatched, as it does until the journal accepts them. */
+/** Render snapshot rows while sent composer items await journal acceptance. */
 export function hostTestDrawnRowIds(
   snapshot: AgentJournalSnapshot,
   sent: readonly { clientMessageId: string; text: string }[]
@@ -77,8 +76,6 @@ export function hostTestDrawnRowIds(
     queuedAt: HOST_TEST_NOW
   }))
   return projectNativeChatTranscriptMessages(
-    projectStructuredAgentSessionMessages(snapshot.items, optimistic, snapshot.submissions, {
-      rejectedInPlace: true
-    })
+    projectStructuredAgentSessionMessages(snapshot.items, optimistic, snapshot.submissions)
   ).map(({ id }) => id)
 }

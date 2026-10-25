@@ -67,6 +67,12 @@ export const uiTabAndBrowserCommandsApi = {
     ipcRenderer.on('ui:focusBrowserAddressBar', listener)
     return () => ipcRenderer.removeListener('ui:focusBrowserAddressBar', listener)
   },
+  onShowBrowserHistory: (callback: (target: BrowserPageCommandTarget) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, target: BrowserPageCommandTarget) =>
+      callback(target)
+    ipcRenderer.on('ui:showBrowserHistory', listener)
+    return () => ipcRenderer.removeListener('ui:showBrowserHistory', listener)
+  },
   onFindInBrowserPage: browserFindSubscriptions.subscribe,
   onReloadBrowserPage: (callback: (target: BrowserPageCommandTarget) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, target: BrowserPageCommandTarget) =>
@@ -198,6 +204,7 @@ export const uiTabAndBrowserCommandsApi = {
       setup?: WorktreeSetupLaunch
       startup?: { command: string; env?: Record<string, string> }
       defaultTabs?: WorktreeDefaultTabsLaunch
+      providesInitialSurface?: boolean
     }) => void
   ): (() => void) => {
     const listener = (
@@ -208,6 +215,7 @@ export const uiTabAndBrowserCommandsApi = {
         setup?: WorktreeSetupLaunch
         startup?: { command: string; env?: Record<string, string> }
         defaultTabs?: WorktreeDefaultTabsLaunch
+        providesInitialSurface?: boolean
       }
     ) => callback(data)
     ipcRenderer.on('ui:activateWorktree', listener)

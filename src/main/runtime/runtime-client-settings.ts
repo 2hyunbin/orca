@@ -5,99 +5,45 @@ import { applyPRBotAuthorOverride } from '../../shared/pr-bot-author-overrides'
 import { TASK_PROVIDERS } from '../../shared/task-providers'
 import {
   applyTerminalQuickCommandMutation,
-  MAX_QUICK_COMMANDS,
   type TerminalQuickCommandMutation
 } from '../../shared/terminal-quick-commands'
 import { haveSameDisabledTuiAgents } from '../../shared/tui-agent-selection'
 import { normalizeSourceControlAiSettings } from '../../shared/source-control-ai'
-import {
-  SOURCE_CONTROL_LAUNCH_ACTION_IDS,
-  type SourceControlAiActionDefaults
-} from '../../shared/source-control-ai-actions'
+import { SOURCE_CONTROL_LAUNCH_ACTION_IDS } from '../../shared/source-control-ai-actions'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { applyNativeChatSessionOptionSettingsMutation } from '../../shared/native-chat-session-option-defaults'
 import type { NativeChatSessionOptionSettingsMutation } from '../../shared/native-chat-session-options'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
-import type { ExecutionHostId } from '../../shared/execution-host'
 import type { TerminalQuickCommand } from '../../shared/terminal-quick-command-types'
 import { recordManagedHookInstallFailure } from '../agent-hooks/install-telemetry'
 import { applyAgentStatusHooksEnabled } from '../agent-hooks/managed-agent-hook-controls'
 import { isAgentStatusHooksEnabledForAgent } from '../../shared/agent-status-hooks-setting'
 import type { RuntimeStore } from './runtime-store-contract'
-
-export type RuntimeClientSettings = Pick<
-  GlobalSettings,
-  | 'defaultTuiAgent'
-  | 'disabledTuiAgents'
-  | 'agentCmdOverrides'
-  | 'agentDefaultArgs'
-  | 'agentDefaultEnv'
-  | 'agentStatusHooksEnabled'
-  | 'terminalCopyTrimsGutter'
-  | 'defaultTaskSource'
-  | 'defaultTaskViewPreset'
-  | 'visibleTaskProviders'
-  | 'defaultRepoSelection'
-  | 'defaultLinearTeamSelection'
-  | 'githubProjects'
-  | 'experimentalNewWorktreeCardStyle'
-  | 'experimentalNativeChat'
-  | 'compactWorktreeCards'
-  | 'minimaxGroupId'
-  | 'minimaxUsageModels'
-  | 'minimaxEndpoint'
-  | 'zcodePlanSite'
-  | 'prBotAuthorOverrides'
-  | 'artifactSharingEnabled'
-  | 'worktreeVisibilityDefaults'
-  | 'agentSkillSharingEnabled'
-  | 'machineName'
-> & {
-  /** Older clients still read these; neither is persisted or accepted as an update. */
-  openAgentTabsInChatByDefault?: boolean
-  experimentalStructuredNativeChat?: boolean
-  hostSettingOverrides: RuntimeHostDisplayLabelOverrides
-  sourceControlAi: RuntimeClientSourceControlAi
-}
-
-/** The saved per-action launch recipes (agent, prompt template, agent args), already migrated. */
-export type RuntimeClientSourceControlAi = { actions: SourceControlAiActionDefaults }
-
-/** Safe paired projection: host labels only; filesystem defaults stay host-private. */
-export type RuntimeHostDisplayLabelOverrides = Partial<
-  Record<ExecutionHostId, { displayLabel: string }>
->
-
-export type RuntimeClientSettingsUpdate = Pick<
-  Partial<GlobalSettings>,
-  | 'agentStatusHooksEnabled'
-  | 'defaultTuiAgent'
-  | 'disabledTuiAgents'
-  | 'agentDefaultArgs'
-  | 'agentDefaultEnv'
-  | 'defaultTaskSource'
-  | 'defaultTaskViewPreset'
-  | 'visibleTaskProviders'
-  | 'defaultRepoSelection'
-  | 'defaultLinearTeamSelection'
-  | 'githubProjects'
-  | 'experimentalNewWorktreeCardStyle'
-  | 'compactWorktreeCards'
-  | 'minimaxGroupId'
-  | 'minimaxUsageModels'
-  | 'minimaxEndpoint'
-  | 'zcodePlanSite'
-  | 'prBotAuthorOverrides'
-  | 'worktreeVisibilityDefaults'
-  | 'machineName'
->
+import {
+  agentLaunchSettingsMutationUpdates,
+  projectAgentLaunchSettings,
+  type AgentLaunchSettings,
+  type AgentLaunchSettingsMutation
+} from '../../shared/agent-launch-settings'
+import { legacyLaunchTextUpdates } from '../../shared/agent-launch-permission-updates'
+import { composeAgentLaunchProfile } from '../../shared/tui-agent-launch-defaults'
+import { agentLaunchSettingsRollbackUpdates } from './agent-launch-settings-rollback'
+import type {
+  RuntimeClientSettings,
+  RuntimeClientSettingsUpdate,
+  RuntimeClientSourceControlAi,
+  RuntimeHostDisplayLabelOverrides
+} from './runtime-client-settings-shape'
 
 export class RuntimeClientSettingsController {
   private reconciliationGeneration = 0
   private reconciliationTail: Promise<void> = Promise.resolve()
 
   constructor(
-    private readonly store: Pick<RuntimeStore, 'getSettings' | 'updateSettings'> | null,
+    private readonly store: Pick<
+      RuntimeStore,
+      'getSettings' | 'updateSettings' | 'runDurableMutation'
+    > | null,
     private readonly notifyReposChanged: (() => void) | undefined = undefined
   ) {}
 
@@ -106,15 +52,17 @@ export class RuntimeClientSettingsController {
       throw new Error('runtime_unavailable')
     }
     const settings = this.store.getSettings()
+    // Older clients read permission from composed argument text, before a stored choice existed.
+    const launchProfile = composeAgentLaunchProfile(settings, process.platform)
     return {
       defaultTuiAgent: settings.defaultTuiAgent ?? null,
+      newWorkspaceSetupOnly: false,
       disabledTuiAgents: settings.disabledTuiAgents ?? [],
       agentCmdOverrides: settings.agentCmdOverrides ?? {},
-      agentDefaultArgs: settings.agentDefaultArgs ?? {},
-      agentDefaultEnv: settings.agentDefaultEnv ?? {},
+      agentDefaultArgs: launchProfile.agentDefaultArgs,
+      agentDefaultEnv: launchProfile.agentDefaultEnv,
       agentStatusHooksEnabled: settings.agentStatusHooksEnabled !== false,
-      // Why projected: mobile's terminal Copy honours this, and a host predating
-      // the setting sends no key, which the client reads as on (#19770).
+      // Mobile honors this Copy option; absence from older hosts means on (#19770).
       terminalCopyTrimsGutter: settings.terminalCopyTrimsGutter !== false,
       defaultTaskSource: settings.defaultTaskSource ?? 'github',
       defaultTaskViewPreset: settings.defaultTaskViewPreset ?? 'issues',
@@ -140,8 +88,14 @@ export class RuntimeClientSettingsController {
       worktreeVisibilityDefaults: settings.worktreeVisibilityDefaults ?? { external: 'hide' },
       agentSkillSharingEnabled: isAgentSkillSharingEnabled(settings),
       machineName: settings.machineName ?? '',
-      // Why projected: a paired client's AI buttons start these actions' agents, and must honour
-      // the agent saved for each one as the desktop does. Absent on older hosts.
+      // Paired web Chat settings edit this host's new-chat default.
+      ...(settings.nativeChatPermissionMode
+        ? { nativeChatPermissionMode: settings.nativeChatPermissionMode }
+        : {}),
+      ...(settings.agentNativeChatPermissionModes
+        ? { agentNativeChatPermissionModes: settings.agentNativeChatPermissionModes }
+        : {}),
+      // Project per-action agent recipes so paired AI buttons honor host choices; older hosts omit them.
       sourceControlAi: projectSourceControlLaunchRecipes(settings),
       hostSettingOverrides: Object.fromEntries(
         [
@@ -157,7 +111,28 @@ export class RuntimeClientSettingsController {
     }
     const beforeSettings = this.store.getSettings()
     const before = beforeSettings.agentStatusHooksEnabled !== false
-    this.store.updateSettings(updates, { notifyListeners: true })
+    // Legacy clients can select an agent or a shell, but cannot select None.
+    this.store.updateSettings(
+      {
+        ...updates,
+        // An older client writes Arguments as it reads them, flag included.
+        ...(updates.agentDefaultArgs !== undefined || updates.agentDefaultEnv !== undefined
+          ? legacyLaunchTextUpdates(
+              beforeSettings,
+              {
+                agentDefaultArgs: updates.agentDefaultArgs,
+                agentDefaultEnv: updates.agentDefaultEnv
+              },
+              process.platform
+            )
+          : {}),
+        ...(updates.nativeChatPermissionMode !== undefined
+          ? { agentNativeChatPermissionModes: {} }
+          : {}),
+        ...(updates.defaultTuiAgent !== undefined ? { newWorkspaceSetupOnly: false } : {})
+      },
+      { notifyListeners: true }
+    )
     const settings = this.store.getSettings()
     if (updates.worktreeVisibilityDefaults !== undefined) {
       this.notifyReposChanged?.()
@@ -180,18 +155,60 @@ export class RuntimeClientSettingsController {
     return this.store.getSettings().terminalQuickCommands ?? []
   }
 
+  getAgentLaunch(): AgentLaunchSettings {
+    if (!this.store?.getSettings) {
+      throw new Error('runtime_unavailable')
+    }
+    return projectAgentLaunchSettings(this.store.getSettings(), process.platform)
+  }
+
+  async mutateAgentLaunch(mutation: AgentLaunchSettingsMutation): Promise<AgentLaunchSettings> {
+    const store = this.store
+    if (!store?.getSettings || !store.updateSettings || !store.runDurableMutation) {
+      throw new Error('runtime_unavailable')
+    }
+    const applySettings = store.updateSettings.bind(store)
+    const committed = await store.runDurableMutation(() => {
+      const before = store.getSettings()
+      const updates = agentLaunchSettingsMutationUpdates(before, mutation, process.platform)
+      applySettings(updates, { notifyListeners: true })
+      const applied = store.getSettings()
+      return {
+        value: {
+          settings: projectAgentLaunchSettings(applied, process.platform),
+          reconcileHooks:
+            updates.disabledTuiAgents !== undefined &&
+            !haveSameDisabledTuiAgents(before.disabledTuiAgents, applied.disabledTuiAgents)
+        },
+        rollback: () => {
+          const rollback = agentLaunchSettingsRollbackUpdates(
+            before,
+            applied,
+            store.getSettings(),
+            updates
+          )
+          if (Object.keys(rollback).length > 0) {
+            applySettings(rollback, { notifyListeners: true })
+          }
+        }
+      }
+    })
+    if (committed.reconcileHooks) {
+      void this.reconcileManagedAgentHooks().catch((error) => {
+        console.error(
+          '[agent-hooks] Failed to reconcile managed hooks after saving launch settings:',
+          error
+        )
+      })
+    }
+    return committed.settings
+  }
+
   updateTerminalQuickCommands(mutation: TerminalQuickCommandMutation): TerminalQuickCommand[] {
     if (!this.store?.getSettings || !this.store.updateSettings) {
       throw new Error('runtime_unavailable')
     }
     const current = this.getTerminalQuickCommands()
-    if (
-      mutation.type === 'upsert' &&
-      !current.some((command) => command.id === mutation.command.id) &&
-      current.length >= MAX_QUICK_COMMANDS
-    ) {
-      throw new Error('Quick command limit reached')
-    }
     const next = applyTerminalQuickCommandMutation(current, mutation)
     this.store.updateSettings({ terminalQuickCommands: next }, { notifyListeners: true })
     return this.getTerminalQuickCommands()

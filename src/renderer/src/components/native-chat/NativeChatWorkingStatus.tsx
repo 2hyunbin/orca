@@ -44,8 +44,7 @@ function turnStatusLabel(
   }
 }
 
-/** The turn bar under the user's message: a running clock while the turn works,
- *  then the settled duration, which toggles the turn's folded detail. */
+/** Run the clock beneath the prompt; after settlement its duration toggles turn details. */
 export function NativeChatWorkingStatus({
   startedAt,
   workedSeconds,
@@ -87,7 +86,7 @@ export function NativeChatWorkingStatus({
         data-native-chat-turn-status="settled"
         className={cn(
           className,
-          'w-full text-left hover:text-chat-foreground-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70'
+          'w-full text-left hover:text-chat-foreground-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring'
         )}
         aria-label={translate(
           'components.native-chat.status.toggleDetails',

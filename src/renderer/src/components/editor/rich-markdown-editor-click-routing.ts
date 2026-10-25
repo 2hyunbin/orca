@@ -11,7 +11,6 @@ import {
 } from '@/lib/workspace-browser-tab-open'
 import { isLocalPathOpenBlocked, showLocalPathOpenBlockedToast } from '@/lib/local-path-open-guard'
 import { getLinkSourceLocalOpenOwner } from '@/lib/link-source-local-open-owner'
-import type { settingsForRuntimeOwner } from '@/runtime/runtime-rpc-client'
 import {
   absolutePathToFileUri as toFileUrlForOsEscape,
   resolveMarkdownLinkTarget
@@ -39,8 +38,6 @@ export type ActivateMarkdownLink = (
     sourceOwner?: HttpLinkSourceOwner
   }
 ) => void | Promise<unknown>
-
-export type RichMarkdownRuntimeSettings = Parameters<typeof settingsForRuntimeOwner>[0]
 
 type RichMarkdownEditorClickRoutingOptions = {
   activateMarkdownLink: ActivateMarkdownLink
@@ -241,8 +238,7 @@ function openShiftModifiedMarkdownLink({
         : getLinkSourceLocalOpenOwner(useAppStore.getState(), sourceOwner, worktreeId)
     )
   ) {
-    // Why: Shift-click opens through the client OS, which cannot safely resolve
-    // server-local paths from SSH or remote runtime worktrees.
+    // Client-OS Shift-click cannot resolve server-local SSH/runtime paths safely.
     showLocalPathOpenBlockedToast()
     return
   }

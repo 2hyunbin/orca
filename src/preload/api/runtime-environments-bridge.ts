@@ -7,14 +7,19 @@ import type { VerifyAndAddRuntimeEnvironmentResult } from '../../shared/remote-p
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import type { RuntimeRpcResponse } from '../../shared/runtime-rpc-envelope'
 import type { PublicKnownRuntimeEnvironment } from '../../shared/runtime-environments'
-import type { RemoteRuntimeSharedConnectionDiagnostics } from '../../shared/remote-runtime-shared-control-types'
+import type { RemoteRuntimeSharedConnectionDiagnostics } from '../../shared/remote-runtime/control/remote-runtime-shared-control-types'
 import { RUNTIME_ENVIRONMENT_DIAGNOSTICS_CHANNEL } from '../../shared/runtime-environment-diagnostics'
+import {
+  WSL_ORCAD_ACCOUNT_NOT_APPLIED_CHANNEL,
+  type WslOrcadAccountNotAppliedEvent
+} from '../../shared/wsl-orcad-account-notice'
 import {
   subscribeRuntimeEnvironmentFromPreload,
   type RuntimeEnvironmentSubscriptionHandle
 } from '../runtime-environment-subscriptions'
 import type { PreloadApi } from '../api-types'
 import { managedOrcadApi } from './managed-orcad-api'
+import { getWslHostsApi } from './wsl-hosts-api'
 
 export const runtimeEnvironmentsApi = {
   getStatusSnapshots: (): Promise<RuntimeHostStatusSnapshot[]> =>
@@ -40,6 +45,11 @@ export const runtimeEnvironmentsApi = {
     allowLoopback?: boolean
   }): Promise<VerifyAndAddRuntimeEnvironmentResult> =>
     ipcRenderer.invoke('runtimeEnvironments:verifyAndAddFromPairingCode', args),
+  repairFromPairingCode: (args: {
+    selector: string
+    pairingCode: string
+  }): Promise<VerifyAndAddRuntimeEnvironmentResult> =>
+    ipcRenderer.invoke('runtimeEnvironments:repairFromPairingCode', args),
   resolve: (args: { selector: string }): Promise<PublicKnownRuntimeEnvironment> =>
     ipcRenderer.invoke('runtimeEnvironments:resolve', args),
   remove: (args: { selector: string }): Promise<{ removed: PublicKnownRuntimeEnvironment }> =>
@@ -59,8 +69,6 @@ export const runtimeEnvironmentsApi = {
     observeOnly?: true
   }): Promise<RuntimeRpcResponse<RuntimeStatus>> =>
     ipcRenderer.invoke('runtimeEnvironments:getStatus', args),
-  retryControlConnection: (args: { selector: string }): Promise<void> =>
-    ipcRenderer.invoke('runtimeEnvironments:retryControlConnection', args),
   onSharedControlDiagnostics: (
     callback: (event: {
       environmentId: string
@@ -78,6 +86,16 @@ export const runtimeEnvironmentsApi = {
     ): void => callback(data)
     ipcRenderer.on(RUNTIME_ENVIRONMENT_DIAGNOSTICS_CHANNEL, listener)
     return () => ipcRenderer.removeListener(RUNTIME_ENVIRONMENT_DIAGNOSTICS_CHANNEL, listener)
+  },
+  onWslAccountNotApplied: (
+    callback: (event: WslOrcadAccountNotAppliedEvent) => void
+  ): (() => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      data: WslOrcadAccountNotAppliedEvent
+    ): void => callback(data)
+    ipcRenderer.on(WSL_ORCAD_ACCOUNT_NOT_APPLIED_CHANNEL, listener)
+    return () => ipcRenderer.removeListener(WSL_ORCAD_ACCOUNT_NOT_APPLIED_CHANNEL, listener)
   },
   prepareBrowserClientHostPlacement: (args) =>
     ipcRenderer.invoke('runtimeEnvironments:prepareBrowserClientHostPlacement', args),
@@ -111,5 +129,6 @@ export const runtimeEnvironmentsApi = {
     }
   ): Promise<RuntimeEnvironmentSubscriptionHandle> =>
     subscribeRuntimeEnvironmentFromPreload(ipcRenderer, args, callbacks),
-  managedOrcad: managedOrcadApi
+  managedOrcad: managedOrcadApi,
+  wslHosts: getWslHostsApi()
 } satisfies PreloadApi['runtimeEnvironments']

@@ -55,9 +55,9 @@ describe('agent session resume metadata', () => {
     ['jcode', { session_id: 'session_jc_1' }, { key: 'session_id', id: 'session_jc_1' }],
     ['jcode', { sessionId: 'session_jc_2' }, { key: 'session_id', id: 'session_jc_2' }],
     [
-      'kiro',
-      { session_id: 'sess_dc17e658-cf15-4822-80df-0f356f21879a', hook_event_name: 'Stop' },
-      { key: 'session_id', id: 'sess_dc17e658-cf15-4822-80df-0f356f21879a' }
+      'hermes',
+      { session_id: '20261020_221305_5e3a1c' },
+      { key: 'session_id', id: '20261020_221305_5e3a1c' }
     ]
   ] as const)('extracts %s provider session ids', (source, payload, expected) => {
     expect(extractAgentProviderSession(source, payload)).toEqual(expected)
@@ -92,11 +92,7 @@ describe('agent session resume metadata', () => {
       ['kimi', '--session', 'session_431324d7']
     ],
     ['jcode', { key: 'session_id', id: 'session_jc_1' }, ['jcode', '--resume', 'session_jc_1']],
-    [
-      'kiro',
-      { key: 'session_id', id: 'sess_dc17e658' },
-      ['kiro-cli', '--resume-id', 'sess_dc17e658']
-    ]
+    ['hermes', { key: 'session_id', id: 's1' }, ['hermes', '--resume', 's1']]
   ] as const)('builds %s resume argv', (agent, providerSession, expected) => {
     expect(getAgentResumeArgv(agent, providerSession)).toEqual(expected)
   })
