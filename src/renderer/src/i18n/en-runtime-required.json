@@ -1813,6 +1813,15 @@
             }
           }
         },
+        "claudeSubagentNavigation": {
+          "search": {
+            "mod": "mod",
+            "navigation": "navigation",
+            "plugin": "plugin",
+            "shortcut": "shortcut",
+            "subagent": "subagent"
+          }
+        },
         "computerUseSkillRuntime": {
           "thisDevice": "This device"
         },
