@@ -10,7 +10,7 @@ import { isWordlessProviderFrameMessage } from '../../../src/shared/native-chat/
 import {
   foldToolMessages,
   isUndrawnProviderFrameMessage
-} from '../../../src/shared/native-chat-tool-fold'
+} from '../../../src/shared/native-chat/tools/native-chat-tool-fold'
 import { projectNativeChatTaskListFrames } from '../../../src/shared/native-chat-task-list-frames'
 import { foldSubagentItems } from '../../../src/shared/native-chat-subagent-items'
 import { prepareNativeChatMessages } from '../../../src/shared/native-chat-message-preparation'
@@ -19,7 +19,7 @@ import {
   type AgentType,
   type NativeChatMessage
 } from '../../../src/shared/native-chat-types'
-import { isImageSourceUserTurn } from './mobile-native-chat-image-transcript-markers'
+import { isImageSourceUserTurn } from '../../../src/shared/native-chat-image-transcript-markers'
 import type { MobileNativeChatStatus } from './use-mobile-native-chat-session'
 
 /** The centered empty-state copy for a chat with no messages, mirroring the
