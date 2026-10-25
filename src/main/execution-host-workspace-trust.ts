@@ -1,13 +1,14 @@
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { markQoderWorkspaceTrusted } from './qoder/workspace-trust'
 import {
   type AgentTrustPreset,
   markAntigravityWorkspaceTrusted,
   markCodexProjectTrusted,
   markCopilotFolderTrusted,
-  markCursorWorkspaceTrusted
+  markCursorWorkspaceTrusted,
+  markKimiWorkspaceTrusted
 } from './agent-trust-presets'
 import { awaitAgentTrustWriteWithinDeadline } from './agent-trust-write-deadline'
 import {
@@ -26,6 +27,8 @@ export type WorkspaceTrustHost = {
   claudeConfig: () => ClaudeTrustConfigTarget | null
   /** Every config.toml the launched Codex may read, in the hook installer's lock order. */
   codexConfigFiles: () => readonly string[]
+  /** KIMI_CODE_HOME for the launched Kimi; unset means `<agentHome>/.kimi-code`. */
+  kimiHome?: string
   deadlineMs: number
 }
 
@@ -44,7 +47,8 @@ export const AGENT_TRUST_INHERITS_FROM_A_HOME: Record<AgentTrustPreset, boolean>
   copilot: true,
   qoder: true,
   'qoder-cn': true,
-  antigravity: false
+  antigravity: false,
+  kimi: false
 }
 
 /** Trust these agents’ starting folders; a workspace ancestor may not be a valid trust key. */
@@ -55,7 +59,8 @@ export const AGENT_TRUST_KEYED_BY_START_FOLDER: Record<AgentTrustPreset, boolean
   copilot: false,
   qoder: false,
   'qoder-cn': false,
-  antigravity: false
+  antigravity: false,
+  kimi: true
 }
 
 // Claude stores resolved paths; resolve also collapses .. when realpath fails.
@@ -98,6 +103,11 @@ async function writePreset(
       return markQoderWorkspaceTrusted(storedPath, host.agentHome)
     case 'antigravity':
       return markAntigravityWorkspaceTrusted(storedPath, host.agentHome)
+    case 'kimi':
+      return markKimiWorkspaceTrusted(
+        storedPath,
+        host.kimiHome || join(host.agentHome, '.kimi-code')
+      )
   }
 }
 
