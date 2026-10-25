@@ -111,14 +111,8 @@ async function decideConptyStartup(
 
 function discardConpty(proc: pty.IPty, watch: Pick<ConptyStartupWatch, 'claim'>): void {
   watch.claim()
-  // The job reaps anything the shell already started; without one, the shell is all there is.
-  if (terminatePtyJob(proc) !== 'terminated') {
-    try {
-      process.kill(proc.pid)
-    } catch {
-      // Already gone.
-    }
-  }
+  // Handle-based only: a pid may already be recycled if the shell exited during startup.
+  terminatePtyJob(proc)
   killConptyNow(proc)
   proc.kill()
 }

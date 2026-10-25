@@ -78,8 +78,7 @@ describe('Windows shell fallback over node-pty ConPTY', () => {
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     nodePty.spawn.mockReset()
-    // A real pid fallback kill must never run in tests.
-    ptyJob.terminatePtyJob.mockReset().mockReturnValue('terminated')
+    ptyJob.terminatePtyJob.mockReset()
     _resetConptyStartupTrustForTest()
   })
   afterEach(() => {
