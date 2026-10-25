@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium } from 'playwright-core'
-import { buildMobileWebAppBundle } from './build-mobile-web-app-bundle.mjs'
+import { buildMobileWebAppBundle } from '../build-mobile-web-app-bundle.mjs'
 import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
 import {
   createBundleServer,
@@ -11,7 +11,7 @@ import {
   readBridgeFaultGrant,
   readBridgeProtocolVersion,
   readShellCsp
-} from './mobile-web-app-render-harness.mjs'
+} from './preview/mobile-web-app-render-harness.mjs'
 
 /**
  * The machines page route in a real browser, against a shell that answers machines.list and

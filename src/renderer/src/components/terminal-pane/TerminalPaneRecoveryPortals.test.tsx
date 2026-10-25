@@ -17,7 +17,12 @@ vi.mock('@/i18n/i18n', () => ({
     fallback.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => options?.[name] ?? ''),
   getIntlLocale: () => 'en-US'
 }))
-vi.mock('@/store', () => ({ useAppStore: (selector: (state: unknown) => unknown) => selector({}) }))
+vi.mock('@/store', () => ({
+  useAppStore: (selector: (state: unknown) => unknown) => selector({ machineWakeByWorktreeId: {} })
+}))
+vi.mock('@/components/machines/use-worktree-machine', () => ({
+  useWorktreeStoppedMachine: () => null
+}))
 vi.mock('./use-wsl-host-unavailable-reason', () => ({ useWslHostUnavailableReason: () => null }))
 vi.mock('./use-managed-pairing-refused', () => ({
   useManagedPairingRefusedEnvironmentId: () => null

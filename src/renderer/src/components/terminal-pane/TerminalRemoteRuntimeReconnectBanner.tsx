@@ -130,9 +130,13 @@ export function TerminalRemoteRuntimeReconnectBanner({
         <RemoteRuntimeRecoveryCard
           icon="stopped"
           data={{ 'data-terminal-remote-runtime-reconnect-banner': 'disconnected' }}
-          title={translate('auto.lib.machines.machineWakeOnOpen.wakeFailed', 'Couldn’t wake {{name}}', {
-            name: wakingMachineName
-          })}
+          title={translate(
+            'auto.lib.machines.machineWakeOnOpen.wakeFailed',
+            'Couldn’t wake {{name}}',
+            {
+              name: wakingMachineName
+            }
+          )}
           body={wakeFailure}
           action={{
             label: translate(
