@@ -5,10 +5,7 @@ import type { DiffComment } from '../../../src/shared/diff-comment-types'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ReviewScreenState } from '../session/mobile-diff-review-screen-model'
 
-// iOS cannot present a review sheet while another is still on screen (even mid-close): the second
-// presentation silently fails and every later tap on the screen is swallowed. These drive the real
-// controller and keyed drawer; only the native drawer is mocked, and its finished hide animation is
-// played by calling its `onHidden`.
+// Drive real controller/keyed drawer with mocked native hide completion; iOS rejects overlapping review sheets and can swallow later taps.
 
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
