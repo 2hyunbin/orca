@@ -228,12 +228,8 @@ describe('the row a usage limit leaves', () => {
   const row: AgentJournalStatusItem = {
     kind: 'status',
     tone: 'warning',
-    ...agentSessionFailureWords(
-      agentSessionFailureFact('usageLimitReached', {
-        usageLimit: { window: 'session', resetsAt }
-      }),
-      { agentName: 'Claude', surface: 'row' }
-    )
+    text: 'Claude hit its session limit. Send a message once it resets to continue.',
+    failure: { kind: 'usageLimitReached', usageLimit: { window: 'session', resetsAt } }
   }
 
   it.each([
@@ -278,12 +274,34 @@ describe('the row a usage limit leaves', () => {
     }
   })
 
-  it('keeps historical usage-limit notices free of continuation guidance', () => {
-    renderStatus(row, null, false, false, 'Claude')
-    expect(screen.getByText(/Claude hit its session limit\. It resets at/)).toBeInTheDocument()
-    expect(screen.queryByText(/Send a message once it resets/)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
-  })
+  it.each(['typed', 'text-only', 'unknown'] as const)(
+    'renders historical usage-limit text with a %s fact',
+    (fact) => {
+      const historicalRow =
+        fact === 'text-only'
+          ? { ...row, failure: undefined }
+          : fact === 'unknown'
+            ? {
+                ...row,
+                failure: {
+                  ...row.failure,
+                  kind: 'usageLimitReached' as const,
+                  futureLimit: true
+                }
+              }
+            : row
+      renderStatus(historicalRow, null, false, false, 'Claude')
+      if (fact === 'typed') {
+        expect(
+          screen.getByText(/^Claude hit its session limit\. It resets at \S.*\.$/u)
+        ).toBeInTheDocument()
+        expect(screen.queryByText(/Send a message once it resets/)).toBeNull()
+      } else {
+        expect(screen.getByText(row.text)).toBeInTheDocument()
+      }
+      expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    }
+  )
 })
 
 describe('notice rows', () => {
