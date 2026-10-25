@@ -70,6 +70,7 @@ describe('browserManager', () => {
     const guest = {
       id: 405,
       isDestroyed: vi.fn(() => false),
+      isCurrentlyAudible: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
@@ -94,6 +95,8 @@ describe('browserManager', () => {
       webContentsId: guest.id,
       rendererWebContentsId
     })
+    // Registration also reports audio state; this test is about shortcut forwarding.
+    rendererSendMock.mockClear()
 
     const beforeInputHandler = guestOnMock.mock.calls.findLast(
       ([event]) => event === 'before-input-event'
@@ -161,6 +164,7 @@ describe('browserManager', () => {
     const guest = {
       id: 406,
       isDestroyed: vi.fn(() => false),
+      isCurrentlyAudible: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
@@ -185,6 +189,8 @@ describe('browserManager', () => {
       webContentsId: guest.id,
       rendererWebContentsId
     })
+    // Registration also reports audio state; this test is about shortcut forwarding.
+    rendererSendMock.mockClear()
 
     const beforeInputHandler = guestOnMock.mock.calls.findLast(
       ([event]) => event === 'before-input-event'
@@ -284,6 +290,15 @@ describe('browserManager', () => {
         control: !isDarwin,
         alt: false,
         shift: true
+      },
+      {
+        type: 'keyDown',
+        code: isDarwin ? 'KeyY' : 'KeyH',
+        key: isDarwin ? 'y' : 'h',
+        meta: isDarwin,
+        control: !isDarwin,
+        alt: false,
+        shift: false
       }
     ]
 
@@ -311,6 +326,9 @@ describe('browserManager', () => {
     expect(rendererSendMock).toHaveBeenNthCalledWith(10, 'ui:hardReloadBrowserPage', {
       browserPageId: 'browser-1'
     })
+    expect(rendererSendMock).toHaveBeenNthCalledWith(11, 'ui:showBrowserHistory', {
+      browserPageId: 'browser-1'
+    })
   })
 
   it('uses customized keybindings when forwarding browser guest shortcuts', () => {
@@ -320,6 +338,7 @@ describe('browserManager', () => {
     const guest = {
       id: 407,
       isDestroyed: vi.fn(() => false),
+      isCurrentlyAudible: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
@@ -350,6 +369,8 @@ describe('browserManager', () => {
       webContentsId: guest.id,
       rendererWebContentsId
     })
+    // Registration also reports audio state; this test is about shortcut forwarding.
+    rendererSendMock.mockClear()
 
     const beforeInputHandler = guestOnMock.mock.calls.findLast(
       ([event]) => event === 'before-input-event'
@@ -424,6 +445,7 @@ describe('browserManager', () => {
     const guest = {
       id: 407,
       isDestroyed: vi.fn(() => false),
+      isCurrentlyAudible: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,
@@ -448,6 +470,8 @@ describe('browserManager', () => {
       webContentsId: guest.id,
       rendererWebContentsId
     })
+    // Registration also reports audio state; this test is about shortcut forwarding.
+    rendererSendMock.mockClear()
 
     const beforeInputHandler = guestOnMock.mock.calls.findLast(
       ([event]) => event === 'before-input-event'
@@ -494,6 +518,7 @@ describe('browserManager', () => {
     const guest = {
       id: 408,
       isDestroyed: vi.fn(() => false),
+      isCurrentlyAudible: vi.fn(() => false),
       getType: vi.fn(() => 'webview'),
       setBackgroundThrottling: guestSetBackgroundThrottlingMock,
       setWindowOpenHandler: guestSetWindowOpenHandlerMock,

@@ -5,7 +5,15 @@ import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contrac
 import { AgentHookServer } from '../agent-hooks/server'
 import { OrcaRuntimeService } from './orca-runtime'
 import type { MobileNotificationEvent } from './runtime-mobile-notification-controller'
-import type { RuntimeStore } from './runtime-store-contract'
+import { getDefaultNotificationSettings } from '../../shared/notification-settings-defaults'
+import {
+  partialRuntimeStore,
+  storeFolderWorkspace,
+  storeProjectGroup,
+  storeRepo,
+  storeWorktreeMeta,
+  type PartialRuntimeStore
+} from './runtime-store-partial-fixture'
 
 export const terminalHostCleanups: (() => void)[] = []
 
@@ -22,18 +30,25 @@ class TestRuntime extends OrcaRuntimeService {
 }
 
 export function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
-  const records = new Map<string, SidebarRecord>()
+  const records = new Map<string, WorktreeMeta>()
   const addWorkspace = (id: string, hostId: ExecutionHostId): SidebarRecord => {
-    const record = { displayName: 'feature', hostId, lastActivityAt: 0, isUnread: false }
+    const record = storeWorktreeMeta({
+      displayName: 'feature',
+      hostId,
+      lastActivityAt: 0,
+      isUnread: false
+    })
     records.set(`${hostId}|${id}`, record)
     return record
   }
   addWorkspace(WT, 'local')
-  const store = {
+  const store: PartialRuntimeStore = {
     getRepos: () => [],
     getRepo: (id: string) =>
-      id === 'repo-1' ? { id, connectionId: null, displayName: 'orca' } : undefined,
-    getSettings: () => ({ notifications: { enabled: true, agentTaskComplete: true } }),
+      id === 'repo-1'
+        ? storeRepo({ id, path: '/repo-1', connectionId: null, displayName: 'orca' })
+        : undefined,
+    getSettings: () => ({ notifications: getDefaultNotificationSettings() }),
     getWorktreeMeta: (id: string) => records.get(`local|${id}`),
     getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) => records.get(`${hostId}|${id}`),
     setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<SidebarRecord>) => {
@@ -43,11 +58,12 @@ export function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID)
       }
     },
     getAllWorktreeMeta: () => ({}),
-    getFolderWorkspaces: () => [{ id: 'f1', name: 'Notes', projectGroupId: 'g1' }],
-    getProjectGroups: () => [{ id: 'g1', name: 'Research' }]
+    getFolderWorkspaces: () => [
+      storeFolderWorkspace({ id: 'f1', name: 'Notes', projectGroupId: 'g1', folderPath: '/notes' })
+    ],
+    getProjectGroups: () => [storeProjectGroup({ id: 'g1', name: 'Research' })]
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: backs the notification and sidebar paths exercised here.
-  const runtime = new TestRuntime(store as unknown as RuntimeStore)
+  const runtime = new TestRuntime(partialRuntimeStore(store))
   if (windowId !== null) {
     runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
   }
