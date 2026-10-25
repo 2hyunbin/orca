@@ -63,21 +63,26 @@ function failingCreate(runtime: AgentLaunchRuntimeStub, error: Error, afterDispa
 }
 
 describe('a launch whose terminal fails', () => {
-  // The ledger admits against `Date.now()`, so the ids must be dated now.
-  const OPERATION_ID = `${Date.now()}-000000000000000000000000000000cc`
-  const OTHER_OPERATION_ID = `${Date.now()}-000000000000000000000000000000dd`
+  const NOW = 1_800_000_000_000
+  const OPERATION_ID = `${NOW}-000000000000000000000000000000cc`
+  const OTHER_OPERATION_ID = `${NOW}-000000000000000000000000000000dd`
   let directory: string
   let store: AgentSessionRecordStore
 
   beforeEach(async () => {
+    vi.useFakeTimers({ now: NOW, toFake: ['Date'] })
     directory = await mkdtemp(join(tmpdir(), 'orca-agent-launch-prestart-'))
     store = await openTestAgentSessionRecordStore(directory)
     setAgentLaunchRecordStore(store)
   })
 
   afterEach(async () => {
-    setAgentLaunchRecordStore(null)
-    await rm(directory, { recursive: true, force: true })
+    try {
+      setAgentLaunchRecordStore(null)
+      await rm(directory, { recursive: true, force: true })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   function outcomeOf(operationId: string) {
@@ -171,7 +176,7 @@ describe('a launch whose terminal fails', () => {
       callerKey,
       operationId: OPERATION_ID,
       fingerprint: computeAgentLaunchFingerprint(launch),
-      now: Date.now()
+      now: NOW
     })
     await store.claimOperation({ callerKey, operationId: OPERATION_ID })
     await store.recordOperationOutcome({
@@ -352,7 +357,7 @@ describe('a launch whose terminal fails', () => {
       callerKey,
       operationId: OPERATION_ID,
       fingerprint: computeAgentLaunchFingerprint(launch),
-      now: Date.now()
+      now: NOW
     })
     await store.claimOperation({ callerKey, operationId: OPERATION_ID })
     await store.recordOperationOutcome({
