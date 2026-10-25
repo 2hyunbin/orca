@@ -1,12 +1,16 @@
 import { ipcRenderer } from 'electron'
 import type { PreloadApi } from '../api-types'
 import type { BrowserUserAgentMode } from '../../shared/browser-user-agent-mode'
+import type { ManagedBrowserProfileOwner } from '../../shared/browser-profile-scope'
 import type { GrabIntent } from '../../shared/browser-grab-types'
 import type {
   BrowserSitePermission,
   BrowserSitePermissionDecision
 } from '../../shared/browser-site-permission'
-import type { BrowserContextMenuRequestedEvent } from '../../shared/browser-guest-events'
+import type {
+  BrowserContextMenuRequestedEvent,
+  BrowserTargetUrlChangedEvent
+} from '../../shared/browser-guest-events'
 
 export const browserPageInteractionAndSessionsApi = {
   onContextMenuRequested: (
@@ -22,6 +26,12 @@ export const browserPageInteractionAndSessionsApi = {
       callback(data)
     ipcRenderer.on('browser:context-menu-dismissed', listener)
     return () => ipcRenderer.removeListener('browser:context-menu-dismissed', listener)
+  },
+  onTargetUrlChanged: (callback: (event: BrowserTargetUrlChangedEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: BrowserTargetUrlChangedEvent) =>
+      callback(data)
+    ipcRenderer.on('browser:target-url-changed', listener)
+    return () => ipcRenderer.removeListener('browser:target-url-changed', listener)
   },
   onNavigationUpdate: (
     callback: (event: { browserPageId: string; url: string; title: string }) => void
@@ -122,6 +132,11 @@ export const browserPageInteractionAndSessionsApi = {
     return () => ipcRenderer.removeListener('browser:grabActionShortcut', listener)
   },
   sessionListProfiles: () => ipcRenderer.invoke('browser:session:listProfiles'),
+  onSessionProfilesChanged: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on('browser:session:profilesChanged', listener)
+    return () => ipcRenderer.removeListener('browser:session:profilesChanged', listener)
+  },
   prepareSshWorkspacePartition: (args: {
     targetId: string
     expectedSshTargetGeneration?: number
@@ -131,6 +146,8 @@ export const browserPageInteractionAndSessionsApi = {
     ipcRenderer.invoke('browser:prepareSshWorkspacePartition', args),
   sessionCreateProfile: (args: { scope: 'default' | 'isolated' | 'imported'; label: string }) =>
     ipcRenderer.invoke('browser:session:createProfile', args),
+  sessionEnsureManagedProfile: (args: { owner: ManagedBrowserProfileOwner; label: string }) =>
+    ipcRenderer.invoke('browser:session:ensureManagedProfile', args),
   identityGet: () => ipcRenderer.invoke('browser:identity:get'),
   identitySet: (mode: BrowserUserAgentMode) => ipcRenderer.invoke('browser:identity:set', mode),
   sessionDeleteProfile: (args: { profileId: string }): Promise<boolean> =>
