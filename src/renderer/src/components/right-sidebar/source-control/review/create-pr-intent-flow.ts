@@ -1,3 +1,4 @@
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import {
   isBehindOnlyUpstream,
   shouldForcePushWithLeaseForUpstream
@@ -29,6 +30,8 @@ export type CreatePrIntentRunToken = {
   branch: string
   provider: HostedReviewProvider
   baseRef?: string | null
+  /** The worktree copy the run started on; a same-path twin on another host shares the id. */
+  ownerHostId?: ExecutionHostId | null
   startedAt: number
 }
 

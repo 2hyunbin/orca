@@ -106,7 +106,8 @@ export function routeListingBranchSwitchesThroughGitIdentity(args: {
         // explicit detached signal expected by updateWorktreeGitIdentity.
         branch: worktree.branch === '' ? null : worktree.branch
       },
-      existing.hostId ?? null
+      // Why null: ambiguous ids were skipped above, so this id has one copy.
+      null
     )
   }
   return reconciled ?? incoming

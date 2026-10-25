@@ -255,7 +255,7 @@ export function createUpdateWorktreeMeta(
       return { ok: true }
     }
     if (hasHostedReviewLinkUpdates(enriched)) {
-      bumpHostedReviewLinkMutationGeneration(worktreeId)
+      bumpHostedReviewLinkMutationGeneration(worktreeId, worktreeForUpdate)
     }
 
     try {

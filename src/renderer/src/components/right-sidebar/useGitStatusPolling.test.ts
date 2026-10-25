@@ -12,9 +12,10 @@ import {
 
 const worktree = { id: 'repo-1::/repo', repoId: 'repo-1', path: '/repo' }
 const repo = { id: 'repo-1', path: '/repo', kind: 'git', connectionId: null as string | null }
-const localGitOwnerModule = () => ({
-  getWorktreeGitOwnerTarget: () => ({ kind: 'local' }),
-  getGitIdentityHostId: () => 'local'
+const LOCAL = { kind: 'local' } as const
+const localGitOwnerModule = () => ({ getWorktreeGitOwnerTarget: () => LOCAL })
+const gitCopyModule = (connectionId?: string) => () => ({
+  resolveWorktreeGitCopyNow: (id: string) => ({ worktreeId: id, transport: LOCAL, connectionId })
 })
 
 type PollState = {
@@ -118,6 +119,7 @@ async function usePollingOnce(
   vi.doMock('@/lib/connection-context', () => ({
     getConnectionId: () => options.connectionId ?? undefined
   }))
+  vi.doMock('@/lib/worktree-git-copy', gitCopyModule(options.connectionId ?? undefined))
 
   vi.stubGlobal('window', {
     api: {
@@ -394,6 +396,7 @@ describe('useGitStatusPolling', () => {
       useRepoMap: () => new Map([[repo.id, repo]])
     }))
     vi.doMock('@/lib/connection-context', () => ({ getConnectionId: () => undefined }))
+    vi.doMock('@/lib/worktree-git-copy', gitCopyModule())
     vi.stubGlobal('window', {
       api: {
         git: { status: gitStatus },
@@ -508,6 +511,7 @@ describe('useGitStatusPolling', () => {
       useRepoMap: () => new Map([[repo.id, repo]])
     }))
     vi.doMock('@/lib/connection-context', () => ({ getConnectionId: () => undefined }))
+    vi.doMock('@/lib/worktree-git-copy', gitCopyModule())
     vi.stubGlobal('window', {
       api: {
         git: { status: gitStatus },
@@ -633,6 +637,7 @@ describe('useGitStatusPolling', () => {
       useRepoMap: () => new Map([[repo.id, repo]])
     }))
     vi.doMock('@/lib/connection-context', () => ({ getConnectionId: () => undefined }))
+    vi.doMock('@/lib/worktree-git-copy', gitCopyModule())
     vi.stubGlobal('window', {
       api: {
         git: { status: gitStatus },

@@ -5,11 +5,6 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { UNRESOLVED_GIT_HOST_ERROR } from '@/store/slices/editor/actions/git-operation-target'
-import { getKnownExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
-import {
-  parseRoutableExecutionHostId,
-  type ExecutionHostId
-} from '../../../../shared/execution-host'
 
 function ownerTargetFor(
   state: AppState,
@@ -52,15 +47,4 @@ export function requireGitOwnerTarget(target: RuntimeClientTarget | null): Runti
     throw new Error(UNRESOLVED_GIT_HOST_ERROR)
   }
   return target
-}
-
-/**
- * The copy a git answer for `worktreeId` describes: the selected copy of a same-id twin, else the
- * row's own host. Null when nothing places it, so the identity patch leaves twins alone.
- */
-export function getGitIdentityHostId(
-  worktreeId: string | null | undefined
-): ExecutionHostId | null {
-  const hostId = getKnownExecutionHostIdForWorktree(useAppStore.getState(), worktreeId)
-  return parseRoutableExecutionHostId(hostId)?.id ?? null
 }

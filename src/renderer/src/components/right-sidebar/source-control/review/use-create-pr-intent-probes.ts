@@ -157,8 +157,7 @@ export function useSourceControlCreatePrIntentProbes({
       return await refreshGitStatusForWorktreeStrict({
         // Why: intent can finish in the background after navigation; branch-safety checks must inspect the worktree that started it.
         target: requireGitOwnerTarget(target.target),
-        // Why null: the selection may have moved to a twin since; an unplaced twin is refused.
-        ownerHostId: null,
+        ownerHostId: target.ownerHostId ?? null,
         worktreeId: target.worktreeId,
         worktreePath: target.worktreePath,
         connectionId: target.connectionId,

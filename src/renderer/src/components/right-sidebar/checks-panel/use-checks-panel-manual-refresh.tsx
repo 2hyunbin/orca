@@ -4,7 +4,7 @@ import { buildGitHubPRRefreshStateClearToken } from '@/store/github/pr-refresh-s
 import { refreshHostedReviewCard } from '@/store/slices/hosted-review-card-refresh'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-sync-client'
-import { getGitIdentityHostId } from '../worktree-git-owner-target'
+import { resolveWorktreeGitCopyNow } from '@/lib/worktree-git-copy'
 import {
   hasChecksPanelGitStatusBranchChanged,
   readChecksPanelRefreshGitIdentitySnapshot,
@@ -41,6 +41,7 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
+    ownerCopyHostId,
     ownerTarget,
     panelContextKey,
     panelContextKeyRef,
@@ -98,7 +99,9 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     })
     try {
       if (activeWorktreeId && activeWorktreePath && !isFolder && ownerTarget) {
-        const ownerHostId = getGitIdentityHostId(activeWorktreeId)
+        // Why one resolution: a same-path twin must not get this copy's transport, SSH target or answer.
+        const copy = resolveWorktreeGitCopyNow(activeWorktreeId, ownerCopyHostId)
+        const ownerHostId = copy?.hostId ?? null
         const snapshotIdentity = readChecksPanelRefreshGitIdentitySnapshot({
           snapshot: gitStatusSnapshot,
           contextKey: panelContextKey,
@@ -116,10 +119,10 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
         }
         try {
           const statusContext = {
-            target: ownerTarget,
+            target: copy?.transport ?? ownerTarget,
             worktreeId: activeWorktreeId,
             worktreePath: activeWorktreePath,
-            connectionId: activeConnectionId ?? undefined
+            connectionId: copy ? copy.connectionId : (activeConnectionId ?? undefined)
           }
           const status = await getRuntimeGitStatus(statusContext, {
             admissionTier: 'interactive'
@@ -385,6 +388,7 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     fetchHostedReviewForBranch,
     expireGitHubPRRefreshState,
     isCurrentAsyncResult,
+    ownerCopyHostId,
     ownerTarget,
     updateWorktreeGitIdentity,
     panelContextKeyRef,

@@ -1,14 +1,13 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../../../types'
 import type { WorktreeSlice } from '../../worktree-helpers'
-import { applyWorktreeUpdates } from '../../worktree-helpers'
 import {
-  clearTwinCopyReviewLinks,
-  deleteTwinCopyTombstones,
-  moveTwinCopyTombstones,
+  clearCopyReviewLinks,
+  deleteCopyTombstones,
+  moveCopyTombstones,
   reviewClearTombstoneKey,
   worktreeCopyOwnerKey
-} from './worktree-twin-copy'
+} from './worktree-copy-review-clear'
 import type { Worktree } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { WorktreeMeta } from '../../../../../../shared/worktree/meta-types'
@@ -31,15 +30,15 @@ export {
 }
 
 export const hostedReviewLinkMutationGenerationByWorktreeId = new Map<string, number>()
-export const hostedReviewLinkClearTombstonesByWorktreeId = new Map<
+export const hostedReviewLinkClearTombstonesByCopy = new Map<
   string,
   {
     branch: string
     branchIdentity: string
     generation: number
     head?: string
-    /** Set for a same-id twin: only the copy with this {@link worktreeCopyOwnerKey} is guarded. */
-    owner?: string
+    /** The guarded copy's {@link worktreeCopyOwnerKey}; part of the map key too. */
+    owner: string
   }
 >()
 export const hostedReviewLinkWorktreeIdAliases = new Map<string, string>()
@@ -67,21 +66,36 @@ export function getHostedReviewLinkMutationGeneration(worktreeId: string): numbe
   return hostedReviewLinkMutationGenerationByWorktreeId.get(worktreeId) ?? 0
 }
 
-export function bumpHostedReviewLinkMutationGeneration(worktreeId: string): void {
-  hostedReviewLinkMutationGenerationByWorktreeId.set(
-    worktreeId,
-    getHostedReviewLinkMutationGeneration(worktreeId) + 1
-  )
-  hostedReviewLinkClearTombstonesByWorktreeId.delete(worktreeId)
-  deleteTwinCopyTombstones(hostedReviewLinkClearTombstonesByWorktreeId, worktreeId)
-  pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
+/** A manual relink; naming the relinked copy keeps a same-path twin's own clear guard. */
+export function bumpHostedReviewLinkMutationGeneration(
+  worktreeId: string,
+  relinkedCopy?: Partial<Pick<Worktree, 'hostId' | 'runtimeOwnerEnvironmentId'>>
+): void {
+  const generation = getHostedReviewLinkMutationGeneration(worktreeId) + 1
+  hostedReviewLinkMutationGenerationByWorktreeId.set(worktreeId, generation)
+  const owner = relinkedCopy ? worktreeCopyOwnerKey(relinkedCopy) : undefined
+  if (owner === undefined) {
+    deleteCopyTombstones(hostedReviewLinkClearTombstonesByCopy, worktreeId)
+    pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
+    return
+  }
+  hostedReviewLinkClearTombstonesByCopy.delete(reviewClearTombstoneKey(worktreeId, owner))
+  let siblingGuarded = false
+  for (const [key, tombstone] of hostedReviewLinkClearTombstonesByCopy) {
+    if (key.startsWith(`${worktreeId}\0`)) {
+      hostedReviewLinkClearTombstonesByCopy.set(key, { ...tombstone, generation })
+      siblingGuarded = true
+    }
+  }
+  if (!siblingGuarded) {
+    pruneHostedReviewLinkWorktreeAliasesForId(worktreeId)
+  }
 }
 
 export function pruneHostedReviewLinkMutationGenerations(worktreeIds: Iterable<string>): void {
   for (const worktreeId of worktreeIds) {
     hostedReviewLinkMutationGenerationByWorktreeId.delete(worktreeId)
-    hostedReviewLinkClearTombstonesByWorktreeId.delete(worktreeId)
-    deleteTwinCopyTombstones(hostedReviewLinkClearTombstonesByWorktreeId, worktreeId)
+    deleteCopyTombstones(hostedReviewLinkClearTombstonesByCopy, worktreeId)
     hostedReviewLinkWorktreeIdAliases.delete(worktreeId)
     for (const [oldWorktreeId, newWorktreeId] of hostedReviewLinkWorktreeIdAliases) {
       if (newWorktreeId === worktreeId) {
@@ -121,13 +135,11 @@ export function migrateHostedReviewLinkMutationGeneration(
   oldWorktreeId: string,
   newWorktreeId: string
 ): void {
-  const tombstone = hostedReviewLinkClearTombstonesByWorktreeId.get(oldWorktreeId)
-  const movedTwinTombstones = moveTwinCopyTombstones(
-    hostedReviewLinkClearTombstonesByWorktreeId,
+  const hasTombstone = moveCopyTombstones(
+    hostedReviewLinkClearTombstonesByCopy,
     oldWorktreeId,
     newWorktreeId
   )
-  const hasTombstone = tombstone !== undefined || movedTwinTombstones
   for (const [alias, target] of hostedReviewLinkWorktreeIdAliases) {
     if (target === oldWorktreeId) {
       if (hasTombstone) {
@@ -148,10 +160,6 @@ export function migrateHostedReviewLinkMutationGeneration(
     )
     hostedReviewLinkMutationGenerationByWorktreeId.delete(oldWorktreeId)
   }
-  if (tombstone) {
-    hostedReviewLinkClearTombstonesByWorktreeId.set(newWorktreeId, tombstone)
-    hostedReviewLinkClearTombstonesByWorktreeId.delete(oldWorktreeId)
-  }
 }
 
 export function getHostedReviewLinkMutationGenerationForTests(worktreeId: string): number {
@@ -164,7 +172,7 @@ export function getHostedReviewLinkWorktreeAliasCountForTests(): number {
 
 export function resetHostedReviewLinkMutationGenerationForTests(): void {
   hostedReviewLinkMutationGenerationByWorktreeId.clear()
-  hostedReviewLinkClearTombstonesByWorktreeId.clear()
+  hostedReviewLinkClearTombstonesByCopy.clear()
   hostedReviewLinkWorktreeIdAliases.clear()
 }
 
@@ -189,15 +197,15 @@ export function rememberHostedReviewLinkClear(
   worktreeId: string,
   branch: string,
   generation: number,
-  head?: string,
-  owner?: string
+  head: string | undefined,
+  owner: string
 ): void {
-  hostedReviewLinkClearTombstonesByWorktreeId.set(reviewClearTombstoneKey(worktreeId, owner), {
+  hostedReviewLinkClearTombstonesByCopy.set(reviewClearTombstoneKey(worktreeId, owner), {
     branch,
     branchIdentity: canonicalHostedReviewBranchIdentity(branch),
     generation,
     head,
-    ...(owner !== undefined ? { owner } : {})
+    owner
   })
 }
 
@@ -216,24 +224,23 @@ export function sanitizeHostedReviewLinksForBranchClear<
     >
 >(worktree: T, currentWorktrees?: readonly T[]): T {
   const hostedReviewWorktreeId = resolveHostedReviewLinkWorktreeId(worktree.id)
-  const tombstone =
-    hostedReviewLinkClearTombstonesByWorktreeId.get(
-      reviewClearTombstoneKey(hostedReviewWorktreeId, worktreeCopyOwnerKey(worktree))
-    ) ?? hostedReviewLinkClearTombstonesByWorktreeId.get(hostedReviewWorktreeId)
+  // Why the copy key only: a bare-id guard would also rewrite a same-path twin that arrives later.
+  const tombstone = hostedReviewLinkClearTombstonesByCopy.get(
+    reviewClearTombstoneKey(hostedReviewWorktreeId, worktreeCopyOwnerKey(worktree))
+  )
   const hasBranchScopedContext =
     HOSTED_REVIEW_LINK_KEYS.some((key) => worktree[key] != null) ||
     worktree.pushTarget !== undefined
   if (
     !tombstone ||
     tombstone.generation !== getHostedReviewLinkMutationGeneration(hostedReviewWorktreeId) ||
-    !hasBranchScopedContext ||
-    (tombstone.owner !== undefined && worktreeCopyOwnerKey(worktree) !== tombstone.owner)
+    !hasBranchScopedContext
   ) {
     return worktree
   }
   const current = currentWorktrees?.find(
     (entry) =>
-      (tombstone.owner === undefined || worktreeCopyOwnerKey(entry) === tombstone.owner) &&
+      worktreeCopyOwnerKey(entry) === tombstone.owner &&
       (entry.id === worktree.id ||
         resolveHostedReviewLinkWorktreeId(entry.id) === hostedReviewWorktreeId)
   )
@@ -271,19 +278,16 @@ export function sanitizeHostedReviewLinksForBranchClears<
 export function applyHostedReviewLinkClear(
   set: Parameters<StateCreator<AppState, [], [], WorktreeSlice>>[0],
   worktreeId: string,
-  /** One twin copy to clear; omitted clears every row with the id. */
-  copy?: { owner: string; hostId: ExecutionHostId | undefined }
+  copy: { owner: string; hostId: ExecutionHostId | undefined }
 ): void {
   set((s) => {
     const byRepo = s.worktreesByRepo
-    const nextWorktrees = copy
-      ? clearTwinCopyReviewLinks(byRepo, worktreeId, copy.owner)
-      : applyWorktreeUpdates(byRepo, worktreeId, CLEARED_HOSTED_REVIEW_LINK_UPDATES)
+    const nextWorktrees = clearCopyReviewLinks(byRepo, worktreeId, copy.owner)
     const nextDetectedWorktrees = applyDetectedWorktreeUpdates(
       s.detectedWorktreesByRepo,
       worktreeId,
       CLEARED_HOSTED_REVIEW_LINK_UPDATES,
-      copy?.hostId
+      copy.hostId
     )
     if (nextWorktrees === byRepo && nextDetectedWorktrees === s.detectedWorktreesByRepo) {
       return s

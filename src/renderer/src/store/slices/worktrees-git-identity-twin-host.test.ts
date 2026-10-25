@@ -3,6 +3,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { resetHostedReviewLinkMutationGenerationForTests } from './worktrees'
 import { makeWorktree } from './worktrees-slice-test-fixtures'
 import {
+  bumpHostedReviewLinkMutationGeneration,
   migrateHostedReviewLinkMutationGeneration,
   sanitizeHostedReviewLinksForBranchClears
 } from './worktrees/metadata/hosted-review-link-mutation'
@@ -206,18 +207,23 @@ describe('a provenance twin review-clear tombstone', () => {
 })
 
 describe('updateWorktreeGitIdentity host matching', () => {
-  it("reaches a paired server's SSH checkout through its runtime alias", () => {
-    const store = storeWith({
-      hostId: 'ssh:private-target',
-      runtimeOwnerEnvironmentId: 'hub-a',
-      branch: 'refs/heads/master'
-    })
+  it("reaches a paired server's SSH checkout through its runtime alias, not its twin", () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/master' },
+      {
+        hostId: 'ssh:private-target',
+        runtimeOwnerEnvironmentId: 'hub-a',
+        branch: 'refs/heads/master'
+      }
+    )
 
     store
       .getState()
       .updateWorktreeGitIdentity(id, { branch: 'refs/heads/feature' }, 'runtime:hub-a')
 
-    expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
+    const [local, paired] = store.getState().worktreesByRepo.repo1
+    expect(local.branch).toBe('refs/heads/master')
+    expect(paired.branch).toBe('refs/heads/feature')
   })
 
   it('keeps two paired servers apart when both publish the same SSH host id', () => {
@@ -230,12 +236,45 @@ describe('updateWorktreeGitIdentity host matching', () => {
 
     expect(store.getState().worktreesByRepo.repo1[1].branch).toBe('refs/heads/feature')
   })
+})
 
-  it('still patches a lone unstamped row named by its repo owner host', () => {
-    const store = storeWith({ branch: 'refs/heads/master' })
+describe('review-clear tombstones are always keyed by the copy', () => {
+  it('never rewrite a same-path twin that arrives after a lone copy cleared', () => {
+    const store = storeWith({ hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 })
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'local')
 
-    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/feature' }, 'ssh:box')
+    const [newcomer] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({
+        id,
+        repoId: 'repo1',
+        hostId: 'ssh:box-b',
+        branch: 'refs/heads/b1',
+        linkedPR: 2
+      })
+    ])
 
-    expect(store.getState().worktreesByRepo.repo1[0].branch).toBe('refs/heads/feature')
+    expect(newcomer).toMatchObject({ branch: 'refs/heads/b1', linkedPR: 2 })
+  })
+
+  it("keep the sibling's guard when one copy is relinked", () => {
+    const store = storeWith(
+      { hostId: 'local', branch: 'refs/heads/a1', linkedPR: 1 },
+      { hostId: 'ssh:box-b', branch: 'refs/heads/b1', linkedPR: 2 }
+    )
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/a2' }, 'local')
+    store.getState().updateWorktreeGitIdentity(id, { branch: 'refs/heads/b2' }, 'ssh:box-b')
+    bumpHostedReviewLinkMutationGeneration(id, { hostId: 'local' })
+
+    const [staleRemote] = sanitizeHostedReviewLinksForBranchClears([
+      makeWorktree({
+        id,
+        repoId: 'repo1',
+        hostId: 'ssh:box-b',
+        branch: 'refs/heads/b1',
+        linkedPR: 2
+      })
+    ])
+
+    expect(staleRemote).toMatchObject({ branch: 'refs/heads/b2', linkedPR: null })
   })
 })

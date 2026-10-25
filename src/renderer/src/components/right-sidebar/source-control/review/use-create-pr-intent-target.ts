@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react'
 import { getConnectionId } from '@/lib/connection-context'
+import { resolveWorktreeGitCopyNow } from '@/lib/worktree-git-copy'
 import type { CreatePrIntentRunToken } from './create-pr-intent-flow'
 import type { SourceControlOperationTarget } from '../listing/operation-target'
 import type { SourceControlWorktreeContext } from '../listing/use-worktree-context'
@@ -46,14 +47,20 @@ export function useSourceControlCreatePrIntentTarget({
   ])
 
   const getCreatePrIntentOperationTarget = useCallback(
-    (token: CreatePrIntentRunToken): SourceControlOperationTarget => ({
-      // Why: Create PR intent continues after navigation; pin git commands to the worktree/host that started the sequence.
-      target: activeRepoTarget,
-      worktreeId: token.worktreeId,
-      worktreePath: token.worktreePath,
-      connectionId: getConnectionId(token.worktreeId) ?? undefined,
-      pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget
-    }),
+    (token: CreatePrIntentRunToken): SourceControlOperationTarget => {
+      // Why: Create PR intent continues after navigation; pin git commands to the worktree copy that started it.
+      const copy = token.ownerHostId
+        ? resolveWorktreeGitCopyNow(token.worktreeId, token.ownerHostId)
+        : null
+      return {
+        target: copy?.transport ?? activeRepoTarget,
+        worktreeId: token.worktreeId,
+        worktreePath: token.worktreePath,
+        connectionId: copy ? copy.connectionId : (getConnectionId(token.worktreeId) ?? undefined),
+        ownerHostId: token.ownerHostId ?? null,
+        pushTarget: worktreeMap.get(token.worktreeId)?.pushTarget
+      }
+    },
     [activeRepoTarget, worktreeMap]
   )
 

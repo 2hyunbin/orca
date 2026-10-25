@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 import { toast } from 'sonner'
-import { getConnectionId } from '@/lib/connection-context'
+import { resolveWorktreeGitCopyNow, useWorktreeGitCopyHostId } from '@/lib/worktree-git-copy'
 import { getLocalPathOpenOwnerForRoute, isLocalPathOpenBlocked } from '@/lib/local-path-open-guard'
 import {
   beginHugeRepoWarningProbe,
@@ -47,6 +47,7 @@ export function useSourceControlStatusRefresh({
   const updateWorktreeGitIdentity = useAppStore((s) => s.updateWorktreeGitIdentity)
   const setUpstreamStatus = useAppStore((s) => s.setUpstreamStatus)
   const fetchUpstreamStatus = useAppStore((s) => s.fetchUpstreamStatus)
+  const activeCopyHostId = useWorktreeGitCopyHostId(activeWorktreeId)
   // Why: activeRepoTarget is pinned to the repo owner's runtime.
   const localIgnoreBlocked = isLocalPathOpenBlocked(
     getLocalPathOpenOwnerForRoute({
@@ -60,15 +61,17 @@ export function useSourceControlStatusRefresh({
       if (!activeWorktreeId || !worktreePath || isFolder || !activeRepoTarget) {
         return
       }
-      const connectionId = getConnectionId(activeWorktreeId) ?? undefined
+      // Why the captured host: a mutation callback can outlive a switch to a same-path twin.
+      const copy = resolveWorktreeGitCopyNow(activeWorktreeId, activeCopyHostId)
+      if (!copy) {
+        return
+      }
       await refreshGitStatusForWorktree({
-        // Why: route git status by the repo OWNER host, not the focused runtime.
-        target: activeRepoTarget,
-        // Why null: a mutation callback can outlive a switch to a twin; an unplaced twin is refused.
-        ownerHostId: null,
+        target: copy.transport,
+        ownerHostId: copy.hostId,
         worktreeId: activeWorktreeId,
         worktreePath,
-        connectionId,
+        connectionId: copy.connectionId,
         pushTarget: activePushTarget,
         deps: {
           setGitStatus,
@@ -80,6 +83,7 @@ export function useSourceControlStatusRefresh({
       })
     },
     [
+      activeCopyHostId,
       activeRepoTarget,
       activeWorktreeId,
       activePushTarget,
@@ -170,8 +174,7 @@ export function useSourceControlStatusRefresh({
         await refreshGitStatusForWorktree({
           // Why: generation can finish after a host switch; refresh the host that owned the generation request.
           target: context.runtimeTarget,
-          // Why null: the selection may have moved to a twin since; an unplaced twin is refused.
-          ownerHostId: null,
+          ownerHostId: context.ownerHostId ?? null,
           worktreeId: context.worktreeId,
           worktreePath: context.worktreePath,
           connectionId: context.connectionId,

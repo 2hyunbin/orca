@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { translate } from '@/i18n/i18n'
 import { createCreatePrIntentRunToken } from './create-pr-intent-flow'
+import { resolveWorktreeGitCopyNow } from '@/lib/worktree-git-copy'
 import type { SourceControlCommitAction } from '../commit/use-commit-action'
 import type { SourceControlWorktreeContext } from '../listing/use-worktree-context'
 import type { SourceControlFileListing } from '../listing/use-file-listing'
@@ -112,7 +113,9 @@ export function useSourceControlCreatePrIntentRun({
       // eligibility IPC can synthesize local prep steps for the correct host.
       provider: provisionalHostedReviewProvider,
       // Why: intent crosses async commit/push steps, so the base stays tied to what was selected when the run started.
-      baseRef: effectiveBaseRef ?? null
+      baseRef: effectiveBaseRef ?? null,
+      // Why: the run outlives navigation; its git answers stay on the copy it started from.
+      ownerHostId: resolveWorktreeGitCopyNow(activeWorktreeId)?.hostId ?? null
     })
     const operationTarget = getCreatePrIntentOperationTarget(token)
     const snapshot = createCreatePrIntentRunSnapshot({

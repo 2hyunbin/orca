@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-sync-client'
-import { getGitIdentityHostId } from '../worktree-git-owner-target'
+import { resolveWorktreeGitCopyNow } from '@/lib/worktree-git-copy'
 import {
   buildChecksPanelEligibilityGitFingerprint,
   shouldClearChecksPanelGitStatusSnapshot,
@@ -158,7 +158,6 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
     }
     let stale = false
     const requestContextKey = panelContextKey
-    const connectionId = activeConnectionId ?? undefined
     // Why: global status maps are keyed only by worktree; use their changes as invalidation signals, then fetch a local snapshot.
     if (gitStatusSnapshotRetryTimerRef.current) {
       clearTimeout(gitStatusSnapshotRetryTimerRef.current)
@@ -167,15 +166,20 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
     setGitStatusSnapshot((snapshot) =>
       shouldClearChecksPanelGitStatusSnapshot(snapshot, requestContextKey) ? null : snapshot
     )
+    // Why one resolution: a same-path twin must not get this copy's transport, SSH target or answer.
+    const copy = resolveWorktreeGitCopyNow(activeWorktreeId)
+    if (!copy) {
+      return
+    }
     const context = {
-      target: ownerTarget,
+      target: copy.transport,
       worktreeId: activeWorktreeId,
       worktreePath: activeWorktreePath,
-      connectionId
+      connectionId: copy.connectionId
     }
+    const ownerHostId = copy.hostId
     const runRequest = async (): Promise<void> => {
       try {
-        const ownerHostId = getGitIdentityHostId(activeWorktreeId)
         const status = await getRuntimeGitStatus(context, { admissionTier: 'status' })
         if (
           !stale &&
