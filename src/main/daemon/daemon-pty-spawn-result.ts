@@ -94,6 +94,9 @@ export abstract class DaemonPtySpawnResult extends DaemonPtySpawnRequest {
     } else if (providerWslDistro === null || result.isNew) {
       this.wslDistrosBySessionId.delete(sessionId)
     }
+    if (wslDistro && opts.env?.ORCA_PANE_KEY) {
+      this.wslPaneKeysBySessionId.set(sessionId, opts.env.ORCA_PANE_KEY)
+    }
 
     if (effectiveCwd) {
       this.initialCwds.set(sessionId, effectiveCwd)
