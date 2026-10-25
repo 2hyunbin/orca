@@ -53,6 +53,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-hidden',
       worktreePath: '/repo',
       connectionId: 'ssh-1',
@@ -75,6 +76,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       deps: makeDeps()
@@ -93,6 +95,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-background',
       worktreePath: '/other-repo',
       deps: makeDeps()
@@ -113,6 +116,7 @@ describe('branch line total request gate on git status refreshes', () => {
     // silently dropped on the most common (fs-watcher) refresh.
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       connectionId: 'ssh-1',
@@ -133,6 +137,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       deps: makeDeps(),
@@ -155,6 +160,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       deps: makeDeps(),
@@ -175,6 +181,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       deps: makeDeps()
@@ -182,6 +189,7 @@ describe('branch line total request gate on git status refreshes', () => {
     setBranchLineTotalMergeBase('wt-1', 'rebased-merge-base')
     await refreshGitStatusForWorktree({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-1',
       worktreePath: '/repo',
       deps: makeDeps()
@@ -206,6 +214,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktreeStrict({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-strict',
       worktreePath: '/repo',
       deps: { ...makeDeps(), fetchUpstreamStatus: undefined }
@@ -227,6 +236,7 @@ describe('branch line total request gate on git status refreshes', () => {
 
     await refreshGitStatusForWorktreeStrict({
       target: { kind: 'local' },
+      ownerHostId: null,
       worktreeId: 'wt-strict',
       worktreePath: '/repo',
       deps: { ...makeDeps(), fetchUpstreamStatus: undefined }

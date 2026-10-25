@@ -9,6 +9,7 @@ import {
 } from './push-target-upstream-refresh-cache'
 import type { GitStatusResult, GitUpstreamStatus } from '../../../../shared/git-status-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { GitPushTarget } from '../../../../shared/worktree/types'
 import {
   beginAutomaticUpstreamRefresh,
@@ -24,7 +25,8 @@ export type GitStatusRefreshDeps = {
   setGitStatus: (worktreeId: string, status: GitStatusResult) => void
   updateWorktreeGitIdentity: (
     worktreeId: string,
-    identity: { head?: string; branch?: string | null }
+    identity: { head?: string; branch?: string | null },
+    ownerHostId: ExecutionHostId | null
   ) => void
   setUpstreamStatus: (worktreeId: string, status: GitUpstreamStatus) => void
   fetchUpstreamStatus: (
@@ -100,6 +102,7 @@ export function clearGitStatusRefreshOrderingForTests(): void {
 
 export async function refreshGitStatusForWorktree({
   target,
+  ownerHostId,
   worktreeId,
   worktreePath,
   connectionId,
@@ -109,6 +112,8 @@ export async function refreshGitStatusForWorktree({
 }: {
   /** The worktree owner's transport. */
   target: RuntimeClientTarget
+  /** The copy `target` answers for, read when the request starts. */
+  ownerHostId: ExecutionHostId | null
   worktreeId: string
   worktreePath: string
   connectionId?: string
@@ -149,12 +154,16 @@ export async function refreshGitStatusForWorktree({
     deps.setGitStatus(worktreeId, status)
     // Why: branch switches can happen inside a terminal. `git status --branch`
     // gives us the new identity without a separate worktree-list poll.
-    deps.updateWorktreeGitIdentity(worktreeId, {
-      head: status.head,
-      // Why: detached HEAD reports a head oid and no branch. Pass null as an
-      // explicit clear signal so stale branch names don't linger in the UI.
-      branch: status.branch ?? (status.head ? null : undefined)
-    })
+    deps.updateWorktreeGitIdentity(
+      worktreeId,
+      {
+        head: status.head,
+        // Why: detached HEAD reports a head oid and no branch. Pass null as an
+        // explicit clear signal so stale branch names don't linger in the UI.
+        branch: status.branch ?? (status.head ? null : undefined)
+      },
+      ownerHostId
+    )
     request?.onStatusAccepted?.(status)
     if (pushTarget) {
       // Why: porcelain status reports Git's configured upstream. Source Control
@@ -187,7 +196,14 @@ export async function refreshGitStatusForWorktree({
         // Why: explicit publish-target comparison can spawn several git
         // subprocesses; unchanged automatic polls should reuse it briefly.
         storeCachedAutomaticPushTargetUpstreamStatus(
-          { target, worktreeId, worktreePath, connectionId, pushTarget, status },
+          {
+            target,
+            worktreeId,
+            worktreePath,
+            connectionId,
+            pushTarget,
+            status
+          },
           upstreamStatus
         )
       }
@@ -235,6 +251,7 @@ export async function refreshGitStatusForWorktree({
 
 export async function refreshGitStatusForWorktreeStrict({
   target,
+  ownerHostId,
   worktreeId,
   worktreePath,
   connectionId,
@@ -243,6 +260,8 @@ export async function refreshGitStatusForWorktreeStrict({
 }: {
   /** The worktree owner's transport. */
   target: RuntimeClientTarget
+  /** The copy `target` answers for, read when the request starts. */
+  ownerHostId: ExecutionHostId | null
   worktreeId: string
   worktreePath: string
   connectionId?: string
@@ -277,12 +296,16 @@ export async function refreshGitStatusForWorktreeStrict({
   deps.setGitStatus(worktreeId, status)
   // Why: branch switches can happen inside a terminal. `git status --branch`
   // gives us the new identity without a separate worktree-list poll.
-  deps.updateWorktreeGitIdentity(worktreeId, {
-    head: status.head,
-    // Why: detached HEAD reports a head oid and no branch. Pass null as an
-    // explicit clear signal so stale branch names don't linger in the UI.
-    branch: status.branch ?? (status.head ? null : undefined)
-  })
+  deps.updateWorktreeGitIdentity(
+    worktreeId,
+    {
+      head: status.head,
+      // Why: detached HEAD reports a head oid and no branch. Pass null as an
+      // explicit clear signal so stale branch names don't linger in the UI.
+      branch: status.branch ?? (status.head ? null : undefined)
+    },
+    ownerHostId
+  )
   if (pushTarget) {
     // Why: porcelain status reports Git's configured upstream. Source Control
     // actions for PR-created worktrees must instead reconcile with Orca's

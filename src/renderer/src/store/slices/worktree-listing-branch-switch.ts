@@ -1,4 +1,5 @@
 import type { Worktree } from '../../../../shared/worktree/types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
 
 function indexUnambiguousWorktrees(
   worktrees: readonly Worktree[],
@@ -51,7 +52,8 @@ export function routeListingBranchSwitchesThroughGitIdentity(args: {
   hasBranchScopedReviewContext: (worktree: Worktree) => boolean
   updateWorktreeGitIdentity: (
     worktreeId: string,
-    identity: { head?: string; branch?: string | null }
+    identity: { head?: string; branch?: string | null },
+    ownerHostId: ExecutionHostId | null
   ) => void
 }): Worktree[] {
   const {
@@ -96,12 +98,16 @@ export function routeListingBranchSwitchesThroughGitIdentity(args: {
     ) {
       continue
     }
-    updateWorktreeGitIdentity(worktree.id, {
-      head: worktree.head,
-      // Empty branch means detached HEAD in listing results; null is the
-      // explicit detached signal expected by updateWorktreeGitIdentity.
-      branch: worktree.branch === '' ? null : worktree.branch
-    })
+    updateWorktreeGitIdentity(
+      worktree.id,
+      {
+        head: worktree.head,
+        // Empty branch means detached HEAD in listing results; null is the
+        // explicit detached signal expected by updateWorktreeGitIdentity.
+        branch: worktree.branch === '' ? null : worktree.branch
+      },
+      existing.hostId ?? null
+    )
   }
   return reconciled ?? incoming
 }

@@ -10,7 +10,7 @@ import {
   hasInteractiveActiveGitStatusConsumer,
   shouldPollActiveGitStatus
 } from '@/lib/passive-macos-app-data-access'
-import { getWorktreeGitOwnerTarget } from './worktree-git-owner-target'
+import { getGitIdentityHostId, getWorktreeGitOwnerTarget } from './worktree-git-owner-target'
 import { useGitStatusFileWatchRefresh } from './git-status-file-watch-refresh'
 import { useGitStatusPushSignalRefresh } from './git-status-push-signal-refresh'
 import { useStaleConflictOperationPolling } from './stale-conflict-operation-poll'
@@ -142,16 +142,12 @@ export function useGitStatusPolling(options: { enabled?: boolean } = {}): void {
         }
         await refreshGitStatusForWorktree({
           target,
+          ownerHostId: getGitIdentityHostId(activeWorktreeId),
           worktreeId: activeWorktreeId,
           worktreePath,
           connectionId,
           pushTarget: activePushTarget,
-          deps: {
-            setGitStatus,
-            updateWorktreeGitIdentity,
-            setUpstreamStatus,
-            fetchUpstreamStatus
-          },
+          deps: { setGitStatus, updateWorktreeGitIdentity, setUpstreamStatus, fetchUpstreamStatus },
           request: {
             admissionTier: admissionTierForGitStatusRefreshReason(request.reason),
             ...(request.reason === 'safety' ? { reuseLineStats: true } : {}),

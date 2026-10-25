@@ -13,6 +13,7 @@ import { useAppStore } from '@/store'
 import type { GitPushTarget } from '../../../../../../shared/worktree/types'
 import type { PullRequestGenerationContext } from '@/store/slices/pull-request-generation'
 import { refreshGitStatusForWorktree } from '../../git-status-refresh'
+import { getGitIdentityHostId } from '../../worktree-git-owner-target'
 
 export type SourceControlStatusRefresh = {
   refreshActiveGitStatus: (signal?: AbortSignal) => Promise<void>
@@ -64,6 +65,7 @@ export function useSourceControlStatusRefresh({
       await refreshGitStatusForWorktree({
         // Why: route git status by the repo OWNER host, not the focused runtime.
         target: activeRepoTarget,
+        ownerHostId: getGitIdentityHostId(activeWorktreeId),
         worktreeId: activeWorktreeId,
         worktreePath,
         connectionId,
@@ -168,6 +170,7 @@ export function useSourceControlStatusRefresh({
         await refreshGitStatusForWorktree({
           // Why: generation can finish after a host switch; refresh the host that owned the generation request.
           target: context.runtimeTarget,
+          ownerHostId: getGitIdentityHostId(context.worktreeId),
           worktreeId: context.worktreeId,
           worktreePath: context.worktreePath,
           connectionId: context.connectionId,

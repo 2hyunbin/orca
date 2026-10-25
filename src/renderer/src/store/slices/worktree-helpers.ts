@@ -380,9 +380,11 @@ export type WorktreeSlice = {
    * keeps its tabs, terminals, and selections. No-op when the ids match.
    */
   migrateWorktreeIdentity: (oldWorktreeId: string, newWorktreeId: string) => void
+  /** `ownerHostId` names the copy git answered for; null patches only an id no twin shares. */
   updateWorktreeGitIdentity: (
     worktreeId: string,
-    identity: { head?: string; branch?: string | null }
+    identity: { head?: string; branch?: string | null },
+    ownerHostId: ExecutionHostId | null
   ) => void
   updateWorktreeBaseStatus: (event: WorktreeBaseStatusEvent) => void
   updateWorktreeRemoteBranchConflict: (event: WorktreeRemoteBranchConflictEvent) => void

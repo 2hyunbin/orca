@@ -4,6 +4,7 @@ import { buildGitHubPRRefreshStateClearToken } from '@/store/github/pr-refresh-s
 import { refreshHostedReviewCard } from '@/store/slices/hosted-review-card-refresh'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-sync-client'
+import { getGitIdentityHostId } from '../worktree-git-owner-target'
 import {
   hasChecksPanelGitStatusBranchChanged,
   readChecksPanelRefreshGitIdentitySnapshot,
@@ -97,16 +98,18 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
     })
     try {
       if (activeWorktreeId && activeWorktreePath && !isFolder && ownerTarget) {
+        const ownerHostId = getGitIdentityHostId(activeWorktreeId)
         const snapshotIdentity = readChecksPanelRefreshGitIdentitySnapshot({
           snapshot: gitStatusSnapshot,
           contextKey: panelContextKey,
           currentBranch: branch
         })
         if (snapshotIdentity.kind === 'changed') {
-          updateWorktreeGitIdentity(activeWorktreeId, {
-            head: snapshotIdentity.head,
-            branch: snapshotIdentity.branch
-          })
+          updateWorktreeGitIdentity(
+            activeWorktreeId,
+            { head: snapshotIdentity.head, branch: snapshotIdentity.branch },
+            ownerHostId
+          )
           // Why: this click discovered a terminal branch switch; let branch-keyed render/effects restart instead of refreshing old PR data.
           refreshOutcome = 'branch-changed'
           return
@@ -122,10 +125,11 @@ export function useChecksPanelManualRefresh(model: ChecksPanelManualRefreshInput
             admissionTier: 'interactive'
           })
           const observedBranch = status.branch ?? (status.head ? null : undefined)
-          updateWorktreeGitIdentity(activeWorktreeId, {
-            head: status.head,
-            branch: observedBranch
-          })
+          updateWorktreeGitIdentity(
+            activeWorktreeId,
+            { head: status.head, branch: observedBranch },
+            ownerHostId
+          )
           if (
             observedBranch !== undefined &&
             hasChecksPanelGitStatusBranchChanged({

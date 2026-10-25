@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { getRuntimeGitUpstreamStatus } from '@/runtime/runtime-git-sync-client'
+import { getGitIdentityHostId } from '../worktree-git-owner-target'
 import {
   buildChecksPanelEligibilityGitFingerprint,
   shouldClearChecksPanelGitStatusSnapshot,
@@ -174,16 +175,21 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
     }
     const runRequest = async (): Promise<void> => {
       try {
+        const ownerHostId = getGitIdentityHostId(activeWorktreeId)
         const status = await getRuntimeGitStatus(context, { admissionTier: 'status' })
         if (
           !stale &&
           shouldCommitChecksPanelGitStatusSnapshot(panelContextKeyRef.current, requestContextKey)
         ) {
           // Why: the Checks tab can be the only visible git surface; commit branch identity before branch-scoped upstream refresh can fail.
-          updateWorktreeGitIdentity(activeWorktreeId, {
-            head: status.head,
-            branch: status.branch ?? (status.head ? null : undefined)
-          })
+          updateWorktreeGitIdentity(
+            activeWorktreeId,
+            {
+              head: status.head,
+              branch: status.branch ?? (status.head ? null : undefined)
+            },
+            ownerHostId
+          )
         }
         let freshRemoteStatus = status.upstreamStatus
         if (activeWorktreePushTarget) {

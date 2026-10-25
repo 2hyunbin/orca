@@ -20,23 +20,47 @@ import {
 } from './hosted-review-link-mutation'
 import { persistWorktreeMeta } from './worktree-meta-persist'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
+import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { worktreeRowMatchesMetaHost } from '../listing/worktree-meta-host-match'
+
+/**
+ * The rows one host's git answer for `worktreeId` describes. Ids are `repoId::path`, so a same-path
+ * twin on another host shares it; with no host named, a twin pair is ambiguous and gets nothing.
+ */
+function gitIdentityTargetRows(
+  worktrees: readonly Worktree[],
+  worktreeId: string,
+  ownerHostId: ExecutionHostId | null
+): Set<Worktree> {
+  const rows = worktrees.filter((worktree) => worktree.id === worktreeId)
+  if (ownerHostId) {
+    return new Set(rows.filter((worktree) => worktreeRowMatchesMetaHost(worktree, ownerHostId)))
+  }
+  return new Set(new Set(rows.map((worktree) => worktree.hostId)).size > 1 ? [] : rows)
+}
 
 export function createUpdateWorktreeGitIdentity(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['updateWorktreeGitIdentity'] {
-  return (worktreeId, identity) => {
+  return (worktreeId, identity, ownerHostId) => {
     let shouldPersistHostedReviewClear = false
     let clearedBranch: string | null = null
     let clearGeneration = getHostedReviewLinkMutationGeneration(worktreeId)
     const repoId = getRepoIdFromWorktreeId(worktreeId)
-    const existing = get().worktreesByRepo[repoId]?.find((worktree) => worktree.id === worktreeId)
-    if (!existing) {
-      return
-    }
-    const expectedHead = identity.head ?? existing.head
-    const expectedBranch = identity.branch === null ? '' : (identity.branch ?? existing.branch)
-    if (expectedHead === existing.head && expectedBranch === existing.branch) {
+    const nextHeadFor = (worktree: Worktree): string => identity.head ?? worktree.head
+    const nextBranchFor = (worktree: Worktree): string =>
+      identity.branch === null ? '' : (identity.branch ?? worktree.branch)
+    const initialTargets = gitIdentityTargetRows(
+      get().worktreesByRepo[repoId] ?? [],
+      worktreeId,
+      ownerHostId
+    )
+    const anyTargetChanges = [...initialTargets].some(
+      (worktree) =>
+        nextHeadFor(worktree) !== worktree.head || nextBranchFor(worktree) !== worktree.branch
+    )
+    if (!anyTargetChanges) {
       return
     }
 
@@ -47,12 +71,13 @@ export function createUpdateWorktreeGitIdentity(
       }
 
       let changed = false
+      const targets = gitIdentityTargetRows(current, worktreeId, ownerHostId)
       const next = current.map((worktree) => {
-        if (worktree.id !== worktreeId) {
+        if (!targets.has(worktree)) {
           return worktree
         }
-        const nextHead = identity.head ?? worktree.head
-        const nextBranch = identity.branch === null ? '' : (identity.branch ?? worktree.branch)
+        const nextHead = nextHeadFor(worktree)
+        const nextBranch = nextBranchFor(worktree)
         if (nextHead === worktree.head && nextBranch === worktree.branch) {
           return worktree
         }
