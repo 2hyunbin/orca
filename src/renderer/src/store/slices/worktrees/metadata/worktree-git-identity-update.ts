@@ -128,7 +128,7 @@ export function createUpdateWorktreeGitIdentity(
         // Why the copy: a same-path twin shares the id, so every guard and clear names this row.
         // Keyed by the stamp the next listing gives the row, so legacy or partial stamps still match.
         // Only missing parts are filled in; a row's own host or publishing server is never replaced.
-        const stampHostId = ownerHostId ?? soleRegistrationHostId(s.repos, worktree.repoId)
+        const stampHostId = soleRegistrationHostId(s.repos, worktree.repoId) ?? ownerHostId
         const listingStamp = stampHostId ? withRepoHostOwnership(worktree, stampHostId) : worktree
         const stamped = {
           hostId: worktree.hostId ?? listingStamp.hostId,
