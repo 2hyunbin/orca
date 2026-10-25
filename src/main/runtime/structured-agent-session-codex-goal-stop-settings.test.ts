@@ -640,7 +640,11 @@ it('answers Stop before the shipped 15s phone budget while the owned 15,970ms cl
   }
   vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
   const started = Date.now()
-  const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+  const captured = Promise.withResolvers<void>()
+  const refreshed = Promise.withResolvers<void>()
+  const reaped = Promise.withResolvers<void>()
+  const capture = vi.fn(() => captured.promise)
+  const refresh = vi.fn(() => refreshed.promise)
   const exit = Promise.withResolvers<void>()
   let rootExited = false,
     completedAt: number | undefined
@@ -652,12 +656,12 @@ it('answers Stop before the shipped 15s phone budget while the owned 15,970ms cl
       supervised: true,
       policy: rootOnlyProviderClosePolicy(true),
       tree: {
-        capture: () => delay(990),
-        refresh: () => delay(990),
+        capture,
+        refresh,
         reap: async () => {
           rootExited = true
           exit.resolve()
-          await delay(3490)
+          await reaped.promise
           return 'exited'
         },
         treeVerdict: 'exited'
@@ -685,12 +689,22 @@ it('answers Stop before the shipped 15s phone budget while the owned 15,970ms cl
     laterFinished = true
     return value
   })
-  for (const ms of [5000, 990, 5500, 990]) {
+  for (const [ms, phase, reached] of [
+    [5000, undefined, capture],
+    [990, captured, capture],
+    [5500, undefined, refresh],
+    [990, refreshed, refresh]
+  ] as const) {
     await vi.advanceTimersByTimeAsync(ms)
+    expect(reached).toHaveBeenCalledOnce()
+    phase?.resolve()
+    await vi.advanceTimersByTimeAsync(0)
     expect(laterFinished).toBe(false)
     expect(child.closes()).toBe(0)
   }
+  expect(rootExited).toBe(true)
   await vi.advanceTimersByTimeAsync(3490)
+  reaped.resolve()
   expect(await later).toMatchObject({ ok: true })
   expect(completedAt).toBe(15_970)
   expect(child.closes()).toBe(1)
