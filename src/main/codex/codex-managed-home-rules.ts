@@ -6,7 +6,6 @@ import { observe } from './codex-path-observation'
 const RULES_DIR_NAME = 'rules'
 // Sorts before account files (byte order) so last-one-wins rules let account choices override globals.
 const GLOBAL_RULE_COPY_PREFIX = '_orca-global-'
-const LEGACY_GLOBAL_RULE_COPY_PREFIX = 'orca-global-'
 
 /** Codex reads every regular `.rules` file in the dir, sorted; symlinked files are skipped. */
 function readRuleFiles(dir: string): Map<string, string> | null {
@@ -58,11 +57,10 @@ export function syncSystemCodexRulesIntoManagedHome(
     }
     const existing = readRuleFiles(targetDir) ?? new Map<string, string>()
     for (const name of existing.keys()) {
-      const isStaleCopy =
-        name.startsWith(LEGACY_GLOBAL_RULE_COPY_PREFIX) ||
-        (name.startsWith(GLOBAL_RULE_COPY_PREFIX) &&
-          !desired.has(name.slice(GLOBAL_RULE_COPY_PREFIX.length)))
-      if (isStaleCopy) {
+      if (
+        name.startsWith(GLOBAL_RULE_COPY_PREFIX) &&
+        !desired.has(name.slice(GLOBAL_RULE_COPY_PREFIX.length))
+      ) {
         rmSync(join(targetDir, name), { force: true })
       }
     }

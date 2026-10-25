@@ -248,7 +248,6 @@ describe('syncSystemCodexResourcesIntoManagedHome', () => {
     mkdirSync(perAccountRulesPath, { recursive: true })
     writeFileSync(join(systemRulesPath, 'default.rules'), 'global\n')
     writeFileSync(join(perAccountRulesPath, 'default.rules'), 'account approval\n')
-    writeFileSync(join(perAccountRulesPath, 'orca-global-default.rules'), 'legacy copy\n')
 
     syncSystemCodexResourcesIntoManagedHome(dirname(perAccountRulesPath))
 
