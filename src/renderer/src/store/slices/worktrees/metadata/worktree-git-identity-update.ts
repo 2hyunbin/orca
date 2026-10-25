@@ -27,7 +27,7 @@ import { persistWorktreeMeta } from './worktree-meta-persist'
 import { withRepoHostOwnership } from '../listing/worktree-host-ownership'
 import { getRepoRegistrationHostIds } from '../../../../../../shared/repo-host-identity'
 import { isRuntimeSelectorNotFoundError } from '../listing/runtime-worktree-rpc-errors'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import { parseExecutionHostId, type ExecutionHostId } from '../../../../../../shared/execution-host'
 import { hostWorktreeTarget } from '../../../../../../shared/worktree/host-qualified-identity'
 import {
   selectWorkspaceByHostTarget,
@@ -130,10 +130,15 @@ export function createUpdateWorktreeGitIdentity(
         // Only missing parts are filled in; a row's own host or publishing server is never replaced.
         const stampHostId = soleRegistrationHostId(s.repos, worktree.repoId) ?? ownerHostId
         const listingStamp = stampHostId ? withRepoHostOwnership(worktree, stampHostId) : worktree
+        const stampedHostId = worktree.hostId ?? listingStamp.hostId
+        // Provenance only distinguishes SSH copies; local listings never carry it.
         const stamped = {
-          hostId: worktree.hostId ?? listingStamp.hostId,
+          hostId: stampedHostId,
           runtimeOwnerEnvironmentId:
-            worktree.runtimeOwnerEnvironmentId ?? listingStamp.runtimeOwnerEnvironmentId
+            worktree.runtimeOwnerEnvironmentId ??
+            (parseExecutionHostId(stampedHostId)?.kind === 'ssh'
+              ? listingStamp.runtimeOwnerEnvironmentId
+              : undefined)
         }
         const copy = {
           owner: worktreeCopyOwnerKey(stamped),
