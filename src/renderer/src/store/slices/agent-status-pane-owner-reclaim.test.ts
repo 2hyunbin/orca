@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createTestStore } from './store-test-helpers'
 
 const PANE_KEY = 'tab-1:11111111-1111-4111-8111-111111111111'
+const NOW = Date.UTC(2026, 9, 25, 12)
+
+afterEach(() => vi.useRealTimers())
 
 // #30589: a nested agent's row arrived while the owner idled; the owner's next hook must land.
 function reclaim(session?: string) {
   const store = createTestStore()
-  const now = Date.now()
+  vi.useFakeTimers()
+  vi.setSystemTime(NOW)
   store
     .getState()
     .setAgentStatus(PANE_KEY, { state: 'working', prompt: 'Background job', agentType: 'claude' })
@@ -14,7 +18,7 @@ function reclaim(session?: string) {
     PANE_KEY,
     { state: 'working', prompt: 'Next task', agentType: 'codex' },
     undefined,
-    { updatedAt: now + 1 },
+    { updatedAt: NOW + 1 },
     undefined,
     session
       ? {

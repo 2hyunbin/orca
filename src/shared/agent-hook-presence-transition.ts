@@ -27,7 +27,10 @@ export function transitionHookPresence(
         : undefined
     }
     if (sender && owner.process && isSameAgentProcess(sender, owner.process)) {
-      return incoming
+      const session = owner.session
+      return session
+        ? { ...incoming, agentPresence: { ...owner, ...incoming.agentPresence, session } }
+        : incoming
     }
     // Why: nested agents inherit ORCA_PANE_KEY; their hooks update status, never ownership.
     return incoming.agentPresence === owner ? incoming : { ...incoming, agentPresence: owner }
