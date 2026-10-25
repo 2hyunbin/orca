@@ -1,23 +1,23 @@
-import { useAppStore } from '@/store'
+import { useAppStore } from '@/store/index'
 import { removeStructuredLaunchSlot } from './structured-agent-session-launch-slot'
 import {
   materializeStructuredLaunchSurface,
   findStructuredLaunchTab
-} from './structured-agent-session-launch-surface'
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
+} from '../../structured-agent-session-launch-surface'
+import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
 import {
   settleStructuredLaunchCallers,
   structuredLaunchCallersHavePendingWork
 } from '@/lib/structured-agent-session-launch-callers'
-import type { StructuredAgentLaunchReceipt } from '@/lib/structured-agent-session-launch-recovery'
-import { structuredLaunchFailure } from './structured-agent-session-launch-failure'
+import type { StructuredAgentLaunchReceipt } from '@/lib/agent-session/launch/structured-agent-session-launch-recovery'
+import { structuredLaunchFailure } from '../../structured-agent-session-launch-failure'
 import {
   deleteStructuredLaunchStateIfCurrent,
   notifyStructuredLaunchListeners,
   retireStructuredAgentSessionLaunchCancellationTombstone,
   type StructuredLaunchState
 } from './structured-agent-session-launch-registry'
-import { recordUnlistedCreatedChat } from './structured-agent-session-unlisted-created-chats'
+import { recordUnlistedCreatedChat } from '../../structured-agent-session-unlisted-created-chats'
 
 function cleanupLaunchState(state: StructuredLaunchState): void {
   if (deleteStructuredLaunchStateIfCurrent(state)) {

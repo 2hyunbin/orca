@@ -1,17 +1,17 @@
-import type { AgentSessionHistoryResult } from '../../../shared/agent-session-wire'
+import type { AgentSessionHistoryResult } from '../../../../../shared/agent-session-wire'
 import type {
   AgentJournalCursor,
   AgentJournalSubmission
-} from '../../../shared/agent-session-journal-types'
+} from '../../../../../shared/agent-session-journal-types'
 import {
   launchStructuredAgentSession,
-  StructuredAgentSessionCreateRefusalError,
-  type StructuredAgentSessionLaunchIntent,
   type StructuredLaunchHostSeedListener
-} from '@/lib/launch-structured-agent-session'
+} from '@/lib/structured-agent-session-launch-create-call'
+import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
+import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readStructuredSessionTabInventory } from '@/runtime/structured-session-tab-inventory'
-import { publishStructuredAgentSessionCreateHydration } from './structured-agent-session-create-hydration'
+import { publishStructuredAgentSessionCreateHydration } from '../../structured-agent-session-create-hydration'
 
 export type StructuredAgentLaunchReceipt = {
   sessionId: string

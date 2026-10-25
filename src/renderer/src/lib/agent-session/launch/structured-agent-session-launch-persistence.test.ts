@@ -9,10 +9,10 @@ import {
   retireAbsentStructuredAgentLaunchCancellationTombstonesPersisted,
   retireStructuredAgentLaunchCancellationTombstonePersisted,
   writeStructuredAgentLaunchRecord,
-  markStructuredAgentLaunchCancelledPersisted,
-  structuredAgentLaunchRecordFor
+  markStructuredAgentLaunchCancelledPersisted
 } from './structured-agent-session-launch-persistence'
-import type { StructuredAgentSessionLaunchIntent } from './launch-structured-agent-session'
+import { structuredAgentLaunchRecordFor } from './structured-agent-session-launch-record'
+import type { StructuredAgentSessionLaunchIntent } from '../../launch-structured-agent-session'
 
 const SERVER = 'runtime:server-1'
 const TOMBSTONES_KEY = 'orca:structuredAgentLaunchCancelledSessions:v1'

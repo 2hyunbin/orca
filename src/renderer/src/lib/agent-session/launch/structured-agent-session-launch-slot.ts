@@ -1,5 +1,5 @@
 import type { TabsSlice } from '@/store/slices/tabs/tabs-slice-contract'
-import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
+import { structuredAgentSessionTabId } from '../../../../../shared/structured-agent-session-projection'
 
 export type StructuredLaunchSlotOwner = Pick<
   TabsSlice,

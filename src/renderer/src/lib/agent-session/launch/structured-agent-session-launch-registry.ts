@@ -1,22 +1,22 @@
 import { useSyncExternalStore } from 'react'
-import type { TuiAgent } from '../../../shared/tui-agent'
-import type { StructuredLaunchFailure } from './structured-agent-session-launch-failure'
-import type { StructuredAgentSessionResumeSource } from '../../../shared/structured-agent-session-create'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import type { TuiAgent } from '../../../../../shared/tui-agent'
+import type { StructuredLaunchFailure } from '../../structured-agent-session-launch-failure'
+import type { StructuredAgentSessionResumeSource } from '../../../../../shared/structured-agent-session-create'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../../shared/execution-host'
 import type { StructuredLaunchRecoveryState } from './structured-agent-session-launch-recovery'
-import type { StructuredLaunchSelection } from './structured-agent-session-launch-options'
+import type { StructuredLaunchSelection } from '../../structured-agent-session-launch-options'
 import type {
   StructuredAgentLaunchOptions,
   StructuredLaunchCallerGroup
-} from './structured-agent-session-launch-callers'
+} from '../../structured-agent-session-launch-callers'
 import {
   deleteStructuredAgentLaunchRecord,
   hasStructuredAgentLaunchCancellationTombstonePersisted,
   readStructuredAgentLaunchRecord,
-  structuredAgentLaunchRecordFor,
-  writeStructuredAgentLaunchRecord,
-  type StructuredAgentLaunchPersistedRecord
+  writeStructuredAgentLaunchRecord
 } from './structured-agent-session-launch-persistence'
+import type { StructuredAgentLaunchPersistedRecord } from './structured-agent-session-launch-record'
+import { structuredAgentLaunchRecordFor } from './structured-agent-session-launch-record'
 import {
   removeStructuredLaunchSlot,
   type StructuredLaunchSlotOwner
@@ -26,12 +26,12 @@ import {
   resetStructuredAgentLaunchCancellationForTests,
   retireAbsentStructuredAgentLaunchCancellations,
   retireStructuredAgentLaunchCancellation
-} from './launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+} from '../../launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import {
   cancelStructuredAgentLaunchOnLocalHost,
   resetStructuredAgentLocalLaunchCancelsForTests
-} from './structured-agent-session-local-launch-cancel'
+} from '../../structured-agent-session-local-launch-cancel'
 
 export type StructuredLaunchState = StructuredLaunchRecoveryState & {
   identity: string

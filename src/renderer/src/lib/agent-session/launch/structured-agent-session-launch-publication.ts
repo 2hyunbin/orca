@@ -1,5 +1,5 @@
-import type { ExecutionHostId } from '../../../shared/execution-host'
-import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import type { ExecutionHostId } from '../../../../../shared/execution-host'
+import type { RuntimeMobileSessionTabsResult } from '../../../../../shared/runtime-session-contracts'
 import { deleteStructuredAgentLaunchRecord } from './structured-agent-session-launch-persistence'
 import {
   getPersistedStructuredAgentLaunchRecord,
@@ -7,7 +7,7 @@ import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
   notifyStructuredLaunchListeners
 } from './structured-agent-session-launch-registry'
-import { forgetUnlistedCreatedChat } from './structured-agent-session-unlisted-created-chats'
+import { forgetUnlistedCreatedChat } from '../../structured-agent-session-unlisted-created-chats'
 
 function confirmStructuredLaunchFirstMessagePublication(
   worktreeId: string,

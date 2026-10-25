@@ -1,20 +1,16 @@
-import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
+import { structuredAgentSessionTabId } from '../../../../../shared/structured-agent-session-projection'
 import {
   validRecord,
   parseStructuredLaunchSurfaceAddress,
   type StructuredAgentLaunchPersistedRecord
 } from './structured-agent-session-launch-record'
-export {
-  structuredAgentLaunchRecordFor,
-  type StructuredAgentLaunchPersistedRecord,
-  type StructuredAgentLaunchPersistedLifecycle
-} from './structured-agent-session-launch-record'
-import { parseStructuredLaunchSeedOptions } from '../../../shared/native-chat-session-option-defaults'
+
+import { parseStructuredLaunchSeedOptions } from '../../../../../shared/native-chat-session-option-defaults'
 import {
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
   type ExecutionHostId
-} from '../../../shared/execution-host'
+} from '../../../../../shared/execution-host'
 
 const LAUNCH_STORAGE_KEY = 'orca:structuredAgentLaunches:v1'
 const TOMBSTONE_STORAGE_KEY = 'orca:structuredAgentLaunchCancelledSessions:v1'

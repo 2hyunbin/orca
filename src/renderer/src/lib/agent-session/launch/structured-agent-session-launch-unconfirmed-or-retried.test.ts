@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
+import type * as LaunchErrors from '@/lib/structured-agent-session-launch-errors'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-session-contracts'
+import type { RuntimeMobileSessionTabsResult } from '../../../../../shared/runtime-session-contracts'
 import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
 
 const mocks = vi.hoisted(() => ({
@@ -18,15 +19,29 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, message: vi.fn() } }))
 
-vi.mock('@/lib/launch-structured-agent-session', () => {
+const launchErrorMocks = vi.hoisted(() => {
   class StructuredAgentSessionCreateRefusalError extends Error {}
+  return { StructuredAgentSessionCreateRefusalError }
+})
+
+vi.mock('@/lib/structured-agent-session-launch-errors', async () => ({
+  ...(await vi.importActual<typeof LaunchErrors>('@/lib/structured-agent-session-launch-errors')),
+  ...launchErrorMocks
+}))
+
+vi.mock('@/lib/structured-agent-session-launch-create-call', () => ({
+  launchStructuredAgentSession: mocks.launch
+}))
+
+vi.mock('@/lib/launch-structured-agent-session', () => {
   return {
     createStructuredAgentSessionLaunchIntent: mocks.createIntent,
     retryStructuredAgentSessionLaunchIntent: mocks.retryIntent,
     restoreStructuredAgentSessionLaunchIntent: mocks.restoreIntent,
     abandonStructuredAgentSessionLaunchIntent: mocks.abandonIntent,
     launchStructuredAgentSession: mocks.launch,
-    StructuredAgentSessionCreateRefusalError
+    StructuredAgentSessionCreateRefusalError:
+      launchErrorMocks.StructuredAgentSessionCreateRefusalError
   }
 })
 
@@ -62,7 +77,7 @@ vi.mock('@/lib/focus-terminal-tab-surface', () => ({ focusTerminalTabSurface: vi
 
 // The structured route hands the launch's own delivery result back unchanged.
 vi.mock('@/lib/launch-agent-in-new-tab', async () => {
-  const launch = await import('./structured-agent-session-launch')
+  const launch = await import('../../structured-agent-session-launch')
   return {
     launchAgentInNewTab: (args: {
       requestId: string
@@ -85,15 +100,15 @@ vi.mock('@/lib/launch-agent-in-new-tab', async () => {
   }
 })
 
-import { StructuredAgentSessionCreateRefusalError } from '@/lib/launch-structured-agent-session'
+import { StructuredAgentSessionCreateRefusalError } from '@/lib/structured-agent-session-launch-errors'
 import { refreshLocalStructuredSessionTabs } from '@/runtime/local-structured-session-tabs-sync/inventory-refresh'
 import { runSourceControlAgentActionStart } from '@/components/right-sidebar/runSourceControlAgentActionStart'
+import { getStructuredAgentLaunchStatus } from '../../structured-agent-session-launch-status'
+import { getStructuredAgentSessionLaunchLifecycle } from './structured-agent-session-launch-registry'
 import {
-  getStructuredAgentLaunchStatus,
-  getStructuredAgentSessionLaunchLifecycle,
   retryStructuredAgentSessionLaunch,
   startStructuredAgentLaunch
-} from './structured-agent-session-launch'
+} from '../../structured-agent-session-launch'
 import { resetStructuredAgentLaunchPersistenceForTests } from './structured-agent-session-launch-persistence'
 import { resetStructuredAgentLaunchRegistryForTests } from './structured-agent-session-launch-registry'
 
