@@ -148,6 +148,19 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
     ]
   }
 
+  // Real-home launches see managed-account history too, or switching back to system default hides it (#25000).
+  protected startSystemDefaultSessionBridgeForLaunch(): void {
+    const sourceCodexHomePaths = this.getManagedHostAccountHomesForSessionDiscovery()
+    if (sourceCodexHomePaths.length === 0) {
+      return
+    }
+    void startCodexAccountSessionBridgeInBackground({
+      targetCodexHomePath:
+        resolveHostCodexSessionSourceHome(this.store.getSettings()) ?? getSystemCodexHomePath(),
+      sourceCodexHomePaths
+    })
+  }
+
   // Per-account homes own auth refreshes in place; selection needs no shared-mirror read-back.
   protected syncSelfContainedManagedSelection(account: CodexManagedAccount): void {
     const resolved = this.resolveSelfContainedManagedHome(account)
@@ -259,13 +272,26 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
     const systemCodexHomePath =
       resolveWslCodexSessionSourceHome(this.store.getSettings(), distro) ??
       this.getWslSystemCodexHomePath({ runtime: 'wsl', wslDistro: distro })
-    if (systemCodexHomePath && systemCodexHomePath !== runtimeHomePath) {
-      // Create history links inside the distro so Codex can see them in /resume.
-      void startWslCodexSessionBridgeInBackground({
-        distro,
-        systemCodexHomePath,
-        managedCodexHomePath: runtimeHomePath
-      })
-    }
+    const targetLinuxPath = parseWslUncPath(runtimeHomePath)?.linuxPath ?? runtimeHomePath
+    // Sibling account homes are sources too, or a switch hides the previous account's sessions (#18486).
+    const sourceHomes = [
+      systemCodexHomePath,
+      ...this.store
+        .getSettings()
+        .codexManagedAccounts.map((account) => this.getWslLaunchCodexHomePath(account, distro))
+    ].filter(
+      (home): home is string =>
+        !!home && (parseWslUncPath(home)?.linuxPath ?? home) !== targetLinuxPath
+    )
+    // Create history links inside the distro so Codex can see them in /resume; one wsl.exe at a time.
+    void (async () => {
+      for (const sourceHome of new Set(sourceHomes)) {
+        await startWslCodexSessionBridgeInBackground({
+          distro,
+          systemCodexHomePath: sourceHome,
+          managedCodexHomePath: runtimeHomePath
+        })
+      }
+    })()
   }
 }
