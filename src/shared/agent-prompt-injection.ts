@@ -141,8 +141,9 @@ export function isHeldAgentPromptDraft(
   const collapse = (text: string): string => text.replace(/\s+/g, ' ').trim()
   const shown = collapse(draft)
   const wanted = collapse(expected)
-  // Why a minimum: a short visible fragment could be the user's text that happens to recur.
-  return shown === wanted || (shown.length >= HELD_PROMPT_TEXT_MIN_CHARS && wanted.includes(shown))
+  // Why a long tail only: a scrolled composer shows the paste's end; a short or inner fragment
+  // could be the user's own text that recurs in the prompt.
+  return shown === wanted || (shown.length >= HELD_PROMPT_TEXT_MIN_CHARS && wanted.endsWith(shown))
 }
 
 export type AgentPromptSubmitDelayOptions = {

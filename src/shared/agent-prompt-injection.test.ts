@@ -165,6 +165,8 @@ describe('isHeldAgentPromptDraft', () => {
       true
     ],
     ['the prompt shown as text', prompt, true],
+    ['its tail in a scrolled composer', prompt.slice(-200), true],
+    ['a line from its middle', prompt.split('\n')[5], false],
     [
       'the user typing beside it',
       `[Pasted Content ${prompt.length} chars] also fix the readme`,
