@@ -171,7 +171,12 @@ test('a connector conversation runs end to end on a headless serve host', async 
     )
     await host.client.call('settings.update', { experimentalConnectors: true })
     // Disabling connectors ends the window, so the watch returns everything seen until then.
-    const watching = connectorCli(userDataDir, ['watch', '--for-ms', '600000'], 660_000)
+    // A plain run, not an asserting one: it stays outstanding while later steps may fail first.
+    const watching = runCompiledOrcaCli(
+      userDataDir,
+      ['connector', 'watch', '--for-ms', '600000', '--json'],
+      660_000
+    )
     const worktree = await openWorkspace(host, testRepoPath)
 
     // Start, then a retried delivery that must not type again.
@@ -250,7 +255,9 @@ test('a connector conversation runs end to end on a headless serve host', async 
     expect(await c1.prompt()).toBeNull()
 
     await host.client.call('settings.update', { experimentalConnectors: false })
-    const { snapshot, events } = WatchRead.parse(await watching)
+    const watched = await watching
+    expect(watched.code, watched.stdout + watched.stderr).toBe(0)
+    const { snapshot, events } = WatchRead.parse(watched.json?.result)
     // Subscribing precedes the snapshot, so an empty one proves no event before the start was missed.
     expect(snapshot.conversations).toEqual([])
     expect(
