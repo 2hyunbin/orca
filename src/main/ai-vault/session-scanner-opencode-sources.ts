@@ -46,7 +46,17 @@ function opencodeStorageDirs(
 ): string[] {
   return [
     options.opencodeStorageDir ?? resolveOpenCodeStorageDirectory(),
-    ...wslHomeDirs.map((homeDir) => join(homeDir, '.local', 'share', 'opencode', 'storage'))
+    ...opencodeExtraDataDirs(options, wslHomeDirs).map((dataDir) => join(dataDir, 'storage'))
+  ]
+}
+
+function opencodeExtraDataDirs(
+  options: AiVaultScanOptions,
+  wslHomeDirs: readonly string[]
+): string[] {
+  return [
+    ...wslHomeDirs.map((homeDir) => join(homeDir, '.local', 'share', 'opencode')),
+    ...(options.opencodeAccountDataDirs ?? [])
   ]
 }
 
@@ -70,14 +80,8 @@ async function opencodeDbPathsForSource(
   if (sourceIndex === 0) {
     return listOpenCodeDatabases(onRefusal, undefined, options.signal)
   }
-  const wslHomeDir = wslHomeDirs[sourceIndex - 1]
-  return wslHomeDir
-    ? listOpenCodeDatabasesInDirectory(
-        join(wslHomeDir, '.local', 'share', 'opencode'),
-        onRefusal,
-        options.signal
-      )
-    : []
+  const dataDir = opencodeExtraDataDirs(options, wslHomeDirs)[sourceIndex - 1]
+  return dataDir ? listOpenCodeDatabasesInDirectory(dataDir, onRefusal, options.signal) : []
 }
 
 async function discoverOpenCode2Sessions(

@@ -1,5 +1,8 @@
 import { join } from 'node:path'
 import { claudeProfileHistoryDirs } from '../claude-accounts/claude-profile-installed-router'
+import { getManagedDataAccountService } from '../managed-data-accounts/service'
+import { resolveOpenCodeDataDirectory } from '../opencode/opencode-data-directory'
+import { hasAppEnvironment } from '../../shared/app-environment'
 import {
   clearAiVaultBackgroundRestartCircuit,
   resetAiVaultScannerBackgroundForTests,
@@ -69,7 +72,13 @@ export function configureAiVaultSessionSources(next: AiVaultSessionSources): voi
 /** Resolve fresh WSL roots for both listing and indexing; distros can start or stop between scans. */
 export async function localAiVaultScanRoots(): Promise<
   Required<Pick<AiVaultScanOptions, 'additionalCodexSessionsDirs' | 'wslHomeDirs'>> &
-    Pick<AiVaultScanOptions, 'executionHostId' | 'wslOpenCodeReaders' | 'claudeProfileProjectsDirs'>
+    Pick<
+      AiVaultScanOptions,
+      | 'executionHostId'
+      | 'wslOpenCodeReaders'
+      | 'claudeProfileProjectsDirs'
+      | 'opencodeAccountDataDirs'
+    >
 > {
   const [additionalCodexHomes, wslHomeDirs] = await Promise.all([
     filterPathsToRunningWslDistrosAsync(configuredAdditionalCodexHomePaths()),
@@ -80,9 +89,25 @@ export async function localAiVaultScanRoots(): Promise<
     wslHomeDirs,
     // Scanner workers have no account router; supply profile roots from this process.
     claudeProfileProjectsDirs: claudeProfileHistoryDirs('projects'),
+    opencodeAccountDataDirs: openCodeAccountDataDirs(),
     wslOpenCodeReaders: await prepareOpenCodeWslReaders(wslHomeDirs),
     // Runtime-addressed callers restamp host-local results at the RPC edge instead of rescanning.
     executionHostId: LOCAL_EXECUTION_HOST_ID
+  }
+}
+
+function openCodeAccountDataDirs(): string[] {
+  if (!hasAppEnvironment()) {
+    return []
+  }
+  try {
+    return getManagedDataAccountService()
+      .transcriptEnvironments('opencode')
+      .map((environment) => resolveOpenCodeDataDirectory(environment))
+  } catch {
+    // An unreadable account registry must not hide every other agent's history.
+    console.warn('[ai-vault] Could not read OpenCode managed accounts.')
+    return []
   }
 }
 

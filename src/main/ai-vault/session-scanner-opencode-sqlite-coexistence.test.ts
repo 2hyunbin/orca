@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { scanAiVaultSessions } from './session-scanner'
 import Database from '../sqlite/sync-database'
+import { writeOpenCode2SqliteFixture } from './session-scanner-test-fixtures'
 
 // Source tests lack a worker bundle; inline fixtures here while production still fails closed without it.
 vi.mock('./session-scanner-opencode-sqlite-worker-spawn', async () => {
@@ -12,13 +13,17 @@ vi.mock('./session-scanner-opencode-sqlite-worker-spawn', async () => {
     import('./session-scanner-opencode-sqlite-list'),
     import('./session-scanner-opencode-sqlite')
   ])
-  const { listOpenCode2SqliteSessions } = await import('./session-scanner-opencode2-sqlite-list')
+  const [{ listOpenCode2SqliteSessions }, { parseOpenCode2SqliteSession }] = await Promise.all([
+    import('./session-scanner-opencode2-sqlite-list'),
+    import('./session-scanner-opencode2-sqlite')
+  ])
   return {
     listOpenCode2SqliteSessionsViaWorker: listOpenCode2SqliteSessions,
     listOpenCodeSqliteSessionsViaWorker: listOpenCodeSqliteSessions,
     listZcodeSqliteSessionsViaWorker: (args: Parameters<typeof listOpenCodeSqliteSessions>[0]) =>
       listOpenCodeSqliteSessions({ ...args, agent: 'zcode' }),
-    parseOpenCodeSqliteSessionViaWorker: parseOpenCodeSqliteSession
+    parseOpenCodeSqliteSessionViaWorker: parseOpenCodeSqliteSession,
+    parseOpenCode2SqliteSessionViaWorker: parseOpenCode2SqliteSession
   }
 })
 
@@ -148,6 +153,26 @@ describe('scanAiVaultSessions — OpenCode SQLite + legacy file coexistence', ()
     expect(session!.title).toBe('Custom SQLite session')
     expect(session!.filePath).toBe(dbPath)
     expect(session!.totalTokens).toBe(42)
+  })
+
+  it('discovers OpenCode 2 sessions in managed account data folders', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-opencode-account-'))
+    tempRoots.push(root)
+    const accountDataDir = join(root, 'account', 'data', 'opencode')
+    await mkdir(accountDataDir, { recursive: true })
+    const dbPath = await writeOpenCode2SqliteFixture(accountDataDir)
+
+    const result = await scanAiVaultSessions({
+      ...isolatedScanRoots(root),
+      opencodeDbPaths: undefined,
+      opencodeAccountDataDirs: [accountDataDir],
+      platform: 'darwin',
+      limit: 50
+    })
+
+    const session = result.sessions.find((s) => s.sessionId === 'opencode2-session')
+    expect(session?.agent).toBe('opencode2')
+    expect(session?.filePath).toBe(dbPath)
   })
 
   it('surfaces SQLite sessions alongside legacy file sessions and dedups by sessionId', async () => {
