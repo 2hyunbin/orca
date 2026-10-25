@@ -23,7 +23,7 @@ export const AGENT_CHAT_PERMISSION_MODES = [
   'full-access'
 ] as const satisfies readonly AgentChatPermissionMode[]
 
-/** The lucide glyph each mode shows; desktop and phone resolve the name in their own icon package. */
+/** Desktop/mobile resolve these lucide names through their own icon packages. */
 export const AGENT_CHAT_PERMISSION_MODE_ICON_NAMES = {
   ask: 'Hand',
   'accept-edits': 'FilePenLine',
@@ -34,7 +34,6 @@ export const AGENT_CHAT_PERMISSION_MODE_ICON_NAMES = {
 export type AgentChatPermissionModeIconName =
   (typeof AGENT_CHAT_PERMISSION_MODE_ICON_NAMES)[AgentChatPermissionMode]
 
-/** The chat option a mode is saved and written under. */
 export const AGENT_CHAT_PERMISSION_MODE_OPTION_ID = 'permissionMode'
 
 export function isAgentChatPermissionMode(value: unknown): value is AgentChatPermissionMode {
@@ -58,7 +57,6 @@ export function savedChatPermissionMode(
   return support.modes.find((mode) => mode === intent) ?? 'ask'
 }
 
-/** The host's new-chat default as an agent's chat starts with it; null for an agent with none. */
 export function newChatPermissionMode(
   agent: string,
   setting: unknown
@@ -70,11 +68,7 @@ export function newChatPermissionMode(
 export type NewChatPermissionSettings = AgentPermissionSettings &
   Partial<Pick<GlobalSettings, 'nativeChatPermissionMode' | 'agentNativeChatPermissionModes'>>
 
-/**
- * An agent's stored permission starts its new chats, as it starts its terminals. On its own
- * settings, chats keep the Chat page default (or its per-agent copy) until chats can run the
- * agent's own config.
- */
+/** New chats inherit agent permissions; own-settings mode retains Chat defaults until chats can run agent config. */
 export function newChatPermissionModeForSettings(
   agent: string,
   settings: NewChatPermissionSettings | null | undefined
@@ -124,9 +118,7 @@ export function loadedChatPermissionSetting(
   return bypasses('claude') && bypasses('codex') ? 'full-access' : 'ask'
 }
 
-/** Whether a chat saved before its agent had modes is filled as Full access: what its agent's own
- *  Arguments ran it with. An agent with no bypass argument never had that choice, so its chats take
- *  the new-chat setting. */
+/** Pre-mode chats inherit argument bypass as Full access; agents without bypass use the new-chat setting. */
 export function preModeChatGetsFullAccess(
   agent: TuiAgent,
   settings: AgentPermissionSettings &

@@ -29,7 +29,19 @@ describe('findUncollectedTestFiles', () => {
 
   it('counts a suite module as collected only while a collected entry runtime-imports it', () => {
     const sources = new Map([
-      ['src/page.test.ts', "import './page.case.spec'\nimport './twin.spec'\n"],
+      [
+        'src/page.test.ts',
+        [
+          "import './page.case.spec'",
+          "import './twin.spec'",
+          "import '@renderer/alias-one.spec'",
+          "import '@/alias-two.spec.js'",
+          "import './nested-suite'"
+        ].join('\n')
+      ],
+      ['src/renderer/src/alias-one.spec.ts', SUITE],
+      ['src/renderer/src/alias-two.spec.ts', SUITE],
+      ['src/nested-suite/index.ts', SUITE],
       ['src/twin.spec.ts', SUITE],
       ['src/twin.spec.tsx', SUITE],
       ['src/page.case.spec.ts', `import './page-harness.spec'\n${SUITE}`],
