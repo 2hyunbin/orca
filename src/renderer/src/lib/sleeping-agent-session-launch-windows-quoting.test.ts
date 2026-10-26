@@ -1,3 +1,4 @@
+import { prepareLegacyAgentTerminalResume } from './legacy-agent-terminal-resume'
 // Resume lines enter the selected Windows shell; cmd.exe must never receive PowerShell single quoting (#12320).
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -83,10 +84,14 @@ const record: SleepingAgentSessionRecord = {
 async function launch(sessionRecord = record): Promise<string | undefined> {
   const { launchSleepingAgentSession } = await import('./sleeping-agent-session-launch')
   launchSleepingAgentSession(sessionRecord)
-  const options = mockCreateTab.mock.calls.at(-1)?.[3] as
-    | { pendingStartup?: { command: string } }
-    | undefined
-  return options?.pendingStartup?.command
+  const startup = mockCreateTab.mock.calls.at(-1)?.[3]?.pendingStartup
+  expect(startup?.command).toBeUndefined()
+  return prepareLegacyAgentTerminalResume({
+    worktreeId: sessionRecord.worktreeId,
+    agent: startup.launchAgent,
+    providerSession: startup.resumeProviderSession,
+    resume: startup.resume
+  }).command
 }
 
 describe('launchSleepingAgentSession Windows shell quoting', () => {

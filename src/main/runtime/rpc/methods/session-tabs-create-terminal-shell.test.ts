@@ -50,6 +50,31 @@ describe('session.tabs.createTerminal shell selection', () => {
     expect(opts).not.toHaveProperty('shellOverride')
   })
 
+  it('projects typed resume and the restricted WSL account contribution through the RPC', async () => {
+    const runtime = makeRuntime()
+    const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
+    const resume = { recipe: { source: 'saved' } }
+    const accountEnv = { CODEX_HOME: '/home/qa/managed' }
+    const request = {
+      worktree: 'id:wt-1',
+      launchAgent: 'codex',
+      resume,
+      resumeProviderSession: { key: 'session_id', id: 'saved' },
+      accountEnv,
+      env: { ORCA_PANE_KEY: 'tab:leaf' },
+      viewMode: 'chat'
+    }
+    expect((await dispatcher.dispatch(makeRequest(request))).ok).toBe(true)
+    expect(runtime.createMobileSessionTerminal).toHaveBeenCalledWith(
+      'id:wt-1',
+      expect.objectContaining({ resume, accountEnv, env: request.env, viewMode: 'chat' })
+    )
+    expect(
+      (await dispatcher.dispatch(makeRequest({ ...request, accountEnv: { PATH: '/bad' } }))).ok
+    ).toBe(false)
+    expect(runtime.createMobileSessionTerminal).toHaveBeenCalledOnce()
+  })
+
   it('refuses a shell pick combined with an agent launch, whose plan picks its own shell', async () => {
     const runtime = makeRuntime()
     const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })

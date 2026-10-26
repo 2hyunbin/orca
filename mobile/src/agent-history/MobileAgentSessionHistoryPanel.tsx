@@ -211,16 +211,17 @@ function MobileAgentSessionHistoryPanelContent({
           session: preparedSession,
           hostPlatform: platform,
           hostTerminalWindowsShell,
-          settings
+          settings,
+          hostCapabilities: target.targetStatus === 'local' ? resumeHost.capabilities : undefined
+        })
+        const attempt = resumeMutationRegistryRef.current.freeze(session.id, {
+          worktreeId: target.worktreeId,
+          launch: { ...launch, hostCapabilities: resumeHost.capabilities }
         })
         await resumeAiVaultSessionInTerminal(
           client,
-          target.worktreeId,
-          {
-            ...launch,
-            hostCapabilities: resumeHost.capabilities,
-            clientMutationId: resumeMutationRegistryRef.current.claim(session.id)
-          },
+          attempt.worktreeId,
+          { ...attempt.launch, clientMutationId: attempt.clientMutationId },
           assertCurrentOwner
         )
         resumeMutationRegistryRef.current.releaseOnSuccess(session.id)
@@ -233,7 +234,7 @@ function MobileAgentSessionHistoryPanelContent({
         }
         setResumeMessage('Agent session queued.')
         router.push(
-          `/h/${encodeURIComponent(hostId)}/session/${encodeURIComponent(target.worktreeId)}` as Parameters<
+          `/h/${encodeURIComponent(hostId)}/session/${encodeURIComponent(attempt.worktreeId)}` as Parameters<
             typeof router.push
           >[0]
         )

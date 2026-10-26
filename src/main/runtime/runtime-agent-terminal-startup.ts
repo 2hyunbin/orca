@@ -1,3 +1,5 @@
+import { buildAgentTerminalResumePlan } from '../../shared/agent-terminal-resume-plan'
+import { isResumableTuiAgent } from '../../shared/agent-session-resume'
 import type { SessionOptionValue } from '../../shared/native-chat-session-options'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
@@ -9,7 +11,11 @@ import {
 import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalWorkspaceLaunchScope } from './runtime-legacy-worker-terminal-recovery-types'
 import type { TerminalCreateOptions } from './runtime-terminal-contracts'
-import { resolveBareAgentLaunchCommand } from './runtime-agent-launch-resolution'
+import {
+  mergeTerminalEnvDeletionKeys,
+  resolveBareAgentLaunchCommand
+} from './runtime-agent-launch-resolution'
+import { realHomeCodexResumeEnvDeletion } from '../../shared/ai-vault-resume-command'
 import {
   buildExecutionHostAgentStartupPlan,
   planExecutionHostStartupWithPromptCandidate
@@ -90,9 +96,19 @@ export async function resolveAgentTerminalCreateOptions(
   if (shellRefusal) {
     throw shellRefusal
   }
-  if (opts.startupAgent) {
-    // Missing plans must not fall through to a shell that never becomes ready; supplied commands/resume identities contradict fresh launch plans.
-    if (callerSuppliedLaunch || opts.command || opts.resumeProviderSession) {
+  if (opts.startupAgent || opts.resume) {
+    // Planned resumes carry recipe inputs; prepared executable outputs cannot also own the launch.
+    if (
+      !opts.startupAgent ||
+      opts.command ||
+      opts.launchConfig ||
+      opts.launchAgent ||
+      (!opts.resume && opts.startupCommandDelivery) ||
+      opts.claudeAgentTeamsSourceCommand ||
+      (opts.resume
+        ? !opts.resumeProviderSession || !isResumableTuiAgent(opts.startupAgent)
+        : opts.env || opts.resumeProviderSession)
+    ) {
       throw new Error(
         `startupAgent ${opts.startupAgent} cannot combine with a caller-supplied launch.`
       )
@@ -160,6 +176,37 @@ async function buildRuntimeAgentTerminalStartupOptions(
 ): Promise<TerminalCreateOptions> {
   // Repo display metadata may belong to another host; use the already-resolved PTY route for launch.
   const isRemote = Boolean(workspace.connectionId)
+  if (opts.resume && opts.resumeProviderSession && isResumableTuiAgent(agent)) {
+    const plan = buildAgentTerminalResumePlan({
+      agent,
+      providerSession: opts.resumeProviderSession,
+      resume: opts.resume,
+      settings,
+      runtime,
+      isRemote,
+      launchCwd: resolveTerminalStartupCwd(workspace.path, opts.cwd) ?? workspace.path,
+      agentArgs: opts.agentArgs,
+      sessionOptions: host.toSessionOptions(opts.launchPreferences)
+    })
+    if (!plan) {
+      throw new AgentLaunchUnbuildableError(`Could not build resume command for ${agent}.`)
+    }
+    return {
+      ...opts,
+      command: plan.launchCommand,
+      env: { ...plan.env, ...opts.env, ...opts.accountEnv },
+      envToDelete: mergeTerminalEnvDeletionKeys(
+        opts.envToDelete,
+        opts.resume.codexHome !== undefined
+          ? realHomeCodexResumeEnvDeletion({ agent, codexHome: opts.resume.codexHome }).envToDelete
+          : undefined
+      ),
+      launchConfig: plan.launchConfig,
+      launchAgent: agent,
+      startupCommandDelivery: opts.startupCommandDelivery ?? plan.startupCommandDelivery,
+      telemetry: agentStartedTelemetry(agent, opts.launchSource, 'resume')
+    }
+  }
   const forceLine = opts.startupPromptCarry === 'force-line'
   // Create has no live PTY for later prompt delivery; refuse uncarryable text. force-line preserves createAgentSession's clean launch.
   if (opts.startupPrompt && !forceLine && !agentPromptRidesLaunchCommand(agent)) {

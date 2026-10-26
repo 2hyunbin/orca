@@ -139,7 +139,8 @@ describe('createRemoteRuntimePtyTransport', () => {
             minCompatibleRuntimeClientVersion: 2,
             capabilities: [
               'agent-session.host-authority.v1',
-              'agent-session.saved-resume-origin.v1'
+              'agent-session.saved-resume-origin.v1',
+              'agent-resume.host-plan.v1'
             ]
           }
         }
@@ -147,6 +148,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       expect(args.method).toBe('terminal.ensureAgentSession')
       expect(ExplicitEnsure.parse(args.params)).toMatchObject({
         resumeOrigin: 'saved',
+        resume: { recipe: { source: 'saved' } },
         providerSession
       })
       return {
@@ -169,6 +171,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       worktreeId: 'repo1::/remote/wt',
       launchAgent: 'codex',
       resumeOrigin: 'saved',
+      resume: { recipe: { source: 'saved' } },
       resumeProviderSession: providerSession,
       tabId: 'tab-1',
       leafId: '11111111-1111-4111-8111-111111111111'

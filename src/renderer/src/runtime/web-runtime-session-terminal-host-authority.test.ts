@@ -92,6 +92,117 @@ describe('createWebRuntimeSessionTerminal', () => {
     resetTerminalCreateEnvironment()
   })
 
+  it.each([
+    { modern: true, explicitUnknown: false },
+    { modern: false, explicitUnknown: false },
+    { modern: true, explicitUnknown: true }
+  ])(
+    'keeps typed resume inputs and route after an uncertain reply ($modern/$explicitUnknown)',
+    async ({ modern, explicitUnknown }) => {
+      let calls = 0
+      const runtimeCall = vi.fn(async (request: { method: string; params?: unknown }) => {
+        if (request.method === 'status.get') {
+          return {
+            ok: true,
+            result: {
+              runtimeProtocolVersion: 3,
+              minCompatibleRuntimeClientVersion: 2,
+              capabilities: [
+                'agent-session.host-authority.v1',
+                ...(modern ? ['agent-resume.host-plan.v1'] : [])
+              ]
+            }
+          }
+        }
+        if (request.method === 'terminal.ensureAgentSession') {
+          if (calls++ === 0) {
+            if (explicitUnknown) {
+              return {
+                ok: false,
+                error: {
+                  code: 'agent_session_operation_outcome_unknown',
+                  message: 'Outcome unknown'
+                }
+              }
+            }
+            throw new Error('response lost after dispatch')
+          }
+          return {
+            ok: true,
+            result: {
+              terminal: { tabId: 'host-typed', paneKey: `host-typed:${FOCUS_LEAF_ID}` },
+              disposition: 'adopted'
+            }
+          }
+        }
+        if (request.method !== 'session.tabs.list') {
+          throw new Error(`Unexpected ${request.method}`)
+        }
+        return { ok: true, result: makeSnapshot() }
+      })
+      stubRuntimeEnvironmentBridge({ call: runtimeCall })
+      const args = {
+        worktreeId: WORKTREE_ID,
+        environmentId: ENVIRONMENT_ID,
+        agentSessionKind: 'resume' as const,
+        launchAgent: 'claude' as const,
+        providerSession: {
+          key: 'session_id' as const,
+          id: `typed-retry-${modern}-${explicitUnknown}`,
+          cwd: '/provider'
+        },
+        cwd: '/launch',
+        env: { ORCA_PANE_KEY: 'tab:leaf', CODEX_HOME: 'C:\\Users\\qa\\managed' },
+        resume: {
+          recipe: {
+            source: 'current-inputs' as const,
+            settings: {
+              agentDefaultArgs: { claude: '--model captured' },
+              agentDefaultEnv: { claude: { RECIPE: 'captured' } }
+            }
+          }
+        }
+      }
+      expect((await createWebRuntimeSessionTerminal(args, { notifyFailure: false })).status).toBe(
+        'failed'
+      )
+      const probes = runtimeCall.mock.calls.filter(
+        ([request]) => request.method === 'status.get'
+      ).length
+      args.resume.recipe.settings.agentDefaultArgs.claude = '--model changed'
+      await expect(
+        createWebRuntimeSessionTerminal(args, { notifyFailure: false })
+      ).resolves.toEqual({ status: 'created' })
+      const ensures = runtimeCall.mock.calls.filter(
+        ([request]) => request.method === 'terminal.ensureAgentSession'
+      )
+      expect(ensures).toHaveLength(2)
+      expect(ensures[1][0].params).toEqual(ensures[0][0].params)
+      expect(
+        runtimeCall.mock.calls.filter(([request]) => request.method === 'status.get')
+      ).toHaveLength(probes)
+      if (modern) {
+        expect(ensures[0][0].params).toMatchObject({
+          resume: { recipe: { settings: { agentDefaultArgs: { claude: '--model captured' } } } },
+          providerSession: { cwd: '/provider' },
+          cwd: '/launch',
+          env: args.env
+        })
+      } else {
+        expect(ensures[0][0].params).toMatchObject({
+          agentArgs: '--model captured',
+          providerSession: { id: `typed-retry-${modern}-${explicitUnknown}` }
+        })
+        expect(ensures[0][0].params).not.toHaveProperty('resume')
+        expect(ensures[0][0].params).not.toHaveProperty('env')
+        expect(ensures[0][0].params).not.toHaveProperty('providerSession.cwd')
+      }
+      expect(
+        runtimeCall.mock.calls.some(([request]) => request.method === 'session.tabs.createTerminal')
+      ).toBe(false)
+    }
+  )
+
   it('keeps same-ID local and runtime worktrees on the selected runtime owner', async () => {
     const selectedHosts: (string | undefined)[] = []
     mocks.setActiveWorktree.mockImplementation((_worktreeId: string, executionHostId?: string) => {

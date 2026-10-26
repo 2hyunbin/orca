@@ -71,6 +71,38 @@ describe('Session History session drag data', () => {
     expect(readAiVaultSessionDragData(transfer)).toEqual(payload)
   })
 
+  it('round-trips selected resume inputs and the real-home alternative without executable text', () => {
+    const transfer = createTransfer()
+    const payload: AiVaultSessionDragPayload = {
+      agent: 'codex',
+      sessionId: 'typed-session',
+      title: 'Typed resume',
+      resume: {
+        recipe: {
+          source: 'current-inputs',
+          settings: { agentDefaultArgs: { codex: '--model selected' } }
+        },
+        codexHome: '/managed'
+      },
+      realHomeStartup: {
+        resume: { recipe: { source: 'saved' }, codexHome: null },
+        envToDelete: ['CODEX_HOME', 'ORCA_CODEX_HOME']
+      }
+    }
+    writeAiVaultSessionDragData(transfer, payload)
+    expect(readAiVaultSessionDragData(transfer)).toEqual(payload)
+    transfer.setData(
+      AI_VAULT_SESSION_DRAG_TYPE,
+      JSON.stringify({
+        kind: 'ai-vault-session',
+        version: 1,
+        ...payload,
+        command: 'also executable'
+      })
+    )
+    expect(readAiVaultSessionDragData(transfer)).toBeNull()
+  })
+
   it('preserves an explicit null sessionCwd across the serialized round-trip', () => {
     const transfer = createTransfer()
     const payload: AiVaultSessionDragPayload = {

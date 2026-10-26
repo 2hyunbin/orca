@@ -84,7 +84,7 @@ describe('a pane restore of a conversation a native chat continues', () => {
     return runtime
   }
 
-  async function spawnResume(resumeOrigin?: 'saved', leafId = LEAF_ID) {
+  async function spawnResume(resumeOrigin?: 'saved', leafId = LEAF_ID, typed = false) {
     const mockProc = createMockProc()
     spawnMock.mockReturnValue(mockProc.proc)
     vi.useFakeTimers()
@@ -96,7 +96,9 @@ describe('a pane restore of a conversation a native chat continues', () => {
         worktreeId: 'wt-1',
         tabId: 'tab-floating',
         leafId,
-        command: `claude --resume '${C}'`,
+        ...(typed
+          ? { resume: { recipe: { source: 'saved' } } }
+          : { command: `claude --resume '${C}'` }),
         launchAgent: 'claude',
         resumeProviderSession: { key: 'session_id', id: C },
         ...(resumeOrigin ? { resumeOrigin } : {})
@@ -106,12 +108,12 @@ describe('a pane restore of a conversation a native chat continues', () => {
         vi.runAllTimers()
       }
       const env: Record<string, string> = spawnMock.mock.calls.at(-1)![2].env
-      const typed = mockProc.proc.write.mock.calls.map((call) => String(call[0]))
+      const inputWrites = mockProc.proc.write.mock.calls.map((call) => String(call[0]))
       const reported = typeof result === 'object' && result !== null ? result : {}
       return {
         refused: 'agentResumeRefused' in reported ? reported.agentResumeRefused : undefined,
         notice: 'agentResumeUnavailable' in reported,
-        input: [env[POSIX_SHELL_STARTUP_COMMAND_ENV] ?? '', ...typed].join('\n')
+        input: [env[POSIX_SHELL_STARTUP_COMMAND_ENV] ?? '', ...inputWrites].join('\n')
       }
     } finally {
       vi.useRealTimers()
@@ -129,6 +131,17 @@ describe('a pane restore of a conversation a native chat continues', () => {
         agent: 'claude',
         providerSession: { key: 'session_id', id: C }
       })
+    }
+  )
+
+  posixOnlyIt(
+    'clears typed resume inputs before the shared planner can regenerate refused work',
+    async () => {
+      register([chat.sessionId])
+      const restored = await spawnResume('saved', LEAF_ID, true)
+      expect(restored).toMatchObject({ refused: 'chat-home', notice: true })
+      expect(restored.input).not.toContain(C)
+      expect(restored.input).not.toContain('--resume')
     }
   )
 
