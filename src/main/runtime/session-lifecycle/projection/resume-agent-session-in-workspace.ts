@@ -42,6 +42,8 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       captureHostId: ExecutionHostId
       /** Names the new pane, so a retry of one request reconciles the pane it may have started. */
       mutationId: string
+      /** Replaces the recorded Arguments, e.g. so a Slack reopen never resumes with approvals skipped. */
+      agentArgs?: string
       signal?: AbortSignal
     }
   ): Promise<AgentSessionResumeResult> {
@@ -87,7 +89,12 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
   private async resumeClaimedAgentSession(
     worktreeId: string,
     session: ResumedAgentSession,
-    request: { captureHostId: ExecutionHostId; mutationId: string; signal?: AbortSignal },
+    request: {
+      captureHostId: ExecutionHostId
+      mutationId: string
+      agentArgs?: string
+      signal?: AbortSignal
+    },
     create: {
       identity: { tabId: string; leafId: string }
       onPtySpawnDispatched: () => void
@@ -134,7 +141,10 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     const record = records[0]
     const resume = this.resolveMobileSessionResumeCommand(workspace, {
       ...session,
-      launchConfig: record?.launchConfig
+      launchConfig:
+        request.agentArgs === undefined
+          ? record?.launchConfig
+          : { agentEnv: {}, ...record?.launchConfig, agentArgs: request.agentArgs }
     })
     if (!resume) {
       return refuse('no_resume_command')

@@ -27,6 +27,8 @@ export async function reopenLinkedAgent(
   terminal: ReopenTerminal,
   worktreeId: string,
   link: ExternalConversationLink,
+  /** The connector launch policy's Arguments, used instead of whatever the session last ran with. */
+  agentArgs: string,
   mutationId: string,
   signal: AbortSignal,
   /** Called as soon as the resumed pane exists, before the readiness wait. */
@@ -43,6 +45,7 @@ export async function reopenLinkedAgent(
     agent: link.agent,
     providerSession,
     captureHostId,
+    agentArgs,
     mutationId,
     signal
   })

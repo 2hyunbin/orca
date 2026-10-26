@@ -10,7 +10,13 @@ import {
 
 export type ExternalConversationStore = ExternalConversationLinkStore & {
   getSettings: () => Partial<
-    Pick<GlobalSettings, 'experimentalConnectors' | 'agentStatusHooksEnabled' | 'disabledTuiAgents'>
+    Pick<
+      GlobalSettings,
+      | 'experimentalConnectors'
+      | 'agentStatusHooksEnabled'
+      | 'disabledTuiAgents'
+      | 'agentDefaultArgs'
+    >
   >
   onSettingsChanged?: (listener: (updates: Partial<GlobalSettings>) => void) => unknown
 }

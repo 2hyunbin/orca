@@ -85,6 +85,8 @@ describe('ExternalConversationSeam reopen', () => {
       agent: 'claude',
       providerSession: SESSION,
       captureHostId: 'local',
+      // Slack reopens never resume with approvals skipped.
+      agentArgs: '--permission-mode default',
       mutationId: expect.stringContaining('d1'),
       signal: expect.any(AbortSignal)
     })

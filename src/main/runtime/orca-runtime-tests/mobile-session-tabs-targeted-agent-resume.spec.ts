@@ -121,18 +121,14 @@ function makeRuntime(
     })
   }
   const resume = (
-    overrides: {
-      captureHostId?: 'local' | `ssh:${string}`
-      mutationId?: string
-      signal?: AbortSignal
-    } = {}
+    overrides: Partial<Parameters<typeof runtime.resumeAgentSessionInWorkspace>[1]> = {}
   ) =>
     runtime.resumeAgentSessionInWorkspace(TEST_WORKTREE_ID, {
       agent: 'claude',
       providerSession: SESSION,
-      captureHostId: overrides.captureHostId ?? 'local',
-      mutationId: overrides.mutationId ?? MUTATION_ID,
-      signal: overrides.signal
+      captureHostId: 'local',
+      mutationId: MUTATION_ID,
+      ...overrides
     })
   const openOldPane = () =>
     runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', HEADLESS_LEAF_ID, {
@@ -377,6 +373,12 @@ describe('resumeAgentSessionInWorkspace', () => {
     // The resume must spawn in the Windows/WSL runtime its command was quoted for.
     expect(spawn.mock.calls[0]?.[0]).toHaveProperty('launchRuntime')
     expect(storedRecord(fixture)).toMatchObject(PANE_OWNED)
+  })
+
+  it('resumes with the Arguments a caller supplies instead of the recorded ones', async () => {
+    const { spawn, resume } = makeRuntime(makeSleptWorkspace())
+    await resume({ agentArgs: '--permission-mode default' })
+    expect(spawnedCommands(spawn)[0]).toMatch(/--permission-mode'? '?default/)
   })
 
   it('resumes and claims the record with a window already attached', async () => {
