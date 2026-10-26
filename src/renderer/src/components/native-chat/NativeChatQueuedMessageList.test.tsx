@@ -593,15 +593,13 @@ describe('NativeChatQueuedMessageList', () => {
         .getByRole('button', { name: 'Steer' })
         .querySelector('.lucide-corner-down-right')
     ).not.toBeNull()
-    expect(
-      waiting!.firstElementChild?.firstElementChild?.classList.contains('lucide-list-end')
-    ).toBe(true)
+    expect(waiting!.querySelector(':scope > div > :first-child svg.lucide-list-end')).not.toBeNull()
     expect(
       within(failed!).getByRole('button', { name: 'Send' }).querySelector('.lucide-send')
     ).not.toBeNull()
     expect(
-      failed!.firstElementChild?.firstElementChild?.classList.contains('lucide-circle-alert')
-    ).toBe(true)
+      failed!.querySelector(':scope > div > :first-child svg.lucide-circle-alert')
+    ).not.toBeNull()
     expect(container.querySelectorAll('.lucide-list-end')).toHaveLength(1)
   })
 
