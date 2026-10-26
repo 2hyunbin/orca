@@ -121,6 +121,7 @@ export function registerAgentStatusListeners(args: {
           pendingAgentStatusEvents.splice(index, 1)
         }
       }
+      useAppStore.getState().flushAgentStatuses()
       const store = useAppStore.getState()
       if (
         data.statusUnavailable !== true &&
