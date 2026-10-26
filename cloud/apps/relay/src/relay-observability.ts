@@ -95,7 +95,7 @@ export interface RelayRuntimeObserver {
   recordDrainReturnRetryAfter?(seconds: number): void
   recordAdmissionServiceMs?(lane: 'sticky' | 'drain-return', durationMs: number): void
   recordStickySlot?(sample: StickySlotSample): void
-  recordAssignmentUnavailable?(cause: AssignmentUnavailableCause): void
+  recordAssignmentUnavailable?(cause: AssignmentUnavailableCause, ownRetry?: boolean): void
   recordDatabaseLockWaitSample?(sample: DatabaseLockWaitSample): void
   recordRegionRequest?(region: RelayRegion | undefined): void
   recordRegionSelection?(input: {
@@ -123,7 +123,8 @@ export type HostPreAuthPath = 'beforeCheck' | 'db' | 'reserve'
 // Abandoned: the host hung up before a decision, or before the cell could act on one.
 export type HostPreAuthOutcome = 'admitted' | 'refused' | 'abandoned'
 
-// Left out of assignNonDrain503sDelta: the drain schedules these 503s.
+// Left out of assignNonDrain503sDelta: the drain schedules these 503s. Own retries
+// (a host re-asking inside its own interval or while in flight) go to ownRetry503sDelta.
 const DRAIN_503_CAUSES: ReadonlySet<string> = new Set<AssignmentUnavailableCause>([
   'drain-return-deferred',
   'reserve-paced-drained'
@@ -208,6 +209,7 @@ type RelayMetricDeltas = {
   stickyStatementMs: number[]
   stickyStatementsObserved: number
   assign503sByCause: Record<string, number>
+  ownRetry503s: number
   dbLockWaitSamples: number
   dbLockWaitersByKey: Record<string, number>
   requestedRegions: Record<string, number>
@@ -303,6 +305,7 @@ const emptyDeltas = (): RelayMetricDeltas => ({
   stickyStatementMs: [],
   stickyStatementsObserved: 0,
   assign503sByCause: {},
+  ownRetry503s: 0,
   dbLockWaitSamples: 0,
   dbLockWaitersByKey: {},
   requestedRegions: {},
@@ -486,8 +489,11 @@ export class RelayObservability implements RelayRuntimeObserver {
     }
   }
 
-  recordAssignmentUnavailable(cause: AssignmentUnavailableCause): void {
+  recordAssignmentUnavailable(cause: AssignmentUnavailableCause, ownRetry = false): void {
     increment(this.deltas.assign503sByCause, cause)
+    if (ownRetry) {
+      this.deltas.ownRetry503s++
+    }
   }
 
   recordDatabaseLockWaitSample(sample: DatabaseLockWaitSample): void {
@@ -718,9 +724,11 @@ export class RelayObservability implements RelayRuntimeObserver {
           }),
       ...stickySlotFields(deltas),
       assign503sByCauseDelta: deltas.assign503sByCause,
-      assignNonDrain503sDelta: Object.entries(deltas.assign503sByCause)
-        .filter(([cause]) => !DRAIN_503_CAUSES.has(cause))
-        .reduce((sum, [, count]) => sum + count, 0),
+      assignNonDrain503sDelta:
+        Object.entries(deltas.assign503sByCause)
+          .filter(([cause]) => !DRAIN_503_CAUSES.has(cause))
+          .reduce((sum, [, count]) => sum + count, 0) - deltas.ownRetry503s,
+      ownRetry503sDelta: deltas.ownRetry503s,
       // Waiters summed over samples / sample count is mean waiting backends (lock-wait seconds per second).
       dbLockWaitSamplesDelta: deltas.dbLockWaitSamples,
       dbLockWaitersByKeyDelta: deltas.dbLockWaitersByKey,
