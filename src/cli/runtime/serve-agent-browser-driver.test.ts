@@ -37,6 +37,9 @@ describe("finding the app's agent-browser driver (#33846)", () => {
     mkdirSync(join(resources, 'app.asar.unpacked'))
     writeFileSync(join(resources, 'agent-browser-win32-x64.exe'), 'driver')
     mkdirSync(join(profile, 'orcad-agent-browser', 'previous-release'), { recursive: true })
+    // Another live launch's copy in progress.
+    const liveCopy = `.tmp-${process.pid}-other`
+    mkdirSync(join(profile, 'orcad-agent-browser', liveCopy))
 
     const staged = await stageAppAgentBrowserDriver(
       join(resources, 'app.asar.unpacked'),
@@ -47,6 +50,9 @@ describe("finding the app's agent-browser driver (#33846)", () => {
 
     expect(staged?.startsWith(join(profile, 'orcad-agent-browser'))).toBe(true)
     expect(staged?.endsWith('agent-browser-win32-x64.exe')).toBe(true)
-    expect(readdirSync(join(profile, 'orcad-agent-browser'))).toHaveLength(1)
+    expect(readdirSync(join(profile, 'orcad-agent-browser'))).toEqual(
+      expect.arrayContaining([liveCopy])
+    )
+    expect(readdirSync(join(profile, 'orcad-agent-browser'))).not.toContain('previous-release')
   })
 })

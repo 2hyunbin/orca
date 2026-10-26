@@ -2,6 +2,9 @@ import { existsSync } from 'node:fs'
 import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { orcadAgentBrowserNativeName } from '../../shared/orcad-agent-browser-name'
+import { isProcessAlive } from '../../shared/serve-bundle-coordination'
+
+const TEMPORARY_PREFIX = '.tmp-'
 
 /** The installed app's agent-browser driver, for orcad's Chromium provider (#33846). Packaged apps ship it in `resources`; a dev checkout keeps it in node_modules. */
 export function findAppAgentBrowserDriver(
@@ -33,7 +36,7 @@ export async function stageAppAgentBrowserDriver(
     const id = `${size}-${Math.trunc(mtimeMs)}`
     const staged = join(root, id, basename(driver))
     if (!existsSync(staged)) {
-      const temporary = join(root, `.tmp-${process.pid}-${id}`)
+      const temporary = join(root, `${TEMPORARY_PREFIX}${process.pid}-${id}`)
       await mkdir(temporary, { recursive: true })
       await copyFile(driver, join(temporary, basename(driver)))
       await rename(temporary, join(root, id)).catch(async (error: unknown) => {
@@ -45,7 +48,10 @@ export async function stageAppAgentBrowserDriver(
     }
     // A copy still running for another serve stays locked and survives until a later pass.
     for (const name of await readdir(root)) {
-      if (name !== id) {
+      const copyingPid = name.startsWith(TEMPORARY_PREFIX)
+        ? Number(name.slice(TEMPORARY_PREFIX.length).split('-')[0])
+        : null
+      if (name !== id && !(copyingPid && isProcessAlive(copyingPid))) {
         await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined)
       }
     }
