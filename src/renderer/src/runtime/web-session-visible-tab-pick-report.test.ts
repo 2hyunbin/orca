@@ -18,13 +18,13 @@ import {
   resetReportedVisibleTabPicksForTests
 } from './web-session-visible-tab-pick-report'
 
-function surface(hostTabId: string, status: 'ready' | 'pending-handle' = 'ready') {
+function surface(hostTabId: string, status: 'ready' | 'pending-handle' = 'ready', leafId = 'leaf') {
   return {
     type: 'terminal' as const,
-    id: `${hostTabId}::leaf`,
+    id: `${hostTabId}::${leafId}`,
     title: hostTabId,
     parentTabId: hostTabId,
-    leafId: 'leaf',
+    leafId,
     isActive: false,
     ...(status === 'ready'
       ? { status: 'ready' as const, terminal: `term-${hostTabId}` }
@@ -84,6 +84,15 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     })
   })
 
+  it('retries after the server answers with an error', async () => {
+    mocks.call.mockResolvedValueOnce({ ok: false, error: { code: 'busy' } })
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
+    await Promise.resolve()
+    reportVisibleTabPickToHost(ENV, frame('host-tab-2'))
+    expect(mocks.call).toHaveBeenCalledTimes(2)
+  })
+
   it.each([
     ['the server already remembers it', frame('host-tab-1')],
     ['the server keeps no pick per device', frame('host-tab-2', { publicationEpoch: 'epoch-1' })],
@@ -91,6 +100,16 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
       'the visible tab has no ready terminal',
       frame('host-tab-2', {
         tabs: [surface('host-tab-1', 'pending-handle'), surface('host-tab-2')]
+      })
+    ],
+    [
+      'only a sibling of the visible pane is ready',
+      frame('host-tab-2', {
+        tabs: [
+          surface('host-tab-1', 'ready', 'sibling'),
+          surface('host-tab-1', 'pending-handle'),
+          surface('host-tab-2')
+        ]
       })
     ]
   ])('reports nothing when %s', (_case, snapshot) => {

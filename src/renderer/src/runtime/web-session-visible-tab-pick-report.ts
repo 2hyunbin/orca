@@ -56,30 +56,48 @@ export function reportVisibleTabPickToHost(
     reportedPickByWorkspace.delete(key)
     return
   }
-  // A ready surface only: reporting must never start a pending or sleeping terminal.
-  const ready = snapshot.tabs.some(
-    (tab) => tab.type === 'terminal' && tab.parentTabId === hostTabId && tab.status === 'ready'
-  )
-  if (!ready || reportedPickByWorkspace.get(key) === hostTabId) {
+  // Name the exact pane and require it ready: activating a pending one would start its terminal.
+  const localLeafId = state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
+  const target =
+    snapshot.tabs.find(
+      (tab) =>
+        tab.type === 'terminal' &&
+        tab.parentTabId === hostTabId &&
+        (!localLeafId || tab.leafId === localLeafId)
+    ) ?? null
+  if (
+    target?.type !== 'terminal' ||
+    target.status !== 'ready' ||
+    reportedPickByWorkspace.get(key) === hostTabId
+  ) {
     return
   }
   reportedPickByWorkspace.set(key, hostTabId)
-  const leafId = state.terminalLayoutsByTabId[visible.entityId]?.activeLeafId
+  const retryLater = (): void => {
+    if (reportedPickByWorkspace.get(key) === hostTabId) {
+      reportedPickByWorkspace.delete(key)
+    }
+  }
   void captureRuntimeEnvironmentCall(environmentId)({
     method: 'session.tabs.activate',
     params: {
       worktree: toRuntimeWorktreeSelector(worktreeId),
       tabId: hostTabId,
-      ...(leafId ? { leafId } : {}),
+      leafId: target.leafId,
       notifyClients: false,
       navigation: 'caller',
       intent: 'automatic'
     },
     timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
-  }).catch(() => {
+  }).then(
     // Best effort; a later frame that still differs reports again.
-    reportedPickByWorkspace.delete(key)
-  })
+    (response) => {
+      if (!response.ok) {
+        retryLater()
+      }
+    },
+    retryLater
+  )
 }
 
 export function resetReportedVisibleTabPicksForTests(): void {
