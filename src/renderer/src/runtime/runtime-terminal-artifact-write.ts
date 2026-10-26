@@ -10,6 +10,7 @@ import {
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import { assertRemoteWriteFitsOneRequest } from './runtime-file-mutation-client'
 import {
   isRenewableGrantError,
   pinTerminalArtifactGrantTarget,
@@ -75,6 +76,8 @@ export async function writeRuntimeTerminalArtifactFile(
   if (new TextEncoder().encode(args.content).byteLength > TERMINAL_ARTIFACT_WRITE_MAX_BYTES) {
     throw new Error('This file is too large to save to its host (512 KB limit).')
   }
+  // Why: escaping can push a smaller file past the host's inbound frame budget.
+  assertRemoteWriteFitsOneRequest(args.content)
   const refusal = async (grantId: string | null): Promise<FileWriteResult | null> => {
     if (!args.precondition) {
       return null

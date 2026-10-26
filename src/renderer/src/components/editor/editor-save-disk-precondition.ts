@@ -125,8 +125,7 @@ export async function editorSaveGrant(
   context: RuntimeFileOperationArgs,
   getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
 ): Promise<EditorSaveGrant | undefined> {
-  const onRenewed = (renewed: string, readOnly?: boolean): void =>
-    getState().setTerminalArtifactGrant(file.id, renewed, readOnly)
+  const onRenewed = (renewed: string): void => getState().setTerminalArtifactGrant(file.id, renewed)
   const expectedEnvironmentPairingRevision =
     context.target.kind === 'environment'
       ? captureRuntimeEnvironmentRequestRevision(context.target.environmentId)
@@ -149,10 +148,11 @@ export async function editorSaveGrant(
     file.filePath,
     expectedEnvironmentPairingRevision
   )
-  onRenewed(restored.grantId, restored.readOnly)
+  // Why: refuse rather than mark the tab read-only, which would drop its draft from the session.
   if (restored.readOnly) {
     throw new Error('This host opens the file read-only.')
   }
+  onRenewed(restored.grantId)
   return { grantId: restored.grantId, onRenewed, expectedEnvironmentPairingRevision }
 }
 

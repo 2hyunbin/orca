@@ -37,7 +37,7 @@ describe('the grant an editor save writes through', () => {
 
     expect(grant?.grantId).toBe('g-2')
     expect(grantRestoredHostFile).toHaveBeenCalledWith(hostContext.target, 'wt-1', PATH, undefined)
-    expect(setTerminalArtifactGrant).toHaveBeenCalledWith(PATH, 'g-2', false)
+    expect(setTerminalArtifactGrant).toHaveBeenCalledWith(PATH, 'g-2')
   })
 
   it('leaves workspace files and this computer’s files to the ordinary save', async () => {
@@ -55,5 +55,16 @@ describe('the grant an editor save writes through', () => {
       editorSaveGrant(tab(), { ...hostContext, target: { kind: 'local' } }, getState)
     ).resolves.toBeUndefined()
     expect(grantRestoredHostFile).not.toHaveBeenCalled()
+  })
+
+  // Why: marking the tab read-only would drop its unsaved draft from the next session save.
+  it('refuses to save through a read-only restored grant without touching the tab', async () => {
+    grantRestoredHostFile.mockResolvedValue({ grantId: 'g-3', readOnly: true })
+    const setTerminalArtifactGrant = vi.fn()
+
+    await expect(
+      editorSaveGrant(tab(), hostContext, () => ({ setTerminalArtifactGrant }))
+    ).rejects.toThrow('read-only')
+    expect(setTerminalArtifactGrant).not.toHaveBeenCalled()
   })
 })

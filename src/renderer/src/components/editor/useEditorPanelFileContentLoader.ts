@@ -171,9 +171,9 @@ export function useEditorPanelFileContentLoader({
               !readGrantId &&
               !chatScratchFileAddress(filePath)
             ) {
-              const restored = await grantRestoredHostFile(readTarget, readWorktreeId, filePath)
-              readGrantId = restored.grantId
-              useAppStore.getState().setTerminalArtifactGrant(id, readGrantId, restored.readOnly)
+              readGrantId = (await grantRestoredHostFile(readTarget, readWorktreeId, filePath))
+                .grantId
+              useAppStore.getState().setTerminalArtifactGrant(id, readGrantId)
             }
             if (!externalSshOwnerId) {
               // Client-local external tabs must stay off the workspace’s SSH host.

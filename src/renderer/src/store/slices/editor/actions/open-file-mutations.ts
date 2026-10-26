@@ -154,11 +154,12 @@ export function createOpenFileMutations(
     setLastKnownDiskSignature: (fileId, signature) =>
       set((s) => updateEditorBuffer(s, fileId, { lastKnownDiskSignature: signature })),
 
-    setTerminalArtifactGrant: (fileId, grantId, readOnly) =>
+    // Why: never touches readOnly, which also guards transcripts and keeps dirty drafts out of sessions.
+    setTerminalArtifactGrant: (fileId, grantId) =>
       set((s) => ({
         openFiles: s.openFiles.map((f) =>
-          f.id === fileId
-            ? { ...f, terminalArtifactGrantId: grantId, ...(readOnly ? { readOnly: true } : {}) }
+          f.id === fileId && f.terminalArtifactGrantId !== grantId
+            ? { ...f, terminalArtifactGrantId: grantId }
             : f
         )
       })),
