@@ -18,8 +18,6 @@ export type ConversationLaunchInput = {
   agent: ConnectorAgent
   target: AgentLaunchParams['target']
   prompt: string
-  /** Replaces the host's default Arguments for this agent (the connector launch policy). */
-  agentArgs: string
 }
 
 export type ConversationLauncher = {
@@ -35,9 +33,9 @@ export type ConversationLauncher = {
 export function runtimeConversationLauncher(runtime: OrcaRuntimeService): ConversationLauncher {
   const context = { runtime }
   return {
-    launch: async ({ agent, target, prompt, agentArgs }, onSurfacePublished, signal) => {
+    launch: async ({ agent, target, prompt }, onSurfacePublished, signal) => {
       const intent = await resolveUnlaunchedIntent(
-        { agent, target, prompt: { text: prompt, delivery: 'submit' }, agentArgs },
+        { agent, target, prompt: { text: prompt, delivery: 'submit' } },
         runtime,
         null
       )

@@ -14,7 +14,6 @@ import type { OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal as OwnedMob
 import { deterministicAgentSessionUuid } from '../../runtime-agent-launch-resolution'
 import { isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
 import type { ResumedAgentSession } from './agent-session-resume-claims'
-import { withResumeArguments } from '../../../../shared/tui-agent-launch-defaults'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
 export type AgentSessionResumeRefusal =
@@ -43,8 +42,6 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       captureHostId: ExecutionHostId
       /** Names the new pane, so a retry of one request reconciles the pane it may have started. */
       mutationId: string
-      /** Replaces the recorded Arguments, e.g. so a connector reopen never resumes with approvals skipped. */
-      agentArgs?: string
       signal?: AbortSignal
     }
   ): Promise<AgentSessionResumeResult> {
@@ -90,12 +87,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
   private async resumeClaimedAgentSession(
     worktreeId: string,
     session: ResumedAgentSession,
-    request: {
-      captureHostId: ExecutionHostId
-      mutationId: string
-      agentArgs?: string
-      signal?: AbortSignal
-    },
+    request: { captureHostId: ExecutionHostId; mutationId: string; signal?: AbortSignal },
     create: {
       identity: { tabId: string; leafId: string }
       onPtySpawnDispatched: () => void
@@ -142,10 +134,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     const record = records[0]
     const resume = this.resolveMobileSessionResumeCommand(workspace, {
       ...session,
-      launchConfig:
-        request.agentArgs === undefined
-          ? record?.launchConfig
-          : withResumeArguments(record?.launchConfig, request.agentArgs)
+      launchConfig: record?.launchConfig
     })
     if (!resume) {
       return refuse('no_resume_command')

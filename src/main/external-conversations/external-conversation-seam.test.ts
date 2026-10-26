@@ -37,17 +37,6 @@ describe('ExternalConversationSeam start', () => {
     ])
   })
 
-  it('launches with the Ask recipe in place of the host default Arguments', async () => {
-    const { seam } = harness()
-    const { launcher, launch } = fakeLauncher(async () => launchResult('handed-to-terminal'))
-    await seam.start({ launcher, terminal: fakeTerminal().terminal }, KEY, 'd1', START)
-    expect(launch).toHaveBeenCalledWith(
-      expect.objectContaining({ agentArgs: '--permission-mode default' }),
-      expect.any(Function),
-      expect.any(AbortSignal)
-    )
-  })
-
   it('answers a launch that fails after publishing as linked but unknown', async () => {
     const { seam, row } = harness()
     const { launcher } = fakeLauncher(async () => {
