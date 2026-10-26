@@ -1495,6 +1495,7 @@
           "systemDescription": "Turns every plugin off at once. Nothing runs until you review and enable it."
         },
         "PluginSettingsRow": {
+          "dev": "Dev",
           "hideLogs": "Hide logs",
           "languageCoverage": "{{value0}} {{value1}}% translated",
           "noDescription": "No description provided.",
