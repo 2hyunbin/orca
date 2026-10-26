@@ -11,9 +11,7 @@ import {
   ConnectorReplyResponseSchema
 } from './event-messages.js'
 import { ConnectorHelloRequestSchema } from './hello-messages.js'
-import { ConnectorHostSessionResponseSchema } from './host-auth-messages.js'
 import { CONNECTOR_LIMITS } from './connector-limits.js'
-import { ConnectorSignInPollResponseSchema } from './sign-in-messages.js'
 
 const conversation = { source: 'slack', externalId: 'T1:C9:1792.9:U5' } as const
 const base = { deliveryId: 'T1:C9:1793.0001', seq: 41, expiresAt: 1_793_000_300_000, conversation }
@@ -86,6 +84,7 @@ describe('acks', () => {
     expect(
       ConnectorAcksRequestSchema.safeParse({
         v: 1,
+        helloRev: 7,
         acks: [
           { deliveryId: 'd1', step: 'received' },
           ...results.map((result) => ({ deliveryId: 'd1', step: 'done', result }))
@@ -93,9 +92,17 @@ describe('acks', () => {
       }).success
     ).toBe(true)
     expect(
-      ConnectorAcksRequestSchema.safeParse({ v: 1, acks: [{ deliveryId: 'd1', step: 'done' }] })
-        .success
+      ConnectorAcksRequestSchema.safeParse({
+        v: 1,
+        helloRev: 7,
+        acks: [{ deliveryId: 'd1', step: 'done' }]
+      }).success
     ).toBe(false)
+  })
+
+  it('names the hello they belong to', () => {
+    const acks = [{ deliveryId: 'd1', step: 'received' }]
+    expect(ConnectorAcksRequestSchema.safeParse({ v: 1, acks }).success).toBe(false)
   })
 })
 
@@ -144,11 +151,13 @@ describe('events', () => {
     ).toBe(true)
   })
 
-  it('numbers every events batch within its host session', () => {
+  it('numbers every events batch within the hello it belongs to', () => {
     const events = [{ kind: 'turn-started', conversation, paneKey: 'tab:leaf', at: 1 }]
-    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, seq: 0, events }).success).toBe(true)
-    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, events }).success).toBe(false)
-    expect(ConnectorEventsRequestSchema.safeParse({ v: 1, seq: -1, events }).success).toBe(false)
+    const parse = (body: object) => ConnectorEventsRequestSchema.safeParse({ v: 1, events, ...body })
+    expect(parse({ helloRev: 7, seq: 0 }).success).toBe(true)
+    expect(parse({ helloRev: 7 }).success).toBe(false)
+    expect(parse({ seq: 0 }).success).toBe(false)
+    expect(parse({ helloRev: 7, seq: -1 }).success).toBe(false)
   })
 
   it('carries a question the agent left without text, as the seam reports it', () => {
@@ -162,28 +171,7 @@ describe('events', () => {
   })
 })
 
-describe('host session', () => {
-  it('names the host once and tolerates added fields', () => {
-    const session = ConnectorHostSessionResponseSchema.parse({
-      sessionToken: Buffer.alloc(32, 3).toString('base64url'),
-      expiresAt: 1_793_003_600_000,
-      hostId: 'D20lU_8MD0R64gLt',
-      addedLater: 1
-    })
-    expect(Object.keys(session)).toEqual(['sessionToken', 'expiresAt', 'hostId'])
-  })
-})
-
-describe('sign-in and hello', () => {
-  it('requires the host id and account only once authorized', () => {
-    expect(ConnectorSignInPollResponseSchema.safeParse({ status: 'pending', interval: 5 }).success).toBe(
-      true
-    )
-    expect(
-      ConnectorSignInPollResponseSchema.safeParse({ status: 'authorized', interval: 5 }).success
-    ).toBe(false)
-  })
-
+describe('hello and replies', () => {
   it('keeps capability entries the cloud does not know', () => {
     const hello = ConnectorHelloRequestSchema.parse({
       v: 1,

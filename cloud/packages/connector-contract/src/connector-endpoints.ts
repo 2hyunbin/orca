@@ -1,12 +1,9 @@
 import { z } from 'zod'
 
-// Every route is POST except hello (PUT). Machine routes take `Authorization: Bearer <sessionToken>`.
+// Every route is POST except hello (PUT), with `Authorization: Bearer <connector token>`: the 5-minute
+// token Orca's auth service mints for a signed-in machine. The machine is that token's (sub, mid), the
+// user and the per-install machine id. A 401 means fetch a new token and try again.
 export const CONNECTOR_PATHS = {
-  signInStart: '/v1/host/auth/start',
-  signInPoll: '/v1/host/auth/poll',
-  signOut: '/v1/host/auth/unbind',
-  hostChallenge: '/v1/host/challenge',
-  hostSession: '/v1/host/session',
   hello: '/v1/connector/hello',
   poll: '/v1/connector/poll',
   acks: '/v1/connector/acks',
@@ -14,14 +11,8 @@ export const CONNECTOR_PATHS = {
   replies: '/v1/connector/replies'
 } as const
 
-// Push's transcript and sealed-challenge layout, with domains no push proof can answer.
-export const CONNECTOR_HOST_PROOF_TRANSCRIPT_DOMAIN = 'orca-connector-host-proof/v1'
-export const CONNECTOR_HOST_CHALLENGE_PLAINTEXT_DOMAIN = 'orca-connector-host-challenge/v1'
-
 export const CONNECTOR_ERROR_CODES = [
-  'session_expired',
-  'host_not_linked',
-  'host_revoked',
+  'invalid_token',
   'hello_required',
   'client_too_old',
   'not_this_hosts_thread'
