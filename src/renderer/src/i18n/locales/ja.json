@@ -19038,6 +19038,7 @@
         "runToolMany": "使用した{{value0}}ツール",
         "runPair": "{{value0}} および {{value1}}",
         "runList": "{{value0}}、{{value1}}",
+        "runListSeparator": "、",
         "runLiveReadOne": "1ファイルを読み込んでいます",
         "runLiveReadMany": "{{value0}} ファイルの読み取り",
         "runLiveSearchOne": "1回検索中",
@@ -19279,10 +19280,10 @@
           "stoppedCount": "{{value0}} が停止しました",
           "unverifiableCount": "{{value0}} 件は状態を取得できません"
         },
-        "startedOne": "1 人のサブ Agent を解雇しました",
-        "startedN": "{{value0}} サブ Agent をキックオフしました",
-        "ranOne": "1 人のサブ Agent を実行しました",
-        "ranN": "{{value0}} サブ Agent を実行しました",
+        "startedOne": "1 個のサブ Agent を起動しました",
+        "startedN": "{{value0}} 個のサブ Agent を起動しました",
+        "ranOne": "1 個のサブ Agent を実行しました",
+        "ranN": "{{value0}} 個のサブ Agent を実行しました",
         "tokens": "{{value0}} トークン",
         "unnamed": "サブ Agent"
       },
