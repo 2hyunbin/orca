@@ -2,7 +2,10 @@ import { ipcMain, type BrowserWindow } from 'electron'
 import type { Store } from '../../persistence'
 import { SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 import { awaitSignInForCredentialHosts } from './ssh-sign-in-requirement'
-import { holdLaunchReconnectOptOuts } from './ssh-host-user-disconnect'
+import {
+  holdLaunchReconnectOptOuts,
+  resetLaunchReconnectOptOutsForTests
+} from './ssh-host-user-disconnect'
 import { SshConnectionManager } from '../../ssh/connection/ssh-connection-manager'
 import { SshPortForwardManager } from '../../ssh/port-forwarding/ssh-port-forward'
 import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
@@ -192,6 +195,7 @@ export async function resetSshHandlerStateForTests(): Promise<void> {
   credentialRequestedForTarget.clear()
   resetSshCredentialDeclinesForTests()
   resetSshUserDisconnectsForTests()
+  resetLaunchReconnectOptOutsForTests()
   quitTeardownStartGate.resetForTests()
   resetSshShutdownDrain()
 

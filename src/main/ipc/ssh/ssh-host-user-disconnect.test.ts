@@ -38,7 +38,10 @@ import {
   isRuntimeEnvironmentManuallyDisconnected
 } from '../runtime-environments/runtime-environment-manual-disconnect'
 import { isSshUserDisconnected } from '../../ssh/ssh-user-disconnect'
-import { holdLaunchReconnectOptOuts } from './ssh-host-user-disconnect'
+import {
+  holdLaunchReconnectOptOuts,
+  resetLaunchReconnectOptOutsForTests
+} from './ssh-host-user-disconnect'
 import { createSshIpcHarness } from './ssh-ipc-test-harness'
 
 const { mockSshStore, mockConnectionManager } = mocks
@@ -171,6 +174,8 @@ describe('a host opted out of reconnect on launch', () => {
   })
 
   it('is not dialed at launch, nor is its managed server, until the user connects it', async () => {
+    // Handler registration already took this process's hold with no hosts; take it again here.
+    resetLaunchReconnectOptOutsForTests()
     holdLaunchReconnectOptOuts([{ ...target, reconnectOnLaunch: false }, { id: 'ssh-2' }], '/tmp')
 
     await expect(

@@ -155,7 +155,7 @@ export function SshHostAdvancedFields({
                 <p className="text-muted-foreground">
                   {translate(
                     'auto.components.settings.SshTargetForm.reconnectOnLaunchHelp',
-                    'When off, Orca leaves this host disconnected when it starts, including its Orca server, until you connect it.'
+                    'When off, Orca leaves this host, and any Orca server reached through it, disconnected at launch until you connect it.'
                   )}
                 </p>
               </div>

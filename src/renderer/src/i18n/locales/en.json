@@ -9317,7 +9317,7 @@
           "proxyConnectionReuse": "Reuse one proxy connection",
           "proxyConnectionReuseHelp": "Faster connects through slow ProxyCommand or ProxyJump hosts. Only enable if your ssh_config doesn't rely on host-specific Match or %h rules.",
           "reconnectOnLaunch": "Reconnect on launch",
-          "reconnectOnLaunchHelp": "When off, Orca leaves this host disconnected when it starts, including its Orca server, until you connect it.",
+          "reconnectOnLaunchHelp": "When off, Orca leaves this host, and any Orca server reached through it, disconnected at launch until you connect it.",
           "allowRemoteCliControl": "Allow this host's orca CLI to control Orca",
           "allowRemoteCliControlHelp": "On by default for new hosts. Lets orca commands run on this host open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected, and lets terminals started by an older Orca on this host run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server.",
           "editTitle": "Edit SSH host",
