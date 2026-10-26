@@ -30,6 +30,8 @@ export type ConversationEvent =
   | (ConversationPane & { kind: 'turn-started'; at: number })
   | (ConversationPane & {
       kind: 'turn-ended'
+      /** The ended turn's turn-started `at`; null when its start predates this watch and the row kept none. */
+      turnId: number | null
       /** Host verdict; null means none was recorded. */
       stopReason: AgentTurnOutcome | null
       lastAssistantMessage?: string
@@ -184,10 +186,10 @@ export class ConversationEvents {
       return
     }
     this.rejected.delete(paneKey)
-    this.turnStartedAt.delete(paneKey)
     this.emit({
       kind: 'turn-ended',
       ...pane(linked.link, linked.workspace.worktreeId),
+      turnId: this.takeTurnId(paneKey, row),
       stopReason: 'cancellation',
       at: activity.observedAt
     })
@@ -250,15 +252,21 @@ export class ConversationEvents {
     if (!link) {
       return
     }
-    this.turnStartedAt.delete(item.paneKey)
     const message = item.row.lastAssistantMessage
     this.emit({
       kind: 'turn-ended',
       ...pane(link, item.worktreeId),
+      turnId: this.takeTurnId(item.paneKey, item.row),
       stopReason,
       ...(message ? { lastAssistantMessage: message } : {}),
       at: item.row.stateStartedAt
     })
+  }
+
+  private takeTurnId(paneKey: string, row: AgentStatusIpcPayload): number | null {
+    const turnId = this.turnStartedAt.get(paneKey) ?? row.turnStartedAt ?? null
+    this.turnStartedAt.delete(paneKey)
+    return turnId
   }
 
   private linkedFor(paneKey: string): LinkedConversation | null {

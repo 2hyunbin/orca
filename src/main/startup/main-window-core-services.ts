@@ -100,11 +100,13 @@ export function attachMainWindowCoreServices(
         // An auth change retries relay installation after launch-time failure.
         void state.desktopRelayInstaller?.authChanged()
         state.desktopRelayService?.authMutated()
+        state.connectorCloud?.accountChanged()
       },
       // Only sign-out fences paired phones; reasonless quit/relaunch must not look like logout.
       onBeforeOrcaProfileSignOut: () => {
         state.desktopRelayInstaller?.suspend()
         state.desktopRelayService?.fenceAndCloseNow(RELAY_HOST_CLOSE_REASON.SIGNED_OUT)
+        state.connectorCloud?.signingOut()
       }
     },
     state.pluginService ?? undefined,
