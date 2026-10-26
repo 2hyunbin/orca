@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { projectIpcPtyConnectResult } from '../ipc-pty-connect-result'
 import type { PtyConnectResult } from '../pty-transport-types'
 import { bindStartFreshSpawn } from './fresh-spawn-start'
+import { captureTerminalLaunchContext } from './terminal-launch-result-policy'
 import { useAppStore } from '@/store'
 import { installPaneTerminalInterfacePresentation } from './pane-terminal-interface-presentation'
 import { clearStaleAgentTabTitleOnConfirmedShell } from './confirmed-shell-agent-title'
@@ -23,6 +24,7 @@ vi.mock('@/store', async () => {
       terminalInterfaceByPtyId: {},
       terminalLayoutsByTabId: {},
       agentStatusByPaneKey: {},
+      agentLaunchConfigByPaneKey: {},
       tabsByWorktree: {},
       runtimePaneTitlesByTabId: {}
     }))
@@ -206,10 +208,15 @@ it('carries real IPC projection identity into the mounted session and releases o
           writeInputModeGround: vi.fn(),
           prepareFreshShellViewportForSpawn: vi.fn(),
           shouldDeclareHiddenAtSpawn: () => false,
-          captureTransportOutputCallbacks: () => ({ generation: 1, callbacks: {} }),
+          captureTransportOutputCallbacks: () => ({
+            generation: 1,
+            launchContext: captureTerminalLaunchContext(session, session.paneStartup),
+            callbacks: {}
+          }),
           finishReattachLiveDataDeferral: vi.fn(),
           handleReattachResult: async () => true,
           registerEffectiveLaunchConfig: vi.fn(),
+          cancelSavedResumeStartup: vi.fn(),
           showSessionRestoredBanner: vi.fn(),
           clearSleepingRecordAfterColdRestoreSpawn: vi.fn(),
           reconcilePtySizeAfterSpawn: vi.fn(),

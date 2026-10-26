@@ -5,7 +5,10 @@ import type { ConnectionState } from '../transport/types'
 import type { MobileSessionTab as Tab } from './mobile-session-route-types'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
-import { resolveMobileNativeChat, canShowMobileNativeChat } from './mobile-native-chat-eligibility'
+import {
+  resolveMobileNativeChat,
+  canShowMobileNativeChat
+} from './native-chat/mobile-native-chat-eligibility'
 
 it('joins listener-first phone observations independently of structural tabs, retracts late tabs and owns client cleanup', async () => {
   const { scopeRpcClientToExecutionHost } =

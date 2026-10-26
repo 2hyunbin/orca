@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
-import { mobileTerminalInterfaceReleasesChat } from './mobile-native-chat-eligibility'
+import { mobileTerminalInterfaceReleasesChat } from './native-chat/mobile-native-chat-eligibility'
 import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
 import {
   editMobileNativeChatDraft,

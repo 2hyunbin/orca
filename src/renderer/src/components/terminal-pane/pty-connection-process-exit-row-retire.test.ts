@@ -2,6 +2,7 @@ import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { RESET_MOUSE_REPORTING } from '../../../../shared/terminal-mode-reset-profiles'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type * as CoordinatorModule from './agent-completion-coordinator'
@@ -23,6 +24,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 const {
   coordinatorOptionsByPaneKey,
@@ -138,6 +140,7 @@ async function connectAgentPane(args: {
   sendData: (data: string) => void
   confirmExit: (agent: TerminalAgent) => void
   onAgentExited: Mock
+  terminal: ReturnType<typeof createPane>['terminal']
 }> {
   const { connectPanePty } = await import('./pty-connection')
   const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -153,14 +156,14 @@ async function connectAgentPane(args: {
     tabId,
     isVisibleRef: { current: args.visible ?? false }
   })
-  const connectArgs = [createPane(paneId), createManager(paneId), deps]
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
-  connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
+  const pane = createPane(paneId)
+  connectPanePty(...mockPanePtyArgs(pane, createManager(paneId), deps))
   await vi.advanceTimersByTimeAsync(20)
   await flushAsyncTicks()
   const paneKey = makePaneKey(tabId, leafIdForPane(paneId))
   return {
     paneKey,
+    terminal: pane.terminal,
     sendData: (data) => dataCallbackRef.current?.(data),
     onAgentExited: deps.onAgentExitedRef.current,
     confirmExit: (agent) =>
@@ -206,6 +209,29 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
 
   afterEach(async () => {
     await restoreTerminalTestGlobals()
+  })
+
+  it('keeps mouse reporting armed when a cached shell name hides a live Codex process', async () => {
+    let foreground = 'codex'
+    vi.mocked(window.api.pty.getForegroundProcess).mockImplementation(async () => foreground)
+    vi.mocked(window.api.pty.hasChildProcesses).mockImplementation(
+      async () => foreground === 'codex'
+    )
+    vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('codex')
+    const { paneKey, terminal } = await connectAgentPane({ ptyId: 'pty-live-codex', visible: true })
+    await seedHookRow(paneKey, 'codex')
+    await vi.advanceTimersByTimeAsync(3_000)
+    terminal.write.mockClear()
+
+    foreground = 'pwsh.exe'
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalledWith('pty-live-codex')
+    expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('codex')
+    expect(mockStoreState.dropAgentStatus).not.toHaveBeenCalled()
+    expect(terminal.write.mock.calls.map(([data]) => data).join('')).not.toContain(
+      RESET_MOUSE_REPORTING
+    )
   })
 
   it('drops the row and retires main latches when Claude exits in a pane without command marks', async () => {
@@ -272,13 +298,14 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
     vi.mocked(window.api.pty.inspectProcess).mockResolvedValue(ambiguousLocalProcessResult())
     await vi.advanceTimersByTimeAsync(3_000)
     expect(onAgentExited).not.toHaveBeenCalled()
-    expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalled()
+    expect(window.api.pty.confirmForegroundProcess).not.toHaveBeenCalled()
     const suspended = ambiguousLocalProcessResult()
     suspended.hasChildProcesses = false
     delete suspended.childProcessEvidence
     vi.mocked(window.api.pty.inspectProcess).mockResolvedValue(suspended)
     foreground = 'zsh'
     await vi.advanceTimersByTimeAsync(750)
+    expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalledWith('pty-job-control')
     expect(onAgentExited).toHaveBeenCalledWith(leafIdForPane(1))
     expect(mockStoreState.agentStatusByPaneKey[paneKey]).toBe(row)
     expect(mockStoreState.agentLaunchConfigByPaneKey[paneKey]).toBeDefined()

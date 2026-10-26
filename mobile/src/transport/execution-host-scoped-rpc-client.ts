@@ -8,10 +8,7 @@ export function executionHostScopedClients(client: RpcClient): Iterable<RpcClien
   return scopedViews.get(client)?.values() ?? []
 }
 
-/**
- * Whether this phone can reach the desktop's servers: the desktop relays, over a transport that
- * carries the `envelope` naming the server (an older shell would refuse every such call).
- */
+// Server calls need both desktop relay support and a transport carrying executionHost; older shells cannot forward the envelope.
 export function relaysToServers(client: RpcClient, hostCapabilities: readonly string[]): boolean {
   return (
     hostCapabilities.includes(MOBILE_DESKTOP_RELAY_RUNTIME_CAPABILITY) &&
@@ -19,10 +16,7 @@ export function relaysToServers(client: RpcClient, hostCapabilities: readonly st
   )
 }
 
-/**
- * The `executionHost` a route into a workspace carries: none for the desktop's own (local, SSH),
- * the server for a reachable one, and null for one this phone cannot reach, which must not open.
- */
+// Undefined selects the desktop; null refuses an unreachable server workspace.
 export function workspaceRouteExecutionHost(
   client: RpcClient | null,
   hostCapabilities: readonly string[],
@@ -34,7 +28,6 @@ export function workspaceRouteExecutionHost(
   return client && relaysToServers(client, hostCapabilities) ? executionHost : null
 }
 
-/** `options` with the call's envelope naming `executionHost`, or untouched for the desktop. */
 function onExecutionHost<Options extends { envelope?: RpcEnvelopeFields }>(
   options: Options | undefined,
   executionHost: ExecutionHostId | undefined
@@ -42,11 +35,7 @@ function onExecutionHost<Options extends { envelope?: RpcEnvelopeFields }>(
   return executionHost ? { ...options, envelope: { ...options?.envelope, executionHost } } : options
 }
 
-/**
- * A view of the paired desktop's client that runs each call on the host `hostOf` names for its
- * params, and on the desktop when it names none. The view owns no connection, so `close` leaves
- * the shared client open.
- */
+// Route calls by params without owning the connection; close must leave the shared client open.
 export function routeRpcClientCalls(
   client: RpcClient,
   hostOf: (params: unknown) => ExecutionHostId | undefined
@@ -70,11 +59,7 @@ export function routeRpcClientCalls(
   }
 }
 
-/**
- * The paired desktop's client with every call run on `executionHost`, mirroring the desktop's
- * `callRuntimeRpc(target, …)`. One view per (client, host), so screens comparing client identity
- * keep working.
- */
+// Cache by client/host so scoped views preserve the identity screens compare.
 export function scopeRpcClientToExecutionHost(
   client: RpcClient,
   executionHost: ExecutionHostId
@@ -93,11 +78,7 @@ export function scopeRpcClientToExecutionHost(
   return view
 }
 
-/**
- * The client for calls about a workspace on `executionHost`: the desktop's own for its workspaces,
- * a scoped view for a reachable server, and null for a server not reachable yet — never the
- * desktop client for a server's workspace, which would run the call on the wrong computer.
- */
+// Return null for unreachable servers; falling back to the desktop would execute workspace calls on the wrong computer.
 export function rpcClientForExecutionHost(
   client: RpcClient,
   hostCapabilities: readonly string[],
@@ -110,7 +91,6 @@ export function rpcClientForExecutionHost(
   return routeHost && scopeRpcClientToExecutionHost(client, routeHost)
 }
 
-/** A scoped client for each of the desktop's servers this phone can reach now, by host. */
 export function reachableServerClients(
   client: RpcClient | null,
   hostCapabilities: readonly string[],

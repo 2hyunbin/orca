@@ -23,11 +23,8 @@ export { PROCESS_TABLE_SNAPSHOT_MAX_STALENESS_MS, PS_ARGS, PS_MAX_BUFFER_BYTES }
 
 const execFile = promisify(execFileCb)
 
-// Why 15s: the `command=` column costs a per-pid argv read (measured 1.15s for 1,948
-// processes; 0.03s without it), and CPU contention multiplies that -- at load 27 the same
-// capture measured 1.3-6.0s, so a 3s budget timed out on 6 of 20 consecutive tries and the
-// whole subsystem answered "unverifiable" about a table it could read. This keeps a wedged
-// `ps` bounded while staying out of reach of a host that is merely busy.
+// command= costs 1.15s for 1,948 idle processes, 1.3–6s at load 27; 3s failed 6/20 captures.
+// Allow 15s for identity reads on busy hosts while bounding wedged ps.
 export const PS_TIMEOUT_MS = 15_000
 
 type Snapshot<T> = { value: T; capturedAtMs: number; completedAtMs: number }
@@ -54,10 +51,8 @@ export function createProcessTableSnapshotReader<T = string>(
   let freshQueued: { promise: Promise<T>; startSequence: number | null } | null = null
 
   async function runSnapshot(): Promise<T> {
-    // Two stamps because they answer different questions: `capturedAtMs` is when `ps` read the
-    // kernel table, which is what a destructive consumer bounds staleness against, while the TTL
-    // keys on completion so a capture slower than the TTL still coalesces instead of forking a
-    // whole-machine `ps` per caller on exactly the loaded host that can least afford it.
+    // Stamp evidence age at capture start, TTL at completion: slow captures must remain old yet still coalesce
+    // instead of spawning one whole-machine ps per caller on loaded hosts.
     const capturedAtMs = deps.now()
     const promise = deps.runPs()
     inFlight = promise
@@ -287,8 +282,7 @@ const processTableReader = createProcessTableSnapshotReader<ProcessTableCapture>
   now: () => Date.now()
 })
 
-// Its own reader, not a column-set flag on the shared one: terminal-name resolution dominates
-// macOS capture time, and a shell proof must not queue behind a full capture it cannot use.
+// Separate shell reader avoids macOS terminal-name costs and waiting on full captures it cannot use.
 const shellForegroundReader = createProcessTableSnapshotReader<ProcessTableRow[]>({
   runPs: async () => parseShellForegroundRows(await captureProcessTable(SHELL_FOREGROUND_PS_ARGS)),
   now: () => Date.now()

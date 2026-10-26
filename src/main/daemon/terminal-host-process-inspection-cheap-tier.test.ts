@@ -356,7 +356,7 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
     }
   )
 
-  it('processes N/10N generic-null shell results without a serial fresh confirmation', async () => {
+  it('matches main confirmation demand for N/10N generic-null shell results', async () => {
     const { createAgentCompletionCoordinator, resetAgentCompletionCoordinatorIdentitiesForTest } =
       await import('../../renderer/src/components/terminal-pane/agent-completion-coordinator')
     const { resetAgentProcessInspectionQueueForTests } =
@@ -370,13 +370,16 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
         fullReader.resetProcessTableSnapshotForTests()
         Object.assign(forks, { full: 0, cheap: 0, narrow: 0 })
         const confirmations = vi.fn()
+        let releaseConfirmation = (): void => {}
+        const confirmationGate = new Promise<void>((resolve) => {
+          releaseConfirmation = resolve
+        })
         const consumed = new Set<number>()
         const shellObserved = vi.fn()
         const exited = vi.fn()
         const inspections = vi.fn()
         const coordinators = Array.from({ length: size }, (_, index) => {
           const session = createSession(() => 'zsh', SHELL_PID + index * 10000)
-          // Keep the removed adapter as a checked structural trap for the old monitor bytes.
           const options = {
             paneKey: `null-wave-${size}:${index}`,
             getPtyId: () => `pty-${index}`,
@@ -400,6 +403,7 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
             },
             confirmForegroundProcess: async () => {
               confirmations(index)
+              await confirmationGate
               return session.confirmForegroundProcess()
             },
             dispatchCompletion: vi.fn(),
@@ -416,14 +420,20 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
           await vi.advanceTimersByTimeAsync(0)
           expect(inspections).toHaveBeenCalledTimes(size)
           expect(consumed.size).toBe(size)
-          expect(confirmations).not.toHaveBeenCalled()
+          expect(confirmations).toHaveBeenCalledTimes(size)
           expect(shellObserved).not.toHaveBeenCalled()
           expect(exited).not.toHaveBeenCalled()
           expect(forks).toEqual({ full: 1, cheap: 0, narrow: 0 })
+          releaseConfirmation()
+          await vi.advanceTimersByTimeAsync(0)
+          expect(confirmations).toHaveBeenCalledTimes(size)
+          expect(forks).toEqual({ full: 2, cheap: 0, narrow: 0 })
+          expect(shellObserved).toHaveBeenCalledTimes(size)
           process.stdout.write(
             `MONITOR_NULL_CAPTURE_BOUND ${JSON.stringify({ hostPlatform, size, consumed: consumed.size, confirmations: confirmations.mock.calls.length, ...forks })}\n`
           )
         } finally {
+          releaseConfirmation()
           coordinators.forEach((coordinator) => coordinator.dispose())
           resetAgentProcessInspectionQueueForTests()
           resetAgentCompletionCoordinatorIdentitiesForTest()

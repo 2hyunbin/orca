@@ -1,9 +1,7 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for the 4 close-routing ipc-events specs, not shipped code, and it falls
-   outside the *.test / *.spec / tests glob set. The stubs and the hook invocation are one unit; splitting the 11 doMock
-   calls back out would duplicate them into all 4 specs. */
 import type * as ReactModule from 'react'
 import { vi } from 'vitest'
 import type { TerminalSurfaceCloseTarget } from '../../../shared/terminal-surface-close-target'
+import { createIdleSshApiStub } from './ipc-events-ssh-api-test-fixtures'
 
 export type RequestTabCloseListener = (data: {
   requestId: string
@@ -96,6 +94,7 @@ export async function useIpcEventsForCloseRouting({
         setSshConnectionState: vi.fn(),
         setSshTargetLabels: vi.fn(),
         setPortForwards: vi.fn(),
+        setUnrestoredPortForwards: vi.fn(),
         clearPortForwards: vi.fn(),
         setDetectedPorts: vi.fn(),
         enqueueSshCredentialRequest: vi.fn(),
@@ -216,8 +215,6 @@ export async function useIpcEventsForCloseRouting({
         respondTerminalTabClose,
         onWorkspaceSleep: () => () => {},
         onResumeSleepingAgents: () => () => {},
-        onNewBrowserTab: () => () => {},
-        onNewMarkdownTab: () => () => {},
         onRequestTabCreate: () => () => {},
         onRequestRemoteCliBrowserScope: () => () => {},
         replyTabCreate: () => {},
@@ -230,7 +227,6 @@ export async function useIpcEventsForCloseRouting({
         replyTabClose,
         onRequestTabSetProfile: () => () => {},
         replyTabSetProfile: () => {},
-        onNewTerminalTab: () => () => {},
         onCloseActiveTab: (listener: CloseActiveTabListener) => {
           if (closeActiveTabListenerRef) {
             closeActiveTabListenerRef.current = listener
@@ -249,19 +245,15 @@ export async function useIpcEventsForCloseRouting({
           }
           return () => {}
         },
-        onSwitchTab: () => () => {},
-        onSwitchTabAcrossAllTypes: () => () => {},
+        onBrowserPageTabShortcut: () => () => {},
         onSwitchRecentTab: () => () => {},
-        onSwitchTerminalTab: () => () => {},
         onToggleStatusBar: () => () => {},
         onFullscreenChanged: () => () => {},
         onTerminalZoom: () => () => {},
         getZoomLevel: () => 0,
         set: vi.fn()
       },
-      settings: {
-        onChanged: () => () => {}
-      },
+      settings: { onChanged: () => () => {} },
       updater: {
         getStatus: () => Promise.resolve({ state: 'idle' }),
         onStatus: () => () => {},
@@ -270,6 +262,7 @@ export async function useIpcEventsForCloseRouting({
       browser: {
         onGuestLoadFailed: () => () => {},
         onOpenLinkInOrcaTab: () => () => {},
+        onSessionProfilesChanged: () => () => {},
         onNavigationUpdate: () => () => {},
         onActivateView: () => () => {},
         onPaneFocus: () => () => {}
@@ -278,17 +271,7 @@ export async function useIpcEventsForCloseRouting({
         get: () => Promise.resolve({ limits: {}, lastUpdatedAt: Date.now() }),
         onUpdate: () => () => {}
       },
-      ssh: {
-        listTargets: () => Promise.resolve([]),
-        listPortForwards: () => Promise.resolve([]),
-        listDetectedPorts: () => Promise.resolve([]),
-        getState: () => Promise.resolve(null),
-        onStateChanged: () => () => {},
-        onCredentialRequest: () => () => {},
-        onPortForwardsChanged: () => () => {},
-        onDetectedPortsChanged: () => () => {},
-        onCredentialResolved: () => () => {}
-      },
+      ssh: createIdleSshApiStub(),
       runtime: {
         subscribe: async () => ({ unsubscribe: () => {} }),
         getTerminalFitOverrides: () => Promise.resolve([]),

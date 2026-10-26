@@ -6,7 +6,6 @@ import type { Project } from '../../../shared/project-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
 
 const mockCreateTab = vi.fn()
-/** Startup commands published with the created tabs, in creation order. */
 function queuedStartups() {
   return mockCreateTab.mock.calls.flatMap((call) => call[3]?.pendingStartup ?? [])
 }
@@ -117,8 +116,7 @@ vi.mock('@/lib/agent-paste-draft', () => ({
   pasteDraftWhenAgentReady: mockPasteDraftWhenAgentReady
 }))
 
-// Why: this file pins main's window launch and its paste, which chat-default and paired launches
-// still take; an AI button's host launch reuses that paste and is pinned in its own tests.
+// Cover window-planned launches/paste here; AI-button host launches share delivery but have separate ownership tests.
 vi.mock('@/lib/launch-agent-new-tab-host-route', () => ({
   newTabPromptLaunchesThroughHost: () => false,
   launchNewTabPromptThroughHost: vi.fn()
@@ -154,7 +152,6 @@ vi.mock('../../../shared/terminal-surface-id', () => ({
   isWebTerminalSurfaceTabId: vi.fn(() => false)
 }))
 
-/** One click that launches Command Code in wt-1, a terminal-route agent. */
 const COMMAND_CODE_CLICK = {
   requestId: 'command-code-click',
   agent: 'command-code',
@@ -164,7 +161,6 @@ const COMMAND_CODE_CLICK = {
 describe('launchAgentInNewTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // The local runtime has answered (without structured support), so no launch waits on it.
     setLocalRuntimeCapabilitiesForTests([])
     mockIsWebRuntimeSessionActive.mockReturnValue(false)
     mockCreateWebRuntimeSessionTerminal.mockResolvedValue({ status: 'created' })
@@ -363,7 +359,6 @@ describe('launchAgentInNewTab', () => {
       promptDelivery: 'draft'
     })
 
-    // Claude's --prefill launch seeds the draft without a paste callback.
     expect(result?.pasteDraftAfterLaunch).toBe(false)
     expect(mockSeedNativeChatLaunchDraft).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -552,7 +547,7 @@ describe('launchAgentInNewTab', () => {
       worktreeId: 'wt-1',
       environmentId: 'web-runtime',
       agentSessionKind: 'fresh',
-      agent: 'codex',
+      launchAgent: 'codex',
       viewMode: 'terminal'
     })
   })
@@ -576,7 +571,7 @@ describe('launchAgentInNewTab', () => {
       worktreeId: 'wt-1',
       environmentId: 'web-runtime',
       agentSessionKind: 'fresh',
-      agent: 'codex',
+      launchAgent: 'codex',
       viewMode: 'terminal'
     })
   })
@@ -767,8 +762,7 @@ describe('launchAgentInNewTab', () => {
     }
     store.ptyIdsByTabId = { 'tab-1': [ptyId] }
 
-    // Why: explicit disconnect sends the transient clear before its state
-    // event, while the old connection can still appear connected and bound.
+    // Disconnect clears status before the state event, while the old binding can still appear connected.
     store.transientClearedAgentStatusConnectionIds = { 'ssh-a': true }
     finishDelivery?.(true)
     await expect(result?.promptDeliveryResult).resolves.toEqual({
@@ -825,7 +819,6 @@ describe('launchAgentInNewTab', () => {
       onTimeout?.()
       return Promise.resolve(false)
     })
-    // User closed the tab before the agent became ready — it is gone from the list.
     store.tabsByWorktree = { 'wt-1': [] }
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
@@ -867,7 +860,6 @@ describe('launchAgentInNewTab', () => {
       onTimeout?.()
       return Promise.resolve(false)
     })
-    // PTY never spawned: a real failure, not a user cancellation.
     store.tabsByWorktree = { 'wt-1': [{ id: 'tab-1', ptyId: null } as never] }
     const { launchAgentInNewTab } = await import('./launch-agent-in-new-tab')
 
@@ -898,7 +890,8 @@ describe('launchAgentInNewTab', () => {
 
     expect(queuedStartups()).toContainEqual(
       expect.objectContaining({
-        command: "codex '--model' 'gpt-5.5'"
+        // Codex's update prompt would take the Enter that submits the pasted prompt (#18153).
+        command: "codex '-c' 'check_for_update_on_startup=false' '--model' 'gpt-5.5'"
       })
     )
   })

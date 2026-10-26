@@ -7,8 +7,7 @@ export type ForegroundReadReason = 'command' | 'visible-pty' | 'command-finished
 
 export type PaneForegroundAgentTrackerDeps = {
   getPtyId: () => string | null
-  /** Local panes only — remote/SSH foreground reads are expensive RPCs and
-   *  their replayed OSC streams must not produce process evidence. */
+  /** Local reads only: remote RPC cost and replayed OSC streams must not produce process evidence. */
   isTrackablePtyId: (ptyId: string) => boolean
   readForegroundProcess: (
     ptyId: string,
