@@ -1,14 +1,11 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import type { ConnectorEvent } from '../../shared/connector-cloud-contract'
-import type { ConnectorFailure } from './connector-cloud-request'
 import { ConnectorTurnEvents } from './connector-turn-events'
 
 const conversation = { source: 'slack', externalId: 'T1:C9:1' } as const
-const REFUSED: ConnectorFailure = { ok: false, status: 503, error: null, retryAfterMs: null }
 let userDataPath: string
 
 const prompt = (promptId: string) =>
@@ -31,48 +28,33 @@ const turnEnded = (turnId: number) =>
   }) as const
 
 beforeEach(() => {
-  vi.useFakeTimers()
   userDataPath = mkdtempSync(join(tmpdir(), 'orca-connector-events-'))
 })
 
 afterEach(() => {
-  vi.useRealTimers()
   rmSync(userDataPath, { recursive: true, force: true })
 })
 
 describe('ConnectorTurnEvents', () => {
-  it('never drops a new hello’s snapshot, even behind a request still in flight', async () => {
+  it('never drops a new hello’s snapshot, even behind a head still in flight', () => {
     const events = new ConnectorTurnEvents(userDataPath, 'ada')
-    const held = Promise.withResolvers<ConnectorFailure | null>()
-    const sent: [number, ConnectorEvent[]][] = []
-    let first = true
-    events.attach(async (batch, seq) => {
-      sent.push([seq, batch])
-      if (first) {
-        first = false
-        return held.promise
-      }
-      return null
-    })
     events.observe(prompt('old'))
+    expect(events.next(1)?.batch).toHaveLength(1)
     events.observe({ kind: 'snapshot', conversations: [] })
     for (let index = 0; index < 600; index++) {
       events.observe(prompt(String(index)))
     }
-    held.resolve(REFUSED)
-    await vi.advanceTimersByTimeAsync(0)
-    expect(sent[1]?.[0]).toBe(0)
-    expect(sent[1]?.[1][0]).toEqual({ kind: 'snapshot', conversations: [] })
+    const head = events.next(2)
+    expect(head?.stamp.seq).toBe(0)
+    expect(head?.batch[0]).toEqual({ kind: 'snapshot', conversations: [] })
   })
 
-  it('keeps 200 turn ends in all, counting a refused batch that holds some', async () => {
+  it('keeps 200 turn ends in all, never trimming the head in flight', () => {
     const events = new ConnectorTurnEvents(userDataPath, 'ada')
     for (let turn = 1; turn <= 50; turn++) {
       events.observe(turnEnded(turn))
     }
-    // The first send freezes all 50 into one refused batch.
-    events.attach(async () => REFUSED)
-    await vi.advanceTimersByTimeAsync(0)
+    expect(events.next(1)?.batch).toHaveLength(50)
     for (let turn = 51; turn <= 300; turn++) {
       events.observe(turnEnded(turn))
     }
@@ -97,21 +79,11 @@ describe('ConnectorTurnEvents', () => {
     expect(events.needsSnapshot).toBe(false)
   })
 
-  it('restores only the turn ends its own account left on disk', async () => {
-    const first = new ConnectorTurnEvents(userDataPath, 'ada')
-    first.observe(turnEnded(1))
-    const sent: ConnectorEvent[][] = []
-    const other = new ConnectorTurnEvents(userDataPath, 'grace')
-    other.attach(async (batch) => {
-      sent.push(batch)
-      return null
-    })
-    const again = new ConnectorTurnEvents(userDataPath, 'ada')
-    again.attach(async (batch) => {
-      sent.push(batch)
-      return REFUSED
-    })
-    await vi.advanceTimersByTimeAsync(0)
-    expect(sent).toEqual([[expect.objectContaining({ kind: 'turn-ended', turnId: 1 })]])
+  it('restores only the turn ends its own account left on disk', () => {
+    new ConnectorTurnEvents(userDataPath, 'ada').observe(turnEnded(1))
+    expect(new ConnectorTurnEvents(userDataPath, 'grace').next(1)).toBeNull()
+    expect(new ConnectorTurnEvents(userDataPath, 'ada').next(1)?.batch).toEqual([
+      expect.objectContaining({ kind: 'turn-ended', turnId: 1 })
+    ])
   })
 })

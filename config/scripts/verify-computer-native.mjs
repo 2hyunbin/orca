@@ -54,6 +54,12 @@ const checks = [
     enabled: process.platform === 'linux'
   },
   {
+    name: 'Linux set_value tests',
+    command: 'python3',
+    args: ['native/computer-use-linux/set_value_test.py'],
+    enabled: true
+  },
+  {
     name: 'Windows provider PowerShell parse',
     command: process.platform === 'win32' ? 'powershell.exe' : 'pwsh',
     args: [

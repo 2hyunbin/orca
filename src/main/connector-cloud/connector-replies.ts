@@ -6,7 +6,7 @@ import {
 } from '../../shared/connector-cloud-contract'
 import type { ConnectorResult } from './connector-cloud-request'
 import type { ConnectorTransport } from './connector-machine'
-import { connectorRetryDelayMs } from './connector-send-queue'
+import { connectorRetryDelayMs } from './connector-outbox'
 
 const REPLY_ATTEMPTS = 3
 // A longer Retry-After fails the reply rather than holding the agent's command.

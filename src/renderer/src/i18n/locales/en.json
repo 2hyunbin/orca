@@ -1457,6 +1457,13 @@
             }
           }
         }
+      },
+      "claudeAgentRowView": {
+        "restartRequired": "Restart Claude in this pane to enable subagent navigation. Recent Claude versions with Orca hooks are required.",
+        "permissionPrompt": "Answer Claude’s permission prompt before switching agents.",
+        "agentUnavailable": "Claude cannot open this agent. It may no longer be available.",
+        "closeDialog": "Claude did not switch views. Close any open dialog and try again.",
+        "hostUnavailable": "Subagent navigation is unavailable on this host. Update Orca and restart Claude in this pane."
       }
     },
     "hooks": {
@@ -13125,7 +13132,9 @@
           "nodeDownloadBlockedNoMirror": "Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.",
           "nodeDownloadBlockedMirrorTried": "Neither this computer nor this host could download Node.js, including from the Node.js download mirror. Check the mirror setting, then connect again.",
           "reassurance": "Runs on {{host}}, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to {{host}}.",
-          "refusedBlockedReason": "Orca isn’t set up on this host yet. {{reason}}"
+          "refusedBlockedReason": "Orca isn’t set up on this host yet. {{reason}}",
+          "windowsBuildUnsupported": "This host runs a version of Windows older than Windows 10 and Windows Server 2016, so it can’t run Orca’s server. Use a host with a newer version of Windows, or a Linux or macOS host.",
+          "windowsNoExtractor": "This Windows host has neither tar.exe nor PowerShell’s Expand-Archive, so Orca can’t unpack its server there. Install Windows PowerShell 5.1 on the host, then connect again."
         },
         "ZcodeCliSetupSection": {
           "title": "Use GLM with ZCode",
@@ -13474,6 +13483,17 @@
           "manualDeleteWarning": "Only do this if no other machine sharing this home runs Orca for this profile.",
           "close": "Close",
           "reclaimedNotStarted": "The lock was cleared, but Orca’s server did not start."
+        },
+        "claudeSubagentNavigation": {
+          "title": "Claude subagent navigation",
+          "description": "Open Claude subagents from the sidebar. Adds a shortcut to Claude’s keybindings.json and loads an Orca mod in new Orca panes. Requires Claude 2.1.300+ and status hooks. Turning off removes Orca’s shortcut; shortcuts you delete stay deleted.",
+          "search": {
+            "subagent": "subagent",
+            "navigation": "navigation",
+            "plugin": "plugin",
+            "mod": "mod",
+            "shortcut": "shortcut"
+          }
         }
       },
       "right": {
@@ -18837,6 +18857,11 @@
         "cancelled": "This plain SSH terminal was closed before it started.",
         "terminalUnavailable": "Orca couldn’t open a terminal here.",
         "openHint": "Keeps you working on the host while Orca can’t set up there."
+      },
+      "ClaudeAgentViewIndicator": {
+        "viewing": "Currently viewing",
+        "viewingChild": "Viewing subagent {{name}}",
+        "returnHint": "Click the parent row to return. Esc stops this subagent. Enter sends your draft to this subagent."
       }
     },
     "i18n": {
