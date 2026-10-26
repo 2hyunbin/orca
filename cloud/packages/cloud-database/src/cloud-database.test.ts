@@ -9,7 +9,9 @@ const SCHEMA = ['CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, value BI
 describe('cloud database', () => {
   const dirs: string[] = []
   afterEach(() => {
-    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+    for (const dir of dirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('names the SQLite file after the service and applies the given schema', async () => {

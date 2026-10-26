@@ -54,11 +54,15 @@ export class HostSessionStore {
       `SELECT host_fingerprint, expires_at FROM ${this.config.table} WHERE token_hash = ?`,
       [hashSessionToken(sessionToken)]
     )
-    if (!row) return { ok: false, reason: 'unknown_session' }
+    if (!row) {
+      return { ok: false, reason: 'unknown_session' }
+    }
     const expiresAt = Number(row.expires_at)
     // No skew grace here: a session that just expired should be re-minted
     // through the challenge, which is cheap and already handled by the host.
-    if (this.now() > expiresAt) return { ok: false, reason: 'session_expired' }
+    if (this.now() > expiresAt) {
+      return { ok: false, reason: 'session_expired' }
+    }
     return { ok: true, hostFingerprint: String(row.host_fingerprint), expiresAt }
   }
 
