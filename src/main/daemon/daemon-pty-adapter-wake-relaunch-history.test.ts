@@ -38,6 +38,13 @@ vi.mock('./daemon-tcc-attribution', async (importOriginal) => {
   }
 })
 
+/** Drives the adapter's own periodic save, which has no public trigger. */
+class SavingDaemonPtyAdapter extends DaemonPtyAdapter {
+  savePeriodically(sessionIds: string[]): Promise<unknown> {
+    return this.checkpointSessions(sessionIds, { final: false })
+  }
+}
+
 describe('daemon history across a wake and a relaunch', () => {
   let dir: string
   let socketPath: string
@@ -93,14 +100,8 @@ describe('daemon history across a wake and a relaunch', () => {
       terminal.dispose()
       return rows
     }
-    let history = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: drives the adapter's own periodic save, which has no public trigger.
-    const save = (adapter: DaemonPtyAdapter) =>
-      (
-        adapter as unknown as {
-          checkpointSessions: (ids: string[], opts: { final: boolean }) => Promise<unknown>
-        }
-      ).checkpointSessions([sessionId], { final: false })
+    let history = new SavingDaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+    const save = (adapter: SavingDaemonPtyAdapter) => adapter.savePeriodically([sessionId])
 
     await history.spawn({ cols: 47, rows: 44, cwd: '/project', sessionId })
     lastSubprocess._simulateData(`${prompt}echo BEFORE\r\nBEFORE\r\n${prompt}`)
@@ -111,7 +112,7 @@ describe('daemon history across a wake and a relaunch', () => {
     await save(history)
     await history.disconnectOnly()
 
-    history = new DaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
+    history = new SavingDaemonPtyAdapter({ socketPath, tokenPath, historyPath: historyDir })
     await history.reconcileOnStartup(new Set([parsePtySessionId(sessionId).worktreeId ?? '']))
     await save(history)
 
