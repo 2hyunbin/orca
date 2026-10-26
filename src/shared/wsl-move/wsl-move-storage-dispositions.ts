@@ -146,6 +146,7 @@ export const SQLITE_TABLE_DISPOSITIONS: Record<string, WslMoveFieldDisposition> 
         'agent_session_store_meta',
         'agent_session_retired_claim_keys',
         'agent_session_command_receipts',
+        'agent_session_mail_holds',
         'agent_session_attachment_claims',
         'agent_session_attachment_sweeps',
         'journal_imports',

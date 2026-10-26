@@ -209,33 +209,22 @@ it.each([
           ...(held ? { nonAdmission: 'held' } : {})
         })
       )
+    const insert = (to: string, subject: string, type = 'status') =>
+      db.insertMessage({ from: 'sender', to, subject, type })
     const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
     for (let index = 0; index < history; index++) {
-      const other = db.insertMessage({
-        from: 'sender',
-        to: 'other-recipient',
-        subject: 'issued elsewhere'
-      })
+      const other = insert('other-recipient', 'issued elsewhere')
       update.run(reference('other', other.to_handle, index % 2 === 0), other.id)
-      const tail = db.insertMessage({
-        from: 'sender',
-        to: mailbox,
-        subject: `tail-${index}`,
-        type: index % 2 ? 'heartbeat' : 'status'
-      })
+      const tail = insert(mailbox, `tail-${index}`, index % 2 ? 'heartbeat' : 'status')
       update.run(reference(PEER_CHAT, mailbox, true), tail.id)
     }
     const owned: string[] = []
     for (let index = 0; index < ownDebt; index++) {
-      const row = db.insertMessage({
-        from: 'sender',
-        to: index % 2 || index === 2 ? mailbox : 'former-address',
-        subject: 'own exact issued'
-      })
+      const row = insert(index % 2 || index === 2 ? mailbox : 'former-address', 'own exact issued')
       update.run(reference(index === 2 ? 'former-session' : PEER_CHAT, row.to_handle), row.id)
       owned.push(row.id)
     }
-    const malformed = db.insertMessage({ from: 'sender', to: mailbox, subject: 'malformed' })
+    const malformed = insert(mailbox, 'malformed')
     update.run('{bad json', malformed.id)
     db.db
       .prepare("UPDATE messages SET delivery_contract = 'legacy_direct' WHERE id = ?")

@@ -14,11 +14,9 @@ import { createJournalReducerState } from './journal-reducer'
 import { journalStopEventRowBuilder } from './journal-stop-and-resume-rows'
 import {
   mailAdmissionPermission,
-  mailHoldsCommitted,
   mailReleaseReceipt,
   mailStopReceipt,
-  readMailHoldFacts,
-  writeMailHold
+  readMailHoldFacts
 } from './journal-mail-holds'
 
 const roots: string[] = []
@@ -164,27 +162,18 @@ it('carries UNKNOWN through a later exact capture until a witnessed release and 
   await h.stop()
   await h.stop(['A'])
   expect(mailAdmissionPermission(h.facts(), ['C'])).toBe(false)
-  const successor = { ...h.record, sessionId: 'successor' }
+  const successor = agentSessionRecordFixture({ sessionId: 'successor' })
   const predecessor = clearedRecord(h.record, successor.sessionId)
   const aliases = () => [predecessor, successor]
   h.apply(mailReleaseReceipt(successor.sessionId))
   const released = readMailHoldFacts(h.database.db, successor.sessionId, aliases, 1)
   expect(mailAdmissionPermission(released, ['A'])).toBe(true)
-  const releaseOrder = Number(
+  for (const record of aliases()) {
     h.database.db
-      .prepare('SELECT intent_order FROM agent_session_mail_holds WHERE session_id = ?')
-      .get(successor.sessionId)?.intent_order
-  )
-  h.database.transaction((db) =>
-    writeMailHold(db, successor.sessionId, {
-      version: 1,
-      status: 'held',
-      members: ['C'],
-      ambiguous: false,
-      releasedThrough: releaseOrder
-    })
-  )
-  mailHoldsCommitted(h.database.db)
+      .prepare('INSERT OR REPLACE INTO agent_session_records VALUES (?, ?)')
+      .run(record.sessionId, JSON.stringify(encodeAgentSessionRecord(record)))
+  }
+  h.apply(mailStopReceipt(successor.sessionId, () => ({ members: ['C'] })))
   const later = readMailHoldFacts(h.database.db, successor.sessionId, aliases, 2)
   expect([...later.members]).toEqual(['C'])
   expect(later.ambiguous).toBe(false)

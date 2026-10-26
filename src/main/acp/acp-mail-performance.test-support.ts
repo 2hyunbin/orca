@@ -87,9 +87,6 @@ export async function measureMailDeliveryWork(input: {
   const maps = z
     .object({ items: z.instanceof(Map), submissions: z.instanceof(Map) })
     .parse(Object.getOwnPropertyDescriptor(journal, 'state')?.value)
-  const flights = z
-    .instanceof(Set)
-    .parse(Object.getOwnPropertyDescriptor(delivery, 'inFlight')?.value)
   const index = journal.mailHandoffs()
   let indexOperations = 0
   let indexScans = 0
@@ -171,12 +168,11 @@ export async function measureMailDeliveryWork(input: {
   expect(freshEvaluations).toBeGreaterThanOrEqual(performance.population)
   expect(freshEvaluations).toBeLessThanOrEqual((passes + 2) * corpus)
   for (let trigger = 0; trigger < triggers; trigger++) {
-    const calls = candidates.mock.calls.length
+    const calls = evidence.mock.calls.length
     delivery.deliverForHandle(mailbox)
     await vi.waitFor(
       () => {
-        expect(candidates.mock.calls.length).toBeGreaterThan(calls)
-        expect(flights.has(mailbox)).toBe(false)
+        expect(evidence.mock.calls.length).toBeGreaterThan(calls)
       },
       { interval: 1 }
     )
@@ -185,8 +181,9 @@ export async function measureMailDeliveryWork(input: {
     (sum, result) => sum + (result.type === 'return' ? result.value.length : 0),
     0
   )
-  // Each uncertain original can restart selection once; pages advance sequence within a pass.
-  expect(sql.count()).toBeGreaterThanOrEqual(triggers * performance.population)
+  // The live ACP turn prevents candidate scans; preparation still reaches the real journal.
+  expect(sql.count()).toBe(0)
+  expect(rows).toBe(0)
   expect(sql.count()).toBeLessThanOrEqual(triggers * (passes + 1) * corpus)
   expect(rows).toBeLessThanOrEqual(
     triggers * passes * (performance.population + performance.uncertain + 5) + triggers
@@ -200,7 +197,7 @@ export async function measureMailDeliveryWork(input: {
   expect(indexScans).toBe(0)
   expect(indexOperations).toBeLessThanOrEqual(20 * (performance.population + triggers * passes))
   expect(folds.mock.calls.length).toBeLessThanOrEqual(performance.population + 2)
-  sql.verify((query) => [mailbox, 0, ...(query.includes('NOT IN') ? ['question'] : []), 50])
+  sql.verify()
   sql.restore()
   const discovery = observeMailSqlWork(
     db.db,
@@ -211,7 +208,7 @@ export async function measureMailDeliveryWork(input: {
   )
   expect(db.getOpenMailHandoffHandles()).toEqual([mailbox])
   expect(discovery.count()).toBe(corpus + 1)
-  discovery.verify(() => [])
+  discovery.verify()
   discovery.restore()
   console.info('actual mail-trigger work', {
     population: performance.population,

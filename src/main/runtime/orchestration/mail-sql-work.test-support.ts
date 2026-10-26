@@ -14,7 +14,8 @@ export function observeMailSqlWork(
     .parse(Object.getOwnPropertyDescriptor(database, 'db')?.value)
   let evaluations = 0
   let observing = true
-  const statements = new Map<string, string>()
+  const statements = new Map<string, { instrumented: string; args: SQLInputValue[] }>()
+  const seen = new WeakSet()
   native.function('observe_mail_work', { deterministic: true }, (value) => {
     if (observing) {
       evaluations++
@@ -28,20 +29,27 @@ export function observeMailSqlWork(
     }
     expect(sql).toContain(expression)
     const instrumented = sql.replace(expression, `observe_mail_work(${expression})`)
-    statements.set(sql, instrumented)
-    return prepare(instrumented)
+    const statement = prepare(instrumented)
+    if (!seen.has(statement)) {
+      seen.add(statement)
+      const all = statement.all.bind(statement)
+      vi.spyOn(statement, 'all').mockImplementation((...args) => {
+        statements.set(sql, { instrumented, args })
+        return all(...args)
+      })
+    }
+    return statement
   })
   return {
     count: () => evaluations,
     reset: () => {
       evaluations = 0
     },
-    verify: (parameters: (sql: string) => SQLInputValue[]) => {
+    verify: () => {
       expect(statements.size).toBeGreaterThan(0)
       observing = false
       try {
-        for (const [original, instrumented] of statements) {
-          const args = parameters(original)
+        for (const [original, { instrumented, args }] of statements) {
           expect(native.prepare(`EXPLAIN QUERY PLAN ${instrumented}`).all(...args)).toEqual(
             native.prepare(`EXPLAIN QUERY PLAN ${original}`).all(...args)
           )

@@ -1,3 +1,5 @@
+import { structuredMailBody } from '../runtime/orchestration/structured-mail-source'
+import { mintAgentSessionOperationId } from '../runtime/orchestration/structured-pointer-operation-id'
 import '../runtime/rpc/unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
@@ -374,7 +376,7 @@ describe('Steer on a Grok card, through the host', () => {
 
 // A real execution host, ACP adapter and RPC dispatcher; only the ACP child is scripted.
 it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
-  'drains five mail obligations as one ACP input (%s), with exact check replay and ack',
+  'holds a backlog for a full ACP turn, then reports its oldest member with exact check replay and ack (%s)',
   async (variant) => {
     const history = variant === 'mixed-10N' ? 'mixed' : variant
     const population = variant === 'mixed-10N' ? 1000 : 100
@@ -430,20 +432,26 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
       })
       const insert = () =>
         db.insertMessage({ from: 'worker', to: mailbox, runId, subject: 'result' })
+      if (history !== 'fresh') {
+        await send(f.host, 'release mail')
+        const release = await f.rig.frame('session/prompt')
+        f.rig.child().agent.reply(release, { stopReason: 'end_turn' })
+        await waitFor(() => expect(pointerHost.takesMailNow?.(SESSION)).toBe(true))
+      }
       const first = insert()
-      let prompts = 0
+      let prompts = 1
       if (history === 'mixed' || history === 'invalidation') {
         delivery.deliverForHandle(mailbox)
-        const failed = await f.rig.frame('session/prompt')
+        const failed = await f.rig.frame('session/prompt', prompts)
         f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(failed), 'working'))
         await waitFor(() =>
           expect(JSON.parse(db.getMessageById(first.id)!.handoff!).phase).toBe('offered')
         )
         f.rig.child().agent.fail(failed, -32603, 'Internal error')
         await waitFor(async () =>
-          expect((await f.turns())[0]).toMatchObject({ outcome: 'failure' })
+          expect((await f.turns()).at(-1)).toMatchObject({ outcome: 'failure' })
         )
-        prompts = 1
+        prompts = 2
       } else if (history === 'fresh') {
         await send(f.host, 'working before mail')
         const working = await f.rig.frame('session/prompt')
@@ -451,15 +459,34 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         await f.rig.settle()
         await f.host.flushStreamedEvents(SESSION)
         answersCancels(f.rig.child().agent)
+        expect(
+          await pointerHost.send({
+            sessionId: SESSION,
+            dispatchId: null,
+            operationId: mintAgentSessionOperationId(Date.now()),
+            expectedRuntimeFence: f.fence(),
+            beforeRun: () => true,
+            body: structuredMailBody({
+              db,
+              mailboxHandle: mailbox,
+              dispatchId: null,
+              message: first,
+              senderName: () => null,
+              cliCommand: 'orca'
+            })
+          })
+        ).toEqual({ kind: 'held' })
         prompts = 1
       }
       if (history === 'held-epoch') {
         const held = vi.spyOn(pointerHost, 'send').mockResolvedValue({ kind: 'held' })
         delivery.deliverForHandle(mailbox)
-        await waitFor(() => expect(held).toHaveBeenCalledTimes(1))
+        await waitFor(() => expect(held).toHaveBeenCalled())
+        await f.rig.settle()
+        const heldCalls = held.mock.calls.length
         const original = JSON.parse(db.getMessageById(first.id)!.handoff!)
         delivery.onJournalActivity(SESSION)
-        await waitFor(() => expect(held).toHaveBeenCalledTimes(2))
+        await waitFor(() => expect(held.mock.calls.length).toBeGreaterThan(heldCalls))
         expect(JSON.parse(db.getMessageById(first.id)!.handoff!).operationId).toBe(
           original.operationId
         )
@@ -484,6 +511,18 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         }
         return actualSend(...args)
       })
+      if (history === 'fresh') {
+        const prepared = vi.spyOn(pointerHost, 'readHandoffEvidence')
+        delivery.deliverForHandle(mailbox)
+        await waitFor(() => expect(prepared).toHaveBeenCalled())
+        await f.rig.settle()
+        expect(sendSpy).not.toHaveBeenCalled()
+        expect(db.getMessageById(first.id)?.handoff).toBeNull()
+        expect(f.rig.sent('session/prompt')).toHaveLength(prompts)
+        f.rig.child().agent.reply(await f.rig.frame('session/prompt'), { stopReason: 'end_turn' })
+        await waitFor(() => expect(pointerHost.takesMailNow?.(SESSION)).toBe(true))
+        prepared.mockRestore()
+      }
       delivery.deliverForHandle(mailbox)
       const pointer = await f.rig.frame('session/prompt', prompts).catch((error) => {
         console.error(
@@ -496,10 +535,12 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
       })
       await f.rig.settle()
       expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
-      expect(f.rig.sent('session/cancel')).toHaveLength(history === 'fresh' ? 1 : 0)
-      expect(JSON.stringify(pointer.params)).toContain(
-        `You have ${history === 'invalidation' ? 4 : 5} orchestration messages`
-      )
+      expect(f.rig.sent('session/cancel')).toHaveLength(0)
+      const delivered = messages[history === 'invalidation' ? 1 : 0]
+      expect(sendSpy.mock.calls.at(-1)?.[1].body?.from?.orchestration).toMatchObject({
+        carriesMailContent: true,
+        messages: [{ messageId: delivered.id, runId, from: 'worker' }]
+      })
       expect(messages.map((m) => db.getMessageById(m.id)!.recovery_used)).toEqual([
         history === 'mixed' || history === 'invalidation' ? 1 : 0,
         0,
@@ -507,16 +548,9 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         0,
         0
       ])
-      expect(
-        new Set(
-          messages
-            .slice(history === 'invalidation' ? 1 : 0)
-            .map((m) => JSON.parse(db.getMessageById(m.id)!.handoff!).authorizationId)
-        ).size
-      ).toBe(history === 'invalidation' ? 4 : 5)
       f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(pointer), 'checking'))
       await waitFor(() =>
-        expect(JSON.parse(db.getMessageById(messages.at(-1)!.id)!.handoff!).phase).toBe('offered')
+        expect(JSON.parse(db.getMessageById(delivered.id)!.handoff!).phase).toBe('offered')
       )
       if (performance) {
         await measureMailDeliveryWork({ f, db, delivery, mailbox, performance })

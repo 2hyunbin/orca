@@ -81,6 +81,10 @@ function queuedReceipt(reference: StructuredMailHandoff, clientMessageId: string
   }
 }
 
+function report(db: OrchestrationDb, subject: string) {
+  return db.insertMessage({ from: 'sender', to: 'consumer', subject })
+}
+
 function issued(db: OrchestrationDb, ids: string[], patch: Partial<StructuredMailHandoff> = {}) {
   const reference = mailHandoffFixture({
     manifest: {
@@ -105,13 +109,15 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
     const { db, message, evidence, host, send, delivery } = harness()
     db.markAsRead([message.id])
     const saved = new Map<string, string>()
+    const assertSaved = () => {
+      for (const [id, handoff] of saved) {
+        expect(db.getMessageById(id)?.handoff).toBe(handoff)
+      }
+    }
     const sources = new Set(['session'])
     for (let i = 0; i < count; i++) {
-      const row = db.insertMessage({ from: 'sender', to: 'consumer', subject: `old-${i}` })
-      const victim =
-        mode === 'cohort'
-          ? db.insertMessage({ from: 'sender', to: 'consumer', subject: 'sibling' })
-          : null
+      const row = report(db, `old-${i}`)
+      const victim = mode === 'cohort' ? report(db, 'sibling') : null
       const prior = `prior-${i}`
       const original = `original-${i}`
       const reference = issued(db, victim ? [row.id, victim.id] : [row.id], {
@@ -160,11 +166,8 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
       readers.set(sessionId, journal)
     }
     const costs = {
-      inventory: 0,
       raw: 0,
       receipts: 0,
-      candidates: 0,
-      rows: 0,
       ordered: 0,
       storeRows: 0,
       members: 0
@@ -182,18 +185,8 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
         }
       }
     )
-    const inventory = db.getIssuedSessionMail.bind(db)
-    vi.spyOn(db, 'getIssuedSessionMail').mockImplementation((...args) => {
-      costs.inventory++
-      return inventory(...args)
-    })
-    const candidates = db.getAutomaticMailCandidates.bind(db)
-    vi.spyOn(db, 'getAutomaticMailCandidates').mockImplementation((...args) => {
-      const rows = candidates(...args)
-      costs.candidates++
-      costs.rows += rows.length
-      return rows
-    })
+    const inventory = vi.spyOn(db, 'getIssuedSessionMail')
+    const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
     host.readReceipt = () => {
       costs.receipts++
       return { verdict: 'absent' }
@@ -216,6 +209,8 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
     }
     for (const edge of ['initial', 'repeat'] as const) {
       Object.keys(costs).forEach((key) => Reflect.set(costs, key, 0))
+      inventory.mockClear()
+      candidates.mockClear()
       if (edge === 'repeat' && mode === 'busy') {
         delivery.onJournalActivity('session')
       } else {
@@ -223,25 +218,21 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
       }
       await new Promise<void>((done) => setImmediate(done))
       console.log({ count, mode, edge, ...costs })
-      expect(costs.inventory).toBeLessThanOrEqual(mode === 'busy' ? 2 : 3)
+      expect(inventory.mock.calls.length).toBeLessThanOrEqual(mode === 'busy' ? 2 : 3)
       expect(costs.raw).toBeGreaterThanOrEqual(count)
       expect(costs.raw).toBeLessThanOrEqual(6 * count)
       expect(costs.receipts).toBeLessThanOrEqual(3 * count)
       expect(costs.ordered).toBe(sources.size)
       expect(costs.storeRows).toBeGreaterThanOrEqual(sources.size)
-      expect(costs.candidates).toBeLessThanOrEqual(mode === 'busy' ? 0 : 3 * count + 3)
-      expect(costs.rows).toBeLessThanOrEqual(6 * count)
+      expect(candidates.mock.calls.length).toBeLessThanOrEqual(mode === 'busy' ? 0 : 3 * count + 3)
+      expect(
+        candidates.mock.results.reduce((n, r) => n + (r.type === 'return' ? r.value.length : 0), 0)
+      ).toBeLessThanOrEqual(6 * count)
       expect(send).not.toHaveBeenCalled()
-      for (const [id, handoff] of saved) {
-        expect(db.getMessageById(id)?.handoff).toBe(handoff)
-      }
+      assertSaved()
     }
     if (mode !== 'busy') {
-      const fresh = db.insertMessage({
-        from: 'sender',
-        to: 'consumer',
-        subject: 'independent report'
-      })
+      const fresh = report(db, 'independent report')
       delivery.deliverForHandle('consumer')
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce())
       const notice = send.mock.calls[0]![0].body.from?.orchestration
@@ -254,9 +245,7 @@ it.each([10, 100].flatMap((count) => ['busy', 'idle', 'cohort'].map((mode) => ({
       delivery.onJournalActivity('session')
       await vi.waitFor(() => expect(db.getMessageById(fresh.id)?.read).toBe(1))
       expect(send).toHaveBeenCalledOnce()
-      for (const [id, handoff] of saved) {
-        expect(db.getMessageById(id)?.handoff).toBe(handoff)
-      }
+      assertSaved()
     }
   }
 )
@@ -326,7 +315,7 @@ it.each(['failed', 'disappeared', 'changed'] as const)(
       })
     )
     const saved = db.getMessageById(message.id)!.handoff
-    const other = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'uncertain source' })
+    const other = report(db, 'uncertain source')
     db.db
       .prepare('UPDATE messages SET handoff = ?, recovery_used = 1 WHERE id = ?')
       .run(JSON.stringify({ ...issuedReference, sessionId: 'source' }), other.id)
@@ -355,11 +344,7 @@ it.each(['failed', 'disappeared', 'changed'] as const)(
         if (failure === 'changed' && source.sessionId === 'source') {
           await new Promise<void>((done) => setImmediate(done))
           expect(db.db.isTransaction).toBe(false)
-          const later = db.insertMessage({
-            from: 'sender',
-            to: 'consumer',
-            subject: 'new dependency'
-          })
+          const later = report(db, 'new dependency')
           issued(db, [later.id], { sessionId: 'later' })
           db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?').run(
             JSON.stringify({

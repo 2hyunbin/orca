@@ -114,6 +114,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
 
     await finishWorker(taskId)
 
+    // No user action: the result itself sends the chat a turn through the host's send.
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
     expect(turnText(chat.turns[0]!)).toMatch(MAIL)
     await settleTurn(COORDINATOR, 0)
@@ -133,7 +134,8 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     await finishWorker(taskId)
     await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
 
-    // Pending sends do not acknowledge mail; retry edges until provider echo confirms delivery.
+    // A pending send is not an acknowledgement, so the mail is retained and retried on every edge
+    // until the host confirms it: before the echo, and again at the turn's idle edge.
     runtime.deliverPendingMessagesForHandle(`run:${runId}`)
     await settleTurn(COORDINATOR, 0)
     runtime.deliverPendingMessagesForHandle(`run:${runId}`)
@@ -196,7 +198,8 @@ describe('a worker result reaches the structured chat that coordinates it', () =
 
   it('does not restart a provider that dies before every echo, however many edges follow', async () => {
     observationClock.start()
-    // A death-status edge formerly re-pointed unread mail and restarted the provider every second.
+    // What this pins: each death's own status edge used to re-point the mail, and that send started
+    // the provider again, about once a second for as long as the mail was unread.
     await openChat(COORDINATOR)
     const { runId, taskId } = await coordinatorRunAndTask()
     providerFaults.dieBeforeEveryEcho = true
@@ -215,7 +218,8 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     'does not restart a provider that crashed while taking the pointer turn (%s)',
     async (crash) => {
       observationClock.start()
-      // A failed send records unknown with the connection error; status edges must not re-point it into a respawn loop.
+      // The crash settles the send `unknown` with the connection's own error, not as a provider
+      // exit; every status edge after it re-pointed the mail and started the provider again.
       await openChat(COORDINATOR)
       const { runId, taskId } = await coordinatorRunAndTask()
       providerFaults.crashOnTurnStart = crash
@@ -266,6 +270,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     const before = providerFaults.starts
     await finishWorker(taskId)
     await vi.waitFor(() => expect(providerFaults.starts).toBe(before + 1), WAIT)
+    // The person presses Stop while the agent is still starting.
     const cancelling = host.cancel(
       { callerKey: 'test-surface' },
       {
@@ -369,6 +374,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
     async (_label, refusal) => {
       const { runId, starts } = await refusedStartsFor(refusal)
       expect(starts).toBe(1)
+      // Later edges replay the refusal: no start, and no new pointer and failure rows in the chat.
       const before = providerFaults.starts
       for (let edge = 0; edge < 5; edge += 1) {
         runtime.onStructuredSessionStatusForMail({ sessionId: COORDINATOR, status: 'idle' })
@@ -493,7 +499,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
   })
 
   it('points mail a refused turn left in doubt again with the next result, counting both', async () => {
-    // Failed turn/start remains unknown on replay; a new result points to both messages without waiting behind that doubt.
+    // Failed turn/start remains unknown; a new result can run while check still reads both.
     const chat = await openChat(COORDINATOR)
     const { taskId } = await coordinatorRunAndTask()
     const second = await call(
@@ -518,6 +524,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
   it('points a coordinator whose agent is not running through the send alone, which starts it', async () => {
     await openChat(COORDINATOR)
     const { taskId } = await coordinatorRunAndTask()
+    // What the idle sweep leaves of a chat nobody is looking at: agent stopped, no map entry.
     await host.close(COORDINATOR, 'evict')
     expect(host.hasSession(COORDINATOR)).toBe(false)
     const before = codex.connections.length
@@ -673,6 +680,7 @@ describe('a worker result reaches the structured chat that coordinates it', () =
       call('orchestration.runCurrent', {}, { sessionId: cleared })
     ).resolves.toMatchObject({ run: { id: runId } })
     expect(db.getRunRaw(runId)!.coordinator_orca_session_id).toBe(COORDINATOR)
+    // What it sends carries the same address.
     await openChat(PEER_CHAT)
     await expect(
       call(

@@ -1,4 +1,4 @@
-import { afterEach, assert, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { openAttachedHostRig, send, hello, framesOf } from './acp-structured-host.test-support'
 import { PROVIDER_SESSION, waitFor } from './acp-structured-adapter.test-support'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
@@ -8,52 +8,10 @@ import { commandReceiptScope } from '../native-chat/agent-session-journal/comman
 import { createStructuredMailboxPointerHost } from '../runtime/orchestration/structured-mailbox-pointer-host'
 import { mintAgentSessionOperationId } from '../runtime/orchestration/structured-pointer-operation-id'
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
-import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 
 afterEach(async () => {
   setStructuredAgentSessionHost(null)
   await closeProviderTimelineRigs()
-})
-
-const mailNotice: AgentJournalMessageItem = {
-  ...hello,
-  from: {
-    kind: 'agent',
-    senders: [],
-    orchestration: { message: 'mail-notice', mailbox: 'run:r1', dispatchId: null, messages: [] }
-  }
-}
-
-function sendMail(host: StructuredAgentSessionHost, operationId: string) {
-  return createStructuredMailboxPointerHost().send({
-    sessionId: SESSION,
-    dispatchId: null,
-    operationId,
-    expectedRuntimeFence: host.deps.store.getRecord(SESSION)!.lease.runtimeFence,
-    beforeRun: () => true,
-    body: mailNotice
-  })
-}
-
-it('holds mail while an ACP turn runs instead of cancelling it, then sends it once the chat is idle', async () => {
-  const { host, rig } = await openAttachedHostRig()
-  setStructuredAgentSessionHost(host)
-  await send(host, 'work')
-  const prompt = await rig.frame('session/prompt')
-  const pointer = createStructuredMailboxPointerHost()
-  const takesMailNow = pointer.takesMailNow?.bind(pointer)
-  assert(takesMailNow, 'missing ACP mail admission check')
-  await waitFor(() => expect(takesMailNow(SESSION)).toBe(false))
-  const operationId = mintAgentSessionOperationId(1_800_000_000_000)
-  expect(await sendMail(host, operationId)).toEqual({ kind: 'held' })
-  expect(framesOf(rig.child(), 'session/cancel')).toHaveLength(0)
-  rig.child().agent.reply(prompt, { stopReason: 'end_turn' })
-  await waitFor(() => expect(takesMailNow(SESSION)).toBe(true))
-  const sent = sendMail(host, operationId)
-  rig.child().agent.reply(await rig.frame('session/prompt', 1), { stopReason: 'end_turn' })
-  expect(await sent).toMatchObject({ kind: 'sent' })
-  expect(framesOf(rig.child(), 'session/cancel')).toHaveLength(0)
-  await host.close(SESSION, 'user-close')
 })
 
 it('holds mail without interrupting an answerable ACP question', async () => {

@@ -337,11 +337,13 @@ export class AgentSessionJournal {
 
   appendSteps: JournalStepWriter['append'] = (steps) => this.stepWriter.append(steps)
 
-  appendSubmission: JournalSubmissionWriter['append'] = (...args) =>
-    this.submissionWriter.append(...args)
+  appendSubmission(...args: Parameters<JournalSubmissionWriter['append']>) {
+    return this.submissionWriter.append(...args)
+  }
 
-  resolveDispatch: JournalSubmissionWriter['resolveDispatch'] = (...args) =>
-    this.submissionWriter.resolveDispatch(...args)
+  resolveDispatch(...args: Parameters<JournalSubmissionWriter['resolveDispatch']>) {
+    return this.submissionWriter.resolveDispatch(...args)
+  }
 
   acceptLate: JournalSubmissionWriter['acceptLate'] = (i) => this.submissionWriter.acceptLate(i)
 
