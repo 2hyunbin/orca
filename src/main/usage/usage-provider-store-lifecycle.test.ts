@@ -183,6 +183,8 @@ describe('UsageProviderStoreLifecycle', () => {
   })
 
   it('reports enabled scans and preserves revisions when the usage cache is rebuilt', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
     const telemetry = setupTelemetryClientTest()
     try {
       const cacheFile = join(tempDirectory, 'provider.json')
@@ -197,14 +199,21 @@ describe('UsageProviderStoreLifecycle', () => {
         event: 'agent_token_usage',
         properties: { revision: 1, input_tokens: 10 }
       })
+      const { timestamp: firstTimestamp, ...firstEvent } = first ?? {}
+      expect(firstTimestamp).toEqual(new Date(NOW))
       await original.flush()
       rmSync(cacheFile)
+      vi.setSystemTime(NOW + 1_000)
       const rebuilt = createStore(cacheFile)
       await rebuilt.setEnabled(true)
       await rebuilt.refresh(true)
-      expect(telemetry.mock.capture.mock.calls[1]?.[0]).toEqual(first)
+      const { timestamp: rebuiltTimestamp, ...rebuiltEvent } =
+        telemetry.mock.capture.mock.calls[1]?.[0] ?? {}
+      expect(rebuiltEvent).toEqual(firstEvent)
+      expect(rebuiltTimestamp).toEqual(new Date(NOW + 1_000))
     } finally {
       cleanupTelemetryClientTest(telemetry.envStash)
+      vi.useRealTimers()
     }
   })
 
