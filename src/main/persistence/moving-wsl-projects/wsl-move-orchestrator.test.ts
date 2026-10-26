@@ -9,9 +9,9 @@ import { wslMoveJournalKey } from '../../../shared/wsl-move/wsl-move-cutover'
 import type { WslMoveOrchestratorRecord } from '../../../shared/wsl-move/wsl-move-orchestrator-types'
 import {
   WslMoveOrchestrator,
-  WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS,
-  type WslMoveOrchestratorPorts
+  WSL_MOVE_ORCHESTRATOR_PROJECT_OPENED_THROTTLE_MS
 } from './wsl-move-orchestrator'
+import type { WslMoveOrchestratorPorts } from './wsl-move-orchestrator-ports'
 import {
   WSL_MOVE_ORCHESTRATOR_BACKOFF_MS,
   WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS

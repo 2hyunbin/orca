@@ -20,11 +20,11 @@ import {
   previewWslMove
 } from '../persistence/moving-wsl-projects/wsl-move-driver'
 import { wslMovedDistroVerdict } from '../persistence/moving-wsl-projects/wsl-move-moved-distro-check'
-import {
-  WslMoveOrchestrator,
-  type WslMoveFinishedMove,
-  type WslMoveHostReadiness
-} from '../persistence/moving-wsl-projects/wsl-move-orchestrator'
+import { WslMoveOrchestrator } from '../persistence/moving-wsl-projects/wsl-move-orchestrator'
+import type {
+  WslMoveFinishedMove,
+  WslMoveHostReadiness
+} from '../persistence/moving-wsl-projects/wsl-move-orchestrator-ports'
 import { prepareWslMoveHost } from '../persistence/moving-wsl-projects/wsl-move-host-readiness'
 import { readConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { defaultWslOrcadEnvironmentId } from '../wsl/wsl-orcad-deploy'

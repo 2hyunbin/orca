@@ -6,7 +6,7 @@
 import type { WslRunningDistrosRead } from '../../wsl-background-distro-gate'
 import { wslMoveJournalKey } from '../../../shared/wsl-move/wsl-move-cutover'
 import type { WslHostAddResult } from '../../../shared/wsl-host-types'
-import type { WslMoveHostReadiness } from './wsl-move-orchestrator'
+import type { WslMoveHostReadiness } from './wsl-move-orchestrator-ports'
 
 export type WslMoveHostReadinessDeps = {
   readRunningDistros: () => Promise<WslRunningDistrosRead>
