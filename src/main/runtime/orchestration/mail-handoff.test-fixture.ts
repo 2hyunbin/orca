@@ -1,3 +1,4 @@
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { vi } from 'vitest'
 import type Database from '../../sqlite/sync-database'
 import type { SqliteBindings, SqliteRow } from '../../sqlite/sqlite-statement'
@@ -57,5 +58,23 @@ export function observeMailSql(
         .all(...args)
         .map((row) => row[column])
         .join(' ')
+  }
+}
+
+export function clearedMailRecord(
+  record: AgentSessionRecord,
+  replacementSessionId: string,
+  operationId = 'clear'
+): AgentSessionRecord {
+  return {
+    ...record,
+    conversationCommand: {
+      command: 'clear',
+      state: 'completed',
+      phase: 'committed',
+      operationId,
+      callerKey: 'person',
+      replacementSessionId
+    }
   }
 }

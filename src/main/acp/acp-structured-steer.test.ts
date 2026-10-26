@@ -1,3 +1,4 @@
+import { subscribeForRedrive } from '../runtime/rpc/methods/orchestration-structured-worker-session'
 import { structuredMailBody } from '../runtime/orchestration/structured-mail-source'
 import { mintAgentSessionOperationId } from '../runtime/orchestration/structured-pointer-operation-id'
 import '../runtime/rpc/unused-default-rpc-methods.test-fixture'
@@ -414,6 +415,7 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
       expect(response).toMatchObject({ ok: true })
       return resultOf(response)
     }
+    let disposeRedrive = () => {}
     try {
       const runId = idOf((await call('orchestration.runCreate', { objective: 'backlog' })).run)
       const mailbox = `run:${runId}`
@@ -485,6 +487,7 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         ).toEqual({ kind: 'held' })
         prompts = 1
       }
+      let priorEpoch: string | undefined
       if (history === 'held-epoch') {
         const held = vi.spyOn(pointerHost, 'send').mockResolvedValue({ kind: 'held' })
         delivery.deliverForHandle(mailbox)
@@ -493,13 +496,15 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         const heldCalls = held.mock.calls.length
         const original = JSON.parse(db.getMessageById(first.id)!.handoff!)
         delivery.onJournalActivity(SESSION)
+        await f.rig.settle()
+        expect(held).toHaveBeenCalledTimes(heldCalls)
+        delivery.deliverForHandle(mailbox)
         await waitFor(() => expect(held.mock.calls.length).toBeGreaterThan(heldCalls))
         expect(JSON.parse(db.getMessageById(first.id)!.handoff!).operationId).toBe(
           original.operationId
         )
-        const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
-        await journal.replaceEpochItems('handle_forked', f.fence(), [])
-        expect(journal.cursor().epoch).not.toBe(original.epoch)
+        priorEpoch = original.epoch
+        await f.rig.settle()
         held.mockRestore()
       }
       performance?.restoreParkedCandidates(db.getMessageById(first.id)!.handoff!)
@@ -530,7 +535,16 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         await waitFor(() => expect(pointerHost.takesMailNow?.(SESSION)).toBe(true))
         prepared.mockRestore()
       }
-      delivery.deliverForHandle(mailbox)
+      if (priorEpoch !== undefined) {
+        const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+        disposeRedrive = await subscribeForRedrive(f.host, SESSION, (id) =>
+          delivery.onJournalActivity(id)
+        )
+        await journal.replaceEpochItems('handle_forked', f.fence(), [])
+        expect(journal.cursor().epoch).not.toBe(priorEpoch)
+      } else {
+        delivery.deliverForHandle(mailbox)
+      }
       const pointer = await f.rig.frame('session/prompt', prompts).catch((error) => {
         console.error(
           'backlog diagnostic',
@@ -555,18 +569,21 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
         0,
         0
       ])
-      f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(pointer), 'checking'))
-      await waitFor(() =>
+      const checking = async () => {
+        f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(pointer), 'checking'))
+        await waitFor(async () => expect(await f.messages()).toContain('checking'))
         expect(JSON.parse(db.getMessageById(delivered.id)!.handoff!).phase).toBe('offered')
-      )
+      }
       if (performance) {
-        await measureMailDeliveryWork({ f, db, delivery, mailbox, performance })
+        await measureMailDeliveryWork({ f, db, delivery, mailbox, performance, checking })
         expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
         expect(f.rig.sent('session/cancel')).toHaveLength(0)
         expect(messages.map((row) => db.getMessageById(row.id)!.recovery_used)).toEqual([
           1, 0, 0, 0, 0
         ])
         performance.finish()
+      } else {
+        await checking()
       }
       const fetched = await call('orchestration.check')
       if (performance) {
@@ -601,6 +618,7 @@ it.each(['fresh', 'mixed', 'mixed-10N', 'invalidation', 'held-epoch'] as const)(
       expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
       expect(sendSpy.mock.calls.length).toBe(history === 'invalidation' ? 2 : 1)
     } finally {
+      disposeRedrive()
       setStructuredAgentSessionHost(null)
       vi.restoreAllMocks()
       db.close()

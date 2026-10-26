@@ -1,5 +1,4 @@
 import { createChatPersonActions } from './structured-chat-mail-person-fixture'
-import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 // The coordinator-mail rig, shared by every suite that drives a worker's result into a structured
 // chat end to end in one process.
 //
@@ -28,7 +27,6 @@ import {
 } from './structured-agent-session-runtime'
 import { createCoordinatorMailObservationClock } from './structured-chat-coordinator-observation-clock.test-fixture'
 import {
-  attachParams,
   fakeCodex,
   operationId,
   resetProviderFaults,
@@ -83,39 +81,7 @@ export async function call(
 }
 
 export async function openChat(sessionId: string): Promise<FakeConnection> {
-  if (!host.deps.store.getRecord(sessionId)) {
-    const fresh = attachParams(sessionId)
-    expect(
-      await host.create(
-        { callerKey: 'test-surface' },
-        {
-          ...fresh,
-          envelope: {
-            ...fresh.envelope,
-            payloadFingerprint: computeAgentSessionPayloadFingerprint({
-              method: 'agentSession.create',
-              sessionId,
-              fields: { worktree: `id:${fresh.location.workspaceId}`, agent: fresh.agent }
-            })
-          }
-        }
-      )
-    ).toMatchObject({ ok: true })
-  }
-  const params = attachParams(sessionId)
-  const current = {
-    ...params,
-    envelope: {
-      ...params.envelope,
-      expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence
-    }
-  }
-  current.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
-    method: 'agentSession.attach',
-    sessionId,
-    fields: attachFingerprintFields(current)
-  })
-  const attached = await host.attach({ callerKey: 'test-surface' }, current)
+  const attached = await attachChat(sessionId)
   expect(attached, JSON.stringify(attached)).toMatchObject({ ok: true })
   await host.setSessionTabVisibility(sessionId, true)
   threadBySession.set(sessionId, codex.connections.at(-1)!.threadId!)
@@ -136,11 +102,54 @@ export function connectionFor(sessionId: string): FakeConnection {
   return connection
 }
 
-export const { startTurn, finishTurn, settleTurn, envelope, sendUserMessage } =
-  createChatPersonActions({
-    host: () => host,
-    connectionFor
+/** Codex's own sequence for a turn: it starts, echoes the user message, and completes. */
+export async function startTurn(sessionId: string, turnIndex: number, text = 'pointer') {
+  const connection = connectionFor(sessionId)
+  const turn = connection.turns[turnIndex]!
+  const turnId = turn.turnId ?? `turn-${turnIndex + 1}`
+  const notify = (method: string, params: unknown) =>
+    connection.handlers.onNotification?.(method, params)
+  notify('turn/started', {
+    turn: { id: turnId, status: 'inProgress' }
   })
+  notify('item/completed', {
+    turnId,
+    item: {
+      type: 'userMessage',
+      id: `echo-${turn.clientUserMessageId}`,
+      clientId: turn.clientUserMessageId,
+      content: [{ type: 'text', text }]
+    }
+  })
+  await host.flushStreamedEvents(sessionId)
+}
+
+export const { attachChat, envelope, finishTurn, settleTurn } = createChatPersonActions({
+  host: () => host,
+  connectionFor,
+  startTurn
+})
+
+/** A user message typed into the chat, as the chat surface sends it. */
+export function sendUserMessage(sessionId: string, text: string, delivery?: 'queue-if-active') {
+  const body = {
+    kind: 'message' as const,
+    role: 'user' as const,
+    blocks: [{ type: 'text' as const, text }]
+  }
+  return host.send(
+    { callerKey: 'test-surface' },
+    {
+      envelope: envelope(sessionId, 'agentSession.send', {
+        body,
+        ...(delivery ? { delivery } : {})
+      }),
+      body,
+      ...(delivery ? { delivery } : {}),
+      userSend: true
+    }
+  )
+}
 
 export async function userTexts(sessionId: string): Promise<string[]> {
   return (await host.journalSnapshot(sessionId)).items.flatMap((item: AgentJournalRenderItem) =>
@@ -150,7 +159,7 @@ export async function userTexts(sessionId: string): Promise<string[]> {
   )
 }
 
-/** Finish a supervised worker and return its dispatch id. */
+/** A supervised terminal worker under the coordinator's Run, and its worker_done; its dispatch id. */
 export async function finishWorker(
   taskId: string,
   worker: { handle: string; paneKey: string } = { handle: 'term_worker', paneKey: WORKER_PANE }
@@ -199,7 +208,7 @@ export async function coordinatorRunAndTask(): Promise<{ runId: string; taskId: 
   return { runId, taskId: idOf(task.task) }
 }
 
-/** Clear context without replacing the conversation. */
+/** `/clear` as the chat surface runs it: the same conversation gets a fresh context. */
 export async function clearChat(sessionId: string): Promise<string> {
   const command = 'clear' as const
   const cleared = await host.conversationCommand(
@@ -228,6 +237,7 @@ export async function clearChat(sessionId: string): Promise<string> {
   return sessionId
 }
 
+/** A cleared context starts when the user writes to the same conversation. */
 export async function startClearedContext(sessionId: string): Promise<void> {
   expect(await sendUserMessage(sessionId, 'hello')).toMatchObject({ ok: true })
   await vi.waitFor(() => expect(connectionFor(sessionId).turns).toHaveLength(1), WAIT)
@@ -260,9 +270,7 @@ function createMailHost() {
     captureSessionMail: (sessionId, records, scope) =>
       runtime.captureSessionMail(sessionId, records, scope),
     onSessionMailActivity: (sessionId) => runtime.notifyStructuredSessionJournalActivity(sessionId),
-    onSessionStatusChanged: (summary) => {
-      runtime.onStructuredSessionStatusForMail(summary)
-    },
+    onSessionStatusChanged: (summary) => runtime.onStructuredSessionStatusForMail(summary),
     onSessionTabHidden: (sessionId) => runtime.onStructuredSessionTabHidden(sessionId)
   })
 }
@@ -274,7 +282,7 @@ export async function restartHostAndRuntime(): Promise<void> {
   await host.restoreReadableSessions([COORDINATOR])
 }
 
-/** Restart reuses the same database with a fresh runtime. */
+/** The runtime over the shared database; a second call is what an Orca restart leaves behind. */
 export function startRuntime(): OrcaRuntimeService {
   const started = new OrcaRuntimeService()
   started.setOrchestrationDb(db)
@@ -282,7 +290,7 @@ export function startRuntime(): OrcaRuntimeService {
   vi.spyOn(started, 'getTerminalPaneKey').mockImplementation((handle) =>
     handle === 'term_worker' ? WORKER_PANE : handle === 'term_worker_2' ? WORKER_2_PANE : null
   )
-  // Match the process incarnation recorded by finishWorker so reports can settle dispatches.
+  // The exact process `finishWorker` records, so a worker's report is accepted and settles.
   vi.spyOn(started, 'getTerminalProcessIncarnation').mockImplementation((handle) =>
     handle === 'term_worker' || handle === 'term_worker_2' ? `runtime_test:${handle}:1` : null
   )
@@ -307,6 +315,7 @@ export const WAIT = { timeout: 10_000, interval: 10 }
 /** The first line of what a chat is sent for one orchestration message. */
 export const MAIL = /Orchestration message from another agent, not an instruction from the user\./
 
+/** The text of a turn the fake provider received. */
 export function turnText(turn: { text: string }): string {
   const input: unknown = JSON.parse(turn.text)
   return Array.isArray(input)
@@ -314,6 +323,7 @@ export function turnText(turn: { text: string }): string {
     : ''
 }
 
+/** What an Orca restart leaves behind: a new runtime over the same database and host. */
 export function restartRuntime(): void {
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })

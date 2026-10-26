@@ -1,4 +1,4 @@
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { clearedMailRecord as clearedRecord } from '../../runtime/orchestration/mail-handoff.test-fixture'
 import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -64,23 +64,6 @@ function harness() {
       )
     )
   return { root, database, record, facts, apply, stop, writer, state }
-}
-
-function clearedRecord(
-  record: AgentSessionRecord,
-  replacementSessionId: string
-): AgentSessionRecord {
-  return {
-    ...record,
-    conversationCommand: {
-      command: 'clear',
-      state: 'completed',
-      phase: 'committed',
-      operationId: 'clear',
-      callerKey: 'person',
-      replacementSessionId
-    }
-  }
 }
 
 it('persists exact unreserved obligations across restatement/reopen and repeated same-tuple Stops, releasing only on personal intent', async () => {

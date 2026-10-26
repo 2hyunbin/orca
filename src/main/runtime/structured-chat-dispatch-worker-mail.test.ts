@@ -1,4 +1,8 @@
-import { mailHandoffFixture, observeMailSql } from './orchestration/mail-handoff.test-fixture'
+import {
+  clearedMailRecord,
+  mailHandoffFixture,
+  observeMailSql
+} from './orchestration/mail-handoff.test-fixture'
 import { AgentSessionRecordStore } from './agent-session-record-store'
 import { encodeAgentSessionRecord } from '../../shared/agent-session-record-stored-form'
 import { createStructuredWorkerSessionForWorktree } from './rpc/methods/orchestration/worker/worker-topology'
@@ -175,17 +179,7 @@ it.each([
         const record = { ...own, sessionId, lease: { ...own.lease, sessionId } }
         const linked =
           index >= history && index + 1 < ids.length
-            ? {
-                ...record,
-                conversationCommand: {
-                  command: 'clear',
-                  state: 'completed',
-                  phase: 'committed',
-                  operationId: `clear-${index}`,
-                  callerKey: 'person',
-                  replacementSessionId: ids[index + 1]
-                } as const
-              }
+            ? clearedMailRecord(record, ids[index + 1], `clear-${index}`)
             : record
         insert.run(sessionId, JSON.stringify(encodeAgentSessionRecord(linked)))
       }

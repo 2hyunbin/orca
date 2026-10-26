@@ -475,6 +475,7 @@ it.each(['accepted', 'absent', 'unreadable'] as const)(
     delivery.deliverForHandle('consumer')
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
     await new Promise<void>((resolve) => setImmediate(resolve))
+    expect(cohort.messages.map((row) => row.id)).toEqual([message.id, survivor.id])
     const original = readMailHandoff(db.getMessageById(survivor.id)!.handoff)
     if (original?.kind !== 'structured') {
       throw new Error('missing reserved input')
@@ -504,6 +505,8 @@ it.each(['accepted', 'absent', 'unreadable'] as const)(
       })
     )
     expect(send).toHaveBeenCalledTimes(2)
+    expect(send.mock.calls[1]![0].operationId).not.toBe(original.operationId)
+    expect(send.mock.calls[1]![0].operationId).toMatch(/^\d{13}-[0-9a-f]{32}$/)
     expect(readMailHandoff(db.getMessageById(fresh.id)?.handoff)).toMatchObject({
       manifest: { members: [fresh.id] }
     })

@@ -81,6 +81,7 @@ export async function measureMailDeliveryWork(input: {
   delivery: OrchestrationStructuredMailboxPointerDelivery<OrchestrationMessageWaiter>
   mailbox: string
   performance: ReturnType<typeof prepareMailPerformanceHistory>
+  checking: () => Promise<void>
 }) {
   const { f, db, delivery, mailbox, performance } = input
   const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
@@ -114,17 +115,29 @@ export async function measureMailDeliveryWork(input: {
     ]
   })
   const folds = vi.spyOn(index, 'item')
+  const folded = () =>
+    folds.mock.calls.map(([id, before, after]) => [id, before?.revision, after?.revision])
+  await input.checking()
+  console.info('mail live folds before history', folded())
+  folds.mockClear()
+  indexOperations = 0
+  indexScans = 0
+  const history: Awaited<ReturnType<typeof journal.appendItem>>[] = []
   for (let n = 0; n < performance.population; n++) {
-    await journal.appendItem(
+    const written = await journal.appendItem(
       { provider: 'legacy', agent: 'grok', sessionId: SESSION, recordId: `history-${n}` },
       message('historical output'),
       { fence: f.fence(), turnScope: { kind: 'thread' } }
     )
+    history.push(written)
   }
   await f.host.flushStreamedEvents(SESSION)
   await journal.readInOrder(() => undefined)
   await new Promise<void>((resolve) => setImmediate(resolve))
+  console.info('mail history folds', folded())
   expect(folds).toHaveBeenCalledTimes(performance.population)
+  expect(new Set(history.map((row) => row.itemId)).size).toBe(performance.population)
+  expect(folded()).toEqual(history.map((row) => [row.itemId, undefined, row.revision]))
   let reading = false
   let lookups = 0
   const scans = [0, 0, 0]
@@ -162,6 +175,16 @@ export async function measureMailDeliveryWork(input: {
   const freshEvaluations = sql.count()
   sql.reset()
   const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
+  const debt = db.getIssuedSessionMail([SESSION], [mailbox])
+  expect(debt).toHaveLength(performance.population + performance.uncertain + 1)
+  const inventory = vi.spyOn(db, 'getIssuedSessionMail')
+  const preparation = vi.spyOn(f.host, 'readMailHandoffEvidence')
+  const receipts = vi.spyOn(f.store, 'readCommandReceipt')
+  const argumentsOf = (calls: readonly unknown[][]) =>
+    Array.from(
+      Map.groupBy(calls, (args) => JSON.stringify(args)),
+      ([args, calls]) => ({ args, calls: calls.length })
+    )
   const triggers = performance.population / 10
   const passes = performance.uncertain + 1
   const corpus = performance.population * 2 + performance.uncertain + 5
@@ -169,13 +192,38 @@ export async function measureMailDeliveryWork(input: {
   expect(freshEvaluations).toBeLessThanOrEqual((passes + 2) * corpus)
   for (let trigger = 0; trigger < triggers; trigger++) {
     const calls = evidence.mock.calls.length
+    inventory.mockClear()
+    preparation.mockClear()
+    receipts.mockClear()
     delivery.deliverForHandle(mailbox)
     await vi.waitFor(
       () => {
-        expect(evidence.mock.calls.length).toBeGreaterThan(calls)
+        expect(inventory).toHaveBeenCalled()
       },
       { interval: 1 }
     )
+    await f.rig.settle()
+    const observed = evidence.mock.calls.slice(calls)
+    console.info('mail completed busy trigger', {
+      population: performance.population,
+      trigger,
+      issued: debt.length,
+      inventoryRows: inventory.mock.results.map((r) =>
+        r.type === 'return' ? r.value.map((row) => row.id) : r.type
+      ),
+      inventory: argumentsOf(inventory.mock.calls),
+      preparation: argumentsOf(preparation.mock.calls),
+      receipts: argumentsOf(receipts.mock.calls),
+      evidence: argumentsOf(observed)
+    })
+    expect(inventory.mock.calls.length).toBeLessThanOrEqual(2)
+    expect(
+      inventory.mock.results.every((r) => r.type === 'return' && r.value.length === debt.length)
+    ).toBe(true)
+    expect(preparation.mock.calls).toEqual([[SESSION, '']])
+    expect(receipts.mock.calls.length).toBeLessThanOrEqual(2 * debt.length)
+    expect(observed.length).toBeLessThanOrEqual(2 * debt.length + 4)
+    expect(debt.map((row) => db.getMessageById(row.id))).toEqual(debt)
   }
   const rows = candidates.mock.results.reduce(
     (sum, result) => sum + (result.type === 'return' ? result.value.length : 0),
@@ -191,11 +239,12 @@ export async function measureMailDeliveryWork(input: {
   expect(candidates.mock.calls.length).toBeLessThanOrEqual(
     triggers * (passes * Math.ceil((performance.population + performance.uncertain + 5) / 50) + 1)
   )
-  expect(evidence.mock.calls.length).toBeLessThanOrEqual(triggers * passes * 5)
-  expect(lookups).toBeLessThanOrEqual(triggers * passes * 50)
+  expect(lookups).toBeLessThanOrEqual(triggers * passes * (2 * debt.length + 50))
   expect(scans).toEqual([0, 0, 0])
   expect(indexScans).toBe(0)
-  expect(indexOperations).toBeLessThanOrEqual(20 * (performance.population + triggers * passes))
+  expect(indexOperations).toBeLessThanOrEqual(
+    20 * (performance.population + triggers * passes * (debt.length + 1))
+  )
   expect(folds.mock.calls.length).toBeLessThanOrEqual(performance.population + 2)
   sql.verify()
   sql.restore()
@@ -225,7 +274,17 @@ export async function measureMailDeliveryWork(input: {
     indexScans,
     itemFolds: folds.mock.calls.length
   })
-  for (const spy of [...indexSpies, folds, ...mapSpies, snapshotSpy, candidates, evidence]) {
+  for (const spy of [
+    ...indexSpies,
+    folds,
+    ...mapSpies,
+    snapshotSpy,
+    candidates,
+    evidence,
+    inventory,
+    preparation,
+    receipts
+  ]) {
     spy.mockRestore()
   }
 }

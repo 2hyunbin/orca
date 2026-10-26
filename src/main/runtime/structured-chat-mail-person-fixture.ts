@@ -1,28 +1,62 @@
+import { expect } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
+import { attachFingerprintFields } from '../native-chat/agent-session-wire/structured-agent-session-attach'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
-import { operationId, type FakeConnection } from './structured-chat-coordinator-fake-codex-fixture'
+import {
+  attachParams,
+  operationId,
+  type FakeConnection
+} from './structured-chat-coordinator-fake-codex-fixture'
 
 export function createChatPersonActions(deps: {
   host: () => StructuredAgentSessionHost
   connectionFor: (sessionId: string) => FakeConnection
+  startTurn: (sessionId: string, turnIndex: number, text?: string) => Promise<void>
 }) {
-  async function startTurn(sessionId: string, turnIndex: number, text = 'pointer') {
-    const connection = deps.connectionFor(sessionId)
-    const turn = connection.turns[turnIndex]!
-    const turnId = turn.turnId ?? `turn-${turnIndex + 1}`
-    connection.handlers.onNotification?.('turn/started', {
-      turn: { id: turnId, status: 'inProgress' }
-    })
-    connection.handlers.onNotification?.('item/completed', {
-      turnId,
-      item: {
-        type: 'userMessage',
-        id: `echo-${turn.clientUserMessageId}`,
-        clientId: turn.clientUserMessageId,
-        content: [{ type: 'text', text }]
+  async function attachChat(sessionId: string) {
+    const host = deps.host()
+    if (!host.deps.store.getRecord(sessionId)) {
+      const fresh = attachParams(sessionId)
+      expect(
+        await host.create(
+          { callerKey: 'test-surface' },
+          {
+            ...fresh,
+            envelope: {
+              ...fresh.envelope,
+              payloadFingerprint: computeAgentSessionPayloadFingerprint({
+                method: 'agentSession.create',
+                sessionId,
+                fields: { worktree: `id:${fresh.location.workspaceId}`, agent: fresh.agent }
+              })
+            }
+          }
+        )
+      ).toMatchObject({ ok: true })
+    }
+    const params = attachParams(sessionId)
+    const current = {
+      ...params,
+      envelope: {
+        ...params.envelope,
+        expectedRuntimeFence: host.deps.store.getRecord(sessionId)!.lease.runtimeFence
       }
+    }
+    current.envelope.payloadFingerprint = computeAgentSessionPayloadFingerprint({
+      method: 'agentSession.attach',
+      sessionId,
+      fields: attachFingerprintFields(current)
     })
-    await deps.host().flushStreamedEvents(sessionId)
+    return host.attach({ callerKey: 'test-surface' }, current)
+  }
+
+  function envelope(sessionId: string, method: string, fields: Record<string, unknown>) {
+    return {
+      sessionId,
+      clientOperationId: operationId(),
+      expectedRuntimeFence: deps.host().deps.store.getRecord(sessionId)!.lease.runtimeFence,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({ method, sessionId, fields })
+    }
   }
 
   async function finishTurn(
@@ -51,40 +85,9 @@ export function createChatPersonActions(deps: {
   }
 
   async function settleTurn(sessionId: string, turnIndex: number, status?: 'completed' | 'failed') {
-    await startTurn(sessionId, turnIndex)
+    await deps.startTurn(sessionId, turnIndex)
     await finishTurn(sessionId, turnIndex, status)
   }
 
-  function envelope(sessionId: string, method: string, fields: Record<string, unknown>) {
-    return {
-      sessionId,
-      clientOperationId: operationId(),
-      expectedRuntimeFence: deps.host().deps.store.getRecord(sessionId)!.lease.runtimeFence,
-      payloadFingerprint: computeAgentSessionPayloadFingerprint({ method, sessionId, fields })
-    }
-  }
-
-  /** A user message typed into the chat, as the chat surface sends it. */
-  function sendUserMessage(sessionId: string, text: string, delivery?: 'queue-if-active') {
-    const host = deps.host()
-    const body = {
-      kind: 'message' as const,
-      role: 'user' as const,
-      blocks: [{ type: 'text' as const, text }]
-    }
-    return host.send(
-      { callerKey: 'test-surface' },
-      {
-        envelope: envelope(sessionId, 'agentSession.send', {
-          body,
-          ...(delivery ? { delivery } : {})
-        }),
-        body,
-        ...(delivery ? { delivery } : {}),
-        userSend: true
-      }
-    )
-  }
-
-  return { startTurn, finishTurn, settleTurn, envelope, sendUserMessage }
+  return { attachChat, envelope, finishTurn, settleTurn }
 }
