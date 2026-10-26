@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findAppAgentBrowserDriver } from './serve-agent-browser-driver'
+import { findAppAgentBrowserDriver, stageAppAgentBrowserDriver } from './serve-agent-browser-driver'
 
 const roots: string[] = []
 afterEach(() => {
@@ -27,5 +27,26 @@ describe("finding the app's agent-browser driver (#33846)", () => {
     expect(findAppAgentBrowserDriver(join(resources, 'app.asar.unpacked'), platform, 'ia32')).toBe(
       undefined
     )
+  })
+
+  // A running daemon locks its image on Windows; lending the installed copy would block app updates.
+  it('hands Windows orcad a profile copy outside the app install', async () => {
+    const resources = mkdtempSync(join(tmpdir(), 'orca-serve-agent-browser-'))
+    const profile = mkdtempSync(join(tmpdir(), 'orca-serve-agent-browser-profile-'))
+    roots.push(resources, profile)
+    mkdirSync(join(resources, 'app.asar.unpacked'))
+    writeFileSync(join(resources, 'agent-browser-win32-x64.exe'), 'driver')
+    mkdirSync(join(profile, 'orcad-agent-browser', 'previous-release'), { recursive: true })
+
+    const staged = await stageAppAgentBrowserDriver(
+      join(resources, 'app.asar.unpacked'),
+      profile,
+      'win32',
+      'x64'
+    )
+
+    expect(staged?.startsWith(join(profile, 'orcad-agent-browser'))).toBe(true)
+    expect(staged?.endsWith('agent-browser-win32-x64.exe')).toBe(true)
+    expect(readdirSync(join(profile, 'orcad-agent-browser'))).toHaveLength(1)
   })
 })
