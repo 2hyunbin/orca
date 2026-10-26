@@ -11,6 +11,7 @@ import type { TerminalIntentionalStopKind } from '../../../runtime/terminal-inte
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { SSH_PROVIDER_UNREGISTERED_REASON } from '../../../../shared/pty-liveness-verdict'
 import { ptyIncarnationById } from '../provider/ownership-state'
+import { attachingRendererViewPtys } from '../delivery/visibility-state'
 import {
   getProviderForPty,
   getPtySshConnectionId,
@@ -161,7 +162,14 @@ async function stopFencedRendererPty(
     if (!provider?.killFenced) {
       return { outcome: 'refused', reason: 'unsupported' }
     }
-    const result = await provider.killFenced(args)
+    // Main attaches every terminal it spawns, so the daemon's attached flag cannot tell a viewer apart.
+    if (
+      args.requireUnattached &&
+      (attachingRendererViewPtys.has(args.id) || deps.runtime?.hasTerminalViewer(args.id))
+    ) {
+      return { outcome: 'refused', reason: 'attached' }
+    }
+    const result = await provider.killFenced({ ...args, requireUnattached: false })
     if (
       (result.outcome === 'ended' || result.outcome === 'already_exited') &&
       ptyIncarnationById.get(args.id) === args.expectedIncarnationId
