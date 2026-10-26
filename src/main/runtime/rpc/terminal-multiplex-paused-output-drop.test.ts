@@ -8,10 +8,14 @@ import {
   encodeTerminalStreamFrame,
   encodeTerminalStreamJson
 } from '../../../shared/terminal-stream-protocol'
+import { TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES } from '../../../shared/terminal-multiplex-flow-control'
 import { startDesktopMultiplexSubscribe } from './terminal-multiplex-test-harness'
 import { RuntimeTerminalViewSubscribers } from '../runtime-terminal-view-subscribers'
 
-async function subscribePausable(capabilities: Record<string, 1>) {
+async function subscribePausable(
+  capabilities: Record<string, 1>,
+  answerYieldedTerminalQueries = vi.fn()
+) {
   const listeners: ((data: string, meta?: RuntimeTerminalDataMeta) => void)[] = []
   const viewSubscribers = new RuntimeTerminalViewSubscribers({
     notifyPresenceChanged: () => {},
@@ -25,7 +29,8 @@ async function subscribePausable(capabilities: Record<string, 1>) {
       return vi.fn()
     }),
     registerRemoteTerminalViewSubscriber: (ptyId, isOutputPaused) =>
-      viewSubscribers.registerRemote(ptyId, isOutputPaused)
+      viewSubscribers.registerRemote(ptyId, isOutputPaused),
+    answerYieldedTerminalQueries
   })
   await vi.waitFor(() => expect(harness.handlers.has(0)).toBe(true))
   harness.handlers.get(0)?.(
@@ -124,6 +129,26 @@ describe('terminal multiplex paused-output drop notice', () => {
     host.setPaused(true)
     expect(host.outputText()).toContain('batched-before-pause\x1b[c')
     expect(host.dropNotices()).toBe(0)
+    await host.close()
+  })
+
+  // #32944: output parked behind a full ACK window is discarded on pause; main must answer its queries.
+  it('hands queries in discarded ACK-pending output back to main', async () => {
+    const answerYieldedTerminalQueries = vi.fn()
+    const host = await subscribePausable(
+      { ackOutput: 1, outputPause: 1, outputPauseDropNotice: 1 },
+      answerYieldedTerminalQueries
+    )
+    for (let i = 0; i <= TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES / (64 * 1024); i++) {
+      host.emitOutput('x'.repeat(64 * 1024))
+    }
+    host.emitOutput('prompt\x1b[c')
+    host.setPaused(true)
+    expect(host.outputText()).not.toContain('\x1b[c')
+    expect(answerYieldedTerminalQueries).toHaveBeenCalledWith(
+      'pty-1',
+      expect.stringContaining('prompt\x1b[c')
+    )
     await host.close()
   })
 

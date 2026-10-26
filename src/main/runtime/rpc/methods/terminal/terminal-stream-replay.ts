@@ -1,5 +1,6 @@
 import type { TerminalReplyQuerySequence } from '../../../../../shared/terminal-reply-query-scan'
 import {
+  decodeTerminalOutputFrameChunkText,
   iterateTerminalOutputFrameChunks,
   type TerminalOutputFrameChunk,
   type TerminalOutputMeta
@@ -98,6 +99,10 @@ export function appendAckPendingOutput(
   )
   stream.ackPendingOutputBytes = trimmed.bytes
   stream.ackPendingOutputOverflowed ||= trimmed.overflowed
+}
+
+export function getAckPendingOutputText(stream: TerminalMultiplexStream): string {
+  return stream.ackPendingOutput.map(decodeTerminalOutputFrameChunkText).join('')
 }
 
 export function trimPendingOutputToBudget(
