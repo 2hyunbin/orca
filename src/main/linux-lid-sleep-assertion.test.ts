@@ -359,6 +359,11 @@ describe('LinuxLidSleepAssertion', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenCalledTimes(1)
     expect(logger.debug).toHaveBeenCalledTimes(1)
+
+    // The second consecutive failure doubled the delay, so one base window is not enough.
+    assertion.start('status-change')
+    expect(spawn).toHaveBeenCalledTimes(2)
+    assertion.dispose()
   })
 
   it('warns again when an inhibitor that held through the retry window fails', () => {

@@ -1,6 +1,8 @@
 import { spawnProcess } from '@orca/process-host'
 
 export const LINUX_LID_SLEEP_ASSERTION_RETRY_MS = 30_000
+// Consecutive failures double the retry delay up to this many base delays.
+const MAX_RETRY_BACKOFF_FACTOR = 16
 
 type Logger = Pick<Console, 'debug' | 'warn'>
 
@@ -48,6 +50,7 @@ export class LinuxLidSleepAssertion {
   private systemdInhibitUnavailable = false
   private lastFailureKey: string | null = null
   private warnedForLastFailure = false
+  private consecutiveFailures = 0
   private readonly intentionalStops = new WeakSet<SystemdInhibitProcess>()
   private readonly reportedFailures = new WeakSet<SystemdInhibitProcess>()
   private readonly childCleanups = new WeakMap<SystemdInhibitProcess, () => void>()
@@ -201,7 +204,11 @@ export class LinuxLidSleepAssertion {
       return
     }
     this.logFailure(failureKey, reason, details, failureType)
-    this.retryNotBefore = this.now() + LINUX_LID_SLEEP_ASSERTION_RETRY_MS
+    this.consecutiveFailures += 1
+    this.retryNotBefore =
+      this.now() +
+      LINUX_LID_SLEEP_ASSERTION_RETRY_MS *
+        Math.min(2 ** (this.consecutiveFailures - 1), MAX_RETRY_BACKOFF_FACTOR)
     this.scheduleRetry()
     this.onUnexpectedFailure('linux-lid-assertion-failure')
   }
@@ -229,6 +236,7 @@ export class LinuxLidSleepAssertion {
   private resetFailureStreak(): void {
     this.lastFailureKey = null
     this.warnedForLastFailure = false
+    this.consecutiveFailures = 0
   }
 
   private scheduleRetry(): void {
