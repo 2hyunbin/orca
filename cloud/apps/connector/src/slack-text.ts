@@ -13,7 +13,7 @@ const MAX_LISTED_OPTIONS = 10
 const MAX_SECTION_CHARS = 3_000
 export const MAX_BUTTON_LABEL_CHARS = 75
 
-// The machine's refusal reasons (its CONNECTOR_REFUSALS, plus turn_not_running for a Stop).
+// The machine's refusal reasons (its CONNECTOR_REFUSALS).
 // A Map, so only these own entries match: a code like `toString` falls to the generic line.
 const REFUSALS = new Map<string, (machine: string) => string>([
   ['connectors_disabled', (machine) => `Connectors are turned off in Orca on ${machine}.`],
@@ -36,8 +36,7 @@ const REFUSALS = new Map<string, (machine: string) => string>([
     'option_not_offered',
     (machine) => `That option isn’t offered any more. Answer in Orca on ${machine}.`
   ],
-  ['conversation_cancelled', () => 'Stopped before it reached the agent.'],
-  ['turn_not_running', () => 'That turn had already finished.']
+  ['conversation_cancelled', () => 'Stopped before it reached the agent.']
 ])
 
 export const slackText = {

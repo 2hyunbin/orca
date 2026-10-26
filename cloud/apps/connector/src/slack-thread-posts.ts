@@ -43,8 +43,6 @@ async function boundThread(
     : null
 }
 
-export const statusPostId = (externalId: string) => `status:${externalId}`
-
 // The status message is a projection of the thread's current state: refreshing twice is a no-op.
 export async function refreshSlackStatus(
   transaction: CloudDatabase,
@@ -74,7 +72,7 @@ export async function refreshSlackStatus(
   const offered = await refreshPromptCards(transaction, posts, { ...place, externalId }, prompt)
   await posts.setStatus(transaction, {
     ...place,
-    postId: statusPostId(externalId),
+    postId: `status:${externalId}`,
     text: statusText(thread.row, latest, thread.hostName, offered, answer)
   })
 }
