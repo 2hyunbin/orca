@@ -6,12 +6,18 @@ RUN npm install --prefix /opt/pnpm --ignore-scripts --no-audit --no-fund "$(node
   && npm audit signatures --prefix /opt/pnpm
 COPY packages/push-contract/package.json packages/push-contract/package.json
 COPY packages/postgres-schema/package.json packages/postgres-schema/package.json
+COPY packages/cloud-database/package.json packages/cloud-database/package.json
+COPY packages/host-handshake/package.json packages/host-handshake/package.json
 COPY apps/push/package.json apps/push/package.json
 RUN pnpm install --frozen-lockfile
 COPY packages/push-contract packages/push-contract
 COPY apps/push apps/push
 COPY packages/postgres-schema packages/postgres-schema
-RUN pnpm --filter @orca-cloud/postgres-schema build && pnpm --filter @orca-cloud/push-contract build && pnpm --filter @orca-cloud/push build
+COPY packages/cloud-database packages/cloud-database
+COPY packages/host-handshake packages/host-handshake
+RUN pnpm --filter @orca-cloud/postgres-schema build && pnpm --filter @orca-cloud/push-contract build \
+  && pnpm --filter @orca-cloud/cloud-database build && pnpm --filter @orca-cloud/host-handshake build \
+  && pnpm --filter @orca-cloud/push build
 
 FROM node:24.22.1-alpine@sha256:feb76650b7195319268c59cb2d419c732d6c499b13bf5296f16ab59eb1f0a4f3 AS runtime
 ENV NODE_ENV=production
@@ -22,9 +28,13 @@ ENV PATH="/opt/pnpm/node_modules/.bin:$PATH"
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/push-contract/package.json packages/push-contract/package.json
 COPY packages/postgres-schema/package.json packages/postgres-schema/package.json
+COPY packages/cloud-database/package.json packages/cloud-database/package.json
+COPY packages/host-handshake/package.json packages/host-handshake/package.json
 COPY apps/push/package.json apps/push/package.json
 COPY --from=build /app/packages/push-contract/dist packages/push-contract/dist
 COPY --from=build /app/packages/postgres-schema/dist packages/postgres-schema/dist
+COPY --from=build /app/packages/cloud-database/dist packages/cloud-database/dist
+COPY --from=build /app/packages/host-handshake/dist packages/host-handshake/dist
 COPY --from=build /app/apps/push/dist apps/push/dist
 RUN pnpm install --prod --frozen-lockfile --filter @orca-cloud/push... \
   && rm -rf /opt/pnpm /usr/local/lib/node_modules /opt/yarn-* /root/.cache /root/.local \
