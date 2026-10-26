@@ -24,8 +24,6 @@ export async function interruptWorkingAgent(
   options: {
     /** The caller's own check before the key goes in (its agent-in-front guard). */
     beforeWrite?: (ptyId: string) => Promise<void>
-    /** Checked at handoff with the working row: false when it is no longer the turn the caller means. */
-    sameTurn?: () => boolean
     signal: AbortSignal
   }
 ): Promise<AgentInterruptOutcome> {
@@ -65,7 +63,7 @@ export async function interruptWorkingAgent(
       }
       // No await separates this host-state check from transport handoff.
       const now = working()
-      if (!now || options.sameTurn?.() === false) {
+      if (!now) {
         throw new AgentNoLongerWorkingError()
       }
       if (

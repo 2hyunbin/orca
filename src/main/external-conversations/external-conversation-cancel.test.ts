@@ -50,31 +50,6 @@ async function linked(settings = {}) {
 }
 
 describe('ExternalConversationSeam cancel', () => {
-  it('stops only the turn a bound cancel names; a later turn is left running', async () => {
-    const { seam, host, hookRows, fake } = await linked()
-    seam.watch(host, () => {})
-    hookRows.set(PANE, hookRow({ turnStartedAt: 300 }))
-    await expect(seam.cancel(host, KEY, 'c-old', 100)).resolves.toEqual({
-      outcome: 'refused',
-      reason: 'turn_not_running'
-    })
-    expect(fake.keys).toEqual([])
-    await expect(seam.cancel(host, KEY, 'c-now', 300)).resolves.toEqual({ outcome: 'accepted' })
-    expect(fake.keys).toEqual(['\x1b'])
-  })
-
-  it('still names the open turn from the hook row once the last watch is released', async () => {
-    const { seam, host, hookRows, fake } = await linked()
-    seam.watch(host, () => {})()
-    hookRows.set(PANE, hookRow({ turnStartedAt: 100 }))
-    await expect(seam.cancel(host, KEY, 'c-old', 50)).resolves.toEqual({
-      outcome: 'refused',
-      reason: 'turn_not_running'
-    })
-    await expect(seam.cancel(host, KEY, 'c-now', 100)).resolves.toEqual({ outcome: 'accepted' })
-    expect(fake.keys).toEqual(['\x1b'])
-  })
-
   it('interrupts a working agent with one Escape, once per delivery id', async () => {
     const { seam, host, hookRows, fake } = await linked()
     hookRows.set(PANE, hookRow())
