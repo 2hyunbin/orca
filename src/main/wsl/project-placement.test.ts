@@ -272,7 +272,7 @@ describe('one placement per project operation', () => {
     const root = '\\\\wsl$\\Ubuntu\\home\\me\\topic'
     const mainPath = '\\\\wsl.localhost\\ubuntu\\home\\me\\App'
     mocks.target = () => root
-    const main = row('main', '/home/me/App', { projectHostSetupMethod: 'provisioned' })
+    const main = row('main', '/home/me/App', { projectHostSetupMethod: 'cloned' })
     const checkout = row('root', '/home/me/topic', { executionHostId: 'local' })
     const child = row('selected', '/home/me/topic/src', { executionHostId: OWNER })
     const ineligible = [
