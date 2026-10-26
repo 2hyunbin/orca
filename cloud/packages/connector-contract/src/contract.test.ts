@@ -201,6 +201,15 @@ describe('hello and replies', () => {
     })
   })
 
+  it('binds a cancel to the turn it targets, when it names one', () => {
+    const cancel = { ...base, kind: 'cancel' }
+    expect(ConnectorDeliverySchema.parse({ ...cancel, turnId: 1_793_000_000_100 })).toMatchObject({
+      turnId: 1_793_000_000_100
+    })
+    expect(ConnectorDeliverySchema.parse(cancel)).not.toHaveProperty('turnId')
+    expect(ConnectorDeliverySchema.safeParse({ ...cancel, turnId: -1 }).success).toBe(false)
+  })
+
   it('carries a conversation from any connected platform', () => {
     for (const source of ['slack', 'discord', 'linear']) {
       expect(
