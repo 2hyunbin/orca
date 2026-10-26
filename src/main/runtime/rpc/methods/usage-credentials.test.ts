@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
 import '../unused-default-rpc-methods.test-fixture'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -270,6 +271,10 @@ describe('usage credential RPC methods', () => {
     const record = agentSessionRecordFixture({ sessionId: 'session-host-environment' })
     const catalog = createAgentModelCatalogService({
       store: agentModelCatalogStore,
+      getConversation: () => {
+        const held = record
+        return held ? agentSessionConversationView(held) : undefined
+      },
       getRecord: () => record,
       drivesRecord: () => true,
       resolveAccountHome: async () => record.accountHome,

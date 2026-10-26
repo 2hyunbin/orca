@@ -1,5 +1,6 @@
 import { agentModelCatalogFingerprintForRecord } from './agent-model-catalog-fingerprint'
 import { agentSessionPinnedLaunchDirectory } from '../../runtime/agent-session-record-launch-directory'
+import type { AgentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import { agentModelCatalogResultFromEntry } from './agent-model-catalog-entry'
@@ -25,15 +26,19 @@ export type AgentModelCatalogBinding = {
   projecting?: Promise<void>
 }
 
-export function agentModelCatalogReleasedOwner(record: AgentSessionRecord | undefined): boolean {
-  return record?.lease?.claimStatus === 'released' && !!record.lease.deathEvidence
+export function agentModelCatalogReleasedOwner(
+  record: AgentSessionConversationView | undefined
+): boolean {
+  return (
+    record?.ownerObservation.claimStatus === 'released' && !!record.ownerObservation.deathEvidence
+  )
 }
 
 export function agentModelCatalogRequestKey(
   deps: AgentModelCatalogServiceDeps,
   params: AgentModelCatalogReadParams
 ): string {
-  const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
+  const record = params.sessionId ? deps.getConversation(params.sessionId) : undefined
   const inWorkspace =
     record &&
     !params.workspace &&
@@ -82,7 +87,7 @@ export function agentModelCatalogMemoryBinding(
   if (held?.current() && held.identity === capture(params)) {
     return held
   }
-  const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
+  const record = params.sessionId ? deps.getConversation(params.sessionId) : undefined
   if (!record || record.provider !== params.agent || !deps.drivesRecord(record)) {
     return
   }
@@ -99,7 +104,7 @@ export function agentModelCatalogMemoryBinding(
         !!bound.params.legacy === !!params.legacy &&
         (bound.cwd ?? bound.folder ?? bound.workspacePath) === cwd &&
         (!bound.params.sessionId ||
-          deps.getRecord(bound.params.sessionId)?.location.executionHostId === 'local') &&
+          deps.getConversation(bound.params.sessionId)?.location.executionHostId === 'local') &&
         bound.base === agentModelCatalogFingerprintForRecord(record, bound.folder) &&
         bound.current() &&
         bound.identity === capture(bound.params)
@@ -225,7 +230,7 @@ export function retireAgentModelCatalogRequests(
       ) ||
       (workspaceId !== undefined &&
         claim.params.sessionId !== undefined &&
-        deps.getRecord(claim.params.sessionId)?.location.workspaceId === workspaceId)
+        deps.getConversation(claim.params.sessionId)?.location.workspaceId === workspaceId)
     ) {
       claim.controller.abort()
       claims.delete(key)
@@ -267,7 +272,7 @@ export function agentModelCatalogSessionPeek(
   binding: (params: AgentModelCatalogReadParams) => AgentModelCatalogBinding | undefined
 ) {
   return (sessionId: string, verifiedOnly?: boolean) => {
-    const record = deps.getRecord(sessionId)
+    const record = deps.getConversation(sessionId)
     const bound = record && binding({ agent: record.provider, sessionId, inSessionWorkspace: true })
     const entry = bound ? deps.store.observation(bound.fingerprint) : null
     return entry && (!verifiedOnly || deps.store.verified(entry)) ? entry : null

@@ -69,7 +69,7 @@ export async function readStructuredAgentSessionOptions(
     const { catalogListing, ...answer } = live
     options = answer
     // Fill missing live listings from saved catalog state; absent records keep the child’s answer.
-    if (!catalogListing && !answer.listedModelIds && store.getRecord(sessionId)) {
+    if (!catalogListing && !answer.listedModelIds && store.getConversation(sessionId)) {
       const { listedModelIds } = await atRest()
       options = listedModelIds ? { ...answer, listedModelIds } : answer
     }
@@ -79,7 +79,7 @@ export async function readStructuredAgentSessionOptions(
   }
   // Earlier reads may have closed/reopened the handle.
   const session = await context.conversation(sessionId)
-  const record = store.getRecord(sessionId)
+  const record = store.getConversation(sessionId)
   const phase = record?.rewind?.phase
   const agent = session.params.provider
   const capabilities = agents.capabilities(agent)

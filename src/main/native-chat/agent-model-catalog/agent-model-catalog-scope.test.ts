@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -118,6 +119,10 @@ describe('original operation through actual nested resolution', () => {
       const store = new AgentModelCatalogStore()
       const service = createAgentModelCatalogService({
         store,
+        getConversation: () => {
+          const held = record
+          return held ? agentSessionConversationView(held) : undefined
+        },
         getRecord: () => record,
         drivesRecord: () => true,
         resolveAccountHome: async () => record.accountHome,
@@ -178,6 +183,7 @@ describe('a picker read with the CLI missing', () => {
       let now = 1_000
       const service = createAgentModelCatalogService({
         store: new AgentModelCatalogStore({ now: () => now }),
+        getConversation: () => undefined,
         getRecord: () => undefined,
         drivesRecord: () => true,
         resolveAccountHome: async () => ({ variable: 'CLAUDE_CONFIG_DIR', path: root }),

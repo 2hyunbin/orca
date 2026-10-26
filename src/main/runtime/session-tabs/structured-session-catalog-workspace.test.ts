@@ -204,6 +204,7 @@ function rig(agent = 'opencode') {
   const persist = vi.fn()
   const catalog = createAgentModelCatalogService({
     store: catalogStore,
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome: account,
@@ -228,7 +229,10 @@ function rig(agent = 'opencode') {
     }
   }
   const hostSlice = {
-    deps: { store: { getRecord: () => undefined }, modelCatalog: exposed }
+    deps: {
+      store: { getConversation: () => undefined, getRecord: () => undefined },
+      modelCatalog: exposed
+    }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the RPC accesses only the installed catalog and record lookup dependencies supplied here.
   const host = hostSlice as unknown as StructuredAgentSessionHost

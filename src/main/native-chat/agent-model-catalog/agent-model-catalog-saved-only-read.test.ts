@@ -1,10 +1,15 @@
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../shared/agent-session-record.test-fixture'
-import { agentModelCatalogFingerprint } from './agent-model-catalog-fingerprint'
+import {
+  agentModelCatalogFingerprint,
+  agentModelCatalogFingerprintForRecord
+} from './agent-model-catalog-fingerprint'
 import { createAgentModelCatalogService } from './agent-model-catalog-service'
 import {
   AGENT_MODEL_CATALOG_FAILURE_TTL_MS,
@@ -62,6 +67,10 @@ it('keeps a released claim separate while two eligible chats share their first p
   const probe = vi.fn(() => answer.promise)
   const service = createAgentModelCatalogService({
     store: new AgentModelCatalogStore(),
+    getConversation: (id) => {
+      const held = records.get(id)
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: (id) => records.get(id),
     drivesRecord: () => true,
     resolveAccountHome: async () => HOME,
@@ -115,6 +124,7 @@ function rig(agent = 'grok') {
   )
   const service = createAgentModelCatalogService({
     store,
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => HOME,
@@ -146,11 +156,16 @@ describe('a saved-only catalog read', () => {
     }
     const store = new AgentModelCatalogStore({ now: () => now })
     const probe = vi.fn(async () => listing('grok-4.7'))
+    const resolveAccountHome = vi.fn(async () => HOME)
     const service = createAgentModelCatalogService({
       store,
-      getRecord: (sessionId) => (sessionId === record.sessionId ? record : undefined),
+      getConversation: (sessionId) => {
+        const saved = sessionId === record.sessionId ? record : undefined
+        return saved ? agentSessionConversationView(saved) : undefined
+      },
+      getRecord: () => undefined,
       drivesRecord: () => true,
-      resolveAccountHome: async () => HOME,
+      resolveAccountHome,
       probes: { grok: probe }
     })
 
@@ -169,6 +184,7 @@ describe('a saved-only catalog read', () => {
     })
     expect(probe).not.toHaveBeenCalled()
 
+    expect(resolveAccountHome).not.toHaveBeenCalled()
     await service.read({ agent: 'grok', waitForListing: true })
     expect(probe).toHaveBeenCalledOnce()
   })
@@ -239,6 +255,7 @@ it('returns a snapshot before a cold worktree selector resolves', async () => {
   const account = vi.fn(async () => HOME)
   const service = createAgentModelCatalogService({
     store: new AgentModelCatalogStore(),
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome: account
@@ -273,6 +290,7 @@ it('observes a bound scope immediately while another account and default writer 
   store.recordSuccess(FINGERPRINT, 'grok', listing('kept'), 'discovery')
   const service = createAgentModelCatalogService({
     store,
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome,
@@ -308,6 +326,7 @@ it.each(['success', 'failure'] as const)(
     const probe = vi.fn(() => stale.promise)
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: () => (resolving ? initial.promise : Promise.resolve(HOME)),
@@ -350,6 +369,7 @@ it('starts a new listing instead of joining a retired workspace invocation', asy
   const store = new AgentModelCatalogStore()
   const service = createAgentModelCatalogService({
     store,
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => HOME,
@@ -377,6 +397,54 @@ it('starts a new listing instead of joining a retired workspace invocation', asy
     })
   } finally {
     stale.resolve(listing('retired'))
+    service.stop()
+  }
+})
+
+it('keeps a readable retired conversation warm without listing or committing its delayed live report', async () => {
+  const pinned = {
+    ...agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: 'session-1' })),
+    provider: 'grok',
+    accountHome: HOME
+  }
+  let writable: AgentSessionRecord | undefined = pinned
+  const store = new AgentModelCatalogStore()
+  const fingerprint = agentModelCatalogFingerprintForRecord(pinned, '/project')
+  store.recordSuccess(fingerprint, pinned.provider, listing('saved'), 'discovery')
+  const folder = Promise.withResolvers<string | null>()
+  const recordWorkspacePath = vi.fn<() => Promise<string | null>>(async () => '/project')
+  const probe = vi.fn(async () => listing('unexpected'))
+  const service = createAgentModelCatalogService({
+    store,
+    getConversation: () => agentSessionConversationView(pinned),
+    getRecord: () => writable,
+    drivesRecord: () => true,
+    resolveAccountHome: async () => pinned.accountHome,
+    recordWorkspacePath,
+    listsInChatFolder: new Set([pinned.provider]),
+    probes: { grok: probe }
+  })
+  const params = {
+    agent: pinned.provider,
+    sessionId: pinned.sessionId,
+    inSessionWorkspace: true as const
+  }
+  try {
+    expect(await service.prepareSaved(params)).toMatchObject({ models: [{ id: 'saved' }] })
+    recordWorkspacePath.mockImplementationOnce(() => folder.promise)
+    service.recordLiveListing(pinned.sessionId, { models: listing('retired-report').models })
+    await vi.waitFor(() => expect(recordWorkspacePath).toHaveBeenCalledTimes(2))
+    writable = undefined
+    folder.resolve('/project')
+    expect(await service.read({ ...params, waitForListing: true })).toMatchObject({
+      models: [{ id: 'saved' }]
+    })
+    expect(store.observation(fingerprint)?.models.map((row) => row.id)).toEqual(['saved'])
+    expect(probe).not.toHaveBeenCalled()
+    service.recordLiveListing(pinned.sessionId, { models: listing('unwritable-report').models })
+    expect(service.snapshot(params)).toMatchObject({ models: [{ id: 'saved' }] })
+  } finally {
+    folder.resolve('/project')
     service.stop()
   }
 })

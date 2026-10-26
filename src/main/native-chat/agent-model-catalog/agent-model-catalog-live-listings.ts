@@ -122,7 +122,10 @@ export function createAgentModelCatalogLiveListings(
     retireContext,
     providerStarted(record: AgentSessionRecord, source?: () => boolean) {
       const receipt = leaseWorkspace(record.location.workspaceId)
-      const current = () => receipt.current() && source?.() !== false
+      const current = () =>
+        receipt.current() &&
+        source?.() !== false &&
+        deps.getRecord(record.sessionId)?.lease.runtimeFence === record.lease.runtimeFence
       void sessionCatalogKey(record)
         .then((fingerprint) => {
           if (current()) {
@@ -142,7 +145,10 @@ export function createAgentModelCatalogLiveListings(
         return
       }
       const receipt = leaseWorkspace(record.location.workspaceId)
-      const current = () => receipt.current() && source?.() !== false
+      const current = () =>
+        receipt.current() &&
+        source?.() !== false &&
+        deps.getRecord(record.sessionId)?.lease.runtimeFence === record.lease.runtimeFence
       if (!current()) {
         receipt.release()
         return

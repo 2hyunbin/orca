@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { expect, it, vi } from 'vitest'
 import { agentModelCatalogStore } from '../../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { createAgentModelCatalogService } from '../../native-chat/agent-model-catalog/agent-model-catalog-service'
@@ -17,6 +18,10 @@ export function registerDurableSettingsWriteTests(): void {
     })
     const catalog = createAgentModelCatalogService({
       store: agentModelCatalogStore,
+      getConversation: () => {
+        const held = record
+        return held ? agentSessionConversationView(held) : undefined
+      },
       getRecord: () => record,
       drivesRecord: () => true,
       resolveAccountHome: async () => record.accountHome,

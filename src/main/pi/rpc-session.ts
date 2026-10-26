@@ -141,6 +141,7 @@ export class PiRpcSession {
         frame.type === 'extension_ui_request'
           ? this.dialogs.receive(frame)
           : this.turns.receive(frame),
+      onOversizedEvent: (type, prefix) => this.turns.skipped(type, prefix),
       onClose: (error) => this.fail(error),
       onDiagnostic: (message) =>
         deps.logger.warn(message, { scope: 'pi-rpc', sessionId: input.identity.sessionId }),

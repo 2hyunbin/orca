@@ -23,7 +23,7 @@ export async function readStructuredAgentSessionOptionsAtRest(
   sessionId: string,
   reader: StructuredAgentSessionOptionsReader
 ): Promise<RestingOptions> {
-  const record = deps.store.getRecord(sessionId)
+  const record = deps.store.getConversation(sessionId)
   if (!record) {
     throw new Error('agent_session_identity_required')
   }

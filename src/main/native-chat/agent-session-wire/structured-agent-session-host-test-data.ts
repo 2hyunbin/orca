@@ -1,10 +1,17 @@
+import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import type {
   AgentJournalSnapshot,
+  AgentJournalItemBody,
   AgentJournalSubmission
 } from '../../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
-import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
+import type {
+  AgentSessionRecord,
+  AgentSessionExecutionLocation
+} from '../../../shared/agent-session-record'
 import { projectNativeChatTranscriptMessages } from '../../../shared/native-chat-transcript-projection'
 import { projectStructuredAgentSessionMessages } from '../../../shared/structured-agent-session-message-projection'
 import { structuredAgentSessionSendBody } from '../../../shared/structured-agent-session-send-mutation'
@@ -125,3 +132,80 @@ export async function hostTestSubmission(
     (entry) => entry.clientMessageId === id
   )
 }
+export const CODEX_INPUT_FINALIZATION_ADMISSION_CASES = [
+  ['queue-stop', 0],
+  ['queue-close', 0],
+  ['queue-quit', 0],
+  ['pending-stop', 0],
+  ['pending-close', 0],
+  ['pending-close-cards', 0],
+  ['pending-quit', 0],
+  ['pending-exit', 0],
+  ['queue-sleep', 0],
+  ['pending-sleep', 0],
+  ['pending-close-then-quit', 0],
+  ['pending-quit-then-close', 0],
+  ['pending-close-cards', 10],
+  ['pending-close-cards', 100]
+] as const
+
+export const CODEX_INPUT_FINALIZATION_OWNER_OUTCOMES = [
+  'null',
+  'live',
+  'admitted',
+  'terminal',
+  'normal',
+  'fallback',
+  'failed',
+  'close-normal',
+  'close-failed',
+  'safe-close',
+  'new-session',
+  'new-live-child',
+  'new-ended-child',
+  'new-send'
+] as const
+
+export function hostTestRestingOptionsJournal(
+  items: AgentJournalItemBody[] = [],
+  wroteBeforeOpen = false
+) {
+  return {
+    threadGoal: () => null,
+    visitItems: (visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void) =>
+      items.forEach((body, index) => visit(`item-${index}`, index + 1, body)),
+    wroteBeforeOpen: () => wroteBeforeOpen,
+    submissions: () => [],
+    contextUsage: () => null,
+    context: { floor: () => null }
+  }
+}
+
+export function hostTestRestingOptionsRecord(sessionId = 'session-1'): AgentSessionRecord {
+  return agentSessionRecordFixture({
+    sessionId,
+    provider: 'codex',
+    accountHome: { variable: 'CODEX_HOME', path: '/homes/a' },
+    providerHandleChain: [],
+    location: { executionHostId: 'local', wslDistro: null },
+    options: {}
+  })
+}
+
+export function hostTestOptionsReadStore(record: () => AgentSessionRecord) {
+  return {
+    getRecord: record,
+    getConversation: () => agentSessionConversationView(record()),
+    requireWritableRecord: record
+  }
+}
+
+export const HOST_TEST_RESTING_OPTIONS_CREATED_LINKS = [
+  {
+    origin: 'created',
+    linkId: 'link-1',
+    mintedAtFence: 1,
+    observedAt: 1,
+    handle: codexProviderHandle('provider-session-1')
+  }
+] satisfies AgentSessionRecord['providerHandleChain']

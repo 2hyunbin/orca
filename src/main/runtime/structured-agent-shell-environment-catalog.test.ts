@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../shared/agent-session-conversation-view'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createAgentModelCatalogSettingsExpiry } from '../native-chat/agent-model-catalog/agent-model-catalog-account-expiry'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
@@ -57,6 +58,10 @@ function rig() {
   const defaults = vi.fn(async () => false)
   const service = createAgentModelCatalogService({
     store: agentModelCatalogStore,
+    getConversation: (id) => {
+      const held = id === record.sessionId ? record : undefined
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: (id) => (id === record.sessionId ? record : undefined),
     drivesRecord: () => true,
     resolveAccountHome: async () => record.accountHome,
@@ -159,6 +164,7 @@ it('preserves ignored inputs and other agent overlays, and releases only the exa
 it('keeps more than 256 live producer leases and releases a replaced source independently', () => {
   const service = createAgentModelCatalogService({
     store: agentModelCatalogStore,
+    getConversation: () => undefined,
     getRecord: () => undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => ({ variable: 'HOME', path: '/account' }),
@@ -259,6 +265,10 @@ it('catalog-scale settles retired publication chains and bounds Refresh registra
     })
     const service = createAgentModelCatalogService({
       store: agentModelCatalogStore,
+      getConversation: (id) => {
+        const held = records.get(id)
+        return held ? agentSessionConversationView(held) : undefined
+      },
       getRecord: (id) => records.get(id),
       drivesRecord: () => true,
       resolveAccountHome: async () => ({

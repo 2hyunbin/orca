@@ -48,6 +48,7 @@ it('catalog-scale retires a many-scope frontier and releases actual listing wait
     const home = vi.fn(async () => ({ variable: 'HOME', path: '/generated-account' }))
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: home,

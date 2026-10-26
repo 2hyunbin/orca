@@ -1,3 +1,4 @@
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import type { ClaudeStructuredSessionEvent } from '../../claude/claude-structured-session-adapter'
 import { startCodexTurn } from '../../codex/codex-structured-turn-start'
 import { readLiveCodexSessionOptions } from '../../codex/codex-structured-session-options'
@@ -24,9 +25,14 @@ import type { StructuredAgentSessionLiveOptions } from './structured-agent-sessi
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import {
+  hostTestRestingOptionsRecord as restingRecord,
+  HOST_TEST_RESTING_OPTIONS_CREATED_LINKS as created,
+  hostTestRestingOptionsJournal as restingJournal,
+  hostTestOptionsReadStore
+} from './structured-agent-session-host-test-data'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionProviderHandleLink } from '../../../shared/agent-session-provider-handle'
-import type { AgentSessionRewindRecord } from '../../../shared/agent-session-rewind'
+import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
 import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import {
@@ -43,7 +49,6 @@ import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-suppo
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
-import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import { agentModelCatalogFingerprintForRecord } from '../agent-model-catalog/agent-model-catalog-fingerprint'
 import {
   saveStructuredAgentSessionStartReadbackListing,
@@ -57,34 +62,10 @@ import {
 
 const SESSION = 'session-1'
 
-type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options' | 'provider'> & {
-  providerHandleChain?: Pick<AgentSessionProviderHandleLink, 'origin'>[]
-  rewind?: Pick<AgentSessionRewindRecord, 'phase'>
-}
-
-function restingJournal(items: AgentJournalItemBody[] = [], wroteBeforeOpen = false) {
-  return {
-    threadGoal: () => null,
-    visitItems: (visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void) =>
-      items.forEach((body, index) => visit(`item-${index}`, index + 1, body)),
-    wroteBeforeOpen: () => wroteBeforeOpen,
-    submissions: () => [],
-    contextUsage: () => null,
-    context: { floor: () => null }
-  }
-}
-
-function restingRecord(): AgentSessionRecord {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read and the catalog key touch only these fields.
-  return {
-    provider: 'codex',
-    accountHome: { variable: 'CODEX_HOME', path: '/homes/a' },
-    providerHandleChain: [],
-    location: { executionHostId: 'local', wslDistro: null },
-    lease: { claimStatus: 'released', ownerProcess: null, runtimeFence: 1 },
-    options: {}
-  } as unknown as AgentSessionRecord
-}
+type RestingFacts = Pick<
+  Partial<AgentSessionRecord>,
+  'options' | 'provider' | 'providerHandleChain' | 'rewind'
+>
 
 describe('options at rest', () => {
   it('keeps the account model for an older client when the starting child has no folder default', async () => {
@@ -111,7 +92,7 @@ describe('options at rest', () => {
       deps: {
         adapter: {},
         agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => record },
+        store: hostTestOptionsReadStore(() => record),
         modelCatalog: { read }
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
@@ -160,7 +141,7 @@ describe('options at rest', () => {
           })
         },
         agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => record },
+        store: hostTestOptionsReadStore(() => record),
         modelCatalog: { read: async () => ({ origin: 'probe', models: [listed], fetchedAt: 1 }) }
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
@@ -184,7 +165,7 @@ describe('options at rest', () => {
       const probe = vi.fn(() => new Promise<AgentModelCatalogSuccess>(() => {}))
       const modelCatalog = createAgentModelCatalogService({
         store: new AgentModelCatalogStore(),
-        getRecord: () => record,
+        ...hostTestOptionsReadStore(() => record),
         drivesRecord: () => true,
         resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/homes/a' }),
         probes: { codex: probe }
@@ -202,7 +183,7 @@ describe('options at rest', () => {
         deps: {
           adapter: { readOptions: async () => withLiveCatalogListing(reader.read()) },
           agents: NO_STRUCTURED_AGENTS,
-          store: { getRecord: () => record },
+          store: hostTestOptionsReadStore(() => record),
           modelCatalog
         },
         serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
@@ -249,7 +230,6 @@ describe('options at rest', () => {
 })
 
 describe('a chat at rest, read by the host', () => {
-  const created: RestingFacts['providerHandleChain'] = [{ origin: 'created' }]
   const turn: AgentJournalItemBody = { kind: 'turn', turnId: 'turn-1', state: 'completed' }
   const fast = [{ value: 'priority', label: 'Fast' }]
   const flex = [...fast, { value: 'flex', label: 'Flex' }]
@@ -282,7 +262,7 @@ describe('a chat at rest, read by the host', () => {
       deps: {
         adapter: liveOptions ? { readOptions: async () => liveOptions } : {},
         agents: claudeAndCodexAgents(),
-        store: { getRecord: () => record },
+        store: hostTestOptionsReadStore(() => record),
         modelCatalog: catalog(models, verified)
       },
       serialize: (_sessionId: string, task: () => Promise<unknown>) => task(),
@@ -294,11 +274,31 @@ describe('a chat at rest, read by the host', () => {
 
   it.each<[string, RestingFacts, AgentJournalItemBody[], boolean, string[]]>([
     ['started here names its default as its own', {}, [], false, []],
-    ['taken from history', { providerHandleChain: [{ origin: 'adopted' }] }, [], true, ['model']],
-    // Context clear hides the newest turn, not its historical existence.
+    [
+      'taken from history',
+      { providerHandleChain: [{ ...created[0]!, origin: 'adopted' }] },
+      [],
+      true,
+      ['model']
+    ],
+    // A context clear hides the turn from the newest-turn read, not from history.
     ['with a turn before a context clear', {}, [turn], true, ['model']],
-    ['after a rewind', { rewind: { phase: 'completed' } }, [], true, ['model']],
-    // A replacement journal cannot prove the agent never ran.
+    [
+      'after a rewind',
+      {
+        rewind: {
+          phase: 'completed',
+          operationId: 'rewind-1',
+          callerKey: 'caller-1',
+          itemId: 'item-1',
+          expectedEpoch: 'epoch-1'
+        }
+      },
+      [],
+      true,
+      ['model']
+    ],
+    // A journal founded afresh proves nothing for a chat whose agent already ran.
     ['whose journal went missing', { providerHandleChain: created }, [], false, ['model']]
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
@@ -465,7 +465,16 @@ describe('a chat at rest, read by the host', () => {
     )
     expect(structuredAgentSessionSendSelection(state)).toEqual(model ? { model } : undefined)
     const resumed = await readAtRest(
-      { provider: 'claude', providerHandleChain: [{ origin: 'adopted' }] },
+      {
+        provider: 'claude',
+        providerHandleChain: [
+          {
+            ...created[0]!,
+            origin: 'adopted',
+            handle: claudeProviderHandle('provider-session-1', null)
+          }
+        ]
+      },
       [],
       true,
       installed,
@@ -574,7 +583,7 @@ describe('a chat at rest, read by the host', () => {
   ) {
     let record: AgentSessionRecord = { ...restingRecord(), options, provider }
     const store = {
-      getRecord: () => record,
+      ...hostTestOptionsReadStore(() => record),
       replaceSessionOptions: vi.fn(),
       reviseSessionOptions: async <A>(
         revise: (held: AgentSessionRecord, args: A) => AgentSessionRecord,
@@ -654,7 +663,7 @@ describe('a chat at rest, read by the host', () => {
     const store = new AgentModelCatalogStore()
     const catalog = createAgentModelCatalogService({
       store,
-      getRecord: () => record,
+      ...hostTestOptionsReadStore(() => record),
       drivesRecord: () => true,
       resolveAccountHome: async () => record.accountHome,
       recordWorkspacePath: lookup,
@@ -685,7 +694,7 @@ describe('a chat at rest, read by the host', () => {
             })
         },
         agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => record },
+        store: hostTestOptionsReadStore(() => record),
         modelCatalog: catalog,
         logger: { warn: vi.fn() }
       },
@@ -762,7 +771,11 @@ it('projects held Claude reports through the full reader while actual controls a
   const live = { child: { fence: 7 }, params: { provider: 'claude' }, journal: restingJournal() }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the full reader uses only these context members; provider operations use the actual adapter.
   const context = {
-    deps: { adapter, agents: claudeAndCodexAgents(), store: { getRecord: () => record } },
+    deps: {
+      adapter,
+      agents: claudeAndCodexAgents(),
+      store: hostTestOptionsReadStore(() => record)
+    },
     serialize: (id: string, task: () => Promise<unknown>) => queue.serialize(id, task),
     openConversation: async () => live,
     conversation: async () => live

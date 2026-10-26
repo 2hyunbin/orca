@@ -71,6 +71,7 @@ import { CurrentRequestsParams } from './agent-session-current-requests-params'
 import { CreateAgentSessionParams, EnsureAgentSessionParams } from './agent-session-params'
 import { ReadVisualParams } from './agent-session-visual-params'
 import {
+  AiVaultDeleteSessionParams,
   AiVaultListSessionsParams,
   AiVaultPrepareSessionResumeParams,
   AiVaultSessionTitlesParams
@@ -181,6 +182,7 @@ import {
   ConnectorAnswer,
   ConnectorCancel,
   ConnectorPendingPrompt,
+  ConnectorReply,
   ConnectorSend,
   ConnectorStart,
   ConnectorWatch
@@ -520,6 +522,7 @@ import {
   CloseLifecycleTab,
   CloseTab,
   CreateTerminalTab,
+  MovePaneToNewTab,
   MoveTab,
   SaveMarkdownTab,
   SessionTabsUnsubscribe,
@@ -614,6 +617,7 @@ import {
   TerminalSetViewerColors,
   TerminalSplit,
   TerminalStopExact,
+  TerminalViewClaudeAgent,
   TerminalWait
 } from './terminal-unary-params'
 import { TerminalGetAutoRestoreFitParams } from './terminal-viewport-methods-params'
@@ -772,6 +776,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'agentSessionAttachment.uploadStart': AttachmentUploadStartParams,
   'agentTeams.prepareLaunch': AgentTeamsPrepareLaunch,
   'agentTeams.tmuxCompat': AgentTeamsTmuxCompat,
+  'aiVault.deleteSession': AiVaultDeleteSessionParams,
   'aiVault.listSessions': AiVaultListSessionsParams,
   'aiVault.prepareSessionResume': AiVaultPrepareSessionResumeParams,
   'aiVault.resolveSessionTitles': AiVaultSessionTitlesParams,
@@ -906,6 +911,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'connector.answer': ConnectorAnswer,
   'connector.cancel': ConnectorCancel,
   'connector.pendingPrompt': ConnectorPendingPrompt,
+  'connector.reply': ConnectorReply,
   'connector.send': ConnectorSend,
   'connector.start': ConnectorStart,
   'connector.watch': ConnectorWatch,
@@ -1308,6 +1314,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'session.tabs.list': WorktreeTabSelector,
   'session.tabs.listAll': null,
   'session.tabs.move': MoveTab,
+  'session.tabs.movePaneToNewTab': MovePaneToNewTab,
   'session.tabs.setTabProps': SetTabProps,
   'session.tabs.subscribe': WorktreeTabSelector,
   'session.tabs.subscribeAll': null,
@@ -1411,8 +1418,10 @@ export const RPC_PARAMS_BY_METHOD = {
   'terminal.stop': TerminalCloseAll,
   'terminal.stopExact': TerminalStopExact,
   'terminal.subscribe': TerminalSubscribe,
+  'terminal.subscribeClaudeAgentViews': null,
   'terminal.unsubscribe': TerminalUnsubscribe,
   'terminal.updateViewport': TerminalUpdateViewport,
+  'terminal.viewClaudeAgent': TerminalViewClaudeAgent,
   'terminal.wait': TerminalWait,
   'terminalDaemon.restartSevered': TerminalDaemonRestartSeveredParams,
   'terminalDaemon.severedStatus': null,

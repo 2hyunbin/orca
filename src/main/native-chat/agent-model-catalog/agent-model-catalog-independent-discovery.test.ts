@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
@@ -56,6 +57,10 @@ function harness() {
   const probe: AgentModelCatalogProbe = Object.assign(async () => run(), { resolve })
   const service = createAgentModelCatalogService({
     store,
+    getConversation: (id) => {
+      const saved = record(id, id === 'a' ? 'old' : 'another')
+      return saved ? agentSessionConversationView(saved) : undefined
+    },
     getRecord: (id) => record(id, id === 'a' ? 'old' : 'another'),
     drivesRecord: () => true,
     resolveAccountHome: async () => HOME,
@@ -216,6 +221,10 @@ it('prepares hydrated Auto evidence without discovery and shares it with another
     }
   )
   const deps = {
+    getConversation: (id: string) => {
+      const held = { ...first, sessionId: id }
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: (id: string) => ({ ...first, sessionId: id }),
     drivesRecord: () => true,
     resolveAccountHome: vi.fn(async () => HOME),

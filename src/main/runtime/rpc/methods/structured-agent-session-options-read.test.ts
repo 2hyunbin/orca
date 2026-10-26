@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../../shared/agent-session-conversation-view'
 import '../unused-default-rpc-methods.test-fixture'
 // The catalog read behind the picker: which directory a named worktree runs in on this host.
 
@@ -44,7 +45,11 @@ describe('agentSession.modelCatalog', () => {
       Object.assign(hostStub(), {
         deps: {
           modelCatalog: { read, demand: vi.fn(async () => {}) },
-          store: { getRecord: () => record },
+          store: {
+            getRecord: () => record,
+            getConversation: () => (record ? agentSessionConversationView(record) : null),
+            requireWritableRecord: () => record
+          },
           adapter: {}
         }
       })
@@ -80,6 +85,10 @@ describe('agentSession.modelCatalog', () => {
     }
     const catalog = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
+      getConversation: () => {
+        const saved = record ?? undefined
+        return saved ? agentSessionConversationView(saved) : undefined
+      },
       getRecord: () => record ?? undefined,
       drivesRecord: () => true,
       recordWorkspacePath: async () => '/repo/work',
@@ -95,7 +104,15 @@ describe('agentSession.modelCatalog', () => {
     })
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
-        deps: { modelCatalog: catalog, store: { getRecord: () => record }, adapter: {} }
+        deps: {
+          modelCatalog: catalog,
+          store: {
+            getRecord: () => record,
+            getConversation: () => (record ? agentSessionConversationView(record) : null),
+            requireWritableRecord: () => record
+          },
+          adapter: {}
+        }
       })
     )
     try {
@@ -218,6 +235,10 @@ describe('agentSession.modelCatalog', () => {
     const resolve = vi.fn(async () => ({ identity: 'saved-launch', run }))
     const catalog = createAgentModelCatalogService({
       store,
+      getConversation: (id) => {
+        const held = { ...pinned, sessionId: id }
+        return held ? agentSessionConversationView(held) : undefined
+      },
       getRecord: (id) => ({ ...pinned, sessionId: id }),
       drivesRecord: () => true,
       resolveAccountHome: vi.fn(() => new Promise<never>(() => {})),
@@ -229,7 +250,13 @@ describe('agentSession.modelCatalog', () => {
         sessionAgent: () => 'claude',
         deps: {
           modelCatalog: catalog,
-          store: { getRecord: (id: string) => ({ ...pinned, sessionId: id }) },
+          store: {
+            getConversation: (id: string) => {
+              const held = { ...pinned, sessionId: id }
+              return held ? agentSessionConversationView(held) : undefined
+            },
+            getRecord: (id: string) => ({ ...pinned, sessionId: id })
+          },
           adapter: {}
         }
       })
@@ -272,7 +299,7 @@ describe('agentSession.modelCatalog before anything built the host', () => {
       Object.assign(hostStub(), {
         deps: {
           modelCatalog: { read, demand: vi.fn(async () => {}) },
-          store: { getRecord: () => null },
+          store: { getRecord: () => null, getConversation: () => null },
           adapter: {}
         }
       })
@@ -338,7 +365,11 @@ describe('agentSession.modelCatalog for a chat on a model its CLI stopped listin
       Object.assign(hostStub(), {
         deps: {
           modelCatalog: { read, demand: vi.fn(async () => {}) },
-          store: { getRecord: () => record },
+          store: {
+            getRecord: () => record,
+            getConversation: () => (record ? agentSessionConversationView(record) : null),
+            requireWritableRecord: () => record
+          },
           adapter: {}
         }
       })

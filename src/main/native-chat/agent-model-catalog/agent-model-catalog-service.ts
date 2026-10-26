@@ -49,10 +49,8 @@ export function createAgentModelCatalogService(
   }
   const bindings = new Map<string, AgentModelCatalogBinding>()
   const claims = new Map<string, Claim>()
-  const requestKey = (params: AgentModelCatalogReadParams): string =>
-    agentModelCatalogRequestKey(deps, params)
-  const capture = (params: AgentModelCatalogReadParams): string =>
-    agentModelCatalogScopeIdentity(deps, params)
+  const requestKey = agentModelCatalogRequestKey.bind(null, deps)
+  const capture = agentModelCatalogScopeIdentity.bind(null, deps)
   const retireContext = (workspaceId?: string, sources = true): void => {
     if (sources) {
       live.retireContext(workspaceId)
@@ -106,7 +104,8 @@ export function createAgentModelCatalogService(
       if (!current()) {
         return
       }
-      const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
+      const record = params.sessionId ? deps.getConversation(params.sessionId) : undefined
+      const savedOnly = params.savedOnly || !!(record && !deps.getRecord(record.sessionId))
       const scoped =
         record && record.provider === params.agent && deps.drivesRecord(record) ? record : undefined
       if (record && !scoped) {
@@ -175,7 +174,7 @@ export function createAgentModelCatalogService(
       }
       const scope = await resolveAgentModelCatalogScope(
         deps,
-        { ...params, workspacePath },
+        { ...params, workspacePath, savedOnly },
         scoped,
         fingerprint,
         probeHome,
@@ -224,7 +223,7 @@ export function createAgentModelCatalogService(
         probeHome,
         () => valid() && bindings.get(bindingKey) === bound
       )
-      if (params.savedOnly) {
+      if (savedOnly) {
         await bound.projecting
         return
       }
@@ -236,6 +235,7 @@ export function createAgentModelCatalogService(
       const list = scopedAgentModelCatalogLister({
         legacy: params.legacy,
         operation: { deadline, current, signal },
+        canList: () => !record || !!deps.getRecord(record.sessionId),
         admission,
         signal,
         resolved,

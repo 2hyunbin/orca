@@ -1,7 +1,8 @@
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { describe, expect, it, vi } from 'vitest'
 
-import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   agentModelCatalogFingerprintForRecord,
@@ -64,6 +65,7 @@ describe('model catalog prewarm', () => {
     const grok = vi.fn(async (_home: AgentSessionAccountHome) => listing('grok-4'))
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       hasChatRecords: () => true,
@@ -108,8 +110,8 @@ describe('model catalog prewarm', () => {
 
   it("saves a running chat's reports in the order it sent them, per folder", async () => {
     const store = new AgentModelCatalogStore()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the service reads only provider, accountHome, location and launchDirectory.
-    const chat = {
+
+    const chat = agentSessionRecordFixture({
       sessionId: 'chat-b',
       provider: 'opencode2',
       accountHome: HOME('OPENCODE_HOME', '/homes/a'),
@@ -119,11 +121,12 @@ describe('model catalog prewarm', () => {
         workspaceId: 'ws-b',
         workspaceKind: 'folder'
       }
-    } as AgentSessionRecord
+    })
     const lookups = [deferred<string | null>(), deferred<string | null>()]
     let lookup = 0
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => agentSessionConversationView(chat),
       getRecord: () => chat,
       drivesRecord: () => true,
       resolveAccountHome: async () => HOME('OPENCODE_HOME', '/homes/a'),
@@ -150,8 +153,8 @@ describe('model catalog prewarm', () => {
       async (_home: AgentSessionAccountHome, options?: { workspacePath?: string }) =>
         listing(options?.workspacePath === '/work/b' ? 'only-in-b' : 'big-pickle')
     )
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the service reads only provider, accountHome, location and launchDirectory.
-    const chatInB = {
+
+    const chatInB = agentSessionRecordFixture({
       sessionId: 'chat-b',
       provider: 'opencode2',
       accountHome: HOME('OPENCODE_HOME', '/homes/a'),
@@ -162,9 +165,13 @@ describe('model catalog prewarm', () => {
         workspaceId: 'ws-b',
         workspaceKind: 'folder'
       }
-    } as AgentSessionRecord
+    })
     const service = createAgentModelCatalogService({
       store,
+      getConversation: (sessionId) => {
+        const saved = sessionId === 'chat-b' ? chatInB : undefined
+        return saved ? agentSessionConversationView(saved) : undefined
+      },
       getRecord: (sessionId) => (sessionId === 'chat-b' ? chatInB : undefined),
       drivesRecord: () => true,
       resolveAccountHome: async () => HOME('OPENCODE_HOME', '/homes/a'),
@@ -207,6 +214,7 @@ describe('model catalog prewarm', () => {
     )
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       hasChatRecords: () => true,
@@ -255,6 +263,7 @@ describe('model catalog prewarm', () => {
     )
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       hasChatRecords: () => true,
@@ -283,6 +292,7 @@ describe('model catalog prewarm', () => {
     const claude = vi.fn(async (_home: AgentSessionAccountHome) => listing('opus'))
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       hasChatRecords: () => true,
@@ -319,6 +329,7 @@ describe('model catalog prewarm', () => {
     store.recordSuccess('claude-other-account', 'claude', listing('opus'), 'discovery')
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: async (agent) => HOME('HOME', `/homes/${agent}`),
@@ -363,6 +374,7 @@ describe('model catalog prewarm', () => {
     const hasChatRecords = vi.fn(() => true)
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: async (agent) => HOME('HOME', `/homes/${agent}`),
@@ -399,6 +411,7 @@ describe('model catalog prewarm', () => {
     const agents = ['codex', 'claude', 'grok', 'opencode', 'pi']
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => undefined,
       getRecord: () => undefined,
       drivesRecord: () => true,
       hasChatRecords: () => true,
@@ -417,8 +430,7 @@ describe('model catalog prewarm', () => {
 
 describe('one account, one catalog key', () => {
   function record(path: string): AgentSessionRecord {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the key reads only provider, accountHome and location.
-    return {
+    return agentSessionRecordFixture({
       sessionId: 'session-1',
       provider: 'grok',
       accountHome: HOME('GROK_HOME', path),
@@ -428,7 +440,7 @@ describe('one account, one catalog key', () => {
         workspaceId: 'ws-1',
         workspaceKind: 'git-worktree'
       }
-    } as AgentSessionRecord
+    })
   }
 
   it('a session’s saves through the host and through its adapter’s handle land under its record’s key', async () => {
@@ -437,6 +449,7 @@ describe('one account, one catalog key', () => {
     const launched = record(managedHome)
     const service = createAgentModelCatalogService({
       store,
+      getConversation: () => agentSessionConversationView(launched),
       getRecord: () => launched,
       drivesRecord: () => true,
       resolveAccountHome: async () => HOME('GROK_HOME', managedHome)
@@ -479,6 +492,10 @@ it('keeps old producers from publishing rows, defaults or failure expiry after r
   const defaultLookup = vi.fn(async () => defaults.promise)
   const service = createAgentModelCatalogService({
     store,
+    getConversation: () => {
+      const held = record
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: () => record,
     drivesRecord: () => true,
     resolveAccountHome: async () => record.accountHome,
@@ -539,6 +556,10 @@ it('withholds a known retired Pi invocation until a current live producer lists'
   const probe = vi.fn(() => listingPending.promise)
   const service = createAgentModelCatalogService({
     store,
+    getConversation: () => {
+      const held = record
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: () => record,
     drivesRecord: () => true,
     resolveAccountHome: async () => record.accountHome,

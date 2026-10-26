@@ -110,6 +110,7 @@ export async function openCodexStructuredSession(
   )
   current()
   start.setPrimaryThreadId(opened.threadId)
+  attempt.window.appliedSettings.observe(opened)
   const restored = translator?.restoreThread(opened.threadId, opened.thread ?? {})
   if (restored && !restored.accepted) {
     throw AgentSessionAcquisitionRefusal.historyTooLarge(
@@ -160,6 +161,13 @@ export async function openCodexStructuredSession(
     ...codexSessionLifecycle(input.fence, generation),
     threadId: opened.threadId,
     historyMode: opened.historyMode,
+    permissions: {
+      acquiredMode: input.permissionMode ?? 'ask',
+      ...(opened.sandbox ? { acquiredSandbox: opened.sandbox } : {}),
+      launchSandboxIntact: true,
+      cwd: launch.cwd,
+      ...(launch.visuals ? { visualsFolder: launch.visuals.folder } : {})
+    },
     activeTurnIds: new Set(),
     abortedTurnIds: new Set(),
     prompts: attempt.window.prompts,
@@ -171,6 +179,7 @@ export async function openCodexStructuredSession(
       ...(opened.effort ? { effort: opened.effort } : {}),
       ...(serviceTier ? { serviceTier } : {})
     },
+    appliedSettings: attempt.window.appliedSettings,
     ...(catalogAccess ? { catalogAccess } : {}),
     dispatchEchoes: start.dispatchEchoes,
     translator,

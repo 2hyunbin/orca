@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { it, expect, vi } from 'vitest'
 import { createClaudeModelCatalogProbe } from '../../claude/claude-model-catalog-probe'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
@@ -31,6 +32,10 @@ it('shares the original legacy read deadline with saved-scope and Auto preparati
   })
   const catalog = createAgentModelCatalogService({
     store: new AgentModelCatalogStore(),
+    getConversation: () => {
+      const held = record
+      return held ? agentSessionConversationView(held) : undefined
+    },
     getRecord: () => record,
     drivesRecord: () => true,
     resolveAccountHome: async () => record.accountHome,
@@ -50,7 +55,13 @@ it('shares the original legacy read deadline with saved-scope and Auto preparati
     deps: {
       adapter: {},
       agents: claudeAndCodexAgents(),
-      store: { getRecord: () => record },
+      store: {
+        getConversation: () => {
+          const held = record
+          return held ? agentSessionConversationView(held) : undefined
+        },
+        getRecord: () => record
+      },
       modelCatalog: catalog
     },
     serialize: (_id: string, task: () => Promise<unknown>) => task(),
