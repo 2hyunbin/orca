@@ -218,6 +218,45 @@ describe('connector inbox', () => {
     expect(Date.now() - startedAt).toBeLessThan(5_000)
   })
 
+  it('ignores acks from an older hello and asks for an unrecorded one', async () => {
+    const { harness, machine, enqueue, poll } = await setup()
+    await enqueue('a', 'a1', START)
+    await poll()
+    expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }], 2)).status).toBe(409)
+    await machine.hello(2)
+    expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }], 1)).status).toBe(204)
+    const [row] = await harness.database.query(
+      "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
+    )
+    expect(row?.state).toBe('leased')
+  })
+
+  // SQLite runs one transaction at a time, so only Postgres can race an ack with a hello.
+  it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
+    'ignores an ack from the old hello that waited on a newer hello; the lease resends it',
+    async () => {
+      let gate!: ReturnType<typeof pauseBefore>
+      const { harness, machine, enqueue, poll } = await setup({
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, 'INSERT INTO connector_hosts', 1)
+          return gate.database
+        }
+      })
+      await enqueue('a', 'a1', START)
+      await poll()
+      const hello = machine.hello(2)
+      await gate.atStatement
+      const late = machine.ack([{ deliveryId: 'a1', step: 'received' }], 1)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      gate.release()
+      expect((await hello).status).toBe(204)
+      expect((await late).status).toBe(204)
+      harness.advance(CONNECTOR_LIMITS.leaseMs)
+      const first = ConnectorPollResponseSchema.parse((await machine.poll(2)).body)
+      expect(first.deliveries.map((delivery) => delivery.deliveryId)).toEqual(['a1'])
+    }
+  )
+
   it('keeps the first done', async () => {
     const { harness, machine, enqueue, poll } = await setup()
     await enqueue('a', 'a1', START)

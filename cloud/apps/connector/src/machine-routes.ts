@@ -9,7 +9,7 @@ import {
   type ConnectorDelivery,
   type ConnectorPollResponse
 } from '@orca-cloud/connector-contract'
-import type { Hono, MiddlewareHandler } from 'hono'
+import type { Context, Hono, MiddlewareHandler } from 'hono'
 import { lockConnectorHost, type ConnectorHosts } from './connector-hosts.js'
 import type { ConnectorInbox, Unsettled } from './connector-inbox.js'
 import type { ConnectorThreads } from './connector-threads.js'
@@ -33,6 +33,27 @@ export function registerMachineRoutes(
   }
 ): void {
   const { database, inbox, threads, hosts, waker, now, holdMs, limitBody } = deps
+
+  // Acks and events from an older hello change nothing: the first poll after the newer hello lists
+  // what is unsettled, and its batches start a new events mark. An unrecorded hello must be sent.
+  async function onCurrentHello(
+    context: Context<MachineEnv>,
+    helloRev: number,
+    run: (transaction: CloudDatabase, hostId: string) => Promise<void>
+  ): Promise<Response> {
+    const { hostId } = context.get('host')
+    const status = await database.transaction(async (transaction) => {
+      await lockConnectorHost(transaction, hostId)
+      const status = await hosts.helloStatus(transaction, hostId, helloRev)
+      if (status === 'current') {
+        await run(transaction, hostId)
+      }
+      return status
+    })
+    return status === 'unknown'
+      ? context.json({ error: 'hello_required' }, 409)
+      : context.body(null, 204)
+  }
 
   app.put(CONNECTOR_PATHS.hello, limitBody, async (context) => {
     const body = ConnectorHelloRequestSchema.safeParse(await context.req.json().catch(() => null))
@@ -69,7 +90,7 @@ export function registerMachineRoutes(
         const pass = await database
           .transaction(async (transaction) => {
             await lockConnectorHost(transaction, hostId)
-            if ((await hosts.helloRev(transaction, hostId)) !== helloRev) {
+            if ((await hosts.helloStatus(transaction, hostId, helloRev)) !== 'current') {
               return null
             }
             const recovered = (await hosts.takeUnsettledDue(transaction, hostId))
@@ -123,11 +144,9 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    const { hostId } = context.get('host')
-    await database.transaction((transaction) =>
+    return await onCurrentHello(context, body.data.helloRev, (transaction, hostId) =>
       inbox.acknowledge(transaction, hostId, body.data.acks)
     )
-    return context.body(null, 204)
   })
 
   app.post(CONNECTOR_PATHS.events, limitBody, async (context) => {
@@ -135,13 +154,11 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    const { hostId } = context.get('host')
     // A stale batch still answers 204: the machine has nothing to retry.
-    await database.transaction(async (transaction) => {
+    return await onCurrentHello(context, body.data.helloRev, async (transaction, hostId) => {
       if (await hosts.advanceEventsSeq(transaction, hostId, body.data.seq)) {
         await threads.applyEvents(transaction, hostId, body.data.events)
       }
     })
-    return context.body(null, 204)
   })
 }
