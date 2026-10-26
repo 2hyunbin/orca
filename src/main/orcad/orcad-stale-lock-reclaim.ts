@@ -198,7 +198,7 @@ async function checkStaleLock(
       host: holder.host,
       bootId: holder.bootId,
       currentBootId: bootId,
-      ageMinutes: Math.round((now - Date.parse(holder.acquiredAt)) / 60_000),
+      ageMinutes: Math.round((now - writtenMs) / 60_000),
       nonce: holder.nonce
     }
   }

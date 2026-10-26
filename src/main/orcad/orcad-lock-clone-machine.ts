@@ -6,8 +6,8 @@ import type { OrcadPeerMachine } from './orcad-lock-holder-locality'
 import { currentLinuxBootStartedAtMs } from '../persistence/profile-state/profile-state-access-identity'
 
 const CLONE_MACHINE_ID_HINT =
-  'Machines cloned from one image share /etc/machine-id, so Orca cannot tell them apart. If that ' +
-  'server crashed, a normal start takes over once its lock goes 5 minutes without a heartbeat. ' +
+  'Machines cloned from one image share /etc/machine-id, so Orca cannot tell them apart. If the Orca ' +
+  'on the clone crashed, a normal start takes over once its lock goes 5 minutes without a heartbeat. ' +
   'On the clone, run `sudo rm /etc/machine-id && sudo systemd-machine-id-setup` and reboot it.'
 const CLONE_OWN_DATA_HINT =
   'Or, on that machine only, give Orca its own data: for Orca-managed SSH servers set ' +
