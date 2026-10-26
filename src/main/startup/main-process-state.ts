@@ -92,6 +92,7 @@ export const mainProcessState = {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null slot to the installer assigned by main-process-relay-startup.
   desktopRelayInstaller: null as DesktopRelayServiceInstaller | null,
   desktopPushService: null as DesktopPushService | null,
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null slot to the connector assigned by main-process-connector-startup.
   connectorCloud: null as ConnectorCloud | null,
   desktopRelayStatus: 'offline' as RelayBrokerStatus,
   desktopRelayCellUrl: undefined as string | undefined,

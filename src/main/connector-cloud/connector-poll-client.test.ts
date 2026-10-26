@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { Delivery } from '../external-conversations/external-conversation-types'
 import { connectorProjects } from './connector-places'
@@ -436,7 +437,8 @@ describe('ConnectorPollClient', () => {
       { kind: 'turn-started' }
     ])
 
-    const helloRevs = () => fake.hellos.map((hello) => (hello as { helloRev: number }).helloRev)
+    const helloRevs = () =>
+      fake.hellos.map((hello) => z.object({ helloRev: z.number() }).parse(hello).helloRev)
     expect(fake.requestsTo(CONNECTOR_PATHS.events)[0]?.body).toMatchObject({
       helloRev: helloRevs()[0]
     })

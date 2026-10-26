@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OrcaCloudAuthConfig } from '../orca-profiles/profile-cloud-auth-config'
 import { desktopConnectorTokenMint } from './connector-token-mint'
 
-const profile = vi.hoisted(() => ({ cloud: { userId: 'ada' } as { userId: string } | undefined }))
+const profile = vi.hoisted(() => {
+  const state: { cloud?: { userId: string } } = { cloud: { userId: 'ada' } }
+  return state
+})
 const runFresh = vi.hoisted(() => vi.fn())
 
 vi.mock('../orca-profiles/profile-index-store', () => ({
