@@ -123,7 +123,7 @@ export function ProjectOptionRow({
         current && !armed && 'bg-accent/60'
       )}
     >
-      <span className="flex shrink-0 items-center pt-0.5">
+      <span className="flex h-5 w-4 shrink-0 items-center justify-center">
         <ProjectOptionMark option={option} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">

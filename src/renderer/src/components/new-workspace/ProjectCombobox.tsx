@@ -309,11 +309,13 @@ export default function ProjectCombobox({
                 onMouseMove={() => arm(ADD_PROJECT_KEY)}
                 onClick={() => commit(ADD_PROJECT_KEY)}
                 className={cn(
-                  'flex h-9 shrink-0 cursor-default items-center gap-2 border-t border-border px-2 text-sm',
+                  'flex h-9 shrink-0 cursor-default items-center gap-2 border-t border-border px-3 text-sm',
                   armedKey === ADD_PROJECT_KEY && 'bg-accent text-accent-foreground'
                 )}
               >
-                <FolderPlus className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="flex w-4 shrink-0 items-center justify-center">
+                  <FolderPlus className="size-3.5 text-muted-foreground" />
+                </span>
                 <span className="truncate">
                   {translate(
                     'auto.components.new.workspace.ProjectCombobox.addProject',

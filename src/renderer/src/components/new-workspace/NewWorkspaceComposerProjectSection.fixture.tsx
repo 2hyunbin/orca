@@ -142,6 +142,9 @@ export const hostMenu = defineFixture({
   }
 })
 
+export const narrowProjectMenu = defineFixture({ ...projectMenu, width: 360 })
+export const narrowHostMenu = defineFixture({ ...hostMenu, width: 360 })
+
 function tooltipFixture(attribute: string) {
   return defineFixture({
     ...closed,

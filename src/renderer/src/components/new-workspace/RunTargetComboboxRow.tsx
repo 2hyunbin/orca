@@ -58,8 +58,9 @@ export function RunTargetRow({
     >
       <span
         className={cn(
-          'flex shrink-0 items-center',
-          stacked ? 'self-start pt-0.5' : 'h-8',
+          'flex w-4 shrink-0 items-center justify-center',
+          stacked ? 'h-5' : 'h-8',
+          stacked && detail && 'self-start',
           dimmed && 'opacity-60'
         )}
       >
