@@ -27,14 +27,18 @@ export type ConnectorConfig = {
   trustedProxyHops: number
 }
 
-function canonicalOrigin(value: string, name: string): string {
+function secureUrl(value: string, name: string): URL {
   const url = new URL(value)
-  if (url.origin !== value) {
-    throw new Error(`${name} must be an origin`)
-  }
   const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)
   if (url.protocol !== 'https:' && !(loopback && url.protocol === 'http:')) {
     throw new Error(`${name} must use HTTPS outside loopback development`)
+  }
+  return url
+}
+
+function canonicalOrigin(value: string, name: string): string {
+  if (secureUrl(value, name).origin !== value) {
+    throw new Error(`${name} must be an origin`)
   }
   return value
 }
@@ -55,7 +59,8 @@ export function loadConnectorConfig(env: NodeJS.ProcessEnv = process.env): Conne
     dataDir: parsed.ORCA_CONNECTOR_DATA_DIR,
     databasePoolMax: parsed.ORCA_CONNECTOR_DATABASE_POOL_MAX,
     authIssuer: canonicalOrigin(parsed.ORCA_CONNECTOR_AUTH_ISSUER, 'ORCA_CONNECTOR_AUTH_ISSUER'),
-    jwksUrl: parsed.ORCA_CONNECTOR_JWKS_URL,
+    // The signing keys come from here, so plain HTTP would let anyone on the path mint tokens.
+    jwksUrl: secureUrl(parsed.ORCA_CONNECTOR_JWKS_URL, 'ORCA_CONNECTOR_JWKS_URL').href,
     trustedProxyHops: parsed.ORCA_CONNECTOR_TRUSTED_PROXY_HOPS
   }
 }
