@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionOptionDescriptor } from '../../../src/shared/native-chat-session-options'
 import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState } from '../transport/types'
-import type { MobileNativeChatPrompts } from './use-mobile-native-chat-prompts'
+import type { MobileNativeChatPrompts } from './native-chat/input/use-mobile-native-chat-prompts'
 
 const acceptSend = vi.fn()
 const captureSendOrigin = vi.fn()
