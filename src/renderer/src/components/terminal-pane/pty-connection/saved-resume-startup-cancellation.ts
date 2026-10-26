@@ -77,6 +77,7 @@ export function installSavedResumeStartupCancellation(session: ConnectPanePtySes
             return current
           }
           transaction.setEntry(session.cacheKey, undefined)
+          return undefined
         })
       }
       session.cleanupStartupDraftPasteTimers?.()

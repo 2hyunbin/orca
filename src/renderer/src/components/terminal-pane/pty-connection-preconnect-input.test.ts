@@ -164,7 +164,13 @@ describe('connectPanePty pre-connect input', () => {
     storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey] = {
       paneKey,
       tabId: 'tab-1',
-      worktreeId: 'wt-1'
+      worktreeId: 'wt-1',
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'session-1' },
+      prompt: '',
+      state: 'working',
+      capturedAt: 1_000,
+      updatedAt: 1_000
     }
     transportFactoryQueue.push(createMockTransport())
 
@@ -238,7 +244,13 @@ describe('connectPanePty pre-connect input', () => {
     storeFixture.read().sleepingAgentSessionsByPaneKey[paneKey] = {
       paneKey,
       tabId: 'tab-1',
-      worktreeId: 'wt-1'
+      worktreeId: 'wt-1',
+      agent: 'claude',
+      providerSession: { key: 'session_id', id: 'session-1' },
+      prompt: '',
+      state: 'working',
+      capturedAt: 1_000,
+      updatedAt: 1_000
     }
 
     expect(typeof release === 'function' && release()).toBe(false)

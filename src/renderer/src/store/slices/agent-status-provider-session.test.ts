@@ -252,7 +252,7 @@ describe('recordAgentProviderSession', () => {
     const store = createTestStore()
     store.setState({
       tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] }
-    } as Partial<AppState>)
+    })
     const paneKey = 'tab-1:leaf-1'
     const launchConfig = {
       agentArgs: '--dangerously-skip-permissions --model haiku',

@@ -44,7 +44,7 @@ test('keeps the visible Agent Dashboard interactive during a 100-pane status rep
       store.setState({
         agentDashboardDrawerOpen: false,
         settings: {
-          ...window.__agentStatus!.getState().settings,
+          ...settings,
           experimentalAgentDashboardPopout: true,
           experimentalAgentDashboardMode: 'in-window',
           experimentalAgentDashboardShowIdle: true,

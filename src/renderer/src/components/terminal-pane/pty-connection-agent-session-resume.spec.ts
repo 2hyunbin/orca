@@ -231,6 +231,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
       ) => {
         storeFixture.read().agentLaunchConfigByPaneKey[key] = {
           launchConfig: config,
+          registeredAt: 1,
           identity: normalizeLaunchConfigRegistrationMetadata(key, metadata)
         }
       }

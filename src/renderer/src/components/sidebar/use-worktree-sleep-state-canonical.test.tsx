@@ -14,9 +14,11 @@ vi.mock('@/store', async () => {
 })
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
   resetWorktreeSleepStateCacheForTests()
 })
 it('keeps a workspace awake through a PTY gap using canonical status only', () => {
+  vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
   const owner = getAgentStatusOwner(useAppStore)
   const view = renderHook(() => useIsSleepingWorktree('workspace'))
   expect(view.result.current).toBe(true)

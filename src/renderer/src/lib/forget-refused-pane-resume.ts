@@ -62,5 +62,6 @@ export function forgetRefusedPaneResume(
       return current
     }
     transaction.setEntry(paneKey, undefined)
+    return undefined
   })
 }
