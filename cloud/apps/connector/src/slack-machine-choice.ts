@@ -10,12 +10,15 @@ export type MachineChoice =
   | { kind: 'no_machine' }
   | { kind: 'ask'; options: PlaceOption[] }
 
-type Place = {
-  host: KnownHost & { agent: string }
-  project: ConnectorHelloRequest['projects'][number]
+type Project = ConnectorHelloRequest['projects'][number]
+type Place = { host: KnownHost & { agent: string }; project: Project }
+
+// One project across machines: its remote when it has one, else its name.
+function projectKey(project: Project): string {
+  return (project.remote ?? project.name).toLowerCase()
 }
 
-function projectNames(project: Place['project']): string[] {
+function projectNames(project: Project): string[] {
   const remote = project.remote?.toLowerCase()
   return [
     project.name.toLowerCase(),
@@ -23,8 +26,17 @@ function projectNames(project: Place['project']): string[] {
   ]
 }
 
-// Decisions §2: project named in the message → channel default → personal default → ask. A
-// project on several machines: a machine named in the message, else the default machine, else ask.
+// Words of the message, plus owner/name for each repository link (<https://host/owner/name…>).
+function messageWords(lower: string): Set<string> {
+  const words = lower.split(/[^a-z0-9._/-]+/).filter((word) => word.length > 0)
+  const links = [
+    ...lower.matchAll(/https?:\/\/[^/\s|>]+\/([\w.-]+\/[\w.-]+?)(?:\.git)?(?=[/|>#?\s]|$)/g)
+  ]
+  return new Set([...words, ...links.map((match) => match[1] ?? '')])
+}
+
+// Decisions §2. The project first: named in the message → channel default → personal default; more
+// than one → ask. Then, among that project's machines: named in the message → default → ask.
 export function chooseMachine(input: {
   hosts: KnownHost[]
   identity: SlackIdentity
@@ -32,7 +44,7 @@ export function chooseMachine(input: {
   text: string
 }): MachineChoice {
   const lower = input.text.toLowerCase()
-  const words = new Set(lower.split(/[^a-z0-9._/-]+/).filter((word) => word.length > 0))
+  const words = messageWords(lower)
   const named = (name: string) => (/\s/.test(name) ? lower.includes(name) : words.has(name))
 
   const capable = input.hosts.flatMap((host) => {
@@ -45,35 +57,42 @@ export function chooseMachine(input: {
   const places: Place[] = capable.flatMap((host) =>
     host.hello.projects.map((project) => ({ host, project }))
   )
-  const inMessage = places.filter((place) => projectNames(place.project).some(named))
   const fallback = input.identity.channelProjects[input.channelId] ?? input.identity.defaultProject
-  const matching =
+  const inMessage = places.filter((place) => projectNames(place.project).some(named))
+  const referenced =
     inMessage.length > 0 || fallback === null
       ? inMessage
       : places.filter((place) => projectNames(place.project).includes(fallback.toLowerCase()))
+  if (new Set(referenced.map((place) => projectKey(place.project))).size !== 1) {
+    return ask(referenced.length > 0 ? referenced : places)
+  }
 
-  let chosen = matching
-  const onNamedHost = chosen.filter((place) => named(place.host.hostName.toLowerCase()))
-  if (onNamedHost.length > 0) {
-    chosen = onNamedHost
-  }
-  const onDefaultHost = chosen.filter((place) => place.host.hostId === input.identity.defaultHostId)
-  if (onDefaultHost.length > 0) {
-    chosen = onDefaultHost
-  }
-  const [place] = chosen
-  if (chosen.length === 1 && place) {
-    return {
-      kind: 'chosen',
-      hostId: place.host.hostId,
-      hostName: place.host.hostName,
-      placeId: place.project.placeId,
-      agent: place.host.agent
+  let machines = referenced
+  for (const prefer of [
+    (place: Place) => named(place.host.hostName.toLowerCase()),
+    (place: Place) => place.host.hostId === input.identity.defaultHostId
+  ]) {
+    const preferred = machines.filter(prefer)
+    if (preferred.length > 0) {
+      machines = preferred
     }
   }
-  const options = (matching.length > 1 ? matching : places).map((option) => ({
-    project: option.project.name,
-    hostName: option.host.hostName
-  }))
-  return { kind: 'ask', options }
+  const [place] = machines
+  if (machines.length !== 1 || !place) {
+    return ask(machines)
+  }
+  return {
+    kind: 'chosen',
+    hostId: place.host.hostId,
+    hostName: place.host.hostName,
+    placeId: place.project.placeId,
+    agent: place.host.agent
+  }
+}
+
+function ask(places: Place[]): MachineChoice {
+  return {
+    kind: 'ask',
+    options: places.map((place) => ({ project: place.project.name, hostName: place.host.hostName }))
+  }
 }

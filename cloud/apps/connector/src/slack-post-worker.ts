@@ -13,20 +13,24 @@ const RepliesSchema = z.object({
       ts: z.string(),
       metadata: z.object({ event_payload: z.looseObject({ post_id: z.unknown() }) }).optional()
     })
-  )
+  ),
+  has_more: z.boolean().optional(),
+  response_metadata: z.looseObject({ next_cursor: z.string().optional() }).optional()
 })
-const UserInfoSchema = z.object({
-  user: z.looseObject({
-    profile: z
-      .looseObject({ display_name: z.string().optional(), real_name: z.string().optional() })
-      .optional(),
-    name: z.string().optional()
-  })
+// Slack may send absent, null or empty profile names; none of that bears on membership.
+const UserInfoSchema = z.object({ user: z.looseObject({}) })
+const UserNamesSchema = z.object({
+  profile: z
+    .looseObject({ display_name: z.string().nullish(), real_name: z.string().nullish() })
+    .nullish(),
+  name: z.string().nullish()
 })
 const POST_METADATA_TYPE = 'orca_post'
 const MEMBER_CHECKS_PER_PASS = 20
-// A post claimed back after a crash is looked for among replies sent from shortly before it.
+// A post claimed back after a crash is looked for among replies sent from shortly before it, over
+// a bounded number of pages; past that it can't be ruled out, so it is uncertain.
 const RECONCILE_LOOKBACK_MS = 60_000
+const RECONCILE_MAX_PAGES = 3
 
 // Sends queued posts. A new message carries its post id in Slack metadata, so one that was left
 // mid-send is looked for in the thread before it is sent again; if that check can't run, the post
@@ -75,18 +79,25 @@ export class SlackPostWorker {
       })
   }
 
+  // Claimed heads are in different channels and go out in parallel, well inside their lease.
   async sendDue(): Promise<void> {
-    for (const post of await this.deps.posts.claim()) {
-      // A token sealed under another key can never be sent with; it fails, not blocks the queue.
-      const token = await this.deps.installs
-        .botToken(this.deps.database, post.teamId)
-        .catch(() => null)
-      if (token === null) {
-        await this.deps.posts.settle(post, 'failed')
-        continue
+    const claimed = await this.deps.posts.claim()
+    await Promise.all(claimed.map((post) => this.sendClaimed(post)))
+  }
+
+  // A post that can never go (no install, a token sealed under another key, an unreadable body)
+  // fails rather than holding its channel.
+  private async sendClaimed(post: ClaimedPost): Promise<void> {
+    try {
+      const token = await this.deps.installs.botToken(this.deps.database, post.teamId)
+      if (token !== null) {
+        await this.send(token, post)
+        return
       }
-      await this.send(token, post)
+    } catch {
+      // Settled as failed below.
     }
+    await this.deps.posts.settle(post, 'failed')
   }
 
   private async send(token: string, post: ClaimedPost): Promise<void> {
@@ -120,7 +131,7 @@ export class SlackPostWorker {
         return
       }
       if (found !== null) {
-        await posts.posted(post, found)
+        await posts.found(post, found)
         return
       }
     }
@@ -161,23 +172,34 @@ export class SlackPostWorker {
     }
   }
 
-  // The sent message's ts, null when it isn't in the thread, undefined when we couldn't look.
+  // The sent message's ts, null when it isn't in the thread, undefined when we couldn't tell.
   private async findSent(token: string, post: ClaimedPost): Promise<string | null | undefined> {
-    const result = await this.deps.api(token, 'conversations.replies', {
-      channel: post.channelId,
-      ts: post.threadTs,
-      oldest: String((post.sentAt - RECONCILE_LOOKBACK_MS) / 1000),
-      include_all_metadata: true,
-      limit: 200
-    })
-    const replies = result.kind === 'ok' ? RepliesSchema.safeParse(result.body) : undefined
-    if (!replies?.success) {
-      return undefined
+    let cursor: string | undefined
+    for (let page = 0; page < RECONCILE_MAX_PAGES; page++) {
+      const result = await this.deps.api(token, 'conversations.replies', {
+        channel: post.channelId,
+        ts: post.threadTs,
+        oldest: String((post.sentAt - RECONCILE_LOOKBACK_MS) / 1000),
+        include_all_metadata: true,
+        limit: 200,
+        ...(cursor === undefined ? {} : { cursor })
+      })
+      const replies = result.kind === 'ok' ? RepliesSchema.safeParse(result.body) : undefined
+      if (!replies?.success) {
+        return undefined
+      }
+      const sent = replies.data.messages.find(
+        (message) => message.metadata?.event_payload.post_id === post.postId
+      )
+      if (sent) {
+        return sent.ts
+      }
+      cursor = replies.data.response_metadata?.next_cursor
+      if (!replies.data.has_more || !cursor) {
+        return null
+      }
     }
-    const sent = replies.data.messages.find(
-      (message) => message.metadata?.event_payload.post_id === post.postId
-    )
-    return sent?.ts ?? null
+    return undefined
   }
 
   // Fills the membership cache for teammates whose messages wait as context (decisions §1).
@@ -200,7 +222,9 @@ export class SlackPostWorker {
       }
       const info = result.kind === 'ok' ? UserInfoSchema.safeParse(result.body) : undefined
       const user = info?.success ? info.data.user : undefined
-      const name = user?.profile?.display_name || user?.profile?.real_name || user?.name || userId
+      const names = UserNamesSchema.safeParse(user).data
+      const name =
+        names?.profile?.display_name || names?.profile?.real_name || names?.name || userId
       await database.query(
         `INSERT INTO connector_slack_users (team_id, slack_user_id, membership, display_name, checked_at)
          VALUES (?, ?, ?, ?, ?)

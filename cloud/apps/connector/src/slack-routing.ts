@@ -5,32 +5,21 @@ import {
   ConnectorHelloRequestSchema
 } from '@orca-cloud/connector-contract'
 import type { DeliveryBody } from './connector-inbox.js'
-import type { QueueResult } from './queue-delivery.js'
+import type { queueDelivery } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
-import { findSlackIdentity } from './slack-identities.js'
+import { findSlackIdentity, MEMBERSHIP_TTL_MS } from './slack-identities.js'
 import type { SlackInstall, SlackInstalls } from './slack-installs.js'
 import { chooseMachine, type KnownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
 import { slackText } from './slack-text.js'
-import { refreshSlackThread } from './slack-thread-status.js'
+import { refreshSlackStatus } from './slack-thread-posts.js'
 
+// queueDelivery inside the routing transaction.
 export type QueueInTransaction = (
   transaction: CloudDatabase,
-  input: {
-    thread: {
-      externalId: string
-      teamId: string
-      channelId: string
-      threadTs: string
-      ownerUserId: string
-      hostId: string
-      placeId: string
-    }
-    deliveryId: string
-    body: DeliveryBody
-  }
-) => Promise<QueueResult>
+  input: Parameters<typeof queueDelivery>[1]
+) => ReturnType<typeof queueDelivery>
 
 export type SlackRoutingDeps = {
   config: SlackConfig
@@ -162,7 +151,7 @@ async function startConversation(route: Route): Promise<void> {
 // the first one never reached the agent (offline, refused).
 async function continueConversation(route: Route, thread: ThreadRow): Promise<void> {
   const { deps, transaction, messageKey, place } = route
-  const prompt = await withTeammateContext(transaction, thread.externalId, route.text)
+  const prompt = await withTeammateContext(transaction, thread.externalId, route.text, deps.now())
   if (await hasLiveStart(transaction, thread)) {
     await deliver(route, { ...thread, body: { kind: 'send', text: prompt } })
     return
@@ -209,7 +198,7 @@ async function deliver(
     kind: 'reaction',
     body: { name: 'eyes', timestamp: message.ts }
   })
-  await refreshSlackThread(transaction, deps.posts, target.externalId)
+  await refreshSlackStatus(transaction, deps.posts, target.hostId, target.externalId)
 }
 
 async function reply(
@@ -256,18 +245,20 @@ async function hasLiveStart(transaction: CloudDatabase, thread: ThreadRow): Prom
   return start?.state === 'pending' || start?.state === 'leased' || start?.state === 'received'
 }
 
-// Teammates' messages go along once their author is confirmed a full member of the workspace.
+// Teammates' messages go along once their author is freshly confirmed a full member of the
+// workspace; the rest wait for the membership check.
 async function withTeammateContext(
   transaction: CloudDatabase,
   externalId: string,
-  ownerText: string
+  ownerText: string,
+  now: number
 ): Promise<string> {
   const rows = await transaction.query(
     `SELECT c.ts, c.text, u.display_name FROM connector_thread_context c
      JOIN connector_slack_users u
-       ON u.team_id = c.team_id AND u.slack_user_id = c.author_user_id AND u.membership = 'member'
-     WHERE c.external_id = ? ORDER BY c.ts`,
-    [externalId]
+       ON u.team_id = c.team_id AND u.slack_user_id = c.author_user_id
+     WHERE c.external_id = ? AND u.membership = 'member' AND u.checked_at >= ? ORDER BY c.ts`,
+    [externalId, now - MEMBERSHIP_TTL_MS]
   )
   if (rows.length === 0) {
     return ownerText

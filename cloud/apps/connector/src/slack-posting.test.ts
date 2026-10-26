@@ -177,7 +177,7 @@ describe('Slack thread status and posts', () => {
     expect(status).toMatchObject({ state: 'queued', slack_ts: '1800000100.000001' })
   })
 
-  it('waits out Slack’s rate limit for the whole channel', async () => {
+  it('waits out Slack’s rate limit for the whole channel, posts queued later included', async () => {
     const harness = await startedThread()
     harness.fake.respond(
       'reactions.add',
@@ -185,13 +185,28 @@ describe('Slack thread status and posts', () => {
     )
     await harness.edge.worker.sendDue()
     expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
-    const due = (await harness.posts()).map((post) => [post.state, Number(post.next_at)])
-    expect(due).toEqual([
-      ['queued', harness.now() + 30_000],
-      ['queued', harness.now() + 30_000]
-    ])
+    await harness.reply('r1', 'later')
     await harness.edge.worker.sendDue()
     expect(harness.fake.take()).toEqual([])
+    harness.advance(30_000)
+    await harness.edge.worker.sendDue()
+    expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
+  })
+
+  it('treats internal_error as maybe-posted and checks before sending again', async () => {
+    const harness = await startedThread()
+    await harness.edge.worker.sendDue()
+    harness.fake.respond('chat.postMessage', Response.json({ ok: false, error: 'internal_error' }))
+    await harness.edge.worker.sendDue()
+    harness.advance(120_000)
+    harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
+    await harness.edge.worker.sendDue()
+    expect(harness.fake.take().map((call) => call.method)).toEqual([
+      'reactions.add',
+      'chat.postMessage',
+      'conversations.replies',
+      'chat.postMessage'
+    ])
   })
 
   it('a post left mid-send is found by its metadata, re-sent when absent, uncertain when unreadable', async () => {
@@ -208,13 +223,19 @@ describe('Slack thread status and posts', () => {
       [`status:${EXTERNAL_ID}`]: 'sending'
     })
 
-    harness.advance(60_000)
+    // The found copy may predate the row's text, so the status is edited once more.
+    harness.advance(120_000)
     harness.fake.respond(
       'conversations.replies',
       Response.json({
         ok: true,
+        messages: [{ ts: THREAD }],
+        has_more: true,
+        response_metadata: { next_cursor: 'c2' }
+      }),
+      Response.json({
+        ok: true,
         messages: [
-          { ts: THREAD },
           {
             ts: '1800000100.000009',
             metadata: {
@@ -226,18 +247,24 @@ describe('Slack thread status and posts', () => {
       })
     )
     await harness.edge.worker.sendDue()
-    expect(harness.fake.take().map((call) => call.method)).toEqual(['conversations.replies'])
-    expect(
-      (await harness.posts()).find((post) => post.post_id === `status:${EXTERNAL_ID}`)
-    ).toMatchObject({
-      state: 'posted',
-      slack_ts: '1800000100.000009'
-    })
+    await harness.edge.worker.sendDue()
+    expect(harness.fake.take()).toEqual([
+      expect.objectContaining({ method: 'conversations.replies' }),
+      expect.objectContaining({
+        method: 'conversations.replies',
+        args: expect.objectContaining({ cursor: 'c2' })
+      }),
+      expect.objectContaining({
+        method: 'chat.update',
+        args: expect.objectContaining({ ts: '1800000100.000009' })
+      })
+    ])
+    expect(await states()).toMatchObject({ [`status:${EXTERNAL_ID}`]: 'posted' })
 
     await harness.reply('r1', 'one')
     harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
     await harness.edge.worker.sendDue()
-    harness.advance(60_000)
+    harness.advance(120_000)
     harness.fake.respond('conversations.replies', Response.json({ ok: true, messages: [] }))
     await harness.edge.worker.sendDue()
     expect(harness.fake.take().map((call) => call.method)).toEqual([
@@ -249,12 +276,57 @@ describe('Slack thread status and posts', () => {
     await harness.reply('r2', 'two')
     harness.fake.respond('chat.postMessage', new Response(null, { status: 502 }))
     await harness.edge.worker.sendDue()
-    harness.advance(60_000)
-    harness.fake.respond(
-      'conversations.replies',
-      Response.json({ ok: false, error: 'ratelimited' })
-    )
+    harness.advance(120_000)
+    const morePages = () =>
+      Response.json({
+        ok: true,
+        messages: [],
+        has_more: true,
+        response_metadata: { next_cursor: 'n' }
+      })
+    harness.fake.respond('conversations.replies', morePages(), morePages(), morePages())
     await harness.edge.worker.sendDue()
     expect((await states())[`reply:${harness.machine.hostId}:r2`]).toBe('uncertain')
+  })
+
+  it('a sender whose lease ran out changes nothing', async () => {
+    const harness = await startedThread()
+    const posts = new SlackPosts(harness.database, harness.now)
+    const [first] = await posts.claim()
+    harness.advance(120_000)
+    const [second] = await posts.claim()
+    expect(second?.postId).toBe(first?.postId)
+    if (first) {
+      await posts.posted(first, '1800000100.000001')
+    }
+    expect((await harness.posts()).find((post) => post.post_id === first?.postId)?.state).toBe(
+      'sending'
+    )
+  })
+
+  it('posts a fallback for every turn that ended in a batch, and none for an empty message', async () => {
+    const harness = await startedThread()
+    await harness.events(
+      turnStarted,
+      turnEnded,
+      { ...turnStarted, at: TURN + 10_000 },
+      { ...turnEnded, turnId: TURN + 10_000, at: TURN + 20_000, lastAssistantMessage: 'second' },
+      { ...turnStarted, at: TURN + 30_000 },
+      { ...turnEnded, turnId: TURN + 30_000, at: TURN + 40_000, lastAssistantMessage: '  ' }
+    )
+    expect(
+      (await harness.posts())
+        .map((post) => String(post.post_id))
+        .filter((id) => id.startsWith('fallback:'))
+    ).toEqual([`fallback:${EXTERNAL_ID}:${TURN}`, `fallback:${EXTERNAL_ID}:${TURN + 10_000}`])
+  })
+
+  it('a turn the agent already replied in gets no fallback', async () => {
+    const harness = await startedThread()
+    await harness.reply('r1', 'Here you go')
+    await harness.events(turnStarted, turnEnded)
+    expect(
+      (await harness.posts()).some((post) => String(post.post_id).startsWith('fallback:'))
+    ).toBe(false)
   })
 })

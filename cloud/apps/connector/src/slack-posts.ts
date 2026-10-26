@@ -18,14 +18,15 @@ export type ClaimedPost = SlackPlace & {
 }
 
 const CLAIM_BATCH = 20
-// A post still sending after this was abandoned (crash or a lost reply) and is checked again.
-const SENDING_LEASE_MS = 60_000
+// A post still sending after this was abandoned (crash or a lost reply) and is checked again. It
+// covers the worst send (a bounded history check plus the post), as a claimed batch goes in parallel.
+const SENDING_LEASE_MS = 120_000
 const MAX_ATTEMPTS = 5
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 60_000
 
-// States: queued -> sending -> posted, or failed / uncertain / cancelled. Posts in one channel go
-// one at a time, in queue order.
+// States: queued -> sending -> posted, or failed / uncertain / cancelled. Each channel sends only its
+// head (oldest queued_at), one at a time, so a head told to wait by Slack holds the whole channel.
 export class SlackPosts {
   constructor(
     private readonly database: CloudDatabase,
@@ -44,11 +45,12 @@ export class SlackPosts {
     }
   ): Promise<void> {
     const now = this.now()
+    const dueAt = now + (post.delayMs ?? 0)
     await transaction.query(
       `INSERT INTO connector_slack_posts
        (post_id, team_id, channel_id, thread_ts, kind, body, turn_key, rev, state, attempts,
-        next_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'queued', 0, ?, ?) ON CONFLICT (post_id) DO NOTHING`,
+        queued_at, next_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'queued', 0, ?, ?, ?) ON CONFLICT (post_id) DO NOTHING`,
       [
         post.postId,
         post.teamId,
@@ -57,13 +59,15 @@ export class SlackPosts {
         post.kind,
         JSON.stringify(post.body),
         post.turnKey ?? null,
-        now + (post.delayMs ?? 0),
+        dueAt,
+        dueAt,
         now
       ]
     )
   }
 
-  // A changed text bumps rev; a sender holding an older rev leaves the row queued for one more edit.
+  // A changed text bumps rev. A finished row rejoins the back of its channel's queue; a queued or
+  // sending one keeps its place, and a sender holding an older rev leaves it queued for one more edit.
   async setStatus(
     transaction: CloudDatabase,
     status: SlackPlace & { postId: string; text: string }
@@ -71,14 +75,18 @@ export class SlackPosts {
     const now = this.now()
     await transaction.query(
       `INSERT INTO connector_slack_posts
-       (post_id, team_id, channel_id, thread_ts, kind, body, rev, state, attempts, next_at,
-        updated_at)
-       VALUES (?, ?, ?, ?, 'status', ?, 0, 'queued', 0, ?, ?)
+       (post_id, team_id, channel_id, thread_ts, kind, body, rev, state, attempts, queued_at,
+        next_at, updated_at)
+       VALUES (?, ?, ?, ?, 'status', ?, 0, 'queued', 0, ?, ?, ?)
        ON CONFLICT (post_id) DO UPDATE SET body = excluded.body,
-         rev = connector_slack_posts.rev + 1, attempts = 0,
-         state = CASE WHEN connector_slack_posts.state = 'sending' THEN 'sending' ELSE 'queued' END,
-         next_at = CASE WHEN connector_slack_posts.state = 'sending'
-           THEN connector_slack_posts.next_at ELSE excluded.next_at END
+         rev = connector_slack_posts.rev + 1,
+         attempts = CASE WHEN connector_slack_posts.state = 'sending'
+           THEN connector_slack_posts.attempts ELSE 0 END,
+         queued_at = CASE WHEN connector_slack_posts.state IN ('queued', 'sending')
+           THEN connector_slack_posts.queued_at ELSE excluded.queued_at END,
+         next_at = CASE WHEN connector_slack_posts.state IN ('queued', 'sending')
+           THEN connector_slack_posts.next_at ELSE excluded.next_at END,
+         state = CASE WHEN connector_slack_posts.state = 'sending' THEN 'sending' ELSE 'queued' END
        WHERE connector_slack_posts.body <> excluded.body`,
       [
         status.postId,
@@ -86,6 +94,7 @@ export class SlackPosts {
         status.channelId,
         status.threadTs,
         JSON.stringify({ text: status.text }),
+        now,
         now,
         now
       ]
@@ -121,53 +130,66 @@ export class SlackPosts {
     return row ? { state: String(row.state), slackTs: nullableText(row.slack_ts) } : null
   }
 
-  // One claimer at a time across instances, so "no post sending in this channel" holds once it commits.
+  // One claimer at a time across instances, so a channel's head is claimed once per lease.
   async claim(): Promise<ClaimedPost[]> {
     return await this.database.transaction(async (transaction) => {
       if (!(await transaction.tryLockScope('orca-connector-slack-posts-claim'))) {
         return []
       }
       const now = this.now()
-      const rows = await transaction.query(
+      const heads = await transaction.query(
         `SELECT * FROM connector_slack_posts p
          WHERE p.state IN ('queued', 'sending') AND p.next_at <= ?
-           AND NOT EXISTS (SELECT 1 FROM connector_slack_posts busy
-             WHERE busy.channel_id = p.channel_id AND busy.state = 'sending' AND busy.next_at > ?)
-         ORDER BY p.next_at, p.post_id LIMIT ?`,
-        [now, now, CLAIM_BATCH]
+           AND NOT EXISTS (SELECT 1 FROM connector_slack_posts ahead
+             WHERE ahead.channel_id = p.channel_id AND ahead.state IN ('queued', 'sending')
+               AND (ahead.queued_at < p.queued_at
+                 OR (ahead.queued_at = p.queued_at AND ahead.post_id < p.post_id)))
+         ORDER BY p.next_at LIMIT ?`,
+        [now, CLAIM_BATCH]
       )
-      const channels = new Set<string>()
       const claimed: ClaimedPost[] = []
-      for (const row of rows) {
-        const channelId = String(row.channel_id)
-        if (channels.has(channelId)) {
-          continue
-        }
-        channels.add(channelId)
+      for (const row of heads) {
         const stale = row.state === 'sending'
+        const sentAt = stale ? Number(row.updated_at) : now
         await transaction.query(
           `UPDATE connector_slack_posts SET state = 'sending', attempts = attempts + 1,
              next_at = ?, updated_at = ?
            WHERE post_id = ?`,
-          [now + SENDING_LEASE_MS, stale ? Number(row.updated_at) : now, row.post_id]
+          [now + SENDING_LEASE_MS, sentAt, row.post_id]
         )
-        claimed.push(claimedPost(row, stale, stale ? Number(row.updated_at) : now))
+        claimed.push(claimedPost(row, stale, sentAt))
       }
       return claimed
     })
   }
 
+  // Every finish names the claim it ends (attempts), so a sender whose lease ran out changes nothing.
   async posted(post: ClaimedPost, slackTs?: string): Promise<void> {
     await this.database.query(
       `UPDATE connector_slack_posts
        SET state = CASE WHEN rev = ? THEN 'posted' ELSE 'queued' END, attempts = 0,
-         slack_ts = COALESCE(?, slack_ts), next_at = ?, updated_at = ?
-       WHERE post_id = ? AND state = 'sending'`,
-      [post.rev, slackTs ?? null, this.now(), this.now(), post.postId]
+         slack_ts = COALESCE(?, slack_ts), queued_at = ?, next_at = ?, updated_at = ?
+       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
+      [post.rev, slackTs ?? null, this.now(), this.now(), this.now(), post.postId, post.attempts]
     )
   }
 
-  // Slack said not now: every queued post in the channel waits, as its rate limit is per channel.
+  // A post found already in Slack after a lost reply. A status's found copy may hold older text than
+  // the row, so it goes back in the queue for one edit.
+  async found(post: ClaimedPost, slackTs: string): Promise<void> {
+    if (post.kind !== 'status') {
+      await this.posted(post, slackTs)
+      return
+    }
+    await this.database.query(
+      `UPDATE connector_slack_posts SET state = 'queued', attempts = 0, slack_ts = ?, next_at = ?,
+         updated_at = ?
+       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
+      [slackTs, this.now(), this.now(), post.postId, post.attempts]
+    )
+  }
+
+  // The post stays its channel's head, so Slack's Retry-After holds everything queued behind it.
   async retry(post: ClaimedPost, afterMs?: number): Promise<void> {
     if (post.attempts >= MAX_ATTEMPTS) {
       await this.settle(post, 'failed')
@@ -176,32 +198,24 @@ export class SlackPosts {
     const now = this.now()
     const nextAt =
       now + (afterMs ?? Math.min(RETRY_BASE_MS * 2 ** (post.attempts - 1), RETRY_MAX_MS))
-    await this.database.transaction(async (transaction) => {
-      await transaction.query(
-        `UPDATE connector_slack_posts SET state = 'queued', next_at = ?, updated_at = ?
-         WHERE post_id = ? AND state = 'sending'`,
-        [nextAt, now, post.postId]
-      )
-      if (afterMs !== undefined) {
-        await transaction.query(
-          `UPDATE connector_slack_posts SET next_at = ?
-           WHERE channel_id = ? AND state = 'queued' AND next_at < ?`,
-          [nextAt, post.channelId, nextAt]
-        )
-      }
-    })
+    await this.database.query(
+      `UPDATE connector_slack_posts SET state = 'queued', next_at = ?, updated_at = ?
+       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
+      [nextAt, now, post.postId, post.attempts]
+    )
   }
 
   // failed: Slack refused it. uncertain: it may have posted and we couldn't check, so no retry.
   async settle(post: ClaimedPost, state: 'failed' | 'uncertain'): Promise<void> {
     await this.database.query(
       `UPDATE connector_slack_posts SET state = ?, updated_at = ?
-       WHERE post_id = ? AND state = 'sending'`,
-      [state, this.now(), post.postId]
+       WHERE post_id = ? AND state = 'sending' AND attempts = ?`,
+      [state, this.now(), post.postId, post.attempts]
     )
   }
 
-  // Status rows stay while their thread may still be edited; finished one-off posts go after a day.
+  // Status rows stay while their thread may still be edited; a finished one-off post's id keeps a
+  // retried reply or a repeated pause notice from posting twice until it goes.
   async pruneFinished(retentionMs: number): Promise<number> {
     const [result] = await this.database.query(
       `DELETE FROM connector_slack_posts

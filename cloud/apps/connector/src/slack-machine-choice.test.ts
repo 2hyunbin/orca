@@ -102,4 +102,15 @@ describe('chooseMachine', () => {
     })
     expect(choose('fix orca', identity(), [])).toEqual({ kind: 'no_machine' })
   })
+
+  it('reads a repository link, and lets no default override the project the message names', () => {
+    const ident = identity({ defaultProject: 'web', defaultHostId: 'h1' })
+    expect(choose('fix <https://github.com/stablyai/orca|this> on build box', ident)).toMatchObject(
+      {
+        kind: 'chosen',
+        hostId: 'h2'
+      }
+    )
+    expect(choose('compare orca and web', ident)).toMatchObject({ kind: 'ask' })
+  })
 })

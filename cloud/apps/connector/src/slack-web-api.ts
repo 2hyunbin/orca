@@ -2,14 +2,10 @@ import { z } from 'zod'
 
 const SLACK_API_ORIGIN = 'https://slack.com/api'
 const SLACK_API_TIMEOUT_MS = 10_000
-// Errors Slack documents as transient; any other ok:false is final for that call.
-const TRANSIENT_ERRORS = new Set([
-  'internal_error',
-  'fatal_error',
-  'service_unavailable',
-  'request_timeout',
-  'ratelimited'
-])
+// Errors Slack documents as "nothing happened, try later", and ones where the call may have
+// partly succeeded; any other ok:false is final for that call.
+const TRANSIENT_ERRORS = new Set(['service_unavailable', 'request_timeout', 'ratelimited'])
+const AMBIGUOUS_ERRORS = new Set(['internal_error', 'fatal_error'])
 
 const SlackResponseSchema = z.looseObject({ ok: z.boolean(), error: z.string().optional() })
 
@@ -72,6 +68,9 @@ export function createSlackWebApi(
       return { kind: 'ok', body: parsed.data }
     }
     const error = parsed.data.error ?? 'unknown_error'
+    if (AMBIGUOUS_ERRORS.has(error)) {
+      return { kind: 'unknown' }
+    }
     return TRANSIENT_ERRORS.has(error) ? { kind: 'retry' } : { kind: 'failed', error }
   }
 }

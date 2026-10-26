@@ -207,4 +207,53 @@ describe('Slack event ingress', () => {
     const [retry] = await harness.poll()
     expect(retry).toMatchObject({ kind: 'start', placeId: 'pl_orca', prompt: 'try again' })
   })
+
+  it('holds a teammate’s message once their membership check is a day old', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    const [start] = await harness.poll()
+    await harness.machine.ack([{ deliveryId: start?.deliveryId, step: 'received' }])
+    harness.fake.respond(
+      'users.info',
+      Response.json({
+        ok: true,
+        user: { team_id: TEAM, profile: { display_name: null, real_name: 'Bob' } }
+      })
+    )
+    await harness.message({
+      user: TEAMMATE,
+      text: 'one',
+      ts: '1800000000.000200',
+      thread_ts: THREAD
+    })
+    await harness.edge.worker.checkMembers()
+    harness.advance(24 * 60 * 60_000 + 1)
+    await harness.message({
+      user: TEAMMATE,
+      text: 'two',
+      ts: '1800000000.000300',
+      thread_ts: THREAD
+    })
+    await harness.message({ text: 'go ahead', ts: '1800000000.000400', thread_ts: THREAD })
+    const [send] = await harness.poll()
+    expect(send).toMatchObject({ kind: 'send', text: 'go ahead' })
+
+    await harness.edge.worker.checkMembers()
+    await harness.message({ text: 'and now', ts: '1800000000.000500', thread_ts: THREAD })
+    await harness.machine.ack([{ deliveryId: send?.deliveryId, step: 'received' }])
+    const [next] = await harness.poll()
+    expect(next?.kind === 'send' ? next.text : '').toMatch(/\[Bob\] one\n\[Bob\] two\n\nand now$/)
+  })
+
+  it('says offline for an older message even while a newer one waits', async () => {
+    const harness = await linkedOwner()
+    await harness.message(mention())
+    harness.advance(60_000)
+    await harness.message({ text: 'and this', ts: '1800000000.000200', thread_ts: THREAD })
+    harness.advance(4 * 60_000 + 1)
+    await harness.edge.onExpired(await harness.runtime.inbox.expireDue())
+    expect((await harness.posts()).map((post) => post.post_id)).toContain(
+      `offline:${EXTERNAL_ID}:${TEAM}:${CHANNEL}:${THREAD}`
+    )
+  })
 })

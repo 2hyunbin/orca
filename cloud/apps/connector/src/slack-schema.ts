@@ -57,13 +57,14 @@ CREATE TABLE IF NOT EXISTS connector_slack_posts (
   rev INTEGER NOT NULL,
   state TEXT NOT NULL,
   attempts INTEGER NOT NULL,
+  queued_at BIGINT NOT NULL,
   next_at BIGINT NOT NULL,
   slack_ts TEXT,
   updated_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS connector_slack_posts_due ON connector_slack_posts(state, next_at);
 CREATE INDEX IF NOT EXISTS connector_slack_posts_channel
-  ON connector_slack_posts(channel_id, state);
+  ON connector_slack_posts(channel_id, state, queued_at);
 CREATE INDEX IF NOT EXISTS connector_slack_posts_turn ON connector_slack_posts(turn_key);
 `
 

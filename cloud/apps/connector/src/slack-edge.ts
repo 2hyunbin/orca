@@ -16,8 +16,12 @@ import { SlackPostWorker } from './slack-post-worker.js'
 import { SlackPosts } from './slack-posts.js'
 import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
-import { escapeSlackText } from './slack-text.js'
-import { refreshSlackThread } from './slack-thread-status.js'
+import {
+  queueAgentReply,
+  queueOfflineNotice,
+  queueTurnFallback,
+  refreshSlackStatus
+} from './slack-thread-posts.js'
 import { createSlackWebApi, type SlackWebApi } from './slack-web-api.js'
 
 // Slack's payloads can carry blocks and files well past the machine API's limit.
@@ -27,7 +31,9 @@ const MEMBER_CHECK_INTERVAL_MS = 5_000
 const RETENTION_INTERVAL_MS = 60_000
 const SEEN_RETENTION_MS = 7 * 24 * 60 * 60_000
 const CONTEXT_RETENTION_MS = 24 * 60 * 60_000
-const POST_RETENTION_MS = 24 * 60 * 60_000
+// As long as Slack's own retries and the inbox's settled rows: a post id that outlives them keeps
+// a retried reply from posting twice.
+const POST_RETENTION_MS = 7 * 24 * 60 * 60_000
 
 export type SlackEdge = ReturnType<typeof createSlackEdge>
 
@@ -50,9 +56,13 @@ export function createSlackEdge(deps: {
     api: deps.api ?? createSlackWebApi(),
     now
   })
-  const refresh = async (transaction: CloudDatabase, externalIds: Iterable<string>) => {
+  const refresh = async (
+    transaction: CloudDatabase,
+    hostId: string,
+    externalIds: Iterable<string>
+  ) => {
     for (const externalId of new Set(externalIds)) {
-      await refreshSlackThread(transaction, posts, externalId)
+      await refreshSlackStatus(transaction, posts, hostId, externalId)
     }
   }
 
@@ -107,29 +117,14 @@ export function createSlackEdge(deps: {
       }
       const { hostId } = context.get('host')
       const { replyId, conversation, turnId, text } = body.data
-      const sent = await database.transaction(async (transaction) => {
-        const [thread] = await transaction.query(
-          `SELECT team_id, channel_id, thread_ts FROM connector_threads
-           WHERE external_id = ? AND host_id = ?`,
-          [conversation.externalId, hostId]
-        )
-        if (!thread) {
-          return null
-        }
-        const postId = `reply:${hostId}:${replyId}`
-        const turnKey = `${conversation.externalId}:${turnId}`
-        await posts.queue(transaction, {
-          teamId: String(thread.team_id),
-          channelId: String(thread.channel_id),
-          threadTs: String(thread.thread_ts),
-          postId,
-          kind: 'message',
-          body: { text: escapeSlackText(text) },
-          turnKey
+      const sent = await database.transaction((transaction) =>
+        queueAgentReply(transaction, posts, hostId, {
+          replyId,
+          externalId: conversation.externalId,
+          turnId,
+          text
         })
-        await posts.cancelQueued(transaction, `fallback:${turnKey}`)
-        return await posts.find(transaction, postId)
-      })
+      )
       if (!sent) {
         return context.json({ error: 'not_this_hosts_thread' }, 403)
       }
@@ -160,10 +155,19 @@ export function createSlackEdge(deps: {
             [hostId]
           )
         : []
-      await refresh(transaction, [
+      await refresh(transaction, hostId, [
         ...externalIds,
         ...unverifiable.map((row) => String(row.external_id))
       ])
+      for (const event of events) {
+        if (event.kind === 'turn-ended' && event.lastAssistantMessage !== undefined) {
+          await queueTurnFallback(transaction, posts, hostId, {
+            externalId: event.conversation.externalId,
+            turnId: event.turnId,
+            lastAssistantMessage: event.lastAssistantMessage
+          })
+        }
+      }
     },
     // In the transaction that recorded a machine's confirmations.
     onAcks: async (transaction: CloudDatabase, hostId: string, deliveryIds: string[]) => {
@@ -174,17 +178,18 @@ export function createSlackEdge(deps: {
       )
       await refresh(
         transaction,
+        hostId,
         rows.map((row) => String(row.external_id))
       )
     },
     // After the expiry sweep, with the threads it hit.
-    onExpired: async (threads: { externalId: string }[]) => {
-      await database.transaction((transaction) =>
-        refresh(
-          transaction,
-          threads.map((thread) => thread.externalId)
-        )
-      )
+    onExpired: async (threads: { hostId: string; externalId: string }[]) => {
+      await database.transaction(async (transaction) => {
+        for (const { hostId, externalId } of threads) {
+          await queueOfflineNotice(transaction, posts, hostId, externalId)
+          await refreshSlackStatus(transaction, posts, hostId, externalId)
+        }
+      })
     },
     startBackground: (): (() => void) => {
       worker.start()
