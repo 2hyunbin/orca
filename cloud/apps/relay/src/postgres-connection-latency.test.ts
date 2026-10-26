@@ -1,11 +1,15 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PostgresDatabase } from './database.js'
+import type pg from 'pg'
 import {
+  noteConnectionStatement,
   SLOW_CONNECTION_RETIRE_INTERVAL_MS,
   SLOW_CONNECTION_SAMPLE_MAX_AGE_MS,
-  SLOW_CONNECTION_WINDOW
+  SLOW_CONNECTION_WINDOW,
+  SlowConnectionRetirement
 } from './postgres-connection-latency.js'
+import { DIRECTOR_SLOW_CONNECTION_STALLS } from './test-fixtures/director-slow-connection-stalls.js'
 
 let clock = 0
 
@@ -184,4 +188,68 @@ describe('slow connection retirement', () => {
     await runStatements(two.database, 4)
     expect(two.destroyed).toEqual(['slow-1', 'slow-2'])
   })
+
+  it('drops clients the pool closed on idle, even when nothing else is judged', () => {
+    const retirement = new SlowConnectionRetirement(() => clock)
+    for (let id = 1; id <= 50; id++) {
+      const closedLater = fakeClient()
+      noteConnectionStatement(closedLater, 3)
+      retirement.shouldRetire(closedLater, id)
+    }
+    expect(retirement.trackedClients).toBe(50)
+
+    clock += SLOW_CONNECTION_SAMPLE_MAX_AGE_MS + 1
+    const live = fakeClient()
+    noteConnectionStatement(live, 3)
+    retirement.shouldRetire(live, 51)
+    expect(retirement.trackedClients).toBe(1)
+  })
+
+  it('replays the 09:38 stall of 2026-10-26 and retires only its slow connection', () => {
+    expect(replay('09:38')).toEqual([{ connectionId: 11, windowEnd: '09:38:21' }])
+  })
+
+  it('replays the 09:51 stall, where a second connection (c31, 38 ms) also turned slow', () => {
+    expect(replay('09:51')).toEqual([
+      { connectionId: 19, windowEnd: '09:51:51' },
+      { connectionId: 31, windowEnd: '09:52:51' }
+    ])
+  })
 })
+
+function fakeClient(): pg.PoolClient {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the retirement rule only uses clients as identity keys.
+  return {} as pg.PoolClient
+}
+
+// Spreads each 30 s window's statements evenly at its median and releases after every statement,
+// as autocommit queries do. Stops judging a connection once it is retired.
+function replay(stall: '09:38' | '09:51'): { connectionId: number; windowEnd: string }[] {
+  const at = (time: string) => Date.parse(`2026-10-26T${time}Z`)
+  const samples = DIRECTOR_SLOW_CONNECTION_STALLS.filter(([name]) => name === stall).flatMap(
+    ([, windowEnd, connectionId, statements, medianMs]) =>
+      Array.from({ length: statements }, (_, index) => ({
+        at: at(windowEnd) - 30_000 + ((index + 0.5) * 30_000) / statements,
+        windowEnd,
+        connectionId,
+        medianMs
+      }))
+  )
+  samples.sort((a, b) => a.at - b.at)
+  const clients = new Map<number, pg.PoolClient>()
+  const retired: { connectionId: number; windowEnd: string }[] = []
+  const retirement = new SlowConnectionRetirement(() => clock)
+  for (const sample of samples) {
+    if (retired.some((entry) => entry.connectionId === sample.connectionId)) {
+      continue
+    }
+    clock = sample.at
+    const client = clients.get(sample.connectionId) ?? fakeClient()
+    clients.set(sample.connectionId, client)
+    noteConnectionStatement(client, sample.medianMs)
+    if (retirement.shouldRetire(client, sample.connectionId)) {
+      retired.push({ connectionId: sample.connectionId, windowEnd: sample.windowEnd })
+    }
+  }
+  return retired
+}

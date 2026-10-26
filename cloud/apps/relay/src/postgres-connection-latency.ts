@@ -7,8 +7,11 @@ export const SLOW_CONNECTION_MEDIAN_MS = 25
 export const SLOW_CONNECTION_PEER_RATIO = 3
 // Enough statements that one lock wait or slow plan cannot retire a healthy connection.
 export const SLOW_CONNECTION_WINDOW = 16
-// Fewer samples than this make a peer's median noise, so it does not count as a comparison.
+// A peer is judged on its latest samples this many; fewer make its median noise.
 export const SLOW_CONNECTION_PEER_MIN_SAMPLES = 8
+// pg-pool reuses the last-released client, so peers often sit idle through a stall: their latest
+// samples may predate the slow window by seconds (10-26 replay: up to ~30 s).
+export const SLOW_CONNECTION_PEER_SLACK_MS = 30_000
 // Older samples describe a connection that may have recovered since.
 export const SLOW_CONNECTION_SAMPLE_MAX_AGE_MS = 60_000
 // Per pool: bounds reconnects if the rule ever misfires.
@@ -45,6 +48,10 @@ export class SlowConnectionRetirement {
 
   constructor(private readonly now: () => number = Date.now) {}
 
+  get trackedClients(): number {
+    return this.clients.size
+  }
+
   forget(client: pg.PoolClient): void {
     this.clients.delete(client)
     recentStatements.delete(client)
@@ -54,25 +61,26 @@ export class SlowConnectionRetirement {
   shouldRetire(client: pg.PoolClient, connectionId: number): boolean {
     this.clients.add(client)
     const now = this.now()
+    const oldest = now - SLOW_CONNECTION_SAMPLE_MAX_AGE_MS
     const since = (candidate: pg.PoolClient, from: number): Sample[] =>
       (recentStatements.get(candidate) ?? []).filter((sample) => sample.at >= from)
-    const own = since(client, now - SLOW_CONNECTION_SAMPLE_MAX_AGE_MS)
+    // Pruned before any early return: pg-pool closes idle clients without telling this class.
+    for (const tracked of this.clients) {
+      if (since(tracked, oldest).length === 0) {
+        this.clients.delete(tracked)
+      }
+    }
+    const own = since(client, oldest)
     if (own.length < SLOW_CONNECTION_WINDOW) {
       return false
     }
-    // Peers are judged over the same span, so a slowdown reaching every connection reads as one.
-    const span = own[0]?.at ?? now
+    // Each peer's latest samples, close enough to this window that a slowdown reaching every
+    // connection shows in them too.
+    const from = Math.max(oldest, (own[0]?.at ?? now) - SLOW_CONNECTION_PEER_SLACK_MS)
     const peerMedians: number[] = []
     for (const peer of this.clients) {
-      if (peer === client) {
-        continue
-      }
-      if (since(peer, now - SLOW_CONNECTION_SAMPLE_MAX_AGE_MS).length === 0) {
-        this.clients.delete(peer)
-        continue
-      }
-      const samples = since(peer, span)
-      if (samples.length >= SLOW_CONNECTION_PEER_MIN_SAMPLES) {
+      const samples = since(peer, from).slice(-SLOW_CONNECTION_PEER_MIN_SAMPLES)
+      if (peer !== client && samples.length === SLOW_CONNECTION_PEER_MIN_SAMPLES) {
         peerMedians.push(median(samples.map((sample) => sample.ms)))
       }
     }
