@@ -71,8 +71,11 @@ export function useRemoteFileBrowserFilterKeyCommands({
         return
       }
       if (e.key === 'Enter') {
-        // Why: until the debounce resolves a newly typed directory, the preview shows the old one.
-        if (preview?.error || preview?.loading || (preview && !previewMatchesInput(filter))) {
+        // Why: until the debounce resolves typed path input, the rows on screen belong to another directory.
+        const pathPending =
+          parsePathInput(filter, pathFlavor).mode === 'path' &&
+          (!preview || !previewMatchesInput(filter))
+        if (preview?.error || preview?.loading || pathPending) {
           e.preventDefault()
           return
         }

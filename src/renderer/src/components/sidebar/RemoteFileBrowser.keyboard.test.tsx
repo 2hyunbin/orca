@@ -196,4 +196,25 @@ describe('RemoteFileBrowser keyboard navigation', () => {
     })
     await act(async () => root.unmount())
   })
+
+  // Why: before the first preview, `.` still filters the old rows, so the default highlight is a dotfolder.
+  it('ignores Enter on path input that has no preview yet', async () => {
+    vi.useFakeTimers()
+    browseDir.mockImplementationOnce(async () => ({
+      entries: [
+        { name: '.config', isDirectory: true },
+        { name: '.ssh', isDirectory: true }
+      ],
+      resolvedPath: '/home/alice',
+      pathFlavor: 'posix' as const
+    }))
+    const { input, root } = await render()
+    browseDir.mockClear()
+
+    await type(input, '.')
+    await press(input, 'Enter')
+
+    expect(browseDir).not.toHaveBeenCalled()
+    await act(async () => root.unmount())
+  })
 })
