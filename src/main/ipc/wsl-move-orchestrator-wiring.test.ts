@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../shared/wsl-host-internal-gate'
 import { WSL_MOVE_ORCHESTRATOR_SLEPT_PANES_REQUEST_CHANNEL } from '../../shared/wsl-move/wsl-move-orchestrator-types'
 
@@ -144,6 +144,12 @@ async function answerWindow(): Promise<void> {
     await new Promise((resolve) => setImmediate(resolve))
   }
 }
+
+// Why: the first import transforms the wiring's module graph, which alone can pass the 30 s test
+// timeout on a loaded machine; later imports after resetModules reuse the transform.
+beforeAll(async () => {
+  await import('./wsl-move-orchestrator-wiring')
+}, 120_000)
 
 beforeEach(() => {
   vi.resetModules()
