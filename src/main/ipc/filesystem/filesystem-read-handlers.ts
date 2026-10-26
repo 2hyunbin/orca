@@ -24,6 +24,7 @@ import { buildReadDirErrorBreadcrumb, type ReadDirThrowSite } from '../readdir-e
 import type { FilesystemHandlerContext } from './filesystem-handler-context'
 import { registerFilesystemChunkReadHandler } from './filesystem-chunk-read-handler'
 import { readMediaPreview } from '../../media/media-preview-protocol'
+import { windowsFsPath } from '../../wsl/wsl-unc-drive-fs-path'
 import {
   readLocalFileContent,
   readLocalLogSnapshot,
@@ -49,7 +50,7 @@ export function registerFilesystemReadHandlers(context: FilesystemHandlerContext
         }
         const dirPath = await resolveDesktopAuthorizedPath(args.dirPath, store)
         throwSite = 'readdir'
-        const entries = await readdir(dirPath, { withFileTypes: true })
+        const entries = await readdir(windowsFsPath(dirPath), { withFileTypes: true })
         const mapped = await classifyFilesystemDirectoryEntries(
           args.dirPath,
           entries,
