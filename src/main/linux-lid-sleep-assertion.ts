@@ -51,6 +51,7 @@ export class LinuxLidSleepAssertion {
   private readonly intentionalStops = new WeakSet<SystemdInhibitProcess>()
   private readonly reportedFailures = new WeakSet<SystemdInhibitProcess>()
   private readonly childCleanups = new WeakMap<SystemdInhibitProcess, () => void>()
+  private readonly childStartedAt = new WeakMap<SystemdInhibitProcess, number>()
 
   constructor(options: LinuxLidSleepAssertionOptions = {}) {
     this.logger = options.logger ?? console
@@ -119,8 +120,8 @@ export class LinuxLidSleepAssertion {
     child.on('exit', onExit)
     child.on('close', onClose)
     child.stdin?.on('error', onError)
+    this.childStartedAt.set(child, this.now())
     this.resetRetrySuppression()
-    this.resetFailureStreak()
   }
 
   stop(_reason: string): void {
@@ -167,6 +168,13 @@ export class LinuxLidSleepAssertion {
     this.reportedFailures.add(child)
     if (this.child === child) {
       this.child = null
+    }
+    // A spawn proves nothing; only a child that outlived the retry window counts as recovered.
+    if (
+      this.now() - (this.childStartedAt.get(child) ?? this.now()) >=
+      LINUX_LID_SLEEP_ASSERTION_RETRY_MS
+    ) {
+      this.resetFailureStreak()
     }
     this.handleFailure(failureKey, startReason, details, failureType)
   }

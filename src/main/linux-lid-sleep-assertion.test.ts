@@ -337,4 +337,49 @@ describe('LinuxLidSleepAssertion', () => {
     expect(logger.warn).toHaveBeenCalledTimes(2)
     expect(logger.debug).toHaveBeenCalledTimes(1)
   })
+
+  it('warns once while each respawned inhibitor exits right away', () => {
+    const logger = createLogger()
+    const children = [new FakeSystemdInhibitProcess(), new FakeSystemdInhibitProcess()]
+    const spawn = vi.fn(() => children[spawn.mock.calls.length - 1])
+    let now = 1_000
+    const assertion = new LinuxLidSleepAssertion({
+      logger,
+      now: () => now,
+      platform: 'linux',
+      spawn
+    })
+
+    for (const child of children) {
+      assertion.start('status-change')
+      child.emit('exit', 1, null)
+      now += LINUX_LID_SLEEP_ASSERTION_RETRY_MS + 1
+    }
+
+    expect(spawn).toHaveBeenCalledTimes(2)
+    expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.debug).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns again when an inhibitor that held through the retry window fails', () => {
+    const logger = createLogger()
+    const children = [new FakeSystemdInhibitProcess(), new FakeSystemdInhibitProcess()]
+    const spawn = vi.fn(() => children[spawn.mock.calls.length - 1])
+    let now = 1_000
+    const assertion = new LinuxLidSleepAssertion({
+      logger,
+      now: () => now,
+      platform: 'linux',
+      spawn
+    })
+
+    assertion.start('status-change')
+    children[0].emit('exit', 1, null)
+    now += LINUX_LID_SLEEP_ASSERTION_RETRY_MS + 1
+    assertion.start('status-change')
+    now += LINUX_LID_SLEEP_ASSERTION_RETRY_MS
+    children[1].emit('exit', 1, null)
+
+    expect(logger.warn).toHaveBeenCalledTimes(2)
+  })
 })

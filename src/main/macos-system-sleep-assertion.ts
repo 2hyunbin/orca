@@ -44,6 +44,7 @@ export class MacosSystemSleepAssertion {
   private readonly intentionalStops = new WeakSet<CaffeinateProcess>()
   private readonly reportedFailures = new WeakSet<CaffeinateProcess>()
   private readonly childCleanups = new WeakMap<CaffeinateProcess, () => void>()
+  private readonly childStartedAt = new WeakMap<CaffeinateProcess, number>()
 
   constructor(options: MacosSystemSleepAssertionOptions = {}) {
     this.logger = options.logger ?? console
@@ -92,8 +93,8 @@ export class MacosSystemSleepAssertion {
     })
     child.on('error', onError)
     child.on('exit', onExit)
+    this.childStartedAt.set(child, this.now())
     this.resetRetrySuppression()
-    this.resetFailureStreak()
     return true
   }
 
@@ -140,6 +141,13 @@ export class MacosSystemSleepAssertion {
     this.reportedFailures.add(child)
     if (this.child === child) {
       this.child = null
+    }
+    // A spawn proves nothing; only a child that outlived the retry window counts as recovered.
+    if (
+      this.now() - (this.childStartedAt.get(child) ?? this.now()) >=
+      MACOS_SYSTEM_SLEEP_ASSERTION_RETRY_MS
+    ) {
+      this.resetFailureStreak()
     }
     this.handleFailure(failureKey, startReason, details, failureType)
   }
