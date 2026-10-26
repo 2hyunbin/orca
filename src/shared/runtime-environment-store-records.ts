@@ -1,4 +1,4 @@
-import { existsSync, linkSync, readFileSync, renameSync, unlinkSync } from 'node:fs'
+import { constants, copyFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { readNodeFileSyncWithinLimit } from './node-bounded-file-reader'
@@ -39,6 +39,8 @@ export type UnreadableEnvironmentRecord = { id: string | undefined; raw: unknown
 export type EnvironmentStoreRecords = {
   environments: PersistedRuntimeEnvironment[]
   unreadable: UnreadableEnvironmentRecord[]
+  /** The file exists but holds only NUL/whitespace; the next write backs it up and replaces it. */
+  blankFile?: true
 }
 
 function recordId(raw: unknown): string | undefined {
@@ -82,14 +84,10 @@ export function readEnvironmentStoreRecords(
   } catch {
     // A crash can publish the name over zeroed data (#18766); those bytes hold no server, and failing
     // every save would strand the user. Other bad JSON may hold servers, so it still fails closed.
-    if (
-      options.requireStoreFile ||
-      !/^[\s\0]*$/.test(text) ||
-      !quarantineBlankEnvironmentStore(path, text)
-    ) {
+    if (options.requireStoreFile || !/^[\s\0]*$/.test(text)) {
       throw invalidStoreError(path)
     }
-    return { environments: [], unreadable: [] }
+    return { environments: [], unreadable: [], blankFile: true }
   }
   let records: unknown[]
   try {
@@ -117,35 +115,13 @@ function invalidStoreError(path: string): RuntimeEnvironmentStoreError {
   )
 }
 
-/** Returns whether the blank file was moved to a backup beside it, so the store reads as missing. */
-function quarantineBlankEnvironmentStore(path: string, blankText: string): boolean {
+/** Copies (never moves) the blank store aside, so concurrent readers never see the name missing. */
+export function backUpBlankEnvironmentStore(userDataPath: string): void {
+  const path = getEnvironmentStorePath(userDataPath)
   const backupPath = `${path}.corrupt-${Date.now()}-${process.pid}`
-  try {
-    renameSync(path, backupPath)
-  } catch (error) {
-    // Another reader already moved it aside.
-    return error instanceof Error && 'code' in error && error.code === 'ENOENT'
-  }
-  // Another process may have published a valid store between our read and the rename.
-  if (readTextOrNull(backupPath) !== blankText) {
-    try {
-      linkSync(backupPath, path)
-      unlinkSync(backupPath)
-    } catch {
-      // A newer store already took the name; the moved copy stays as a backup.
-    }
-    return false
-  }
-  console.warn(`[runtime-environments] ${path} held no data; moved it to ${backupPath}.`)
-  return true
-}
-
-function readTextOrNull(path: string): string | null {
-  try {
-    return readFileSync(path, 'utf8')
-  } catch {
-    return null
-  }
+  copyFileSync(path, backupPath, constants.COPYFILE_EXCL)
+  hardenExistingSecureFile(backupPath)
+  console.warn(`[runtime-environments] ${path} held no data; kept a copy at ${backupPath}.`)
 }
 
 const warned = new Set<string>()

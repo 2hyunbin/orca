@@ -11,6 +11,7 @@ import {
   RuntimeEnvironmentSidecarInvalidError
 } from './runtime-environment-sidecar'
 import {
+  backUpBlankEnvironmentStore,
   getEnvironmentStorePath,
   MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES,
   readEnvironmentStoreRecords,
@@ -114,6 +115,9 @@ export function writeEnvironmentStore(userDataPath: string, store: RuntimeEnviro
   const path = getEnvironmentStorePath(userDataPath)
   const environments = RuntimeEnvironmentStoreSchema.parse(store).environments
   const onDisk = readEnvironmentStoreRecords(userDataPath)
+  if (onDisk.blankFile) {
+    backUpBlankEnvironmentStore(userDataPath)
+  }
   const readableIds = new Set(onDisk.environments.map((environment) => environment.id))
   const unreadableIds = new Set(onDisk.unreadable.map((record) => record.id))
   // A new readable record must not shadow one a newer build owns under the same id.
