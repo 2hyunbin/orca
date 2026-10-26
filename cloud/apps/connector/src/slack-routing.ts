@@ -1,9 +1,5 @@
-import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
-import {
-  CONNECTOR_AGENTS,
-  ConnectorDeliveryResultSchema,
-  ConnectorHelloRequestSchema
-} from '@orca-cloud/connector-contract'
+import type { CloudDatabase } from '@orca-cloud/cloud-database'
+import { CONNECTOR_AGENTS, ConnectorDeliveryResultSchema } from '@orca-cloud/connector-contract'
 import type { DeliveryBody } from './connector-inbox.js'
 import type { queueDelivery } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
