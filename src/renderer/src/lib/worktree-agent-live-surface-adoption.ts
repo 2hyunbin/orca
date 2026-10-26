@@ -85,7 +85,7 @@ function tabExists(store: LiveSurfaceAdoptionStore, tabId: string): boolean {
   return Object.values(store.tabsByWorktree).some((tabs) => tabs.some((tab) => tab.id === tabId))
 }
 
-/** Rebind host-unowned PTYs to recorded panes still held free here; a tab this window lacks is recreated under the recorded id unless it was closed. Host graph omits unmounted panes, so its verdict alone cannot distinguish close from lost binding; minting would duplicate surfaces. */
+/** Rebind host-unowned PTYs to recorded panes still free here, recreating a missing unclosed tab under its recorded id; minting would duplicate surfaces. */
 function bindToRecordedSurface(
   getState: () => LiveSurfaceAdoptionStore,
   worktreeId: string,

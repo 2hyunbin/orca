@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import type { PtyListedSession } from '../../../shared/pty-listed-session'
@@ -20,6 +20,11 @@ import {
   indexLiveTerminalSurfaceOwners,
   type UnownedLiveTerminal
 } from './worktree-live-terminal-surface-owners'
+
+const TAB_CLOSED_AT = 1_700_000_000_000
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 // Main places live terminals in a layout-owner build; those tests' twins are in
 // worktree-agent-activation-gate-layout-owner.test.ts, under the same name unless noted.
@@ -236,8 +241,10 @@ describe('worktree agent activation gate', () => {
     [
       'the recorded tab was closed',
       (store) => {
+        // Pin the clock so the close record is inside its TTL.
+        vi.setSystemTime(TAB_CLOSED_AT)
         store.closedTerminalTabTombstonesByTabId['tab-live'] = {
-          closedAt: Date.now(),
+          closedAt: TAB_CLOSED_AT,
           worktreeId: WORKTREE_ID,
           reason: 'user'
         }
