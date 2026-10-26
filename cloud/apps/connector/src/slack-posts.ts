@@ -1,7 +1,8 @@
 import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
 
-// message: chat.postMessage; status: posted once, then edited in place; reaction: reactions.add.
-export type SlackPostKind = 'message' | 'status' | 'reaction'
+// message: chat.postMessage; status: posted once, then edited in place; reaction: reactions.add;
+// ephemeral: chat.postEphemeral, seen only by one person, with no ts to edit or look for.
+export type SlackPostKind = 'message' | 'status' | 'reaction' | 'ephemeral'
 
 export type SlackPlace = { teamId: string; channelId: string; threadTs: string }
 
@@ -249,7 +250,7 @@ function claimedPost(
   claim: { stale: boolean; sentAt: number; leaseUntil: number }
 ): ClaimedPost {
   const kind = String(row.kind)
-  if (kind !== 'message' && kind !== 'status' && kind !== 'reaction') {
+  if (kind !== 'message' && kind !== 'status' && kind !== 'reaction' && kind !== 'ephemeral') {
     throw new Error('unknown Slack post kind')
   }
   const body: unknown = JSON.parse(String(row.body))

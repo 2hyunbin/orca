@@ -89,8 +89,8 @@ export async function routeSlackMessage(
         await reply(
           deps,
           transaction,
-          place,
-          `paused:${teamId}:${channelId}:${threadTs}`,
+          message,
+          `paused:${teamId}:${channelId}:${threadTs}:${userId}`,
           slackText.paused
         )
       }
@@ -135,10 +135,10 @@ type Route = {
 }
 
 async function startConversation(route: Route): Promise<void> {
-  const { deps, transaction, message, messageKey, place } = route
+  const { deps, transaction, message, messageKey } = route
   const identity = await findSlackIdentity(transaction, message.teamId, message.userId)
   if (!identity) {
-    await reply(deps, transaction, place, `unlinked:${messageKey}`, slackText.unlinked)
+    await reply(deps, transaction, message, `unlinked:${messageKey}`, slackText.unlinked)
     return
   }
   const rows = await transaction.query(
@@ -152,11 +152,11 @@ async function startConversation(route: Route): Promise<void> {
     text: route.text
   })
   if (choice.kind === 'no_machine') {
-    await reply(deps, transaction, place, `update:${messageKey}`, slackText.updateOrca)
+    await reply(deps, transaction, message, `update:${messageKey}`, slackText.updateOrca)
     return
   }
   if (choice.kind === 'ask') {
-    await reply(deps, transaction, place, `ask:${messageKey}`, slackText.askPlace(choice.options))
+    await reply(deps, transaction, message, `ask:${messageKey}`, slackText.askPlace(choice.options))
     return
   }
   // Partway through a thread, the start carries the thread so far; the start worker reads it.
@@ -205,7 +205,7 @@ async function holdForThreadStart(
 // The owner's next message is a follow-up, or a fresh start on the same machine and project when
 // the first one never reached the agent (offline, refused).
 async function continueConversation(route: Route, thread: ThreadRow): Promise<void> {
-  const { deps, transaction, messageKey, place } = route
+  const { deps, transaction, message, messageKey } = route
   // Context is consumed only once there is a delivery to carry it.
   const prompt = () => withTeammateContext(transaction, thread.externalId, route.text, deps.now())
   if (await hasLiveStart(transaction, thread, deps.now())) {
@@ -220,7 +220,7 @@ async function continueConversation(route: Route, thread: ThreadRow): Promise<vo
     CONNECTOR_AGENTS.some((known) => known === name)
   )
   if (!agent) {
-    await reply(deps, transaction, place, `update:${messageKey}`, slackText.updateOrca)
+    await reply(deps, transaction, message, `update:${messageKey}`, slackText.updateOrca)
     return
   }
   await deliver(route, {
@@ -268,14 +268,21 @@ async function reactSeen(
   })
 }
 
+// Meant only for the person who wrote: ephemeral in a channel; in a DM it is theirs anyway.
 async function reply(
   deps: SlackRoutingDeps,
   transaction: CloudDatabase,
-  place: SlackPlace,
+  message: SlackMessage,
   postId: string,
   text: string
 ): Promise<void> {
-  await deps.posts.queue(transaction, { ...place, postId, kind: 'message', body: { text } })
+  const place = { teamId: message.teamId, channelId: message.channelId, threadTs: message.threadTs }
+  await deps.posts.queue(
+    transaction,
+    message.direct
+      ? { ...place, postId, kind: 'message', body: { text } }
+      : { ...place, postId, kind: 'ephemeral', body: { text, user: message.userId } }
+  )
 }
 
 async function threadsIn(transaction: CloudDatabase, place: SlackPlace): Promise<ThreadRow[]> {

@@ -19,12 +19,7 @@ import { SlackPosts } from './slack-posts.js'
 import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
 import { SlackThreadStarts } from './slack-thread-start.js'
-import {
-  queueAgentReply,
-  queueOfflineNotice,
-  queueTurnFallback,
-  refreshSlackStatus
-} from './slack-thread-posts.js'
+import { queueAgentReply, queueTurnFallback, refreshSlackStatus } from './slack-thread-posts.js'
 import { createSlackWebApi, type SlackWebApi } from './slack-web-api.js'
 
 // Slack's payloads can carry blocks and files well past the machine API's limit.
@@ -41,8 +36,8 @@ const POST_RETENTION_MS = 7 * 24 * 60 * 60_000
 export type SlackEdge = ReturnType<typeof createSlackEdge>
 
 // Slack in and out: event ingress, starts that carry their thread, the agent's replies, and the post
-// queue that turns thread state into a reaction, one edited status message and the offline /
-// fallback posts.
+// queue that turns thread state into a reaction, one edited status message (offline included), the
+// fallback posts and replies only the writer sees.
 export function createSlackEdge(deps: {
   config: SlackConfig
   database: CloudDatabase
@@ -194,7 +189,6 @@ export function createSlackEdge(deps: {
     // In the expiry sweep's transaction, with the threads it hit.
     onExpired: async (transaction: CloudDatabase, threads: ExpiredThread[]) => {
       for (const { hostId, externalId } of threads) {
-        await queueOfflineNotice(transaction, posts, hostId, externalId)
         await refreshSlackStatus(transaction, posts, hostId, externalId)
       }
     },

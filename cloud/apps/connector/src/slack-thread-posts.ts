@@ -57,30 +57,6 @@ export async function refreshSlackStatus(
   })
 }
 
-// Q18: one notice per expiry sweep that hit the thread, keyed by its newest expired message.
-export async function queueOfflineNotice(
-  transaction: CloudDatabase,
-  posts: SlackPosts,
-  hostId: string,
-  externalId: string
-): Promise<void> {
-  const thread = await boundThread(transaction, hostId, externalId)
-  const [expired] = await transaction.query(
-    `SELECT delivery_id FROM connector_inbox
-     WHERE host_id = ? AND external_id = ? AND state = 'expired' ORDER BY seq DESC LIMIT 1`,
-    [hostId, externalId]
-  )
-  if (!thread || !expired) {
-    return
-  }
-  await posts.queue(transaction, {
-    ...thread,
-    postId: `offline:${externalId}:${String(expired.delivery_id)}`,
-    kind: 'message',
-    body: { text: slackText.offline(thread.hostName) }
-  })
-}
-
 // A turn's reply and its fallback decide under one lock, so exactly one of them wins.
 async function lockTurn(transaction: CloudDatabase, turnKey: string): Promise<void> {
   await transaction.lockQuotaScope(`orca-connector-slack-turn:${turnKey}`)
@@ -150,7 +126,7 @@ function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string
     case 'leased':
       return slackText.status.waiting(hostName)
     case 'expired':
-      return slackText.status.offline(hostName)
+      return slackText.status.offline(String(thread.owner_user_id), hostName)
   }
   const result =
     latest?.state === 'done'
@@ -162,7 +138,7 @@ function statusText(thread: SqlRow, latest: SqlRow | undefined, hostName: string
     case 'unsupported':
       return slackText.status.refused(hostName, 'unsupported')
     case 'expired':
-      return slackText.status.offline(hostName)
+      return slackText.status.offline(String(thread.owner_user_id), hostName)
     case 'unknown':
       return slackText.status.unknown
   }

@@ -247,17 +247,41 @@ describe('Slack event ingress', () => {
     await harness.message({ ...mention(), ts: '1800000000.000200' })
     await harness.machineWith('user-1', [project('orca'), project('web')])
     await harness.message({ ...mention(), ts: '1800000000.000300' })
+    // Only the person who wrote sees these.
     const bodies = (await harness.posts()).map((post) => [
       post.post_id,
-      JSON.parse(String(post.body)).text
+      post.kind,
+      JSON.parse(String(post.body))
     ])
     expect(bodies).toEqual([
       [
         `ask:${TEAM}:${CHANNEL}:1800000000.000300`,
-        expect.stringMatching(/^Which project\?.*\n• orca on build-box\n• web on build-box$/s)
+        'ephemeral',
+        {
+          user: OWNER,
+          text: expect.stringMatching(
+            /^Which project\?.*\n• orca on build-box\n• web on build-box$/s
+          )
+        }
       ],
-      [`unlinked:${TEAM}:${CHANNEL}:${THREAD}`, expect.stringContaining('Ask an admin')],
-      [`update:${TEAM}:${CHANNEL}:1800000000.000200`, expect.stringContaining('Update Orca')]
+      [
+        `unlinked:${TEAM}:${CHANNEL}:${THREAD}`,
+        'ephemeral',
+        { user: OWNER, text: expect.stringContaining('Ask an admin') }
+      ],
+      [
+        `update:${TEAM}:${CHANNEL}:1800000000.000200`,
+        'ephemeral',
+        { user: OWNER, text: 'Update Orca and turn on connectors, then send again.' }
+      ]
+    ])
+  })
+
+  it('answers in a DM with a normal message', async () => {
+    const harness = await createSlackHarness()
+    await harness.message({ text: 'fix it', ts: THREAD, channel: 'D1', channel_type: 'im' })
+    expect((await harness.posts()).map((post) => [post.post_id, post.kind])).toEqual([
+      [`unlinked:${TEAM}:D1:${THREAD}`, 'message']
     ])
   })
 
@@ -266,8 +290,15 @@ describe('Slack event ingress', () => {
     expect((await harness.message(mention())).status).toBe(200)
     await harness.message({ ...mention(), ts: '1800000000.000200', thread_ts: THREAD })
     expect(await harness.poll()).toEqual([])
-    expect((await harness.posts()).map((post) => post.post_id)).toEqual([
-      `paused:${TEAM}:${CHANNEL}:${THREAD}`
+    await harness.message({
+      ...mention(),
+      user: TEAMMATE,
+      ts: '1800000000.000300',
+      thread_ts: THREAD
+    })
+    expect((await harness.posts()).map((post) => [post.post_id, post.kind])).toEqual([
+      [`paused:${TEAM}:${CHANNEL}:${THREAD}:${OWNER}`, 'ephemeral'],
+      [`paused:${TEAM}:${CHANNEL}:${THREAD}:${TEAMMATE}`, 'ephemeral']
     ])
   })
 
@@ -276,16 +307,16 @@ describe('Slack event ingress', () => {
     await harness.message(mention())
     harness.advance(5 * 60_000 + 1)
     await harness.runtime.inbox.expireDue(harness.edge.onExpired)
-    const posts = await harness.posts()
-    expect(posts.map((post) => [post.post_id, JSON.parse(String(post.body)).text])).toEqual(
-      expect.arrayContaining([
-        [
-          `offline:${EXTERNAL_ID}:${TEAM}:${CHANNEL}:${THREAD}`,
-          'Your Orca on build-box is offline. Send again when it’s back.'
-        ],
-        [`status:${EXTERNAL_ID}`, 'Your Orca on build-box was offline.']
-      ])
-    )
+    // Said in the public status message, with no separate reply.
+    expect(
+      (await harness.posts()).map((post) => [post.post_id, JSON.parse(String(post.body)).text])
+    ).toEqual([
+      [`eyes:${TEAM}:${CHANNEL}:${THREAD}`, undefined],
+      [
+        `status:${EXTERNAL_ID}`,
+        `Couldn’t reach <@${OWNER}>’s Orca on build-box. Send again when it’s back.`
+      ]
+    ])
 
     await harness.message({ text: 'try again', ts: '1800000000.000500', thread_ts: THREAD })
     const [retry] = await harness.poll()
@@ -327,18 +358,6 @@ describe('Slack event ingress', () => {
     await harness.machine.ack([{ deliveryId: send?.deliveryId, step: 'received' }])
     const [next] = await harness.poll()
     expect(next?.kind === 'send' ? next.text : '').toMatch(/\[Bob\] one\n\[Bob\] two\n\nand now$/)
-  })
-
-  it('says offline for an older message even while a newer one waits', async () => {
-    const harness = await linkedOwner()
-    await harness.message(mention())
-    harness.advance(60_000)
-    await harness.message({ text: 'and this', ts: '1800000000.000200', thread_ts: THREAD })
-    harness.advance(4 * 60_000 + 1)
-    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
-    expect((await harness.posts()).map((post) => post.post_id)).toContain(
-      `offline:${EXTERNAL_ID}:${TEAM}:${CHANNEL}:${THREAD}`
-    )
   })
 
   it('keeps a teammate’s messages as context even once they have their own conversation', async () => {

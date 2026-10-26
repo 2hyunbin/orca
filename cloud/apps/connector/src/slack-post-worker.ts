@@ -1,11 +1,18 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
 import type { SlackInstalls } from './slack-installs.js'
-import type { ClaimedPost, SlackPosts } from './slack-posts.js'
+import type { ClaimedPost, SlackPostKind, SlackPosts } from './slack-posts.js'
 import type { SlackResult, SlackWebApi } from './slack-web-api.js'
 
 const TextBodySchema = z.object({ text: z.string().min(1) })
 const ReactionBodySchema = z.object({ name: z.string().min(1), timestamp: z.string().min(1) })
+const EphemeralBodySchema = z.object({ text: z.string().min(1), user: z.string().min(1) })
+const BODY_SCHEMAS: Record<SlackPostKind, z.ZodType> = {
+  message: TextBodySchema,
+  status: TextBodySchema,
+  reaction: ReactionBodySchema,
+  ephemeral: EphemeralBodySchema
+}
 const RepliesSchema = z.object({
   messages: z.array(
     z.looseObject({
@@ -51,9 +58,7 @@ export class SlackPostWorker {
   // holding its channel.
   private async sendClaimed(post: ClaimedPost): Promise<void> {
     const token = await this.deps.installs.botToken(this.deps.database, post.teamId)
-    const body = (post.kind === 'reaction' ? ReactionBodySchema : TextBodySchema).safeParse(
-      post.body
-    )
+    const body = BODY_SCHEMAS[post.kind].safeParse(post.body)
     if (token === null || !body.success) {
       await this.deps.posts.settle(post, 'failed')
       return
@@ -73,6 +78,22 @@ export class SlackPostWorker {
           : result,
         'retry'
       )
+      return
+    }
+    if (post.kind === 'ephemeral') {
+      // Nothing to look for afterwards, so an unclear outcome is retried; a duplicate is seen by
+      // one person at most.
+      const result = await api(token, 'chat.postEphemeral', {
+        channel: post.channelId,
+        thread_ts: post.threadTs,
+        ...EphemeralBodySchema.parse(post.body)
+      })
+      if (result.kind === 'failed') {
+        console.warn(
+          JSON.stringify({ event: 'orca_connector_slack_ephemeral_failed', error: result.error })
+        )
+      }
+      await this.finish(post, result, 'retry')
       return
     }
     const { text } = TextBodySchema.parse(post.body)

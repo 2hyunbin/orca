@@ -420,4 +420,33 @@ describe('Slack thread status and posts', () => {
       (await harness.posts()).find((post) => post.post_id === `status:${EXTERNAL_ID}`)?.state
     ).toBe('uncertain')
   })
+
+  it('sends an ephemeral reply to its one reader, and gives up on user_not_in_channel', async () => {
+    const harness = await createSlackHarness()
+    await harness.message({ user: 'U7', text: `<@${BOT}> fix it`, ts: THREAD })
+    await harness.message({ user: 'U8', text: `<@${BOT}> fix it`, ts: '1800000000.000200' })
+    harness.fake.respond('chat.postEphemeral', Response.json({ ok: true, message_ts: '1' }))
+    harness.fake.respond(
+      'chat.postEphemeral',
+      Response.json({ ok: false, error: 'user_not_in_channel' })
+    )
+    await harness.edge.worker.sendDue()
+    await harness.edge.worker.sendDue()
+    expect(harness.fake.take()).toEqual([
+      {
+        method: 'chat.postEphemeral',
+        args: {
+          channel: CHANNEL,
+          thread_ts: THREAD,
+          user: 'U7',
+          text: expect.stringContaining('Ask an admin')
+        }
+      },
+      {
+        method: 'chat.postEphemeral',
+        args: expect.objectContaining({ user: 'U8', thread_ts: '1800000000.000200' })
+      }
+    ])
+    expect((await harness.posts()).map((post) => post.state)).toEqual(['posted', 'failed'])
+  })
 })

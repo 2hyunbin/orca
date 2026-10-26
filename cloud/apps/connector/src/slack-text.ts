@@ -1,7 +1,8 @@
 import type { PlaceOption } from './slack-machine-choice.js'
 
-// Every line Orca posts in Slack, in one place for review. Inputs are escaped here, so text from an
-// agent or a machine name can't ping a channel or forge a link.
+// Every line Orca posts in Slack, in one place for review. Replies meant only for the person who
+// wrote (paused, unlinked, update, which project) go out ephemeral. Inputs are escaped here, so
+// text from an agent or a machine name can't ping a channel or forge a link.
 export function escapeSlackText(text: string): string {
   return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
 }
@@ -11,7 +12,7 @@ const MAX_LISTED_OPTIONS = 10
 export const slackText = {
   paused: 'Orca for Slack is paused.',
   unlinked: 'Your Slack account isn’t linked to Orca yet. Ask an admin to link you.',
-  updateOrca: 'Update Orca and turn on Slack on your computer, then send again.',
+  updateOrca: 'Update Orca and turn on connectors, then send again.',
   askPlace: (options: PlaceOption[]) => {
     const listed = [...new Set(options.map((option) => `${option.project} on ${option.hostName}`))]
     return listed.length === 0
@@ -21,15 +22,15 @@ export const slackText = {
           ...listed.slice(0, MAX_LISTED_OPTIONS).map((entry) => `• ${escapeSlackText(entry)}`)
         ].join('\n')
   },
-  offline: (hostName: string) =>
-    `Your Orca on ${escapeSlackText(hostName)} is offline. Send again when it’s back.`,
   status: {
     waiting: (hostName: string) => `Waiting for your Orca on ${escapeSlackText(hostName)}…`,
     working: (hostName: string) => `Working on ${escapeSlackText(hostName)}…`,
     needsAnswer: (hostName: string) =>
       `Waiting for your answer in Orca on ${escapeSlackText(hostName)}.`,
     done: (hostName: string) => `Done on ${escapeSlackText(hostName)}.`,
-    offline: (hostName: string) => `Your Orca on ${escapeSlackText(hostName)} was offline.`,
+    // Q18, in the public status: the thread sees who it was waiting on (Slack renders <@U…> as a name).
+    offline: (ownerUserId: string, hostName: string) =>
+      `Couldn’t reach <@${ownerUserId}>’s Orca on ${escapeSlackText(hostName)}. Send again when it’s back.`,
     refused: (hostName: string, reason: string) =>
       `Your Orca on ${escapeSlackText(hostName)} couldn’t take this (${escapeSlackText(reason)}).`,
     unknown: 'This may not have reached the agent; check Orca.',
