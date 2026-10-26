@@ -45,16 +45,16 @@ export class LinuxLidSleepAssertion {
   private readonly platform: NodeJS.Platform
   private readonly spawn: SystemdInhibitSpawn
   private child: SystemdInhibitProcess | null = null
+  private childStartedAt: number | null = null
+  private consecutiveFailures = 0
   private retryNotBefore: number | null = null
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private systemdInhibitUnavailable = false
   private lastFailureKey: string | null = null
   private warnedForLastFailure = false
-  private consecutiveFailures = 0
   private readonly intentionalStops = new WeakSet<SystemdInhibitProcess>()
   private readonly reportedFailures = new WeakSet<SystemdInhibitProcess>()
   private readonly childCleanups = new WeakMap<SystemdInhibitProcess, () => void>()
-  private readonly childStartedAt = new WeakMap<SystemdInhibitProcess, number>()
 
   constructor(options: LinuxLidSleepAssertionOptions = {}) {
     this.logger = options.logger ?? console
@@ -98,6 +98,7 @@ export class LinuxLidSleepAssertion {
     }
 
     this.child = child
+    this.childStartedAt = this.now()
     const onError: SystemdInhibitErrorListener = (error) => {
       this.handleChildFailure(
         child,
@@ -123,18 +124,19 @@ export class LinuxLidSleepAssertion {
     child.on('exit', onExit)
     child.on('close', onClose)
     child.stdin?.on('error', onError)
-    this.childStartedAt.set(child, this.now())
+    // Not a held lock yet: systemd-inhibit can still exit 1 right after spawning.
     this.resetRetrySuppression()
   }
 
   stop(_reason: string): void {
     this.resetRetrySuppression()
-    this.resetFailureStreak()
     if (!this.child) {
       return
     }
     const child = this.child
+    this.resetFailureStreakIfHeld()
     this.child = null
+    this.childStartedAt = null
     // Pipe and child errors can arrive after stop; close ends both event sources.
     this.intentionalStops.add(child)
     try {
@@ -170,14 +172,9 @@ export class LinuxLidSleepAssertion {
     }
     this.reportedFailures.add(child)
     if (this.child === child) {
+      this.resetFailureStreakIfHeld()
       this.child = null
-    }
-    // A spawn proves nothing; only a child that outlived the retry window counts as recovered.
-    if (
-      this.now() - (this.childStartedAt.get(child) ?? this.now()) >=
-      LINUX_LID_SLEEP_ASSERTION_RETRY_MS
-    ) {
-      this.resetFailureStreak()
+      this.childStartedAt = null
     }
     this.handleFailure(failureKey, startReason, details, failureType)
   }
@@ -233,10 +230,16 @@ export class LinuxLidSleepAssertion {
     this.logger.warn('[agent-awake] Linux lid sleep assertion failed', payload)
   }
 
-  private resetFailureStreak(): void {
-    this.lastFailureKey = null
-    this.warnedForLastFailure = false
-    this.consecutiveFailures = 0
+  // Only a lock held for a retry interval ends the streak; idle/active cycles keep it.
+  private resetFailureStreakIfHeld(): void {
+    if (
+      this.childStartedAt !== null &&
+      this.now() - this.childStartedAt >= LINUX_LID_SLEEP_ASSERTION_RETRY_MS
+    ) {
+      this.lastFailureKey = null
+      this.warnedForLastFailure = false
+      this.consecutiveFailures = 0
+    }
   }
 
   private scheduleRetry(): void {
