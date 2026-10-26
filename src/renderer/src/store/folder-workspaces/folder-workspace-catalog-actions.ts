@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-target'
 import type { FetchedFolderWorkspaceCatalog } from './folder-workspace-catalog'
 import type { HostCatalogFence } from '../host-catalog-fencing'
@@ -77,6 +77,7 @@ export function createFolderWorkspaceCatalogActions(
 
     fetchFolderWorkspacesForAllHosts: async (options) => {
       const hydratedFolderWorkspaceFences = new Map<ExecutionHostId, HostCatalogFence>()
+      let listedRuntimeHostIds: ReadonlySet<ExecutionHostId> | null = null
       const clearRestoredOwnersForHydratedHosts = (): void => {
         const hydratedFolderWorkspaceHostIds = new Set(
           [...hydratedFolderWorkspaceFences]
@@ -89,7 +90,7 @@ export function createFolderWorkspaceCatalogActions(
             clearRestoredFolderWorkspaceSessionOwners(
               s.restoredRuntimeHostIdByWorkspaceSessionKey,
               s,
-              { hydratedFolderWorkspaceHostIds }
+              { hydratedHostIds: hydratedFolderWorkspaceHostIds, listedRuntimeHostIds }
             )
           )
           return restoredRuntimeHostIdByWorkspaceSessionKey ===
@@ -113,19 +114,27 @@ export function createFolderWorkspaceCatalogActions(
         return
       }
 
-      await loadRuntimeHostCatalogs(get, 'folder-workspaces', async (target, fence) => {
-        try {
-          const catalog = await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups)
-          if (applyCatalog(catalog, fence)) {
-            hydratedFolderWorkspaceFences.set(catalog.hostId, fence)
+      await loadRuntimeHostCatalogs(
+        get,
+        'folder-workspaces',
+        async (target, fence) => {
+          try {
+            const catalog = await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups)
+            if (applyCatalog(catalog, fence)) {
+              hydratedFolderWorkspaceFences.set(catalog.hostId, fence)
+            }
+          } catch (err) {
+            console.warn(
+              `Skipped folder workspaces for runtime environment ${target.environmentId}:`,
+              err
+            )
           }
-        } catch (err) {
-          console.warn(
-            `Skipped folder workspaces for runtime environment ${target.environmentId}:`,
-            err
-          )
+        },
+        undefined,
+        (environmentIds) => {
+          listedRuntimeHostIds = new Set(environmentIds.map(toRuntimeExecutionHostId))
         }
-      })
+      )
       clearRestoredOwnersForHydratedHosts()
     }
   }

@@ -228,7 +228,7 @@ export function registerReposAllHostsFolderWorkspacesTests(): void {
         }
       )
       const localFolderKey = folderWorkspaceKey('local-folder')
-      const missingLocalFolderKey = folderWorkspaceKey('missing-local-folder')
+      const missingSshFolderKey = folderWorkspaceKey('missing-ssh-folder')
       const missingFailedRuntimeFolderKey = folderWorkspaceKey('missing-runtime-folder-env-1')
       const missingHydratedRuntimeFolderKey = folderWorkspaceKey('missing-runtime-folder-env-2')
       const store = createTestStore()
@@ -236,7 +236,7 @@ export function registerReposAllHostsFolderWorkspacesTests(): void {
         settings: { activeRuntimeEnvironmentId: 'env-1' } as never,
         restoredRuntimeHostIdByWorkspaceSessionKey: {
           [localFolderKey]: 'runtime:env-1',
-          [missingLocalFolderKey]: 'local',
+          [missingSshFolderKey]: 'ssh:box',
           [missingFailedRuntimeFolderKey]: 'runtime:env-1',
           [missingHydratedRuntimeFolderKey]: 'runtime:env-2'
         }
@@ -245,18 +245,20 @@ export function registerReposAllHostsFolderWorkspacesTests(): void {
       await store.getState().fetchProjectGroupsForAllHosts()
       await store.getState().fetchFolderWorkspacesForAllHosts()
 
+      // A same-id local copy can't settle env-1's claim; only env-1's own catalog can.
       expect(store.getState().restoredRuntimeHostIdByWorkspaceSessionKey).toEqual({
+        [localFolderKey]: 'runtime:env-1',
         [missingFailedRuntimeFolderKey]: 'runtime:env-1'
       })
     })
 
-    it('clears missing local restored owners when remote hosts are skipped', async () => {
-      const missingLocalFolderKey = folderWorkspaceKey('missing-local-folder')
+    it('clears missing local-catalog restored owners when remote hosts are skipped', async () => {
+      const missingSshFolderKey = folderWorkspaceKey('missing-ssh-folder')
       const missingRemoteFolderKey = folderWorkspaceKey('missing-runtime-folder')
       const store = createTestStore()
       store.setState({
         restoredRuntimeHostIdByWorkspaceSessionKey: {
-          [missingLocalFolderKey]: 'local',
+          [missingSshFolderKey]: 'ssh:box',
           [missingRemoteFolderKey]: 'runtime:env-1'
         }
       })
