@@ -94,7 +94,9 @@ export function stderrShowsInteractiveSignIn(stderr: string): boolean {
 
 /** One bounded line of agy's error text, safe to show in the status bar. */
 export function formatAgyErrorForDisplay(text: string): string | null {
-  const line = redactString(stripTerminalControl(text).replace(/\s+/g, ' ').trim())
+  const line = redactString(stripTerminalControl(text))
+    .replace(/\s+/g, ' ')
+    .trim()
     .replace(EMAIL_PATTERN, '[email]')
     .replace(TOKEN_LIKE_PATTERN, '[redacted]')
   if (!line) {

@@ -501,13 +501,14 @@ describe("agy's own error envelope", () => {
       result: processResult({
         code: 1,
         stdout: errorEnvelope(
-          `\u001b[31mDenied\u001b[0m for person@example.com\nwith ${token} ${'x '.repeat(200)}`
+          `\u001b[31mDenied\u001b[0m for person@example.com\nAGY_SESSION=shortsecret\nwith ${token} ${'x '.repeat(200)}`
         )
       })
     }).fetch()
 
     const shown = result.error?.replace('Antigravity usage is not available. agy reported: ', '')
-    expect(shown).toMatch(/^Denied for \[email\] with ya29\.\[redacted\] x x/)
+    expect(shown).toMatch(/^Denied for \[email\] AGY_SESSION=\S+ with ya29\.\[redacted\] x x/)
+    expect(shown).not.toContain('shortsecret')
     expect(Array.from(shown ?? '').length).toBeLessThanOrEqual(160)
     expect(shown?.endsWith('…')).toBe(true)
   })
