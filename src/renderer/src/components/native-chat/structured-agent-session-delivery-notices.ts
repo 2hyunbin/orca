@@ -1,4 +1,9 @@
-import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
+import {
+  agentSessionFailureDetailText,
+  readWholeAgentSessionFailureFact,
+  type AgentSessionFailureFact
+} from '../../../../shared/agent-session-failure'
+import { agentSessionFailureStatedByRow } from '../../../../shared/agent-session-visible-failures'
 import { agentJournalSubmissionKey } from '../../../../shared/agent-session-journal-item-key'
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
 import { structuredAgentSessionRecordedRejectionParts } from '../../../../shared/structured-agent-session-rejection-words'
@@ -44,6 +49,10 @@ export function structuredAgentSessionDeliveryNotices(args: {
   for (const submission of submissions) {
     const id = agentJournalSubmissionKey(submission.clientMessageId)
     if (submission.dispatchState === 'rejected' && shown.has(id)) {
+      // A start row that states this failure carries its detail; otherwise the message does.
+      const detail = agentSessionFailureStatedByRow(submission.rejection, args.startFailures)
+        ? undefined
+        : agentSessionFailureDetailText(readWholeAgentSessionFailureFact(submission.rejection))
       notices.set(id, {
         text: agentSessionWriteNoticeText(
           structuredAgentSessionRecordedRejectionParts(
@@ -51,7 +60,8 @@ export function structuredAgentSessionDeliveryNotices(args: {
             { agentName },
             args.startFailures
           )
-        )
+        ),
+        ...(detail ? { detail } : {})
       })
     }
   }

@@ -37,6 +37,7 @@ const TYPED_START_REFUSALS = [
   'claudeAccountSetupFailed',
   'agentCommandNotRunnable',
   'runtimeNotInstalled',
+  'fullAccessAsRoot',
   'conversationOpenInTerminal',
   'conversationOpenElsewhere'
 ] as const satisfies readonly (AgentSessionFailureKind &
