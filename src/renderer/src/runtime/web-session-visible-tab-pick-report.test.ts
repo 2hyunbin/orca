@@ -40,6 +40,7 @@ vi.mock('./web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
 
 import { setRuntimeEnvironmentConnectionGenerationForTests } from '../store/slices/runtime-status-connection-generation'
 import {
+  forgetVisibleTabPicksForEnvironment,
   reportVisibleTabPickToHost,
   resetReportedVisibleTabPicksForTests,
   VISIBLE_TAB_PICK_SETTLE_MS
@@ -178,6 +179,32 @@ describe('reporting the tab the desktop shows to a server that remembers picks p
     deliver(frame('host-tab-1'))
     expect(mocks.call).toHaveBeenCalledTimes(2)
     expect(mocks.call.mock.calls[1]?.[0]).toMatchObject({ params: { tabId: 'host-tab-2' } })
+  })
+
+  it('rechecks against the host answer when no later frame arrives', async () => {
+    let finish: (value: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    deliver(frame('host-tab-2'))
+    groups[WT]![0]!.activeTabId = 'u2'
+    deliver(frame('host-tab-2'))
+    // The late report landed last: the host now remembers tab 1, and says so in its answer.
+    finish({ ok: true, result: frame('host-tab-1') })
+    await vi.advanceTimersByTimeAsync(VISIBLE_TAB_PICK_SETTLE_MS)
+    expect(mocks.call).toHaveBeenCalledTimes(2)
+    expect(mocks.call.mock.calls[1]?.[0]).toMatchObject({ params: { tabId: 'host-tab-2' } })
+  })
+
+  it('does nothing with a report answered after mirror teardown', async () => {
+    reassert.mockReset()
+    let finish: (value: unknown) => void = () => {}
+    mocks.call.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    deliver(frame('host-tab-2'))
+    groups[WT]![0]!.activeTabId = 'u3'
+    forgetVisibleTabPicksForEnvironment(ENV)
+    finish({ ok: true, result: {} })
+    await vi.advanceTimersByTimeAsync(VISIBLE_TAB_PICK_SETTLE_MS)
+    expect(reassert).not.toHaveBeenCalled()
+    expect(mocks.call).toHaveBeenCalledTimes(1)
   })
 
   it('sends a browser pick again when it was made while a report was in flight', async () => {

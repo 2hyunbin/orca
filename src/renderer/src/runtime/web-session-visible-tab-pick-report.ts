@@ -33,6 +33,8 @@ const latestFrameByWorkspace = new Map<
   }
 >()
 const pendingCheckByWorkspace = new Map<string, ReturnType<typeof setTimeout>>()
+/** Bumped by mirror teardown, so a report answered after it does nothing. */
+const teardownEpochByEnvironment = new Map<string, number>()
 let stopWatchingActiveWorkspace: (() => void) | null = null
 
 /** A tab click records its activation only after an async hop; settle before comparing so a
@@ -153,6 +155,11 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
     return
   }
   reportedPaneByWorkspace.set(key, pane)
+  const sentEpoch = teardownEpochByEnvironment.get(environmentId) ?? 0
+  const sentGeneration = connectionGeneration(environmentId)
+  const stillCurrent = (): boolean =>
+    (teardownEpochByEnvironment.get(environmentId) ?? 0) === sentEpoch &&
+    connectionGeneration(environmentId) === sentGeneration
   const retryLater = (): void => {
     if (reportedPaneByWorkspace.get(key) === pane) {
       reportedPaneByWorkspace.delete(key)
@@ -175,6 +182,9 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
   }).then(
     // Best effort; a failed report is tried again on a later frame.
     (response) => {
+      if (!stillCurrent()) {
+        return
+      }
       if (!response.ok) {
         retryLater()
         return
@@ -182,11 +192,19 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
       // The host does not order activations; one the user made meanwhile may have landed first.
       const now = visibleTerminalPane(worktreeId)
       if (now && (now.hostTabId !== hostTabId || (now.leafId && now.leafId !== target.leafId))) {
-        // Whatever was recorded since may predate the late landing, so check afresh.
+        // Check afresh against the host's answer, which is its state after this report; a cached
+        // frame or record may predate the late landing.
         reportedPaneByWorkspace.delete(key)
+        if (isSessionTabsFrame(response.result, worktreeId)) {
+          latestFrameByWorkspace.set(key, {
+            environmentId,
+            snapshot: response.result,
+            generation: sentGeneration
+          })
+        }
         scheduleCheck(key)
       } else if (!now) {
-        reassertVisibleNonTerminalTab(worktreeId)
+        reassertVisibleNonTerminalTab(worktreeId, stillCurrent)
       }
     },
     retryLater
@@ -195,7 +213,7 @@ function reportIfStale(environmentId: string, snapshot: RuntimeMobileSessionTabs
 
 /** A browser or chat tab the user picked while a report was in flight: send their pick again, the
  *  way a click does, so the report cannot have the last word. */
-function reassertVisibleNonTerminalTab(worktreeId: string): void {
+function reassertVisibleNonTerminalTab(worktreeId: string, stillCurrent: () => boolean): void {
   const state = useAppStore.getState()
   const visibleId = resolveWebSessionVisibleTabId(state, worktreeId)
   const visible = state.unifiedTabsByWorktree[worktreeId]?.find((tab) => tab.id === visibleId)
@@ -204,8 +222,28 @@ function reassertVisibleNonTerminalTab(worktreeId: string): void {
   }
   const next = { type: visible.contentType, id: visible.entityId, tabId: visible.id }
   // Loaded lazily: the owner activations reach the session-tab lifecycle, which loads this module.
-  void import('../lib/cycled-tab-owner-activation').then(({ activateCycledTabOnOwner }) =>
-    activateCycledTabOnOwner(worktreeId, next)
+  void import('../lib/cycled-tab-owner-activation').then(({ activateCycledTabOnOwner }) => {
+    if (stillCurrent()) {
+      activateCycledTabOnOwner(worktreeId, next)
+    }
+  })
+}
+
+/** The activate answer is the host's per-device frame after the report. */
+function isSessionTabsFrame(
+  value: unknown,
+  worktreeId: string
+): value is RuntimeMobileSessionTabsResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'worktree' in value &&
+    value.worktree === worktreeId &&
+    'publicationEpoch' in value &&
+    typeof value.publicationEpoch === 'string' &&
+    value.publicationEpoch.endsWith(CLIENT_NAVIGATION_PUBLICATION_EPOCH_SUFFIX) &&
+    'tabs' in value &&
+    Array.isArray(value.tabs)
   )
 }
 
@@ -227,6 +265,10 @@ function visibleTerminalPane(
 
 /** Mirror teardown for an environment drops everything recorded for it. */
 export function forgetVisibleTabPicksForEnvironment(environmentId: string): void {
+  teardownEpochByEnvironment.set(
+    environmentId,
+    (teardownEpochByEnvironment.get(environmentId) ?? 0) + 1
+  )
   const prefix = `${environmentId}\0`
   for (const map of [reportedPaneByWorkspace, latestFrameByWorkspace]) {
     for (const key of map.keys()) {
