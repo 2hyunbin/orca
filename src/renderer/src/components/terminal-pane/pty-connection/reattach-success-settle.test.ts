@@ -36,6 +36,7 @@ function buildSession(overrides: Record<string, unknown> = {}): {
     disconnect: vi.fn(),
     serializeBuffer: vi.fn()
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This partial session supplies every field reached before rejection or the deliberate tracking throw.
   const session = {
     settlePaneAttachAttempt,
     transport,
