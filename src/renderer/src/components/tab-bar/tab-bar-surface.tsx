@@ -91,9 +91,6 @@ export function renderTabBarSurface({
   } = createMenu
   const { orderedItems, sortableIds, dropIndicatorByVisibleId } = itemProjection
   const clientHostedBrowserRows = props.clientHostedBrowserRows ?? EMPTY_CLIENT_HOSTED_ROWS
-  const tabSizingStyle: React.CSSProperties & { '--tab-count': number } = {
-    '--tab-count': Math.max(1, orderedItems.length + clientHostedBrowserRows.length)
-  }
   const {
     tabStripRef,
     tabStripOverflowState,
@@ -113,11 +110,7 @@ export function renderTabBarSurface({
   })
 
   return (
-    <div
-      ref={surfaceRef}
-      className="@container/tab-widths flex items-stretch h-full overflow-hidden flex-1 min-w-0"
-      style={tabSizingStyle}
-    >
+    <div ref={surfaceRef} className="flex items-stretch h-full overflow-hidden flex-1 min-w-0">
       {tabStripOverflowState.hasOverflow ? (
         <Tooltip>
           <TooltipTrigger asChild>
