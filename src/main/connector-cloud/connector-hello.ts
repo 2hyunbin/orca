@@ -2,12 +2,20 @@
 import {
   CONNECTOR_CLIENT_LIMITS,
   CONNECTOR_CONTRACT_VERSION,
-  CONNECTOR_FEATURES,
+  type CONNECTOR_FEATURES,
   type ConnectorProject
 } from '../../shared/connector-cloud-contract'
 import type { ConnectorMachine } from './connector-machine'
 import { jsonBytes } from './connector-snapshot'
 
+// What this build implements, listed by hand so a new contract feature is never advertised early.
+// turnCancel: a cancel naming another turn is refused (turn_not_running).
+export const CONNECTOR_DESKTOP_FEATURES: readonly (typeof CONNECTOR_FEATURES)[number][] = [
+  'answer',
+  'cancel',
+  'reply',
+  'turnCancel'
+]
 const PROMPT_KINDS = ['approval', 'question']
 
 export type ConnectorHelloSaid = { agents: string[]; projects: ConnectorProject[] }
@@ -26,8 +34,7 @@ export function connectorHello(
     hostName: machine.hostName,
     agents: said.agents,
     promptKinds: PROMPT_KINDS,
-    // Every feature, turnCancel included: a cancel naming another turn is refused (turn_not_running).
-    features: CONNECTOR_FEATURES
+    features: CONNECTOR_DESKTOP_FEATURES
   }
   let bytes = jsonBytes({ ...envelope, projects: [] })
   let count = 0
