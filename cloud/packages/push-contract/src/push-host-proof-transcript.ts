@@ -7,14 +7,14 @@ export const PUSH_HOST_PROOF_ALGORITHM = 'HMAC-SHA-256'
 
 // The layout is shared; the domains keep one service's proof from answering another's challenge.
 export interface HostProofDomains {
-  transcript: string
-  challengePlaintext: string
+  readonly transcript: string
+  readonly challengePlaintext: string
 }
 
-export const PUSH_HOST_PROOF_DOMAINS: HostProofDomains = {
+export const PUSH_HOST_PROOF_DOMAINS: HostProofDomains = Object.freeze({
   transcript: PUSH_HOST_PROOF_TRANSCRIPT_DOMAIN,
   challengePlaintext: PUSH_HOST_CHALLENGE_PLAINTEXT_DOMAIN
-}
+})
 
 export interface PushHostProofTranscriptInput {
   gatewayOrigin: string
