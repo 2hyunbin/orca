@@ -18,6 +18,7 @@ import {
   waitForSessionReady
 } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActivePanePtyId } from './helpers/terminal'
+import { readFreshTerminalInventory } from './helpers/terminal-inventory-observation'
 import { RuntimeClient } from '../../src/cli/runtime-client'
 import Database from '../../src/main/sqlite/sync-database'
 import {
@@ -635,13 +636,18 @@ for (const contractVersion of [LEGACY_CONTRACT_VERSION, CURRENT_CONTRACT_VERSION
       await waitForSessionReady(second.page)
       expect(await waitForActiveWorktree(second.page)).toBe(worktreeId)
       const secondClient = new RuntimeClient(session.userDataDir, 30_000, null, null)
-      let recovered = (
-        await secondClient.call<RuntimeTerminalListResult>('terminal.list')
-      ).result.terminals.find((terminal) => terminal.ptyId === initialWorker.ptyId)
+      const initialInventory = await readFreshTerminalInventory(
+        async () => (await secondClient.call<RuntimeTerminalListResult>('terminal.list')).result
+      )
+      let recovered = initialInventory?.terminals.find(
+        (terminal) => terminal.ptyId === initialWorker.ptyId
+      )
       await expect
         .poll(async () => {
-          const listed = await secondClient.call<RuntimeTerminalListResult>('terminal.list')
-          const matches = listed.result.terminals.filter(
+          const listed = await readFreshTerminalInventory(
+            async () => (await secondClient.call<RuntimeTerminalListResult>('terminal.list')).result
+          )
+          const matches = (listed?.terminals ?? []).filter(
             (terminal) => terminal.ptyId === initialWorker.ptyId
           )
           recovered = matches[0]
