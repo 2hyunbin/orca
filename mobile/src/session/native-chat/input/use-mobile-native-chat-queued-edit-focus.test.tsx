@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useMobileNativeChatQueuedEditFocus } from './use-mobile-native-chat-queued-edit-focus'
-import type { MobileQueuedMessageEdit } from './use-mobile-structured-queued-message-controls'
+import type { MobileQueuedMessageEdit } from '../../use-mobile-structured-queued-message-controls'
 
 type Focus = ReturnType<typeof useMobileNativeChatQueuedEditFocus>
 

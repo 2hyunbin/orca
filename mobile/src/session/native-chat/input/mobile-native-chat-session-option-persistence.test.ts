@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   applyNativeChatSessionOptionSettingsMutation,
   resolveStructuredLaunchSeedOptions
-} from '../../../src/shared/native-chat-session-option-defaults'
-import type { PersistedNativeChatSessionOptions } from '../../../src/shared/native-chat-session-options'
-import type { RpcClient } from '../transport/rpc-client'
+} from '../../../../../src/shared/native-chat-session-option-defaults'
+import type { PersistedNativeChatSessionOptions } from '../../../../../src/shared/native-chat-session-options'
+import type { RpcClient } from '../../../transport/rpc-client'
 import { persistMobileStructuredOptionPicks } from './mobile-native-chat-session-option-persistence'
 
 function hostClient(initial?: PersistedNativeChatSessionOptions) {

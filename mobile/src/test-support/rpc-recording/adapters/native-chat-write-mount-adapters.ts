@@ -62,9 +62,9 @@ export function nativeChatWriteMountAdapters(
     },
     'nativeChat.session-option-pick': ({ client }) => {
       const persist = modules.load<
-        typeof import('../../../session/mobile-native-chat-session-option-persistence')
+        typeof import('../../../session/native-chat/input/mobile-native-chat-session-option-persistence')
       >(
-        'mobile/src/session/mobile-native-chat-session-option-persistence.ts'
+        'mobile/src/session/native-chat/input/mobile-native-chat-session-option-persistence.ts'
       ).persistMobileStructuredOptionPicks
       let settled: unknown = 'unsent'
       return {

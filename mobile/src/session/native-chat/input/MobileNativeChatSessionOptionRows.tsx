@@ -1,12 +1,12 @@
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native'
 import { Check, ChevronRight, ShieldAlert, type LucideIcon } from 'lucide-react-native'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
 import {
   sessionOptionValueMarker,
   type SessionOptionDescriptor,
   type SessionOptionValueMarker,
   type SessionOptionValue
-} from '../../../src/shared/native-chat-session-options'
+} from '../../../../../src/shared/native-chat-session-options'
 
 export function SessionOptionCaption({ children }: { children: string }): React.JSX.Element {
   return <Text style={styles.caption}>{children}</Text>

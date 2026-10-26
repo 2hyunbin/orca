@@ -2,19 +2,22 @@ import { createElement, useState, type ReactNode } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AccessibilityInfo, Platform } from 'react-native'
-import { colors } from '../theme/mobile-theme'
-import { structuredAgentSessionPermissionDescriptor } from '../../../src/shared/structured-agent-session-permission-option'
-import { createStructuredAgentSessionOptionState } from '../../../src/shared/structured-agent-session-options'
+import { colors } from '../../../theme/mobile-theme'
+import { structuredAgentSessionPermissionDescriptor } from '../../../../../src/shared/structured-agent-session-permission-option'
+import { createStructuredAgentSessionOptionState } from '../../../../../src/shared/structured-agent-session-options'
 import type {
   SessionOptionDescriptor,
   SessionOptionSelectChoice
-} from '../../../src/shared/native-chat-session-options'
+} from '../../../../../src/shared/native-chat-session-options'
 import {
   MobileNativeChatSessionOptionPickers,
   type MobileNativeChatPickerPresentation
 } from './MobileNativeChatSessionOptionPickers'
 import type { MobileNativeChatSessionOptionsController } from './use-mobile-native-chat-session-options'
-import { findAllByHostType, findByHostType } from '../test-support/react-test-renderer-host-nodes'
+import {
+  findAllByHostType,
+  findByHostType
+} from '../../../test-support/react-test-renderer-host-nodes'
 
 vi.mock('react-native', () => ({
   AccessibilityInfo: { announceForAccessibilityWithOptions: vi.fn() },
@@ -39,7 +42,7 @@ vi.mock('lucide-react-native', () => ({
   ShieldCheck: 'ShieldCheck',
   X: 'X'
 }))
-vi.mock('../components/BottomDrawer', async () => {
+vi.mock('../../../components/BottomDrawer', async () => {
   const React = await import('react')
   return {
     BottomDrawer: ({ visible, children }: { visible: boolean; children?: ReactNode }) =>

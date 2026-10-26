@@ -10,10 +10,10 @@ import {
   type ViewStyle
 } from 'react-native'
 import { Check, X } from 'lucide-react-native'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
-import { mobileNativeChatInputStyles } from './native-chat/composer/mobile-native-chat-input-styles'
-import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
-import { useTextInputContentHeight } from '../platform/text-input-content-height'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
+import { mobileNativeChatInputStyles } from '../composer/mobile-native-chat-input-styles'
+import type { MobileQueuedMessageInlineEditor } from '../../use-mobile-structured-queued-edit'
+import { useTextInputContentHeight } from '../../../platform/text-input-content-height'
 
 const BUTTON_SIZE = 28
 const ICON_SIZE = 16

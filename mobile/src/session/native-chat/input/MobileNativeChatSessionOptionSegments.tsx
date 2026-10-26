@@ -1,11 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native'
-import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
-import { colors, spacing, typography } from '../theme/mobile-theme'
+import { MobileSegmentedControl } from '../../../components/MobileSegmentedControl'
+import { colors, spacing, typography } from '../../../theme/mobile-theme'
 import {
   sessionOptionDispatchUnconfirmed,
   type SessionOptionDescriptor,
   type SessionOptionValue
-} from '../../../src/shared/native-chat-session-options'
+} from '../../../../../src/shared/native-chat-session-options'
 import { SessionOptionCaption } from './MobileNativeChatSessionOptionRows'
 
 // Five fit across a phone's sheet; more read better as a list on their own page.

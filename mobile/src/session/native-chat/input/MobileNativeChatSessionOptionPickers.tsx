@@ -19,14 +19,14 @@ import {
   X,
   type LucideIcon
 } from 'lucide-react-native'
-import { BottomDrawer } from '../components/BottomDrawer'
-import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { BottomDrawer } from '../../../components/BottomDrawer'
+import { colors, radii, spacing, typography } from '../../../theme/mobile-theme'
 import {
   isReadOnlySessionOptionValue,
   sessionOptionDispatchUnconfirmed,
   type SessionOptionDescriptor,
   type SessionOptionValue
-} from '../../../src/shared/native-chat-session-options'
+} from '../../../../../src/shared/native-chat-session-options'
 import {
   mobileModelPillLabel,
   mobileOptionsPillLabel,
@@ -43,12 +43,12 @@ import {
   SessionOptionSegments,
   showsSessionOptionAsSegments
 } from './MobileNativeChatSessionOptionSegments'
-import { sortNativeChatSessionOptions } from '../../../src/shared/native-chat-session-option-snapshot'
+import { sortNativeChatSessionOptions } from '../../../../../src/shared/native-chat-session-option-snapshot'
 import {
   AGENT_CHAT_PERMISSION_MODE_ICON_NAMES,
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   isAgentChatPermissionMode
-} from '../../../src/shared/agent-chat-permission-mode'
+} from '../../../../../src/shared/agent-chat-permission-mode'
 import type { MobileNativeChatSessionOptionsController } from './use-mobile-native-chat-session-options'
 
 export type MobileNativeChatPickerPresentation = { page: string | null; refocus: boolean }

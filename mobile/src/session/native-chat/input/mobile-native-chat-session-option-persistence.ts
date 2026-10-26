@@ -1,7 +1,7 @@
-import type { AgentType } from '../../../src/shared/agent-status-types'
-import type { StructuredSessionOptionPick } from '../../../src/shared/structured-agent-session-options'
-import type { RpcClient } from '../transport/rpc-client'
-import { nativeChatSessionOptionsWrite } from './mobile-session-launch-operations'
+import type { AgentType } from '../../../../../src/shared/agent-status-types'
+import type { StructuredSessionOptionPick } from '../../../../../src/shared/structured-agent-session-options'
+import type { RpcClient } from '../../../transport/rpc-client'
+import { nativeChatSessionOptionsWrite } from '../../mobile-session-launch-operations'
 
 // Persist picks on the host that seeds future sessions; best-effort failure only loses that next-session default.
 export function persistMobileStructuredOptionPicks(args: {

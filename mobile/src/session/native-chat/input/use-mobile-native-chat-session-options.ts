@@ -1,27 +1,26 @@
-import { appliedReportByScope, getScopedRecord } from './mobile-session-option-records'
-export { clearMobileSessionOptionRecordsForTests } from './mobile-session-option-records'
-import { mobileOmpSessionCatalog } from './mobile-omp-session-catalog'
-import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session/agent-session-conversation-command'
+import { appliedReportByScope, getScopedRecord } from '../../mobile-session-option-records'
+import { mobileOmpSessionCatalog } from '../../mobile-omp-session-catalog'
+import type { AgentSessionConversationCommand } from '../../../../../src/shared/agent-session/agent-session-conversation-command'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import {
-  getAgentSessionOptionCatalog,
-  type CatalogCommandDelivery,
-  type CatalogModel
-} from '../../../src/shared/agent-session-option-catalog'
+import { getAgentSessionOptionCatalog } from '../../../../../src/shared/agent-session-option-catalog'
+import type {
+  CatalogCommandDelivery,
+  CatalogModel
+} from '../../../../../src/shared/agent-session-option-catalog-types'
 import type {
   SessionOptionsSurface,
   SessionOptionDescriptor,
   SessionOptionValue
-} from '../../../src/shared/native-chat-session-options'
-import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
+} from '../../../../../src/shared/native-chat-session-options'
+import type { MobileNativeChatSendOutcome } from '../mobile-native-chat-send'
 import {
   buildNativeChatSessionOptionCommand,
   recordNativeChatSessionOptionCommand
-} from '../../../src/shared/native-chat-session-option-commands'
+} from '../../../../../src/shared/native-chat-session-option-commands'
 import {
   buildNativeChatSessionOptionSnapshot,
   withTrackedNativeChatModel
-} from '../../../src/shared/native-chat-session-option-snapshot'
+} from '../../../../../src/shared/native-chat-session-option-snapshot'
 import {
   applyNativeChatReportedSessionOptions,
   clearNativeChatSessionModel,
@@ -29,7 +28,7 @@ import {
   isFlipOnlyMidSession,
   matchNativeChatCatalogModelId,
   setTrackedSessionOption
-} from '../../../src/shared/native-chat-session-option-state'
+} from '../../../../../src/shared/native-chat-session-option-state'
 
 export type MobileNativeChatSessionOptionsController = {
   optionSurface?: SessionOptionsSurface

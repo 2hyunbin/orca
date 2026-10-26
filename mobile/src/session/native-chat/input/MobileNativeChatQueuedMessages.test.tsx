@@ -1,9 +1,9 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ActionSheetAction } from '../components/ActionSheetModal'
+import type { ActionSheetAction } from '../../../components/ActionSheetModal'
 import { MobileNativeChatQueuedMessages } from './MobileNativeChatQueuedMessages'
-import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
+import type { MobileQueuedMessageCard } from '../../mobile-structured-queued-message-cards'
 
 let fontScale = 1
 vi.mock('react-native', () => ({
@@ -33,7 +33,7 @@ vi.mock('lucide-react-native', () => ({
   X: 'X'
 }))
 
-vi.mock('../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
+vi.mock('../../../components/ActionSheetModal', () => ({ ActionSheetModal: 'ActionSheetModal' }))
 
 function card(
   overrides: Partial<MobileQueuedMessageCard> & { messageId: string }

@@ -1,12 +1,12 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MobileNativeChatSendOutcome } from './native-chat/mobile-native-chat-send'
+import type { MobileNativeChatSendOutcome } from '../mobile-native-chat-send'
 import {
-  clearMobileSessionOptionRecordsForTests,
   useMobileNativeChatSessionOptions,
   type MobileNativeChatSessionOptionsController
 } from './use-mobile-native-chat-session-options'
+import { clearMobileSessionOptionRecordsForTests } from '../../mobile-session-option-records'
 
 type HookArgs = Parameters<typeof useMobileNativeChatSessionOptions>[0]
 
