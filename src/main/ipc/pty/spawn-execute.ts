@@ -1,119 +1,63 @@
-import {
-  suppressSavedResumeLaunch,
-  captureSavedResumeCleanup,
-  chooseSavedResumeFreshLaunch,
-  type ResumeSpawnAdmission,
-  resumeSpawnRefusal,
-  SavedResumeFreshRefusal
-} from '../host-env/saved-resume-admission'
-import type { AgentSessionClaimedSpawnResult } from '../../../../shared/agent-session-host-authority'
-import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
-import { spawnWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
-import { ptyIncarnationById } from '../provider/ownership-state'
-import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
-import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
+import type { PtySpawnResult } from '../../providers/pty-provider-contract'
+import { ptyIncarnationById } from './provider/ownership-state'
+import { ensureWslHookRelayForReattach } from '../../agent-hooks/wsl-hook-relay-reattach'
+import { noteWslDistrosRunning } from '../../wsl-background-distro-gate'
 import {
   agentSessionOwners,
   assertSpawnReplyWasLive,
   reconcileAgentSessionOwnerListings
-} from '../pane/agent-session-owners'
-import { resolveStablePaneOwner } from '../pane/stable-owner'
+} from './pane/agent-session-owners'
+import { resolveStablePaneOwner } from './pane/stable-owner'
 import {
   assertPaneStillExists,
   excludeAbsentOwnerReplay,
   PaneOwnerContentionError
-} from '../pane/pane-spawn-operation'
-import { isRegisteredAgentSessionOwnerLive } from '../provider/liveness'
-import { failPtySpawnExecute } from '../spawn-execute-failure'
-import type { RuntimePtySpawnState } from './spawn-state'
-import { markRuntimeSpawnHiddenBeforeSpawn } from './spawn-hidden-delivery'
+} from './pane/pane-spawn-operation'
+import { isRegisteredAgentSessionOwnerLive } from './provider/liveness'
+import type { AgentSessionClaimedSpawnResult } from '../../../shared/agent-session-host-authority'
+import {
+  resumeSpawnRefusal,
+  SavedResumeFreshRefusal,
+  suppressSavedResumeLaunch,
+  type ResumeSpawnRefusal
+} from './host-env/saved-resume-admission'
+import { failPtySpawnExecute } from './spawn-execute-failure'
+import type { PtySpawnOperationState, PtySpawnExecutionFacts } from './spawn-operation-state'
+import { excludeReplacedPaneOwner } from './pane/replaced-pane-owner'
+import { attachViewWithoutOwner } from './pane/attach-only-view'
 
-export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise<void> {
+export async function executePtySpawn(
+  ctx: PtySpawnOperationState,
+  facts: PtySpawnExecutionFacts,
+  chooseFresh: (inherited?: ResumeSpawnRefusal) => Promise<void>
+): Promise<void> {
   const args = ctx.args
-  const captured: ResumeSpawnAdmission | null =
-    args.launchAgent && args.resumeProviderSession
-      ? {
-          verdict: 'admitted',
-          refused: { agent: args.launchAgent, providerSession: args.resumeProviderSession }
-        }
-      : null
-  if (args.resumeOrigin === 'saved') {
-    await captureSavedResumeCleanup(
-      ctx.deps.runtime,
-      ctx.deps.store,
-      ctx.spawnIdentityPaneKey,
-      captured,
-      args.worktreeId
-    )
-  }
-  const chooseFresh = async (): Promise<void> => {
-    ctx.spawnOptions.env = { ...ctx.spawnOptions.env }
-    ctx.resumeAdmission = await chooseSavedResumeFreshLaunch(
-      ctx.deps.runtime,
-      args,
-      ctx.expectedWslDistro,
-      ctx.spawnOptions
-    )
-    if (captured && ctx.resumeAdmission) {
-      ctx.resumeAdmission.refused = captured.refused
-      ctx.resumeAdmission.sourceRecord = captured.sourceRecord
-    }
-    if (resumeSpawnRefusal(ctx.resumeAdmission)) {
-      ctx.launchCommand = undefined
-      ctx.env = ctx.spawnOptions.env
-    }
-  }
-  const runtime = ctx.deps.runtime
-  const acquireWorktreeSpawn = runtime?.acquireWorktreeTerminalSpawn
-  ctx.releaseWorktreeSpawn = acquireWorktreeSpawn
-    ? await acquireWorktreeSpawn.call(
-        runtime,
-        spawnWorktreeTarget(args.worktreeId, args.connectionId),
-        {
-          refuseSleptWorktree: args.refuseSleptWorktree,
-          // A pre-adopted stable pane attaches to its live owner, not a new terminal.
-          reattachSessionId: ctx.preAdoptedStablePane?.owner.ptyId ?? args.sessionId,
-          requireAttachOnly: () => {
-            ctx.spawnOptions = { ...ctx.spawnOptions, attachOnly: true }
-          }
-        }
-      )
-    : undefined
   let awaitingAnotherStart = false
   try {
-    if (args.preAllocatedHandle) {
-      ctx.deps.trustedTerminalHandleEnv.add(args.preAllocatedHandle)
+    if (facts.preAllocatedHandle) {
+      ctx.deps.trustedTerminalHandleEnv.add(facts.preAllocatedHandle)
     }
     const stablePaneOwnerCandidate = ctx.preAdoptedStablePane
       ? ctx.preAdoptedStablePane.owner
       : args.agentSessionEnsure
         ? null
         : excludeAbsentOwnerReplay(
-            resolveStablePaneOwner(
-              ctx.deps.runtime,
-              ctx.deps.store,
-              ctx.spawnIdentityPaneKey,
-              args.worktreeId,
-              args.connectionId
+            excludeReplacedPaneOwner(
+              resolveStablePaneOwner(
+                ctx.deps.runtime,
+                ctx.deps.store,
+                facts.paneKey,
+                args.worktreeId,
+                args.connectionId
+              ),
+              facts.replacedPaneOwner ?? null
             ),
-            args.paneSpawnOperation?.absentOwner
+            ctx.paneSpawnOperation?.absentOwner
           )
     if (stablePaneOwnerCandidate) {
       throw new PaneOwnerContentionError()
     }
-    if (args.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
-      assertPaneStillExists(
-        ctx.deps.store,
-        args.worktreeId,
-        args.tabId,
-        args.leafId,
-        args.connectionId
-      )
-    }
-    const expectedPtyId = ctx.effectiveSessionAppId ?? ctx.sessionId
-    if (!stablePaneOwnerCandidate) {
-      markRuntimeSpawnHiddenBeforeSpawn(ctx)
-    }
+    const expectedPtyId = ctx.effectiveSessionAppId ?? facts.sessionId
     if (expectedPtyId) {
       ctx.pendingRegistrationClaim = ctx.deps.runtime?.beginPtyRegistration?.(expectedPtyId)
       ctx.pendingRegistrationPtyId = expectedPtyId
@@ -121,17 +65,30 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
     if (ctx.isDaemonHostSpawn && expectedPtyId) {
       ctx.preparedProvisionalExecutionContext =
         ctx.deps.runtime?.preparePtyExecutionContext?.(expectedPtyId, ctx.expectedWslDistro, {
-          resetIncarnation: ctx.isNewDaemonSession && !stablePaneOwnerCandidate,
-          preserveExisting: !ctx.isNewDaemonSession || Boolean(stablePaneOwnerCandidate)
+          resetIncarnation: ctx.ownsNewIncarnation && !stablePaneOwnerCandidate,
+          preserveExisting: !ctx.ownsNewIncarnation || Boolean(stablePaneOwnerCandidate)
         }) ?? false
     }
     const sequenceBeforeProviderSpawn = expectedPtyId
       ? (ctx.deps.runtime?.getPtyOutputSequence?.(expectedPtyId) ?? 0)
       : 0
-    const assertClientStillConnected = (): void => {
+    ctx.spawnTiming?.mark('options')
+    const validateDispatch = (): void => {
+      facts.validateDispatch?.()
+      if (ctx.paneSpawnOperation?.mustExist && args.worktreeId && args.tabId && args.leafId) {
+        assertPaneStillExists(
+          ctx.deps.store,
+          args.worktreeId,
+          args.tabId,
+          args.leafId,
+          args.connectionId
+        )
+      }
+
       if (args.signal?.aborted) {
         throw new Error('client_disconnected')
       }
+      facts.beforeProviderSpawn?.()
     }
     if (args.agentSessionEnsure && !ctx.preAdoptedStablePane) {
       // Claims can outlive this controller; import authoritative owner listings before deciding absence.
@@ -158,24 +115,23 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
           claim: args.agentSessionEnsure.claim,
           surface: args.agentSessionEnsure.surface,
           spawn: async () => {
-            assertClientStillConnected()
             await chooseFresh()
             const refusal = resumeSpawnRefusal(ctx.resumeAdmission)
             if (refusal) {
               throw new SavedResumeFreshRefusal(refusal)
             }
+            validateDispatch()
             providerResult = await ctx.provider.spawn(ctx.spawnOptions)
             ctx.rejectedRegistrationCandidate = providerResult
-            // Why: a successful lower-owner return proves physical work committed even if admission sees an early exit.
-            ctx.reportPtySpawnCommitted()
+            // Lower-owner success proves physical commit even when registration observes an early exit.
+            facts.reportPtySpawnCommitted?.()
             assertSpawnReplyWasLive(providerResult)
             ctx.deps.runtime?.assertPtyRegistrationAllowed?.(
               providerResult.id,
               providerResult.incarnationId
             )
             if (providerResult.incarnationId) {
-              // Why: local providers cannot serialize controller claims, so liveness proof
-              // needs the exact incarnation before the registry promotes the new owner.
+              // In-process providers cannot list controller claims; record exact incarnation before ownership promotion.
               ptyIncarnationById.set(providerResult.id, providerResult.incarnationId)
             }
             const providerEnsure = providerResult.agentSessionEnsure
@@ -198,19 +154,15 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
         if (!(error instanceof SavedResumeFreshRefusal)) {
           throw error
         }
-        // The claim reservation rejected before spawn; this shell must never become its owner.
-        ctx.resumeAdmission = {
-          ...error.admission,
-          refused: captured?.refused ?? error.admission.refused,
-          sourceRecord: captured?.sourceRecord
-        }
+        // The claim has unwound; the refused shell must never become its agent owner.
+        await chooseFresh(error.admission)
         suppressSavedResumeLaunch(args, ctx.spawnOptions)
-        ctx.launchCommand = undefined
-        ctx.env = ctx.spawnOptions.env
+        facts.suppressRefusedLaunch?.()
         delete args.agentSessionEnsure
-        ctx.spawnOptions.agentSessionEnsure = undefined
+        delete ctx.spawnOptions.agentSessionEnsure
+        validateDispatch()
         providerResult = await ctx.provider.spawn(ctx.spawnOptions)
-        ctx.reportPtySpawnCommitted()
+        facts.reportPtySpawnCommitted?.()
         ctx.stablePaneOwner = null
       }
       awaitingAnotherStart = false
@@ -220,7 +172,6 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
         ctx.result = {
           id: ensured.owner.ptyId,
           isReattach: true,
-          // A listing's incarnation rejects delayed exits from an older process.
           incarnationId: ptyIncarnationById.get(ensured.owner.ptyId)
         }
       } else {
@@ -230,18 +181,20 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
         ctx.result.agentSessionEnsure = ensured
       }
     } else {
-      assertClientStillConnected()
-      await chooseFresh()
-      ctx.result = await ctx.provider.spawn(ctx.spawnOptions)
-      ctx.reportPtySpawnCommitted()
+      if (!facts.attachOnlyView) {
+        await chooseFresh()
+      }
+      validateDispatch()
+      ctx.result = facts.attachOnlyView
+        ? await attachViewWithoutOwner(ctx.provider, ctx.spawnOptions)
+        : await ctx.provider.spawn(ctx.spawnOptions)
+      facts.reportPtySpawnCommitted?.()
       ctx.stablePaneOwner = null
       ctx.rejectedRegistrationCandidate = ctx.result
     }
     if (ctx.result.isReattach || ctx.result.agentSessionEnsure?.disposition === 'adopted') {
       ctx.result.isReattach = true
       ctx.resumeAdmission = null
-    }
-    if (ctx.result.isReattach) {
       Object.assign(ctx.result, ctx.deps.runtime?.getTerminalLaunchResult?.(ctx.result.id))
     }
     ctx.rejectedRegistrationCandidate ??= ctx.result
@@ -275,16 +228,18 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
     if (ctx.result.providerSequence) {
       const runtimeSequenceBeforeReconcile =
         ctx.deps.runtime?.getPtyOutputSequence?.(ctx.result.id) ?? 0
-      // Preserve the renderer-domain boundary needed to reconcile daemon snapshot kitty flags.
-      ctx.reconciledSnapshotSeq =
+      // Keyboard flags require the snapshot boundary translated into the renderer sequence domain.
+      const translatedSnapshotSeq =
         ctx.deps.runtime?.synchronizePtyOutputSequenceFromProvider?.(
           ctx.result.id,
           ctx.result.providerSequence,
           sequenceBeforeProviderSpawn
         ) ?? null
-      if (runtimeSequenceBeforeReconcile > sequenceBeforeProviderSpawn) {
-        ctx.snapshotKittyFlagsCoverReconciledSeq = false
-      }
+      ctx.provedSnapshotSeq =
+        runtimeSequenceBeforeReconcile <= sequenceBeforeProviderSpawn &&
+        typeof ctx.result.snapshotKittyKeyboardFlags === 'number'
+          ? (translatedSnapshotSeq ?? undefined)
+          : undefined
     }
     ensureWslHookRelayForReattach(ctx.result)
     const spawnedWslDistro =
@@ -294,16 +249,17 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
       noteWslDistrosRunning([spawnedWslDistro])
     }
     ctx.deps.runtime?.preparePtyExecutionContext?.(ctx.result.id, spawnedWslDistro)
+    ctx.spawnTiming?.mark('provider_spawn')
   } catch (err) {
     throw failPtySpawnExecute(ctx, err, {
-      sessionId: ctx.sessionId,
-      ownsNewSession: ctx.isNewDaemonSession,
+      sessionId: facts.sessionId,
+      ownsNewSession: ctx.ownsNewIncarnation,
       telemetry: args.telemetry,
       joinedAnotherStart: awaitingAnotherStart
     })
   } finally {
-    if (args.preAllocatedHandle) {
-      ctx.deps.trustedTerminalHandleEnv.delete(args.preAllocatedHandle)
+    if (facts.preAllocatedHandle) {
+      ctx.deps.trustedTerminalHandleEnv.delete(facts.preAllocatedHandle)
     }
   }
 }
