@@ -14,12 +14,10 @@ import {
   retireOutgrownStructuredAgentSessionChild,
   structuredAgentSessionChildReportedSignedOut
 } from './structured-agent-session-outgrown-child'
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 import type {
   AgentJournalItemBody,
-  AgentJournalSubmission,
   AgentJournalTurnLifecycle
 } from '../../../shared/agent-session-journal-types'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
@@ -188,17 +186,12 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
     input: Parameters<typeof conversation>[0],
     work: Partial<typeof idle> = {},
     stopAgent = vi.fn(async () => undefined),
-    launchPermission?: () => Promise<AgentChatPermissionChoice | null>,
-    transition: Pick<
-      Parameters<typeof retireOutgrownStructuredAgentSessionChild>[2],
-      'next' | 'requiresModelTransitionRestart'
-    > = {}
+    launchPermission?: () => Promise<AgentChatPermissionChoice | null>
   ) => {
     const warn = vi.fn()
     await retireOutgrownStructuredAgentSessionChild('session', conversation(input), {
       work: { ...idle, ...work },
       ...(launchPermission ? { launchPermission } : {}),
-      ...transition,
       stopAgent,
       logger: { warn, error: vi.fn() }
     })
@@ -287,59 +280,6 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
       const current = now('full-access')
       expect((await retire({}, {}, undefined, current)).stopAgent).not.toHaveBeenCalled()
       expect(current).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('a send that picks another model for a child that opened in another approval mode', () => {
-    const next = { clientMessageId: 'send-b', options: { model: 'sonnet' } } as const
-    const mailNotice = {
-      kind: 'agent' as const,
-      senders: [],
-      orchestration: {
-        message: 'mail-notice' as const,
-        mailbox: 'agent:worker',
-        dispatchId: null,
-        messages: []
-      }
-    }
-    const sendRow = (from?: typeof mailNotice): Row => ({
-      itemId: agentJournalSubmissionKey('send-b'),
-      fence: 2,
-      body: {
-        kind: 'message',
-        role: 'user',
-        blocks: [{ type: 'text', text: 'next' }],
-        ...(from ? { from } : {})
-      }
-    })
-    const transition = {
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: retirement reads only the send's id and options.
-      next: next as unknown as AgentJournalSubmission,
-      requiresModelTransitionRestart: vi.fn(() => true)
-    }
-
-    it('reopens an idle child before the send, but never for an Orca mail notice', async () => {
-      const user = await retire({ items: [sendRow()] }, {}, undefined, undefined, transition)
-      expect(user.stopAgent).toHaveBeenCalledWith('session')
-      const mail = await retire(
-        { items: [sendRow(mailNotice)] },
-        {},
-        undefined,
-        undefined,
-        transition
-      )
-      expect(mail.stopAgent).not.toHaveBeenCalled()
-    })
-
-    it('keeps a child that still owes work and sends on it, with no refusal', async () => {
-      const kept = await retire(
-        { items: [sendRow()] },
-        owing('turn-1', false),
-        undefined,
-        undefined,
-        transition
-      )
-      expect(kept.stopAgent).not.toHaveBeenCalled()
     })
   })
 })

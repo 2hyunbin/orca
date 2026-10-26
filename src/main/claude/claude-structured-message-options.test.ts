@@ -402,7 +402,10 @@ describe('Claude accepted message choices', () => {
   })
 
   it('keeps a running turn on its choices and applies new ones at the next turn', async () => {
-    const claude = fakeClaude({ initModels: MODELS, routes: { list_models: () => MODELS } })
+    const claude = fakeClaude({
+      initModels: MODELS.map((model) => ({ ...model, supportsFastMode: true })),
+      routes: { list_models: () => MODELS }
+    })
     const adapter = await acquired(claude)
     const connection = claude.connections[0]!
     const send = (clientMessageId: string, model: string, body = USER_MESSAGE) =>
@@ -410,16 +413,23 @@ describe('Claude accepted message choices', () => {
         sessionId: 'session-1',
         clientMessageId,
         body,
-        executionOptions: { model },
+        executionOptions: {
+          model,
+          effort: model === 'sonnet' ? 'high' : 'low',
+          fastMode: model === 'sonnet' ? 'false' : 'true'
+        },
         fence: 7
       })
     const models = () =>
       connection.calls.flatMap((call) => (call.subtype === 'set_model' ? [call.params?.model] : []))
     await expect(send('opens', 'sonnet')).resolves.toMatchObject({ state: 'admitted' })
     expect(models()).toEqual(['sonnet'])
+    const settings = () => connection.calls.filter((call) => call.subtype === 'apply_flag_settings')
+    const liveSettings = [...settings()]
     // Typed while that turn runs, after the pick changed: it joins the turn as it is.
     await expect(send('joins', 'opus')).resolves.toMatchObject({ state: 'admitted' })
     expect(models()).toEqual(['sonnet'])
+    expect(settings()).toEqual(liveSettings)
     claudeTurnEnds(connection)
     const mail = {
       ...USER_MESSAGE,
@@ -436,53 +446,36 @@ describe('Claude accepted message choices', () => {
     }
     await expect(send('mail', 'opus', mail)).resolves.toMatchObject({ state: 'admitted' })
     expect(models()).toEqual(['sonnet'])
-    claudeTurnEnds(connection)
-    await expect(send('next', 'opus')).resolves.toMatchObject({ state: 'admitted' })
-    expect(models()).toEqual(['sonnet', 'opus'])
-    expect(connection.sent).toHaveLength(4)
-  })
-})
-
-it('uses the new turn selection when a live turn ends during content preparation', async () => {
-  const claude = fakeClaude({ initModel: 'claude-opus-5-5[1m]' })
-  const adapter = await acquired(claude)
-  const connection = claude.connections[0]!
-  const send = (id: string, model: string) =>
-    adapter.dispatch({
-      sessionId: 'session-1',
-      clientMessageId: id,
-      body: USER_MESSAGE,
-      executionOptions: { model },
-      fence: 7
-    })
-  let release!: () => void
-  const held = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  const original = dispatchContent.claudeDispatchMessageContent
-  try {
-    await send('opening', 'opus[1m]')
+    expect(settings()).toEqual(liveSettings)
+    const held = Promise.withResolvers<void>()
+    const entered = Promise.withResolvers<void>()
+    const original = dispatchContent.claudeDispatchMessageContent
     const content = vi
       .spyOn(dispatchContent, 'claudeDispatchMessageContent')
       .mockImplementationOnce(async (body) => {
-        await held
+        entered.resolve()
+        await held.promise
         return original(body)
       })
-    const delayed = send('delayed', 'sonnet')
-    await vi.waitFor(() => expect(content).toHaveBeenCalledTimes(1))
-    claudeTurnEnds(connection)
-    release()
-    expect(await delayed).toMatchObject({ state: 'admitted' })
-    expect(
-      connection.calls
-        .filter((call) => call.subtype === 'set_model')
-        .map((call) => call.params?.model)
-    ).toEqual(['opus[1m]', 'sonnet'])
-    expect(connection.sent).toHaveLength(2)
-    content.mockRestore()
-  } finally {
-    release()
-    vi.restoreAllMocks()
-    await adapter.closeAll()
-  }
+    const delayed = send('next', 'opus')
+    try {
+      await entered.promise
+      claudeTurnEnds(connection)
+      held.resolve()
+      await expect(delayed).resolves.toMatchObject({ state: 'admitted' })
+    } finally {
+      held.resolve()
+      content.mockRestore()
+    }
+    expect(models()).toEqual(['sonnet', 'opus'])
+    expect(settings()).toContainEqual({
+      subtype: 'apply_flag_settings',
+      params: { settings: { effortLevel: 'low' } }
+    })
+    expect(settings()).toContainEqual({
+      subtype: 'apply_flag_settings',
+      params: { settings: { fastMode: true } }
+    })
+    expect(connection.sent).toHaveLength(4)
+  })
 })

@@ -18,7 +18,7 @@ import type {
 } from './structured-agent-session-host-types'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
-  startFlights?: Pick<StructuredAgentSessionStartFlights, 'has'>
+  startFlights?: Pick<StructuredAgentSessionStartFlights, 'get'>
   deliveryOrder: StructuredAgentSessionDeliveryOrder
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
   adapter: StructuredAgentSessionAdapter

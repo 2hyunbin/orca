@@ -23,7 +23,7 @@ import { holdRestartedStructuredAgentSessionSends } from './structured-agent-ses
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
 import { sameProviderChild } from './structured-agent-session-provider-child'
-import { StructuredAgentSessionDeliveryProgress } from './structured-agent-session-delivery-progress'
+import { DeliveryProgress } from './structured-agent-session-delivery-progress'
 
 export type { StructuredAgentSessionDeliveryLoopDeps } from './structured-agent-session-delivery-loop-deps'
 
@@ -42,9 +42,8 @@ type Prepared =
 type StartFailure = NonNullable<ReturnType<typeof startThatFailedWhileQueued>>
 
 export class StructuredAgentSessionDeliveryLoop {
-  private readonly running = new Set<string>()
+  private readonly running = new Map<string, DeliveryProgress>()
   private readonly runs = new Map<string, Promise<void>>()
-  private readonly progress = new StructuredAgentSessionDeliveryProgress()
   private disposed = false
 
   constructor(private readonly deps: StructuredAgentSessionDeliveryLoopDeps) {}
@@ -55,6 +54,7 @@ export class StructuredAgentSessionDeliveryLoop {
 
   dispose(): void {
     this.disposed = true
+    this.running.clear()
     this.deps.deliveryOrder.dispose()
   }
 
@@ -63,7 +63,7 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.disposed) {
       return Promise.resolve()
     }
-    this.progress.woke(sessionId)
+    this.running.get(sessionId)?.woke()
     this.deps.deliveryOrder.reconcile(
       sessionId,
       this.deps.sessions.get(sessionId)?.journal.submissions() ?? []
@@ -71,23 +71,29 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.running.has(sessionId)) {
       return this.runs.get(sessionId) ?? Promise.resolve()
     }
-    this.running.add(sessionId)
-    const run = this.run(sessionId).finally(() => {
+    const progress = new DeliveryProgress()
+    this.running.set(sessionId, progress)
+    const run = this.run(sessionId, progress).finally(() => {
       if (this.runs.get(sessionId) === run) {
         this.runs.delete(sessionId)
+        if (this.running.get(sessionId) === progress) {
+          this.stop(sessionId)
+        }
       }
     })
     this.runs.set(sessionId, run)
     return run
   }
 
-  private async run(sessionId: string): Promise<void> {
+  private async run(sessionId: string, progress: DeliveryProgress): Promise<void> {
+    // Only this run's current owner may act; a stopped or replaced run reads 'stop'.
+    const owned = <T>(task: () => Promise<T>) =>
+      this.deps.serialize(sessionId, async () =>
+        this.running.get(sessionId) === progress ? task() : ('stop' as const)
+      )
     try {
-      this.progress.begin(sessionId)
       for (;;) {
-        const prepared = await this.deps.trackStart(
-          this.deps.serialize(sessionId, () => this.prepare(sessionId))
-        )
+        const prepared = await this.deps.trackStart(owned(() => this.prepare(sessionId, progress)))
         if (prepared === 'stop') {
           return
         }
@@ -108,15 +114,13 @@ export class StructuredAgentSessionDeliveryLoop {
             }
           )
           if (!completed) {
-            await this.deps
-              .serialize(sessionId, async () => this.stop(sessionId))
-              .catch((error: unknown) =>
-                this.deps.logger.warn('parking delivery after a failed start failed', {
-                  scope: 'delivery-loop-start',
-                  sessionId,
-                  error
-                })
-              )
+            await owned(async () => this.stop(sessionId)).catch((error: unknown) =>
+              this.deps.logger.warn('parking delivery after a failed start failed', {
+                scope: 'delivery-loop-start',
+                sessionId,
+                error
+              })
+            )
             return
           }
           // The flight settled its requester; joiners rederive their own work.
@@ -126,7 +130,7 @@ export class StructuredAgentSessionDeliveryLoop {
           await prepared.readiness.wait()
         }
         await prepared.before
-        const handed = await this.deps.serialize(sessionId, () =>
+        const handed = await owned(() =>
           this.handOver(
             sessionId,
             prepared.awaited,
@@ -154,31 +158,29 @@ export class StructuredAgentSessionDeliveryLoop {
         error
       })
       const cause = { hostFault: true } as const
-      await this.deps
-        .serialize(sessionId, async () => {
-          try {
-            const session = this.deps.sessions.get(sessionId)
-            const selected = session && oldestQueuedSubmission(session)
-            await this.fail(sessionId, { startKey: null, cause }, selected?.clientMessageId ?? null)
-          } finally {
-            this.stop(sessionId)
-          }
+      await owned(async () => {
+        try {
+          const session = this.deps.sessions.get(sessionId)
+          const selected = session && oldestQueuedSubmission(session)
+          await this.fail(sessionId, { startKey: null, cause }, selected?.clientMessageId ?? null)
+        } finally {
+          this.stop(sessionId)
+        }
+      }).catch((failure: unknown) => {
+        // Keep failed-settlement leftovers for the next accept/open recovery.
+        this.deps.logger.warn('recording a failed delivery failed', {
+          scope: 'delivery-loop-fail',
+          sessionId,
+          error: failure
         })
-        .catch((failure: unknown) => {
-          // Keep failed-settlement leftovers for the next accept/open recovery.
-          this.deps.logger.warn('recording a failed delivery failed', {
-            scope: 'delivery-loop-fail',
-            sessionId,
-            error: failure
-          })
-        })
+      })
     }
   }
 
-  private async prepare(sessionId: string): Promise<Prepared> {
+  private async prepare(sessionId: string, progress: DeliveryProgress): Promise<Prepared> {
     const session = this.deps.sessions.get(sessionId)
     // A step that proved no change since the last one would repeat forever; park until a commit or wake.
-    if (!session || this.disposed || !this.progress.advanced(sessionId, this.deps)) {
+    if (!session || this.disposed || progress.decide(sessionId, this.deps).kind === 'park') {
       return this.stop(sessionId)
     }
     // Retry failed open recovery before delivery; never hand over earlier-process sends.
@@ -197,8 +199,8 @@ export class StructuredAgentSessionDeliveryLoop {
     if (!oldest || (session.child && work && structuredAgentSessionCommandRunning(work))) {
       return this.stop(sessionId)
     }
-    if (this.deps.startFlights?.has(sessionId)) {
-      return { start: this.deps.startProviderChild(sessionId, oldest.clientMessageId) }
+    if (this.deps.startFlights?.get(sessionId)) {
+      return { start: progress.claim(sessionId, this.deps, oldest.clientMessageId) }
     }
     const failedStart = startThatFailedWhileQueued(session, oldest)
     if (failedStart) {
@@ -207,9 +209,7 @@ export class StructuredAgentSessionDeliveryLoop {
     await this.deps.retireOutgrownChild(sessionId, oldest)
     const child = this.deps.sessions.get(sessionId)?.child
     if (!child || child.close) {
-      return {
-        start: this.deps.startProviderChild(sessionId, oldest.clientMessageId)
-      }
+      return { start: progress.claim(sessionId, this.deps, oldest.clientMessageId) }
     }
     return {
       ok: true,

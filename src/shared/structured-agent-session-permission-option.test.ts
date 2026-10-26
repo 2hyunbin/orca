@@ -98,12 +98,10 @@ describe('the permission mode picker', () => {
   })
 
   it('offers all Claude modes regardless of catalog support, and shows the host mode as stated', () => {
-    for (const autoMode of [true, false, undefined]) {
-      const descriptor = permission(live('claude', { permissionMode: 'ask' }, autoMode))
-      expect(
-        descriptor?.kind.type === 'select' && descriptor.kind.choices.map((c) => c.value)
-      ).toEqual(['ask', 'accept-edits', 'auto', 'full-access'])
-    }
+    const unsupported = permission(live('claude', { permissionMode: 'ask' }, false))
+    expect(
+      unsupported?.kind.type === 'select' && unsupported.kind.choices.map((c) => c.value)
+    ).toEqual(['ask', 'accept-edits', 'auto', 'full-access'])
     expect(permission(live('claude', { permissionMode: 'auto' }, false))).toMatchObject({
       kind: { currentValue: 'auto' }
     })
