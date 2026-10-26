@@ -167,7 +167,7 @@ it.each([100, 1000])(
         .run(record.sessionId, JSON.stringify(encodeAgentSessionRecord(record)))
     }
     const successor = records.at(-1)!.sessionId
-    h.apply(mailStopReceipt(records[0].sessionId, () => ({ members: ['A'] })))
+    h.apply(mailStopReceipt(records[0].sessionId))
     h.apply(mailReleaseReceipt(successor))
     expect(
       mailAdmissionPermission(readMailHoldFacts(h.database.db, successor, read, 2), ['A'])
