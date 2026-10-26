@@ -3,6 +3,8 @@ import { DaemonPtyAdapter } from '../../daemon/daemon-pty-adapter'
 import { waitFor } from '../../daemon/daemon-pty-adapter-test-harness'
 import { startLateExitHarness } from './daemon-late-exit-test-fixture'
 import { ptyIncarnationById } from './provider/ownership-state'
+import { installPtyKillIpcHandler } from './ipc/renderer-kill'
+import { shutdownProviderAndDetectExit } from './provider/shutdown-detect'
 
 const request = (id: string, expectedIncarnationId: string) => ({
   id,
@@ -77,6 +79,26 @@ describe('checked renderer stop route', () => {
           requireUnattached: true
         })
       ).resolves.toEqual({ outcome: 'ended' })
+    } finally {
+      await harness.dispose()
+    }
+  })
+
+  it('keeps the daemon attached check when no runtime can answer for viewers', async () => {
+    const harness = await startLateExitHarness()
+    try {
+      installPtyKillIpcHandler({
+        getLocalPtyProviderStartupPromise: () => undefined,
+        shutdownProviderAndDetectExit,
+        rememberSyntheticKillExit: harness.session.rememberSyntheticKillExit,
+        sendPtyExitToRenderer: harness.session.sendPtyExitToRenderer
+      })
+      await expect(
+        harness.killFenced({
+          ...request(harness.id, harness.result.incarnationId ?? 'missing'),
+          requireUnattached: true
+        })
+      ).resolves.toEqual({ outcome: 'refused', reason: 'attached' })
     } finally {
       await harness.dispose()
     }

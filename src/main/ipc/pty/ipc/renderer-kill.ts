@@ -165,7 +165,11 @@ async function stopFencedRendererPty(
     if (args.requireUnattached && deps.runtime?.hasTerminalViewer(args.id)) {
       return { outcome: 'refused', reason: 'attached' }
     }
-    const result = await provider.killFenced({ ...args, requireUnattached: false })
+    // Without a runtime to ask about viewers, keep the daemon's attached check.
+    const result = await provider.killFenced({
+      ...args,
+      requireUnattached: args.requireUnattached && !deps.runtime
+    })
     if (
       (result.outcome === 'ended' || result.outcome === 'already_exited') &&
       ptyIncarnationById.get(args.id) === args.expectedIncarnationId
