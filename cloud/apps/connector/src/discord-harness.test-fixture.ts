@@ -42,7 +42,7 @@ function fakeDiscord() {
     if (route.method === 'GET') {
       return route.path.includes('?')
         ? { kind: 'ok', body: { items: [] } }
-        : { kind: 'failed', error: '10008' }
+        : { kind: 'failed', status: 404, error: '10008' }
     }
     return { kind: 'ok', body: { id: `1400000000000000${String(++id).padStart(3, '0')}` } }
   }

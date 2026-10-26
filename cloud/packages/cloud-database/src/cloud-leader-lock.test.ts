@@ -1,16 +1,22 @@
 import { randomUUID } from 'node:crypto'
 import pg from 'pg'
 import { describe, expect, it } from 'vitest'
+import { openInMemoryCloudDatabase } from './cloud-database.js'
 import { acquireLeadership } from './cloud-leader-lock.js'
 
 const postgresUrl = process.env.ORCA_CLOUD_DATABASE_TEST_URL
+const database = await openInMemoryCloudDatabase([])
 
 describe('acquireLeadership', () => {
   it('leads at once without a database', async () => {
     const leadership = await acquireLeadership({
+      database,
       key: 'gateway',
       signal: new AbortController().signal
     })
+    expect(
+      await leadership.transaction((transaction) => transaction.query('SELECT 1 AS one'))
+    ).toEqual([{ one: 1 }])
     await leadership.release()
     await expect(leadership.lost).resolves.toBeUndefined()
   })
@@ -19,7 +25,7 @@ describe('acquireLeadership', () => {
     'lets one holder lead until it releases or its session dies',
     async () => {
       const key = `gateway-${randomUUID()}`
-      const options = { databaseUrl: postgresUrl, key, pollMs: 50, checkMs: 50 }
+      const options = { databaseUrl: postgresUrl, database, key, pollMs: 50, checkMs: 50 }
       const first = await acquireLeadership({ ...options, signal: AbortSignal.timeout(5_000) })
       let secondLed = false
       const second = acquireLeadership({ ...options, signal: AbortSignal.timeout(5_000) }).then(
@@ -43,6 +49,10 @@ describe('acquireLeadership', () => {
       )
       await admin.end()
       await next.lost
+      // Its transactions ran on the lock's connection, so none can commit after the loss.
+      await expect(
+        next.transaction((transaction) => transaction.query('SELECT 1'))
+      ).rejects.toThrow()
       const third = await acquireLeadership({ ...options, signal: AbortSignal.timeout(5_000) })
       await third.release()
     }
@@ -50,7 +60,7 @@ describe('acquireLeadership', () => {
 
   it.skipIf(!postgresUrl)('stops waiting when aborted', async () => {
     const key = `gateway-${randomUUID()}`
-    const options = { databaseUrl: postgresUrl, key, pollMs: 50 }
+    const options = { databaseUrl: postgresUrl, database, key, pollMs: 50 }
     const first = await acquireLeadership({ ...options, signal: AbortSignal.timeout(5_000) })
     await expect(
       acquireLeadership({ ...options, signal: AbortSignal.timeout(200) })

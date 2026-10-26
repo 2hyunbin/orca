@@ -27,21 +27,14 @@ function sender(...results: DiscordResult[]) {
     routes.push(route)
     return results.shift() ?? { kind: 'ok' as const, body: { id: 'M1' } }
   }
-  return { routes, sender: new DiscordPostSender({ botToken: 'bot', api, now: () => NOW }) }
+  return { routes, sender: new DiscordPostSender({ botToken: 'bot', api }) }
 }
 
 describe('DiscordPostSender', () => {
-  it('resends a post left mid-send while its nonce still dedupes, and calls it uncertain after', async () => {
-    const within = sender()
-    expect(await within.sender.send(post({ stale: true, sentAt: NOW - 60_000 }))).toEqual({
-      kind: 'found',
-      messageRef: 'M1'
-    })
-    const past = sender()
-    expect(await past.sender.send(post({ stale: true, sentAt: NOW - 120_000 }))).toEqual({
-      kind: 'uncertain'
-    })
-    expect(past.routes).toEqual([])
+  it('never resends a post left mid-send', async () => {
+    const stale = sender()
+    expect(await stale.sender.send(post({ stale: true }))).toEqual({ kind: 'uncertain' })
+    expect(stale.routes).toEqual([])
   })
 
   it('calls an unclear create uncertain, retries an unclear edit, and waits out a rate limit', async () => {
@@ -53,7 +46,9 @@ describe('DiscordPostSender', () => {
       kind: 'retry',
       afterMs: 500
     })
-    expect(await sender({ kind: 'failed', error: '50013' }).sender.send(post())).toEqual({
+    expect(
+      await sender({ kind: 'failed', status: 403, error: '50013' }).sender.send(post())
+    ).toEqual({
       kind: 'failed'
     })
   })

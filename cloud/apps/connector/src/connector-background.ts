@@ -1,6 +1,5 @@
 import type { ConnectorCore } from './connector-core.js'
 import type { ConnectorInbox } from './connector-inbox.js'
-import type { DiscordEdge } from './discord-edge.js'
 import type { SlackEdge } from './slack-edge.js'
 
 // Chains each sweep after the previous one settles, so a slow database never stacks them.
@@ -45,7 +44,6 @@ export function startConnectorBackground(runtime: {
   }
   core: Pick<ConnectorCore, 'onExpired' | 'startBackground'>
   slack?: Pick<SlackEdge, 'startBackground'>
-  discord?: Pick<DiscordEdge, 'startBackground'>
 }): () => void {
   const stops = [
     every('inbox_expiry', EXPIRY_SWEEP_INTERVAL_MS, async () => {
@@ -60,8 +58,7 @@ export function startConnectorBackground(runtime: {
       runtime.inbox.pruneSettled(INBOX_RETENTION_MS)
     ),
     runtime.core.startBackground(),
-    runtime.slack?.startBackground() ?? (() => {}),
-    runtime.discord?.startBackground() ?? (() => {})
+    runtime.slack?.startBackground() ?? (() => {})
   ]
   return () => {
     for (const stop of stops) {

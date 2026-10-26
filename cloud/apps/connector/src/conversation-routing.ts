@@ -82,7 +82,13 @@ export async function routeMessage(
     await keepTeammateContext(
       transaction,
       other,
-      { messageId, workspaceId: place.workspaceId, authorId, text: message.text },
+      {
+        messageId,
+        workspaceId: place.workspaceId,
+        authorId,
+        authorName: message.authorName,
+        text: message.text
+      },
       deps.now()
     )
   }

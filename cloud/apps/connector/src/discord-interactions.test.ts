@@ -14,9 +14,6 @@ const guildBase = {
   version: 1
 }
 const base = {
-  interactionId: '1300000000000000001',
-  token: 'interaction-token',
-  applicationId: '1200000000000000000',
   guildId: '1100000000000000000',
   channelId: '1000000000000000000',
   userId: '900000000000000000'
@@ -60,7 +57,7 @@ describe('readDiscordInteraction', () => {
         message: { id: '1' }
       })
     ).toEqual({ kind: 'invalid' })
-    expect(readDiscordInteraction({ type: 3 })).toEqual({ kind: 'invalid' })
+    expect(readDiscordInteraction({ id: '1' })).toEqual({ kind: 'invalid' })
   })
 })
 

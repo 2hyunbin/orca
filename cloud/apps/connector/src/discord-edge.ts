@@ -3,12 +3,11 @@ import type { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ConnectorAdapter, ThreadPlace } from './connector-adapter.js'
 import { noticeText, statusText } from './connector-copy.js'
-import { every } from './connector-background.js'
-import { CONTEXT_RETENTION_MS, type ConnectorCore } from './connector-core.js'
+import type { ConnectorCore } from './connector-core.js'
 import type { DiscordConfig } from './discord-config.js'
 import type { DiscordGatewayMessage } from './discord-gateway-session.js'
 import { discordInteractionResponse, readDiscordInteraction } from './discord-interactions.js'
-import { DiscordMembers } from './discord-members.js'
+import { linkedDiscordUsers } from './discord-members.js'
 import { discordNotice, messageChannel } from './discord-notices.js'
 import { DiscordPostSender } from './discord-post-sender.js'
 import {
@@ -23,7 +22,6 @@ import { discordText } from './discord-text.js'
 import { DiscordThreadHistory } from './discord-thread-history.js'
 import type { MachineEnv } from './machine-auth.js'
 
-const RETENTION_INTERVAL_MS = 60_000
 // Interactions are small; this only bounds what is read before the signature check.
 const MAX_INTERACTION_BYTES = 64 * 1024
 
@@ -40,7 +38,6 @@ export function createDiscordEdge(deps: {
   const { config, database, now } = deps
   const { botToken } = config
   const api = deps.api ?? createDiscordRestApi()
-  const members = new DiscordMembers(now)
   // Read once from the API: Discord doesn't promise the bot's user id equals its application's.
   let botUser: Promise<string | null> | undefined
   const botUserId = () =>
@@ -52,8 +49,8 @@ export function createDiscordEdge(deps: {
       botUser = undefined
       return null
     }))
-  const history = new DiscordThreadHistory({ database, members, api, botToken, botUserId })
-  const sender = new DiscordPostSender({ botToken, api, now })
+  const history = new DiscordThreadHistory({ database, api, botToken, botUserId })
+  const sender = new DiscordPostSender({ botToken, api })
 
   const adapter: ConnectorAdapter = {
     source: 'discord',
@@ -72,8 +69,10 @@ export function createDiscordEdge(deps: {
     teammateContext: discordText.teammateContext,
     send: (post) => sender.send(post),
     heldStartPrompt: (start) => history.heldStartPrompt(start),
-    trustedNames: (transaction, guildId, userIds) =>
-      members.trustedNames(transaction, guildId, userIds)
+    trustedNames: async (transaction, guildId, userIds) =>
+      new Map(
+        [...(await linkedDiscordUsers(transaction, guildId, userIds))].map((id) => [id, null])
+      )
   }
 
   // A message's thread: a mention in a thread, a top-level mention (its thread is made on Orca's
@@ -112,12 +111,12 @@ export function createDiscordEdge(deps: {
     if (!place) {
       return
     }
-    await members.remember(transaction, message)
     await core.routeIn(transaction, {
       source: 'discord',
       place,
       messageId: message.messageId,
       authorId: message.userId,
+      authorName: message.userName,
       text: message.text,
       mentioned: message.mentioned,
       direct: false,
@@ -185,13 +184,5 @@ export function createDiscordEdge(deps: {
     )
   }
 
-  return {
-    adapter,
-    routeIn,
-    registerRoutes,
-    startBackground: () =>
-      every('discord_members', RETENTION_INTERVAL_MS, () =>
-        members.prune(database, CONTEXT_RETENTION_MS)
-      )
-  }
+  return { adapter, routeIn, registerRoutes }
 }

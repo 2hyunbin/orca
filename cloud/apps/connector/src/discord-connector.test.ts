@@ -19,7 +19,7 @@ afterEach(cleanupConnectorHarnesses)
 
 // Error codes from https://docs.discord.com/developers/topics/opcodes-and-status-codes and the
 // interaction callback types in https://docs.discord.com/developers/interactions/receiving-and-responding.
-const UNKNOWN_CHANNEL = { kind: 'failed' as const, error: '10003' }
+const UNKNOWN_CHANNEL = { kind: 'failed' as const, status: 404, error: '10003' }
 const APPROVAL = {
   kind: 'approval',
   promptId: 'p1',
@@ -58,8 +58,7 @@ describe('Discord connector', () => {
     expect(created).toHaveLength(2)
     expect(created[1]?.body).toMatchObject({
       content: 'Waiting for your Orca on build-box…',
-      allowed_mentions: { parse: [] },
-      enforce_nonce: true
+      allowed_mentions: { parse: [] }
     })
     expect(
       (await harness.posts()).find((post) => post.post_id === `status:${EXTERNAL_ID}`)

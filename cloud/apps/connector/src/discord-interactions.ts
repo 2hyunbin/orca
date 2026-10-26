@@ -8,10 +8,7 @@ const EPHEMERAL = 1 << 6
 const UserSchema = z.looseObject({ id: z.string().min(1) })
 
 const InteractionSchema = z.looseObject({
-  id: z.string().min(1),
-  application_id: z.string().min(1),
   type: z.number().int(),
-  token: z.string().min(1),
   guild_id: z.string().min(1).optional(),
   channel_id: z.string().min(1).optional(),
   // A guild interaction names its user under member; a DM one under user.
@@ -27,9 +24,6 @@ const ComponentDataSchema = z.looseObject({
 })
 
 type InteractionBase = {
-  interactionId: string
-  token: string
-  applicationId: string
   guildId?: string
   channelId: string
   userId: string
@@ -55,9 +49,6 @@ export function readDiscordInteraction(payload: unknown): DiscordInteraction {
     return { kind: 'ignored' }
   }
   const base: InteractionBase = {
-    interactionId: interaction.id,
-    token: interaction.token,
-    applicationId: interaction.application_id,
     ...(interaction.guild_id === undefined ? {} : { guildId: interaction.guild_id }),
     channelId: interaction.channel_id,
     userId

@@ -4,50 +4,29 @@ import type { GatewayCheckpoint } from './discord-gateway-session.js'
 // The one checkpoint row.
 const SLOT = 1
 
-// Each leader takes the next epoch and commits only under it, so a leader that lost its lock can't
-// route or move the checkpoint once its successor has started. Returns where to resume.
-export async function takeCheckpoint(
-  database: CloudDatabase,
-  now: number
-): Promise<{ epoch: number; resumeFrom: GatewayCheckpoint | null }> {
-  return await database.transaction(async (transaction) => {
-    await transaction.query(
-      `INSERT INTO connector_discord_gateway (slot, epoch, updated_at) VALUES (?, 0, ?)
-       ON CONFLICT (slot) DO NOTHING`,
-      [SLOT, now]
-    )
-    const [row] = await transaction.query(
-      `UPDATE connector_discord_gateway SET epoch = epoch + 1, updated_at = ? WHERE slot = ?
-       RETURNING epoch, session_id, resume_url, sequence`,
-      [now, SLOT]
-    )
-    const epoch = Number(row?.epoch)
-    return row?.session_id === null || row?.session_id === undefined
-      ? { epoch, resumeFrom: null }
-      : {
-          epoch,
-          resumeFrom: {
-            sessionId: String(row.session_id),
-            resumeURL: String(row.resume_url),
-            sequence: Number(row.sequence)
-          }
-        }
-  })
+export async function loadCheckpoint(database: CloudDatabase): Promise<GatewayCheckpoint | null> {
+  const [row] = await database.query(
+    'SELECT session_id, resume_url, sequence FROM connector_discord_gateway WHERE slot = ?',
+    [SLOT]
+  )
+  return row
+    ? {
+        sessionId: String(row.session_id),
+        resumeURL: String(row.resume_url),
+        sequence: Number(row.sequence)
+      }
+    : null
 }
 
 export async function saveCheckpoint(
   transaction: CloudDatabase,
-  epoch: number,
-  checkpoint: GatewayCheckpoint,
-  now: number
+  checkpoint: GatewayCheckpoint
 ): Promise<void> {
-  const [saved] = await transaction.query(
-    `UPDATE connector_discord_gateway SET session_id = ?, resume_url = ?, sequence = ?,
-       updated_at = ?
-     WHERE slot = ? AND epoch = ?`,
-    [checkpoint.sessionId, checkpoint.resumeURL, checkpoint.sequence, now, SLOT, epoch]
+  await transaction.query(
+    `INSERT INTO connector_discord_gateway (slot, session_id, resume_url, sequence)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (slot) DO UPDATE SET session_id = excluded.session_id,
+       resume_url = excluded.resume_url, sequence = excluded.sequence`,
+    [SLOT, checkpoint.sessionId, checkpoint.resumeURL, checkpoint.sequence]
   )
-  if (Number(saved?.changes ?? 0) === 0) {
-    throw new Error('a newer leader holds the Discord gateway')
-  }
 }

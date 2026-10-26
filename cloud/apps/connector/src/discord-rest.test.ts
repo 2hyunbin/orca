@@ -1,14 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import {
-  createDiscordRestApi,
-  discordNonce,
-  discordRoutes,
-  nonceStillDedupes
-} from './discord-rest.js'
+import { createDiscordRestApi, discordRoutes } from './discord-rest.js'
 
-// Routes and bodies follow https://docs.discord.com/developers/resources/message (create with
-// nonce + enforce_nonce, message_reference, allowed_mentions, reactions, history),
-// and the 429 body in
+// Routes and bodies follow https://docs.discord.com/developers/resources/message (message_reference,
+// allowed_mentions, reactions, history) and the 429 body in
 // https://docs.discord.com/developers/topics/rate-limits.
 type Reply = { status: number; body?: unknown; headers?: Record<string, string> }
 
@@ -41,7 +35,7 @@ describe('createDiscordRestApi', () => {
       kind: 'ok',
       body: { id: 'T1' }
     })
-    await api('bot', discordRoutes.createMessage('T1', { content: 'Working' }, 'status:h1:t1'))
+    await api('bot', discordRoutes.createMessage('T1', { content: 'Working' }))
     await api('bot', discordRoutes.editMessage('T1', 'M2', { content: 'Done', components: [] }))
     expect(await api('bot', discordRoutes.addReaction('C1', 'M1', '👀'))).toEqual({
       kind: 'ok',
@@ -67,9 +61,7 @@ describe('createDiscordRestApi', () => {
     expect(discord.calls[3]?.init.headers).toEqual({ authorization: 'Bot bot' })
     expect(discord.sentBody(1)).toEqual({
       content: 'Working',
-      allowed_mentions: { parse: [] },
-      nonce: discordNonce('status:h1:t1'),
-      enforce_nonce: true
+      allowed_mentions: { parse: [] }
     })
     expect(discord.sentBody(2)).toEqual({
       content: 'Done',
@@ -82,24 +74,12 @@ describe('createDiscordRestApi', () => {
     const discord = fakeDiscord([])
     await createDiscordRestApi(discord.request)(
       'bot',
-      discordRoutes.createMessage('C1', { content: 'Orca is paused.', replyTo: 'M1' }, 'notice:M1')
+      discordRoutes.createMessage('C1', { content: 'Orca is paused.', replyTo: 'M1' })
     )
     expect(discord.sentBody(0)).toMatchObject({
       message_reference: { message_id: 'M1', fail_if_not_exists: false },
       allowed_mentions: { parse: [], replied_user: true }
     })
-  })
-
-  it('derives a stable 25-character nonce from a post id', () => {
-    const nonce = discordNonce(`reply:${'h'.repeat(40)}:r1`)
-    expect(nonce).toHaveLength(25)
-    expect(discordNonce(`reply:${'h'.repeat(40)}:r1`)).toBe(nonce)
-    expect(discordNonce(`reply:${'h'.repeat(40)}:r2`)).not.toBe(nonce)
-  })
-
-  it('trusts the nonce for two minutes after the first send', () => {
-    expect(nonceStillDedupes(1_000_000, 1_000_000 + 119_999)).toBe(true)
-    expect(nonceStillDedupes(1_000_000, 1_000_000 + 120_000)).toBe(false)
   })
 
   it('turns a 429 into retry after retry_after, else the Retry-After header', async () => {
@@ -126,10 +106,10 @@ describe('createDiscordRestApi', () => {
       { status: 502 }
     ])
     const api = createDiscordRestApi(discord.request)
-    const route = discordRoutes.createMessage('C1', { content: 'a' }, 'p1')
-    expect(await api('bot', route)).toEqual({ kind: 'failed', error: '50001' })
-    expect(await api('bot', route)).toEqual({ kind: 'failed', error: '10003' })
-    expect(await api('bot', route)).toEqual({ kind: 'failed', error: 'http_400' })
+    const route = discordRoutes.createMessage('C1', { content: 'a' })
+    expect(await api('bot', route)).toEqual({ kind: 'failed', status: 403, error: '50001' })
+    expect(await api('bot', route)).toEqual({ kind: 'failed', status: 404, error: '10003' })
+    expect(await api('bot', route)).toEqual({ kind: 'failed', status: 400, error: 'http_400' })
     expect(await api('bot', route)).toEqual({ kind: 'unknown' })
     const offline = createDiscordRestApi(async () => {
       throw new Error('offline')

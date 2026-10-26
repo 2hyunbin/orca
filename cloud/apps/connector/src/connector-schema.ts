@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS connector_thread_context (
   message_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   author_id TEXT NOT NULL,
+  author_name TEXT,
   text TEXT NOT NULL,
   created_at BIGINT NOT NULL,
   PRIMARY KEY (source, external_id, message_id)

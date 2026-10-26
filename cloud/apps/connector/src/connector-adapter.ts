@@ -16,6 +16,8 @@ export type InboundMessage = {
   place: ThreadPlace
   messageId: string
   authorId: string
+  // The author's display name, where the source sends one with each message.
+  authorName?: string
   // What the agent reads: the mention dropped, the source's escapes undone.
   text: string
   // Mentions Orca, or is a direct message to it.
@@ -72,10 +74,11 @@ export type ConnectorAdapter = {
     messageId: string
     request: string
   }): Promise<string>
-  // Display names of those freshly confirmed trusted members; nobody else's words reach an agent.
+  // Those of userIds confirmed trusted, with a display name where the source keeps one (null: the
+  // name their message carried); nobody else's words reach an agent.
   trustedNames(
     transaction: CloudDatabase,
     workspaceId: string,
     userIds: string[]
-  ): Promise<Map<string, string>>
+  ): Promise<Map<string, string | null>>
 }

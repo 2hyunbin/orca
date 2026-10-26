@@ -1,16 +1,11 @@
-import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 const DISCORD_API_ORIGIN = 'https://discord.com/api/v10'
 const DISCORD_API_TIMEOUT_MS = 10_000
-const NONCE_LENGTH = 25
-// Discord checks a nonce "in the past few minutes" without saying how many; past this, a stale
-// send can't be deduplicated and is uncertain.
-const NONCE_WINDOW_MS = 2 * 60_000
 
 export type DiscordResult =
   | { kind: 'ok'; body: Record<string, unknown> }
-  | { kind: 'failed'; error: string }
+  | { kind: 'failed'; status: number; error: string }
   | { kind: 'retry'; afterMs?: number }
   // The request may or may not have reached Discord.
   | { kind: 'unknown' }
@@ -40,16 +35,6 @@ function messageBody({ replyTo, ...message }: DiscordMessageBody): Record<string
       }
 }
 
-// Discord nonces are at most 25 characters; a post id can be longer.
-export function discordNonce(postId: string): string {
-  return createHash('sha256').update(postId).digest('base64url').slice(0, NONCE_LENGTH)
-}
-
-// Whether a resend of a post first sent at sentAt still dedupes on its nonce.
-export function nonceStillDedupes(sentAt: number, now: number): boolean {
-  return now - sentAt < NONCE_WINDOW_MS
-}
-
 // https://docs.discord.com/developers/resources/message,
 // https://docs.discord.com/developers/resources/channel
 export const discordRoutes = {
@@ -59,22 +44,17 @@ export const discordRoutes = {
     path: `/channels/${channelId}/messages/${messageId}/threads`,
     body: { name }
   }),
-  // With enforce_nonce, a resend of the same post returns the message the first send created.
   // Text over Discord's limit goes as a preview with the whole text attached.
-  createMessage: (channelId: string, message: DiscordMessageBody, postId: string): DiscordRoute => {
+  createMessage: (channelId: string, message: DiscordMessageBody): DiscordRoute => {
     const long = message.content.length > MAX_CONTENT_CHARS
-    const body = {
-      ...messageBody(
-        long
-          ? {
-              ...message,
-              content: `${message.content.slice(0, PREVIEW_CHARS)}… (full text attached)`
-            }
-          : message
-      ),
-      nonce: discordNonce(postId),
-      enforce_nonce: true
-    }
+    const body = messageBody(
+      long
+        ? {
+            ...message,
+            content: `${message.content.slice(0, PREVIEW_CHARS)}… (full text attached)`
+          }
+        : message
+    )
     return long
       ? {
           method: 'POST',
@@ -99,6 +79,7 @@ export const discordRoutes = {
     path: `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`
   }),
   currentUser: (): DiscordRoute => ({ method: 'GET', path: '/users/@me' }),
+  channel: (channelId: string): DiscordRoute => ({ method: 'GET', path: `/channels/${channelId}` }),
   message: (channelId: string, messageId: string): DiscordRoute => ({
     method: 'GET',
     path: `/channels/${channelId}/messages/${messageId}`
@@ -181,6 +162,7 @@ export function createDiscordRestApi(
       const error = ErrorSchema.safeParse(body)
       return {
         kind: 'failed',
+        status: response.status,
         error: error.success ? String(error.data.code) : `http_${response.status}`
       }
     }

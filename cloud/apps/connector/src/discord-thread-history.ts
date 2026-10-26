@@ -2,7 +2,7 @@ import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
 import type { ThreadPlace } from './connector-adapter.js'
 import { readDiscordMessage } from './discord-events.js'
-import type { DiscordMembers } from './discord-members.js'
+import { linkedDiscordUsers } from './discord-members.js'
 import { discordRoutes, type DiscordRestApi } from './discord-rest.js'
 import { discordText } from './discord-text.js'
 
@@ -22,7 +22,6 @@ export class DiscordThreadHistory {
   constructor(
     private readonly deps: {
       database: CloudDatabase
-      members: DiscordMembers
       api: DiscordRestApi
       botToken: string
       botUserId: () => Promise<string | null>
@@ -60,7 +59,7 @@ export class DiscordThreadHistory {
       .slice(-(THREAD_MAX_MESSAGES - 1))
     const first = starter.kind === 'ok' ? read(starter.body) : null
     const kept = first && first.messageId !== start.messageId ? [first, ...latest] : latest
-    const linked = await this.deps.members.linked(
+    const linked = await linkedDiscordUsers(
       this.deps.database,
       guildId,
       kept.map((message) => message.userId)

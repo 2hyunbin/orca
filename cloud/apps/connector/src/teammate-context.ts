@@ -8,18 +8,25 @@ import { conversationKey } from './connector-threads.js'
 export async function keepTeammateContext(
   transaction: CloudDatabase,
   conversation: ConnectorConversation,
-  message: { messageId: string; workspaceId: string; authorId: string; text: string },
+  message: {
+    messageId: string
+    workspaceId: string
+    authorId: string
+    authorName?: string
+    text: string
+  },
   now: number
 ): Promise<void> {
   await transaction.query(
     `INSERT INTO connector_thread_context
-     (source, external_id, message_id, workspace_id, author_id, text, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (source, external_id, message_id) DO NOTHING`,
+     (source, external_id, message_id, workspace_id, author_id, author_name, text, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (source, external_id, message_id) DO NOTHING`,
     [
       ...conversationKey(conversation),
       message.messageId,
       message.workspaceId,
       message.authorId,
+      message.authorName ?? null,
       message.text,
       now
     ]
@@ -36,7 +43,7 @@ export async function withTeammateContext(
 ): Promise<string> {
   const key = conversationKey(conversation)
   const kept = await transaction.query(
-    `SELECT message_id, author_id, text FROM connector_thread_context
+    `SELECT message_id, author_id, author_name, text FROM connector_thread_context
      WHERE source = ? AND external_id = ? ORDER BY message_id`,
     key
   )
@@ -46,8 +53,13 @@ export async function withTeammateContext(
     kept.map((row) => String(row.author_id))
   )
   const lines = kept.flatMap((row) => {
-    const name = names.get(String(row.author_id))
-    return name === undefined ? [] : [{ messageId: row.message_id, name, text: String(row.text) }]
+    const authorId = String(row.author_id)
+    if (!names.has(authorId)) {
+      return []
+    }
+    const name =
+      names.get(authorId) ?? (row.author_name === null ? authorId : String(row.author_name))
+    return [{ messageId: row.message_id, name, text: String(row.text) }]
   })
   if (lines.length === 0) {
     return ownerText

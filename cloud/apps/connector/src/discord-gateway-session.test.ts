@@ -9,6 +9,7 @@ import {
   type GatewayCheckpoint,
   type GatewayStep
 } from './discord-gateway-session.js'
+import { createDiscordRestApi } from './discord-rest.js'
 
 // A fake Discord: GET /gateway/bot and /users/@me over HTTP, and a gateway speaking the payloads in
 // https://docs.discord.com/developers/events/gateway (Hello, Identify, Ready, Dispatch, Resume)
@@ -128,7 +129,11 @@ async function fakeDiscord() {
     origin,
     nextConnection,
     requested,
-    rest: new REST({ api: `http://127.0.0.1:${address.port}/api` })
+    rest: new REST({ api: `http://127.0.0.1:${address.port}/api` }),
+    // The real single-attempt client, pointed at the fake.
+    api: createDiscordRestApi((input, init) =>
+      fetch(String(input).replace('https://discord.com', `http://127.0.0.1:${address.port}`), init)
+    )
   }
 }
 
@@ -146,6 +151,8 @@ async function start(
   session = startDiscordGatewaySession({
     token: 'bot-token',
     rest: discord.rest,
+    api: discord.api,
+    guildIds: new Set(['G1']),
     resumeFrom: options.resumeFrom?.(discord.origin) ?? null,
     commit: async (step) => {
       if (step.checkpoint.sequence === options.failAt) {
@@ -217,7 +224,7 @@ describe('startDiscordGatewaySession', () => {
       }
     })
     connection.send(ready(origin))
-    connection.send({ op: 0, s: 2, t: 'THREAD_CREATE', d: { id: 'T1', parent_id: 'C1', type: 11 } })
+    connection.send({ op: 0, s: 2, t: 'TYPING_START', d: { channel_id: 'C1' } })
     connection.send(messageCreate(3, mention))
     connection.send(messageCreate(4, { channel_id: 'T1', content: 'also check CI', type: 19 }))
     connection.send(messageCreate(5, { channel_id: 'T1', author: { id: 'B2', bot: true } }))
@@ -245,14 +252,13 @@ describe('startDiscordGatewaySession', () => {
         userId: OWNER,
         userName: 'Sam',
         text: 'also check CI',
-        mentioned: false,
-        threadParentId: 'C1'
+        mentioned: false
       },
       null
     ])
   })
 
-  it('looks up a mention’s unknown channel once, and skips one that is gone', async () => {
+  it('looks up a mention’s unknown channel once, skips one that is gone, and ignores other servers', async () => {
     const { origin, nextConnection, steps, requested, fatal } = await start()
     const connection = await nextConnection()
     await connection.next()
@@ -260,10 +266,11 @@ describe('startDiscordGatewaySession', () => {
     connection.send(messageCreate(2, { ...mention, channel_id: 'C9' }))
     connection.send(messageCreate(3, { ...mention, channel_id: 'T7' }))
     connection.send(messageCreate(4, { ...mention, channel_id: 'T7' }))
-    await until(() => steps.length === 4)
+    connection.send(messageCreate(5, { ...mention, channel_id: 'C8', guild_id: 'G2' }))
+    await until(() => steps.length === 5)
     expect(
       steps.map((step) => step.message?.threadParentId ?? step.message?.messageId ?? null)
-    ).toEqual([null, null, 'C7', 'C7'])
+    ).toEqual([null, null, 'C7', 'C7', null])
     expect(requested.filter((url) => url.startsWith('/api/v10/channels/'))).toEqual([
       '/api/v10/channels/C9',
       '/api/v10/channels/T7'
