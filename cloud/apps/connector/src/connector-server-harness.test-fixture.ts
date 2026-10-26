@@ -33,6 +33,21 @@ export async function cleanupConnectorHarnesses(): Promise<void> {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
 }
 
+// Advisory locks are database-wide and parallel harnesses share one test database, so each scopes
+// its lock keys to its schema; production has one database per service, which does this by itself.
+function schemaLocks(inner: CloudDatabase, schema: string): CloudDatabase {
+  const scoped = (key: string) => `${schema}:${key}`
+  return {
+    dialect: inner.dialect,
+    query: (sql, params) => inner.query(sql, params),
+    transaction: (run) => inner.transaction((transaction) => run(schemaLocks(transaction, schema))),
+    lockQuotaScope: (key) => inner.lockQuotaScope(scoped(key)),
+    tryLockScope: (key) => inner.tryLockScope(scoped(key)),
+    tryLockSharedScope: (key) => inner.tryLockSharedScope(scoped(key)),
+    close: () => inner.close()
+  }
+}
+
 async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUrl?: string }> {
   if (!testDatabaseUrl) {
     const database = await openInMemoryConnectorDatabase()
@@ -45,7 +60,10 @@ async function openTestDatabase(): Promise<{ database: CloudDatabase; databaseUr
   await admin.query(`CREATE SCHEMA ${schema}`)
   const url = new URL(testDatabaseUrl)
   url.searchParams.set('options', `-c search_path=${schema}`)
-  const database = await openConnectorDatabase({ databaseUrl: url.toString(), dataDir: '', poolMax: 4 })
+  const database = schemaLocks(
+    await openConnectorDatabase({ databaseUrl: url.toString(), dataDir: '', poolMax: 4 }),
+    schema
+  )
   cleanups.push(async () => {
     await database.close()
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`)
@@ -61,7 +79,12 @@ async function testTokenIssuer() {
   return {
     jwks: createLocalJWKSet({ keys: [jwk] }),
     sign: async (claims: { sub: string; mid: string }, expiresAtSeconds: number) =>
-      await new SignJWT({ prof: 'profile-1', sid: 'family-1', mid: claims.mid, purpose: 'connector-host' })
+      await new SignJWT({
+        prof: 'profile-1',
+        sid: 'family-1',
+        mid: claims.mid,
+        purpose: 'connector-host'
+      })
         .setProtectedHeader({ alg: 'ES256', kid: 'test-key' })
         .setIssuer(AUTH_ISSUER)
         .setAudience('orca-connector')
