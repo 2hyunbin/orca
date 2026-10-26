@@ -140,6 +140,40 @@ describe('emitBrowserCookieImportToast', () => {
     expect(message).not.toContain('libsecret-tools')
   })
 
+  it.each([
+    { detail: 'absent detail', keyringFailure: undefined },
+    { detail: 'absent cause', keyringFailure: { browser: 'Google Chrome' } },
+    {
+      detail: 'unknown cause',
+      keyringFailure: { cause: 'future-key-source', browser: 'Google Chrome' }
+    }
+  ])('keeps the legacy keyring warning for $detail', ({ keyringFailure }) => {
+    emitBrowserCookieImportToast(
+      {
+        ...summary,
+        importedCookies: 0,
+        totalCookies: 5,
+        skippedCookies: 5,
+        warning: {
+          code: 'cookies-undecryptable',
+          failedCookies: 3,
+          reason: 'linux-keyring-unavailable',
+          otherFailedCookies: 2,
+          keyringFailure
+          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: simulate missing/future nested cause values from an unvalidated RPC peer.
+        } as unknown as BrowserCookieImportSummary['warning']
+      },
+      'Imported 0 cookies.',
+      remoteExecution
+    )
+
+    expect(warningToastMock).toHaveBeenCalledTimes(1)
+    expect(warningToastMock).toHaveBeenCalledWith(
+      '3 cookies could not be decrypted because the system keyring was unavailable; 2 more could not be decrypted for another reason. Unlock your login keyring (or install a Secret Service provider such as gnome-keyring) and import again.'
+    )
+    expect(successToastMock).not.toHaveBeenCalled()
+  })
+
   it('shows workspace-specific Google guidance after a remote-side import', () => {
     emitBrowserCookieImportToast(
       { ...summary, importedCookies: 2, skippedCookies: 1, googleCookiesSkipped: 1 },
