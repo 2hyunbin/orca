@@ -203,6 +203,32 @@ describe('removing a project while its paired server is unreachable', () => {
     expect(store.getState().repos).toEqual([])
   })
 
+  it('retries when the server reconnects while a replay is still failing', async () => {
+    seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
+    reachable = true
+    let failFirstRm: () => void = () => {}
+    let rmAttempts = 0
+    answerRepoRm = () => {
+      rmAttempts += 1
+      return rmAttempts === 1
+        ? new Promise((_resolve, reject) => {
+            failFirstRm = () => reject(new Error(UNREACHABLE))
+          })
+        : Promise.resolve({ removed: true })
+    }
+
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
+    await vi.waitFor(() => expect(rmAttempts).toBe(1), { timeout: 20_000 })
+    observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), transport: 'disconnected' })
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
+    failFirstRm()
+
+    await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]), {
+      timeout: 20_000
+    })
+    expect(rmAttempts).toBe(2)
+  })
+
   it('keeps the record when the server is still unreachable at replay time', async () => {
     seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
 

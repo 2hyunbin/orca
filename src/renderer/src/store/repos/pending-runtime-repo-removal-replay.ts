@@ -14,6 +14,8 @@ import {
 // Main publishes status only on change, so readiness is remembered for records written later.
 const readyEnvironments = new Set<string>()
 const replayingEnvironments = new Set<string>()
+// A ready snapshot that lands mid-replay must not be lost if that replay then fails as unreachable.
+const readyDuringReplay = new Set<string>()
 
 /** Replays owed removals for a ready server; a no-op while one replay for it is still running. */
 export function replayPendingRuntimeRepoRemovalsIfReady(environmentId: string): void {
@@ -50,13 +52,15 @@ export function replayPendingRuntimeRepoRemovalsIfReady(environmentId: string): 
   )
     .then((outcome) => {
       replayingEnvironments.delete(environmentId)
+      const reconnected = readyDuringReplay.delete(environmentId)
       // Records written during this run were skipped by the in-flight guard; take them now.
-      if (outcome === 'settled') {
+      if (outcome === 'settled' || reconnected) {
         replayPendingRuntimeRepoRemovalsIfReady(environmentId)
       }
     })
     .catch((error) => {
       replayingEnvironments.delete(environmentId)
+      readyDuringReplay.delete(environmentId)
       console.warn('[repos] replaying pending project removals failed', error)
     })
 }
@@ -83,6 +87,9 @@ export function observeRuntimeHostStatusForPendingRemovals(
     return
   }
   if (snapshot.transport === 'ready' && snapshot.verification === 'verified') {
+    if (!readyEnvironments.has(environmentId) && replayingEnvironments.has(environmentId)) {
+      readyDuringReplay.add(environmentId)
+    }
     readyEnvironments.add(environmentId)
     replayPendingRuntimeRepoRemovalsIfReady(environmentId)
   } else {
@@ -93,4 +100,5 @@ export function observeRuntimeHostStatusForPendingRemovals(
 export function resetPendingRuntimeRepoRemovalReplayForTests(): void {
   readyEnvironments.clear()
   replayingEnvironments.clear()
+  readyDuringReplay.clear()
 }
