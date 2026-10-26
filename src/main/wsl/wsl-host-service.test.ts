@@ -21,6 +21,7 @@ import {
   makeConnector,
   pairing
 } from './wsl-host-service.test-support'
+import { wakeRememberedWslHosts } from './wsl-host-early-wake'
 import { WslOrcadLaunchDeferredError } from './wsl-orcad-connection-errors'
 import { setWslHostService } from './wsl-host-service-instance'
 import { onWslHostUserAction, type WslHostUserAction } from './wsl-host-user-actions'
@@ -492,6 +493,8 @@ describe('WslHostService', () => {
     connector.distro.state = 'running'
     await service.ensureForRuntimeCall('wsl:ubuntu')
     expect(connector.connect).toHaveBeenCalledTimes(1)
+    // Even this reconnect to a running distro may not boot it if it stops meanwhile.
+    expect(connector.connect).toHaveBeenCalledWith('Ubuntu', { noBoot: true })
   })
 
   it('lifts a park on an explicit Connect', async () => {
@@ -607,6 +610,36 @@ describe('WslHostService', () => {
     })
     await service.add({ distro: 'Ubuntu' })
     expect(knownWhileAdding).toBe(true)
+  })
+
+  it('remembers only the focused host for an early boot next launch (E9)', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    const spawn = vi.fn()
+    // Open work alone is not remembered.
+    service.setVisibleWork(['wsl:ubuntu'])
+    expect(wakeRememberedWslHosts(userDataPath, spawn)).toEqual([])
+    service.focusHost('wsl:ubuntu')
+    expect(wakeRememberedWslHosts(userDataPath, spawn)).toEqual(['Ubuntu'])
+    service.focusHost(null)
+    expect(wakeRememberedWslHosts(userDataPath, spawn)).toEqual([])
+    service.focusHost('wsl:ubuntu')
+    enabled = false
+    await service.enabledChanged(false)
+    expect(wakeRememberedWslHosts(userDataPath, spawn)).toEqual([])
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('forgets the early-wake host when it is removed', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.focusHost('wsl:ubuntu')
+    await service.remove('wsl:ubuntu')
+    // Re-registering the distro must not bring the old early wake back.
+    await service.add({ distro: 'Ubuntu' })
+    expect(wakeRememberedWslHosts(userDataPath, vi.fn())).toEqual([])
   })
 
   it('adopts holders at startup only when a WSL host exists', async () => {
