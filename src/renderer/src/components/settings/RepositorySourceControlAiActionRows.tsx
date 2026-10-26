@@ -274,10 +274,7 @@ export function RepositorySourceControlAiActionRows({
                   />
                 ) : (
                   <SourceControlActionOptionField
-                    label={translate(
-                      'auto.components.settings.RepositorySourceControlAiActionRows.7a3a8e431d',
-                      'Arguments'
-                    )}
+                    label={translate('auto.components.settings.AgentsPane.cfb3f35775', 'Arguments')}
                   >
                     <Input
                       value={agentArgsValue}

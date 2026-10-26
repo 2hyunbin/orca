@@ -44,7 +44,7 @@ export function nativeChatPermissionModeDescription(
       if (agent === 'codex') {
         return translate(
           'components.native-chat.composer.permissionAskCodexDescription',
-          'Asks before editing files or using the network'
+          'Edits files and runs commands in this workspace; asks before anything else'
         )
       }
       if (agent !== 'claude') {

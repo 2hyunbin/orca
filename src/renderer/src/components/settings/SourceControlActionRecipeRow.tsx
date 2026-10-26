@@ -176,10 +176,7 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
           </div>
         ) : (
           <SourceControlActionOptionField
-            label={translate(
-              'auto.components.settings.SourceControlAiActionRecipeDefaults.2cb4bb7e5d',
-              'Arguments'
-            )}
+            label={translate('auto.components.settings.AgentsPane.cfb3f35775', 'Arguments')}
           >
             <Input
               value={draftValue.agentArgs}
