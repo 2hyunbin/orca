@@ -16,6 +16,8 @@ import { registerMachineRoutes } from './machine-routes.js'
 import { queueDelivery } from './queue-delivery.js'
 import { limitByClientIp, RateLimiter } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
+import { createSlackEdge } from './slack-edge.js'
+import type { QueueInTransaction } from './slack-routing.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 const UNAUTHENTICATED_PER_MINUTE_PER_IP = 30
@@ -52,6 +54,17 @@ export function createConnectorServer(
   const waker = new InboxWaker(notifications)
   const queue = (input: Parameters<typeof queueDelivery>[1]) =>
     queueDelivery({ database, inbox, threads, hosts }, input)
+  const queueInTransaction: QueueInTransaction = (transaction, input) =>
+    queueDelivery({ database: transaction, inbox, threads, hosts }, input)
+  const slack = config.slack
+    ? createSlackEdge({
+        config: config.slack,
+        database,
+        inbox,
+        queue: queueInTransaction,
+        now
+      })
+    : undefined
   const limitUnauthenticated = limitByClientIp(
     new RateLimiter(UNAUTHENTICATED_PER_MINUTE_PER_IP, now),
     config.trustedProxyHops
@@ -109,8 +122,10 @@ export function createConnectorServer(
     waker,
     now,
     holdMs: options.pollHoldMs ?? CONNECTOR_LIMITS.initialPollHoldMs,
-    limitBody
+    limitBody,
+    slack
   })
+  slack?.registerRoutes(app, limitBody)
   // Local development only: a stand-in for Slack ingress until it exists.
   if (isLoopbackOrigin(config.publicUrl)) {
     registerDevEnqueueRoute(app, { queue, limitBody })
@@ -122,6 +137,7 @@ export function createConnectorServer(
     server: createAdaptorServer(app),
     inbox,
     waker,
-    queueDelivery: queue
+    queueDelivery: queue,
+    slack
   }
 }
