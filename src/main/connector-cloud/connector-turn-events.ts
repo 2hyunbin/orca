@@ -134,16 +134,17 @@ export class ConnectorTurnEvents {
     })
   }
 
+  /**
+   * A snapshot opens a session's events: it goes first, numbered 0, and replaces every live event still
+   * owed; only turn ends carry over. Everything else follows in order.
+   */
   observe(event: ConversationSnapshot | ConversationEvent): void {
     const wire = toConnectorEvent(event)
-    if (wire) {
+    if (wire?.kind === 'snapshot') {
+      this.queue.restart([wire], isTurnEnded)
+    } else if (wire) {
       this.queue.push(wire)
     }
-  }
-
-  /** A new session's snapshot restates everything live, so only turn ends still need sending. */
-  newSession(): void {
-    this.queue.retain(isTurnEnded)
   }
 
   attach(sender: ConnectorBatchSender<ConnectorEvent>): void {
@@ -156,7 +157,7 @@ export class ConnectorTurnEvents {
 
   /** Drops everything, file included: no other key can report these turns. */
   clear(): void {
-    this.queue.retain(() => false)
+    this.queue.restart([], () => false)
   }
 
   /** The same, before any owner exists in this process. */

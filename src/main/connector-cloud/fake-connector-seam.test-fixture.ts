@@ -7,7 +7,7 @@ import type {
 } from '../external-conversations/external-conversation-events'
 import type { ExternalConversationSeam } from '../external-conversations/external-conversation-seam'
 import type { Delivery } from '../external-conversations/external-conversation-types'
-import type { ConnectorMachine } from './connector-poll-client'
+import type { ConnectorMachine } from './connector-machine'
 
 export type FakeSeam = ReturnType<typeof fakeSeam>
 

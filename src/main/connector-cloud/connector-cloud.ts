@@ -19,7 +19,8 @@ import {
   type ConnectorHostLink
 } from './connector-host-identity'
 import { ConnectorHostSession } from './connector-host-session'
-import { ConnectorPollClient, type ConnectorMachine } from './connector-poll-client'
+import type { ConnectorMachine } from './connector-machine'
+import { ConnectorPollClient } from './connector-poll-client'
 import { ConnectorTurnEvents } from './connector-turn-events'
 import type { E2EEKeypair } from '../runtime/e2ee-keypair'
 
@@ -102,17 +103,14 @@ export class ConnectorCloud {
     const seam = this.options.machine.seam()
     const identity = seam ? readConnectorHostIdentity(this.options.userDataPath) : null
     const current = this.client
-    if (
-      current &&
-      (current.seam !== seam || current.identity.link.hostId !== identity?.link.hostId)
-    ) {
+    if (current && (current.seam !== seam || current.link.hostId !== identity?.link.hostId)) {
       current.stop()
       this.client = null
     }
     if (!this.client && seam && identity) {
       const client = new ConnectorPollClient({
-        origin: this.options.origin,
-        identity,
+        link: identity.link,
+        transport: new ConnectorHostSession(this.options.origin, identity.keypair, this.fetchImpl),
         events,
         seam,
         machine: this.options.machine,
@@ -121,8 +119,7 @@ export class ConnectorCloud {
           if (this.client === client) {
             this.forget({ revoked: true })
           }
-        },
-        fetchImpl: this.fetchImpl
+        }
       })
       this.client = client
       client.start()

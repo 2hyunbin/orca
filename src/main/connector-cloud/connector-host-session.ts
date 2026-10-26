@@ -12,6 +12,7 @@ import { connectorHostId } from './connector-host-identity'
 import {
   requestConnector,
   UNREADABLE_ANSWER,
+  type ConnectorFailure,
   type ConnectorRequest,
   type ConnectorResult
 } from './connector-cloud-request'
@@ -24,14 +25,26 @@ export const CONNECTOR_HOST_PROOF_DOMAINS = {
   challengePlaintext: CONNECTOR_HOST_CHALLENGE_PLAINTEXT_DOMAIN
 }
 
-type Session = { token: string; expiresAt: number }
+/** `generation` counts sessions this key opened; each new one starts a fresh cloud-side session state. */
+type Session = { token: string; expiresAt: number; generation: number }
 
-export type ConnectorCallOptions = Pick<ConnectorRequest, 'method' | 'timeoutMs' | 'signal'>
+export type ConnectorCallOptions = Pick<ConnectorRequest, 'method' | 'timeoutMs' | 'signal'> & {
+  /** Send only on this session; a renewed one answers session_expired without sending. */
+  generation?: number
+}
+
+const SESSION_GONE: ConnectorFailure = {
+  ok: false,
+  status: 401,
+  error: 'session_expired',
+  retryAfterMs: null
+}
 
 /** Push's sealed-challenge handshake under the connector's domains; one session shared by every call. */
 export class ConnectorHostSession {
   readonly hostId: string
   private session: Session | null = null
+  private opened = 0
   private pending: Promise<ConnectorResult<Session>> | null = null
 
   constructor(
@@ -43,7 +56,13 @@ export class ConnectorHostSession {
     this.hostId = connectorHostId(keypair)
   }
 
-  /** An authorized call; a 401 opens one new session and tries once more. */
+  /** The generation of a live session, opening one if needed. */
+  async current(): Promise<ConnectorResult<number>> {
+    const session = await this.ensure()
+    return session.ok ? { ok: true, value: session.value.generation } : session
+  }
+
+  /** An authorized call; a 401 opens one new session and tries once more, unless pinned to a generation. */
   async call<TSchema extends z.ZodType>(
     path: string,
     body: unknown,
@@ -54,6 +73,10 @@ export class ConnectorHostSession {
     if (!session.ok) {
       return session
     }
+    const pinned = options.generation
+    if (pinned !== undefined && session.value.generation !== pinned) {
+      return SESSION_GONE
+    }
     const result = await this.send(session.value, path, body, schema, options)
     if (result.ok || result.status !== 401) {
       return result
@@ -61,6 +84,9 @@ export class ConnectorHostSession {
     // Drop only the refused token; a concurrent call may already hold its replacement.
     if (this.session === session.value) {
       this.session = null
+    }
+    if (pinned !== undefined) {
+      return result
     }
     const renewed = await this.ensure()
     return renewed.ok ? await this.send(renewed.value, path, body, schema, options) : renewed
@@ -127,7 +153,11 @@ export class ConnectorHostSession {
     if (session.value.hostId !== this.hostId) {
       return UNREADABLE_ANSWER
     }
-    this.session = { token: session.value.sessionToken, expiresAt: session.value.expiresAt }
+    this.session = {
+      token: session.value.sessionToken,
+      expiresAt: session.value.expiresAt,
+      generation: ++this.opened
+    }
     return { ok: true, value: this.session }
   }
 

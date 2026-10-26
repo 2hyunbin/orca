@@ -11,6 +11,7 @@ import {
   type ConnectorHostIdentity
 } from './connector-host-identity'
 import { connectorProjects } from './connector-places'
+import { ConnectorHostSession } from './connector-host-session'
 import { ConnectorPollClient } from './connector-poll-client'
 import { ConnectorTurnEvents } from './connector-turn-events'
 import { FakeConnectorCloud } from './fake-connector-cloud.test-fixture'
@@ -37,13 +38,12 @@ function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDat
   const onRevoked = vi.fn()
   const machine = fakeMachine(() => seam, [project!])
   const client = new ConnectorPollClient({
-    origin: fake.origin,
-    identity,
+    link: identity.link,
+    transport: new ConnectorHostSession(fake.origin, identity.keypair, fake.fetch),
     events,
     seam: seam.seam,
     machine,
     onRevoked,
-    fetchImpl: fake.fetch,
     random: () => 0.5
   })
   client.start()
@@ -411,6 +411,41 @@ describe('ConnectorPollClient', () => {
     expect(stored.map((event: { turnId: number }) => event.turnId)).toEqual(
       Array.from({ length: 200 }, (_, index) => index + 51)
     )
+    client.stop()
+  })
+
+  it('opens each session with the snapshot as batch 0 and keeps later events in order behind a retry', async () => {
+    const { client, emit } = startClient()
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
+    emit({
+      kind: 'prompt',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      prompt: { kind: 'unsupported', promptId: 'old' }
+    })
+    await settle()
+    emit({ kind: 'turn-started', conversation, worktreeId: 'wt', paneKey: 'tab:1', at: 7 })
+    fake.forced.delete(CONNECTOR_PATHS.events)
+    await settle(5_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.events).map(({ body }) => body)).toMatchObject([
+      { seq: 0, events: [{ kind: 'snapshot' }] },
+      { seq: 1, events: [{ kind: 'prompt' }] },
+      { seq: 1, events: [{ kind: 'prompt' }] },
+      { seq: 2, events: [{ kind: 'turn-started' }] }
+    ])
+    expect(fake.events).toMatchObject([
+      { kind: 'snapshot' },
+      { kind: 'prompt' },
+      { kind: 'turn-started' }
+    ])
+
+    fake.expireSessions()
+    poll([])
+    await settle()
+    const renewed = fake.requestsTo(CONNECTOR_PATHS.events).at(-1)?.body
+    expect(renewed).toMatchObject({ seq: 0, events: [{ kind: 'snapshot' }] })
     client.stop()
   })
 })

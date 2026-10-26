@@ -19,8 +19,8 @@ import type {
 } from '../external-conversations/external-conversation-seam'
 import { UNREADABLE_ANSWER, type ConnectorFailure } from './connector-cloud-request'
 import { dispatchDelivery } from './connector-deliveries'
-import type { ConnectorHostIdentity } from './connector-host-identity'
-import { ConnectorHostSession } from './connector-host-session'
+import type { ConnectorHostLink } from './connector-host-identity'
+import type { ConnectorMachine, ConnectorTransport } from './connector-machine'
 import {
   connectorRetryDelayMs,
   ConnectorSendQueue,
@@ -34,27 +34,15 @@ const MAX_ACKS_PER_REQUEST = 100
 const FEATURES = ['answer', 'cancel']
 const PROMPT_KINDS = ['approval', 'question']
 
-/** What the connector needs from this Orca; the seam exists exactly while connectors are on. */
-export type ConnectorMachine = {
-  runtime: 'serve' | 'desktop'
-  orcaVersion: string
-  seam: () => ExternalConversationSeam | null
-  conversationHost: () => ExternalConversationHost
-  agents: () => string[]
-  projects: () => ConnectorProject[]
-  onConnectorsToggled: (listener: () => void) => void
-}
-
 export type ConnectorPollClientOptions = {
-  origin: string
-  identity: ConnectorHostIdentity
+  link: ConnectorHostLink
+  transport: ConnectorTransport
   /** Owned by the caller across clients; this client only sends through it while running. */
   events: ConnectorTurnEvents
   seam: ExternalConversationSeam
   machine: ConnectorMachine
   /** The cloud no longer knows this key; the caller forgets it. */
   onRevoked: () => void
-  fetchImpl?: typeof globalThis.fetch
   random?: () => number
 }
 
@@ -73,9 +61,9 @@ function stopFor(failure: ConnectorFailure): Stop | null {
 
 export class ConnectorPollClient {
   readonly seam: ExternalConversationSeam
-  readonly identity: ConnectorHostIdentity
+  readonly link: ConnectorHostLink
   private readonly host: ExternalConversationHost
-  private readonly session: ConnectorHostSession
+  private readonly transport: ConnectorTransport
   private readonly stopped = new AbortController()
   private readonly acks: ConnectorSendQueue<ConnectorAck>
   private readonly sendAcks: ConnectorBatchSender<ConnectorAck>
@@ -87,19 +75,17 @@ export class ConnectorPollClient {
   private helloRev = 0
   // What the cloud was last told; null makes the next cycle say hello.
   private helloSaid: string | null = null
+  // The cloud session the watch and the event numbers belong to.
+  private sessionGeneration = 0
   private failures = 0
   private stopReason: Stop | null = null
 
   constructor(private readonly options: ConnectorPollClientOptions) {
     this.seam = options.seam
-    this.identity = options.identity
+    this.link = options.link
+    this.transport = options.transport
     this.random = options.random ?? Math.random
     this.host = options.machine.conversationHost()
-    this.session = new ConnectorHostSession(
-      options.origin,
-      options.identity.keypair,
-      options.fetchImpl
-    )
     this.acks = new ConnectorSendQueue<ConnectorAck>({
       maxBatch: MAX_ACKS_PER_REQUEST,
       random: this.random,
@@ -112,7 +98,13 @@ export class ConnectorPollClient {
       }
     })
     this.sendAcks = (acks) => this.post(CONNECTOR_PATHS.acks, { v: 1, acks })
-    this.sendEvents = (events) => this.post(CONNECTOR_PATHS.events, { v: 1, events })
+    // Pinned to the watch's session: its numbering means nothing to a newer one.
+    this.sendEvents = (events, seq) =>
+      this.post(
+        CONNECTOR_PATHS.events,
+        { v: 1, seq, events },
+        { generation: this.sessionGeneration }
+      )
   }
 
   start(): void {
@@ -157,16 +149,20 @@ export class ConnectorPollClient {
 
   /** One hello-if-needed and one held poll; returns why to stop, or null to go on. */
   private async cycle(): Promise<Stop | null> {
+    const live = await this.transport.current()
+    if (!live.ok) {
+      return stopFor(live) ?? this.backoff(live)
+    }
     const { machine } = this.options
     const said = { agents: machine.agents(), projects: machine.projects() }
-    if (JSON.stringify(said) !== this.helloSaid) {
-      const refused = await this.hello(said)
+    if (live.value !== this.sessionGeneration || JSON.stringify(said) !== this.helloSaid) {
+      const refused = await this.hello(said, live.value)
       if (refused) {
         return stopFor(refused) ?? this.backoff(refused)
       }
     }
     const sentAt = performance.now()
-    const polled = await this.session.call(
+    const polled = await this.transport.call(
       CONNECTOR_PATHS.poll,
       { v: 1, helloRev: this.helloRev },
       ConnectorPollResponse,
@@ -177,7 +173,7 @@ export class ConnectorPollClient {
       return null
     }
     if (!polled.ok) {
-      // A new session must say hello first; forgetting what was said makes the next cycle say it.
+      // The cloud wants hello again; forgetting what was said makes the next cycle say it.
       if (polled.status === 409) {
         this.helloSaid = null
         return null
@@ -198,15 +194,15 @@ export class ConnectorPollClient {
     return this.obey(response.control)
   }
 
-  /** Null once the cloud took it; otherwise why not. */
-  private async hello(said: {
-    agents: string[]
-    projects: ConnectorProject[]
-  }): Promise<ConnectorFailure | null> {
-    const { machine, identity } = this.options
+  /** Null once the cloud took it; otherwise why not. A new session also gets a fresh watch and snapshot. */
+  private async hello(
+    said: { agents: string[]; projects: ConnectorProject[] },
+    generation: number
+  ): Promise<ConnectorFailure | null> {
+    const { machine } = this.options
     // Monotonic across restarts, so the cloud never keeps an older process's hello.
     const helloRev = Math.max(this.helloRev + 1, Date.now())
-    const answer = await this.session.call(
+    const answer = await this.transport.call(
       CONNECTOR_PATHS.hello,
       {
         v: 1,
@@ -215,14 +211,14 @@ export class ConnectorPollClient {
         orcaVersion: machine.orcaVersion,
         platform: process.platform,
         runtime: machine.runtime,
-        hostName: identity.link.hostName,
+        hostName: this.link.hostName,
         agents: said.agents,
         promptKinds: PROMPT_KINDS,
         features: FEATURES,
         projects: said.projects
       },
       z.unknown(),
-      { method: 'PUT', signal: this.stopped.signal }
+      { method: 'PUT', signal: this.stopped.signal, generation }
     )
     if (!answer.ok) {
       return answer
@@ -232,14 +228,16 @@ export class ConnectorPollClient {
     }
     this.helloRev = helloRev
     this.helloSaid = JSON.stringify(said)
-    this.watchAgain()
+    if (generation !== this.sessionGeneration) {
+      this.sessionGeneration = generation
+      this.watchAgain()
+    }
     return null
   }
 
-  /** Each hello opens a fresh watch, whose first event is the snapshot the cloud reconciles against. */
+  /** A fresh watch's first event is the snapshot, which opens the session's numbered events. */
   private watchAgain(): void {
     const { events } = this.options
-    events.newSession()
     const previous = this.releaseWatch
     this.releaseWatch = this.seam.watch(this.host, (event) => events.observe(event))
     previous?.()
@@ -304,8 +302,15 @@ export class ConnectorPollClient {
     return null
   }
 
-  private async post(path: string, body: unknown): Promise<ConnectorFailure | null> {
-    const sent = await this.session.call(path, body, z.unknown(), { signal: this.stopped.signal })
+  private async post(
+    path: string,
+    body: unknown,
+    options: { generation?: number } = {}
+  ): Promise<ConnectorFailure | null> {
+    const sent = await this.transport.call(path, body, z.unknown(), {
+      ...options,
+      signal: this.stopped.signal
+    })
     if (sent.ok) {
       return null
     }

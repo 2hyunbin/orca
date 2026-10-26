@@ -6,7 +6,7 @@ import type { RuntimeStore } from '../runtime/runtime-store-contract'
 import { ConnectorCloud } from './connector-cloud'
 import { resolveConnectorOrigin } from './connector-origin'
 import { connectorProjects, type ConnectorPlacesStore } from './connector-places'
-import type { ConnectorMachine } from './connector-poll-client'
+import type { ConnectorMachine } from './connector-machine'
 
 export type ConnectorCloudStore = ConnectorPlacesStore &
   Pick<RuntimeStore, 'getSettings' | 'onSettingsChanged'>

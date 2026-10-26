@@ -33,6 +33,7 @@ export class FakeConnectorCloud {
   private readonly proofs = new Map<string, { proof: string; hostId: string }>()
   private readonly sessions = new Map<string, string>()
   private readonly helloed = new Set<string>()
+  private readonly eventsSeq = new Map<string, number>()
   /** Every hello, ack and event the machine sent, in order. */
   readonly hellos: unknown[] = []
   readonly acks: unknown[] = []
@@ -149,12 +150,17 @@ export class FakeConnectorCloud {
       this.acks.push(...(isRecord(body) && Array.isArray(body.acks) ? body.acks : []))
       return { status: 204 }
     }
-    if (path === CONNECTOR_PATHS.events) {
-      this.events.push(...(isRecord(body) && Array.isArray(body.events) ? body.events : []))
-      return { status: 204 }
-    }
     if (!this.helloed.has(token ?? '')) {
       return { status: 409, body: { error: 'hello_required' } }
+    }
+    if (path === CONNECTOR_PATHS.events) {
+      // Applied only above the session's high-water mark; a late or repeated batch is dropped.
+      const seq = isRecord(body) && typeof body.seq === 'number' ? body.seq : -1
+      if (seq > (this.eventsSeq.get(token ?? '') ?? -1)) {
+        this.eventsSeq.set(token ?? '', seq)
+        this.events.push(...(isRecord(body) && Array.isArray(body.events) ? body.events : []))
+      }
+      return { status: 204 }
     }
     while (this.pollReplies.length === 0) {
       await new Promise<void>((resolve, reject) => {

@@ -13,15 +13,18 @@ export function connectorRetryDelayMs(
   return Math.max(failure.retryAfterMs ?? 0, ceiling * (0.5 + random() / 2))
 }
 
-/** Sends a batch; null when the cloud accepted it. */
-export type ConnectorBatchSender<T> = (batch: T[]) => Promise<ConnectorFailure | null>
+/** Sends a batch with its number; null when the cloud accepted it. */
+export type ConnectorBatchSender<T> = (batch: T[], seq: number) => Promise<ConnectorFailure | null>
 
 /**
- * Items sent in order, one request at a time, through whichever sender is attached.
- * A refused batch stays queued and is retried after a backoff; pushes during that wait only queue.
+ * Items sent strictly in order, one request at a time, through whichever sender is attached.
+ * Each batch is numbered and frozen when first sent; a refusal retries that same batch, with the same
+ * number, after a backoff, and nothing later goes out before it. Pushes during the wait only queue.
  */
 export class ConnectorSendQueue<T> {
   private items: T[]
+  private head: { seq: number; batch: T[] } | null = null
+  private nextSeq = 0
   private sender: ConnectorBatchSender<T> | null = null
   private sending = false
   private failures = 0
@@ -32,9 +35,9 @@ export class ConnectorSendQueue<T> {
       maxBatch: number
       /** Restored items, sent once a sender is attached. */
       initial?: T[]
-      /** Applied to every new item list, so the queue itself never exceeds its bounds. */
+      /** Applied to the unsent items, so the queue itself never exceeds its bounds. */
       bound?: (items: T[]) => T[]
-      /** Called after every change, e.g. to persist what must survive a restart. */
+      /** Called after every change with everything still owed, e.g. to persist it. */
       onChange?: (items: readonly T[]) => void
       onAccepted?: (batch: readonly T[]) => void
       random?: () => number
@@ -69,9 +72,18 @@ export class ConnectorSendQueue<T> {
     }
   }
 
-  /** Keeps only the queued items that `keep` accepts. */
-  retain(keep: (item: T) => boolean): void {
-    this.replace(this.items.filter(keep))
+  /**
+   * Starts numbering again from 0 with `first` at the front, keeping what `keep` accepts of everything
+   * still owed, the frozen batch included. A new cloud session sees none of the old numbers.
+   */
+  restart(first: T[], keep: (item: T) => boolean): void {
+    const owed = [...(this.head?.batch ?? []), ...this.items].filter(keep)
+    this.head = null
+    this.nextSeq = 0
+    this.failures = 0
+    this.cancelRetry()
+    this.replace([...first, ...owed])
+    void this.flush()
   }
 
   private async flush(): Promise<void> {
@@ -81,17 +93,24 @@ export class ConnectorSendQueue<T> {
     }
     this.sending = true
     try {
-      while (this.items.length > 0 && this.sender === sender) {
-        const batch = this.items.slice(0, this.options.maxBatch)
-        const failure = await sender(batch)
+      while (this.sender === sender && (this.head || this.items.length > 0)) {
+        const head = (this.head ??= {
+          seq: this.nextSeq++,
+          batch: this.items.splice(0, this.options.maxBatch)
+        })
+        const failure = await sender(head.batch, head.seq)
+        // A restart took the batch back meanwhile; whatever it holds now goes next.
+        if (this.head !== head) {
+          continue
+        }
         if (failure) {
           this.scheduleRetry(sender, failure)
           return
         }
         this.failures = 0
-        // Items retained away during the request are already gone; drop only what was sent.
-        this.replace(this.items.filter((item) => !batch.includes(item)))
-        this.options.onAccepted?.(batch)
+        this.head = null
+        this.notify()
+        this.options.onAccepted?.(head.batch)
       }
     } finally {
       this.sending = false
@@ -127,6 +146,10 @@ export class ConnectorSendQueue<T> {
 
   private replace(items: T[]): void {
     this.items = this.options.bound ? this.options.bound(items) : items
-    this.options.onChange?.(this.items)
+    this.notify()
+  }
+
+  private notify(): void {
+    this.options.onChange?.([...(this.head?.batch ?? []), ...this.items])
   }
 }
