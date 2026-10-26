@@ -8,7 +8,10 @@ import {
   encodeTerminalStreamFrame,
   encodeTerminalStreamJson
 } from '../../../shared/terminal-stream-protocol'
-import { TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES } from '../../../shared/terminal-multiplex-flow-control'
+import {
+  TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES,
+  TERMINAL_STREAM_CHUNK_BYTES
+} from '../../../shared/terminal-multiplex-flow-control'
 import { startDesktopMultiplexSubscribe } from './terminal-multiplex-test-harness'
 import { RuntimeTerminalViewSubscribers } from '../runtime-terminal-view-subscribers'
 
@@ -154,6 +157,22 @@ describe('terminal multiplex paused-output drop notice', () => {
     host.setPaused(true)
     expect(host.outputText()).not.toContain('\x1b[c')
     expect(answerYieldedTerminalQueries).toHaveBeenCalledWith('pty-1', '\x1b[c')
+    await host.close()
+  })
+
+  it('does not re-answer a query whose sub-frame of a large event was delivered', async () => {
+    const answerYieldedTerminalQueries = vi.fn()
+    const host = await subscribePausable(
+      { ackOutput: 1, outputPause: 1, outputPauseDropNotice: 1 },
+      answerYieldedTerminalQueries
+    )
+    for (let i = 1; i < TERMINAL_MULTIPLEX_ACK_STREAM_INITIAL_WINDOW_BYTES / (64 * 1024); i++) {
+      host.emitOutput('x'.repeat(64 * 1024))
+    }
+    host.emitOutput(`prompt\x1b[c${'y'.repeat(2 * TERMINAL_STREAM_CHUNK_BYTES)}`)
+    host.setPaused(true)
+    expect(host.outputText()).toContain('prompt\x1b[c')
+    expect(answerYieldedTerminalQueries).not.toHaveBeenCalled()
     await host.close()
   })
 

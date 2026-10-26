@@ -1,4 +1,8 @@
-import { extractHiddenStartupRendererQueryData } from '../../../../../shared/terminal-reply-query-extraction'
+import { isStatelessRendererReplyCsiQuery } from '../../../../../shared/terminal-reply-query-extraction'
+import {
+  EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE,
+  scanTerminalReplyQuerySequences
+} from '../../../../../shared/terminal-reply-query-scan'
 import type { RuntimeTerminalDataMeta } from '../../../orca-runtime'
 import type { TerminalMultiplexConnection } from './terminal-multiplex-connection'
 import type { TerminalMultiplexStream } from './terminal-stream-types'
@@ -21,17 +25,25 @@ export function recordYieldedTerminalQueries(
     typeof meta?.seq !== 'number' ||
     !runtime.isSoleRemoteTerminalQueryOwner(stream.ptyId)
   ) {
-    stream.yieldedQueryPending = ''
+    stream.yieldedQueryScan = EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE
     return
   }
-  const extracted = extractHiddenStartupRendererQueryData(data, stream.yieldedQueryPending)
-  stream.yieldedQueryPending = extracted.pending
-  if (!extracted.statelessQueryData) {
-    return
+  // Why: frames split large events with per-slice seqs, so settle by each query's own end seq; transformed text can't map offsets to seq.
+  const mapsToSeq = (meta.rawLength ?? data.length) === data.length
+  const { queries, state } = scanTerminalReplyQuerySequences(
+    data,
+    meta.seq - data.length,
+    mapsToSeq ? stream.yieldedQueryScan : EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE
+  )
+  stream.yieldedQueryScan = mapsToSeq ? state : EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE
+  const at = Date.now()
+  for (const query of queries) {
+    if (query.data.startsWith('\x1b[') && isStatelessRendererReplyCsiQuery(query.data)) {
+      stream.yieldedQueries.push({ seq: mapsToSeq ? query.endSeq : meta.seq, data: query.data, at })
+    }
   }
-  stream.yieldedQueries.push({ seq: meta.seq, data: extracted.statelessQueryData, at: Date.now() })
   if (stream.yieldedQueries.length > YIELDED_QUERY_MAX_ENTRIES) {
-    stream.yieldedQueries.shift()
+    stream.yieldedQueries.splice(0, stream.yieldedQueries.length - YIELDED_QUERY_MAX_ENTRIES)
   }
 }
 
@@ -55,7 +67,7 @@ export function answerUndeliveredYieldedQueries(
     .map((query) => query.data)
     .join('')
   stream.yieldedQueries = []
-  stream.yieldedQueryPending = ''
+  stream.yieldedQueryScan = EMPTY_TERMINAL_REPLY_QUERY_SCAN_STATE
   if (data) {
     runtime.answerYieldedTerminalQueries(stream.ptyId, data)
   }
