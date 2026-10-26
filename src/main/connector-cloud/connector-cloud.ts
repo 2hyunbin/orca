@@ -125,6 +125,16 @@ export class ConnectorCloud {
     }
   }
 
+  private requireCurrent(flow: StartedSignIn, ended: AbortSignal): void {
+    if (ended.aborted) {
+      throw new Error(CANCELLED)
+    }
+    this.requireSignInAllowed()
+    if (this.now() >= flow.expiresAt) {
+      throw new Error('Sign-in expired. Run `orca cloud login` again.')
+    }
+  }
+
   private endFlow(flow: SignInFlow): void {
     flow.ended.abort()
     if (this.flow === flow) {
@@ -154,6 +164,7 @@ export class ConnectorCloud {
     if (ended.aborted) {
       throw new Error(CANCELLED)
     }
+    this.requireSignInAllowed()
     if (!started.ok) {
       throw new Error(
         started.status === 404
@@ -179,27 +190,20 @@ export class ConnectorCloud {
     let intervalMs = flow.intervalMs
     for (;;) {
       await delayUnlessAborted(intervalMs, ended)
-      const polled = ended.aborted
-        ? null
-        : await requestConnector(
-            {
-              fetchImpl: this.fetchImpl,
-              url: `${this.options.origin}${CONNECTOR_PATHS.signInPoll}`,
-              body: { v: 1, deviceCode: flow.deviceCode },
-              signal: ended
-            },
-            ConnectorSignInPollResponse
-          )
-      // Checked after every wait and answer, so nothing retired meanwhile can still link a key.
-      if (ended.aborted) {
-        throw new Error(CANCELLED)
-      }
-      this.requireSignInAllowed()
-      if (this.now() >= flow.expiresAt) {
-        throw new Error('Sign-in expired. Run `orca cloud login` again.')
-      }
+      this.requireCurrent(flow, ended)
+      const polled = await requestConnector(
+        {
+          fetchImpl: this.fetchImpl,
+          url: `${this.options.origin}${CONNECTOR_PATHS.signInPoll}`,
+          body: { v: 1, deviceCode: flow.deviceCode },
+          signal: ended
+        },
+        ConnectorSignInPollResponse
+      )
+      // Checked again after the answer, so nothing retired meanwhile can still link a key.
+      this.requireCurrent(flow, ended)
       // Lost answers and outages wait out the interval; the poll carries no secret to lose.
-      if (!polled?.ok) {
+      if (!polled.ok) {
         continue
       }
       const answer = polled.value
