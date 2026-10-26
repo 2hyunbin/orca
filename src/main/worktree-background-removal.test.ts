@@ -12,6 +12,7 @@ import {
   projectPendingWorktreeRemovals,
   snapshotPendingWorktreeRemovals
 } from './worktree-removal-listing'
+import { BACKGROUND_REMOVAL_DEADLINE_MS } from './worktree-removal-deadline'
 import { assertNoPendingWorktreeRemovalConflict } from './worktree-removal-table'
 
 const removal = {
@@ -116,6 +117,31 @@ describe('background worktree removal', () => {
     await expect(result).rejects.toThrow('Permission denied')
     await _settlePendingWorktreeRemovalsForTests()
     expect(isPending()).toBe(false)
+  })
+
+  it('aborts a delete still running at the deadline and fails it instead of leaving it unseen', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const result = startBackgroundWorktreeRemoval({
+        removal,
+        run: (signal) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+          }),
+        publish: () => {}
+      })
+      const rejected = expect(result).rejects.toThrow('did not finish within 30 minutes')
+
+      await vi.advanceTimersByTimeAsync(BACKGROUND_REMOVAL_DEADLINE_MS)
+
+      await rejected
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('still running after 60s'))
+      await _settlePendingWorktreeRemovalsForTests()
+      expect(isPending()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps the table consistent when publishing throws', async () => {

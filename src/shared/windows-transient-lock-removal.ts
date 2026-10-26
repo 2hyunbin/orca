@@ -2,11 +2,13 @@
 
 import type { RmOptions } from 'node:fs'
 import { rmSync } from 'node:fs'
-import { rm } from 'node:fs/promises'
+import * as fs from 'node:fs/promises'
+import { removeTreeWithBoundedRetries } from './bounded-tree-removal'
 
 export const WINDOWS_RM_MAX_RETRIES = 8
 export const WINDOWS_RM_RETRY_DELAY_MS = 150
 
+/** For `rmSync` only: its native retry loop is top-level, but async `rm` retries per entry and multiplies. */
 export function transientLockRemovalOptions(): RmOptions {
   const base = { recursive: true, force: true }
   if (process.platform !== 'win32') {
@@ -51,5 +53,15 @@ export function removeTreeSync(targetPath: string): void {
 }
 
 export async function removeTree(targetPath: string): Promise<void> {
-  await rm(targetPath, transientLockRemovalOptions())
+  if (process.platform !== 'win32') {
+    await fs.rm(targetPath, { recursive: true, force: true })
+    return
+  }
+  await removeTreeWithBoundedRetries(targetPath, fs, {
+    // Linear backoff, matching the total wait Node's `maxRetries` allowed each entry.
+    retryDelaysMs: Array.from(
+      { length: WINDOWS_RM_MAX_RETRIES },
+      (_, index) => (index + 1) * WINDOWS_RM_RETRY_DELAY_MS
+    )
+  })
 }

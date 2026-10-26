@@ -7,6 +7,7 @@ import { runWorktreeChangeInvalidators } from './ipc/worktree-change-invalidator
 import { parseWslPath } from './wsl'
 import { readWorktreeRemovalRecords, type WorktreeRemovalRecord } from './worktree-removal-records'
 import { failureLeftByGit } from './worktree-removal-failure'
+import { runWithRemovalDeadline } from './worktree-removal-deadline'
 import { differentCheckoutAtPathError, isCheckoutRegistered } from './worktree-removal-leftover'
 import {
   failedWorktreeRemovals,
@@ -18,7 +19,7 @@ import {
 } from './worktree-removal-table'
 
 export type BackgroundWorktreeRemovalJob = {
-  /** Abort only the checkout delete on orderly quit. */
+  /** Abort only the checkout delete, on orderly quit or after the removal deadline. */
   run: (stopSignal: AbortSignal) => Promise<RemoveWorktreeResult>
   /** Publish on acceptance and after removing the pending entry. */
   publish: () => void
@@ -229,7 +230,7 @@ async function settleBackgroundWorktreeRemoval(
     if (stopSignal.aborted) {
       return
     }
-    const result = await job.run(stopSignal)
+    const result = await runWithRemovalDeadline(record, job, stopSignal)
     finishedWorktreeRemovals.add(record)
     settle = (settlement) => settlement.resolve(result)
   } catch (error) {

@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { runProcessMock, lstatMock, readFileMock, rmMock } = vi.hoisted(() => ({
-  runProcessMock: vi.fn(),
-  lstatMock: vi.fn(),
-  readFileMock: vi.fn(),
-  rmMock: vi.fn()
-}))
+const { runProcessMock, lstatMock, readFileMock, rmMock, readdirMock, rmdirMock } = vi.hoisted(
+  () => ({
+    runProcessMock: vi.fn(),
+    lstatMock: vi.fn(),
+    readFileMock: vi.fn(),
+    rmMock: vi.fn(),
+    readdirMock: vi.fn(),
+    rmdirMock: vi.fn()
+  })
+)
 
 // Process-host tests own encoding, timeouts, and console hiding; assert guest commands here.
 vi.mock('@orca/process-host', () => ({
@@ -15,7 +19,9 @@ vi.mock('@orca/process-host', () => ({
 vi.mock('node:fs/promises', () => ({
   lstat: lstatMock,
   readFile: readFileMock,
-  rm: rmMock
+  rm: rmMock,
+  readdir: readdirMock,
+  rmdir: rmdirMock
 }))
 
 import {
@@ -56,6 +62,8 @@ describe('local worktree filesystem runtime access', () => {
     lstatMock.mockReset()
     readFileMock.mockReset()
     rmMock.mockReset()
+    readdirMock.mockReset()
+    rmdirMock.mockReset()
     completeExecFile()
   })
 
@@ -65,42 +73,34 @@ describe('local worktree filesystem runtime access', () => {
   })
 
   it('uses host filesystem operations when no WSL distro is selected', async () => {
-    lstatMock.mockResolvedValue({ type: 'file' })
-    readFileMock.mockResolvedValue('gitdir: ../.git/worktrees/feature')
+    await withPlatform('linux', async () => {
+      lstatMock.mockResolvedValue({ type: 'file' })
+      readFileMock.mockResolvedValue('gitdir: ../.git/worktrees/feature')
 
-    const access = getLocalWorktreePathAccess()
-    await access.statPath('C:\\repo\\.git')
-    await access.readPath('C:\\repo\\.git')
-    await removeLocalWorktreePath('C:\\repo\\feature')
+      const access = getLocalWorktreePathAccess()
+      await access.statPath('/repo/.git')
+      await access.readPath('/repo/.git')
+      await removeLocalWorktreePath('/repo/feature')
 
-    expect(lstatMock).toHaveBeenCalledWith('C:\\repo\\.git')
-    expect(readFileMock).toHaveBeenCalledWith('C:\\repo\\.git', 'utf8')
-    expect(rmMock).toHaveBeenCalledWith(
-      toHostRemovalPath('C:\\repo\\feature'),
-      expect.objectContaining({
-        recursive: true,
-        force: true
-      })
-    )
-    expect(runProcessMock).not.toHaveBeenCalled()
+      expect(lstatMock).toHaveBeenCalledWith('/repo/.git')
+      expect(readFileMock).toHaveBeenCalledWith('/repo/.git', 'utf8')
+      expect(rmMock).toHaveBeenCalledWith(
+        '/repo/feature',
+        expect.objectContaining({ recursive: true, force: true })
+      )
+      expect(runProcessMock).not.toHaveBeenCalled()
+    })
   })
 
   it('uses a Win32 long-path namespace for host removal on Windows', async () => {
     await withPlatform('win32', async () => {
       const longPath = `C:\\repo\\${'nested\\'.repeat(40)}feature`
+      lstatMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
 
       await removeLocalWorktreePath(longPath)
 
       expect(toHostRemovalPath(longPath)).toBe(`\\\\?\\${longPath}`)
-      expect(rmMock).toHaveBeenCalledWith(
-        `\\\\?\\${longPath}`,
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
-        })
-      )
+      expect(lstatMock).toHaveBeenCalledWith(`\\\\?\\${longPath}`)
     })
   })
 
@@ -129,33 +129,17 @@ describe('local worktree filesystem runtime access', () => {
     vi.useFakeTimers()
     await withPlatform('win32', async () => {
       const error = Object.assign(new Error('Directory not empty'), { code: 'ENOTEMPTY' })
-      rmMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined)
+      lstatMock.mockResolvedValue({ isDirectory: () => true })
+      readdirMock.mockResolvedValue([])
+      rmdirMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined)
 
       const removal = removeLocalWorktreePath('C:\\repo\\feature')
       await vi.advanceTimersByTimeAsync(250)
 
       await expect(removal).resolves.toBeUndefined()
-      expect(rmMock).toHaveBeenCalledTimes(2)
-      expect(rmMock).toHaveBeenNthCalledWith(
-        1,
-        toHostRemovalPath('C:\\repo\\feature'),
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
-        })
-      )
-      expect(rmMock).toHaveBeenNthCalledWith(
-        2,
-        toHostRemovalPath('C:\\repo\\feature'),
-        expect.objectContaining({
-          recursive: true,
-          force: true,
-          maxRetries: expect.any(Number),
-          retryDelay: expect.any(Number)
-        })
-      )
+      expect(rmdirMock).toHaveBeenCalledTimes(2)
+      expect(rmdirMock).toHaveBeenLastCalledWith(toHostRemovalPath('C:\\repo\\feature'))
+      expect(rmMock).not.toHaveBeenCalled()
     })
   })
 
