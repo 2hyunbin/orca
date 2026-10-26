@@ -34,7 +34,8 @@ export function createCodexRuntimeHomeLaunchPreparation(deps: {
       return null
     }
     if (runtimeHomePath !== null && target?.runtime !== 'wsl') {
-      await grantCodexSandboxReadOnManagedHome(runtimeHomePath)
+      // Off the launch path: a large home's ACL walk must not delay the terminal.
+      void grantCodexSandboxReadOnManagedHome(runtimeHomePath)
     }
     const hookTarget =
       target?.runtime === 'wsl'
