@@ -3362,8 +3362,8 @@
       },
       "heldTerminal": {
         "close": "Close terminal",
-        "continue": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.",
-        "open": "{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat."
+        "continue": "{{agent}} is already running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.",
+        "open": "{{agent}} is already running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat."
       }
     },
     "onboarding": {

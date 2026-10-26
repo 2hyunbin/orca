@@ -62,7 +62,7 @@ it.each(['named', 'workspace', 'missing', 'replaced', 'legacy', 'unknown-agent']
     )
     expect(text).toContain(
       kind === 'named' || kind === 'unknown-agent'
-        ? `${kind === 'named' ? 'Codex' : 'future-cli'} may still be running this conversation in Review.`
+        ? `${kind === 'named' ? 'Codex' : 'future-cli'} is already running this conversation in Review.`
         : 'Unnamed fallback'
     )
     expect(text).not.toMatch(/<(a|button)\b/)

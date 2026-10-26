@@ -2,7 +2,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useAppStore } from '@/store'
-import { resolveHeldTerminalTarget } from './native-chat-held-terminal'
+import { resolveHeldTerminalTarget, useHeldTerminalNotice } from './native-chat-held-terminal'
+import { structuredSessionNotices } from './native-chat-structured-session-notices'
+import { NativeChatComposerNotices } from './NativeChatComposerNotices'
 import { NativeChatNoticeRow } from './NativeChatNoticeRow'
 import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
 const mocks = vi.hoisted(() => ({ reveal: vi.fn(), capture: vi.fn(), close: vi.fn() }))
@@ -95,6 +97,7 @@ it('names and reveals only the verified original; a replacement immediately rest
   fireEvent.click(screen.getByRole('button', { name: 'Review' }))
   await waitFor(() => expect(mocks.reveal).toHaveBeenCalledOnce())
   expect(screen.getByRole('button', { name: 'Close terminal' })).toBeDefined()
+  expect(screen.getByText(/Codex is already running this conversation in/)).toBeDefined()
   act(() => {
     for (const fn of spawned) {
       fn({ id: 'pty', incarnationId: 'new-life' })
@@ -140,19 +143,52 @@ it('keeps legacy metadata generic without a host lookup', () => {
   expect(mocks.capture).not.toHaveBeenCalled()
 })
 
-it('keeps Close busy for one attempt, then clears without submitting another action', async () => {
+it('replaces Retry with Close, then returns to ordinary Retry after original-holder retirement without invoking it', async () => {
   const closed = Promise.withResolvers<boolean>()
+  const retry = vi.fn()
   mocks.close.mockReturnValueOnce(closed.promise)
-  notice()
+  function LaunchNotice() {
+    const heldTerminal = useHeldTerminalNotice(terminal, 'local', 'Codex')
+    return (
+      <NativeChatComposerNotices
+        notices={structuredSessionNotices({
+          launch: {
+            lifecycle: 'failed',
+            failure: {
+              kind: 'refused',
+              code: 'agent_session_operation_invalid',
+              details: { reason: 'conversationOpenInTerminal' },
+              terminal
+            },
+            retry
+          },
+          agentLabel: 'Codex',
+          sessionError: null,
+          composerError: null,
+          heldTerminal
+        })}
+      />
+    )
+  }
+  render(<LaunchNotice />)
   const button = await screen.findByRole('button', { name: 'Close terminal' })
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   fireEvent.click(button)
   fireEvent.click(button)
   expect(mocks.close).toHaveBeenCalledOnce()
   expect(button).toHaveProperty('disabled', true)
+  act(() => useAppStore.setState({ tabsByWorktree: { w: [] } }))
+  expect(screen.getByRole('button', { name: 'Close terminal' })).toHaveProperty('disabled', true)
   await act(async () => closed.resolve(true))
-  expect(button).toHaveProperty('disabled', false)
+  const retryButton = screen.getByRole('button', { name: 'Retry' })
+  expect(retryButton).toHaveProperty('disabled', false)
+  expect(screen.queryByRole('button', { name: 'Close terminal' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Review' })).toBeNull()
+  expect(retry).not.toHaveBeenCalled()
   expect(mocks.close).toHaveBeenCalledOnce()
   expect(mocks.reveal).not.toHaveBeenCalled()
+  fireEvent.click(retryButton)
+  expect(retry).toHaveBeenCalledOnce()
 })
 
 it.each([undefined, false, 'true'])(

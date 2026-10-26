@@ -9,9 +9,9 @@ import type { AgentCliInstallationProblem } from './agent-cli-installation-probl
 import { tuiAgentDisplayName } from './tui-agent-display-names'
 
 export const HELD_TERMINAL_CONTINUE_SENTENCE =
-  '{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.'
+  '{{agent}} is already running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to continue here.'
 export const HELD_TERMINAL_OPEN_SENTENCE =
-  '{{agent}} may still be running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat.'
+  '{{agent}} is already running this conversation in <terminal>{{terminal}}</terminal>. Close that terminal to open it in chat.'
 
 /** Sentences a refusal notice shows too, so a chat says them one way. */
 export const TERMINAL_AGENT_HOLDS_CHAT = 'This chat is still open in a terminal agent.'

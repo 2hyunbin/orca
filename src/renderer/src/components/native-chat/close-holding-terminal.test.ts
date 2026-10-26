@@ -216,6 +216,46 @@ it('uses host-captured incarnation without a renderer map, subscribes before con
   ])
   expect(vi.getTimerCount()).toBe(0)
 })
+it('preserves the chat in its retired terminal source slot when a different holder closes', async () => {
+  useAppStore.setState({ activeWorktreeId: worktree })
+  const state = useAppStore.getState()
+  const source = state.createUnifiedTab(worktree, 'terminal', {
+    entityId: 'switched-source',
+    executionHostId: 'local'
+  })
+  const chat = state.createUnifiedTab(worktree, 'agent-session', {
+    entityId: 'returned-chat',
+    executionHostId: 'local'
+  })
+  const holder = state.createUnifiedTab(worktree, 'terminal', {
+    entityId: tab,
+    executionHostId: 'local'
+  })
+  // The in-place switch publishes after its source, then retires that source.
+  state.reorderUnifiedTabs(source.groupId, [source.id, chat.id, holder.id])
+  state.closeUnifiedTab(source.id)
+  state.activateTab(chat.id, { worktreeId: worktree })
+  const before = useAppStore
+    .getState()
+    .unifiedTabsByWorktree[worktree].find((t) => t.id === chat.id)
+  const { result } = await begin()
+  callbacks.onConfirm?.()
+  state.closeUnifiedTab(holder.id)
+  useAppStore.setState({ tabsByWorktree: { [worktree]: [] } })
+  exit(0, { hadPrimary: false, incarnationId: life })
+  expect(await result).toBe(true)
+  const after = useAppStore.getState()
+  expect(after.unifiedTabsByWorktree[worktree]).toEqual([before])
+  expect(after.groupsByWorktree[worktree].find((g) => g.id === chat.groupId)).toMatchObject({
+    tabOrder: [chat.id],
+    activeTabId: chat.id
+  })
+  expect(after.activeWorktreeId).toBe(worktree)
+  expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
+    'terminal.resolvePane',
+    'terminal.close'
+  ])
+})
 it.each(['cancel', 'replace', 'navigate', 'timeout', 'host-loss', 'spawn'] as const)(
   'settles %s without a follow-up or stolen navigation',
   async (outcome) => {
