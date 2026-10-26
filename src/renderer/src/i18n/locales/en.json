@@ -203,6 +203,16 @@
     "managedProfile": {
       "createFailed": "Couldn't create this workspace's browser profile. Close this tab and open a new one to try again."
     },
+    "extensions": {
+      "menu": "Extensions",
+      "open": "Open",
+      "pin": "Pin to toolbar",
+      "unpin": "Unpin from toolbar",
+      "remove": "Remove…",
+      "empty": "No extensions are on for this profile",
+      "visitWebStore": "Visit Chrome Web Store",
+      "manage": "Manage extensions"
+    },
     "history": {
       "clear": "Clear browsing history",
       "clearAllTime": "All time",
@@ -224,16 +234,6 @@
       "title": "History",
       "today": "Today",
       "yesterday": "Yesterday"
-    },
-    "extensions": {
-      "menu": "Extensions",
-      "open": "Open",
-      "pin": "Pin to toolbar",
-      "unpin": "Unpin from toolbar",
-      "remove": "Remove…",
-      "empty": "No extensions are on for this profile",
-      "visitWebStore": "Visit Chrome Web Store",
-      "manage": "Manage extensions"
     }
   },
   "editor": {
@@ -21524,14 +21524,6 @@
     "killAllLocal": "Kill all local sessions",
     "killFailed": "The terminal could not be ended. Last-observed sessions are retained."
   },
-  "browserTab": {
-    "agentDriving": "An agent is using this page"
-  },
-  "nativeChat": {
-    "math": {
-      "scrollDisplayEquation": "Scroll display equation"
-    }
-  },
   "browserExtensions": {
     "permission": {
       "history": "Read your browsing history",
@@ -21578,6 +21570,14 @@
       "description": "It is asking for access it did not have when you added it.",
       "deny": "Deny",
       "confirm": "Allow"
+    }
+  },
+  "browserTab": {
+    "agentDriving": "An agent is using this page"
+  },
+  "nativeChat": {
+    "math": {
+      "scrollDisplayEquation": "Scroll display equation"
     }
   }
 }
