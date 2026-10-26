@@ -109,9 +109,9 @@ export function replayPendingRuntimeRepoRemovals(
   environmentId: string,
   removeOnHost: (repoId: string) => Promise<unknown>,
   onRefused: (repoId: string, error: unknown) => void
-): Promise<void> {
+): Promise<'settled' | 'unreachable'> {
   if (listPendingRuntimeRepoRemovals(environmentId).length === 0) {
-    return Promise.resolve()
+    return Promise.resolve('settled')
   }
   return runExclusiveForRuntimeEnvironment(environmentId, async () => {
     for (const { repoId } of listPendingRuntimeRepoRemovals(environmentId)) {
@@ -123,7 +123,7 @@ export function replayPendingRuntimeRepoRemovals(
         await removeOnHost(repoId)
       } catch (error) {
         if (isRuntimeHostUnreachableError(error)) {
-          return
+          return 'unreachable'
         }
         if (!hasRuntimeRpcErrorCode(error, 'repo_not_found')) {
           // The server kept it: let its catalog show the project again rather than hide it forever.
@@ -134,6 +134,7 @@ export function replayPendingRuntimeRepoRemovals(
       }
       clearPendingRuntimeRepoRemoval(environmentId, repoId)
     }
+    return 'settled'
   })
 }
 

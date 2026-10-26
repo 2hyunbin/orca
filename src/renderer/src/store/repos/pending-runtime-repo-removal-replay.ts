@@ -4,6 +4,7 @@ import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { translate } from '@/i18n/i18n'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { ERROR_TOAST_DURATION } from './repo-state'
+import { isRuntimeEnvironmentRegistered } from './runtime-environment-registration'
 import {
   dropPendingRuntimeRepoRemovalsForEnvironment,
   listPendingRuntimeRepoRemovals,
@@ -47,8 +48,17 @@ export function replayPendingRuntimeRepoRemovalsIfReady(environmentId: string): 
         )
     }
   )
-    .catch((error) => console.warn('[repos] replaying pending project removals failed', error))
-    .finally(() => replayingEnvironments.delete(environmentId))
+    .then((outcome) => {
+      replayingEnvironments.delete(environmentId)
+      // Records written during this run were skipped by the in-flight guard; take them now.
+      if (outcome === 'settled') {
+        replayPendingRuntimeRepoRemovalsIfReady(environmentId)
+      }
+    })
+    .catch((error) => {
+      replayingEnvironments.delete(environmentId)
+      console.warn('[repos] replaying pending project removals failed', error)
+    })
 }
 
 /** Records seeded at startup may postdate the ready snapshot that already arrived. */
@@ -63,9 +73,13 @@ export function observeRuntimeHostStatusForPendingRemovals(
 ): void {
   const { environmentId } = snapshot
   if (snapshot.retired === true) {
-    // A forgotten server will never take the replay; its records would only accumulate.
     readyEnvironments.delete(environmentId)
-    dropPendingRuntimeRepoRemovalsForEnvironment(environmentId)
+    // Disconnects and re-pairs retire status owners too; only a forgotten server drops its records.
+    void isRuntimeEnvironmentRegistered(environmentId).then((registered) => {
+      if (!registered) {
+        dropPendingRuntimeRepoRemovalsForEnvironment(environmentId)
+      }
+    })
     return
   }
   if (snapshot.transport === 'ready' && snapshot.verification === 'verified') {

@@ -72,7 +72,7 @@ function serverStillLists(store: ReturnType<typeof createTestStore>): readonly R
   return mergeFetchedRepoCatalog(
     {
       repos: [remoteRepo],
-      projectHostSetupCompatibility: { projects: [], projectHostSetups: [] },
+      projectHostSetupCompatibility: { projects: [], setups: [] },
       hostId: 'runtime:env-1',
       reposAtRequest: store.getState().repos
     },
@@ -156,6 +156,32 @@ describe('removing a project while its paired server is unreachable', () => {
       timeout: 20_000
     })
     expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
+  })
+
+  it('keeps records across a disconnect or re-pair, dropping them only once the server is forgotten', async () => {
+    seedPendingRuntimeRepoRemovals([{ environmentId: 'env-1', repoId: 'app', requestedAt: 1 }])
+
+    observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), retired: true })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(listPendingRuntimeRepoRemovals('env-1')).toHaveLength(1)
+
+    vi.mocked(window.api.runtimeEnvironments.list).mockResolvedValue([])
+    observeRuntimeHostStatusForPendingRemovals({ ...readySnapshot(), retired: true })
+    await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]))
+  })
+
+  it('replays at once when local removal is chosen while the server already reports ready', async () => {
+    const store = seedRemoteProject()
+    observeRuntimeHostStatusForPendingRemovals(readySnapshot())
+    reachable = true
+
+    await store.getState().removeProject('app', { hostId: 'runtime:env-1', localOnly: true })
+
+    await vi.waitFor(() => expect(listPendingRuntimeRepoRemovals('env-1')).toEqual([]), {
+      timeout: 20_000
+    })
+    expect(hostCalls.filter((method) => method === 'repo.rm')).toEqual(['repo.rm'])
+    expect(store.getState().repos).toEqual([])
   })
 
   it('keeps the record when the server is still unreachable at replay time', async () => {
