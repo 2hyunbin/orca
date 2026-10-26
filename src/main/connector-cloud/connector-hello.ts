@@ -18,7 +18,7 @@ export function connectorHello(
   machine: ConnectorMachine,
   said: ConnectorHelloSaid
 ): { body: unknown; trimmed: boolean } {
-  const body = {
+  const envelope = {
     v: 1,
     contract: CONNECTOR_CONTRACT_VERSION,
     orcaVersion: machine.orcaVersion,
@@ -27,10 +27,9 @@ export function connectorHello(
     hostName: machine.hostName,
     agents: said.agents,
     promptKinds: PROMPT_KINDS,
-    features: FEATURES,
-    projects: [] as ConnectorProject[]
+    features: FEATURES
   }
-  let bytes = jsonBytes(body)
+  let bytes = jsonBytes({ ...envelope, projects: [] })
   let count = 0
   for (const project of said.projects) {
     // Each project adds its JSON and a comma.
@@ -41,7 +40,7 @@ export function connectorHello(
     count++
   }
   return {
-    body: { ...body, projects: said.projects.slice(0, count) },
+    body: { ...envelope, projects: said.projects.slice(0, count) },
     trimmed: count < said.projects.length
   }
 }
