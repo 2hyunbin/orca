@@ -3,6 +3,7 @@ import type { SFTPWrapper } from 'ssh2'
 
 import type { AgentHookInstallState, AgentHookInstallStatus } from '../../shared/agent-hook-types'
 import {
+  listRemoteDirectory,
   readTextFileRemote,
   writeTextFileRemoteAtomic
 } from '../agent-hooks/installer-utils-remote'
@@ -21,12 +22,14 @@ import {
   getConfigPath,
   getPluginDir,
   getPluginFilesState,
+  listManagedProfileHomes,
   readConfigFile,
   writeConfigFile,
   writePluginFiles
 } from './hermes-home-filesystem'
 import {
   HERMES_EVENTS,
+  HERMES_PLUGIN_MARKER,
   HERMES_PLUGIN_NAME,
   getPluginInitSource,
   getPluginManifest
@@ -62,6 +65,56 @@ function buildStatus(configPath: string, config: HermesConfig): AgentHookInstall
     configPath,
     managedHooksPresent: pluginFiles.present && pluginFiles.managed,
     detail: state === 'installed' || state === 'not_installed' ? null : details.join('; ')
+  }
+}
+
+// Why: each named profile loads plugins and client_env_passthrough from its own home, so a copy there must track Orca's.
+function updateManagedProfiles(
+  update: (content: string | null) => { content: string | null },
+  onUpdated: (pluginDir: string) => void
+): void {
+  for (const home of listManagedProfileHomes()) {
+    const configPath = getConfigPath(home)
+    const parsed = readConfigFile(configPath)
+    const next = parsed.ok ? update(parsed.content) : { content: null }
+    if (!parsed.ok || next.content === null) {
+      continue
+    }
+    onUpdated(getPluginDir(home))
+    if (next.content !== parsed.content) {
+      writeConfigFile(configPath, next.content)
+    }
+  }
+}
+
+async function writeRemoteHome(
+  sftp: SFTPWrapper,
+  home: string,
+  existing: string | null,
+  content: string
+): Promise<void> {
+  const pluginDir = `${home}/plugins/${HERMES_PLUGIN_NAME}`
+  await writeTextFileRemoteAtomic(sftp, `${pluginDir}/plugin.yaml`, getPluginManifest())
+  await writeTextFileRemoteAtomic(sftp, `${pluginDir}/__init__.py`, getPluginInitSource())
+  if (content !== existing) {
+    await writeTextFileRemoteAtomic(sftp, `${home}/config.yaml`, content)
+  }
+}
+
+async function installRemoteManagedProfiles(sftp: SFTPWrapper, profilesDir: string): Promise<void> {
+  for (const name of (await listRemoteDirectory(sftp, profilesDir)) ?? []) {
+    const home = `${profilesDir}/${name}`
+    const manifestPath = `${home}/plugins/${HERMES_PLUGIN_NAME}/plugin.yaml`
+    // A stray file or unreadable profile must not fail the default profile's install.
+    const manifest = await readTextFileRemote(sftp, manifestPath).catch(() => null)
+    if (!manifest?.includes(HERMES_PLUGIN_MARKER)) {
+      continue
+    }
+    const existing = await readTextFileRemote(sftp, `${home}/config.yaml`)
+    const next = installOrcaStatusContent(existing)
+    if (next.content !== null) {
+      await writeRemoteHome(sftp, home, existing, next.content)
+    }
   }
 }
 
@@ -112,13 +165,13 @@ export class HermesHookService {
     if (next.content !== parsed.content) {
       writeConfigFile(configPath, next.content)
     }
+    updateManagedProfiles(installOrcaStatusContent, writePluginFiles)
     return this.getStatus()
   }
 
   async installRemote(sftp: SFTPWrapper, remoteHome: string): Promise<AgentHookInstallStatus> {
     const remoteRoot = stripTrailingSlash(remoteHome)
     const remoteConfigPath = `${remoteRoot}/.hermes/config.yaml`
-    const remotePluginDir = `${remoteRoot}/.hermes/plugins/${HERMES_PLUGIN_NAME}`
     try {
       const existing = await readTextFileRemote(sftp, remoteConfigPath)
       const next = installOrcaStatusContent(existing)
@@ -131,11 +184,8 @@ export class HermesHookService {
           detail: `Could not parse remote Hermes config.yaml: ${next.detail ?? 'unknown error'}`
         }
       }
-      await writeTextFileRemoteAtomic(sftp, `${remotePluginDir}/plugin.yaml`, getPluginManifest())
-      await writeTextFileRemoteAtomic(sftp, `${remotePluginDir}/__init__.py`, getPluginInitSource())
-      if (next.content !== existing) {
-        await writeTextFileRemoteAtomic(sftp, remoteConfigPath, next.content)
-      }
+      await writeRemoteHome(sftp, `${remoteRoot}/.hermes`, existing, next.content)
+      await installRemoteManagedProfiles(sftp, `${remoteRoot}/.hermes/profiles`)
       return {
         agent: 'hermes',
         state: 'installed',
@@ -183,6 +233,9 @@ export class HermesHookService {
     if (getPluginFilesState(pluginDir).managed) {
       rmSync(pluginDir, { recursive: true, force: true })
     }
+    updateManagedProfiles(removeOrcaStatusContent, (dir) =>
+      rmSync(dir, { recursive: true, force: true })
+    )
     return this.getStatus()
   }
 }

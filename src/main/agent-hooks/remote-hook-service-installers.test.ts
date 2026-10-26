@@ -797,6 +797,23 @@ describe('remote hook service installers', () => {
     expect(fs.files.get('/home/dev/.hermes/config.yaml')).toContain('orca-status')
   })
 
+  it('adds the pane passthrough to a remote named profile that carries the plugin', async () => {
+    const work = '/home/dev/.hermes/profiles/work'
+    const { sftp, fs } = createFakeSftp({
+      [`${work}/plugins/orca-status/plugin.yaml`]:
+        '# Managed by Orca. Do not edit; changes may be overwritten.\n',
+      [`${work}/config.yaml`]: 'plugins:\n  enabled: [orca-status]\n',
+      '/home/dev/.hermes/profiles/plain/config.yaml': 'model: x\n'
+    })
+    fs.dirs.add('/home/dev/.hermes/profiles')
+
+    await new HermesHookService().installRemote(sftp, '/home/dev')
+
+    expect(fs.files.get(`${work}/config.yaml`)).toContain('ORCA_AGENT_PANE')
+    expect(fs.files.get(`${work}/plugins/orca-status/__init__.py`)).toContain('/hook/hermes')
+    expect(fs.files.get('/home/dev/.hermes/profiles/plain/config.yaml')).toBe('model: x\n')
+  })
+
   it('does not overwrite a remote user-authored Amp plugin file', async () => {
     const { sftp, fs } = createFakeSftp({
       '/home/dev/.config/amp/plugins/orca-agent-status.ts':

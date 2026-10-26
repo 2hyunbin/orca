@@ -121,6 +121,40 @@ describe('HermesHookService', () => {
     expect(removed).toContain('- MY_VAR # mine')
   })
 
+  it('keeps a named profile’s copy of the plugin and its passthrough current', () => {
+    // `hermes profile create --clone` copies the plugin but not later passthrough edits.
+    const cloned = join(homeDir, 'profiles', 'work')
+    const untouched = join(homeDir, 'profiles', 'plain')
+    mkdirSync(join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME), { recursive: true })
+    mkdirSync(untouched, { recursive: true })
+    writeFileSync(
+      join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, 'plugin.yaml'),
+      _internals.getPluginManifest()
+    )
+    writeFileSync(
+      join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, '__init__.py'),
+      '# Managed by Orca. Do not edit; changes may be overwritten.\n# stale\n'
+    )
+    writeFileSync(join(cloned, 'config.yaml'), 'plugins:\n  enabled: [orca-status]\n')
+    writeFileSync(join(untouched, 'config.yaml'), 'plugins:\n  enabled: []\n')
+    const service = new HermesHookService()
+
+    service.install()
+    expect(parse(readFileSync(join(cloned, 'config.yaml'), 'utf-8')).terminal).toEqual({
+      client_env_passthrough: [...HERMES_CLIENT_ENV_PASSTHROUGH]
+    })
+    expect(
+      readFileSync(join(cloned, 'plugins', _internals.HERMES_PLUGIN_NAME, '__init__.py'), 'utf-8')
+    ).toBe(_internals.getPluginInitSource())
+    expect(readFileSync(join(untouched, 'config.yaml'), 'utf-8')).toBe('plugins:\n  enabled: []\n')
+
+    service.remove()
+    expect(parse(readFileSync(join(cloned, 'config.yaml'), 'utf-8'))).toEqual({
+      plugins: { enabled: [] },
+      terminal: { client_env_passthrough: [] }
+    })
+  })
+
   it.each([
     ['an anchored terminal setting', 'terminal:\n  env: &env {A: "1"}\nshared: *env\n', true],
     ['a malformed passthrough', 'terminal:\n  client_env_passthrough: FOO\n', false],
