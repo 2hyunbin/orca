@@ -43,33 +43,12 @@ describe('readDiscordInteraction', () => {
     })
   })
 
-  it('reads a slash command with top-level options, and a DM user', () => {
-    const { member: _member, guild_id: _guild, ...dm } = guildBase
-    expect(
-      readDiscordInteraction({
-        ...dm,
-        user: { id: '900000000000000000' },
-        type: 2,
-        data: {
-          id: '1',
-          name: 'orca',
-          type: 1,
-          options: [{ name: 'prompt', type: 3, value: 'fix it' }]
-        }
-      })
-    ).toEqual({
-      ...base,
-      guildId: undefined,
-      kind: 'command',
-      name: 'orca',
-      options: { prompt: 'fix it' }
-    })
-  })
-
   it('ignores other types and refuses malformed payloads', () => {
-    expect(readDiscordInteraction({ ...guildBase, type: 5, data: { custom_id: 'm' } })).toEqual({
-      kind: 'ignored'
-    })
+    for (const type of [2, 5]) {
+      expect(readDiscordInteraction({ ...guildBase, type, data: { custom_id: 'm' } })).toEqual({
+        kind: 'ignored'
+      })
+    }
     expect(readDiscordInteraction({ ...guildBase, type: 3, data: { component_type: 2 } })).toEqual({
       kind: 'invalid'
     })
@@ -86,15 +65,12 @@ describe('readDiscordInteraction', () => {
 })
 
 describe('discordInteractionResponse', () => {
-  it('builds PONG, an ephemeral reply and a message update that mention no one', () => {
+  it('builds PONG, an ephemeral reply that mentions no one, and a deferred update', () => {
     expect(discordInteractionResponse.pong()).toEqual({ type: 1 })
     expect(discordInteractionResponse.ephemeral('Only the owner can answer')).toEqual({
       type: 4,
       data: { content: 'Only the owner can answer', flags: 64, allowed_mentions: { parse: [] } }
     })
-    expect(discordInteractionResponse.updateMessage('Approved')).toEqual({
-      type: 7,
-      data: { content: 'Approved', components: [], allowed_mentions: { parse: [] } }
-    })
+    expect(discordInteractionResponse.deferredUpdate()).toEqual({ type: 6 })
   })
 })

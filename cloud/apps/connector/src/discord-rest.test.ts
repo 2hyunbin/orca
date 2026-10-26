@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { createDiscordRestApi, discordRoutes } from './discord-rest.js'
+import { createDiscordRestApi, discordNonce, discordRoutes } from './discord-rest.js'
 
-// Headers and the 429 body follow https://docs.discord.com/developers/topics/rate-limits; routes
-// follow https://docs.discord.com/developers/resources/message and
-// https://docs.discord.com/developers/interactions/receiving-and-responding.
+// Routes and bodies follow https://docs.discord.com/developers/resources/message (create with
+// nonce + enforce_nonce, message_reference, allowed_mentions, reactions, history),
+// https://docs.discord.com/developers/resources/guild (members) and the 429 body in
+// https://docs.discord.com/developers/topics/rate-limits.
 type Reply = { status: number; body?: unknown; headers?: Record<string, string> }
 
 function fakeDiscord(replies: Reply[]) {
@@ -16,145 +17,109 @@ function fakeDiscord(replies: Reply[]) {
       headers: reply.headers
     })
   }
-  return { calls, request }
+  const sentBody = (index: number): unknown => JSON.parse(String(calls[index]?.init.body))
+  return { calls, request, sentBody }
 }
 
-const limited = (remaining: string, resetAfter: string, bucket = 'abcd') => ({
-  'x-ratelimit-bucket': bucket,
-  'x-ratelimit-limit': '5',
-  'x-ratelimit-remaining': remaining,
-  'x-ratelimit-reset-after': resetAfter
-})
-
 describe('createDiscordRestApi', () => {
-  it('sends each route with the bot token and no mentions', async () => {
+  it('sends each route with the bot token', async () => {
     const discord = fakeDiscord([
       { status: 201, body: { id: 'T1' } },
       { status: 200, body: { id: 'M2' } },
       { status: 200, body: { id: 'M2' } },
       { status: 204 },
-      { status: 200, body: { id: 'F1' } }
+      { status: 200, body: [{ id: 'M0', content: 'earlier' }] },
+      { status: 200, body: { user: { id: 'U1' }, nick: 'Sam' } }
     ])
     const api = createDiscordRestApi(discord.request)
     expect(await api('bot', discordRoutes.startThread('C1', 'M1', 'Fix the build'))).toEqual({
       kind: 'ok',
       body: { id: 'T1' }
     })
-    await api('bot', discordRoutes.createMessage('T1', { content: 'Working' }))
-    await api('bot', discordRoutes.editMessage('T1', 'M2', { content: 'Done' }))
+    await api('bot', discordRoutes.createMessage('T1', { content: 'Working' }, 'status:h1:t1'))
+    await api('bot', discordRoutes.editMessage('T1', 'M2', { content: 'Done', components: [] }))
     expect(await api('bot', discordRoutes.addReaction('C1', 'M1', '👀'))).toEqual({
       kind: 'ok',
       body: {}
     })
-    await api('bot', discordRoutes.ephemeralFollowup('A1', 'itok', 'Only the owner can answer'))
+    expect(await api('bot', discordRoutes.messagesBefore('T1', 'M1', 50))).toEqual({
+      kind: 'ok',
+      body: { items: [{ id: 'M0', content: 'earlier' }] }
+    })
+    await api('bot', discordRoutes.guildMember('G1', 'U1'))
     expect(discord.calls.map(({ url, init }) => [init.method, url])).toEqual([
       ['POST', 'https://discord.com/api/v10/channels/C1/messages/M1/threads'],
       ['POST', 'https://discord.com/api/v10/channels/T1/messages'],
       ['PATCH', 'https://discord.com/api/v10/channels/T1/messages/M2'],
       ['PUT', 'https://discord.com/api/v10/channels/C1/messages/M1/reactions/%F0%9F%91%80/@me'],
-      ['POST', 'https://discord.com/api/v10/webhooks/A1/itok']
+      ['GET', 'https://discord.com/api/v10/channels/T1/messages?before=M1&limit=50'],
+      ['GET', 'https://discord.com/api/v10/guilds/G1/members/U1']
     ])
     expect(discord.calls[1]?.init.headers).toEqual({
       authorization: 'Bot bot',
       'content-type': 'application/json'
     })
-    expect(JSON.parse(String(discord.calls[1]?.init.body))).toEqual({
+    expect(discord.calls[3]?.init.headers).toEqual({ authorization: 'Bot bot' })
+    expect(discord.sentBody(1)).toEqual({
       content: 'Working',
+      allowed_mentions: { parse: [] },
+      nonce: discordNonce('status:h1:t1'),
+      enforce_nonce: true
+    })
+    expect(discord.sentBody(2)).toEqual({
+      content: 'Done',
+      components: [],
       allowed_mentions: { parse: [] }
     })
-    expect(discord.calls[4]?.init.headers).toEqual({ 'content-type': 'application/json' })
-    expect(JSON.parse(String(discord.calls[4]?.init.body))).toMatchObject({ flags: 64 })
   })
 
-  it('holds a spent bucket until it resets, per channel', async () => {
-    let now = 1_000_000
-    const discord = fakeDiscord([{ status: 200, body: { id: 'M' }, headers: limited('0', '1.5') }])
-    const api = createDiscordRestApi(discord.request, () => now)
-    await api('bot', discordRoutes.createMessage('C1', { content: 'a' }))
-    expect(await api('bot', discordRoutes.createMessage('C1', { content: 'b' }))).toEqual({
-      kind: 'retry',
-      afterMs: 1500
-    })
-    // Another channel counts separately; the hold never reached Discord.
-    await api('bot', discordRoutes.createMessage('C2', { content: 'c' }))
-    expect(discord.calls).toHaveLength(2)
-    now += 1500
-    await api('bot', discordRoutes.createMessage('C1', { content: 'd' }))
-    expect(discord.calls).toHaveLength(3)
-  })
-
-  it('shares a learned bucket between routes on the same channel', async () => {
-    const now = 1_000_000
-    const discord = fakeDiscord([
-      { status: 200, body: {}, headers: limited('1', '2', 'shared') },
-      { status: 200, body: {}, headers: limited('0', '2', 'shared') }
-    ])
-    const api = createDiscordRestApi(discord.request, () => now)
-    await api('bot', discordRoutes.createMessage('C1', { content: 'a' }))
-    await api('bot', discordRoutes.editMessage('C1', 'M', { content: 'b' }))
-    expect(await api('bot', discordRoutes.createMessage('C1', { content: 'c' }))).toEqual({
-      kind: 'retry',
-      afterMs: 2000
+  it('replies to a writer, pinging only them', async () => {
+    const discord = fakeDiscord([])
+    await createDiscordRestApi(discord.request)(
+      'bot',
+      discordRoutes.createMessage('C1', { content: 'Orca is paused.', replyTo: 'M1' }, 'notice:M1')
+    )
+    expect(discord.sentBody(0)).toMatchObject({
+      message_reference: { message_id: 'M1', fail_if_not_exists: false },
+      allowed_mentions: { parse: [], replied_user: true }
     })
   })
 
-  it('turns a 429 into retry after retry_after, holding the bucket or every route when global', async () => {
-    let now = 1_000_000
+  it('derives a stable 25-character nonce from a post id', () => {
+    const nonce = discordNonce(`reply:${'h'.repeat(40)}:r1`)
+    expect(nonce).toHaveLength(25)
+    expect(discordNonce(`reply:${'h'.repeat(40)}:r1`)).toBe(nonce)
+    expect(discordNonce(`reply:${'h'.repeat(40)}:r2`)).not.toBe(nonce)
+  })
+
+  it('turns a 429 into retry after retry_after, else the Retry-After header', async () => {
     const discord = fakeDiscord([
       {
         status: 429,
         body: { message: 'You are being rate limited.', retry_after: 0.25, global: false }
       },
-      {
-        status: 429,
-        body: { message: 'You are being rate limited.', retry_after: 2, global: true },
-        headers: { 'x-ratelimit-global': 'true' }
-      }
+      { status: 429, body: null, headers: { 'retry-after': '2' } },
+      { status: 429, body: null }
     ])
-    const api = createDiscordRestApi(discord.request, () => now)
-    const react = discordRoutes.addReaction('C1', 'M1', '✅')
-    expect(await api('bot', react)).toEqual({ kind: 'retry', afterMs: 250 })
-    expect(await api('bot', react)).toEqual({ kind: 'retry', afterMs: 250 })
-    expect(await api('bot', discordRoutes.createMessage('C9', { content: 'a' }))).toEqual({
-      kind: 'retry',
-      afterMs: 2000
-    })
-    now += 1000
-    expect(await api('bot', discordRoutes.createMessage('C8', { content: 'b' }))).toEqual({
-      kind: 'retry',
-      afterMs: 1000
-    })
-    // Interaction followups are exempt from the global limit.
-    await api('bot', discordRoutes.ephemeralFollowup('A1', 'itok', 'x'))
-    expect(discord.calls).toHaveLength(3)
-  })
-
-  it('keeps under 50 requests a second', async () => {
-    let now = 1_000_200
-    const api = createDiscordRestApi(fakeDiscord([]).request, () => now)
-    for (let index = 0; index < 50; index++) {
-      expect(
-        (await api('bot', discordRoutes.createMessage(`C${index}`, { content: 'a' }))).kind
-      ).toBe('ok')
-    }
-    expect(await api('bot', discordRoutes.createMessage('C50', { content: 'a' }))).toEqual({
-      kind: 'retry',
-      afterMs: 800
-    })
-    now += 800
-    expect((await api('bot', discordRoutes.createMessage('C50', { content: 'a' }))).kind).toBe('ok')
+    const api = createDiscordRestApi(discord.request)
+    const route = discordRoutes.addReaction('C1', 'M1', '✅')
+    expect(await api('bot', route)).toEqual({ kind: 'retry', afterMs: 250 })
+    expect(await api('bot', route)).toEqual({ kind: 'retry', afterMs: 2000 })
+    expect(await api('bot', route)).toEqual({ kind: 'retry' })
   })
 
   it('reads errors as failed, server errors and network failures as unknown', async () => {
     const discord = fakeDiscord([
       { status: 403, body: { code: 50001, message: 'Missing Access' } },
-      { status: 404, body: null },
+      { status: 404, body: { code: 10003, message: 'Unknown Channel' } },
+      { status: 400, body: null },
       { status: 502 }
     ])
     const api = createDiscordRestApi(discord.request)
-    const route = discordRoutes.createMessage('C1', { content: 'a' })
+    const route = discordRoutes.createMessage('C1', { content: 'a' }, 'p1')
     expect(await api('bot', route)).toEqual({ kind: 'failed', error: '50001' })
-    expect(await api('bot', route)).toEqual({ kind: 'failed', error: 'http_404' })
+    expect(await api('bot', route)).toEqual({ kind: 'failed', error: '10003' })
+    expect(await api('bot', route)).toEqual({ kind: 'failed', error: 'http_400' })
     expect(await api('bot', route)).toEqual({ kind: 'unknown' })
     const offline = createDiscordRestApi(async () => {
       throw new Error('offline')
