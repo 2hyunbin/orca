@@ -347,7 +347,7 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
       await act(async () => {
         renderer?.update(createElement(Harness, props))
       })
-      expect(controller?.nativeChatAgentWorking).toBe(true)
+      expect(controller?.nativeChatTurnActive).toBe(true)
       expect(controller?.handleNativeChatCancelPrompt).toBeUndefined()
       structuredActivity.turnId = 'provider-turn'
       await act(async () => {
@@ -751,7 +751,7 @@ describe('useMobileNativeChatController terminal turn', () => {
   })
 
   it('runs the turn clock and streams the hook preview while the agent works', () => {
-    expect(controller?.nativeChatAgentWorking).toBe(true)
+    expect(controller?.nativeChatTurnActive).toBe(true)
     expect(controller?.nativeChatCanStop).toBe(true)
     expect(controller?.nativeChatStreamingText).toBe('Partial reply')
     expect(controller?.nativeChatWorkingStartedAt).toBe(turnStartedAt)
@@ -761,7 +761,7 @@ describe('useMobileNativeChatController terminal turn', () => {
     workingTab.agentStatus.workingMode = 'monitoring'
     rerender()
 
-    expect(controller?.nativeChatAgentWorking).toBe(false)
+    expect(controller?.nativeChatTurnActive).toBe(false)
     expect(controller?.nativeChatStreamingText).toBeUndefined()
     expect(controller?.nativeChatSessionOptions?.isWorking).toBe(false)
   })
@@ -772,7 +772,7 @@ describe('useMobileNativeChatController terminal turn', () => {
     })
     rerender()
 
-    expect(controller?.nativeChatAgentWorking).toBe(false)
+    expect(controller?.nativeChatTurnActive).toBe(false)
     expect(controller?.nativeChatCanStop).toBe(false)
   })
 
@@ -812,6 +812,6 @@ describe('useMobileNativeChatController terminal turn', () => {
     rerender()
 
     expect(answerSendArgs.at(-1)?.streamIdentity).not.toBe(before)
-    expect(controller?.nativeChatAgentWorking).toBe(false)
+    expect(controller?.nativeChatTurnActive).toBe(false)
   })
 })
