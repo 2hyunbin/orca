@@ -752,7 +752,9 @@ describe('the lineage journal page', () => {
     unreadable.add(MINTED)
     const read = await readJournal(registerWorker())
     expect(texts(read.transcript?.messages)).toContain('POST-CLEAR')
-    expect(read.warnings).toContain('Older journal items were omitted from this page.')
+    expect(read.warnings).toContain(
+      'Older journal items were omitted from this page; the cursor follows only newer ones.'
+    )
   })
 })
 
