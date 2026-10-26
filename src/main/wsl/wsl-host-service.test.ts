@@ -690,6 +690,17 @@ describe('WslHostService', () => {
     expect(spawn).toHaveBeenCalledOnce()
   })
 
+  it('forgets the early-wake host when it is removed', async () => {
+    const connector = makeConnector([UBUNTU])
+    const service = makeService(connector)
+    await service.add({ distro: 'Ubuntu' })
+    service.focusHost('wsl:ubuntu')
+    await service.remove('wsl:ubuntu')
+    // Re-registering the distro must not bring the old early wake back.
+    await service.add({ distro: 'Ubuntu' })
+    expect(wakeRememberedWslHosts(userDataPath, vi.fn())).toEqual([])
+  })
+
   it('adopts holders at startup only when a WSL host exists', async () => {
     const connector = makeConnector([UBUNTU])
     const service = makeService(connector)

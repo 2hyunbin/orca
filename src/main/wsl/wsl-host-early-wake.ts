@@ -3,6 +3,7 @@
  * so the boot (seconds on a slow PC) overlaps the app's own startup instead of following it. Only
  * the focused host is listed (E9: a launch boots the focused host, never others with saved tabs).
  */
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { spawnProcess } from '@orca/process-host'
@@ -48,6 +49,32 @@ export function rememberWslHostsToWake(userDataPath: string, distros: readonly s
     )
   } catch (error) {
     console.warn('[wsl-hosts] Could not save the distros to wake at next launch:', error)
+  }
+}
+
+/**
+ * WSL hosts turned off: the file is the only thing the next launch reads (before settings load),
+ * so it goes now, synchronously. If it can't be deleted it is emptied instead, and if that fails
+ * too the failure is logged; a missing or unreadable file wakes nothing.
+ */
+export function forgetWslHostsToWake(userDataPath: string): void {
+  try {
+    rmSync(wakeFile(userDataPath), { force: true })
+  } catch (error) {
+    console.warn('[wsl-hosts] Could not delete the early-wake list; emptying it:', error)
+    rememberWslHostsToWake(userDataPath, [])
+  }
+}
+
+/** A removed host is never woken early, even before its record is gone. */
+export function forgetWslHostToWake(userDataPath: string, distro: string): void {
+  const key = wslDistroHolderKey(distro)
+  const remembered = readWakeList(userDataPath)
+  if (remembered.some((entry) => wslDistroHolderKey(entry) === key)) {
+    rememberWslHostsToWake(
+      userDataPath,
+      remembered.filter((entry) => wslDistroHolderKey(entry) !== key)
+    )
   }
 }
 
