@@ -20,6 +20,7 @@ type ClientTabView = { layoutLeaves: string[]; panes: number; ptyId: string | nu
 test('a pane another client moves to a new tab leaves this desktop’s source tab', async ({
   testRepoPath
 }, testInfo) => {
+  // Why: launches a headless server and a paired Electron client, then waits on both.
   test.setTimeout(240_000)
   const host = await launchHeadlessPairedRuntimeHost()
   try {
@@ -50,11 +51,29 @@ test('a pane another client moves to a new tab leaves this desktop’s source ta
           })
         ).result
 
+      // The server makes the source tab, as for a long-running agent; a tab the desktop seeds into an
+      // empty workspace is still settling its first spawn when the split lands.
+      const created = await host.client.call<{ tab: { parentTabId: string } }>(
+        'session.tabs.createTerminal',
+        { worktree, activate: false, select: false, navigation: 'caller' }
+      )
+      const sourceTabId = toWebTerminalSurfaceTabId(created.result.tab.parentTabId)
       await page.evaluate((id) => window.__store?.getState().setActiveWorktree(id), worktreeId)
-      await expect(page.locator(PANE)).toHaveCount(1, { timeout: 60_000 })
+      const sourceTab = page.locator(`[data-testid="sortable-tab"][data-tab-id="${sourceTabId}"]`)
+      await expect(sourceTab).toBeVisible({ timeout: 60_000 })
+      await sourceTab.click()
       await waitForBoundPanes(page, 1)
-      const sourceTabId = await page.evaluate(() => window.__store?.getState().activeTabId ?? '')
       const firstLeafId = await page.locator(PANE).first().getAttribute('data-leaf-id')
+      // Split once the first shell is up, as a user does.
+      await expect
+        .poll(
+          async () =>
+            (
+              await host.client.call<RuntimeTerminalListResult>('terminal.list', { worktree })
+            ).result.terminals.find((terminal) => terminal.leafId === firstLeafId)?.preview ?? '',
+          { timeout: 30_000 }
+        )
+        .not.toBe('')
       await splitActiveTerminalPane(page, 'vertical')
       await waitForBoundPanes(page, 2)
       const movedLeafId = (
