@@ -322,7 +322,13 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     })
 
     expect(accepted).toBe(true)
-    expect(structuredSendWithOutcome).toHaveBeenCalledWith('look')
+    expect(structuredSendWithOutcome).toHaveBeenCalledWith(
+      'look',
+      undefined,
+      undefined,
+      undefined,
+      []
+    )
     expect(sendWithOutcome).not.toHaveBeenCalled()
     expect(clientStub.sendRequest).not.toHaveBeenCalled()
   })
@@ -334,7 +340,13 @@ describe('useMobileNativeChatController handleNativeChatSend', () => {
     await act(async () => {
       await controller!.handleNativeChatSend('/review')
     })
-    expect(structuredSendWithOutcome).toHaveBeenCalledWith('/review')
+    expect(structuredSendWithOutcome).toHaveBeenCalledWith(
+      '/review',
+      undefined,
+      undefined,
+      undefined,
+      []
+    )
     expect(acceptSend).not.toHaveBeenCalled()
     expect(restoreRejectedDraft).not.toHaveBeenCalled()
     expect(controller!.nativeChatAcceptsImages).toBe(false)
