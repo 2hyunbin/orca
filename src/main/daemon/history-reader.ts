@@ -5,7 +5,6 @@ import type { TerminalCheckpointFile } from './types'
 import { getHistorySessionDirName } from './history-paths'
 import { decodeTerminalHistoryLog, LOG_HEADER_BYTES } from './terminal-history-log'
 import { DAEMON_RESTORE_SCROLLBACK_ROWS } from './daemon-restore-scrollback-depth'
-import { HeadlessEmulator } from './headless-emulator'
 import { PrioritySemaphore } from '../../shared/priority-semaphore'
 import { ColdRestoreReplayWriter } from './cold-restore-replay-writer'
 import { readTerminalHistoryBufferAsync } from './terminal-history-file-reader'
@@ -252,6 +251,7 @@ export class HistoryReader {
         return { restoreInfo: null, readFailed: true }
       }
 
+      const { HeadlessEmulator } = await import('./headless-emulator')
       const emulator = new HeadlessEmulator({
         cols: checkpoint?.cols ?? meta.cols,
         rows: checkpoint?.rows ?? meta.rows,
