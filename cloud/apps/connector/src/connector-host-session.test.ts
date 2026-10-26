@@ -12,6 +12,7 @@ import {
   createConnectorHarness,
   hiddenField,
   hostKeypair,
+  pauseBefore,
   publicKeyB64
 } from './connector-server-harness.test-fixture.js'
 
@@ -80,6 +81,53 @@ describe('connector machine sessions', () => {
     const refused = await signOut()
     expect(refused.status).toBe(403)
     await expect(refused.json()).resolves.toEqual({ error: 'host_revoked' })
+  })
+
+  it('ends every earlier session when a key is linked again', async () => {
+    const { harness, host, browser, signOut } = await linkedHarness()
+    // The state a session request leaves when it races a revoke: revoked, but its session kept.
+    await harness.database.query('UPDATE connector_hosts SET revoked_at = 1 WHERE host_id = ?', [
+      deriveHostFingerprint(host.publicKey)
+    ])
+    await harness.approve(browser, (await harness.startSignIn(host)).started!.userCode)
+    expect((await signOut()).status).toBe(401)
+  })
+
+  it('lets no session minted across a revoke survive it', async () => {
+    let gate!: ReturnType<typeof pauseBefore>
+    const harness = await createConnectorHarness(
+      {},
+      {
+        wrapDatabase: (database) => {
+          gate = pauseBefore(database, 'INSERT INTO connector_sessions')
+          return gate.database
+        }
+      }
+    )
+    const host = hostKeypair()
+    const browser = await harness.signedInBrowser()
+    await harness.approve(browser, (await harness.startSignIn(host)).started!.userCode)
+    const page = await (await browser.get('/machines')).text()
+    const pending = harness.machineSession(host)
+    await gate.atStatement
+    // Revoke and relink both try to run while the session insert is held.
+    const relinked = browser
+      .post(`/v1/account/hosts/${deriveHostFingerprint(host.publicKey)}/revoke`, {
+        csrf: hiddenField(page, 'csrf')
+      })
+      .then(async () => {
+        await harness.approve(browser, (await harness.startSignIn(host)).started!.userCode)
+      })
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    gate.release()
+    const session = ConnectorHostSessionResponseSchema.parse(await (await pending).json())
+    await relinked
+    const stale = await harness.json(
+      CONNECTOR_PATHS.signOut,
+      { v: 1 },
+      { authorization: `Bearer ${session.sessionToken}` }
+    )
+    expect(stale.status).toBe(401)
   })
 
   it('ignores a revoke from an account that does not own the machine', async () => {

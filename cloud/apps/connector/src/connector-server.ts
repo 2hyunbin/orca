@@ -212,11 +212,11 @@ export function createConnectorServer(
       return context.json({ error }, 401)
     }
     const hostId = verification.hostFingerprint
-    const link = await hostLinks.status(hostId)
-    if (link !== 'linked') {
-      return context.json({ error: link === 'revoked' ? 'host_revoked' : 'host_not_linked' }, 403)
-    }
-    const { sessionToken, expiresAt } = await sessions.create(hostId)
+    const session = await sessions.create(hostId, (transaction) =>
+      hostLinks.refusal(transaction, hostId)
+    )
+    if (typeof session === 'string') return context.json({ error: session }, 403)
+    const { sessionToken, expiresAt } = session
     return context.json({ sessionToken, expiresAt, hostId })
   })
 

@@ -24,6 +24,11 @@ export type HostSessionLookup =
       reason: 'unknown_session' | 'session_expired' | 'host_not_linked' | 'host_revoked'
     }
 
+// The advisory lock serializing one host's session swap; hold it too when changing what guards it.
+export function hostSessionLockKey(lockScope: string, hostFingerprint: string): string {
+  return `${lockScope}:${hostFingerprint}`
+}
+
 function hashSessionToken(sessionToken: string): string {
   return createHash('sha256').update(sessionToken).digest('base64url')
 }
@@ -35,13 +40,20 @@ export class HostSessionStore {
     private readonly now: () => number = Date.now
   ) {}
 
-  async create(hostFingerprint: string): Promise<IssuedHostSession> {
+  // `guard` runs under the host's session lock, so a caller changing the host's standing under
+  // the same lock runs wholly before or after it. A non-null result refuses the session.
+  async create<Refusal = never>(
+    hostFingerprint: string,
+    guard?: (transaction: CloudDatabase) => Promise<Refusal | null>
+  ): Promise<IssuedHostSession | Refusal> {
     const sessionToken = randomBytes(32).toString('base64url')
     const createdAt = this.now()
     const expiresAt = createdAt + this.config.ttlMs
-    await this.database.transaction(async (transaction) => {
+    const refusal = await this.database.transaction(async (transaction): Promise<Refusal | null> => {
       // One active session per desktop bounds rows even for self-minted hosts that flood proofs.
-      await transaction.lockQuotaScope(`${this.config.lockScope}:${hostFingerprint}`)
+      await transaction.lockQuotaScope(hostSessionLockKey(this.config.lockScope, hostFingerprint))
+      const refused = guard ? await guard(transaction) : null
+      if (refused !== null) return refused
       await transaction.query(`DELETE FROM ${this.config.table} WHERE host_fingerprint = ?`, [
         hostFingerprint
       ])
@@ -50,8 +62,9 @@ export class HostSessionStore {
          VALUES (?, ?, ?, ?)`,
         [hashSessionToken(sessionToken), hostFingerprint, expiresAt, createdAt]
       )
+      return null
     })
-    return { sessionToken, expiresAt, hostFingerprint }
+    return refusal ?? { sessionToken, expiresAt, hostFingerprint }
   }
 
   async resolve(sessionToken: string): Promise<HostSessionLookup> {

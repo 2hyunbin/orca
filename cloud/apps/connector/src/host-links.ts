@@ -1,5 +1,6 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { ConnectorHelloRequest } from '@orca-cloud/connector-contract'
+import { lockConnectorHost } from './connector-host-handshake.js'
 import type { ConnectorInbox } from './connector-inbox.js'
 
 // Coarse on purpose: last-seen is written at most once a minute per host.
@@ -16,7 +17,7 @@ export type LinkedHost = {
   linkedAt: number
 }
 
-export type HostLinkStatus = 'linked' | 'revoked' | 'not_linked'
+export type HostLinkRefusal = 'host_not_linked' | 'host_revoked'
 
 // A host is linked to the one account that approved its key; logout deletes the link, revoke keeps it as revoked.
 export class ConnectorHostLinks {
@@ -26,13 +27,14 @@ export class ConnectorHostLinks {
     private readonly now: () => number
   ) {}
 
-  async status(hostId: string): Promise<HostLinkStatus> {
-    const [row] = await this.database.query(
+  // Run under lockConnectorHost (session creation's guard), so no link change interleaves.
+  async refusal(transaction: CloudDatabase, hostId: string): Promise<HostLinkRefusal | null> {
+    const [row] = await transaction.query(
       'SELECT revoked_at FROM connector_hosts WHERE host_id = ?',
       [hostId]
     )
-    if (!row) return 'not_linked'
-    return row.revoked_at === null ? 'linked' : 'revoked'
+    if (!row) return 'host_not_linked'
+    return row.revoked_at === null ? null : 'host_revoked'
   }
 
   async listForAccount(accountId: string): Promise<LinkedHost[]> {
@@ -53,6 +55,7 @@ export class ConnectorHostLinks {
 
   async revoke(accountId: string, hostId: string): Promise<boolean> {
     return await this.database.transaction(async (transaction) => {
+      await lockConnectorHost(transaction, hostId)
       const [revoked] = await transaction.query(
         `UPDATE connector_hosts SET revoked_at = ?
          WHERE host_id = ? AND account_id = ? AND revoked_at IS NULL`,
@@ -67,6 +70,7 @@ export class ConnectorHostLinks {
 
   async unbind(hostId: string): Promise<void> {
     await this.database.transaction(async (transaction) => {
+      await lockConnectorHost(transaction, hostId)
       await transaction.query('DELETE FROM connector_hosts WHERE host_id = ?', [hostId])
       await transaction.query('DELETE FROM connector_sessions WHERE host_fingerprint = ?', [hostId])
       await this.inbox.expireHost(transaction, hostId)

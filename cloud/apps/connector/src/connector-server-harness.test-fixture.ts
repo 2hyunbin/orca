@@ -157,9 +157,38 @@ export function hiddenField(html: string, name: string): string {
   return match[1]
 }
 
+// Holds the first transaction statement starting with `prefix` until release(), locks still held.
+export function pauseBefore(database: CloudDatabase, prefix: string) {
+  let reached!: () => void
+  const atStatement = new Promise<void>((resolve) => (reached = resolve))
+  let release!: () => void
+  const released = new Promise<void>((resolve) => (release = resolve))
+  let paused = false
+  const wrap = (inner: CloudDatabase): CloudDatabase => ({
+    dialect: inner.dialect,
+    query: async (sql, params) => {
+      if (!paused && sql.trimStart().startsWith(prefix)) {
+        paused = true
+        reached()
+        await released
+      }
+      return await inner.query(sql, params)
+    },
+    transaction: (run) => inner.transaction((transaction) => run(wrap(transaction))),
+    lockQuotaScope: (key) => inner.lockQuotaScope(key),
+    tryLockScope: (key) => inner.tryLockScope(key),
+    tryLockSharedScope: (key) => inner.tryLockSharedScope(key),
+    close: () => inner.close()
+  })
+  return { database: wrap(database), atStatement, release }
+}
+
 export async function createConnectorHarness(
   config: Partial<ConnectorConfig> = {},
-  options: { pollHoldMs?: number } = {}
+  options: {
+    pollHoldMs?: number
+    wrapDatabase?: (database: CloudDatabase) => CloudDatabase
+  } = {}
 ) {
   let now = 1_800_000_000_000
   const issuer = fakeIssuer()
@@ -167,7 +196,7 @@ export async function createConnectorHarness(
   const notifications = openCloudNotifications(databaseUrl ? { databaseUrl } : {})
   const runtime = createConnectorServer(
     { ...testConnectorConfig(), ...config },
-    database,
+    options.wrapDatabase?.(database) ?? database,
     notifications,
     { now: () => now, fetch: issuer.fetch, pollHoldMs: options.pollHoldMs ?? 0 }
   )
