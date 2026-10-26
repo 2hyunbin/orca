@@ -57,7 +57,8 @@ export function activateStructuredAgentSessionTab(args: {
 export function activateStructuredAgentSessionTabOnOwner(
   worktreeId: string,
   sessionId: string,
-  target?: RuntimeClientTarget
+  target?: RuntimeClientTarget,
+  options?: { callerOnly?: boolean }
 ): void {
   const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(useAppStore.getState(), worktreeId)
   void callRuntimeRpc(
@@ -65,7 +66,9 @@ export function activateStructuredAgentSessionTabOnOwner(
     'session.tabs.activate',
     {
       worktree: toRuntimeWorktreeSelector(worktreeId),
-      tabId: `agent-session:${sessionId}`
+      tabId: `agent-session:${sessionId}`,
+      // Why both: navigation scopes new hosts to this client; notifyClients:false protects old hosts.
+      ...(options?.callerOnly ? { notifyClients: false, navigation: 'caller' as const } : {})
     }
   )
 }

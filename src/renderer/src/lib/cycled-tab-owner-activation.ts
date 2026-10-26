@@ -22,7 +22,7 @@ export function activateCycledTabOnOwner(worktreeId: string | null, next: TypeCy
     // Why server-only: a local activation would make paired phones follow every intermediate stop.
     const environmentId = runtimeEnvironmentIdOrLocalUnlessTwin(useAppStore.getState(), worktreeId)
     if (environmentId && isWebRuntimeSessionActive(environmentId)) {
-      activateStructuredAgentSessionTabOnOwner(worktreeId, next.id)
+      activateStructuredAgentSessionTabOnOwner(worktreeId, next.id, undefined, { callerOnly: true })
     }
   }
 }

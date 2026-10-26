@@ -120,7 +120,11 @@ describe('keyboard tab switches in a server workspace', () => {
     expect(mocks.runtimeRpc).toHaveBeenCalledWith(
       { kind: 'environment', environmentId: 'env-1' },
       'session.tabs.activate',
-      expect.objectContaining({ tabId: 'agent-session:session-1' })
+      expect.objectContaining({
+        tabId: 'agent-session:session-1',
+        notifyClients: false,
+        navigation: 'caller'
+      })
     )
   })
 
