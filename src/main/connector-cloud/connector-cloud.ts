@@ -65,7 +65,8 @@ export type ConnectorCloudOptions = {
 export class ConnectorCloud {
   private flow: SignInFlow | null = null
   private client: ConnectorPollClient | null = null
-  private connecting = false
+  // Built on connect, so the outbox file is read once and has one owner for this process.
+  private events: ConnectorTurnEvents | null = null
   private revoked = false
   private readonly fetchImpl: typeof globalThis.fetch
   private readonly now: () => number
@@ -85,35 +86,46 @@ export class ConnectorCloud {
 
   /** From now on, hold the poll whenever connectors are on and this machine is linked. */
   connect(): void {
-    if (this.connecting) {
+    if (this.events) {
       return
     }
-    this.connecting = true
+    this.events = new ConnectorTurnEvents(this.options.userDataPath)
     this.options.machine.onConnectorsToggled(() => this.reconcile())
     this.reconcile()
   }
 
   private reconcile(): void {
-    if (!this.connecting) {
+    const { events } = this
+    if (!events) {
       return
     }
     const seam = this.options.machine.seam()
     const identity = seam ? readConnectorHostIdentity(this.options.userDataPath) : null
-    if (this.client && (this.client.seam !== seam || !identity)) {
-      this.client.stop()
+    const current = this.client
+    if (
+      current &&
+      (current.seam !== seam || current.identity.link.hostId !== identity?.link.hostId)
+    ) {
+      current.stop()
       this.client = null
     }
     if (!this.client && seam && identity) {
-      this.client = new ConnectorPollClient({
+      const client = new ConnectorPollClient({
         origin: this.options.origin,
-        userDataPath: this.options.userDataPath,
         identity,
+        events,
         seam,
         machine: this.options.machine,
-        onRevoked: () => this.forget({ revoked: true }),
+        // Only for the client still running; a retired one cannot sign out its replacement.
+        onRevoked: () => {
+          if (this.client === client) {
+            this.forget({ revoked: true })
+          }
+        },
         fetchImpl: this.fetchImpl
       })
-      this.client.start()
+      this.client = client
+      client.start()
     }
   }
 
@@ -122,7 +134,7 @@ export class ConnectorCloud {
     this.client?.stop()
     this.client = null
     deleteConnectorHostIdentity(this.options.userDataPath)
-    ConnectorTurnEvents.forget(this.options.userDataPath)
+    this.events?.clear()
     this.revoked = revoked
   }
 
@@ -281,7 +293,7 @@ export class ConnectorCloud {
     }
   }
 
-  /** Unlinks in the cloud when it answers, then forgets the key either way. */
+  /** Forgets the key, then unlinks it in the cloud when the cloud answers. */
   async signOut(): Promise<{ signedOut: boolean }> {
     if (this.flow) {
       this.endFlow(this.flow)
@@ -290,9 +302,8 @@ export class ConnectorCloud {
     if (!identity) {
       return { signedOut: false }
     }
-    // A running client would read its own unlink as a revoke.
-    this.client?.stop()
-    this.client = null
+    // Forgotten before the unlink is sent, so nothing can reconnect with this key meanwhile.
+    this.forget({ revoked: false })
     const session = new ConnectorHostSession(
       this.options.origin,
       identity.keypair,
@@ -304,12 +315,6 @@ export class ConnectorCloud {
       session.call(CONNECTOR_PATHS.signOut, { v: 1 }, z.unknown(), { signal: giveUp }),
       delayUnlessAborted(SIGN_OUT_UNBIND_TIMEOUT_MS, giveUp)
     ])
-    // Only the key this call unlinked; a login that finished meanwhile keeps its own.
-    if (
-      readConnectorHostIdentity(this.options.userDataPath)?.link.hostId === identity.link.hostId
-    ) {
-      this.forget({ revoked: false })
-    }
     return { signedOut: true }
   }
 }

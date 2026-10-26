@@ -52,19 +52,22 @@ export function fakeSeam() {
 export function fakeMachine(
   current: () => FakeSeam | null,
   projects: ConnectorProject[] = []
-): ConnectorMachine & { toggle: () => void } {
+): ConnectorMachine & { toggle: () => void; agentList: string[] } {
   const toggled = new Set<() => void>()
-  return {
+  const machine: ConnectorMachine & { toggle: () => void; agentList: string[] } = {
+    /** What `agents()` reports; tests change it to model a settings change. */
+    agentList: ['claude', 'codex'],
     runtime: 'serve',
     orcaVersion: '1.4.250',
     seam: () => current()?.seam ?? null,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake seam never reads its host.
     conversationHost: () => ({}) as ReturnType<ConnectorMachine['conversationHost']>,
-    agents: () => ['claude', 'codex'],
+    agents: () => machine.agentList,
     projects: () => projects,
     onConnectorsToggled: (listener) => {
       toggled.add(listener)
     },
     toggle: () => toggled.forEach((listener) => listener())
   }
+  return machine
 }

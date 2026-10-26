@@ -169,8 +169,10 @@ describe('ConnectorCloud sign-in', () => {
     const delayed = cloud.signOut()
     await vi.advanceTimersByTimeAsync(0)
     fake.hang = false
+    // The key is gone before the unlink is sent, so a second logout finds nothing.
+    expect(readConnectorHostIdentity(userDataPath)).toBeNull()
     const other = connectorCloud()
-    expect(await other.signOut()).toEqual({ signedOut: true })
+    expect(await other.signOut()).toEqual({ signedOut: false })
     await finish(other, await other.beginSignIn())
     const fresh = other.status().link?.hostId
     await vi.advanceTimersByTimeAsync(5_000)

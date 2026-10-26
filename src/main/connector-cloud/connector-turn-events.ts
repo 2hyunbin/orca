@@ -14,12 +14,12 @@ import type {
 } from '../external-conversations/external-conversation-events'
 import type { ConversationKey } from '../external-conversations/external-conversation-types'
 import { isMissingFileError } from '../runtime/device-registry-corruption'
-import { ConnectorSendQueue } from './connector-send-queue'
+import { ConnectorSendQueue, type ConnectorBatchSender } from './connector-send-queue'
 
 const TURN_OUTBOX_FILE = 'connector-turn-outbox.json'
-const MAX_STORED_TURN_ENDS = 200
-// Live events beyond this are dropped oldest first; the snapshot after the next session restates them.
-const MAX_QUEUED_EVENTS = 500
+const MAX_TURN_ENDS = 200
+// Live events past this are dropped oldest first; the snapshot after the next session restates them.
+const MAX_LIVE_EVENTS = 500
 const MAX_EVENTS_PER_REQUEST = 50
 
 type TurnEnded = Extract<ConnectorEvent, { kind: 'turn-ended' }>
@@ -105,31 +105,40 @@ export function toConnectorEvent(
   }
 }
 
-/** Events for the cloud, in order; turn ends also wait on disk until the cloud accepts them. */
+/** The newest turn ends and live events within their caps, so memory and disk hold the same set. */
+function boundEvents(events: ConnectorEvent[]): ConnectorEvent[] {
+  const turnEnds = events.filter(isTurnEnded).length
+  let turnEndsOver = turnEnds - MAX_TURN_ENDS
+  let liveOver = events.length - turnEnds - MAX_LIVE_EVENTS
+  if (turnEndsOver <= 0 && liveOver <= 0) {
+    return events
+  }
+  return events.filter((event) => (isTurnEnded(event) ? turnEndsOver-- <= 0 : liveOver-- <= 0))
+}
+
+/**
+ * Events for the cloud, in order, owned once per linked machine so a replacement client never races
+ * a retired one over the file. Turn ends also wait on disk until the cloud accepts them.
+ */
 export class ConnectorTurnEvents {
   private readonly queue: ConnectorSendQueue<ConnectorEvent>
   private readonly filePath: string
 
-  constructor(userDataPath: string, send: (events: ConnectorEvent[]) => Promise<boolean>) {
+  constructor(userDataPath: string) {
     this.filePath = join(userDataPath, TURN_OUTBOX_FILE)
-    this.queue = new ConnectorSendQueue<ConnectorEvent>(send, {
+    this.queue = new ConnectorSendQueue<ConnectorEvent>({
       maxBatch: MAX_EVENTS_PER_REQUEST,
       initial: this.readStored(),
+      bound: boundEvents,
       onChange: (events) => this.store(events)
     })
   }
 
   observe(event: ConversationSnapshot | ConversationEvent): void {
     const wire = toConnectorEvent(event)
-    if (!wire) {
-      return
+    if (wire) {
+      this.queue.push(wire)
     }
-    const overflow = this.queue.pending.length - MAX_QUEUED_EVENTS + 1
-    if (overflow > 0) {
-      let dropped = 0
-      this.queue.retain((queued) => isTurnEnded(queued) || dropped++ >= overflow)
-    }
-    this.queue.push(wire)
   }
 
   /** A new session's snapshot restates everything live, so only turn ends still need sending. */
@@ -137,12 +146,17 @@ export class ConnectorTurnEvents {
     this.queue.retain(isTurnEnded)
   }
 
-  flush(): Promise<void> {
-    return this.queue.flush()
+  attach(sender: ConnectorBatchSender<ConnectorEvent>): void {
+    this.queue.attach(sender)
   }
 
-  static forget(userDataPath: string): void {
-    rmSync(join(userDataPath, TURN_OUTBOX_FILE), { force: true })
+  detach(sender: ConnectorBatchSender<ConnectorEvent>): void {
+    this.queue.detach(sender)
+  }
+
+  /** Drops everything, file included: no other key can report these turns. */
+  clear(): void {
+    this.queue.retain(() => false)
   }
 
   private readStored(): TurnEnded[] {
@@ -164,7 +178,7 @@ export class ConnectorTurnEvents {
   }
 
   private store(events: readonly ConnectorEvent[]): void {
-    const turnEnds = events.filter(isTurnEnded).slice(-MAX_STORED_TURN_ENDS)
+    const turnEnds = events.filter(isTurnEnded)
     if (turnEnds.length === 0) {
       rmSync(this.filePath, { force: true })
     } else {

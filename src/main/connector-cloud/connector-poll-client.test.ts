@@ -12,6 +12,7 @@ import {
 } from './connector-host-identity'
 import { connectorProjects } from './connector-places'
 import { ConnectorPollClient } from './connector-poll-client'
+import { ConnectorTurnEvents } from './connector-turn-events'
 import { FakeConnectorCloud } from './fake-connector-cloud.test-fixture'
 import { fakeMachine, fakeSeam } from './fake-connector-seam.test-fixture'
 
@@ -31,20 +32,22 @@ let userDataPath: string
 let fake: FakeConnectorCloud
 let identity: ConnectorHostIdentity
 
-function startClient(seam = fakeSeam()) {
+/** `events` stands for one process's outbox; a new one models a restart. */
+function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDataPath)) {
   const onRevoked = vi.fn()
+  const machine = fakeMachine(() => seam, [project!])
   const client = new ConnectorPollClient({
     origin: fake.origin,
-    userDataPath,
     identity,
+    events,
     seam: seam.seam,
-    machine: fakeMachine(() => seam, [project!]),
+    machine,
     onRevoked,
     fetchImpl: fake.fetch,
     random: () => 0.5
   })
   client.start()
-  return { client, onRevoked, ...seam }
+  return { client, onRevoked, machine, ...seam }
 }
 
 // Each step lets a chain of fetches and seam answers run to its next timer.
@@ -332,6 +335,82 @@ describe('ConnectorPollClient', () => {
     poll([])
     await settle(60_000)
     expect(fake.requestsTo(CONNECTOR_PATHS.poll)).toHaveLength(polls)
+    client.stop()
+  })
+
+  it('admits nothing once stopped: not a late poll answer, not a late result', async () => {
+    const seam = fakeSeam()
+    const late = Promise.withResolvers<Delivery>()
+    seam.outcomes.set('d1', late.promise)
+    const { client, calls, onRevoked } = startClient(seam)
+    await settle()
+    poll([{ ...base, deliveryId: 'd1', kind: 'send', text: 'hi' }])
+    await settle()
+    fake.pollReplyDelayMs = 1_000
+    poll([{ ...base, deliveryId: 'd2', kind: 'send', text: 'late' }])
+    await settle(10)
+    client.stop()
+    fake.linked.clear()
+    late.resolve({ outcome: 'accepted' })
+    await settle(2_000)
+    expect(calls.send).toHaveBeenCalledTimes(1)
+    expect(fake.acks).toEqual([{ deliveryId: 'd1', step: 'received' }])
+    expect(onRevoked).not.toHaveBeenCalled()
+  })
+
+  it('waits out Retry-After before sending confirmations again, however many are queued', async () => {
+    const seam = fakeSeam()
+    const done = Promise.withResolvers<Delivery>()
+    seam.outcomes.set('d1', done.promise)
+    const { client } = startClient(seam)
+    await settle()
+    fake.forced.set(CONNECTOR_PATHS.acks, { status: 429, headers: { 'retry-after': '300' } })
+    poll([{ ...base, deliveryId: 'd1', kind: 'send', text: 'hi' }])
+    await settle()
+    done.resolve({ outcome: 'accepted' })
+    await settle(60_000)
+    expect(fake.requestsTo(CONNECTOR_PATHS.acks)).toHaveLength(1)
+    fake.forced.delete(CONNECTOR_PATHS.acks)
+    await settle(250_000)
+    expect(fake.acks).toEqual([
+      { deliveryId: 'd1', step: 'received' },
+      { deliveryId: 'd1', step: 'done', result: { outcome: 'accepted' } }
+    ])
+    client.stop()
+  })
+
+  it('says hello again when the agents it can run change', async () => {
+    const { client, machine } = startClient()
+    await settle()
+    machine.agentList = ['claude']
+    poll([])
+    await settle()
+    expect(fake.hellos.at(-1)).toMatchObject({ agents: ['claude'] })
+    expect(fake.hellos).toHaveLength(2)
+    client.stop()
+  })
+
+  it('keeps at most 200 turn ends, in memory and on disk alike', async () => {
+    fake.forced.set(CONNECTOR_PATHS.events, { status: 503 })
+    const { client, emit } = startClient()
+    await settle()
+    for (let turn = 1; turn <= 250; turn++) {
+      emit({
+        kind: 'turn-ended',
+        conversation,
+        worktreeId: 'wt',
+        paneKey: 'tab:1',
+        turnId: turn,
+        stopReason: null,
+        at: turn
+      })
+    }
+    const stored = JSON.parse(
+      readFileSync(join(userDataPath, 'connector-turn-outbox.json'), 'utf8')
+    )
+    expect(stored.map((event: { turnId: number }) => event.turnId)).toEqual(
+      Array.from({ length: 200 }, (_, index) => index + 51)
+    )
     client.stop()
   })
 })
