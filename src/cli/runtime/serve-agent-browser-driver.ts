@@ -1,10 +1,9 @@
 import { existsSync } from 'node:fs'
-import { copyFile, mkdir, readdir, rename, rm, stat } from 'node:fs/promises'
+import { copyFile, mkdir, stat } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { orcadAgentBrowserNativeName } from '../../shared/orcad-agent-browser-name'
 import { isProcessAlive } from '../../shared/serve-bundle-coordination'
-
-const TEMPORARY_PREFIX = '.tmp-'
+import { publishClaimedSnapshot, removeUnusedSnapshots } from './claimed-snapshot-store'
 
 /** The installed app's agent-browser driver, for orcad's Chromium provider (#33846). Packaged apps ship it in `resources`; a dev checkout keeps it in node_modules. */
 export function findAppAgentBrowserDriver(
@@ -34,28 +33,13 @@ export async function stageAppAgentBrowserDriver(
   try {
     const { size, mtimeMs } = await stat(driver)
     const id = `${size}-${Math.trunc(mtimeMs)}`
-    const staged = join(root, id, basename(driver))
-    if (!existsSync(staged)) {
-      const temporary = join(root, `${TEMPORARY_PREFIX}${process.pid}-${id}`)
-      await mkdir(temporary, { recursive: true })
-      await copyFile(driver, join(temporary, basename(driver)))
-      await rename(temporary, join(root, id)).catch(async (error: unknown) => {
-        await rm(temporary, { recursive: true, force: true })
-        if (!existsSync(staged)) {
-          throw error
-        }
-      })
-    }
+    await mkdir(root, { recursive: true })
+    const snapshot = await publishClaimedSnapshot(root, id, process.pid, (directory) =>
+      copyFile(driver, join(directory, basename(driver)))
+    )
     // A copy still running for another serve stays locked and survives until a later pass.
-    for (const name of await readdir(root)) {
-      const copyingPid = name.startsWith(TEMPORARY_PREFIX)
-        ? Number(name.slice(TEMPORARY_PREFIX.length).split('-')[0])
-        : null
-      if (name !== id && !(copyingPid && isProcessAlive(copyingPid))) {
-        await rm(join(root, name), { recursive: true, force: true }).catch(() => undefined)
-      }
-    }
-    return staged
+    await removeUnusedSnapshots(root, id, isProcessAlive)
+    return join(snapshot, basename(driver))
   } catch {
     // Without a copy, Chromium stays unavailable rather than locking the installed image.
     return undefined
