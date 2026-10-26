@@ -4,14 +4,18 @@ import {
   AlertCircle,
   CornerDownRight,
   ListEnd,
+  Image as ImageIcon,
   MoreHorizontal,
   Send,
   Trash2
 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
-import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
+import {
+  mobileQueuedMessageCardLine,
+  type MobileQueuedMessageCard
+} from './mobile-structured-queued-message-cards'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
-import { MobileNativeChatQueuedMessageEditor } from './MobileNativeChatQueuedMessageEditor'
+import { MobileQueuedMessageComposer } from './MobileQueuedMessageComposer'
 import { MobileQueuedCardText } from './MobileQueuedCardText'
 import { queuedMessageStyles as styles } from './mobile-native-chat-queued-message-styles'
 
@@ -40,7 +44,7 @@ export function MobileQueuedMessageCardRow({
         style={styles.divided}
         onLayout={(event) => onEditorLayout(event.nativeEvent.layout)}
       >
-        <MobileNativeChatQueuedMessageEditor editor={editor} attribution={card.attribution} />
+        <MobileQueuedMessageComposer editor={editor} attribution={card.attribution} />
       </View>
     )
   }
@@ -74,7 +78,7 @@ function QueuedMessageCardContents({
             </Text>
           ) : null}
           <MobileQueuedCardText
-            text={card.text}
+            text={mobileQueuedMessageCardLine(card)}
             expanded={expanded}
             onToggle={() => setExpanded(!expanded)}
           />
@@ -85,7 +89,16 @@ function QueuedMessageCardContents({
           ) : null}
         </View>
         <View style={styles.actions}>
-          {}
+          {card.images ? (
+            <View
+              style={styles.actions}
+              accessible
+              accessibilityLabel={`${card.images.length} images`}
+            >
+              <ImageIcon size={12} color={colors.textMuted} strokeWidth={2} />
+              <Text style={styles.caption}>{card.images.length}</Text>
+            </View>
+          ) : null}
           {card.waitsForAgent ? null : (
             <Pressable
               accessibilityRole="button"
@@ -128,7 +141,6 @@ function QueuedMessageCardContents({
           >
             <Trash2 size={14} color={colors.textPrimary} strokeWidth={2} />
           </Pressable>
-          {}
           {card.command ? null : (
             <Pressable
               accessibilityRole="button"

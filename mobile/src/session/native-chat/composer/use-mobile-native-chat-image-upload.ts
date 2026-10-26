@@ -1,3 +1,7 @@
+import {
+  mobileNativeChatDraftDestination,
+  type MobileNativeChatDraftDestination
+} from './mobile-native-chat-draft-inputs'
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { CLIPBOARD_IMAGE_TOO_LARGE_ERROR } from '../../../../../src/shared/clipboard-image'
 import type { RpcClient } from '../../../transport/rpc-client'
@@ -24,7 +28,10 @@ export function useMobileNativeChatImageUpload(args: {
   scopeKey: string | null
   structuredNativeChat: boolean
   showToast: ShowToast
-  onImagesUploaded: (scope: string, images: UploadedNativeChatImage[]) => void
+  onImagesUploaded: (
+    scope: MobileNativeChatDraftDestination,
+    images: UploadedNativeChatImage[]
+  ) => void
   onAttachSuccess?: () => void
   onError?: () => void
 }): {
@@ -62,6 +69,7 @@ export function useMobileNativeChatImageUpload(args: {
       ) {
         return
       }
+      const destination = mobileNativeChatDraftDestination(scope)
       let started = false
       const uploadedImages: UploadedNativeChatImage[] = []
       let uploadError: unknown = null
@@ -88,10 +96,10 @@ export function useMobileNativeChatImageUpload(args: {
         }
       }
       if (uploadedImages.length > 0) {
-        onImagesUploaded(scope, uploadedImages)
+        onImagesUploaded(destination, uploadedImages)
         onAttachSuccess?.()
       }
-      if (uploadError !== null) {
+      if (uploadError !== null && destination.active) {
         const message = uploadError instanceof Error ? uploadError.message : String(uploadError)
         onError?.()
         if (connStateRef.current !== 'connected') {

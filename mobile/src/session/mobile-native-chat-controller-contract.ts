@@ -32,6 +32,8 @@ export type MobileNativeChatController = {
   showNativeChat: boolean
   showNativeChatRef: MutableRefObject<boolean>
   nativeChatAgent: string | null
+  chatComposerScopeKey?: string | null
+  reportQueuedEditError?: (message: string) => void
   chatComposerText: string
   setChatComposerText: Dispatch<SetStateAction<string>>
   getChatComposerEditGeneration: () => number

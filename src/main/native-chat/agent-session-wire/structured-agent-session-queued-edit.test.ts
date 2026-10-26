@@ -21,6 +21,7 @@ import { shouldQueueStructuredAgentSessionSend } from './structured-agent-sessio
 import { QUEUED_MESSAGES_PUBLISHED_MAX_BYTES } from './structured-agent-session-queued-published-bytes'
 import { QUEUED_MESSAGE_EDIT_LEASE_MS } from '../agent-session-journal/queued-message-edit-leases'
 import { agentSessionAttachmentStoreRoot } from '../agent-session-attachments/agent-session-attachment-references'
+import type { AgentJournalSkillRef } from '../../../shared/agent-session-journal-types'
 import type { QueuedMessageImageBlock } from '../../../shared/queued-message-edit'
 
 let rig: QueuedMessageTestRig
@@ -56,13 +57,15 @@ function update(
   text: string,
   operationId?: string,
   images?: QueuedMessageImageBlock[],
-  queuedImageCards?: boolean
+  queuedImageCards?: boolean,
+  skills?: readonly AgentJournalSkillRef[]
 ) {
   const fields = {
     messageId,
     expectedBodyFingerprint: expected,
     text,
-    ...(images ? { images } : {})
+    ...(images ? { images } : {}),
+    ...(skills !== undefined ? { skills } : {})
   }
   return rig.host.queuedMessageUpdate(QUEUED_RIG_CALLER, {
     envelope: rig.envelope(
@@ -103,7 +106,7 @@ function held() {
 }
 
 describe('saving a queued card in place', () => {
-  it('keeps id, position and sender; text that reads like a command stays text', async () => {
+  it('keeps id and position and attributes an edited agent message to the user', async () => {
     await rig.workingSend()
     const from = { kind: 'agent' as const, senders: [], orchestration: null }
     const queued = await rig.send('original', 'queue-if-active', { internal: true, from }).result
@@ -116,13 +119,101 @@ describe('saving a queued card in place', () => {
       ok: true,
       value: { status: 'updated' }
     })
-    const body = { ...before.body, blocks: [{ type: 'text' as const, text: '/compact' }] }
+    const { from: _sender, ...plain } = before.body
+    const body = { ...plain, blocks: [{ type: 'text' as const, text: '/compact' }] }
     expect(journal().queuedMessages.get(id)).toEqual({
       ...before,
       body,
       fingerprint: agentSessionSendBodyFingerprint(HOST_TEST_SESSION, body)
     })
     expect(published(id)?.body).toEqual(body)
+  })
+
+  it('replaces skills including an empty set, reconciles lost replies and reopens the durable user-authored body', async () => {
+    await rig.workingSend()
+    const from = { kind: 'agent' as const, senders: [], orchestration: null }
+    const originalSkill = { name: 'review', path: '/remote/old/SKILL.md' }
+    const nextSkill = { name: 'review', path: '/remote/new/SKILL.md' }
+    const row = await journal().queuedMessages.insert({
+      messageId: 'skill-card',
+      body: {
+        ...hostTestMessage('$review this'),
+        from,
+        skills: [originalSkill]
+      }
+    })
+    expect(await update(row.messageId, row.fingerprint, '$review this')).toMatchObject({
+      value: { status: 'unchanged' }
+    })
+    expect(published(row.messageId)?.body.from).toEqual(from)
+    expect(
+      await update(row.messageId, '0'.repeat(64), '$review this', undefined, undefined, undefined, [
+        nextSkill
+      ])
+    ).toMatchObject({ value: { status: 'changed' } })
+    expect(published(row.messageId)?.body.from).toEqual(from)
+    const operation = hostTestOperationId()
+    expect(
+      await update(
+        row.messageId,
+        row.fingerprint,
+        '$review this',
+        operation,
+        undefined,
+        undefined,
+        [nextSkill]
+      )
+    ).toMatchObject({ value: { status: 'updated' } })
+    expect(
+      await update(
+        row.messageId,
+        row.fingerprint,
+        '$review this',
+        operation,
+        undefined,
+        undefined,
+        [nextSkill]
+      )
+    ).toMatchObject({ value: { status: 'unchanged' } })
+    expect(published(row.messageId)?.body.skills).toEqual([nextSkill])
+    expect(published(row.messageId)?.body).not.toHaveProperty('from')
+    await rig.restartHostProcess()
+    await rig.drafts()
+    expect(published(row.messageId)?.body.skills).toEqual([nextSkill])
+    expect(published(row.messageId)?.body).not.toHaveProperty('from')
+    expect(
+      await update(
+        row.messageId,
+        fingerprint(row.messageId),
+        '$review this',
+        undefined,
+        undefined,
+        undefined,
+        []
+      )
+    ).toMatchObject({ value: { status: 'updated' } })
+    expect(published(row.messageId)?.body).not.toHaveProperty('skills')
+  })
+
+  it('preserves omitted skills on a no-op from an old phone and drops them only on its content-changing edit', async () => {
+    await rig.workingSend()
+    const row = await journal().queuedMessages.insert({
+      messageId: 'legacy-skills',
+      body: {
+        ...hostTestMessage('$review this'),
+        skills: [{ name: 'review', path: '/skills/review.md' }],
+        from: { kind: 'agent', senders: [], orchestration: null }
+      }
+    })
+    expect(await update(row.messageId, row.fingerprint, '$review this')).toMatchObject({
+      value: { status: 'unchanged' }
+    })
+    expect(published(row.messageId)?.body.skills).toHaveLength(1)
+    expect(await update(row.messageId, row.fingerprint, '$review that')).toMatchObject({
+      value: { status: 'updated' }
+    })
+    expect(published(row.messageId)?.body).not.toHaveProperty('skills')
+    expect(published(row.messageId)?.body).not.toHaveProperty('from')
   })
 
   it('a resent Save reads the card as it stands and never overwrites newer text', async () => {

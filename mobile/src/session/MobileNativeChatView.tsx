@@ -1,3 +1,4 @@
+import { updateMobileNativeChatDraftInputs } from './native-chat/composer/mobile-native-chat-draft-inputs'
 import { useCallback, useMemo } from 'react'
 import { nativeChatTaskListPredecessors } from '../../../src/shared/native-chat-task-list-history'
 import {
@@ -93,6 +94,7 @@ type Props = ComposerTrayProps & {
   pending: MobileNativeChatPendingItem[]
   // Retain local preview URIs after authoritative image messages replace optimistic rows.
   imagePreviewsByMessageId?: Record<string, string[]>
+  composerScopeKey?: string | null
   composerText: string
   onComposerTextChange: (text: string) => void
   onAttachImage?: () => void
@@ -161,6 +163,7 @@ export function MobileNativeChatView({
   pending,
   imagePreviewsByMessageId,
   composerText,
+  composerScopeKey,
   onComposerTextChange,
   onAttachImage,
   attachments,
@@ -373,6 +376,15 @@ export function MobileNativeChatView({
       {}
       {trayContent}
       <MobileNativeChatComposer
+        draftScopeKey={composerScopeKey}
+        onPickSkill={(skill) => {
+          if (composerScopeKey) {
+            updateMobileNativeChatDraftInputs(composerScopeKey, (current) => ({
+              ...current,
+              skills: [...current.skills.filter(({ name }) => name !== skill.name), skill]
+            }))
+          }
+        }}
         structured={structuredActivityUi ? structuredComposer : null}
         value={composerText}
         onChangeText={onComposerTextChange}

@@ -18,7 +18,7 @@ import type { AgentSessionFailureFact } from '../../../../shared/agent-session-f
 import { NATIVE_CHAT_ROOT_SELECTOR } from '@/lib/native-chat-paste-request'
 import { focusNativeChatPromptCard } from './use-native-chat-prompt-card-focus'
 import { QUEUED_MESSAGE_PAUSED_SEND_FAILED } from '../../../../shared/agent-session-wire'
-import type { QueuedEditAttachTarget } from './use-native-chat-queued-edit-image-intake'
+import type { QueuedEditAttachTarget } from './NativeChatQueuedMessageComposer'
 
 /** Keep host-held drafts outside the transcript until consumed; keep the live region mounted for the first card. */
 export function NativeChatQueuedMessageList({

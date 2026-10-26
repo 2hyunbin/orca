@@ -16,7 +16,10 @@ import {
   AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY,
   AGENT_SESSION_PERMISSION_OWN_RUNTIME_CAPABILITY
 } from '../../../src/shared/agent-session-permission-modes-capability'
-import { AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-runtime-capabilities'
+import {
+  AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY,
+  AGENT_SESSION_QUEUED_MESSAGE_SKILLS_EDIT_RUNTIME_CAPABILITY
+} from '../../../src/shared/agent-session-runtime-capabilities'
 
 export type StructuredAgentSessionHostSupport = {
   coherentModelCatalog?: boolean
@@ -30,6 +33,7 @@ export type StructuredAgentSessionHostSupport = {
   queuedMessageEdit?: boolean
   // Older hosts edit queued text only.
   queuedMessageImageEdit?: boolean
+  queuedMessageSkillsEdit?: boolean
   // Hosts predating mobile access refuse this feed even if they implement it.
   statusFeed: boolean
   quietRepeatedStop: boolean
@@ -53,6 +57,9 @@ export function structuredAgentSessionHostSupport(
     queuedMessages: capabilities.includes(AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY),
     queuedCommands: capabilities.includes(AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY),
     queuedMessageEdit: capabilities.includes(AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY),
+    queuedMessageSkillsEdit: capabilities.includes(
+      AGENT_SESSION_QUEUED_MESSAGE_SKILLS_EDIT_RUNTIME_CAPABILITY
+    ),
     queuedMessageImageEdit: capabilities.includes(
       AGENT_SESSION_QUEUED_MESSAGE_IMAGE_EDIT_RUNTIME_CAPABILITY
     ),

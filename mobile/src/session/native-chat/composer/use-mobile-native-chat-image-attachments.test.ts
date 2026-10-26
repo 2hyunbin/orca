@@ -1,3 +1,4 @@
+import { resetMobileNativeChatDraftInputsForTests } from './mobile-native-chat-draft-inputs'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { buildAgentTuiClearInputForText } from '../../../../../src/shared/agent-tui-input-clear'
@@ -85,6 +86,7 @@ describe('useMobileNativeChatImageAttachments', () => {
   }
 
   beforeEach(() => {
+    resetMobileNativeChatDraftInputsForTests()
     pick.mockReset()
     resetMobileNativeChatStaleInputForTests()
     resetMobileNativeChatTerminalWritesForTests()

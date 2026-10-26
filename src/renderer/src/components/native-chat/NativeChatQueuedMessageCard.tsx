@@ -38,8 +38,8 @@ import { useNativeChatClippedLine } from './use-native-chat-clipped-line'
 import { agentSessionFailureStatedByStartRow } from './structured-agent-session-delivery-notices'
 import type { AgentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import { agentSessionWriteNotDoneParts } from '../../../../shared/agent-session-refusal-notice'
-import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
-import type { QueuedEditAttachTarget } from './use-native-chat-queued-edit-image-intake'
+import { NativeChatQueuedMessageComposer } from './NativeChatQueuedMessageComposer'
+import type { QueuedEditAttachTarget } from './NativeChatQueuedMessageComposer'
 import type { QueuedMessageInlineEditor } from './use-structured-agent-session-queued-edit'
 import { nativeChatImageLabel } from './native-chat-image-label'
 
@@ -202,7 +202,7 @@ export function NativeChatQueuedMessageCard({
     return (
       // The editor fills the row, so a drop anywhere on the card reaches it.
       <li data-queued-message-id={card.messageId} data-queued-message-state={card.state}>
-        <NativeChatQueuedMessageEditor
+        <NativeChatQueuedMessageComposer
           editor={editor}
           attachTo={editAttachTo}
           sender={sender}

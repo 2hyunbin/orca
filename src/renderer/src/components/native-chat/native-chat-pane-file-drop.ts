@@ -19,6 +19,7 @@ export type CapturedNativeChatDrop = ((paths: string[]) => Promise<void>) & {
 }
 
 export type NativeChatPaneDropClaim = {
+  focusScopeKey?: string
   destinationKey: string
   captureExternalDrop: () => CapturedNativeChatDrop
   /** A guarded composer refuses the drop, so the pane must not invite one. */

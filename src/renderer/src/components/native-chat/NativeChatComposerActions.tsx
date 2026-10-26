@@ -14,6 +14,7 @@ import type { NativeChatContextUsageSummary } from './native-chat-context-usage-
 import type { NativeChatOptionPickerRequest } from './native-chat-composer-types'
 
 export type NativeChatComposerActionsProps = {
+  editSession?: { cancel: () => void }
   attachDisabled: boolean
   dictationDisabled: boolean
   sendDisabled: boolean
@@ -45,6 +46,7 @@ export type NativeChatComposerActionsProps = {
 }
 
 export function NativeChatComposerActions({
+  editSession,
   attachDisabled,
   dictationDisabled,
   sendDisabled,
@@ -93,17 +95,26 @@ export function NativeChatComposerActions({
           ? isStopping
             ? translate('components.native-chat.status.stopping', 'Stopping…')
             : translate('components.native-chat.stop', 'Stop the agent')
-          : (sendReason ?? translate('components.native-chat.composer.send', 'Send'))
+          : (sendReason ??
+            (editSession
+              ? translate('components.native-chat.queuedMessages.save', 'Save')
+              : translate('components.native-chat.composer.send', 'Send')))
       }
       disabled={sendDisabled || (isWorking && isStopping)}
       // A press keeps focus where it was; a focused button drops it to <body> when it disables.
       onMouseDown={(event) => event.preventDefault()}
       onClick={handleCriticalAction}
       variant={stops ? 'secondary' : 'default'}
-      size="icon"
-      className="size-8 rounded-full pointer-coarse:size-10"
+      size={editSession ? 'sm' : 'icon'}
+      className={editSession ? '' : 'size-8 rounded-full pointer-coarse:size-10'}
     >
-      {stops ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" />}
+      {editSession ? (
+        translate('components.native-chat.queuedMessages.save', 'Save')
+      ) : stops ? (
+        <Square className="size-3.5 fill-current" />
+      ) : (
+        <ArrowUp className="size-4" />
+      )}
     </Button>
   )
 
@@ -190,6 +201,11 @@ export function NativeChatComposerActions({
           </TooltipContent>
         </Tooltip>
         <DraftNotSavedIcon shown={draftNotSaved === true} />
+        {editSession ? (
+          <Button type="button" variant="ghost" size="sm" onClick={editSession.cancel}>
+            {translate('common.cancel', 'Cancel')}
+          </Button>
+        ) : null}
         {sendReason ? (
           <Tooltip>
             <TooltipTrigger asChild>

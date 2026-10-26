@@ -130,7 +130,7 @@ export function useNativeChatComposerAttachments({
     [mountedRef, textareaRef]
   )
   useLayoutEffect(() => {
-    if (disabled) {
+    if (disabled && !attachmentScopeKey.startsWith('queued-edit:')) {
       settlePendingImageReferences(attachmentScopeKey, scopeEditor(), () =>
         clearNativeChatPendingAttachments(attachmentScopeKey)
       )

@@ -29,6 +29,7 @@ export function useNativeChatFileDrops(args: Args) {
   }, [destinationKey])
   useNativeChatPaneFileDropClaim({
     destinationKey,
+    focusScopeKey: args.draftScopeKey ?? args.paneKey,
     disabled: args.disabled,
     ...workspace,
     captureExternalDrop: () =>

@@ -71,6 +71,42 @@ export type NativeChatComposerDraftChange = {
   owner?: NativeChatComposerDraftOwner
 }
 
+export type NativeChatEditDraftDestination = { scopeKey: string; active: boolean }
+const ephemeralDrafts = new Map<string, NativeChatEditDraftDestination>()
+
+export function captureNativeChatEditDraftDestination(
+  scopeKey: string
+): NativeChatEditDraftDestination | undefined {
+  return ephemeralDrafts.get(scopeKey)
+}
+
+export function redirectNativeChatEditDraft(scopeKey: string, destination: string): void {
+  const target = ephemeralDrafts.get(scopeKey)
+  if (target) {
+    target.scopeKey = destination
+  }
+}
+
+export function isNativeChatEditDraft(scopeKey: string): boolean {
+  return scopeKey.startsWith('queued-edit:')
+}
+
+/** Edit scopes share input machinery but never enter draft persistence. */
+export function openNativeChatEditDraft(scopeKey: string, draft: NativeChatComposerDraft): void {
+  ephemeralDrafts.set(scopeKey, { scopeKey, active: true })
+  updateNativeChatComposerDraft(scopeKey, draft, 'immediate')
+}
+
+export function closeNativeChatEditDraft(scopeKey: string): void {
+  const target = ephemeralDrafts.get(scopeKey)
+  if (target?.scopeKey === scopeKey) {
+    target.active = false
+  }
+  ephemeralDrafts.delete(scopeKey)
+  records.delete(scopeKey)
+  notifyScope(scopeKey)
+}
+
 const EMPTY_DRAFT: DraftRecord = { text: '', images: [], savedAt: 0 }
 
 let resolveOwner: ((scopeKey: string) => NativeChatComposerDraftOwner | undefined) | null = null
@@ -125,6 +161,9 @@ export function updateNativeChatComposerDraft(
   persist: 'immediate' | 'deferred',
   append?: DraftAppend
 ): void {
+  if (isNativeChatEditDraft(scopeKey) && !ephemeralDrafts.has(scopeKey)) {
+    return
+  }
   const current = records.get(scopeKey) ?? EMPTY_DRAFT
   const text = change.text ?? current.text
   const document = 'document' in change ? change.document : current.document
@@ -151,7 +190,9 @@ export function updateNativeChatComposerDraft(
     records.delete(scopeKey)
     reconcileRestoredImageChecks(scopeKey, [])
     notifyScope(scopeKey)
-    persistNativeChatComposerDraft(scopeKey, 'immediate', append)
+    if (!isNativeChatEditDraft(scopeKey)) {
+      persistNativeChatComposerDraft(scopeKey, 'immediate', append)
+    }
     return
   }
   // Why stamped once: a conversation never moves to another workspace, so its owner stays true.
@@ -168,6 +209,9 @@ export function updateNativeChatComposerDraft(
   records.set(scopeKey, record)
   reconcileRestoredImageChecks(scopeKey, record.images)
   notifyScope(scopeKey)
+  if (isNativeChatEditDraft(scopeKey)) {
+    return
+  }
   persistNativeChatComposerDraft(scopeKey, persist, append)
   if (!load.hydrated) {
     // Why: a window whose startup never started the load still gets its saved drafts.
@@ -191,13 +235,14 @@ export function appendToNativeChatComposerDraft(
   const before = records.get(scopeKey)
   const current = readNativeChatComposerDraft(scopeKey)
   const placed = placeNativeChatComposerDraftAddition(current, addition)
-  const { text, images, document } = withAddition(current, placed)
+  const { text, images, document, pastedTextFiles } = withAddition(current, placed)
   updateNativeChatComposerDraft(
     scopeKey,
     {
       text,
       images,
       document,
+      pastedTextFiles,
       ...(owner ? { owner } : {})
     },
     'immediate',
@@ -211,7 +256,10 @@ export function appendToNativeChatComposerDraft(
   if (after === before && !hasLocalChange(scopeKey) && !refusedScopes.has(scopeKey)) {
     return true
   }
-  return journalNativeChatComposerDraftAddition(scopeKey, placed, after.savedAt)
+  return (
+    isNativeChatEditDraft(scopeKey) ||
+    journalNativeChatComposerDraftAddition(scopeKey, placed, after.savedAt)
+  )
 }
 
 /** Clear only the sent draft’s unchanged portion so late acceptance cannot erase newer typing or attachments. */
@@ -289,6 +337,7 @@ export function deleteNativeChatComposerDraftsOwnedBy(owner: NativeChatComposerD
 }
 
 export function clearNativeChatComposerDraftsForTests(): void {
+  ephemeralDrafts.clear()
   clearDraftMemoryForTests()
   resetNativeChatComposerDraftPersistenceForTests()
   resetNativeChatComposerDraftLoadForTests()

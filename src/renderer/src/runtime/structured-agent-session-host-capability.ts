@@ -6,6 +6,7 @@ import {
   AGENT_SESSION_QUEUED_COMMANDS_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGE_EDIT_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGE_IMAGE_EDIT_RUNTIME_CAPABILITY,
+  AGENT_SESSION_QUEUED_MESSAGE_SKILLS_EDIT_RUNTIME_CAPABILITY,
   AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY,
   AGENT_SESSION_REWIND_RECOVERY_CAPABILITY,
   type RuntimeCapability
@@ -198,4 +199,13 @@ export function useStructuredAgentSessionHostEditsQueuedImages(
 /** The API runtime owns Chat settings; on web the local API forwards to the active paired host. */
 export function useChatSettingsOwnPermissions(): boolean {
   return useStructuredAgentSessionOwnPermissionState({ kind: 'local' }) === 'supported'
+}
+
+export function useStructuredAgentSessionHostEditsQueuedSkills(
+  target: RuntimeClientTarget
+): boolean {
+  return useStructuredAgentSessionHostCapability(
+    target,
+    AGENT_SESSION_QUEUED_MESSAGE_SKILLS_EDIT_RUNTIME_CAPABILITY
+  )
 }

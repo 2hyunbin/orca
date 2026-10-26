@@ -83,6 +83,8 @@ export type NativeChatOptimisticSendOutcome = {
 export type NativeChatComposerProps = {
   /** Tab hosting the agent; used to resolve the live ptyId + runtime settings. */
   terminalTabId: string
+  /** Input-only edit session: every submit saves, Escape cancels, and send-only actions are absent. */
+  editSession?: { save: () => void; cancel: () => void; canSave: boolean }
   /** Stable split-leaf identity; unlike a PTY id, this survives reconnects. */
   paneKey: string
   /** Unsent-draft owner; defaults to paneKey, while structured chats share conversation scope. */

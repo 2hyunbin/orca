@@ -1,8 +1,9 @@
+import { promptMarkersToImageReferences } from '../../../../shared/native-chat-image-transcript-markers'
+import { nativeChatImageRowIds } from './native-chat-composer-image-references'
 // Edit inside the card while prompts own the composer; host owns durable content, this pane owns typing, a delivery hold lease and compare-and-set Save.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentSessionHostKey } from '@/runtime/structured-agent-session-host-capability'
 import type {
   AgentSessionQueuedMessage,
@@ -11,66 +12,39 @@ import type {
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
 import { agentSessionSendBodyFingerprint } from '../../../../shared/structured-agent-session-send-mutation'
 import {
-  queuedEditDirty,
-  queuedEditInput,
-  queuedEditSaveHeld,
   queuedMessageEditableText,
   queuedMessageWithEdit
 } from '../../../../shared/queued-message-edit'
 import { queuedEditChangedNotice, queuedEditNotice } from './queued-message-edit-notices'
 import {
-  handOffQueuedEdit,
-  queuedEditImageFields,
-  queuedEditImagesEditor,
-  releaseQueuedEditImages,
-  type QueuedEditImagesEditor,
-  type QueuedEditImageState
-} from './structured-agent-session-queued-edit-images'
-import { structuredSessionOperationId } from './structured-agent-session-operation-id'
+  createNativeChatQueuedEditDraft,
+  discardNativeChatQueuedEdit,
+  handBackNativeChatQueuedEdit,
+  nativeChatQueuedEditDirty,
+  nativeChatQueuedEditHeld,
+  nativeChatQueuedEditInput
+} from './native-chat-queued-edit-draft'
 import {
-  startQueuedEditLease,
-  type QueuedEditLease
-} from './structured-agent-session-queued-edit-lease'
+  readNativeChatComposerDraft,
+  updateNativeChatComposerDraft
+} from './native-chat-composer-draft-store'
+import { structuredSessionOperationId } from './structured-agent-session-operation-id'
+import { startQueuedEditLease } from './structured-agent-session-queued-edit-lease'
 import type { QueuedMessageCard } from './structured-agent-session-queued-cards'
 import {
   queuedCardOnScreen,
   queuedEditStanding
 } from './structured-agent-session-queued-edit-standing'
-import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
-
-export type QueuedEditTransport = {
-  target: RuntimeClientTarget
-  sessionId: string
-  /** The host advertises `agent-session.queued-message-edit.v1`; without it there is no Edit. */
-  capable: boolean
-  /** The host advertises `agent-session.queued-message-image-edit.v1`: Save may replace images. */
-  imagesCapable?: boolean
-  write: StructuredAgentSessionWrite
-}
-
-export type QueuedMessageInlineEditor = {
-  messageId: string
-  text: string
-  /** The host has not answered the lease yet: the field shows the text, read-only. */
-  acquiring: boolean
-  saving: boolean
-  canSave: boolean
-  change: (text: string) => void
-  save: () => void
-  cancel: () => void
-  /** Present when the host can replace the card's images; absent, the editor edits text only. */
-  images?: QueuedEditImagesEditor
-}
-
-type Edit = QueuedEditImageState & {
-  scope: string
-  messageId: string
-  /** The body Save expects to replace; fixed for the edit, so a newer text is never overwritten. */
-  baseFingerprint: string
-  acquiring: boolean
-  saving: boolean
-  lease: QueuedEditLease
-}
+import { useNativeChatQueuedEditLifetime } from './native-chat-queued-edit-session'
+import type {
+  QueuedEditTransport,
+  QueuedMessageInlineEditor,
+  NativeChatQueuedEditSession as Edit
+} from './native-chat-queued-edit-session'
+export type {
+  QueuedEditTransport,
+  QueuedMessageInlineEditor
+} from './native-chat-queued-edit-session'
 
 export function useStructuredAgentSessionQueuedEdit(args: {
   transport: QueuedEditTransport
@@ -94,55 +68,51 @@ export function useStructuredAgentSessionQueuedEdit(args: {
   const latest = useRef({ messages, cards, submissions, promptOpen })
   useEffect(() => {
     latest.current = { messages, cards, submissions, promptOpen }
-  }, [messages, cards, submissions, promptOpen])
+    if (active.current?.scope === scope) {
+      active.current.view = latest.current
+    }
+  }, [messages, cards, submissions, promptOpen, scope])
 
   const render = useCallback((edit: Edit | null) => {
     active.current = edit
     setShown(edit ? { ...edit } : null)
   }, [])
-  const close = useCallback(() => {
-    const edit = active.current
-    render(null)
-    edit?.lease.end()
-    if (edit) {
-      releaseQueuedEditImages(edit)
-    }
-  }, [render])
+  const close = useCallback(
+    (edit = active.current) => {
+      if (!edit || edit.closed) {
+        return
+      }
+      edit.closed = true
+      if (active.current === edit) {
+        render(null)
+      }
+      edit.lease.end()
+      discardNativeChatQueuedEdit(edit)
+    },
+    [render]
+  )
   /** Return dirty text to its conversation’s composer after existing draft content when the card leaves the queue. */
   const gone = useCallback(
     (edit: Edit) => {
-      if (active.current !== edit) {
+      if (edit.closed) {
         return
       }
-      if (queuedEditDirty(edit.body, edit) && handOffQueuedEdit(edit)) {
-        toast.error(queuedEditNotice(latest.current.promptOpen ? 'editGonePrompt' : 'editGone'))
+      if (nativeChatQueuedEditDirty(edit) && handBackNativeChatQueuedEdit(edit)) {
+        toast.error(queuedEditNotice(edit.view.promptOpen ? 'editGonePrompt' : 'editGone'))
       }
-      close()
+      close(edit)
     },
     [close]
   )
 
-  // On chat/host/composer changes, unmount or reload, hand unsaved typing back to its original chat.
-  useEffect(() => {
-    const handOff = (): void => {
-      const edit = active.current
-      active.current = null
-      reopen.current = null
-      if (edit && queuedEditDirty(edit.body, edit)) {
-        handOffQueuedEdit(edit)
-      }
-      if (edit) {
-        edit.lease.end()
-        // The chat box takes paths, never these previews.
-        releaseQueuedEditImages(edit)
-      }
-    }
-    window.addEventListener('pagehide', handOff)
-    return () => {
-      window.removeEventListener('pagehide', handOff)
-      handOff()
-    }
-  }, [scope])
+  useNativeChatQueuedEditLifetime({
+    scope,
+    shownScope: shown?.scopeKey,
+    active,
+    reopen,
+    close,
+    render
+  })
 
   const begin = useCallback(
     async (messageId: string): Promise<void> => {
@@ -166,19 +136,15 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       })
       const edit: Edit = {
         scope,
-        draftKey: composerScopeKey,
+        ...createNativeChatQueuedEditDraft(message.body, composerScopeKey),
         messageId,
         body: message.body,
-        text,
-        ...queuedEditImageFields(
-          message.body,
-          () => edit,
-          () => isOpen(active, edit),
-          () => render(edit)
-        ),
         baseFingerprint,
         acquiring: true,
         saving: false,
+        closed: false,
+        pendingClose: false,
+        view: latest.current,
         lease
       }
       render(edit)
@@ -201,29 +167,18 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     [capable, close, composerScopeKey, messages, render, scope, sessionId, target]
   )
 
-  const change = useCallback(
-    (text: string) => {
-      const edit = active.current
-      if (edit && !edit.acquiring && !edit.saving) {
-        edit.text = text
-        render(edit)
-      }
-    },
-    [render]
-  )
-
   const save = useCallback(async () => {
     const edit = active.current
     if (!edit || edit.acquiring || edit.saving) {
       return
     }
-    if (!queuedEditDirty(edit.body, edit)) {
+    if (!nativeChatQueuedEditDirty(edit)) {
       close()
       return
     }
-    const input = queuedEditInput(edit.body, edit, imagesCapable)
+    const input = nativeChatQueuedEditInput(edit, imagesCapable, transport.skillsCapable === true)
     const edited = queuedMessageWithEdit(edit.body, input)
-    if (!edited.ok || queuedEditSaveHeld(edit.body, edit, imagesCapable)) {
+    if (!edited.ok || nativeChatQueuedEditHeld(edit, imagesCapable)) {
       return
     }
     edit.saving = true
@@ -235,36 +190,45 @@ export function useStructuredAgentSessionQueuedEdit(args: {
         messageId: edit.messageId,
         expectedBodyFingerprint: edit.baseFingerprint,
         text: input.text,
-        ...(input.images ? { images: input.images } : {})
+        ...(input.images ? { images: input.images } : {}),
+        ...(input.skills ? { skills: input.skills } : {})
       }
     )
-    if (!isOpen(active, edit)) {
+    if (edit.closed) {
       return
     }
     edit.saving = false
     if (result.kind === 'done') {
       const { status } = result.value
       if (status === 'updated' || status === 'unchanged') {
-        close()
+        close(edit)
       } else if (status === 'gone') {
         gone(edit)
       } else if (status === 'changed') {
         // Preserve typing after a competing edit, then reopen on the newer text; removal alone needs no handoff.
-        toast.error(queuedEditChangedNotice(handOffQueuedEdit(edit), latest.current.promptOpen))
-        reopen.current = { scope, messageId: edit.messageId, stale: edit.baseFingerprint }
-        close()
+        toast.error(
+          queuedEditChangedNotice(handBackNativeChatQueuedEdit(edit), edit.view.promptOpen)
+        )
+        if (!edit.pendingClose) {
+          reopen.current = { scope, messageId: edit.messageId, stale: edit.baseFingerprint }
+        }
+        close(edit)
       } else {
-        toast.error(queuedEditNotice('editFailed'))
-        render(edit)
+        if (edit.pendingClose) {
+          gone(edit)
+        } else {
+          toast.error(queuedEditNotice('editFailed'))
+          render(edit)
+        }
       }
       return
     }
     // When Save’s reply is lost/unread, published card state proves whether its body landed; leaving the queue may mean delivery before or after Save.
     const desired = agentSessionSendBodyFingerprint(sessionId, edited.body)
-    const standing = queuedEditStanding(latest.current, sessionId, edit.messageId, desired)
+    const standing = queuedEditStanding(edit.view, sessionId, edit.messageId, desired)
     if (standing === 'sent' || standing === 'holds') {
-      close()
-    } else if (standing === 'gone') {
+      close(edit)
+    } else if (standing === 'gone' || edit.pendingClose) {
       gone(edit)
     } else {
       // A refusal says why; an unread answer leaves the editor as it was for Save again.
@@ -273,7 +237,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
       }
       render(edit)
     }
-  }, [close, gone, imagesCapable, render, scope, sessionId, write])
+  }, [close, gone, imagesCapable, render, scope, sessionId, write, transport.skillsCapable])
 
   // Let in-flight Save decide delivery races; otherwise reconcile departures, but never infer them from an unloaded list.
   useEffect(() => {
@@ -281,7 +245,7 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     if (edit && !edit.saving && messages !== null) {
       const typed = queuedMessageWithEdit(
         edit.body,
-        queuedEditInput(edit.body, edit, imagesCapable)
+        nativeChatQueuedEditInput(edit, imagesCapable, transport.skillsCapable === true)
       )
       const desired = typed.ok ? agentSessionSendBodyFingerprint(sessionId, typed.body) : null
       const view = { messages, cards, submissions }
@@ -303,22 +267,50 @@ export function useStructuredAgentSessionQueuedEdit(args: {
     } else if (agentSessionSendBodyFingerprint(sessionId, listed.body) !== pending.stale) {
       void begin(pending.messageId)
     }
-  }, [begin, cards, close, gone, imagesCapable, messages, scope, sessionId, shown, submissions])
+  }, [
+    begin,
+    cards,
+    close,
+    gone,
+    imagesCapable,
+    messages,
+    scope,
+    sessionId,
+    shown,
+    submissions,
+    transport.skillsCapable
+  ])
 
   const typed =
-    shown && queuedMessageWithEdit(shown.body, queuedEditInput(shown.body, shown, imagesCapable))
+    shown &&
+    queuedMessageWithEdit(
+      shown.body,
+      nativeChatQueuedEditInput(shown, imagesCapable, transport.skillsCapable === true)
+    )
   const editor: QueuedMessageInlineEditor | undefined =
     shown && typed && shown.scope === scope
       ? {
           messageId: shown.messageId,
-          text: shown.text,
+          draftScopeKey: shown.scopeKey,
+          text: readNativeChatComposerDraft(shown.scopeKey).text,
+          change: (text) => {
+            if (!shown.acquiring && !shown.saving) {
+              updateNativeChatComposerDraft(
+                shown.scopeKey,
+                {
+                  text: promptMarkersToImageReferences(text, nativeChatImageRowIds(shown.scopeKey)),
+                  document: undefined
+                },
+                'immediate'
+              )
+            }
+          },
+          imagesCapable,
           acquiring: shown.acquiring,
           saving: shown.saving,
-          canSave: typed.ok && !queuedEditSaveHeld(shown.body, shown, imagesCapable),
-          ...(imagesCapable ? { images: queuedEditImagesEditor(shown, typed) } : {}),
-          change,
+          canSave: typed.ok && !nativeChatQueuedEditHeld(shown, imagesCapable),
           save: () => void save(),
-          cancel: close
+          cancel: () => close()
         }
       : undefined
   return { editor, begin, capable }

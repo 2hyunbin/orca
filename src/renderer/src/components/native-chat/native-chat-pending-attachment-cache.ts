@@ -90,6 +90,7 @@ export function takeNativeChatPendingAttachment(
   scopeKey: string,
   id: string
 ): NativeChatComposerImageAttachment | undefined {
+  scopeKey = pendingDestination(scopeKey, id)
   const current = nativeChatPendingAttachmentSnapshot(scopeKey)
   const taken = current.find((attachment) => attachment.id === id && attachment.pending)
   if (taken) {
@@ -134,6 +135,25 @@ export function nativeChatImageRow<T extends { id: string }>(
   return [...images.flatMap((image) => [...(ahead.get(image.id) ?? []), image]), ...waiting]
 }
 
+/** Move outstanding operations with their draft; completion resolves by chip identity after the source closes. */
+export function moveNativeChatPendingAttachments(from: string, to: string): void {
+  const pending = nativeChatPendingAttachmentSnapshot(from)
+  writePending(to, [...nativeChatPendingAttachmentSnapshot(to), ...pending])
+  writePending(from, [])
+}
+
+function pendingDestination(scope: string, id: string): string {
+  if (nativeChatPendingAttachmentSnapshot(scope).some((chip) => chip.id === id)) {
+    return scope
+  }
+  for (const [key, chips] of pendingCache) {
+    if (chips.some((chip) => chip.id === id)) {
+      return key
+    }
+  }
+  return scope
+}
+
 /** Persist completed images in attachment order; return false if already removed. */
 export function settleNativeChatPendingAttachment(
   scopeKey: string,
@@ -141,6 +161,7 @@ export function settleNativeChatPendingAttachment(
   path: string,
   connectionId?: string | null
 ): boolean {
+  scopeKey = pendingDestination(scopeKey, id)
   const current = nativeChatPendingAttachmentSnapshot(scopeKey)
   const index = current.findIndex((chip) => chip.id === id && chip.pending)
   if (index === -1) {
@@ -178,6 +199,8 @@ export function settleNativeChatPendingAttachmentReferences(
   references: { id: string; path: string }[],
   insertAtCaret?: (paths: string[]) => void
 ): boolean {
+  const originalScope = scopeKey
+  scopeKey = references.length ? pendingDestination(scopeKey, references[0].id) : scopeKey
   const owner = pendingOwners.get(scopeKey)
   const paths = references.flatMap(({ id, path }) =>
     takeNativeChatPendingAttachment(scopeKey, id) ? [path] : []
@@ -185,7 +208,7 @@ export function settleNativeChatPendingAttachmentReferences(
   if (paths.length === 0) {
     return false
   }
-  if (insertAtCaret) {
+  if (insertAtCaret && scopeKey === originalScope) {
     insertAtCaret(paths)
   } else {
     appendNativeChatDraftCache(scopeKey, paths.map(formatNativeChatFileReference).join(' '), owner)

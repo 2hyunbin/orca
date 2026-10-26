@@ -55,7 +55,6 @@ export function useMobileStructuredAgentSession(
 ): StructuredMobileSession {
   const {
     agent,
-    appendComposerText,
     client,
     connected,
     sessionId,
@@ -179,6 +178,7 @@ export function useMobileStructuredAgentSession(
     }) === 'stopping'
   const stopRequestInFlight = isWorking && stopPress.pressed
   const sendWithOutcome = useMobileStructuredSendWithOutcome({
+    composerScopeKey: args.composerScopeKey,
     agent,
     client,
     sessionId,
@@ -225,6 +225,7 @@ export function useMobileStructuredAgentSession(
     [approvalPrompt, questionPrompt, turnId]
   )
   const queued = useMobileStructuredQueuedMessageControls({
+    ...args,
     sessionKey,
     agentName: agent ? (tuiAgentDisplayName(agent) ?? agent) : undefined,
     journalItems: state.items,
@@ -232,14 +233,12 @@ export function useMobileStructuredAgentSession(
     queuePause,
     submissions: state.submissions,
     agentWorking: isWorking,
-    client,
-    sessionId,
+    imagesCapable: hostSupport?.queuedMessageImageEdit === true,
+    skillsCapable: hostSupport?.queuedMessageSkillsEdit === true,
     editCapable: hostSupport ? hostSupport.queuedMessageEdit === true : null,
     chatActive: enabled,
     enabled: enabled && connected,
     mutate,
-    appendComposerText,
-    onSendError,
     ...(onActionResolved ? { onActionResolved } : {})
   })
   // Stop preserves host-held cards under queue pause; only a later user action resumes them.

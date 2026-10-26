@@ -1,3 +1,4 @@
+import { appendNativeChatAttachmentCache } from './native-chat-draft-cache'
 // @vitest-environment happy-dom
 
 // Exercise real edit lifecycle with a scripted host: preserve dirty text on departure and keep lease failures from blocking typing/Save/Cancel.
@@ -312,7 +313,7 @@ describe('inline queued editor', () => {
     expect(hook.result.current.editor).toMatchObject({ text: 'long', saving: false })
   })
 
-  it('Save answering gone puts the typing in the chat box; another chat keeps it there quietly', async () => {
+  it('Save answering gone puts the typing in the chat box; another chat keeps it there once', async () => {
     answer = done({ status: 'gone', messageId: 'card', disposition: 'dispatched' })
     const hook = harness()
     await begin(hook)
@@ -326,11 +327,11 @@ describe('inline queued editor', () => {
     hook.rerender({ messages: [message], sessionId: 'another-session' })
     expect(hook.result.current.editor).toBeUndefined()
     expect(readNativeChatDraftCache(SCOPE)).toBe('unsaved\n\nanother draft')
-    expect(toast.error).toHaveBeenCalledOnce()
+    expect(toast.error).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(holdCalls('release')).toHaveLength(2))
   })
 
-  it('closing the pane keeps unsaved typing in the chat box, quietly; clean edits leave nothing', async () => {
+  it('closing the pane keeps unsaved typing in the chat box; clean edits leave nothing', async () => {
     const dirty = harness()
     await begin(dirty)
     act(() => dirty.result.current.editor?.change('unsaved'))
@@ -340,7 +341,7 @@ describe('inline queued editor', () => {
     await begin(clean)
     clean.unmount()
     expect(readNativeChatDraftCache(SCOPE)).toBe('unsaved')
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledOnce()
     await waitFor(() => expect(holdCalls('release')).toHaveLength(2))
   })
 
@@ -355,7 +356,7 @@ describe('inline queued editor', () => {
     expect(readNativeChatDraftCache(SCOPE)).toBe('existing\n\nunsaved')
     hook.unmount()
     expect(readNativeChatDraftCache(SCOPE)).toBe('existing\n\nunsaved')
-    expect(toast.error).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledOnce()
     await waitFor(() => expect(holdCalls('release')).toHaveLength(1))
   })
 
@@ -387,9 +388,13 @@ describe('inline queued editor', () => {
       const finish = deferred()
       const hook = harness(true, { messages: [message], imagesCapable: true })
       await begin(hook)
-      act(() => hook.result.current.editor?.images?.intake.append(['/tmp/new.png']))
+      act(() =>
+        appendNativeChatAttachmentCache(hook.result.current.editor!.draftScopeKey, [
+          { id: 'new', path: '/tmp/new.png' }
+        ])
+      )
       act(() => hook.result.current.editor?.save())
-      const saved = withText('original [Image #1]')
+      const saved = withText('original')
       saved.body.blocks.push({ type: 'image-ref', path: '/tmp/new.png' })
       hook.rerender({ messages: [saved], imagesCapable: true })
       await finish({ kind: 'not-done', notice: 'lost', failure: { kind: 'unconfirmed' } })

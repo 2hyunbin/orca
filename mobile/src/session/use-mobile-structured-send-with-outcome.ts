@@ -1,9 +1,13 @@
+import { MAX_SKILL_REFS } from '../../../src/shared/rpc-contract/structured-agent-session-message-params'
+import { tuiAgentDisplayName } from '../../../src/shared/tui-agent-display-names'
+import { readMobileNativeChatDraftInputs } from './native-chat/composer/mobile-native-chat-draft-inputs'
 import { selectAgentSessionCurrentRequests } from '../../../src/shared/agent-session-current-requests'
 
 import { useCallback } from 'react'
 import { runningStructuredAgentSessionTurnId } from '../../../src/shared/structured-agent-session-live-turn'
 import { pendingPromptsAllUnanswerableHere } from '../../../src/shared/agent-session-approval-subject'
 import {
+  pickedSkillsInText,
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
 } from '../../../src/shared/structured-agent-session-send-mutation'
@@ -40,6 +44,7 @@ export type StructuredMobileSendAttachment =
 
 export function useMobileStructuredSendWithOutcome(args: {
   agent: string | null
+  composerScopeKey?: string | null
   client: RpcClient | null
   sessionId: string | null
   enabled: boolean
@@ -138,7 +143,17 @@ export function useMobileStructuredSendWithOutcome(args: {
         }
       }
       const wireText = nativeChatTextWithFileReferences(text, files)
-      const body = structuredAgentSessionSendBody(wireText, imageAttachments)
+      const skills = pickedSkillsInText(
+        wireText,
+        readMobileNativeChatDraftInputs(args.composerScopeKey ?? null).skills
+      )
+      if (skills.length > MAX_SKILL_REFS) {
+        onSendError(
+          `Your message was not sent to ${tuiAgentDisplayName(agent) ?? agent ?? 'the agent'}. Keep at most ${MAX_SKILL_REFS} selected skill files and try again.`
+        )
+        return 'rejected'
+      }
+      const body = structuredAgentSessionSendBody(wireText, imageAttachments, skills)
       if (body.blocks.length === 0) {
         return 'rejected'
       }
@@ -155,6 +170,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         sessionId,
         expectedRuntimeFence: currentFence,
         text: wireText,
+        skills: body.skills,
         attachments: imageAttachments,
         ...(mobileStructuredSendQueues(queueCapable, stateRef.current)
           ? { delivery: 'queue-if-active' as const }
@@ -172,6 +188,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       return outcome
     },
     [
+      args.composerScopeKey,
       accept,
       agent,
       client,

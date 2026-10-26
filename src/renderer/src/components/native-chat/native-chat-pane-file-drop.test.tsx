@@ -2,8 +2,6 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { NativeChatQueuedMessageEditor } from './NativeChatQueuedMessageEditor'
 import type * as NativeChatAttachmentUpload from './native-chat-attachment-upload'
 import { WORKSPACE_FILE_PATH_MIME } from '@/lib/workspace-file-drag'
 import {
@@ -24,46 +22,6 @@ vi.mock('./native-chat-attachment-upload', async (original) => ({
 
 const OVERLAY = '[data-native-chat-drop-overlay="true"]'
 const IGNORE_DRAG = (): void => {}
-
-function EditingCard({ disabled = false }: { disabled?: boolean }) {
-  return (
-    <TooltipProvider>
-      <NativeChatQueuedMessageEditor
-        editor={{
-          messageId: 'card',
-          text: 'edit',
-          acquiring: false,
-          saving: disabled,
-          canSave: true,
-          change: IGNORE_DRAG,
-          save: IGNORE_DRAG,
-          cancel: IGNORE_DRAG,
-          images: {
-            chips: [],
-            empty: false,
-            intake: {
-              begin: () => null,
-              resolve: () => false,
-              reveal: IGNORE_DRAG,
-              drop: () => false,
-              append: () => [],
-              remove: IGNORE_DRAG
-            }
-          }
-        }}
-        attachTo={{
-          terminalTabId: 'tab',
-          transport: {
-            sessionId: 's',
-            worktreeId: 'wt',
-            runtimeEnvironmentId: null,
-            acceptsImages: true
-          }
-        }}
-      />
-    </TooltipProvider>
-  )
-}
 
 class DropDataTransfer {
   dropEffect = 'none'
@@ -154,53 +112,6 @@ describe('nativeChatPaneDragKind', () => {
 })
 
 describe('NativeChatPaneFileDropSurface', () => {
-  it('scopes OS and in-app hover to the editing card, clears on exit/end and respects disabled intake', () => {
-    const { container, rerender } = renderPane(
-      <>
-        <ClaimingComposer />
-        <EditingCard />
-      </>
-    )
-    const edit = screen.getByRole('textbox').closest('[data-queued-message-editor]')
-    if (!(edit instanceof HTMLElement)) {
-      throw new Error('Expected editing card')
-    }
-    for (const drag of [osDrag(), workspaceDrag()]) {
-      fireDrag(screen.getByTestId('transcript'), 'dragover', drag)
-      fireDrag(screen.getByRole('textbox'), 'dragover', drag)
-      expect(container.querySelectorAll(OVERLAY)).toHaveLength(1)
-      expect(edit.querySelector(OVERLAY)?.textContent).toContain('Drop to attach to this message')
-      fireDrag(
-        screen.getByRole('textbox'),
-        'dragleave',
-        drag,
-        screen.getByRole('button', { name: 'Attach file' })
-      )
-      expect(edit.querySelector(OVERLAY)).not.toBeNull()
-      fireDrag(
-        screen.getByRole('button', { name: 'Attach file' }),
-        'dragleave',
-        drag,
-        screen.getByTestId('transcript')
-      )
-      expect(edit.querySelector(OVERLAY)).toBeNull()
-      fireDrag(screen.getByRole('textbox'), 'dragover', drag)
-      act(() => document.dispatchEvent(new Event('dragend', { bubbles: true })))
-      expect(edit.querySelector(OVERLAY)).toBeNull()
-      fireDrag(screen.getByRole('textbox'), 'dragover', drag)
-      fireDrag(screen.getByRole('textbox'), 'drop', drag)
-      expect(container.querySelector(OVERLAY)).toBeNull()
-    }
-    rerender(
-      <NativeChatPaneFileDropSurface className="pane">
-        <ClaimingComposer />
-        <EditingCard disabled />
-      </NativeChatPaneFileDropSurface>
-    )
-    fireDrag(screen.getByRole('textbox'), 'dragover', osDrag())
-    expect(container.querySelector(OVERLAY)).toBeNull()
-  })
-
   it('routes a drop on the transcript to the composer that claimed the pane', () => {
     const onDropCapture = vi.fn()
     const { transcript, container } = renderPane(<ClaimingComposer onDropCapture={onDropCapture} />)

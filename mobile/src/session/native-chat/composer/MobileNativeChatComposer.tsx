@@ -1,5 +1,11 @@
+import { setMobileNativeChatDraftText } from './mobile-native-chat-draft-store'
+import { appendReturnedDraftText } from '../../../../../src/shared/returned-draft-text'
+import {
+  focusMobileNativeChatTextDestination,
+  registerMobileNativeChatTextDestination
+} from './mobile-native-chat-draft-inputs'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Keyboard, Pressable, type TextInput, View } from 'react-native'
+import { ActivityIndicator, Keyboard, Pressable, type TextInput, Text, View } from 'react-native'
 import { ArrowUp, Mic, Plus, Square } from 'lucide-react-native'
 import { colors } from '../../../theme/mobile-theme'
 import { NATIVE_CHAT_COMPOSER_PLACEHOLDER } from '../../../../../src/shared/native-chat-turn-status'
@@ -36,6 +42,10 @@ export type MobileNativeChatStructuredComposer = {
 }
 
 type Props = {
+  insertDictation?: (text: string) => void
+  draftScopeKey?: string | null
+  editSession?: { cancel: () => void; refuseCommand: (text: string) => boolean; locked: boolean }
+  onPickSkill?: (skill: { name: string; path: string }) => void
   inputRef?: React.RefObject<TextInput | null>
   // Terminal-backed chats keep curated commands and image-only attachment actions.
   structured?: MobileNativeChatStructuredComposer | null
@@ -70,6 +80,10 @@ type Props = {
 
 export function MobileNativeChatComposer({
   inputRef,
+  draftScopeKey,
+  insertDictation,
+  editSession,
+  onPickSkill,
   value,
   onChangeText,
   onSend,
@@ -95,6 +109,19 @@ export function MobileNativeChatComposer({
   onNeedFiles,
   stop = null
 }: Props): React.JSX.Element {
+  useEffect(() => {
+    if (!draftScopeKey) {
+      return
+    }
+    return registerMobileNativeChatTextDestination(
+      draftScopeKey,
+      insertDictation ??
+        ((text) =>
+          setMobileNativeChatDraftText(draftScopeKey, (before) =>
+            appendReturnedDraftText(before, text)
+          ))
+    )
+  }, [draftScopeKey, insertDictation])
   const fallbackInputRef = useRef<TextInput>(null)
   const fieldRef = inputRef ?? fallbackInputRef
   const [focused, setFocused] = useState(false)
@@ -110,6 +137,8 @@ export function MobileNativeChatComposer({
   const menu = useMobileNativeChatComposerMenu({
     value,
     onChangeText,
+    onPickSkill,
+    refuseCommand: editSession?.refuseCommand,
     agent,
     structuredCatalog: structured?.catalog,
     filePaths,
@@ -180,7 +209,9 @@ export function MobileNativeChatComposer({
         menu.resetCursor()
         // Why: the turn is now the agent's — the keyboard would cover the reply.
         // A rejected send keeps it up so the handed-back draft stays editable.
-        Keyboard.dismiss()
+        if (!editSession) {
+          Keyboard.dismiss()
+        }
       }
     } finally {
       sendingRef.current = false
@@ -202,15 +233,20 @@ export function MobileNativeChatComposer({
           <MobileNativeChatComposerAttachments
             images={attachments}
             files={files}
-            onRemoveImage={onRemoveAttachment}
-            onRemoveFile={structured?.onRemoveFile}
+            onRemoveImage={editSession?.locked ? undefined : onRemoveAttachment}
+            onRemoveFile={editSession?.locked ? undefined : structured?.onRemoveFile}
           />
           <MobileNativeChatComposerField
             ref={fieldRef}
             value={value}
             skillToken={menu.skillToken}
             onChangeText={menu.onFieldChange}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true)
+              if (draftScopeKey) {
+                focusMobileNativeChatTextDestination(draftScopeKey)
+              }
+            }}
             onBlur={() => setFocused(false)}
             // Controlled only transiently right after an autocomplete insert.
             selection={menu.pendingSelection ?? undefined}
@@ -219,6 +255,7 @@ export function MobileNativeChatComposer({
             placeholderTextColor={colors.textMuted}
             selectionColor={colors.accentBlue}
             multiline
+            editable={!editSession?.locked}
             // Why: never revoke `editable` — iOS resigns first responder on a focused
             // field, so a transient lock would yank the keyboard mid-typing (#10681).
             // The lock gates sending; the draft survives and rides the next send.
@@ -286,12 +323,23 @@ export function MobileNativeChatComposer({
                 )}
               </Pressable>
             ) : null}
+            {editSession ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing"
+                style={styles.ghostButton}
+                onPress={editSession.cancel}
+                disabled={editSession.locked}
+              >
+                <Text style={{ color: colors.textSecondary }}>Cancel</Text>
+              </Pressable>
+            ) : null}
             {showsStop && stop ? (
               // Only this phone's own request holds Stop: a repeat is how a stuck stop escalates.
               <MobileNativeChatStopButton onStop={stop.onStop} held={stop.held} />
             ) : (
               <Pressable
-                accessibilityLabel="Send message"
+                accessibilityLabel={editSession ? 'Save edited message' : 'Send message'}
                 style={({ pressed }) => [
                   styles.sendButton,
                   !canSend && styles.sendButtonDisabled,
@@ -300,11 +348,15 @@ export function MobileNativeChatComposer({
                 onPress={handleSend}
                 disabled={!canSend}
               >
-                <ArrowUp
-                  size={19}
-                  color={canSend ? colors.bgBase : colors.textMuted}
-                  strokeWidth={2.4}
-                />
+                {editSession ? (
+                  <Text style={{ color: canSend ? colors.bgBase : colors.textMuted }}>Save</Text>
+                ) : (
+                  <ArrowUp
+                    size={19}
+                    color={canSend ? colors.bgBase : colors.textMuted}
+                    strokeWidth={2.4}
+                  />
+                )}
               </Pressable>
             )}
           </View>

@@ -1,3 +1,6 @@
+import { getRuntimePathBasename } from '../../../src/shared/cross-platform-path'
+import type { QueuedMessageImageBlock } from '../../../src/shared/queued-message-edit'
+import { stripSentImagePromptMarkers } from '../../../src/shared/native-chat-image-transcript-markers'
 // Derive queue captions from draft/live facts because the host sends no hold copy.
 
 import {
@@ -32,6 +35,27 @@ export type MobileQueuedMessageCard = {
   command?: true
   /** A command card while the agent works: it offers no send until the agent is idle. */
   waitsForAgent?: true
+  images?: readonly QueuedMessageImageBlock[]
+}
+
+/** What a card's image is called where it is not drawn: its alt text, else its file's name. */
+export function mobileQueuedImageLabel(block: QueuedMessageImageBlock): string {
+  const name = getRuntimePathBasename(block.path ?? '')
+  return (
+    block.alt?.trim() || (/^orca-paste-.+\.png$/i.test(name) ? 'Pasted image' : name) || 'Image'
+  )
+}
+
+/** The card's line: its text, or for a card of images alone, the image's name or their count. */
+export function mobileQueuedMessageCardLine(
+  card: Pick<MobileQueuedMessageCard, 'text' | 'images'>
+): string {
+  const [first, ...rest] = card.images ?? []
+  const text = stripSentImagePromptMarkers(card.text, card.images?.length ?? 0)
+  if (text.trim() || !first) {
+    return text
+  }
+  return rest.length === 0 ? mobileQueuedImageLabel(first) : `${rest.length + 1} images`
 }
 
 function queuedMessageBodyText(body: AgentSessionQueuedMessage['body']): string {
@@ -123,7 +147,11 @@ export function mobileQueuedMessageCards(
           : behindReturned
             ? 'Waiting — a message ahead needs attention'
             : null
+    const images = draft.body.blocks.filter(
+      (block): block is QueuedMessageImageBlock => block.type === 'image-ref'
+    )
     cards.push({
+      ...(images.length ? { images } : {}),
       messageId: draft.messageId,
       text: queuedMessageBodyText(draft.body),
       state: draft.state,

@@ -30,6 +30,8 @@ export function useMobileNativeChatComposerMenu(input: {
   /** The `/` menu opened; the session's list may have changed since it was read. */
   onSlashMenuOpen?: () => void
   focusField: () => void
+  onPickSkill?: (skill: { name: string; path: string }) => void
+  refuseCommand?: (text: string) => boolean
 }) {
   const { value, onChangeText, agent, structuredCatalog, filePaths } = input
   const [cursor, setCursor] = useState(0)
@@ -102,10 +104,17 @@ export function useMobileNativeChatComposerMenu(input: {
     if (!trigger) {
       return
     }
+    if (row.kind === 'command' && input.refuseCommand?.(row.token)) {
+      return
+    }
     setMenuKind(null)
     // Restore page field focus after a menu tap so typing continues at the inserted pick.
     input.focusField()
     if (row.kind === 'skill') {
+      const path = row.path
+      if (path) {
+        input.onPickSkill?.({ name: row.token.slice(1), path })
+      }
       const rest = value.slice(trigger.end).trimStart()
       onChangeText(`${row.token} ${rest}`)
       placeCaret(row.token.length + 1)

@@ -1,3 +1,4 @@
+import { isRenderableImageUri } from '../../mobile-native-chat-image-preview'
 import {
   ActivityIndicator,
   Image,
@@ -7,7 +8,7 @@ import {
   Text,
   View
 } from 'react-native'
-import { FileText, X } from 'lucide-react-native'
+import { FileText, Image as ImageIcon, X } from 'lucide-react-native'
 import { colors, radii, spacing } from '../../../theme/mobile-theme'
 import { formatPreviewByteLength } from '../../../files/mobile-file-preview-response'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
@@ -46,7 +47,21 @@ export function MobileNativeChatComposerAttachments({
     >
       {images.map((image) => (
         <View key={image.id} style={styles.thumb}>
-          <Image source={{ uri: image.previewUri }} style={styles.thumbImage} resizeMode="cover" />
+          {isRenderableImageUri(image.previewUri) ? (
+            <Image
+              source={{ uri: image.previewUri }}
+              style={styles.thumbImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View
+              style={styles.fileIcon}
+              accessible
+              accessibilityLabel={image.path.split(/[\\/]/).at(-1) || 'Attached image'}
+            >
+              <ImageIcon size={17} color={colors.textSecondary} strokeWidth={2} />
+            </View>
+          )}
           {onRemoveImage ? (
             <RemoveBadge label="Remove image" onPress={() => onRemoveImage(image.id)} />
           ) : null}
