@@ -15,7 +15,7 @@ vi.mock('./ssh-port-scanner', () => mocks.sshPortScanner)
 
 import { createSshIpcHarness } from './ssh-ipc-test-harness'
 import { ensureSshHandlersLoaded, registerSshHandlers } from './ssh'
-import { connectionManager } from './ssh-ipc-context'
+import { connectionManager, getCurrentMainWindow, persistedStore } from './ssh-ipc-context'
 import { quitTeardownStartGate } from '../../quit-teardown-start-gate'
 import { runQuitTasks } from '../../quit-task-registry'
 import { connectRegisteredSshTarget } from '../../ssh/targets/ssh-target-registry'
@@ -73,8 +73,12 @@ describe('SSH startup boundary', () => {
     expect(mocks.hostServerConnect.decideHostServer).not.toHaveBeenCalled()
 
     const manager = connectionManager
-    // SAFETY: the harness provides the store and window members used by SSH registration.
-    registerSshHandlers(harness.mockStore as never, () => harness.mockWindow as never)
+    const store = persistedStore
+    if (!store) {
+      throw new Error('SSH store was not registered')
+    }
+    const mainWindow = getCurrentMainWindow()
+    registerSshHandlers(store, () => mainWindow)
     await ensureSshHandlersLoaded()
     expect(connectionManager).toBe(manager)
     expect(mocks.mockPortForwardManager.callbacksRef.current).not.toBeNull()
