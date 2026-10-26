@@ -268,8 +268,7 @@ export function registerPtyConnectionWindowsKeyboardResetTests(): void {
         connectPanePty(pane as never, manager as never, deps as never)
         expect(pane.terminal.write).not.toHaveBeenCalled()
 
-        // The burst's intermediate `working` never publishes, so the entry stays `done` end-to-end;
-        // only the stateHistory row proves a second turn ran and re-armed the kitty protocol.
+        // Batching coalesces done→working→done; only stateHistory proves the new turn re-armed Kitty.
         const secondDoneAt = firstDoneAt + 10_000
         storeFixture.setStatus(paneKey, {
           state: 'done',

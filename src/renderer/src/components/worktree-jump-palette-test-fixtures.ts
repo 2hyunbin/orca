@@ -8,8 +8,6 @@ import type { AgentStatusEntry, AgentStatusState } from '../../../shared/agent-s
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import type { AppState } from '@/store/types'
 
-// Store fixtures shared by the Cmd+J palette suites (worktree list + recent chats & terminals).
-
 export function makeRepo(): Repo {
   return {
     id: 'repo-1',
@@ -128,7 +126,6 @@ export function makeAgentEntry(
   }
 }
 
-/** Two worktrees, one terminal tab each, none of them current. */
 export function makeRecentTabState(
   overrides: Partial<AgentStatusReadState> = {}
 ): Partial<AgentStatusReadState> {
@@ -191,7 +188,6 @@ export function makeDuplicateRecentTabState(): Partial<AppState> {
   }
 }
 
-/** One tab-heavy worktree plus `count` bare ones, so both sections overflow their caps. */
 export function makeManyTabState(count: number): Partial<AppState> {
   const ids = Array.from({ length: count }, (_, index) => `${index}`)
   return {

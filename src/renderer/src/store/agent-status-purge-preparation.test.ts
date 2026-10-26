@@ -28,12 +28,12 @@ import {
   getStructuredLaunchStateBySessionId,
   resetStructuredAgentLaunchRegistryForTests,
   setStructuredLaunchState
-} from '@/lib/structured-agent-session-launch-registry'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
 import {
   readStructuredAgentLaunchRecord,
   resetStructuredAgentLaunchPersistenceForTests,
   writeStructuredAgentLaunchRecord
-} from '@/lib/structured-agent-session-launch-persistence'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-persistence'
 import { awaitAgentLaunchPaneStart } from '@/lib/agent-launch-pane-start'
 import {
   isUnlistedCreatedChat,

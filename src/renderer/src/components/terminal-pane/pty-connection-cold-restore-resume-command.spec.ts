@@ -24,6 +24,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
   let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
@@ -114,7 +115,6 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
               agent: 'codex',
               providerSession: { key: 'session_id', id: 'codex-session-1' },
               prompt: 'finish the task',
-              // Mirrors the user's scenario: a stopped/completed agent that hibernated.
               state: 'done',
               origin: 'worktree-sleep',
               capturedAt: 1,
@@ -132,7 +132,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -140,8 +140,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         await flushAsyncTicks(10)
 
         if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-          // Retiring a contentless shell to resume is main's start: the window drops its view of
-          // the shell and asks main, which replaces it and resumes the agent.
+          // Only main replaces the contentless shell and resumes the agent; the window drops its old view and asks main.
           expect(transport.disconnect).toHaveBeenCalled()
           await expectWindowStartAskedMain(transport, paneKey)
           expectNoWindowStart(transport, storeFixture.read())
@@ -161,7 +160,6 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
             })
           })
         )
-        // The dead session is not adopted as the pane's live PTY.
         expect(deps.clearExitedPanePtyLayoutBinding).toHaveBeenCalledWith(2, 'restored-session')
         expect(deps.clearTabPtyId).toHaveBeenCalledWith('tab-1', 'restored-session')
         expect(deps.syncPanePtyLayoutBinding).not.toHaveBeenCalledWith(2, 'restored-session')
@@ -173,12 +171,11 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
       }
     })
 
-    /** The command the window's own resume types; with the switch on main's start resumes, so none. */
+    // Main-owned resume must type no window-generated command.
     const windowResumeCommand = (command: string): string | undefined =>
       ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : command
 
-    // Regression (#12320): a cold restore after reboot typed PowerShell single quotes into
-    // cmd.exe tabs, so the agent CLI rejected the resume argv ("unexpected argument").
+    // Cold restore must quote for the recorded shell; PowerShell quotes break cmd.exe resume argv (#12320).
     async function runWindowsColdRestoreResume(args: {
       terminalWindowsShell: string
       tabShellOverride?: string
@@ -260,7 +257,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
           .mockResolvedValueOnce(1)
           .mockResolvedValueOnce(2)
 
-        connectPanePty(createPane(2) as never, createManager(2) as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(createPane(2), createManager(2), deps))
         await flushAsyncTicks(20)
         for (const fn of pendingTimeouts) {
           fn()
@@ -338,7 +335,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)
@@ -403,7 +400,7 @@ export function registerPtyConnectionColdRestoreResumeCommandTests(): void {
         restoredPtyIdByLeafId: { [LEAF_2]: 'restored-session' }
       })
 
-      connectPanePty(pane as never, manager as never, deps as never)
+      connectPanePty(...mockPanePtyArgs(pane, manager, deps))
       await flushAsyncTicks(20)
 
       expect(transport.connect).toHaveBeenCalledTimes(1)

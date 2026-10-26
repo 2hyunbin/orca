@@ -5,7 +5,11 @@ import { forgetCombinedDiffViewsForWorktrees } from '@/components/editor/combine
 import type { WorktreePurgeTarget, WorktreePurgeTargets } from '../../worktree-helpers'
 import { forgetHugeRepoWarningDismissalsForWorktrees } from '@/lib/source-control-huge-repo-warning-dismissals'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
-import { prepareHostedReviewMutationRemoval } from '../metadata/hosted-review-link-mutation'
+import {
+  hostedReviewLinkMutationGenerationByWorktreeId,
+  hostedReviewLinkClearTombstonesByCopy,
+  hostedReviewLinkWorktreeIdAliases
+} from '../metadata/hosted-review-link-mutation'
 import { collectWorktreePurgeDoomedIds } from './worktree-purge-doomed-ids'
 import { createWorktreePurgeOmitters } from './worktree-purge-omitters'
 import { omitSleepingAgentSessionsForWorktrees } from './sleeping-agent-session-omission'
@@ -154,26 +158,20 @@ export function buildFullWorktreePurgeState(
       activeFileCleared
     }),
     ...buildWorktreePurgeSurfacePatch(s, omitters, doomed.doomedTabIds, nextSleeping),
-    // Worktree-scoped terminal/tab state
     worktreeLineageById: omitByWorktree(s.worktreeLineageById),
     workspaceLineageByChildKey: omitWorkspaceLineageByWorktree(s.workspaceLineageByChildKey),
-    // Delete state
     deleteStateByWorktreeId: removeDeleteStatesForWorktreeIds(
       s.deleteStateByWorktreeId,
       worktreeIdSet
     ),
     baseStatusByWorktreeId: omitByWorktree(s.baseStatusByWorktreeId),
     remoteBranchConflictByWorktreeId: omitByWorktree(s.remoteBranchConflictByWorktreeId),
-    // File search
     fileSearchStateByWorktree: omitByWorktree(s.fileSearchStateByWorktree),
     recentlyClosedBrowserTabsByWorktree: omitByWorktree(s.recentlyClosedBrowserTabsByWorktree),
-    // Editor state
     pendingReconnectTabByWorktree: omitByWorktree(s.pendingReconnectTabByWorktree),
     rightSidebarTabByWorktree: pruneRightSidebarTabByWorktree(),
     rightSidebarExplorerViewByWorktree: omitByWorktree(s.rightSidebarExplorerViewByWorktree ?? {}),
-    // Git status caches
     gitStatusByWorktree: omitByWorktree(s.gitStatusByWorktree),
-    // Why: keyed by worktreeId; re-keyed on rename but missed by both removal paths (upstream-status entry).
     remoteStatusesByWorktree: omitByWorktree(s.remoteStatusesByWorktree),
     gitStatusHeadByWorktree: omitByWorktree(s.gitStatusHeadByWorktree),
     gitBranchLineTotalByWorktree: omitByWorktree(s.gitBranchLineTotalByWorktree),
@@ -186,22 +184,18 @@ export function buildFullWorktreePurgeState(
     gitBranchCompareRequestStatusHeadByWorktree: omitByWorktree(
       s.gitBranchCompareRequestStatusHeadByWorktree
     ),
-    // Why: keyed by worktreeId; without this it leaks a huge-status marker per removed worktree.
     gitStatusHugeByWorktree: omitByWorktree(s.gitStatusHugeByWorktree),
     explorerDisplayRootByWorktree: omitByWorktree(s.explorerDisplayRootByWorktree),
     showDotfilesByWorktree: omitByWorktree(s.showDotfilesByWorktree),
     expandedDirs: omitByWorktree(s.expandedDirs),
-    // Why: keyed by worktreeId; re-keyed on rename but missed by both removal paths (editor-undo / Cmd+Shift+T snapshots).
     recentlyClosedEditorTabsByWorktree: omitByWorktree(s.recentlyClosedEditorTabsByWorktree),
     recentlyClosedTerminalTabsByWorktree: omitByWorktree(s.recentlyClosedTerminalTabsByWorktree),
     recentlyClosedTabKindsByWorktree: omitByWorktree(s.recentlyClosedTabKindsByWorktree),
-    // Top-level actives
     everActivatedWorktreeIds: nextEverActivatedWorktreeIds,
     lastVisitedAtByWorktreeId: removeWorktreeVisitEntriesForTargets(
       s.lastVisitedAtByWorktreeId,
       normalizedTargets
     ),
-    // Why: keyed by worktreeId; re-keyed on rename but missed by both removal paths (write-once default-terminal guard).
     defaultTerminalTabsAppliedByWorktreeId: omitByWorktree(
       s.defaultTerminalTabsAppliedByWorktreeId
     ),
@@ -216,5 +210,34 @@ export function buildFullWorktreePurgeState(
         ? null
         : s.activeWorkspaceKey
     })()
+  }
+}
+
+function prepareHostedReviewMutationRemoval(worktreeIds: ReadonlySet<string>): () => void {
+  const generations = [...hostedReviewLinkMutationGenerationByWorktreeId].filter(([key]) =>
+    worktreeIds.has(key)
+  )
+  const tombstones = [...hostedReviewLinkClearTombstonesByCopy].filter(([key]) =>
+    worktreeIds.has(key.split('\0', 1)[0] ?? key)
+  )
+  const aliases = [...hostedReviewLinkWorktreeIdAliases].filter(
+    ([key, value]) => worktreeIds.has(key) || worktreeIds.has(value)
+  )
+  return () => {
+    for (const [key, value] of generations) {
+      if (hostedReviewLinkMutationGenerationByWorktreeId.get(key) === value) {
+        hostedReviewLinkMutationGenerationByWorktreeId.delete(key)
+      }
+    }
+    for (const [key, value] of tombstones) {
+      if (hostedReviewLinkClearTombstonesByCopy.get(key) === value) {
+        hostedReviewLinkClearTombstonesByCopy.delete(key)
+      }
+    }
+    for (const [key, value] of aliases) {
+      if (hostedReviewLinkWorktreeIdAliases.get(key) === value) {
+        hostedReviewLinkWorktreeIdAliases.delete(key)
+      }
+    }
   }
 }

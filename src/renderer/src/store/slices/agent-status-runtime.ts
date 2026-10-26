@@ -124,8 +124,7 @@ export function createAgentStatusRuntime(
   const freshness = createFreshnessScheduler({
     getStatusEntries: () => get().agentStatusByPaneKey,
     bumpEpochs: () => {
-      // Why: freshness is time-based — bump both epochs at the stale boundary to force selector
-      // recompute and re-sort even with no new output, since staleness can change worktree ordering.
+      // Time-based staleness changes ordering without output; bump freshness/sort epochs at boundaries.
       set((s) => ({
         agentStatusEpoch: s.agentStatusEpoch + 1,
         sortEpoch: s.sortEpoch + 1
@@ -133,6 +132,7 @@ export function createAgentStatusRuntime(
     }
   })
 
+  // Why: launch configs retire with the pane; a woken pane registers its config before consuming this record.
   const clearSleepingAgentSessionsByPaneKey = (paneKeys: readonly string[]): void => {
     if (paneKeys.length === 0) {
       return
@@ -140,7 +140,6 @@ export function createAgentStatusRuntime(
     const uniquePaneKeys = new Set(paneKeys)
     set((s) => {
       let nextSleeping = s.sleepingAgentSessionsByPaneKey
-      let nextLaunchConfigs = s.agentLaunchConfigByPaneKey
       for (const paneKey of uniquePaneKeys) {
         if (paneKey in nextSleeping) {
           if (nextSleeping === s.sleepingAgentSessionsByPaneKey) {
@@ -148,23 +147,11 @@ export function createAgentStatusRuntime(
           }
           delete nextSleeping[paneKey]
         }
-        if (paneKey in nextLaunchConfigs) {
-          if (nextLaunchConfigs === s.agentLaunchConfigByPaneKey) {
-            nextLaunchConfigs = { ...nextLaunchConfigs }
-          }
-          delete nextLaunchConfigs[paneKey]
-        }
       }
-      if (
-        nextSleeping === s.sleepingAgentSessionsByPaneKey &&
-        nextLaunchConfigs === s.agentLaunchConfigByPaneKey
-      ) {
+      if (nextSleeping === s.sleepingAgentSessionsByPaneKey) {
         return s
       }
-      return {
-        sleepingAgentSessionsByPaneKey: nextSleeping,
-        agentLaunchConfigByPaneKey: nextLaunchConfigs
-      }
+      return { sleepingAgentSessionsByPaneKey: nextSleeping }
     })
   }
 

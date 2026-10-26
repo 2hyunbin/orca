@@ -251,7 +251,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
     })
 
     it('closes a hidden split pane whose PTY exits before output instead of keeping a ghost', async () => {
-      // Why (regression, ghost blank pane): a hidden pane's bytes are withheld by the hidden-delivery gate, so "no output" proves nothing — keeping it strands a blank ghost on reveal.
+      // Hidden delivery withholds bytes, so no output cannot justify retaining an exited ghost pane.
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('pty-pane-2')
       transportFactoryQueue.push(transport)
@@ -280,7 +280,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
     })
 
     it('keeps a worktree sole terminal mounted when its freshly-spawned PTY exits before input (direnv failure)', async () => {
-      // Why (regression): a failing .envrc direnv makes the sole terminal's shell exit immediately; routing to onPtyExitRef would close the tab and bounce the user to Landing, so keep it mounted.
+      // Keep an unused shell mounted after startup failure so direnv errors do not close the tab and return to Landing.
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transportFactoryQueue.push(transport)
@@ -306,9 +306,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
     })
 
     it('keeps a worktree sole terminal mounted when only a captured shortcut preceded the exit', async () => {
-      // Why (regression): captured shortcuts refresh the redraw window, but that must not
-      // count as "the user typed into this pane" — otherwise Shift+Enter before a direnv
-      // failure closes the tab and bounces the user to Landing.
+      // Shortcut-driven redraw activity is not typed input; Shift+Enter must not turn startup failure into tab closure.
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transportFactoryQueue.push(transport)
@@ -350,8 +348,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
 
       onPtyExit?.('tab-pty', -1)
 
-      // A synthetic exit is not proof that the remote process ended. Keep the
-      // persisted binding and let the tab-level handler mark it unverifiable.
+      // Synthetic remote exit is unverifiable; retain the persisted binding for tab-level recovery.
       expect(deps.clearExitedPanePtyLayoutBinding).not.toHaveBeenCalled()
       expect(deps.clearTabPtyId).not.toHaveBeenCalled()
       expect(deps.onPtyExitRef.current).toHaveBeenCalledWith('tab-pty', -1)
@@ -581,7 +578,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
     })
 
     it('tears down the sole terminal when a reattached (not freshly spawned) PTY exits', async () => {
-      // Why: reattach/coldRestore skip onPtySpawn, so a now-dead previously-live session must still route through onPtyExitRef; the keep-mounted guard is only for brand-new shells.
+      // Reattach skips onPtySpawn; the unused-new-shell guard must not retain a dead previously-live session.
       const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
       const transport = createMockTransport('tab-pty')
       transportFactoryQueue.push(transport)
@@ -662,8 +659,7 @@ export function registerPtyConnectionPtyExitTeardownTests(): void {
       transportPtyId = 'terminal-reconnected'
       onPtyRebind?.('terminal-reconnected', 'terminal-old')
 
-      // The fixture dependency is intentionally lightweight, so mirror the live
-      // tab/layout commit that the real store performs atomically on replacement.
+      // Mirror the real store’s atomic tab/layout replacement in this lightweight fixture.
       storeFixture.read().tabsByWorktree['wt-1'][0]!.ptyId = 'terminal-reconnected'
       const replacementLayout = storeFixture.read().terminalLayoutsByTabId?.['tab-1']
       if (!replacementLayout) {

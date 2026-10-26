@@ -116,11 +116,9 @@ async function boot() {
   stream.onPosition!(seq)
   sync.start()
   await settle()
-  /** Main's answer to the window's command, with the frame holding the window's change. */
   const answer = async (
     index: number,
     reply: LayoutApplyReply = okReply,
-    /** Main's change the window has not drawn: a change main applies first. */
     mainChange: (layout: PublishedWorkspaceLayout) => void = () => {}
   ): Promise<void> => {
     const frame = publishedOf(buildWorkspaceSessionPayload(getAgentStatusOwner(store).getState()))
@@ -303,7 +301,6 @@ describe('a change main applies first, with frames flowing', () => {
       contentType: 'editor',
       isPreview: true
     })
-    // Main holds the tab: its frame carries the window's copy.
     seq += 1
     stream.onFrame!(
       frames.records(
@@ -331,7 +328,6 @@ describe('a change main applies first, with frames flowing', () => {
     await answer(pin, okReply, (layout) => {
       layout.tabs.find((item) => item.id === tab.id)!.isPinned = true
     })
-    // Main's frame draws the pin; the window does not pin it again.
     expect(windowPin).not.toHaveBeenCalled()
     expect(callsOf('promotePreviewTab')).toHaveLength(1)
     expect(entry()).toMatchObject({ isPinned: true, isPreview: true })
@@ -360,7 +356,6 @@ describe('a change main applies first, with frames flowing', () => {
     const agent = () =>
       store.getState().unifiedTabsByWorktree[GIT_KEY]!.find((item) => item.id === 'tab-agent')!
     expect(agent().viewMode).toBe('terminal')
-    // Main owns the workspace: the paired-server mirror is not asked.
     expect(effects.mirrorViewMode).not.toHaveBeenCalled()
     expect(effects.chatToggled).toHaveBeenCalledTimes(1)
     expect(effects.chatToggled).toHaveBeenCalledWith(
@@ -387,7 +382,6 @@ describe('a change main applies first, with frames flowing', () => {
     })
     expect(renames()).toEqual([])
 
-    // Main's frame carries the title main derived from its own agent status.
     const writes = writesOf(store, (state) => state.tabsByWorktree)
     const frame = publishedOf(buildWorkspaceSessionPayload(getAgentStatusOwner(store).getState()))
     frame.tabs.find((item) => item.id === 'tab-unbound')!.generatedTitle = 'Refactor the auth'

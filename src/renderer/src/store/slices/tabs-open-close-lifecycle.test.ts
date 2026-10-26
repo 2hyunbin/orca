@@ -18,7 +18,6 @@ import {
 import { makeBrowserTab } from './store-session-test-harness'
 import { drawTabsFromMain } from './tabs-drawn-from-main.test-fixture'
 
-// Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
@@ -30,10 +29,8 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
   ).runtimeLayoutClientWithTestFrames(await importOriginal())
 )
 
-// Mock sonner (imported by repos.ts)
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
-// Mock agent-status (imported by terminal-helpers)
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
   return {
@@ -67,8 +64,6 @@ describe('TabsSlice', () => {
   beforeEach(() => {
     store = createTestStore()
   })
-
-  // ─── createUnifiedTab ───────────────────────────────────────────────
 
   describe('createUnifiedTab', () => {
     it('creates a terminal tab and auto-creates a group', () => {
@@ -215,15 +210,12 @@ describe('TabsSlice', () => {
     })
   })
 
-  // ─── closeUnifiedTab ────────────────────────────────────────────────
-
   describe('closeUnifiedTab', () => {
     it('removes the tab and selects right neighbor', () => {
       store.getState().createUnifiedTab(WT, 'terminal')
       const t2 = store.getState().createUnifiedTab(WT, 'terminal')
       const t3 = store.getState().createUnifiedTab(WT, 'terminal')
 
-      // Activate t2 so closing it tests neighbor selection
       store.getState().activateTab(t2.id)
 
       const result = store.getState().closeUnifiedTab(t2.id)
@@ -231,14 +223,12 @@ describe('TabsSlice', () => {
       expect(result).toEqual({ closedTabId: t2.id, wasLastTab: false, worktreeId: WT })
       const state = getAgentStatusOwner(store).getState()
       expect(state.unifiedTabsByWorktree[WT]).toHaveLength(2)
-      // Right neighbor (t3) should be active
       expect(state.groupsByWorktree[WT][0].activeTabId).toBe(t3.id)
     })
 
     it('selects left neighbor when closing the rightmost tab', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
       const t2 = store.getState().createUnifiedTab(WT, 'terminal')
-      // t2 is already active (last created)
 
       const result = store.getState().closeUnifiedTab(t2.id)
 
@@ -260,7 +250,6 @@ describe('TabsSlice', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
       store.getState().createUnifiedTab(WT, 'terminal')
       const t3 = store.getState().createUnifiedTab(WT, 'terminal')
-      // t3 is active
 
       store.getState().closeUnifiedTab(t1.id)
 
@@ -435,7 +424,6 @@ describe('TabsSlice', () => {
       main.close()
 
       expect(store.getState().groupsByWorktree[WT][0].activeTabId).toBe(t1.id)
-      // t2 should still exist and not be active
       expect(
         store
           .getState()
@@ -514,16 +502,14 @@ describe('TabsSlice', () => {
       const secondGroupId = store.getState().createEmptySplitGroup(WT, sourceGroupId, 'right')
       expect(secondGroupId).toBeTruthy()
 
-      // Create two tabs in the second (right) group and visit them in order.
       const t2 = store.getState().createUnifiedTab(WT, 'terminal', {
         targetGroupId: secondGroupId!
       })
       const t3 = store.getState().createUnifiedTab(WT, 'terminal', {
         targetGroupId: secondGroupId!
       })
-      // Second group's MRU tail should be t3.
 
-      // Focus the source group so its activations don't pollute the second group's MRU.
+      // Focus the source group without changing the second group’s MRU.
       store.getState().activateTab(t1.id)
 
       // Re-focus the second group via t2, then close it: expect the same-group previous tab (t3), not a source-group neighbor.
@@ -533,7 +519,6 @@ describe('TabsSlice', () => {
 
       const secondGroup = store.getState().groupsByWorktree[WT].find((g) => g.id === secondGroupId)
       expect(secondGroup?.activeTabId).toBe(t3.id)
-      // Source group's active tab must remain untouched.
       const sourceGroup = store.getState().groupsByWorktree[WT].find((g) => g.id === sourceGroupId)
       expect(sourceGroup?.activeTabId).toBe(t1.id)
     })
@@ -554,8 +539,6 @@ describe('TabsSlice', () => {
     })
   })
 
-  // ─── closeOtherTabs ───────────────────────────────────────────────
-
   describe('closeOtherTabs', () => {
     it('closes all tabs except the target and pinned tabs', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
@@ -569,8 +552,8 @@ describe('TabsSlice', () => {
       expect(closed).toEqual([t3.id])
       const tabs = store.getState().unifiedTabsByWorktree[WT]
       expect(tabs).toHaveLength(2)
-      expect(tabs.map((t) => t.id)).toContain(t1.id) // pinned
-      expect(tabs.map((t) => t.id)).toContain(t2.id) // target
+      expect(tabs.map((t) => t.id)).toContain(t1.id)
+      expect(tabs.map((t) => t.id)).toContain(t2.id)
     })
 
     it('activates the target tab', () => {
@@ -588,8 +571,6 @@ describe('TabsSlice', () => {
       expect(closed).toEqual([])
     })
   })
-
-  // ─── closeTabsToRight ─────────────────────────────────────────────
 
   describe('closeTabsToRight', () => {
     it('closes unpinned tabs to the right of target', () => {
@@ -610,15 +591,12 @@ describe('TabsSlice', () => {
     it('activates target if active tab was closed', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
       store.getState().createUnifiedTab(WT, 'terminal')
-      // last created tab is active
 
       store.getState().closeTabsToRight(t1.id)
 
       expect(store.getState().groupsByWorktree[WT][0].activeTabId).toBe(t1.id)
     })
   })
-
-  // ─── closeTabsToLeft ──────────────────────────────────────────────
 
   describe('closeTabsToLeft', () => {
     it('closes unpinned tabs to the left of target', () => {
@@ -658,8 +636,6 @@ describe('TabsSlice', () => {
     })
   })
 
-  // ─── getActiveTab / getTab ────────────────────────────────────────
-
   describe('getActiveTab / getTab', () => {
     it('getActiveTab returns the active tab for a worktree', () => {
       const t1 = store.getState().createUnifiedTab(WT, 'terminal')
@@ -684,8 +660,6 @@ describe('TabsSlice', () => {
     })
   })
 
-  // ─── Cross-content-type neighbor selection ────────────────────────
-
   describe('cross-content-type neighbor selection', () => {
     it('selects an editor tab as neighbor when closing a terminal tab', () => {
       const term = store.getState().createUnifiedTab(WT, 'terminal')
@@ -694,7 +668,6 @@ describe('TabsSlice', () => {
         label: 'file.ts'
       })
 
-      // Activate the terminal tab, then close it
       store.getState().activateTab(term.id)
       store.getState().closeUnifiedTab(term.id)
 
@@ -710,7 +683,6 @@ describe('TabsSlice', () => {
       })
       const main = await drawTabsFromMain(store)
 
-      // editor is active (last created), close it
       store.getState().closeUnifiedTab(editor.id)
       await main.settle()
       main.close()

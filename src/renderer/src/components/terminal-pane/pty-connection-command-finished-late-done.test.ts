@@ -18,6 +18,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 const {
   resetAndRefreshAllTerminalWebglAtlases,
@@ -124,7 +125,7 @@ vi.mock('./remote-runtime-pty-transport', () => ({
   )
 }))
 
-// Why: stub only getEagerPtyBufferHandle so tests can simulate a live eager buffer (adopt path) without standing up the real IPC dispatcher.
+// Stub eager-buffer lookup to exercise live adoption without the IPC dispatcher.
 vi.mock('./pty-dispatcher', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return {
@@ -137,8 +138,7 @@ function createDeps(overrides: Record<string, unknown> = {}) {
   return buildPaneConnectionDeps(storeFixture, overrides)
 }
 
-// A process-lifetime producer (OpenCode 2 `opencode run`) posts the run's Done after the
-// command-finished fact; the exited-agent drop must keep it, as it keeps a late hook Done.
+// OpenCode 2 posts Done after command-finished; exited-agent cleanup must preserve it like a late hook Done.
 describe('command-finished drop and a Done that lands after it', () => {
   beforeEach(async () => {
     vi.resetModules()
@@ -177,12 +177,11 @@ describe('command-finished drop and a Done that lands after it', () => {
     transportFactoryQueue.push(transport)
     const paneKey = makePaneKey('tab-1', LEAF_1)
     const pane = createPane(1)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
-    const args = [
+    const args = mockPanePtyArgs(
       pane,
       createManager(1),
       createDeps({ isVisibleRef: { current: false } })
-    ] as unknown as Parameters<typeof connectPanePty>
+    )
     connectPanePty(...args)
     await vi.advanceTimersByTimeAsync(20)
     await flushAsyncTicks()

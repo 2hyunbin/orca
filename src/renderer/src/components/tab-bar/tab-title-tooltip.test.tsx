@@ -103,10 +103,29 @@ vi.mock('../../store', async () => {
       selector: (state: {
         unreadTerminalTabs: Record<string, boolean>
         agentStatusByPaneKey: Record<string, never>
+        browserPagesByWorkspace: Record<string, never>
+        browserAudiblePageIds: Record<string, never>
+        browserAudioMutedTabIds: Record<string, never>
+        setBrowserTabAudioMuted: () => void
       }) => unknown
-    ) => selector({ unreadTerminalTabs: {}, agentStatusByPaneKey: {} })
+    ) =>
+      selector({
+        unreadTerminalTabs: {},
+        agentStatusByPaneKey: {},
+        browserPagesByWorkspace: {},
+        browserAudiblePageIds: {},
+        browserAudioMutedTabIds: {},
+        setBrowserTabAudioMuted: vi.fn()
+      })
   }
-  const readFixture = () => ({ unreadTerminalTabs: {}, agentStatusByPaneKey: {} })
+  const readFixture = () => ({
+    unreadTerminalTabs: {},
+    agentStatusByPaneKey: {},
+    browserPagesByWorkspace: {},
+    browserAudiblePageIds: {},
+    browserAudioMutedTabIds: {},
+    setBrowserTabAudioMuted: vi.fn()
+  })
 
   return withAgentStatusFixture(fixture, () => readFixture() ?? {})
 })
@@ -121,20 +140,32 @@ vi.mock('@/store', async () => {
         settings: null
         unreadTerminalTabs: Record<string, boolean>
         agentStatusByPaneKey: Record<string, never>
+        browserPagesByWorkspace: Record<string, never>
+        browserAudiblePageIds: Record<string, never>
+        browserAudioMutedTabIds: Record<string, never>
+        setBrowserTabAudioMuted: () => void
       }) => unknown
     ) =>
       selector({
         openMarkdownPreview: vi.fn(),
         settings: null,
         unreadTerminalTabs: {},
-        agentStatusByPaneKey: {}
+        agentStatusByPaneKey: {},
+        browserPagesByWorkspace: {},
+        browserAudiblePageIds: {},
+        browserAudioMutedTabIds: {},
+        setBrowserTabAudioMuted: vi.fn()
       })
   }
   const readFixture = () => ({
     openMarkdownPreview: vi.fn(),
     settings: null,
     unreadTerminalTabs: {},
-    agentStatusByPaneKey: {}
+    agentStatusByPaneKey: {},
+    browserPagesByWorkspace: {},
+    browserAudiblePageIds: {},
+    browserAudioMutedTabIds: {},
+    setBrowserTabAudioMuted: vi.fn()
   })
 
   return withAgentStatusFixture(fixture, () => readFixture() ?? {})
@@ -211,8 +242,7 @@ function textSpanHtml(markup: string, text: string): string {
 
 function expectTabContainerWidth(markup: string, root: string): void {
   const container = firstOpeningTag(markup)
-  // Why: pinned literally — a definite `w-*` is what stops live title updates from resizing
-  // every tab, so asserting against the constant would let that guarantee be edited away.
+  // Assert literal widths so changing the shared constant cannot silently allow live-title tab resizing.
   const widthClasses = 'w-[180px] min-w-[72px] min-[1280px]:w-[220px]'
   expect(container).toContain(widthClasses)
   expect(root).not.toContain('w-[180px]')
@@ -225,7 +255,7 @@ function expectTooltipContent(markup: string, text: string): void {
   expect(markup).toContain('data-side="bottom"')
   expect(markup).toContain('data-variant="tab-preview" data-side="bottom" data-side-offset="0"')
   expect(markup).toContain('data-variant="tab-preview"')
-  expect(markup).toContain(text)
+  expect(markup).toContain(`data-tab-hover-card-title="true">${text}</div>`)
 }
 
 function makeTerminalTab(overrides: Partial<TerminalTab> = {}): TerminalTab {

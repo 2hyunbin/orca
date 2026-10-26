@@ -12,6 +12,7 @@ import {
   type ProjectExecutionRuntimeResolution
 } from '../../../shared/project-execution-runtime'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
+import { makeTerminalTab } from '@/store/slices/worktrees-slice-test-fixtures'
 import {
   buildPaneAccountRestartStartup,
   resolveAgentAccountRestartResumeStartup,
@@ -252,6 +253,26 @@ describe('buildPaneAccountRestartStartup for Claude', () => {
     expect(buildPaneAccountRestartStartup('claude', pane)?.command).toContain('--model')
   })
 
+  // #31545: `cd pkg && claude` must come back in pkg, not the tab's start folder.
+  it('resumes a Claude started in another folder from that folder', () => {
+    seedAgentStatus({
+      agentType: 'claude',
+      state: 'done',
+      providerSession: { key: 'session_id', id: SESSION_ID, cwd: '/repo/pkg' }
+    })
+    useAppStore.setState({
+      tabsByWorktree: {
+        [WORKTREE_ID]: [
+          makeTerminalTab({ id: TAB_ID, worktreeId: WORKTREE_ID, startupCwd: '/repo' })
+        ]
+      }
+    })
+
+    expect(buildPaneAccountRestartStartup('claude', pane)?.command).toBe(
+      `cd '/repo/pkg' && claude '--resume' '${SESSION_ID}'`
+    )
+  })
+
   it('reports no resume when the Claude pane has no session id', () => {
     seedAgentStatus({ agentType: 'claude', state: 'done' })
 
@@ -268,7 +289,7 @@ describe('buildPaneAccountRestartStartup for Claude', () => {
     expect(resolveAgentAccountRestartResumeStartup('claude', pane)).toBeNull()
   })
 
-  // Why both: a WSL worktree's UNC path and a WSL Windows runtime default each resolve a WSL runtime.
+  // Both WSL UNC paths and a WSL default runtime must resolve to the guest runtime.
   it.each([
     [
       'a WSL worktree path',

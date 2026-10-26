@@ -11,10 +11,7 @@ export function selectHookPreviewIsToolOutput(entry: AgentStatusEntry | undefine
   return entry?.lastAssistantMessageIsToolOutput === true
 }
 
-/**
- * Hydrated nonterminal rows are only recovery evidence until a live hook event
- * confirms the turn. They must not make Native Chat look permanently busy.
- */
+/** Restored nonterminal rows need a live hook confirmation before they may keep chat busy. */
 export function resolveNativeChatHookState(
   entry:
     | Pick<AgentStatusEntry, 'state' | 'workingMode' | 'updatedAt' | 'restoredUnconfirmed'>
@@ -30,19 +27,15 @@ export function resolveNativeChatHookState(
 export function useNativeChatHookStatus(
   paneKey: string
 ): readonly [AgentStatusState | null, number | null, boolean] {
-  // Freshness is time-based; subscribe to the scheduler epoch so a silent
-  // working row stops driving Native Chat when its TTL expires.
+  // Subscribe to TTL expiry so silent working rows eventually stop keeping chat busy.
   const agentStatusEpoch = useAppStore((store) => store.agentStatusEpoch)
   void agentStatusEpoch
-  // Why: primitive selectors keep unrelated pane/status updates from rerendering
-  // native chat while still exposing the three fields used for reconciliation.
+  // Primitive selectors avoid rerenders for unrelated status changes.
   const state = useAgentStatusField(paneKey, (entry) => {
     return resolveNativeChatHookState(entry)
   })
   const stateStartedAt = useAgentStatusField(paneKey, (entry) => entry?.stateStartedAt ?? null)
-  // Why: only children that started during the current parent working epoch can
-  // keep the session working after lead completion. Prior-turn roster leftovers
-  // (missed SubagentStop, pane reuse) must not veto settle forever.
+  // Only children started in this parent epoch may delay settlement; missed stops and reused panes leave stale roster entries.
   const hasWorkingSubagents = useAgentStatusField(paneKey, (entry) => {
     const epochStart = entry?.stateStartedAt
     return (

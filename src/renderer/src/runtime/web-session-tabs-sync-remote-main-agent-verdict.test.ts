@@ -1,11 +1,6 @@
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
-/**
- * A paired client mirrors a host's agent rows from `session.tabs`. A main agent that fails while
- * its subagents keep the row working changes nothing but `mainAgent`: the row's state, start and
- * (within one host frame) update time all stay put. The mirror must still take the new row and
- * invalidate the worktree rollup, which caches on the agent-status epoch.
- */
+// mainAgent can fail while subagents keep state/start/update time unchanged. Mirror that verdict and invalidate the epoch-cached worktree rollup.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
 import type { AgentMainAgentStatus } from '../../../shared/main-agent-status'

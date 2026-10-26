@@ -161,8 +161,7 @@ function createReadOwner(
       if (!older.ok || older.page.window.oldest?.sequence === oldest.sequence) {
         break
       }
-      // A live batch that head-trimmed past the anchor makes this page discontiguous;
-      // the reducer drops it, so re-anchor rather than chase a moving window forever.
+      // Bound re-anchoring when head trimming makes older pages discontiguous.
       if (oldestStructuredAgentSessionCursor(snapshot.state)?.sequence !== oldest.sequence) {
         anchorSlides += 1
         if (anchorSlides >= OLDER_PAGE_ANCHOR_ATTEMPTS) {
@@ -200,8 +199,7 @@ function createReadOwner(
         }
       },
       applyError: (message, refusal) => {
-        // Once loaded, a failure with no host refusal attached is treated as lost contact: the
-        // transport retries it and the chat stays as it is. A refusal is the host's answer: shown.
+        // After loading, transport failures retain history while retrying; host refusals are explicit answers to show.
         if (snapshot.state.epoch !== null && refusal === undefined) {
           return
         }
@@ -260,8 +258,7 @@ function createReadOwner(
     dispose: () => teardownStructuredReadOwner(activations, listeners, () => stopActiveRun?.()),
     getSnapshot: () => snapshot,
     loadOlder: () => {
-      // Concurrent callers (scroll-to-top, the button, a rail jump) share one page
-      // and its result rather than reading a refusal as "no progress".
+      // Share concurrent page requests so another caller’s refusal cannot look like exhaustion.
       if (olderPage && !olderPage.shouldStop()) {
         return olderPage.promise
       }

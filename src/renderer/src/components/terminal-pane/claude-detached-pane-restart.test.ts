@@ -67,7 +67,6 @@ function setPaneState(state: AgentStatusEntry['state']): void {
   applyAgentStatusPatch(useAppStore, { agentStatusByPaneKey: { [paneKey]: { ...entry, state } } })
 }
 
-/** Lets a queued sweep run to completion. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 5; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0))

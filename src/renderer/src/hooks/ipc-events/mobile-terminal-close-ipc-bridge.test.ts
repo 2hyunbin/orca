@@ -39,7 +39,6 @@ vi.mock('@/components/terminal-pane/closed-terminal-leaf-notice', () => ({
 }))
 vi.mock('@/components/terminal/terminal-tab-actions', () => ({ closeTerminalTab: vi.fn() }))
 vi.mock('@/components/sidebar/sleep-worktree-flow', () => ({ runSleepWorktree: vi.fn() }))
-// Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
@@ -73,7 +72,6 @@ afterEach(() => {
   main = null
 })
 
-/** Waits for main's answers and frames: a layout-owner build draws editor tabs from them. */
 async function settle(): Promise<void> {
   await main?.settle()
 }
@@ -204,7 +202,6 @@ describe('runtime file opens on the host desktop', () => {
     await openFile({ worktreeId: BACKGROUND, ...APP_TS, navigation: 'caller' })
 
     expect(screenState(store)).toEqual(before)
-    // Why: the tab is that worktree's selection, so it is what the user sees on going there.
     expect(activeEditorEntityId(store, BACKGROUND)).toBe(APP_TS.filePath)
     expect(store.getState().activeFileIdByWorktree[BACKGROUND]).toBe(APP_TS.filePath)
     store.getState().setActiveWorktree(BACKGROUND)
@@ -309,7 +306,6 @@ describe('runtime file opens on the host desktop', () => {
       .unifiedTabsByWorktree[BACKGROUND]?.find((tab) => tab.entityId === terminal.id)?.id
     if (reopen) {
       await openFile({ worktreeId: BACKGROUND, ...APP_TS, navigation: 'caller' })
-      // Why: the user went back to the terminal, so the file is in the history but not last.
       getAgentStatusOwner(store)
         .getState()
         .activateTab(terminalTabId ?? '')
@@ -430,7 +426,6 @@ describe('runtime file opens on the host desktop', () => {
   })
 
   describe('with another server focused', () => {
-    // A worktree the CLI just created, before this renderer's catalog lists it.
     const FRESH = 'repo9::/repo9/fresh'
     const FRESH_TS = { filePath: '/repo1/fresh/src/app.ts', relativePath: 'src/app.ts' }
 

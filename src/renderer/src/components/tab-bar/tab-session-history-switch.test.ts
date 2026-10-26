@@ -119,8 +119,6 @@ function makeState(
   return getAgentStatusOwner(useAppStore).getState()
 }
 
-// What the Session History panel sends for its default Workspace scope, at the panel's default
-// depth, on the workspace's own host.
 const PANEL_REQUEST = {
   scopePaths: ['/repo/wt'],
   executionHostScope: 'local',

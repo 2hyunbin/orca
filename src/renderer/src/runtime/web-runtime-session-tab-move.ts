@@ -35,7 +35,7 @@ export async function moveWebRuntimeSessionTab(
   const callEnvironment = captureRuntimeEnvironmentCall(environmentId, intentOwner.pairingRevision)
 
   if (args.kind === 'reorder') {
-    // Why: record local order synchronously before async host resolution, so a pre-move snapshot can't snap the tab back.
+    // Record local order before async resolution so pre-move snapshots cannot snap it back.
     recordWebSessionReorderIntent(
       intentOwner,
       args.worktreeId,
@@ -57,7 +57,7 @@ export async function moveWebRuntimeSessionTab(
         worktreeId: args.worktreeId,
         tabId
       })
-    // Why: until the next server list, a split-off tab still records its source group, as tabs outside do.
+    // Before the next server list, split-off tabs still carry their source group like outside tabs.
     const hostGroupIdsOutsideTarget = new Set(
       groups
         .filter((group) => group.id !== args.targetGroupId)
@@ -65,7 +65,7 @@ export async function moveWebRuntimeSessionTab(
         .filter((tabId) => tabId !== args.tabId)
         .map(recordedHostGroupId)
     )
-    // Why: a group this desktop split off has another id on the host, so name it by a tab it holds.
+    // Name client-split host groups by a contained tab; desktop group IDs differ.
     const targetHostGroupId =
       (targetGroup?.tabOrder ?? [])
         .filter((tabId) => tabId !== args.tabId)
@@ -115,7 +115,7 @@ export async function moveWebRuntimeSessionTab(
         ? {
             ...base,
             kind: 'reorder' as const,
-            // Why: the host reorder API only accepts host tab ids, so local-only tabs must be omitted from the mirrored order.
+            // Host reorder accepts only host tab IDs; omit local-only tabs.
             tabOrder: reorderedHostTabOrder
           }
         : args.kind === 'split'
@@ -127,7 +127,7 @@ export async function moveWebRuntimeSessionTab(
           : {
               ...base,
               kind: 'move-to-group' as const,
-              // Why: web groups can contain local-only tabs, so host insertion indexes count only the filtered host-backed order.
+              // Host indexes must count only host-backed tabs in mixed web groups.
               index: targetHostIndex
             }
     const response = await callEnvironment({

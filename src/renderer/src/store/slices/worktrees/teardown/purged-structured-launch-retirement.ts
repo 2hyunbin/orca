@@ -9,10 +9,10 @@ import {
   prepareStructuredAgentSessionLaunchCancellation,
   shouldRetainStructuredAgentSessionLaunchTab,
   structuredLaunchStates
-} from '@/lib/structured-agent-session-launch-registry'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-registry'
 import { prepareStructuredAgentSessionChatSendRemoval } from '@/lib/structured-agent-session-launch-prompt'
 import { prepareUnlistedCreatedChatRemoval } from '@/lib/structured-agent-session-unlisted-created-chats'
-import { readStructuredAgentLaunchRecords } from '@/lib/structured-agent-session-launch-persistence'
+import { readStructuredAgentLaunchRecords } from '@/lib/agent-session/launch/structured-agent-session-launch-persistence'
 import {
   prepareStructuredReadRetirement,
   installStructuredReadRetirement

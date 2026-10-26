@@ -78,6 +78,7 @@ describe('useIpcEvents rate-limit hydration', () => {
         setSshConnectionState: vi.fn(),
         setSshTargetLabels: vi.fn(),
         setPortForwards: vi.fn(),
+        setUnrestoredPortForwards: vi.fn(),
         clearPortForwards: vi.fn(),
         setDetectedPorts: vi.fn(),
         enqueueSshCredentialRequest: vi.fn(),
@@ -167,6 +168,7 @@ describe('useIpcEvents rate-limit hydration', () => {
         ssh: {
           listTargets: () => Promise.resolve([]),
           listPortForwards: () => Promise.resolve([]),
+          listUnrestoredPortForwards: () => Promise.resolve([]),
           listDetectedPorts: () => Promise.resolve([]),
           getState: () => Promise.resolve(null),
           onStateChanged: () => () => {},

@@ -3,7 +3,7 @@ import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import {
   markStructuredAgentSessionLaunchesPublished,
   publishedStructuredSessions
-} from '@/lib/structured-agent-session-launch-publication'
+} from '@/lib/agent-session/launch/structured-agent-session-launch-publication'
 import { toRuntimeExecutionHostId } from '../../../../shared/execution-host'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
@@ -91,7 +91,11 @@ export function applyWebSessionTabsStorePatch(
             continue
           }
           const notificationStatus = clientOwnedNotification ? remapped : accepted
-          if (!notificationStatus) {
+          // Why: an unverifiable `done` restates an earlier turn or none, never a completion.
+          if (
+            !notificationStatus ||
+            (notificationStatus.state === 'done' && notificationStatus.restoredUnconfirmed)
+          ) {
             continue
           }
           const currentClientStateStartedAt = clientOwnedNotification

@@ -25,6 +25,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 type HiddenPaneBinding = {
   noteVisibilityResume: () => void
@@ -108,12 +109,8 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
   }
 
   function connectPane(deps: ReturnType<typeof buildPaneConnectionDeps>): HiddenPaneBinding {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixtures implement the pane, manager and deps members connectPanePty reads.
-    const args = [createPane(2), createManager(2), deps] as unknown as Parameters<
-      typeof connectPanePty
-    >
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: connectPanePty returns the PanePtyBinding, which has both methods.
-    return connectPanePtyRef!(...args) as unknown as HiddenPaneBinding
+    const args = mockPanePtyArgs(createPane(2), createManager(2), deps)
+    return connectPanePtyRef!(...args)
   }
 
   function setHostLiveness(isLive: boolean | null): void {
@@ -124,7 +121,6 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
     return transport.connect.mock.calls.map((call) => call[0]?.command)
   }
 
-  /** Switch on: the window asked main to start the pane and attached to main's terminal. */
   async function expectAttachedToMainStart(transport: MockTransport): Promise<void> {
     await expectWindowStartAskedMain(transport, PANE_KEY, storeFixture.read())
     expect(transport.connect).toHaveBeenLastCalledWith(
@@ -153,7 +149,6 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
       await installTerminalTestGlobals()
       connectPanePtyRef = storeFixture.own(await import('./pty-connection')).connectPanePty
       ;(await mainLayoutApplyTransport()).reset()
-      // Switch on: main's start of the pane binds it to `pty-main`.
       await mainStartsPaneAs({
         ptyId: MAIN_PTY_ID,
         bind: bindsPaneInStore(storeFixture.store, 'tab-1', LEAF_2)
@@ -201,7 +196,6 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
       // The reveal takes the same reattach a visible pane would, so the host restores its scrollback.
       expect(transport.connect.mock.calls[0]?.[0]).toMatchObject({ sessionId: DEAD_SESSION_ID })
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        // The reveal's reattach is a view: main's start, not the window, resumes the agent.
         expect(transport.connect.mock.calls[0]?.[0]).toMatchObject({ attachOnlyView: true })
         expectNoWindowStart(transport, storeFixture.read())
         return
@@ -286,7 +280,6 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
 
       expect(transport.connect).toHaveBeenCalledTimes(2)
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        // The failed reattach asks main to start the pane; the second connect attaches to it.
         await expectAttachedToMainStart(transport)
         return
       }
@@ -340,7 +333,6 @@ export function registerPtyConnectionHiddenSleepingResumeTests(): void {
       // Hibernation sleeps the hidden pane again: its own wake, which the activation sweep may clean around.
       isVisibleRef.current = false
       seedSleepingPane(null, { state: 'done', origin: 'worktree-sleep' })
-      // Switch on: the pane runs main's terminal, so that is what the sleep ends.
       const resumedPtyId = ORCA_LAYOUT_OWNER_IS_MAIN ? MAIN_PTY_ID : 'resumed-pty'
       storeFixture.read().suppressedPtyExitIds[resumedPtyId] = true
       const onPtyExit = createdTransportOptions[0]?.onPtyExit

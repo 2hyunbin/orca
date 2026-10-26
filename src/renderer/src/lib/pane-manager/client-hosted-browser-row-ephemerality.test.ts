@@ -1,15 +1,7 @@
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 import { getAgentStatusOwner } from '@/store/agent-status-commit'
-/**
- * The invariant that makes these rows safe: they are ephemeral.
- *
- * A client-hosted row describes a page this desktop does not render. If one ever reached the
- * persisted workspace session or the runtime window graph, the host would round-trip it back as a
- * host-owned local tab — resurrecting a dead page as a real one after restart. Both sinks are
- * driven for real below, and every absence is paired with a presence check through the same
- * oracle so an empty result can never pass for a proof.
- */
+/** Client-hosted UI rows own no host page and must never enter persistence/runtime graphs, which would resurrect them as local tabs. Exercise both sinks with paired live-row presence checks so empty results cannot pass vacuously. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { buildWorkspaceSessionPayload } from '../workspace-session'
@@ -25,7 +17,6 @@ import {
   type TabsDrawnFromMain
 } from '@/store/slices/tabs-drawn-from-main.test-fixture'
 
-// Main answers the window's layout commands; its frames draw the local browser tab.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
   (
     await import('@/runtime/layout-apply-test-transport.test-fixture')
@@ -43,7 +34,6 @@ const CLIENT_HOSTED_PAGE_ID = 'client-hosted-page-1'
 let initialState: AgentStatusReadState
 let main: TabsDrawnFromMain | undefined
 
-/** A layout-owner build draws the tab once main's frame is in. */
 async function seedLocalBrowserTab(): Promise<string> {
   main = await drawTabsFromMain(useAppStore)
   const workspace = useAppStore.getState().createBrowserTab(WT, 'https://local.test/', {

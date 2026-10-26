@@ -95,9 +95,7 @@ function getWorktreeAgentActivitySummaries(
     return agentActivityCache.summaries
   }
 
-  // Why: status dots render once per visible worktree. Build the tab/worktree
-  // index once per store snapshot so agent pings are O(worktrees + agents),
-  // not O(worktrees * agents).
+  // Index tabs once per snapshot so per-card summaries cost O(worktrees + agents).
   const tabIdToWorktreeId = new Map<string, string>()
   for (const [worktreeId, tabs] of Object.entries(state.tabsByWorktree)) {
     for (const tab of tabs) {
@@ -135,9 +133,7 @@ function getWorktreeAgentActivitySummaries(
       continue
     }
     if (!isExplicitAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
-      // Why: staleness ends this row's authority but not the pane's identity — see
-      // `stalePaneIdsByTabId`. Dropping both let Orca's self-authored permission title outlive
-      // the row it came from and pin the card to a question nobody was asking.
+      // Retain stale pane identity to suppress generated permission titles after the row loses authority.
       addStalePaneId(summary, paneIdentity.tabId, paneIdentity.paneId)
       continue
     }
@@ -158,7 +154,7 @@ function getWorktreeAgentActivitySummaries(
 
   for (const retained of Object.values(state.retainedAgentsByPaneKey ?? {})) {
     const summary = summaryForWorktree(retained.worktreeId)
-    // Why: a failed agent is retained so its failure stays visible, not so it reads done.
+    // Retained failures must remain failures rather than become clean completions.
     if (agentVerdictDisplayMark(retained.entry) === 'failed') {
       summary.hasRetainedFailed = true
     } else {
@@ -175,8 +171,7 @@ function getWorktreeAgentActivitySummaries(
     addParentPaneId(summary, orchestration, retained.worktreeId, tabIdToWorktreeId)
   }
 
-  // Why: epoch changes rebuild every summary, so reuse structurally equal results
-  // to keep unrelated worktree subscriptions from scheduling card renders.
+  // Reuse equal summaries across freshness epochs so unrelated cards do not rerender.
   const previousSummaries = agentActivityCache?.summaries
   if (previousSummaries) {
     for (const [worktreeId, summary] of summaries) {
@@ -296,9 +291,7 @@ function addParentPaneId(
   if (!parentPaneIdentity) {
     return
   }
-  // Why: a completed worker can be the only visible row for a worktree while
-  // its parent pane still carries a stale spinner title. Let that row own the
-  // parent pane's title for this worktree without touching other worktrees.
+  // Completed workers own stale parent titles only within their attributed worktree.
   if (tabIdToWorktreeId.get(parentPaneIdentity.tabId) !== worktreeId) {
     return
   }

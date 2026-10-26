@@ -1,11 +1,11 @@
 import {
   getStructuredLaunchStateBySessionId,
   detachStructuredLaunchStateIfCurrent
-} from './structured-agent-session-launch-registry'
+} from './agent-session/launch/structured-agent-session-launch-registry'
 import {
   hasStructuredAgentLaunchCancellationTombstonePersisted,
   prepareStructuredAgentLaunchCancellationPersistence
-} from './structured-agent-session-launch-persistence'
+} from './agent-session/launch/structured-agent-session-launch-persistence'
 import { prepareStructuredAgentLaunchCancellation } from './launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
 import { prepareStructuredAgentLocalLaunchCancellation } from './structured-agent-session-local-launch-cancel'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'

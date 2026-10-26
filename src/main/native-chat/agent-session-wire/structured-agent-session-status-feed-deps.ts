@@ -25,6 +25,7 @@ export type StatusFeedSession = {
 
 export type StructuredAgentSessionStatusFeedDeps = {
   sessions: ReadonlyMap<string, StatusFeedSession>
+  starting?: (sessionId: string) => boolean
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** Absent means no replaced runtime. */
   replacedRuntime?: (sessionId: string) => { fence: number } | undefined
@@ -66,5 +67,30 @@ export function structuredAgentSessionNamingSnapshot(
     type: 'snapshot',
     sessions: [],
     namingActiveSessionIds: deps.namingActiveSessionIds?.() ?? []
+  }
+}
+
+/** Activity observers remain separate from descriptive provider reports. */
+export function notifyStructuredStatusObservers(
+  deps: StructuredAgentSessionStatusFeedDeps,
+  summary: AgentSessionStatusSummary,
+  previous: AgentSessionStatusSummary | undefined,
+  options: StructuredAgentSessionStatusObserverOptions & { reportOnly: boolean }
+): void {
+  if (summary.hostExecutionPhase === 'ready' && previous?.hostExecutionPhase !== 'ready') {
+    deps.onAgentStarted?.(summary.sessionId)
+  }
+  const { reportOnly, ...observation } = options
+  if (reportOnly) {
+    return
+  }
+  try {
+    deps.onStatusChanged?.(summary, observation)
+  } catch (error) {
+    deps.logger.warn('status observer failed', {
+      scope: 'status-observer',
+      sessionId: summary.sessionId,
+      error
+    })
   }
 }

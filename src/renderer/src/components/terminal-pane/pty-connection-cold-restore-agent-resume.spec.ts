@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
+  expectNoWindowStart,
   expectWindowPaintsColdRestoreOnly,
   mainLayoutApplyTransport
 } from './pty-connection-test-main-pane-start-fixtures'
@@ -348,8 +349,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       const transport = createMockTransport('fresh-pty')
       transport.connect.mockImplementation(async ({ sessionId }: { sessionId?: string }) => {
         if (sessionId) {
-          // Why: main dropped `resume <id>` because it could not verify which Codex
-          // account owns the rollout, so this PTY is a new session, not a restore.
+          // Unverified Codex rollout ownership prevents resume; main starts a new session instead.
           return {
             id: 'fresh-pty',
             coldRestore: { scrollback: 'cold-payload', cwd: '/tmp/wt-1' },
@@ -369,6 +369,9 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
           agentCmdOverrides: {}
         },
         agentStatusByPaneKey: {},
+        consumeTabStartupCommand: vi.fn(),
+        pendingStartupByTabId: {},
+        automaticAgentResumeClaimsByTabId: {},
         sleepingAgentSessionsByPaneKey: {
           [paneKey]: {
             paneKey,
@@ -396,13 +399,20 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
       await vi.advanceTimersByTimeAsync(70)
 
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        // Main resumes the agent; the window attaches, paints the host's history, and resumes nothing.
-        expectWindowPaintsColdRestoreOnly(pane, transport, deps, storeFixture.read(), 'lost-pty')
-        return
+        expectNoWindowStart(transport, storeFixture.read())
+        expect(transport.connect).toHaveBeenCalledWith(
+          expect.objectContaining({ sessionId: 'lost-pty', attachOnlyView: true })
+        )
+        expect(pane.terminal.write).toHaveBeenCalledWith(
+          `${RESET_GRAPHIC_RENDITION}cold-payload`,
+          expect.any(Function)
+        )
+        expect(transport.sendInput).not.toHaveBeenCalled()
       }
 
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledTimes(1)
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledWith(1, 'resume-unavailable')
+      expect(storeFixture.read().clearSleepingAgentSession).toHaveBeenCalledWith(paneKey)
     })
 
     it('resumes from an unambiguous legacy sleeping record when cold-restoring a preserved pane', async () => {

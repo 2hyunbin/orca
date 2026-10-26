@@ -3,11 +3,7 @@ import { getAgentStatusOwner } from '../../src/renderer/src/store/agent-status-c
 import { applyAgentStatusPatch } from '../../src/renderer/src/store/agent-status-patch'
 // @vitest-environment happy-dom
 
-// A Codex parent settles, its subagent asks for approval, and the user answers. Every hop is the
-// real one: provider translator, deferred sink, durable journal and host status feed, then the
-// renderer's status bridge, agent-status store and Activity pipeline. The answer returns the
-// session to its own turn's end, so the row must read done, list the ask before the done, and
-// leave nothing unread that the user had already read.
+// Round-trip subagent approval through the real translator/journal/status/activity pipeline; answering must preserve done time and read state.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -19,7 +15,10 @@ import type {
   AgentSessionStatusEvent,
   AgentSessionStatusSummary
 } from '../../src/shared/agent-session-wire'
-import type { AgentJournalItemBody } from '../../src/shared/agent-session-journal-types'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalItemBody
+} from '../../src/shared/agent-session-journal-types'
 import { parseAgentJournalItemKey } from '../../src/shared/agent-session-journal-item-key'
 import type { Tab } from '../../src/shared/tab-types'
 
@@ -143,7 +142,13 @@ async function openHost() {
   const feed = new StructuredAgentSessionStatusFeed({
     logger: createStructuredAgentSessionLogger(),
     sessions: new Map([
-      [SESSION, indexedStatusFeedSession({ journal, child: { phase: 'ready' } })]
+      [
+        SESSION,
+        indexedStatusFeedSession({
+          journal,
+          child: { phase: 'ready', generation: null, fence: 1 }
+        })
+      ]
     ]),
     getRecord: () => null,
     now: () => 1
@@ -193,7 +198,10 @@ async function openHost() {
         resolvedAt: tick()
       }
     }
-    await journal.appendItem(identity, resolved, { fence: 1 })
+    await journal.appendItem(identity, resolved, {
+      fence: 1,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    })
     publish()
     translator.resolvePrompt(itemId)
   }
@@ -227,7 +235,7 @@ describe("a Codex subagent's answered approval on the settled parent's Activity 
     await host.journal.appendItem(
       { provider: 'orca', clientMessageId: 'prompt-1' },
       { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'fan out' }] },
-      { fence: 1 }
+      { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
     host.on(CODEX_THREAD, 'turn/started', { turn: { id: 'parent-turn' } })
     const spawn = {

@@ -16,6 +16,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
   let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
@@ -91,19 +92,13 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
         transportFactoryQueue.push(transport)
         const pane = createPane(1)
         const manager = createManager(1)
-        const binding = connectPanePty(pane as never, manager as never, deps as never) as {
-          syncProcessTracking: () => void
-          dispose: () => void
-        }
+        const binding = connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks(6)
         expect(capturedDataCallback.current).not.toBeNull()
         return { transport, pane, dataCallback: capturedDataCallback.current!, binding }
       }
 
-      // STA-4042 root: the restore-needed marker is the ONE point where "bytes
-      // were dropped" is known. The emulator carries state across chunks just like
-      // the cross-chunk parser the handler already resets, so the gap is closed
-      // here rather than left to each recovery path to remember.
+      // Only the restore-needed marker proves a byte gap; reset emulator state here with the cross-chunk parser (STA-4042).
 
       describe('foreground flood restore feedback loop (rc.7.perf)', () => {
         function writtenFloodData(pane: ReturnType<typeof createPane>): string {
@@ -132,9 +127,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
             onPtySpawn?: (ptyId: string) => void
           }
           transportOptions.onPtySpawn?.('pty-id')
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installTerminalTestGlobals installs getMainBufferSnapshot as a vi.fn mock.
-          const getMainBufferSnapshot = window.api.pty
-            .getMainBufferSnapshot as unknown as ReturnType<typeof vi.fn>
+          const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
           const firstSnapshot = createDeferred<{
             data: string
             cols: number
@@ -293,9 +286,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
             onPtySpawn?: (ptyId: string) => void
           }
           transportOptions.onPtySpawn?.('pty-id')
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installTerminalTestGlobals installs getMainBufferSnapshot as a vi.fn mock.
-          const getMainBufferSnapshot = window.api.pty
-            .getMainBufferSnapshot as unknown as ReturnType<typeof vi.fn>
+          const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
           getMainBufferSnapshot.mockResolvedValue({
             data: 'hidden reveal snapshot\r\n',
             cols: 100,
@@ -334,9 +325,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
             onPtySpawn?: (ptyId: string) => void
           }
           transportOptions.onPtySpawn?.('pty-id')
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installTerminalTestGlobals installs getMainBufferSnapshot as a vi.fn mock.
-          const getMainBufferSnapshot = window.api.pty
-            .getMainBufferSnapshot as unknown as ReturnType<typeof vi.fn>
+          const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
           getMainBufferSnapshot.mockResolvedValue({
             data: 'restored snapshot\r\n',
             cols: 100,
@@ -379,10 +368,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
         })
 
         it('records a 2031 subscribe on a chunk the restored snapshot drops as duplicate', async () => {
-          // Why the scan runs before reconciliation: the snapshot restore replays bytes into
-          // xterm without tracking modes, so this live delivery is the only chance to observe
-          // the subscription. Dropping the chunk as a duplicate must not drop that.
-          // Gate off so the chunk scanner (not main's fact) owns this pane's registry.
+          // Scan before duplicate reconciliation: replay omits mode tracking, leaving this delivery as the only subscription evidence.
           enableMainAuthority()
           storeFixture.patch({
             settings: {
@@ -459,9 +445,7 @@ export function registerPtyConnectionHiddenBacklogReconciliationTests(): void {
             onPtySpawn?: (ptyId: string) => void
           }
           transportOptions.onPtySpawn?.('pty-id')
-          // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: installTerminalTestGlobals installs getMainBufferSnapshot as a vi.fn mock.
-          const getMainBufferSnapshot = window.api.pty
-            .getMainBufferSnapshot as unknown as ReturnType<typeof vi.fn>
+          const getMainBufferSnapshot = vi.mocked(window.api.pty.getMainBufferSnapshot)
           // Visible prompt echo metered in main's cumulative seq domain.
           dataCallback('$ node frame-script.mjs\r\n', { seq: 2_315, rawLength: 25 })
           // Pane hides mid-stream; main drops the hidden frame and marks restore.

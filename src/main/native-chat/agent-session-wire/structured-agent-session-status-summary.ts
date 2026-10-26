@@ -1,3 +1,4 @@
+import { structuredAgentSessionRuntimePermission } from './structured-agent-session-ran-options'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import { normalizeOptionalField } from '../../../shared/agent-status-field-normalization'
@@ -21,6 +22,7 @@ export function structuredAgentSessionStatusSummary({
   record,
   state,
   stopping,
+  starting,
   childWork,
   namingFailure,
   now
@@ -28,12 +30,13 @@ export function structuredAgentSessionStatusSummary({
   sessionId: string
   session: {
     params: { location: AgentSessionRecord['location']; provider: AgentSessionRecord['provider'] }
-    child?: Pick<StructuredAgentSessionProviderChild, 'phase'> | null
+    child?: StructuredAgentSessionProviderChild | null
     restartResume?: AgentSessionStatusSummary['restartResume']
   }
   journal: AgentSessionJournal
   record: AgentSessionRecord | null
   state: StructuredAgentSessionStatusState
+  starting?: boolean
   stopping: boolean
   childWork: Pick<AgentSessionStatusSummary, 'children' | 'backgroundTasks'>
   namingFailure: StructuredChatNamingFailure | undefined
@@ -49,14 +52,16 @@ export function structuredAgentSessionStatusSummary({
     sessionId,
     workspaceId: session.params.location.workspaceId,
     agent: session.params.provider,
-    ...(session.child
+    ...(session.child || starting
       ? {
           hostExecutionOwned: true as const,
-          hostExecutionPhase: session.child.phase
+          hostExecutionPhase: session.child?.phase ?? 'starting'
         }
       : {}),
     ...(session.restartResume ? { restartResume: { phase: session.restartResume.phase } } : {}),
     ...projected,
+    runtimePermission: structuredAgentSessionRuntimePermission(session.child ?? undefined),
+    // Only a working session is still being stopped; any other status already ended that work.
     ...(stopping && projected.status === 'working' ? { stopping: true as const } : {}),
     ...(record?.rewind?.phase === 'prepared' || record?.rewind?.phase === 'provider-succeeded'
       ? { rewindBlockedReason: 'outcome-unknown' as const }

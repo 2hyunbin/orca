@@ -4,11 +4,8 @@ import {
   readStructuredAgentLaunchCancellationTombstoneSessionIds,
   retireAbsentStructuredAgentLaunchCancellationTombstonesPersisted,
   retireStructuredAgentLaunchCancellationTombstonePersisted
-} from '../structured-agent-session-launch-persistence'
-// The window's cancel tombstones: a chat cancelled before its create landed is hidden and closed when
-// its host later lists it. Kept for paired hosts, which may not refuse a create whose close came
-// first; the remote-server project sets their floor. Local chats need them only in window-owned
-// builds (ORCA_LAYOUT_OWNER), until phase F.
+} from '../agent-session/launch/structured-agent-session-launch-persistence'
+// Hide/close late publication of canceled creates for paired hosts; they may not fence close-before-create. Local window-owned builds retain tombstones until layout-owner phase F.
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 
 type CancellationRetirement = {
@@ -45,8 +42,6 @@ export function beginStructuredAgentSessionAuthoritativeInventory(): number {
   return authoritativeInventorySequence
 }
 
-/** Claims `executionHostId`'s restored tombstones for best-effort cleanup on that host before
- *  its authoritative census. */
 export function claimStructuredAgentLaunchCancellationCleanups(
   executionHostId: ExecutionHostId
 ): readonly string[] {

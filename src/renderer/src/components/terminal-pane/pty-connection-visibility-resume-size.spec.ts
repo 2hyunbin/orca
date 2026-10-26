@@ -16,6 +16,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 export function registerPtyConnectionVisibilityResumeSizeTests(): void {
   let storeFixture: Awaited<ReturnType<typeof createInitialStoreState>>
@@ -71,14 +72,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           ...depsOverrides
         })
         const pane = createPane(2)
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
-        ) as unknown as {
-          noteVisibilityResume: () => void
-        }
+        const binding = connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         return { binding, transport, deps, pane }
       }
 
@@ -187,7 +181,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           pane.terminal.cols = 82
           pane.terminal.rows = 40
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           transport.resize.mockClear()
           vi.mocked(window.api.pty.getSize).mockClear()
@@ -232,7 +226,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         } as never
         vi.mocked(window.api.pty.getSize).mockResolvedValue({ cols: 62, rows: 63 })
 
-        connectPanePty(pane as never, manager as never, deps as never)
+        connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         await flushAsyncTicks()
         proposedGrid = { cols: 65, rows: 63 }
         vi.mocked(pane.fitAddon.fit).mockClear()
@@ -279,7 +273,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
         } as never
 
         try {
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           proposedGrid = { cols: 65, rows: 63 }
           setDriverForPty('pty-pane-2', { kind: 'mobile', clientId: 'phone-1' })
@@ -317,7 +311,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => ({ cols: 101, rows: 33 }))
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           setFitOverride('pty-pane-2', 'mobile-fit', 40, 30)
           transport.resize.mockClear()
@@ -364,7 +358,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => proposedGrid)
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           observer.trigger()
           await flushAsyncTicks()
@@ -415,7 +409,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             ...pane.fitAddon,
             proposeDimensions: vi.fn(() => proposedGrid)
           } as never
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           observer.trigger()
           await flushAsyncTicks()
@@ -461,7 +455,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
             proposeDimensions: vi.fn(() => ({ cols: 130, rows: 50 }))
           } as never
 
-          connectPanePty(pane as never, manager as never, deps as never)
+          connectPanePty(...mockPanePtyArgs(pane, manager, deps))
           await flushAsyncTicks()
           setDriverForPty('pty-pane-2', { kind: 'mobile', clientId: 'phone-1' })
           transport.resize.mockClear()
@@ -561,14 +555,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           paneTransportsRef: { current: new Map([[1, createMockTransport('pty-pane-1')]]) }
         })
         const pane = createPane(2)
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The real PanePtyBinding exposes noteVisibilityResume; this fixture narrows it to that method.
-        const binding = connectPanePty(
-          pane as never,
-          manager as never,
-          deps as never
-        ) as unknown as {
-          noteVisibilityResume: () => void
-        }
+        const binding = connectPanePty(...mockPanePtyArgs(pane, manager, deps))
         transport.resize.mockClear()
 
         deps.isVisibleRef.current = visible
@@ -604,7 +591,7 @@ export function registerPtyConnectionVisibilityResumeSizeTests(): void {
           ...pane.fitAddon,
           proposeDimensions: vi.fn(() => ({ cols: 132, rows: 42 }))
         } as never
-        const binding = connectPanePty(pane as never, createManager(2) as never, deps as never)
+        const binding = connectPanePty(...mockPanePtyArgs(pane, createManager(2), deps))
         await flushAsyncTicks()
         transport.claimViewport.mockClear()
 

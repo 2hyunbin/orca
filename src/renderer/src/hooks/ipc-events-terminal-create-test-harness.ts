@@ -1,6 +1,3 @@
-/* oxlint-disable anti-slop/no-module-mocking -- Vitest support module for useIpcEvents-terminal-create-surfacing.test.ts, not shipped code, and it
-   falls outside the *.test / *.spec / tests glob set. That spec already sits at 799 of its 800 max-lines budget, so these 13
-   stubs cannot move back into it without a max-lines disable. */
 import type * as ReactModule from 'react'
 import { vi } from 'vitest'
 import type { AppState } from '@/store/types'
@@ -13,8 +10,7 @@ import type {
   TerminalCreateSurfacingScenario
 } from './ipc-events-terminal-create-scenario-types'
 
-// Why: the terminal-create surfacing scenario is one long ordered assertion run;
-// its store/window/mock wiring lives here so the assertions stay under budget.
+// Keep ordered scenario assertions in the spec while extracting its store/window wiring to meet the line budget.
 export async function setupTerminalCreateSurfacing(
   isFloatingPanelFocused: () => boolean
 ): Promise<TerminalCreateSurfacingScenario> {
@@ -102,6 +98,7 @@ export async function setupTerminalCreateSurfacing(
     setSshConnectionState: vi.fn(),
     setSshTargetLabels: vi.fn(),
     setPortForwards: vi.fn(),
+    setUnrestoredPortForwards: vi.fn(),
     clearPortForwards: vi.fn(),
     setDetectedPorts: vi.fn(),
     enqueueSshCredentialRequest: vi.fn(),
@@ -142,7 +139,6 @@ export async function setupTerminalCreateSurfacing(
   const focusTerminalListenerRef: ListenerRef<(data: FocusTerminalListenerPayload) => void> = {
     current: null
   }
-  const newTerminalTabListenerRef: ListenerRef<() => void> = { current: null }
 
   vi.doMock('react', async () => {
     const actual = await vi.importActual<typeof ReactModule>('react')
@@ -210,8 +206,7 @@ export async function setupTerminalCreateSurfacing(
       replyTerminalCreate,
       createTerminalListenerRef,
       requestTerminalCreateListenerRef,
-      focusTerminalListenerRef,
-      newTerminalTabListenerRef
+      focusTerminalListenerRef
     })
   )
 
@@ -221,9 +216,6 @@ export async function setupTerminalCreateSurfacing(
 
   if (typeof createTerminalListenerRef.current !== 'function') {
     throw new Error('Expected create-terminal listener to be registered')
-  }
-  if (typeof newTerminalTabListenerRef.current !== 'function') {
-    throw new Error('Expected new-terminal-tab listener to be registered')
   }
   return {
     createTab,
@@ -250,7 +242,6 @@ export async function setupTerminalCreateSurfacing(
     },
     createTerminalListenerRef,
     requestTerminalCreateListenerRef,
-    focusTerminalListenerRef,
-    newTerminalTabListenerRef
+    focusTerminalListenerRef
   }
 }

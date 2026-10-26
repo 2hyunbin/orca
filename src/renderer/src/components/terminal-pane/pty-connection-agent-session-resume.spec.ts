@@ -21,6 +21,8 @@ import {
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'
 import { createInitialStoreState } from './pty-connection-test-store-fixtures'
 import type { StoreState } from './pty-connection-test-store-state'
+import type { AgentStatusSlice } from '@/store/slices/agent-status-slice-contract'
+import { normalizeLaunchConfigRegistrationMetadata } from '@/store/slices/agent-status-launch-config'
 import type { MockTransport } from './pty-connection-test-pane-fixtures'
 import {
   installTerminalTestGlobals,
@@ -222,6 +224,19 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
       transportFactoryQueue.push(transport)
       const paneKey = makePaneKey('tab-1', LEAF_1)
       const launchConfig = { agentCommand: 'codex', agentArgs: '', agentEnv: {} }
+      const registerLaunchConfig: AgentStatusSlice['registerAgentLaunchConfig'] = (
+        key,
+        config,
+        metadata
+      ) => {
+        storeFixture.read().agentLaunchConfigByPaneKey[key] = {
+          launchConfig: config,
+          identity: normalizeLaunchConfigRegistrationMetadata(key, metadata)
+        }
+      }
+      vi.mocked(storeFixture.read().registerAgentLaunchConfig).mockImplementation(
+        registerLaunchConfig
+      )
       storeFixture.patch({
         ...storeFixture.read(),
         tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
@@ -625,8 +640,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         expect.objectContaining({ sessionId: staleSessionId })
       )
       if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        // The reattach found no terminal: main starts the pane and keeps its record; the window
-        // starts no fresh shell of its own.
+        // A missing reattach asks main to start and preserve the resume record; the window cannot spawn its own shell.
         await expectWindowStartAskedMain(transport, paneKey, storeFixture.read())
         expect(transport.connect).toHaveBeenLastCalledWith(
           expect.objectContaining({ sessionId: 'pty-main', attachOnlyView: true })

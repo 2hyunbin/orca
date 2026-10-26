@@ -44,7 +44,7 @@ export function resolveTabAgentFromSignals(args: {
   launchAgent?: TuiAgent
 }): TerminalAgent | null {
   const launchAgent = args.launchAgent ?? null
-  // Durable focused-pane owner (launch intent → hook → session); focused-pane-scoped so a sibling can't re-own the focused title (would mislabel a Pi pane as OMP).
+  /** Focused-pane ownership follows launch → hook → session; sibling ownership cannot reinterpret this title (e.g. Pi as OMP). */
   const owner = agentTypeToIconAgent(
     resolvePaneAgentOwner({
       launchAgent,
@@ -73,15 +73,14 @@ export function resolveTabAgentFromSignals(args: {
   )
   const sleepingSessionAgent = args.sleepingSessionAgent ?? null
 
-  // Title carries identity only as a reuse override (names a DIFFERENT-group agent) or a legacy standalone id when no hook — same-group titles say nothing (OMP wraps Pi), so the record wins.
+  /** Titles identify only different-group reuse or legacy hookless agents; same-group titles (OMP wrapping Pi) defer to durable records. */
   const explicitTitleAgent = resolveSignalAgentForLaunchOwner(
     resolveExplicitTerminalTitleAgentType(args.title),
     owner
   )
   const priorIdentity = idleFocusedIdentity ?? launchAgent
   const nativeOpenCodeTitle = explicitTitleAgent === 'opencode' && isOpenCodeNativeTitle(args.title)
-  // Why: a "claude" token in another agent's task text is a mention, not identity, so it must
-  // not take a pane from its known owner — only a title that PRESENTS Claude may (#8940).
+  // A task mentioning claude cannot take another agent’s pane; only titles presenting Claude establish identity (#8940).
   const titleClaimsIdentity =
     explicitTitleAgent !== 'claude' || isClaudeIdentityFrameTitle(args.title)
   // Why: native OpenCode titles can reclaim stale launch intent before any observed hook signal.
@@ -117,7 +116,6 @@ export function resolveTabAgentFromSignals(args: {
   const activeLaunchAgent = launchedAgentExited ? null : launchAgent
   // Why: re-own the foreground process within its title-identity group so OMP's nested pi (shell → omp → pi) can't flip an OMP-owned tab's icon.
   const processAgent = resolveSignalAgentForLaunchOwner(args.processAgent, owner)
-  // Identity-first precedence (see JSDoc): live hook > process > title > completed > sleeping > launch > sibling.
   return (
     liveFocusedIdentity ??
     processAgent ??
@@ -130,20 +128,7 @@ export function resolveTabAgentFromSignals(args: {
   )
 }
 
-/**
- * Resolve which coding-harness agent a terminal tab is running, for its tab-bar
- * icon. A pane's IDENTITY (separate from activity state), from the same
- * already-computed state as the sidebar rows — no foreground probing.
- * Identity-first precedence:
- *
- * 1. Live focused hook — ground truth while the agent works; never title-overridden.
- * 2. Process identity — recognized foreground process (local only); re-owned within its title-identity group so OMP's nested `pi` (shell → omp → pi) can't flip the icon.
- * 3. Title — only a reuse override or legacy standalone identity; native OpenCode titles cannot displace durable ownership.
- * 4. Idle focused identity — the pane's completed hook or sidebar-retained completion; suppressed locally once OSC 133;D proves exit.
- * 5. Sleeping session identity — current provider-session ownership.
- * 6. launchAgent — bootstrap before any hook/process signal; cleared once exit evidence shows it left.
- * 7. Sibling-pane identity (live, then completed/retained) — split-tab fallback.
- */
+/** Resolve pane identity, separate from activity, without foreground probes: live focused hook → process (normalized to owner group) → reuse/hookless title → completed/retained focused identity → sleeping session → launch → sibling fallback. Native OpenCode titles cannot displace durable ownership; local OSC 133;D suppresses exited idle identity. */
 export function useTabAgent(tab: TerminalTab, groupId?: string): TerminalAgent | null {
   const focusedHookAgent = useAgentStatusSelector(
     (s) => resolveFocusedTabAgent(s.agentStatusByPaneKey, s.terminalLayoutsByTabId[tab.id], tab.id),

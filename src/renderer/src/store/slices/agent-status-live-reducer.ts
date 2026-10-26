@@ -19,7 +19,6 @@ export type AgentStatusLiveUpdateReduction = {
   evictedEntries: AgentStatusEntry[]
 }
 
-/** Apply the map changes associated with an accepted live status row. */
 export function reduceAgentStatusLiveUpdate(
   state: AgentStatusReadState,
   build: AgentStatusLiveEntryBuild,

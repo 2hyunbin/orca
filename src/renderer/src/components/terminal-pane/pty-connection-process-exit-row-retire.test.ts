@@ -2,6 +2,7 @@ import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
+import { RESET_MOUSE_REPORTING } from '../../../../shared/terminal-mode-reset-profiles'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type * as CoordinatorModule from './agent-completion-coordinator'
@@ -22,6 +23,7 @@ import {
   installTerminalTestGlobals,
   restoreTerminalTestGlobals
 } from './pty-connection-test-environment'
+import { mockPanePtyArgs } from './pty-connection-test-connect-mock-pane'
 
 const {
   coordinatorOptionsByPaneKey,
@@ -143,6 +145,7 @@ async function connectAgentPane(args: {
   paneKey: string
   sendData: (data: string) => void
   confirmExit: (agent: TerminalAgent) => void
+  terminal: ReturnType<typeof createPane>['terminal']
 }> {
   const { connectPanePty } = storeFixture.own(await import('./pty-connection'))
   const dataCallbackRef: { current: ((data: string) => void) | null } = { current: null }
@@ -154,21 +157,23 @@ async function connectAgentPane(args: {
   transportFactoryQueue.push(transport)
   const tabId = args.tabId ?? 'tab-1'
   const paneId = args.paneId ?? 1
-  const connectArgs = [
-    createPane(paneId),
-    createManager(paneId),
-    buildPaneConnectionDeps(storeFixture, {
-      tabId,
-      isVisibleRef: { current: args.visible ?? false }
-    })
-  ]
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures implement the members connectPanePty touches.
-  connectPanePty(...(connectArgs as unknown as Parameters<typeof connectPanePty>))
+  const pane = createPane(paneId)
+  connectPanePty(
+    ...mockPanePtyArgs(
+      pane,
+      createManager(paneId),
+      buildPaneConnectionDeps(storeFixture, {
+        tabId,
+        isVisibleRef: { current: args.visible ?? false }
+      })
+    )
+  )
   await vi.advanceTimersByTimeAsync(20)
   await flushAsyncTicks()
   const paneKey = makePaneKey(tabId, leafIdForPane(paneId))
   return {
     paneKey,
+    terminal: pane.terminal,
     sendData: (data) => dataCallbackRef.current?.(data),
     confirmExit: (agent) =>
       coordinatorOptionsByPaneKey.get(paneKey)?.onForegroundAgentExited?.({
@@ -215,6 +220,29 @@ describe('connectPanePty confirmed process exit retires the live agent row', () 
   afterEach(async () => {
     storeFixture.dispose()
     await restoreTerminalTestGlobals()
+  })
+
+  it('keeps mouse reporting armed when a cached shell name hides a live Codex process', async () => {
+    let foreground = 'codex'
+    vi.mocked(window.api.pty.getForegroundProcess).mockImplementation(async () => foreground)
+    vi.mocked(window.api.pty.hasChildProcesses).mockImplementation(
+      async () => foreground === 'codex'
+    )
+    vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('codex')
+    const { paneKey, terminal } = await connectAgentPane({ ptyId: 'pty-live-codex', visible: true })
+    await seedHookRow(paneKey, 'codex')
+    await vi.advanceTimersByTimeAsync(3_000)
+    terminal.write.mockClear()
+
+    foreground = 'pwsh.exe'
+    await vi.advanceTimersByTimeAsync(10_000)
+
+    expect(window.api.pty.confirmForegroundProcess).toHaveBeenCalledWith('pty-live-codex')
+    expect(storeFixture.read().paneForegroundAgentByPaneKey[paneKey]?.agent).toBe('codex')
+    expect(storeFixture.read().dropAgentStatus).not.toHaveBeenCalled()
+    expect(terminal.write.mock.calls.map(([data]) => data).join('')).not.toContain(
+      RESET_MOUSE_REPORTING
+    )
   })
 
   it('drops the row and retires main latches when Claude exits in a pane without command marks', async () => {
