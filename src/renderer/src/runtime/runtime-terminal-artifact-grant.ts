@@ -6,6 +6,7 @@ import {
 import { callRuntimeRpc, runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
 
 // Why: the host refuses a grant whose file changed, expired, or belongs to an earlier connection.
 const RENEWABLE_GRANT_ERRORS = new Set([
@@ -18,6 +19,18 @@ export type TerminalArtifactGrantTarget = {
   target: RuntimeClientTarget & { kind: 'environment' }
   worktreeId: string
   absolutePath: string
+  /** Pinned before the first await so a same-id re-pair cannot retarget a later step. */
+  expectedEnvironmentPairingRevision?: number
+}
+
+export function pinTerminalArtifactGrantTarget<T extends TerminalArtifactGrantTarget>(args: T): T {
+  return {
+    ...args,
+    expectedEnvironmentPairingRevision: captureRuntimeEnvironmentRequestRevision(
+      args.target.environmentId,
+      args.expectedEnvironmentPairingRevision
+    )
+  }
 }
 
 export function isRenewableGrantError(error: unknown): boolean {
@@ -38,7 +51,10 @@ export async function renewTerminalArtifactGrant(
       pathText: args.absolutePath,
       crossWorkspace: true
     },
-    { timeoutMs: 15_000 }
+    {
+      timeoutMs: 15_000,
+      expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
+    }
   )
   const openTarget = resolved.openTarget
   if (openTarget?.kind === 'absolute-file' && openTarget.absolutePath === args.absolutePath) {

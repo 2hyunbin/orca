@@ -1,21 +1,20 @@
 import type { RuntimeFilePreviewResult, RuntimeFileReadResult } from '../../../shared/runtime-types'
-import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { RuntimeReadableFileContent } from './runtime-file-client-types'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   isRenewableGrantError,
-  renewTerminalArtifactGrant
+  pinTerminalArtifactGrantTarget,
+  renewTerminalArtifactGrant,
+  type TerminalArtifactGrantTarget
 } from './runtime-terminal-artifact-grant'
 
 /** Reads a host file outside every workspace through its grant, renewing a lapsed or stale one. */
-export async function readRuntimeTerminalArtifactContent(args: {
-  target: RuntimeClientTarget & { kind: 'environment' }
-  worktreeId: string
-  absolutePath: string
-  grantId: string
-}): Promise<RuntimeReadableFileContent> {
+export async function readRuntimeTerminalArtifactContent(
+  unpinned: TerminalArtifactGrantTarget & { grantId: string }
+): Promise<RuntimeReadableFileContent> {
+  const args = pinTerminalArtifactGrantTarget(unpinned)
   try {
     return await readThroughGrant(args)
   } catch (error) {
@@ -31,12 +30,9 @@ export async function readRuntimeTerminalArtifactContent(args: {
   return readThroughGrant({ ...args, grantId: renewed.grantId })
 }
 
-async function readThroughGrant(args: {
-  target: RuntimeClientTarget & { kind: 'environment' }
-  worktreeId: string
-  absolutePath: string
-  grantId: string
-}): Promise<RuntimeReadableFileContent> {
+async function readThroughGrant(
+  args: TerminalArtifactGrantTarget & { grantId: string }
+): Promise<RuntimeReadableFileContent> {
   const params = {
     worktree: toRuntimeWorktreeSelector(args.worktreeId),
     grantId: args.grantId,
@@ -48,7 +44,10 @@ async function readThroughGrant(args: {
       args.target,
       'files.readTerminalArtifact',
       params,
-      { timeoutMs: 15_000 }
+      {
+        timeoutMs: 15_000,
+        expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
+      }
     )
   } catch (err) {
     // Why: the host refuses binary artifacts with this exact typed error; images use the preview.
@@ -57,7 +56,10 @@ async function readThroughGrant(args: {
         args.target,
         'files.readTerminalArtifactPreview',
         params,
-        { timeoutMs: 15_000 }
+        {
+          timeoutMs: 15_000,
+          expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
+        }
       )
     }
     throw err

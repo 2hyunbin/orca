@@ -10,6 +10,9 @@ import type { LocalFileAccess } from '../../../../shared/local-file-access'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
 import { writeRuntimeTerminalArtifactFile } from '@/runtime/runtime-terminal-artifact-write'
+import { getRelativePathInsideWorktree } from '@/runtime/runtime-file-routing'
+import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-address'
+import { grantRestoredHostFile } from './restored-host-file-grant'
 
 /** Only overwrite grants disk-conflict consent; convert grants non-UTF-8 conversion consent. Other explicit saves remain guarded. */
 export type EditorSaveTrigger = 'autosave' | 'user' | 'convert' | 'restart' | 'overwrite'
@@ -109,14 +112,27 @@ export function editorSavePrecondition(
 }
 
 /** The tab's host grant for a file outside every workspace; a renewed grant is kept on the tab. */
-export function editorSaveGrant(
+export async function editorSaveGrant(
   file: OpenFile,
+  context: RuntimeFileOperationArgs,
   getState: () => Pick<AppState, 'setTerminalArtifactGrant'>
-): { grantId: string; onRenewed: (grantId: string) => void } | undefined {
-  const grantId = file.terminalArtifactGrantId
-  return grantId
-    ? { grantId, onRenewed: (renewed) => getState().setTerminalArtifactGrant(file.id, renewed) }
-    : undefined
+): Promise<{ grantId: string; onRenewed: (grantId: string) => void } | undefined> {
+  const onRenewed = (renewed: string): void => getState().setTerminalArtifactGrant(file.id, renewed)
+  if (file.terminalArtifactGrantId) {
+    return { grantId: file.terminalArtifactGrantId, onRenewed }
+  }
+  // Why: grants are never persisted, so a restored tab that never loaded asks its host before saving.
+  if (
+    context.target.kind !== 'environment' ||
+    file.relativePath !== file.filePath ||
+    getRelativePathInsideWorktree(context.worktreePath, file.filePath) !== null ||
+    chatScratchFileAddress(file.filePath)
+  ) {
+    return undefined
+  }
+  const grantId = await grantRestoredHostFile(context.target, context.worktreeId, file.filePath)
+  onRenewed(grantId)
+  return { grantId, onRenewed }
 }
 
 export function writeEditorSave(

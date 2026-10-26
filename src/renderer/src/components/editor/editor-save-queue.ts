@@ -180,7 +180,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
             throw new EditorSaveDiscardedError()
           }
         },
-        editorSaveGrant(liveFile, () => store.getState())
+        await editorSaveGrant(liveFile, fileContext, () => store.getState())
       )
     } catch (error) {
       // Clear failed-write stamps so they cannot suppress real external changes.

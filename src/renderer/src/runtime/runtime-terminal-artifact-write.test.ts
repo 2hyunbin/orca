@@ -7,6 +7,7 @@ import {
   type RuntimeRpcRequest
 } from './runtime-file-client-test-harness'
 import { getDiskBaselineSignature } from '../../../shared/disk-baseline-signature'
+import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
 
 installRuntimeFileClientEnvironment()
 
@@ -129,5 +130,28 @@ describe('saving a granted host file outside every workspace', () => {
 
     await expect(save('# new', '# old')).resolves.toEqual({ ok: false, diskConflict: 'missing' })
     expect(callsTo('files.writeTerminalArtifact')).toHaveLength(0)
+  })
+
+  // Why: a same-id re-pair mid-save must not let a renewed grant write the replacement host's file.
+  it('pins every step of a save to the pairing it started on', async () => {
+    replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 1, pairingRevision: 7 }])
+    runtimeEnvironmentCall.mockImplementation(async ({ method, params }) => {
+      if (method === 'files.resolveTerminalPath') {
+        return granted('g-2')
+      }
+      if (grantIdOf(params) === 'g-1') {
+        replaceRuntimeEnvironmentRevisions([{ id: 'env-1', createdAt: 2, pairingRevision: 8 }])
+        return refused('terminal_file_grant_expired')
+      }
+      return method === 'files.readTerminalArtifact' ? read('# old') : ok({ ok: true })
+    })
+
+    await save('# new', '# old').catch(() => undefined)
+
+    const revisions = runtimeEnvironmentCall.mock.calls
+      .map(([call]) => call)
+      .filter((call) => call.method !== 'status.get')
+      .map((call) => call.expectedEnvironmentPairingRevision)
+    expect(new Set(revisions)).toEqual(new Set([7]))
   })
 })

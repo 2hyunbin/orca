@@ -12,6 +12,7 @@ import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { isMissingRuntimePathError } from './runtime-file-metadata-client'
 import {
   isRenewableGrantError,
+  pinTerminalArtifactGrantTarget,
   renewTerminalArtifactGrant,
   type TerminalArtifactGrantTarget
 } from './runtime-terminal-artifact-grant'
@@ -35,7 +36,10 @@ async function readGrantedText(
         grantId,
         absolutePath: args.absolutePath
       },
-      { timeoutMs: 15_000 }
+      {
+        timeoutMs: 15_000,
+        expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
+      }
     )
     return result.truncated ? undefined : result.content
   } catch (error) {
@@ -58,7 +62,7 @@ async function readGrantedText(
 
 /** Saves a host file outside every workspace through its grant; never touches this computer's files. */
 export async function writeRuntimeTerminalArtifactFile(
-  args: GrantTarget & {
+  unpinned: GrantTarget & {
     grantId: string
     content: string
     precondition?: FileWriteDiskPrecondition
@@ -67,6 +71,7 @@ export async function writeRuntimeTerminalArtifactFile(
     onGrantRenewed?: (grantId: string) => void
   }
 ): Promise<FileWriteResult> {
+  const args = pinTerminalArtifactGrantTarget(unpinned)
   if (new TextEncoder().encode(args.content).byteLength > TERMINAL_ARTIFACT_WRITE_MAX_BYTES) {
     throw new Error('This file is too large to save to its host (512 KB limit).')
   }
@@ -92,7 +97,11 @@ export async function writeRuntimeTerminalArtifactFile(
         content: args.content
       },
       // Why: runs after connection setup, so a discard during it still stops the write.
-      { timeoutMs: 15_000, beforeSend: args.beforeSend }
+      {
+        timeoutMs: 15_000,
+        beforeSend: args.beforeSend,
+        expectedEnvironmentPairingRevision: args.expectedEnvironmentPairingRevision
+      }
     )
     return FILE_WRITE_OK
   }
