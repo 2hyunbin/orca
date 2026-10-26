@@ -261,8 +261,10 @@ describe('resolveTabSessionHistorySubject', () => {
           providerSessionId: 'claude-session-1',
           paneKey: 'term-1:leaf-1'
         })
+        expect(source?.hostUpdateRequired).toBeUndefined()
       } else {
-        expect(source).toBeNull()
+        // A verified host without resume-history keeps the action, disabled, asking for an update.
+        expect(source).toMatchObject({ hostUpdateRequired: true })
       }
     }
   )

@@ -92,6 +92,7 @@ import { useAppStore } from '@/store'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { runCliChatResume } from './cli-chat-resume-run'
+import { toWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import {
   resetStructuredAgentLaunchRegistryForTests,
   structuredLaunchStates
@@ -201,11 +202,18 @@ async function seedTabs() {
   return seeded
 }
 
+const HOST_LEAF = '11111111-1111-4111-8111-111111111111'
+
 describe('CLI identity resume through the existing launch owner', () => {
   it.each([true, false])(
     'resumes on the owning server with optional CLI-source capability: %s',
     async (supported) => {
-      const source: CliChatResumeSource = { ...SOURCE, executionHostId: 'runtime:server-1' }
+      // A desktop sees the host's pane through its mirrored surface key.
+      const source: CliChatResumeSource = {
+        ...SOURCE,
+        executionHostId: 'runtime:server-1',
+        paneKey: `${toWebTerminalSurfaceTabId('host-tab-1')}:${HOST_LEAF}`
+      }
       mocks.source = source
       mocks.sourceCapability.mockResolvedValue(supported)
       useAppStore.setState({
@@ -238,7 +246,9 @@ describe('CLI identity resume through the existing launch owner', () => {
         expect.objectContaining({
           resumeFrom: {
             providerSessionId: 'provider-1',
-            ...(supported ? { cliSource: { workspaceId: 'wt-1', paneKey: 'tab-1:leaf' } } : {})
+            ...(supported
+              ? { cliSource: { workspaceId: 'wt-1', paneKey: `host-tab-1:${HOST_LEAF}` } }
+              : {})
           }
         })
       )

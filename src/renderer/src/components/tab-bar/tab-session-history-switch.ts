@@ -74,27 +74,26 @@ function canHostOfferTabSessionMove(hostScope: ExecutionHostScope): boolean {
   return parseExecutionHostId(hostScope)?.kind === 'runtime'
 }
 
+/** Null when the pane has nothing to move; `host-update-required` when its host predates chat resume. */
+export type PaneResumeInNewChatOffer = 'available' | 'host-update-required' | null
+
 /** The pane's known identity and launch route, without a History request. */
-export function canPaneOfferResumeInNewChat(
+export function resolvePaneResumeInNewChatOffer(
   state: AppState,
   pane: { worktreeId: string; paneKey: string }
-): boolean {
+): PaneResumeInNewChatOffer {
   const conversation = resolvePaneAgentConversation(state, pane, adoptsCliConversations)
   if (!conversation) {
-    return false
+    return null
   }
   const hostScope = resolveAiVaultHostScopeDefaults(
     getAiVaultResumeWorkspaceExecutionHostId(state, conversation.worktreeId),
     conversation.worktreeId
   ).defaultExecutionHostScope
   // The row gate's launch-route half, so a project the chat route refuses (WSL, repair) hides it.
-  return (
-    canHostOfferTabSessionMove(hostScope) &&
-    (conversation.executionHostId === LOCAL_EXECUTION_HOST_ID ||
-      resolveHostCapabilities(state, conversation.executionHostId)?.includes(
-        STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY
-      ) === true) &&
-    CLI_CONVERSATION_ADOPTING_AGENTS[conversation.agent].some((agent) =>
+  if (
+    !canHostOfferTabSessionMove(hostScope) ||
+    !CLI_CONVERSATION_ADOPTING_AGENTS[conversation.agent].some((agent) =>
       structuredAgentSessionLaunchFeasible(state, {
         agent,
         workspace: {
@@ -104,7 +103,27 @@ export function canPaneOfferResumeInNewChat(
         settings: state.settings
       })
     )
-  )
+  ) {
+    return null
+  }
+  if (conversation.executionHostId === LOCAL_EXECUTION_HOST_ID) {
+    return 'available'
+  }
+  // Older hosts' create schemas reject resumeFrom; unverified capabilities offer nothing yet.
+  const capabilities = resolveHostCapabilities(state, conversation.executionHostId)
+  if (!capabilities) {
+    return null
+  }
+  return capabilities.includes(STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY)
+    ? 'available'
+    : 'host-update-required'
+}
+
+export function canPaneOfferResumeInNewChat(
+  state: AppState,
+  pane: { worktreeId: string; paneKey: string }
+): boolean {
+  return resolvePaneResumeInNewChatOffer(state, pane) !== null
 }
 
 /** A native chat tab's session and the provider recorded when it was created. */
