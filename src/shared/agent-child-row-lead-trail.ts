@@ -3,6 +3,7 @@
 import type { AgentChildRowModel } from './agent-child-row-model'
 import type { AgentChildDisplayState } from './agent-status-child-work-display'
 import { formatAgentTypeLabel } from './agent-type-label'
+import { formatAgentToolPreviewLine } from './agent-tool-preview'
 import { agentNoUpdateLabel } from './agent-row-decay-state'
 import type { BackgroundTaskSay } from './background-task-copy'
 import { backgroundTaskStateReason, backgroundTaskStateWord } from './background-task-roster'
@@ -45,11 +46,11 @@ export function agentChildRowDetailText(
     return ''
   }
   switch (detail.kind) {
-    case 'operation': {
-      const toolName = detail.toolName.trim()
-      const input = detail.input?.trim() ?? ''
-      return toolName && input ? `${toolName}: ${input}` : toolName
-    }
+    case 'operation':
+      return formatAgentToolPreviewLine(
+        { toolName: detail.toolName, toolInput: detail.input },
+        false
+      )
     case 'monitoring':
       return copy.stateLabel('monitoring')
     case 'message':
