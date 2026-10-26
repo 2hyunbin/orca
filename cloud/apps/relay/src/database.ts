@@ -1172,7 +1172,7 @@ export class PostgresDatabase implements RelayDatabase {
   // pg-pool hands the same client object back for the same connection.
   private readonly connectionIds = new WeakMap<pg.PoolClient, number>()
   private nextConnectionId = 1
-  private readonly slowConnections = new SlowConnectionRetirement()
+  private readonly slowConnections: SlowConnectionRetirement | undefined
 
   consumeHoldCounts(): CellInventoryHoldCounts {
     return this.holds.consumeCounts()
@@ -1180,9 +1180,11 @@ export class PostgresDatabase implements RelayDatabase {
 
   constructor(
     private readonly pool: pg.Pool,
-    private readonly queryTimeout?: PostgresQueryTimeout
+    private readonly queryTimeout?: PostgresQueryTimeout,
+    options: { retiresSlowConnections?: boolean } = {}
   ) {
     this.pressure = new PostgresPoolPressure(pool)
+    this.slowConnections = options.retiresSlowConnections ? new SlowConnectionRetirement() : undefined
   }
 
   async query(sql: string, params: unknown[] = []): Promise<SqlRow[]> {
@@ -1338,7 +1340,9 @@ export class PostgresDatabase implements RelayDatabase {
   private async connect(lane?: PostgresPoolLane): Promise<pg.PoolClient> {
     const startedAt = performance.now()
     try {
-      return await this.pressure.connect(lane)
+      const client = await this.pressure.connect(lane)
+      this.slowConnections?.track(client)
+      return client
     } finally {
       noteStickySlotPoolWait(performance.now() - startedAt)
     }
@@ -1347,11 +1351,11 @@ export class PostgresDatabase implements RelayDatabase {
   // Destroys the client on an error, or when it has turned slow, so the pool dials a fresh one.
   private release(client: pg.PoolClient, error: Error | undefined): void {
     if (error) {
-      this.slowConnections.forget(client)
+      this.slowConnections?.forget(client)
       client.release(error)
       return
     }
-    const slow = this.slowConnections.shouldRetire(client, this.idOfConnection(client))
+    const slow = this.slowConnections?.shouldRetire(client, this.idOfConnection(client))
     client.release(slow || undefined)
   }
 
@@ -1506,6 +1510,8 @@ export type RelayDatabaseOpenInput = {
   readTimeoutMarginOverrideMs?: () => number | undefined
   // Directors own schema; cells skip boot DB access, listen through outages and stay unready until the first successful query.
   appliesPostgresSchema?: boolean
+  // Directors only: on cells, lock waits and batch flushes could trip the tail rule, and cells have not shown this stall.
+  retiresSlowConnections?: boolean
 }
 
 export async function openRelayDatabase(input: RelayDatabaseOpenInput): Promise<RelayDatabase> {
@@ -1543,7 +1549,8 @@ export async function openRelayDatabase(input: RelayDatabaseOpenInput): Promise<
             const marginMs = override()
             return marginMs === undefined ? undefined : statementTimeoutMs + marginMs
           }
-        : undefined
+        : undefined,
+      { retiresSlowConnections: input.retiresSlowConnections === true }
     )
   } else {
     mkdirSync(input.dataDir, { recursive: true })

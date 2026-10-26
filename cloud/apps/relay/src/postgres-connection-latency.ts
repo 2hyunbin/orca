@@ -33,13 +33,13 @@ type Sample = { ms: number; at: number }
 
 const recentStatements = new WeakMap<pg.PoolClient, Sample[]>()
 
+// Records only clients a retiring pool has tracked, so pools without retirement keep no samples.
 export function noteConnectionStatement(client: pg.PoolClient, durationMs: number): void {
-  const sample = { ms: durationMs, at: Date.now() }
   const samples = recentStatements.get(client)
   if (!samples) {
-    recentStatements.set(client, [sample])
     return
   }
+  const sample = { ms: durationMs, at: Date.now() }
   samples.push(sample)
   while (
     samples.length > MAX_SAMPLES_PER_CONNECTION ||
@@ -71,6 +71,12 @@ export class SlowConnectionRetirement {
 
   get trackedClients(): number {
     return this.clients.size
+  }
+
+  track(client: pg.PoolClient): void {
+    if (!recentStatements.has(client)) {
+      recentStatements.set(client, [])
+    }
   }
 
   forget(client: pg.PoolClient): void {
@@ -105,14 +111,15 @@ export class SlowConnectionRetirement {
       .map((samples) => samples.slice(-SLOW_CONNECTION_PEER_MIN_SAMPLES))
       .filter((samples) => samples.length === SLOW_CONNECTION_PEER_MIN_SAMPLES)
       .map((samples) => median(samples.map((sample) => sample.ms)))
-    // A peer's single slowest statement: if any peer saw one as slow, the tail is not this connection's.
+    // Each peer's single slowest statement; the bar is the slowest of them all, so if any peer saw
+    // a statement that slow, the tail is not this connection's alone.
     const peerTails = peerSamples(fresh[0]?.at ?? now)
       .filter((samples) => samples.length >= SLOW_CONNECTION_TAIL_PEER_MIN_SAMPLES)
       .map((samples) => Math.max(...samples.map((sample) => sample.ms)))
     const medianMs = median(own.map((sample) => sample.ms))
     const peerMedianMs = median(peerMedians)
     const tailMs = tail(fresh)
-    const peerTailMs = median(peerTails)
+    const peerTailMs = Math.max(0, ...peerTails)
     const slowMedian =
       peerMedians.length > 0 &&
       medianMs > SLOW_CONNECTION_MEDIAN_MS &&
