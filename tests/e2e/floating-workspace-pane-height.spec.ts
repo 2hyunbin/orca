@@ -225,7 +225,8 @@ test('tabs cap long titles to a fair share, keep short titles compact, and scrol
   expect(await widths()).toEqual([100, 100, 100, 100, 100, 100])
 })
 
-test('floating header keeps a drag and maximize target with expanded and overflowing tabs', async ({
+// Real pointer capture requires the isolated visible-window project.
+test('@headful floating header keeps a drag and maximize target with expanded and overflowing tabs', async ({
   orcaPage
 }) => {
   for (const count of [1, 16]) {
