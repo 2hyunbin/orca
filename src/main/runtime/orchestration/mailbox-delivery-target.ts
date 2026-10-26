@@ -1,5 +1,4 @@
 import type { OrchestrationDb } from './db'
-import type { OrchestrationMailboxLeaf } from './mailbox-owner'
 
 type OrchestrationMailboxDeliveryTargetDependencies = {
   getDb: () => OrchestrationDb | null
@@ -54,14 +53,11 @@ export class OrchestrationMailboxDeliveryTarget {
   }
 
   deferForAbsenceProbe(
-    leaf: OrchestrationMailboxLeaf,
-    mailboxHandle: string,
+    ptyId: string,
     skipAbsenceProbe: boolean | undefined,
-    redeliver: (leaf: OrchestrationMailboxLeaf, ptyId: string, mailboxHandle: string) => void
+    redeliver: () => void
   ): boolean {
-    const ptyId = leaf.ptyId
     if (
-      !ptyId ||
       skipAbsenceProbe ||
       !this.deps.canProbePtyLiveness() ||
       this.deps.controllerKnowsPtyIsLive(ptyId)
@@ -76,8 +72,8 @@ export class OrchestrationMailboxDeliveryTarget {
       .isLeafPtyProvenAbsent(ptyId)
       .then((absent) => {
         this.probeDeferredPtyIds.delete(ptyId)
-        if (!absent && leaf.ptyId === ptyId) {
-          setTimeout(() => redeliver(leaf, ptyId, mailboxHandle), 0)
+        if (!absent) {
+          setTimeout(redeliver, 0)
         }
       })
       .catch(() => this.probeDeferredPtyIds.delete(ptyId))

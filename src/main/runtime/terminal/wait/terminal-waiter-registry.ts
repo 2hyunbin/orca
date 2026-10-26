@@ -8,8 +8,11 @@ export class RuntimeTerminalWaiterRegistry {
     return this.byHandle.get(handle)
   }
 
-  handles(): Iterable<string> {
-    return this.byHandle.keys()
+  /** Every wait on one terminal, whichever handle it was asked through. */
+  forPty(ptyId: string): TerminalWaiter[] {
+    return [...this.byHandle.values()].flatMap((waiters) =>
+      [...waiters].filter((waiter) => waiter.ptyId === ptyId)
+    )
   }
 
   add(waiter: TerminalWaiter): void {
@@ -39,20 +42,22 @@ export class RuntimeTerminalWaiterRegistry {
     return true
   }
 
-  rejectHandle(handle: string, code: string): void {
-    const waiters = this.byHandle.get(handle)
-    if (!waiters) {
-      return
-    }
-    for (const waiter of Array.from(waiters)) {
-      this.remove(waiter)
-      waiter.reject(new Error(code))
+  reject(waiter: TerminalWaiter, code: string): void {
+    this.remove(waiter)
+    waiter.reject(new Error(code))
+  }
+
+  rejectPty(ptyId: string, code: string): void {
+    for (const waiter of this.forPty(ptyId)) {
+      this.reject(waiter, code)
     }
   }
 
   rejectAll(code: string): void {
-    for (const handle of Array.from(this.byHandle.keys())) {
-      this.rejectHandle(handle, code)
+    for (const waiters of Array.from(this.byHandle.values())) {
+      for (const waiter of Array.from(waiters)) {
+        this.reject(waiter, code)
+      }
     }
   }
 

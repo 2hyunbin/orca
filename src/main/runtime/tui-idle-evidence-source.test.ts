@@ -15,7 +15,6 @@ vi.mock('electron', () => ({
 function source(agent: TuiAgent): TuiIdleEvidenceSource {
   return {
     quiescenceMs: 3000,
-    getTabTitle: () => null,
     getAdoptedPtyIdleStatus: () => 'idle',
     getPaneAgent: () => agent,
     getFirstPartyAgentStatus: () => null,

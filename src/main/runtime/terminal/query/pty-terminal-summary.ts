@@ -19,15 +19,7 @@ import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import type { OrchestrationMailboxLeaf } from '../../orchestration/mailbox-owner'
-import { ptyMailboxLeaf } from '../../orchestration/pty-mailbox-leaf'
-import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
-
-export type PtyLaneMailboxTarget = {
-  leaf: OrchestrationMailboxLeaf
-  pty: RuntimePtyWorktreeRecord
-  handle: string
-}
+import type { OrchestrationMailboxTerminal } from '../../orchestration/mailbox-owner'
 
 export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
   protected abstract bindPtyIncarnationHandle(
@@ -127,77 +119,88 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
     return { record, leaf }
   }
 
-  /** The mailbox pane a handle names: its graph leaf, else its pane-less PTY's (headless serve). */
-  protected getOrchestrationMailboxLeafForHandle(handle: string): OrchestrationMailboxLeaf {
-    this.assertGraphReady()
+  /** The terminal a handle names: its runtime PTY, or the PTY its window pane shows. */
+  protected getTerminalPtyForHandle(handle: string): {
+    record: TerminalHandleRecord
+    pty: RuntimePtyWorktreeRecord
+  } {
     const live = this.getLivePtyForHandle(handle)
-    const target = live && this.getPtyLaneMailboxTargetForPty(live.pty)
-    return target?.handle === handle ? target.leaf : this.getLiveLeafForHandle(handle).leaf
+    if (live) {
+      return live
+    }
+    const { record, leaf } = this.getLiveLeafForHandle(handle)
+    const pty = leaf.ptyId ? this.ptysById.get(leaf.ptyId) : undefined
+    if (!pty) {
+      throw new Error('terminal_handle_stale')
+    }
+    return { record, pty }
   }
 
-  /** A pane no window publishes; the graph's leaf, when present, stays authoritative. */
-  protected getPtyLaneMailboxTarget(leafKey: string): PtyLaneMailboxTarget | null {
-    const split = leafKey.indexOf('::')
-    if (split === -1 || !this.servesHeadlessMailboxLane() || this.leaves.has(leafKey)) {
-      return null
-    }
-    const paneKey = makePaneKey(leafKey.slice(0, split), leafKey.slice(split + 2))
-    const target = this.getPtyLaneMailboxTargetForPty(this.getPtyRecordForPaneKey(paneKey))
-    return target && this.getLeafKey(target.leaf.tabId, target.leaf.leafId) === leafKey
-      ? target
-      : null
+  /** The terminal orchestration points at its mail, whether or not a window pane shows it. */
+  protected getOrchestrationMailboxTerminal(ptyId: string): OrchestrationMailboxTerminal | null {
+    const pty = this.ptysById.get(ptyId)
+    const handle = pty?.connected ? this.getTerminalHandleForPty(ptyId) : undefined
+    return pty && handle ? this.buildOrchestrationMailboxTerminal(handle, pty) : null
   }
 
-  protected getPtyLaneMailboxTargetForPty(
-    pty: RuntimePtyWorktreeRecord | null | undefined
-  ): PtyLaneMailboxTarget | null {
-    if (!pty?.connected || !this.servesHeadlessMailboxLane()) {
+  protected getOrchestrationMailboxTerminalForHandle(
+    handle: string
+  ): OrchestrationMailboxTerminal | null {
+    try {
+      const { pty } = this.getTerminalPtyForHandle(handle)
+      return pty.connected ? this.buildOrchestrationMailboxTerminal(handle, pty) : null
+    } catch {
       return null
     }
-    const recorded = this.paneOfPty(pty)
-    const paneKey = recorded.paneKey
+  }
+
+  private buildOrchestrationMailboxTerminal(
+    handle: string,
+    pty: RuntimePtyWorktreeRecord
+  ): OrchestrationMailboxTerminal | null {
+    const paneKey = this.getMailboxPaneKeyForPty(pty)
+    const { ptyId, lastAgentStatus, lastAgentStatusObservedLive } = pty
+    return paneKey ? { ptyId, handle, paneKey, lastAgentStatus, lastAgentStatusObservedLive } : null
+  }
+
+  /** The handle a terminal is known by: its own, else the one its window pane issued. */
+  protected getTerminalHandleForPty(ptyId: string): string | undefined {
+    const handle =
+      this.handleByPtyId.get(ptyId) ??
+      this.handleByPtyIncarnation.get(ptyId)?.handle ??
+      this.getLeavesForPty(ptyId)
+        .map((leaf) => this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId)))
+        .find((leafHandle) => leafHandle !== undefined)
+    try {
+      return handle && this.getTerminalPtyForHandle(handle).pty.ptyId === ptyId ? handle : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  /** The pane Runs and Dispatches bind this terminal by; none while another terminal holds or shares it, so no mail is typed. */
+  private getMailboxPaneKeyForPty(pty: RuntimePtyWorktreeRecord): string | null {
+    const { paneKey } = this.paneOfPty(pty)
     const pane = parsePaneKey(paneKey ?? '')
-    if (
-      !pane ||
-      // A pane a window retracted before it closed stays an orphan, as the summary reports it.
-      !ptyHoldsRecordedSurface(pty.ptyId, recorded, this.ptySurfaceTopology()) ||
-      this.leaves.has(this.getLeafKey(pane.tabId, pane.leafId)) ||
-      this.getLeavesForPty(pty.ptyId).length > 0
-    ) {
+    if (!paneKey || !pane) {
       return null
     }
-    // Two live PTYs claiming one pane (a retained predecessor) leave no owner to type into.
+    const holder = this.leaves.get(this.getLeafKey(pane.tabId, pane.leafId))?.ptyId
+    if (holder) {
+      return holder === pty.ptyId ? paneKey : null
+    }
+    // A retained predecessor and its replacement can both claim a pane no window shows.
     for (const other of this.ptysById.values()) {
       if (other !== pty && other.connected && this.paneOfPty(other).paneKey === paneKey) {
         return null
       }
     }
-    const handle = this.handleByPtyId.get(pty.ptyId)
-    if (!handle || this.getLivePtyForHandle(handle)?.pty !== pty) {
-      return null
-    }
-    return { leaf: ptyMailboxLeaf(pane, pty), pty, handle }
+    return paneKey
   }
 
-  /** Whether a handle names a terminal; a cancelled promotion clears records the PTY still owns. */
+  /** Whether a handle names a terminal; PTY-owned handles re-issue records a graph reload cleared. */
   protected hasMailboxTerminalHandle(handle: string): boolean {
-    return (
-      this.handles.has(handle) ||
-      (this.servesHeadlessMailboxLane() && this.getLivePtyForHandle(handle) !== null)
-    )
-  }
-
-  /** Off a headless graph the lane has no say; on one, only its single pane owner is typed into. */
-  protected headlessMailboxLaneAdmitsPty(pty: RuntimePtyWorktreeRecord): boolean {
-    return !this.servesHeadlessMailboxLane() || this.getPtyLaneMailboxTargetForPty(pty) !== null
-  }
-
-  /**
-   * Only a ready headless graph lacks leaves by design. A window's empty or unavailable graph
-   * (reload, crash, unmounted pane) must keep failing closed rather than typing into its PTYs.
-   */
-  private servesHeadlessMailboxLane(): boolean {
-    return this.authoritativeWindowId === HEADLESS_RUNTIME_WINDOW_ID && this.graphStatus === 'ready'
+    return this.handles.has(handle) || this.getLivePtyForHandle(handle) !== null
   }
 
   protected getLivePtyForHandle(handle: string): {
@@ -253,15 +256,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
   }
 
   protected assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void {
-    const runtimePty = this.getLivePtyForHandle(handle)
-    if (runtimePty) {
-      if (runtimePty.pty.ptyId !== expectedPtyId) {
-        throw new Error('terminal_handle_stale')
-      }
-      return
-    }
-    const { leaf } = this.getLiveLeafForHandle(handle)
-    if (leaf.ptyId !== expectedPtyId) {
+    if (this.getTerminalPtyForHandle(handle).pty.ptyId !== expectedPtyId) {
       throw new Error('terminal_handle_stale')
     }
   }
