@@ -51,8 +51,8 @@ export function TerminalTabLeadingIcon({
   isActive,
   progress
 }: TerminalTabLeadingIconProps): React.JSX.Element {
-  // Reserve activity and identity slots so status changes cannot resize the tab.
-  const iconClassName = cn('mr-1 inline-flex shrink-0 items-center gap-1', agent ? 'w-7' : 'w-3')
+  // Reserve activity and identity slots before agent detection as well as status changes.
+  const iconClassName = 'mr-1 inline-flex w-7 shrink-0 items-center gap-1'
   if (showUnreadActivity) {
     return (
       <span

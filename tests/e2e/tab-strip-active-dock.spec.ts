@@ -127,7 +127,7 @@ test.describe('Tab strip active-tab dock', () => {
     expect(buttonBox!.x - stripBox!.x - stripBox!.width).toBeLessThanOrEqual(12)
   })
 
-  test('keeps tab and close-button positions stable through agent activity changes', async ({
+  test('keeps tab and close-button positions stable through agent detection and activity changes', async ({
     orcaPage
   }) => {
     const worktreeId = await waitForActiveWorktree(orcaPage)
@@ -139,18 +139,10 @@ test.describe('Tab strip active-tab dock', () => {
       const next = store.getState().createTab(worktreeId, undefined, undefined, { activate: false })
       store.getState().setTabCustomTitle(agent.id, 'Agent conversation')
       store.getState().setTabCustomTitle(next.id, 'Neighbor')
-      store.setState((state) => ({
-        tabsByWorktree: {
-          ...state.tabsByWorktree,
-          [worktreeId]: state.tabsByWorktree[worktreeId].map((tab) =>
-            tab.id === agent.id ? { ...tab, launchAgent: 'codex' } : tab
-          )
-        }
-      }))
       return [agent.id, next.id]
     }, worktreeId)
     const agent = orcaPage.locator(slotSelector(ids[0]))
-    await expect(agent.locator('[data-agent-icon="codex"]')).toBeVisible()
+    await expect(agent.locator('[data-shell-icon]')).toBeVisible()
     await expect(orcaPage.locator(slotSelector(ids[1]))).toContainText('Neighbor')
     const geometry = (): Promise<number[][]> =>
       orcaPage.evaluate(
@@ -200,6 +192,10 @@ test.describe('Tab strip active-tab dock', () => {
       await expect(agent.locator('[data-testid="tab-activity-bell"]')).toHaveCount(
         stage === 'unread' ? 1 : 0
       )
+      await expect(agent.locator('[data-agent-icon="codex"]')).toHaveCount(
+        stage === 'working' ? 1 : 0
+      )
+      await expect(agent).toContainText('Agent conversation')
       await expect.poll(geometry).toEqual(before)
     }
   })
