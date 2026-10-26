@@ -12,6 +12,7 @@ import { parseWorkspaceReferenceUrl } from '../../shared/workspace-reference-ide
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
 import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
+import { isOrchestrationRetryRequestId } from '../../shared/orchestration-retry-request-id'
 import {
   CALLER,
   hostTestState,
@@ -629,12 +630,23 @@ describeIfBuilt('native caller subprocess over durable records', () => {
         nativeEnv
       )
       expect(refused.exitCode).toBe(1)
-      expect(JSON.parse(refused.stdout)).toMatchObject({
+      const refusedPayload: unknown = JSON.parse(refused.stdout)
+      if (
+        !isRecord(refusedPayload) ||
+        !isRecord(refusedPayload.error) ||
+        !isRecord(refusedPayload.error.data) ||
+        !isOrchestrationRetryRequestId(refusedPayload.error.data.orchestrationRequestId)
+      ) {
+        throw new Error('Expected fresh mutation refusal with a valid request ID')
+      }
+      const failedRequestId = refusedPayload.error.data.orchestrationRequestId
+      expect(refusedPayload).toMatchObject({
         ok: false,
         error: {
           code: 'execution_owner_reconciling',
-          message: 'execution_owner_reconciling',
+          message: `execution_owner_reconciling Orchestration mutation request ID: ${failedRequestId}.`,
           data: {
+            orchestrationRequestId: failedRequestId,
             refusal: {
               code: 'execution_owner_reconciling',
               details: { reason: 'recordUnreadable' }
@@ -649,12 +661,27 @@ describeIfBuilt('native caller subprocess over durable records', () => {
         nativeEnv
       )
       expect(damagedRetry.exitCode).toBe(1)
-      expect(JSON.parse(damagedRetry.stdout)).toMatchObject({
+      const damagedRetryPayload: unknown = JSON.parse(damagedRetry.stdout)
+      if (
+        !isRecord(damagedRetryPayload) ||
+        !isRecord(damagedRetryPayload.error) ||
+        !isRecord(damagedRetryPayload.error.data) ||
+        !isOrchestrationRetryRequestId(damagedRetryPayload.error.data.orchestrationRequestId)
+      ) {
+        throw new Error('Expected retry mutation refusal with a valid request ID')
+      }
+      expect(damagedRetryPayload.error.data.orchestrationRequestId).toBe(requestId)
+      expect(damagedRetryPayload).toMatchObject({
         ok: false,
         error: {
           code: 'execution_owner_reconciling',
+          message: `execution_owner_reconciling Orchestration mutation request ID: ${requestId}.`,
           data: {
-            refusal: { details: { reason: 'recordUnreadable' } }
+            orchestrationRequestId: requestId,
+            refusal: {
+              code: 'execution_owner_reconciling',
+              details: { reason: 'recordUnreadable' }
+            }
           }
         }
       })
