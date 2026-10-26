@@ -115,8 +115,10 @@ export function codexChatHolding(sessionId: string, threadIds: string[]): AgentS
 }
 
 export function installChats(records: AgentSessionRecord[]): void {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ownership read touches only `deps.store.listRecords`; the rest of the host is never reached.
-  setStructuredAgentSessionHost({ deps: { store: { listRecords: () => records } } } as never)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ownership read touches only `deps.store.listConversations`; the rest of the host is never reached.
+  setStructuredAgentSessionHost({
+    deps: { store: { listConversations: () => records.map(agentSessionConversationView) } }
+  } as never)
 }
 
 export function listResult(): AiVaultListResult {
