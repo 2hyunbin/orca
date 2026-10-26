@@ -223,6 +223,7 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     return
   }
   const settings = storeRef.getSettings()
+  const captureOptOut = !optedIn && resolveConsent(settings).effective !== 'disabled'
   // Deep-merge opt-in without clobbering installation identity or cohort.
   storeRef.updateSettings(
     {
@@ -245,18 +246,28 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     track('telemetry_opted_in', { via })
   } else {
     transport.discardPending()
-    const client = transport.client
-    if (!client) {
-      return
-    }
+    let client = transport.client
     // Enqueue opt-out directly before disabling SDK; track would reject it under the newly stored preference.
     try {
-      if (!shuttingDown && commonProps && consumeBurstToken('telemetry_opted_out')) {
+      if (
+        captureOptOut &&
+        !shuttingDown &&
+        commonProps &&
+        consumeBurstToken('telemetry_opted_out')
+      ) {
         const validated = validate('telemetry_opted_out', { via })
         if (validated.ok) {
+          client ??= await transport.startForOptOut()
+          if (!client) {
+            return
+          }
           const uuid = randomUUID()
           const { waitForCaptureEnqueue } = await import('./posthog-transport')
-          if (shuttingDown) {
+          const consent = resolveConsent(storeRef.getSettings())
+          if (
+            shuttingDown ||
+            (consent.effective === 'disabled' && consent.reason !== 'user_opt_out')
+          ) {
             return
           }
           const enqueued = waitForCaptureEnqueue(client, 'telemetry_opted_out', uuid)
@@ -278,7 +289,7 @@ export async function setOptIn(via: OptInVia, optedIn: boolean): Promise<void> {
     } catch (err) {
       console.warn('[telemetry] telemetry_opted_out capture failed before SDK opt-out:', err)
     } finally {
-      await client.optOut()
+      await client?.optOut()
     }
   }
 }

@@ -47,7 +47,10 @@ describe('deferred telemetry transport', () => {
     vi.doMock('./posthog-transport', async () => {
       moduleLoads += 1
       await moduleGate
-      return { createPostHogClient: createClient }
+      return {
+        createPostHogClient: createClient,
+        waitForCaptureEnqueue: async () => true
+      }
     })
     settings.telemetry = {
       installId: 'startup-test',
@@ -259,6 +262,125 @@ describe('deferred telemetry transport', () => {
     expect(
       sdk.capture.mock.calls.filter(([capture]) => capture.event === 'app_opened')
     ).toHaveLength(1)
+  })
+
+  it.each(['pending banner', 'enabled'] as const)(
+    'starts only the explicit opt-out for pre-start %s consent',
+    async (consent) => {
+      settings.telemetry!.optedIn = consent === 'pending banner' ? null : true
+      client.initTelemetry(store)
+      client.trackAppOpenedOnce()
+      let releaseImport = (): void => {}
+      moduleGate = new Promise((resolve) => {
+        releaseImport = resolve
+      })
+      const optingOut = client.setOptIn(
+        consent === 'pending banner' ? 'first_launch_banner' : 'settings',
+        false
+      )
+      expect(settings.telemetry?.optedIn).toBe(false)
+      expect(client.track('app_opened', {})).toBe(false)
+      const backgroundStart = client.startTelemetryTransport()
+      releaseImport()
+      await Promise.all([optingOut, backgroundStart])
+      expect(createClient).toHaveBeenCalledTimes(1)
+      expect(sdk.capture.mock.calls.map(([capture]) => capture.event)).toEqual([
+        'telemetry_opted_out'
+      ])
+      expect(sdk.optOut).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('shares an in-flight startup import with explicit opt-out without replaying ordinary events', async () => {
+    let releaseImport = (): void => {}
+    moduleGate = new Promise((resolve) => {
+      releaseImport = resolve
+    })
+    client.trackAppOpenedOnce()
+    const starting = client.startTelemetryTransport()
+    const optingOut = client.setOptIn('settings', false)
+    releaseImport()
+    await Promise.all([starting, optingOut])
+    expect(createClient).toHaveBeenCalledTimes(1)
+    expect(sdk.capture.mock.calls.map(([capture]) => capture.event)).toEqual([
+      'telemetry_opted_out'
+    ])
+  })
+
+  it.each(['DO_NOT_TRACK', 'ORCA_TELEMETRY_DISABLED', 'CI', 'unofficial', 'already disabled'])(
+    'does not import an explicit opt-out while blocked by %s',
+    async (block) => {
+      if (block === 'unofficial') {
+        vi.stubGlobal('ORCA_BUILD_IDENTITY', null)
+        vi.resetModules()
+        client = await import('./client')
+        client.initTelemetry(store)
+      } else if (block === 'already disabled') {
+        settings.telemetry!.optedIn = false
+      } else {
+        vi.stubEnv(block, '1')
+      }
+      await client.setOptIn('settings', false)
+      expect(moduleLoads).toBe(0)
+      expect(createClient).not.toHaveBeenCalled()
+      expect(sdk.capture).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['DO_NOT_TRACK', 'ORCA_TELEMETRY_DISABLED', 'CI'])(
+    'rechecks %s before constructing for an explicit opt-out',
+    async (block) => {
+      let releaseImport = (): void => {}
+      moduleGate = new Promise((resolve) => {
+        releaseImport = resolve
+      })
+      const optingOut = client.setOptIn('settings', false)
+      vi.stubEnv(block, '1')
+      releaseImport()
+      await optingOut
+      expect(createClient).not.toHaveBeenCalled()
+      expect(sdk.capture).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['DO_NOT_TRACK', 'ORCA_TELEMETRY_DISABLED', 'CI'])(
+    'rechecks %s before capturing an explicit opt-out on a newly loaded SDK',
+    async (block) => {
+      createClient.mockImplementationOnce(() => {
+        vi.stubEnv(block, '1')
+        return sdk
+      })
+      await client.setOptIn('settings', false)
+      expect(createClient).toHaveBeenCalledTimes(1)
+      expect(sdk.capture).not.toHaveBeenCalled()
+      expect(sdk.optOut).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('does not construct for an explicit opt-out after quit fences its pending import', async () => {
+    vi.useFakeTimers()
+    let releaseImport = (): void => {}
+    moduleGate = new Promise((resolve) => {
+      releaseImport = resolve
+    })
+    const optingOut = client.setOptIn('settings', false)
+    await client.shutdownTelemetry()
+    await vi.advanceTimersByTimeAsync(2_001)
+    releaseImport()
+    await optingOut
+    expect(createClient).not.toHaveBeenCalled()
+    expect(sdk.capture).not.toHaveBeenCalled()
+    expect(client.track('app_opened', {})).toBe(false)
+  })
+
+  it('does not retain opt-out loading admission after failed construction', async () => {
+    createClient.mockImplementationOnce(() => {
+      throw new Error('transport unavailable')
+    })
+    await client.setOptIn('settings', false)
+    await client.startTelemetryTransport()
+    expect(createClient).toHaveBeenCalledTimes(1)
+    expect(sdk.capture).not.toHaveBeenCalled()
   })
 
   it('retains bounded startup captures across a failed first initialization', async () => {

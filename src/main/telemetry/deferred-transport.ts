@@ -14,6 +14,7 @@ export class DeferredTelemetryTransport {
   private shutdownDeadline: number | null = null
   private stopped = false
   private readonly pending: Capture[] = []
+  private readonly optOutStarts = new Set<symbol>()
 
   constructor(
     private readonly readOptions: () => TransportOptions | null,
@@ -31,6 +32,7 @@ export class DeferredTelemetryTransport {
     this.shutdownDeadline = null
     this.client = null
     this.stopped = false
+    this.optOutStarts.clear()
     this.discardPending()
   }
 
@@ -55,6 +57,29 @@ export class DeferredTelemetryTransport {
     return this.stopped ? Promise.resolve() : this.load()
   }
 
+  async startForOptOut(): Promise<PostHog | null> {
+    if (this.stopped) {
+      return null
+    }
+    const generation = this.generation
+    const request = Symbol()
+    this.optOutStarts.add(request)
+    try {
+      await this.load()
+      return this.stopped || generation !== this.generation ? null : this.client
+    } finally {
+      this.optOutStarts.delete(request)
+    }
+  }
+
+  private canLoad(options: TransportOptions | null): options is TransportOptions {
+    return (
+      options !== null &&
+      (options.consent.effective !== 'disabled' ||
+        (options.consent.reason === 'user_opt_out' && this.optOutStarts.size > 0))
+    )
+  }
+
   private load(): Promise<void> {
     if (this.loading) {
       return this.loading
@@ -63,7 +88,7 @@ export class DeferredTelemetryTransport {
     if (this.client) {
       return Promise.resolve()
     }
-    if (!options || options.consent.effective === 'disabled') {
+    if (!this.canLoad(options)) {
       this.discardPending()
       return Promise.resolve()
     }
@@ -77,11 +102,15 @@ export class DeferredTelemetryTransport {
         return
       }
       const current = this.readOptions()
-      if (!current || current.consent.effective === 'disabled') {
+      if (!this.canLoad(current)) {
         this.discardPending()
         return
       }
-      this.client = createPostHogClient(current.writeKey, current.consent)
+      // Only an admitted opt-out control may initialize while ordinary telemetry stays disabled.
+      this.client = createPostHogClient(
+        current.writeKey,
+        current.consent.effective === 'disabled' ? { effective: 'pending_banner' } : current.consent
+      )
       if (current.consent.effective === 'enabled') {
         const captures = this.pending.splice(0)
         for (const capture of captures) {

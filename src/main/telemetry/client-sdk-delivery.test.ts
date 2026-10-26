@@ -138,8 +138,46 @@ describe('real PostHog SDK delivery with intercepted HTTP', () => {
     expect(client.track('app_opened', {})).toBe(false)
     await client.setOptIn('settings', true)
     await client.shutdownTelemetry()
-    expect(deliveredEvents()).toEqual(['app_opened', 'telemetry_opted_in'])
+    expect(deliveredEvents()).toEqual(['telemetry_opted_out', 'app_opened', 'telemetry_opted_in'])
   })
+
+  it.each(['pending banner', 'enabled'] as const)(
+    'delivers only the explicit pre-start opt-out for %s consent',
+    async (consent) => {
+      settings.telemetry!.optedIn = consent === 'pending banner' ? null : true
+      client.initTelemetry(store)
+      client.trackAppOpenedOnce()
+      const optingOut = client.setOptIn(
+        consent === 'pending banner' ? 'first_launch_banner' : 'settings',
+        false
+      )
+      expect(settings.telemetry?.optedIn).toBe(false)
+      expect(client.track('app_opened', {})).toBe(false)
+      await optingOut
+      await client.shutdownTelemetry()
+      expect(deliveredEvents()).toEqual(['telemetry_opted_out'])
+      expect(requests).toHaveLength(1)
+    }
+  )
+
+  it.each(['DO_NOT_TRACK', 'ORCA_TELEMETRY_DISABLED', 'CI', 'unofficial', 'already disabled'])(
+    'sends no pre-start opt-out request while blocked by %s',
+    async (block) => {
+      if (block === 'unofficial') {
+        vi.stubGlobal('ORCA_BUILD_IDENTITY', null)
+        vi.resetModules()
+        client = await import('./client')
+        client.initTelemetry(store)
+      } else if (block === 'already disabled') {
+        settings.telemetry!.optedIn = false
+      } else {
+        vi.stubEnv(block, '1')
+      }
+      await client.setOptIn('settings', false)
+      await client.shutdownTelemetry()
+      expect(requests).toHaveLength(0)
+    }
+  )
 
   it('enqueues opt-out before SDK optOut and delivers it during shutdown', async () => {
     await client.startTelemetryTransport()
