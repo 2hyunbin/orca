@@ -4,7 +4,8 @@ import {
   type CloudDatabase,
   type OpenCloudDatabaseInput
 } from '@orca-cloud/cloud-database'
-import { connectorSchemaStatements } from './connector-schema.js'
+
+const CONNECTOR_SCHEMA_STATEMENTS: string[] = []
 
 export async function openConnectorDatabase(
   input: Omit<OpenCloudDatabaseInput, 'service' | 'schemaStatements'>
@@ -12,10 +13,10 @@ export async function openConnectorDatabase(
   return await openCloudDatabase({
     ...input,
     service: 'connector',
-    schemaStatements: connectorSchemaStatements()
+    schemaStatements: CONNECTOR_SCHEMA_STATEMENTS
   })
 }
 
 export async function openInMemoryConnectorDatabase(): Promise<CloudDatabase> {
-  return await openInMemoryCloudDatabase(connectorSchemaStatements())
+  return await openInMemoryCloudDatabase(CONNECTOR_SCHEMA_STATEMENTS)
 }

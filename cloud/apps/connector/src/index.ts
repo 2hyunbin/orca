@@ -1,5 +1,4 @@
 import { loadConnectorConfig } from './config.js'
-import { startConnectorBackground } from './connector-background.js'
 import { openConnectorDatabase } from './connector-database.js'
 import { createConnectorServer } from './connector-server.js'
 
@@ -12,7 +11,6 @@ const database = await openConnectorDatabase({
   readOnly: config.mode === 'validation'
 })
 const runtime = createConnectorServer(config, database)
-const stopBackground = config.mode === 'validation' ? () => {} : startConnectorBackground(runtime)
 
 runtime.server.listen(config.port, () => {
   console.log(`[orca-connector] listening on ${config.publicUrl} (port ${config.port})`)
@@ -27,7 +25,6 @@ const shutdown = (): void => {
   // Cloud Run sends SIGKILL after ten seconds; leave time for explicit cleanup.
   const deadline = setTimeout(() => process.exit(1), 9_000)
   deadline.unref()
-  stopBackground()
   const requests = runtime.requestDrain.begin()
   const connections = new Promise<void>((resolve) => runtime.server.close(() => resolve()))
   void Promise.all([requests, connections])

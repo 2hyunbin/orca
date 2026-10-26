@@ -3,8 +3,8 @@ import { loadConnectorConfig } from './config.js'
 
 const ENV = {
   ORCA_CONNECTOR_PUBLIC_URL: 'https://connector.onorca.dev',
-  ORCA_CONNECTOR_AUTH_URL: 'https://auth.onorca.dev',
-  ORCA_CONNECTOR_COOKIE_SECRET: 'x'.repeat(32)
+  ORCA_CONNECTOR_AUTH_ISSUER: 'https://login.onorca.dev',
+  ORCA_CONNECTOR_JWKS_URL: 'https://login.onorca.dev/.well-known/jwks.json'
 }
 
 describe('connector config', () => {
@@ -15,9 +15,8 @@ describe('connector config', () => {
       publicUrl: 'https://connector.onorca.dev',
       dataDir: './data/connector',
       databasePoolMax: 10,
-      authUrl: 'https://auth.onorca.dev',
-      authClientId: 'orca-connector',
-      cookieSecret: 'x'.repeat(32),
+      authIssuer: 'https://login.onorca.dev',
+      jwksUrl: 'https://login.onorca.dev/.well-known/jwks.json',
       trustedProxyHops: 0
     })
   })
@@ -30,8 +29,8 @@ describe('connector config', () => {
 
   it.each([
     ['a path on the public URL', { ORCA_CONNECTOR_PUBLIC_URL: 'https://connector.onorca.dev/x' }],
-    ['plain HTTP off loopback', { ORCA_CONNECTOR_AUTH_URL: 'http://auth.onorca.dev' }],
-    ['a short cookie secret', { ORCA_CONNECTOR_COOKIE_SECRET: 'short' }]
+    ['plain HTTP off loopback', { ORCA_CONNECTOR_AUTH_ISSUER: 'http://login.onorca.dev' }],
+    ['a missing key set URL', { ORCA_CONNECTOR_JWKS_URL: undefined }]
   ])('rejects %s', (_name, override) => {
     expect(() => loadConnectorConfig({ ...ENV, ...override })).toThrow()
   })
