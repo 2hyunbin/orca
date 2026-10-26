@@ -28,6 +28,7 @@ import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-
 import { matchesSettingsSearch } from './settings-search'
 import { SourceControlActionRecipeRow } from './SourceControlActionRecipeRow'
 import { SourceControlActionRepoOverrideNote } from './SourceControlActionRepoOverrideNote'
+import { retireActionLaunchPreferences } from './source-control-ai-action-recipe-draft'
 import { useSourceControlActionRecipeDraftState } from './source-control-action-recipe-draft-state'
 import { translate } from '@/i18n/i18n'
 import { useSourceControlActionAgentInventory } from './use-source-control-action-agent'
@@ -134,20 +135,13 @@ export function SourceControlAiActionRecipeDefaults({
   const writeActionDefault = async (
     update: (actions: SourceControlAiActionDefaults | undefined) => SourceControlAiActionDefaults
   ): Promise<boolean> => {
-    let previousActions = config.actions
     try {
       await writeConfig((current) => {
-        previousActions = current.actions
         return { actions: update(current.actions) }
       })
       return true
     } catch (error) {
       console.error('Failed to save Source Control AI action agent default', error)
-      try {
-        await writeConfig({ actions: previousActions })
-      } catch (rollbackError) {
-        console.error('Failed to roll back Source Control AI action agent default', rollbackError)
-      }
       toast.error(
         translate(
           'auto.components.settings.SourceControlAiActionRecipeDefaults.b5f46664d3',
@@ -170,12 +164,13 @@ export function SourceControlAiActionRecipeDefaults({
           ? CUSTOM_AGENT_ID
           : (value as TuiAgent)
     const changed = config.actions?.[actionId]?.agentId !== agentId
+    const captured = actionRecipeDraftState.values[actionId].launchPreferences
     const saved = await writeActionDefault((actions) =>
       setSourceControlActionAgentDefault(actions, actionId, agentId)
     )
-    if (saved && changed) {
+    if (saved && changed && captured) {
       onActionLaunchPreferencesChange(actionId, (current) =>
-        current?.agentId === agentId ? current : undefined
+        retireActionLaunchPreferences(current, captured, agentId)
       )
     }
   }

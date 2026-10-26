@@ -14,7 +14,10 @@ import type { AgentPromptDelivery } from '../../../shared/agent-session-host-aut
 import { translate } from '@/i18n/i18n'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import type { AgentTerminalLaunchCompletion } from './structured-agent-session-launch-admission'
-import { toAgentLaunchPreferences } from '../../../shared/agent-launch-preferences'
+import {
+  agentPermissionNeedsPreparedCommand,
+  toAgentLaunchPreferences
+} from '../../../shared/agent-launch-preferences'
 
 /** Paired web tabs are host-owned; never create a local tab, and return tabId:null. */
 export function launchAgentInWebHostTab(args: {
@@ -64,6 +67,7 @@ export function launchAgentInWebHostTab(args: {
     agentSessionKind: 'fresh',
     // Why: with or without a prompt, the desktop's launch settings decide args (#31986).
     launchAgent: agent,
+    preparedAgentCommand: agentPermissionNeedsPreparedCommand(agent, startupPlan.sessionOptions),
     command: startupPlan.launchCommand,
     ...(startupPlan.env ? { env: startupPlan.env } : {}),
     launchConfig: startupPlan.launchConfig,

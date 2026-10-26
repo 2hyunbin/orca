@@ -3,6 +3,7 @@ import {
   DEFAULT_SOURCE_CONTROL_ACTION_COMMAND_TEMPLATES,
   SOURCE_CONTROL_ACTION_IDS,
   type SourceControlActionLaunchPreferences,
+  type SourceControlActionRecipe,
   type SourceControlActionId
 } from '../../../../shared/source-control-ai-actions'
 
@@ -47,4 +48,13 @@ export function serializeActionRecipeInputValues(
   values: Record<SourceControlActionId, ActionRecipeDraftValue>
 ): string {
   return JSON.stringify(SOURCE_CONTROL_ACTION_IDS.map((actionId) => [actionId, values[actionId]]))
+}
+
+/** A successful agent change can retire only the obsolete value it captured. */
+export function retireActionLaunchPreferences(
+  latest: SourceControlActionLaunchPreferences | undefined,
+  captured: SourceControlActionLaunchPreferences | undefined,
+  selected: SourceControlActionRecipe['agentId']
+): SourceControlActionLaunchPreferences | undefined {
+  return captured && latest === captured && captured.agentId !== selected ? undefined : latest
 }

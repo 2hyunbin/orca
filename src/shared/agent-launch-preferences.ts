@@ -1,3 +1,4 @@
+import { YOLO_TUI_AGENT_ENV } from './tui-agent-permissions'
 import type { AgentLaunchPreferences } from './agent-session-host-authority'
 import type { AgentType } from './agent-status-types'
 import {
@@ -27,4 +28,14 @@ export function toAgentLaunchPreferences(
     ...(mode && isTuiAgent(agent) && agentPermissionHasTerminalChoice(agent, mode) ? { mode } : {})
   }
   return Object.keys(preferences).length > 0 ? preferences : undefined
+}
+
+/** Authority v1 cannot carry a composed per-launch permission environment. */
+export function agentPermissionNeedsPreparedCommand(
+  agent: AgentType,
+  applied: Readonly<Record<string, unknown>> | null | undefined
+): boolean {
+  return (
+    Object.hasOwn(YOLO_TUI_AGENT_ENV, agent) && readLaunchPermissionChoice(applied) !== undefined
+  )
 }

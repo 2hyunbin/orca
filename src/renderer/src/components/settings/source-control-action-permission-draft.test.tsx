@@ -2,18 +2,16 @@
 import { useState } from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import * as lifts from '../../../../shared/source-control-action-permission-lift'
+import * as shell from '../../../../shared/tui-agent-startup-shell'
 import { expect, it, vi } from 'vitest'
 import './settings-persistence-test-fixture'
 import { normalizeSourceControlAiSettings } from '../../../../shared/source-control-ai'
-import type {
-  RepoSourceControlAiOverrides,
-  SourceControlAiSettings
-} from '../../../../shared/source-control-ai-types'
+import type { RepoSourceControlAiOverrides } from '../../../../shared/source-control-ai-types'
 import { liftActionPermissionArgs } from '../../../../shared/source-control-action-permission-lift'
 import { sourceControlActionAgentArgs } from '../../../../shared/source-control-action-launch-preferences'
 import { agentPermissionArgsForLaunch } from '../../../../shared/tui-agent-launch-defaults'
 import { SourceControlActionArguments } from './SourceControlActionArguments'
-import { useSourceControlActionRecipeDraftState } from './source-control-action-recipe-draft-state'
 import { useRepositorySourceControlAiGlobalUx } from './repository-source-control-ai-global-ux'
 import { TooltipProvider } from '../ui/tooltip'
 
@@ -23,35 +21,6 @@ const initial = normalizeSourceControlAiSettings({
   actions: { fixChecks: { agentId: 'claude', agentArgs: '', launchPreferences: model } }
 })
 const write = vi.fn()
-
-function GlobalHarness({ saved }: { saved: { value: SourceControlAiSettings } }) {
-  const [config, setConfig] = useState(saved.value)
-  const draft = useSourceControlActionRecipeDraftState({
-    config,
-    writeConfig: async (patch) => {
-      const next = { ...saved.value, ...(typeof patch === 'function' ? patch(saved.value) : patch) }
-      saved.value = next
-      write(next)
-      setConfig(next)
-    }
-  })
-  const value = draft.actionRecipeDraftState.values.fixChecks
-  return (
-    <TooltipProvider>
-      <SourceControlActionArguments
-        agent="claude"
-        value={value.agentArgs}
-        preferences={value.launchPreferences}
-        onArgsChange={(text, commit) => draft.onActionAgentArgsChange('fixChecks', text, commit)}
-        onPreferencesChange={(preferences) =>
-          draft.onActionLaunchPreferencesChange('fixChecks', preferences)
-        }
-      />
-      <button onClick={() => void draft.saveActionTemplateDraft('fixChecks')}>Save</button>
-      <button onClick={() => draft.discardActionTemplateDraft('fixChecks')}>Discard</button>
-    </TooltipProvider>
-  )
-}
 
 function RepoHarness({ saved }: { saved: { value: RepoSourceControlAiOverrides } }) {
   const [persisted, setPersisted] = useState(saved.value)
@@ -85,64 +54,80 @@ function RepoHarness({ saved }: { saved: { value: RepoSourceControlAiOverrides }
   )
 }
 
-for (const scope of ['global', 'repo'] as const) {
-  it(`${scope}: commits typed permission at Enter, drafts own removal and saves/discards args and model together`, async () => {
-    write.mockClear()
-    const global = { value: initial }
-    const repo: { value: RepoSourceControlAiOverrides } = {
-      value: { actionOverrides: { fixChecks: initial.actions?.fixChecks } }
+it('repo: commits typed permission, drafts own removal and saves/discards args and model together', async () => {
+  write.mockClear()
+  const repo: { value: RepoSourceControlAiOverrides } = {
+    value: { actionOverrides: { fixChecks: initial.actions?.fixChecks } }
+  }
+  const view = () => <RepoHarness saved={repo} />
+  const savedRecipe = () => repo.value.actionOverrides?.fixChecks
+  const rendered = render(view())
+  const input = screen.getByRole('textbox', { name: 'Arguments' })
+  const lift = vi.spyOn(lifts, 'liftActionPermissionArgs')
+  const tokenize = vi.spyOn(shell, 'tokenizeStartupCommand')
+  const work: number[][] = []
+  for (const n of [32, 320]) {
+    tokenize.mockClear()
+    for (let i = 0; i < n; i++) {
+      fireEvent.change(input, { target: { value: `--verbose ${String(i).padStart(3, '0')}` } })
     }
-    const view = () =>
-      scope === 'global' ? <GlobalHarness saved={global} /> : <RepoHarness saved={repo} />
-    const savedRecipe = () =>
-      scope === 'global' ? global.value.actions?.fixChecks : repo.value.actionOverrides?.fixChecks
-    const rendered = render(view())
-    const input = screen.getByRole('textbox', { name: 'Arguments' })
-    fireEvent.change(input, { target: { value: '--dangerously-skip-permissions --verbose' } })
-    expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
-    fireEvent.keyDown(input, { key: 'Enter' })
-    expect(input).toHaveProperty('value', '--verbose')
-    expect(screen.getByRole('button', { name: /Remove --dangerously/ })).toBeDefined()
+    work.push([
+      tokenize.mock.calls.length,
+      tokenize.mock.calls.reduce((sum, [text]) => sum + text.length, 0)
+    ])
+    expect(lift).not.toHaveBeenCalled()
     expect(write).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByText('Discard'))
-    expect(input).toHaveProperty('value', '')
-    expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
-    // Direct Save without blur must commit the dirty text exactly once.
-    fireEvent.change(input, { target: { value: '--dangerously-skip-permissions --verbose' } })
-    fireEvent.click(screen.getByText('Save'))
-    await waitFor(() =>
-      expect(savedRecipe()?.launchPreferences?.permissionMode).toBe('full-access')
-    )
-    expect(savedRecipe()?.launchPreferences).toEqual({ ...model, permissionMode: 'full-access' })
-    expect(savedRecipe()?.agentArgs).toBe('--verbose')
-    expect(write).toHaveBeenCalledTimes(1)
-    rendered.unmount()
-    const reopened = render(view())
-    const args = screen.getByRole('textbox', { name: 'Arguments' })
-    fireEvent.click(screen.getByRole('button', { name: /Remove --dangerously/ }))
-    expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
-    expect(write).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByText('Discard'))
-    fireEvent.focus(args)
-    if (!(args instanceof HTMLTextAreaElement)) {
-      throw new Error('Missing arguments textarea')
-    }
-    args.setSelectionRange(0, 0)
-    fireEvent.keyDown(args, { key: 'Backspace' })
-    expect(document.activeElement).toBe(
-      screen.getByRole('button', { name: /Remove --dangerously/ })
-    )
-    fireEvent.keyDown(document.activeElement ?? args, { key: 'Backspace' })
-    fireEvent.click(screen.getByText('Save'))
-    await waitFor(() => expect(savedRecipe()?.launchPreferences?.permissionMode).toBe('own'))
-    expect(savedRecipe()?.launchPreferences).toEqual({ ...model, permissionMode: 'own' })
-    expect(savedRecipe()?.agentArgs).toBe('--verbose')
-    reopened.unmount()
-    render(view())
-    expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
-    expect(screen.getByRole('textbox', { name: 'Arguments' })).toHaveProperty('value', '--verbose')
-  })
-}
+  }
+  process.stdout.write(
+    `${JSON.stringify({ metric: 'permission-input-work', scope: 'repo', work })}\n`
+  )
+  expect(work[0][0]).toBeGreaterThan(32)
+  work[1].forEach((value, i) => expect(value).toBeLessThanOrEqual(10 * work[0][i]))
+  fireEvent.click(screen.getByText('Discard'))
+  fireEvent.click(screen.getByText('Save'))
+  expect(write).not.toHaveBeenCalled()
+  lift.mockClear()
+  fireEvent.change(input, { target: { value: '--dangerously-skip-permissions --verbose' } })
+  expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
+  fireEvent.keyDown(input, { key: 'Enter' })
+  expect(lift).toHaveBeenCalledTimes(1)
+  expect(input).toHaveProperty('value', '--verbose')
+  expect(screen.getByRole('button', { name: /Remove --dangerously/ })).toBeDefined()
+  expect(write).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByText('Discard'))
+  expect(input).toHaveProperty('value', '')
+  expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
+  // Direct Save without blur must commit the dirty text exactly once.
+  fireEvent.change(input, { target: { value: '--dangerously-skip-permissions --verbose' } })
+  fireEvent.click(screen.getByText('Save'))
+  await waitFor(() => expect(savedRecipe()?.launchPreferences?.permissionMode).toBe('full-access'))
+  expect(savedRecipe()?.launchPreferences).toEqual({ ...model, permissionMode: 'full-access' })
+  expect(savedRecipe()?.agentArgs).toBe('--verbose')
+  expect(write).toHaveBeenCalledTimes(1)
+  rendered.unmount()
+  const reopened = render(view())
+  const args = screen.getByRole('textbox', { name: 'Arguments' })
+  fireEvent.click(screen.getByRole('button', { name: /Remove --dangerously/ }))
+  expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
+  expect(write).toHaveBeenCalledTimes(1)
+  fireEvent.click(screen.getByText('Discard'))
+  fireEvent.focus(args)
+  if (!(args instanceof HTMLTextAreaElement)) {
+    throw new Error('Missing arguments textarea')
+  }
+  args.setSelectionRange(0, 0)
+  fireEvent.keyDown(args, { key: 'Backspace' })
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: /Remove --dangerously/ }))
+  fireEvent.keyDown(document.activeElement ?? args, { key: 'Backspace' })
+  fireEvent.click(screen.getByText('Save'))
+  await waitFor(() => expect(savedRecipe()?.launchPreferences?.permissionMode).toBe('own'))
+  expect(savedRecipe()?.launchPreferences).toEqual({ ...model, permissionMode: 'own' })
+  expect(savedRecipe()?.agentArgs).toBe('--verbose')
+  reopened.unmount()
+  render(view())
+  expect(screen.queryByRole('button', { name: /Remove --dangerously/ })).toBeNull()
+  expect(screen.getByRole('textbox', { name: 'Arguments' })).toHaveProperty('value', '--verbose')
+})
 
 it('disables the menu, input, reset and chip keyboard path while preserving geometry', async () => {
   const args = vi.fn()

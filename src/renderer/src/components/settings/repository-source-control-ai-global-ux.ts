@@ -216,13 +216,14 @@ export function useRepositorySourceControlAiGlobalUx({
           : (value as TuiAgent)
     const changed =
       readCompleteRecipeForDraft(immediateRepoAiRef.current, settings, actionId).agentId !== agentId
+    const captured = actionTextDrafts[actionId]?.launchPreferences
     commitImmediate(withRepoAiActionAgent(immediateRepoAiRef.current, settings, actionId, agentId))
     persist(
       (base) => withRepoAiActionAgent(base, settings, actionId, agentId),
       () => {
         if (changed) {
           setActionTextDrafts((current) =>
-            resetActionDraftLaunchPreferences(current, actionId, agentId)
+            resetActionDraftLaunchPreferences(current, actionId, agentId, captured)
           )
         }
       }

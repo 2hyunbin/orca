@@ -134,19 +134,21 @@ export function useSourceControlActionRecipeDraftState({
     actionId: SourceControlActionId,
     update: SetStateAction<SourceControlActionLaunchPreferences | undefined>
   ): void => {
-    setActionRecipeDraftState((current) => ({
-      ...current,
-      values: {
-        ...current.values,
-        [actionId]: {
-          ...current.values[actionId],
-          launchPreferences:
-            typeof update === 'function'
-              ? update(current.values[actionId].launchPreferences)
-              : update
+    setActionRecipeDraftState((current) => {
+      const latest = current.values[actionId].launchPreferences
+      const next = typeof update === 'function' ? update(latest) : update
+      // A completion with no owned change must not materialize an explicit clear.
+      if (typeof update === 'function' && next === latest) {
+        return current
+      }
+      return {
+        ...current,
+        values: {
+          ...current.values,
+          [actionId]: { ...current.values[actionId], launchPreferences: next }
         }
       }
-    }))
+    })
   }
 
   const saveActionTemplateDraft = async (actionId: SourceControlActionId): Promise<void> => {

@@ -90,25 +90,52 @@ describe('useRepositorySourceControlAiGlobalUx', () => {
       commandInputTemplate: 'edited'
     })
     expect(reopened.launchPreferences).toBeUndefined()
-    await act(async () => result.current.updateActionAgent('fixChecks', 'claude'))
-    expect(result.current.actionDirtyById.fixChecks).toBe(false)
-    let finish = (_ok: boolean): void => {
-      throw new Error('Agent save has not started')
-    }
-    updateRepo.mockImplementationOnce(
-      () =>
-        new Promise<boolean>((resolve) => {
-          finish = resolve
-        })
-    )
-    await act(async () => result.current.updateActionAgent('fixChecks', 'codex'))
-    const newAgentChoice = { agentId: 'codex', model: 'gpt-5.5', permissionMode: 'ask' } as const
-    act(() => result.current.updateActionLaunchPreferences('fixChecks', newAgentChoice))
-    await act(async () => finish(true))
-    expect(result.current.displayRepoAi.actionOverrides?.fixChecks?.launchPreferences).toEqual(
-      newAgentChoice
-    )
   })
+
+  it.each(['grok', 'claude', 'identical', 'clear'] as const)(
+    'two queued switches preserve a newly authored %s value and unrelated text',
+    async (edit) => {
+      const old = { agentId: 'claude', model: 'sonnet', permissionMode: 'ask' } as const
+      const finishes: ((ok: boolean) => void)[] = []
+      const updateRepo = vi.fn(() => new Promise<boolean>((resolve) => finishes.push(resolve)))
+      const { result } = setup(
+        { actionOverrides: { fixChecks: { agentId: 'claude' } } },
+        updateRepo
+      )
+      act(() => result.current.updateActionLaunchPreferences('fixChecks', old))
+      await act(async () => result.current.updateActionAgent('fixChecks', 'codex'))
+      await act(async () =>
+        result.current.updateActionAgent(
+          'fixChecks',
+          edit === 'clear' ? '__default_agent__' : edit === 'claude' ? 'claude' : 'grok'
+        )
+      )
+      const authored =
+        edit === 'clear'
+          ? undefined
+          : { ...old, agentId: edit === 'grok' ? ('grok' as const) : ('claude' as const) }
+      act(() => {
+        result.current.updateActionLaunchPreferences('fixChecks', authored)
+        result.current.updateActionAgentArgs('fixChecks', '--verbose')
+        result.current.updateActionTemplate('fixChecks', 'new template')
+      })
+      await act(async () => finishes[0](true))
+      await act(async () => finishes[1](true))
+      const row = result.current.displayRepoAi.actionOverrides?.fixChecks
+      expect(row?.launchPreferences).toBe(authored)
+      expect(Object.hasOwn(row ?? {}, 'launchPreferences')).toBe(true)
+      expect(row).toMatchObject({ agentArgs: '--verbose', commandInputTemplate: 'new template' })
+      const save = result.current.saveActionRecipeText('fixChecks')
+      await act(async () => {})
+      await act(async () => {
+        finishes[2](true)
+        await save
+      })
+      expect(
+        updateRepo.mock.lastCall?.[1].sourceControlAi?.actionOverrides?.fixChecks?.launchPreferences
+      ).toEqual(authored)
+    }
+  )
 
   it('keeps an optimistic immediate field when the persist succeeds', async () => {
     const updateRepo = vi.fn().mockResolvedValue(true)

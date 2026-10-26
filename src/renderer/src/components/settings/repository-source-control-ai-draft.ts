@@ -254,19 +254,27 @@ export function computeActionDirtyById(
   persisted: RepoSourceControlAiOverrides,
   actionTextDrafts: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>
 ): Record<SourceControlActionId, boolean> {
-  return Object.fromEntries(
-    SOURCE_CONTROL_ACTION_IDS.map((actionId) => {
-      if (!hasOwnActionOverride(immediate.actionOverrides, actionId)) {
-        return [actionId, false]
-      }
-      const draft = actionTextDrafts[actionId] ?? readActionRecipeTextDraft(immediate, actionId)
-      // Prefer persisted text as the base; if the override is only optimistic, compare against immediate.
-      const compareBase = hasOwnActionOverride(persisted.actionOverrides, actionId)
-        ? readActionRecipeTextDraft(persisted, actionId)
-        : readActionRecipeTextDraft(immediate, actionId)
-      return [actionId, !sameActionRecipeText(draft, compareBase)]
-    })
-  ) as Record<SourceControlActionId, boolean>
+  const isDirty = (actionId: SourceControlActionId): boolean => {
+    if (!hasOwnActionOverride(immediate.actionOverrides, actionId)) {
+      return false
+    }
+    const draft = actionTextDrafts[actionId] ?? readActionRecipeTextDraft(immediate, actionId)
+    // Prefer persisted text as the base; if the override is only optimistic, compare against immediate.
+    const compareBase = hasOwnActionOverride(persisted.actionOverrides, actionId)
+      ? readActionRecipeTextDraft(persisted, actionId)
+      : readActionRecipeTextDraft(immediate, actionId)
+    return !sameActionRecipeText(draft, compareBase)
+  }
+  return {
+    commitMessage: isDirty('commitMessage'),
+    pullRequest: isDirty('pullRequest'),
+    branchName: isDirty('branchName'),
+    fixCommitFailure: isDirty('fixCommitFailure'),
+    fixPushFailure: isDirty('fixPushFailure'),
+    fixChecks: isDirty('fixChecks'),
+    resolveConflicts: isDirty('resolveConflicts'),
+    resolveComments: isDirty('resolveComments')
+  }
 }
 
 export function retainDivergentActionTextDrafts(

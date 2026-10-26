@@ -13,18 +13,20 @@ import {
   readActionRecipeTextDraft,
   type ActionRecipeTextDraft
 } from './repository-source-control-ai-draft'
+import { retireActionLaunchPreferences } from './source-control-ai-action-recipe-draft'
 import { readInheritedCommandTemplate } from './repository-source-control-ai-labels'
 
 export function resetActionDraftLaunchPreferences(
   current: Partial<Record<SourceControlActionId, ActionRecipeTextDraft>>,
   actionId: SourceControlActionId,
-  agentId: SourceControlActionRecipe['agentId']
+  agentId: SourceControlActionRecipe['agentId'],
+  captured: SourceControlActionLaunchPreferences | undefined
 ): Partial<Record<SourceControlActionId, ActionRecipeTextDraft>> {
   const draft = current[actionId]
   if (
     !draft ||
-    !Object.hasOwn(draft, 'launchPreferences') ||
-    draft.launchPreferences?.agentId === agentId
+    retireActionLaunchPreferences(draft.launchPreferences, captured, agentId) ===
+      draft.launchPreferences
   ) {
     return current
   }
