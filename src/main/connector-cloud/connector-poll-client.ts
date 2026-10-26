@@ -40,6 +40,8 @@ export type ConnectorPollClientOptions = {
   events: ConnectorTurnEvents
   seam: ExternalConversationSeam
   machine: ConnectorMachine
+  /** A hello revision above every earlier one from this install, across clients and restarts. */
+  nextHelloRev: () => number
   random?: () => number
 }
 
@@ -102,7 +104,6 @@ export class ConnectorPollClient {
     })
     // Turn ends that finish before the first hello still reach the outbox; only sending waits for it.
     this.watch()
-    this.acks.attach(this.sendAcks)
     void this.run()
   }
 
@@ -183,8 +184,8 @@ export class ConnectorPollClient {
     projects: ConnectorProject[]
   }): Promise<ConnectorFailure | null> {
     const { machine } = this.options
-    // Monotonic across restarts, so the cloud never keeps an older process's hello.
-    const helloRev = Math.max(this.helloRev + 1, Date.now())
+    this.pauseSending()
+    const helloRev = this.options.nextHelloRev()
     const answer = await this.transport.call(
       CONNECTOR_PATHS.hello,
       {
@@ -211,12 +212,23 @@ export class ConnectorPollClient {
     }
     this.helloRev = helloRev
     this.helloSaid = JSON.stringify(said)
-    // Owed acks go again under this hello; one still in flight under the old one would be ignored.
-    this.acks.restart([], () => true)
     // A fresh watch's first event is the snapshot, which opens this hello's numbered events.
     this.watch()
     this.options.events.attach(this.sendEvents)
+    this.acks.attach(this.sendAcks)
     return null
+  }
+
+  /**
+   * Senders work only under an accepted hello. While the cloud switches hellos, an old request's ignored
+   * success would read as taken and drop it here, so in-flight batches are taken back, kept, and sent
+   * again under the new hello.
+   */
+  private pauseSending(): void {
+    this.acks.detach(this.sendAcks)
+    this.acks.restart([], () => true)
+    this.options.events.detach(this.sendEvents)
+    this.options.events.takeBack()
   }
 
   private watch(): void {

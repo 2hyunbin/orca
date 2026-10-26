@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { CONNECTOR_PATHS } from '../../shared/connector-cloud-contract'
 import type { Delivery } from '../external-conversations/external-conversation-types'
+import { nextConnectorHelloRev } from './connector-hello-rev'
 import { connectorProjects } from './connector-places'
 import { ConnectorPollClient } from './connector-poll-client'
 import { ConnectorAccountTransport } from './connector-transport'
@@ -35,6 +36,7 @@ function startClient(seam = fakeSeam(), events = new ConnectorTurnEvents(userDat
     events,
     seam: seam.seam,
     machine,
+    nextHelloRev: () => nextConnectorHelloRev(userDataPath),
     random: () => 0.5
   })
   client.start()
@@ -520,21 +522,47 @@ describe('ConnectorPollClient', () => {
     await settle()
     poll([{ ...base, deliveryId: 'd1', kind: 'send', text: 'hi' }])
     await settle()
-    fake.holdAcks = true
+    fake.holdBefore.add(CONNECTOR_PATHS.acks)
     sent.resolve({ outcome: 'accepted' })
     await settle()
     machine.agentList = ['claude']
     poll([], { unsettled: [{ deliveryId: 'd1', conversation }] })
     await settle()
     expect(fake.hellos).toHaveLength(2)
-    fake.holdAcks = false
-    fake.releaseAcks()
+    fake.release(CONNECTOR_PATHS.acks)
     await settle(5_000)
     expect(fake.acks).toContainEqual({
       deliveryId: 'd1',
       step: 'done',
       result: { outcome: 'accepted' }
     })
+    client.stop()
+  })
+
+  it('keeps a turn end whose request the cloud ignored while switching to a new hello', async () => {
+    const { client, machine, emit } = startClient()
+    await settle()
+    fake.holdBefore.add(CONNECTOR_PATHS.events)
+    emit({
+      kind: 'turn-ended',
+      conversation,
+      worktreeId: 'wt',
+      paneKey: 'tab:1',
+      turnId: 4,
+      stopReason: 'success',
+      at: 9
+    })
+    await settle()
+    // The cloud takes the new hello but its answer is late; the old request lands first, ignored.
+    fake.holdAfter.add(CONNECTOR_PATHS.hello)
+    machine.agentList = ['claude']
+    poll([])
+    await settle()
+    fake.release(CONNECTOR_PATHS.events)
+    await settle()
+    fake.release(CONNECTOR_PATHS.hello)
+    await settle(5_000)
+    expect(fake.events).toContainEqual(expect.objectContaining({ kind: 'turn-ended', turnId: 4 }))
     client.stop()
   })
 })

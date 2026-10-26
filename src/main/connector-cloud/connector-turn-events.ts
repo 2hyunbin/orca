@@ -184,6 +184,11 @@ export class ConnectorTurnEvents {
     this.queue.detach(sender)
   }
 
+  /** Takes back the batch in flight, keeping everything owed, so its late answer changes nothing. */
+  takeBack(): void {
+    this.queue.restart([], () => true)
+  }
+
   /** Drops everything, file included: no other account can report these turns. */
   clear(): void {
     this.queue.restart([], () => false)

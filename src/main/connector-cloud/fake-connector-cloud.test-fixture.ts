@@ -18,9 +18,11 @@ export class FakeConnectorCloud {
   pollReplyDelayMs = 0
   /** Requests never answer, as on a stalled network. */
   hang = false
-  /** Ack requests wait for `releaseAcks()`, then are judged against the hello current at that time. */
-  holdAcks = false
-  private readonly heldAcks: (() => void)[] = []
+  /** Requests to these paths wait for `release(path)`, then are judged against the cloud's state then. */
+  readonly holdBefore = new Set<string>()
+  /** Requests to these paths take effect at once; their answers wait for `release(path)`. */
+  readonly holdAfter = new Set<string>()
+  private readonly held = new Map<string, (() => void)[]>()
   /** Accounts the auth service still mints for; removing one is a sign-out elsewhere. */
   readonly signedIn = new Set<string>(['ada'])
   /** Every token minted, in order. */
@@ -49,7 +51,13 @@ export class FakeConnectorCloud {
     const auth = new Headers(init?.headers).get('authorization')
     const token = auth?.startsWith('Bearer ') ? auth.slice(7) : null
     this.requests.push({ path, body, token })
+    if (this.holdBefore.has(path)) {
+      await this.waitForRelease(path)
+    }
     const reply = this.forced.get(path) ?? (await this.route(path, body, token, init?.signal))
+    if (this.holdAfter.has(path)) {
+      await this.waitForRelease(path)
+    }
     return new Response(reply.body === undefined ? null : JSON.stringify(reply.body), {
       status: reply.status,
       headers: { 'content-type': 'application/json', ...reply.headers }
@@ -80,8 +88,21 @@ export class FakeConnectorCloud {
     this.heldPoll?.()
   }
 
-  releaseAcks(): void {
-    this.heldAcks.splice(0).forEach((release) => release())
+  /** Lets every held request or answer for `path` go on, and stops holding new ones. */
+  release(path: string): void {
+    this.holdBefore.delete(path)
+    this.holdAfter.delete(path)
+    for (const resume of this.held.get(path)?.splice(0) ?? []) {
+      resume()
+    }
+  }
+
+  private waitForRelease(path: string): Promise<void> {
+    return new Promise((resolve) => {
+      const waiting = this.held.get(path) ?? []
+      waiting.push(resolve)
+      this.held.set(path, waiting)
+    })
   }
 
   /** Refuses every token issued so far, as a key rotation would. */
@@ -122,24 +143,26 @@ export class FakeConnectorCloud {
       return { status: 401, body: { error: 'invalid_token' } }
     }
     const fields = isRecord(body) ? body : {}
+    const rev = typeof fields.helloRev === 'number' ? fields.helloRev : -1
     if (path === CONNECTOR_PATHS.hello) {
       this.hellos.push(body)
-      this.hello = { rev: Number(fields.helloRev), seq: -1 }
-      return { status: 204 }
-    }
-    if (path === CONNECTOR_PATHS.acks && this.holdAcks) {
-      await new Promise<void>((resolve) => this.heldAcks.push(resolve))
-    }
-    const { hello } = this
-    if (path === CONNECTOR_PATHS.acks) {
-      // Acks from an older hello are ignored; those deliveries come back as unsettled instead.
-      if (hello && fields.helloRev === hello.rev) {
-        this.acks.push(...(Array.isArray(fields.acks) ? fields.acks : []))
+      // An older hello is ignored; repeating the current one keeps its event mark.
+      if (!this.hello || rev > this.hello.rev) {
+        this.hello = { rev, seq: -1 }
       }
       return { status: 204 }
     }
-    if (!hello || fields.helloRev !== hello.rev) {
+    const { hello } = this
+    // Acks and events from an older hello are ignored; the next first poll lists what is unsettled.
+    if (hello && rev < hello.rev && path !== CONNECTOR_PATHS.poll) {
+      return { status: 204 }
+    }
+    if (!hello || rev !== hello.rev) {
       return { status: 409, body: { error: 'hello_required' } }
+    }
+    if (path === CONNECTOR_PATHS.acks) {
+      this.acks.push(...(Array.isArray(fields.acks) ? fields.acks : []))
+      return { status: 204 }
     }
     if (path === CONNECTOR_PATHS.events) {
       // Applied only above this hello's high-water mark; a late or repeated batch is dropped.
