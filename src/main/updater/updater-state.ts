@@ -43,7 +43,7 @@ export class ReleaseFeedPreflightError extends Error {
 }
 
 export abstract class UpdaterState {
-  protected mainWindowRef: BrowserWindow | null = null
+  protected getMainWindow: () => BrowserWindow | null = () => null
   protected currentStatus: UpdateStatus = { state: 'idle' }
   protected userInitiatedCheck = false
   protected onBeforeQuitCleanup: (() => void | Promise<void>) | null = null

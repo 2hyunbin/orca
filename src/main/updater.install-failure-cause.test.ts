@@ -1,3 +1,4 @@
+import { updaterMainWindow } from './updater-test-main-window'
 import os from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as TracerModule from './observability/tracer'
@@ -157,14 +158,14 @@ function installSpan(): CapturedSpan | undefined {
 }
 
 async function reachDownloaded(): Promise<typeof UpdaterModule> {
-  const mainWindow = { webContents: { send: vi.fn() } }
+  const mainWindow = updaterMainWindow(vi.fn())
   autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
   // Install the sink on the fresh tracer instance the updater will import.
   tracer = await import('./observability/tracer')
   tracer.setActiveSink(capturingSink())
   const updater = await loadUpdaterModule()
 
-  updater.setupAutoUpdater(mainWindow as never)
+  updater.setupAutoUpdater(() => mainWindow as never)
   await vi.advanceTimersByTimeAsync(0)
   await vi.waitFor(() => {
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)

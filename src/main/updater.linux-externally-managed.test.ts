@@ -1,3 +1,4 @@
+import { updaterMainWindow } from './updater-test-main-window'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as UpdaterModule from './updater'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
@@ -52,7 +53,8 @@ describe('updater externally managed Linux installs', () => {
     })
     const send = vi.fn()
     const updater = await loadUpdaterModule()
-    updater.setupAutoUpdater({ webContents: { send } } as never, {
+    const mainWindow = updaterMainWindow(send)
+    updater.setupAutoUpdater(() => mainWindow, {
       getLastUpdateCheckAt: () => Date.now(),
       installMode: 'interactive'
     })

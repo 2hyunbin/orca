@@ -110,9 +110,8 @@ export class UpdaterSetup extends UpdaterDownloadInstall {
     super.dismissAvailableUpdate()
   }
 
-  setupAutoUpdater(mainWindow: BrowserWindow | null, opts?: UpdaterSetupOptions): void {
-    // Headless setup must not erase a later attached window.
-    this.mainWindowRef = mainWindow ?? this.mainWindowRef
+  setupAutoUpdater(getMainWindow: () => BrowserWindow | null, opts?: UpdaterSetupOptions): void {
+    this.getMainWindow = getMainWindow
     this.onBeforeQuitCleanup = opts?.onBeforeQuit ?? null
     this.onBeforeQuitFailure = opts?.onBeforeQuitFailure ?? 'continue'
     this.persistLastUpdateCheckAt = opts?.setLastUpdateCheckAt ?? null

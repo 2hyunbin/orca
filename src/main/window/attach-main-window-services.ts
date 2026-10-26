@@ -51,6 +51,7 @@ let activeTccPromptHandlerToken: number | null = null
 
 export function attachMainWindowServices(
   mainWindow: BrowserWindow,
+  getMainWindow: () => BrowserWindow | null,
   store: Store,
   runtime: OrcaRuntimeService,
   getSelectedCodexHomePath?: GetSelectedCodexHomePath,
@@ -132,7 +133,7 @@ export function attachMainWindowServices(
     return getAgentSessionAttachmentStore()
   })
   registerTccPromptNoticeHandlers(mainWindow)
-  scheduleMainWindowAutoUpdaterSetup(mainWindow, store, options)
+  scheduleMainWindowAutoUpdaterSetup(mainWindow, getMainWindow, store, options)
   registerRuntimeWindowLifecycle(mainWindow, runtime)
 
   const allowedPermissions = new Set(['media', 'fullscreen', 'pointerLock'])

@@ -48,7 +48,8 @@ function holdFirstPreflight(): (value: FeedResult) => void {
 
 async function setup() {
   const updater = await loadUpdaterModule()
-  updater.setupAutoUpdater(updaterMainWindow(vi.fn()), { getLastUpdateCheckAt: () => Date.now() })
+  const mainWindow = updaterMainWindow(vi.fn())
+  updater.setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
   return updater
 }
 

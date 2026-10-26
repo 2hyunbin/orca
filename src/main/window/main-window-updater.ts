@@ -69,10 +69,14 @@ function buildUpdaterSetupOptions(store: Store, options?: UpdaterSetupHooks): Up
 }
 
 /** Headless serve has no window-driven setup; defer the slow require past readiness so remote updater support becomes available (#22261). */
-export function setupHeadlessServeAutoUpdater(store: Store, options: UpdaterSetupHooks): void {
+export function setupHeadlessServeAutoUpdater(
+  store: Store,
+  getCurrentMainWindow: () => BrowserWindow | null,
+  options: UpdaterSetupHooks
+): void {
   setImmediate(() => {
     try {
-      setupAutoUpdater(null, buildUpdaterSetupOptions(store, options))
+      setupAutoUpdater(getCurrentMainWindow, buildUpdaterSetupOptions(store, options))
       logStartupMilestone('updater-setup-done')
     } catch (error) {
       console.warn(
@@ -85,6 +89,7 @@ export function setupHeadlessServeAutoUpdater(store: Store, options: UpdaterSetu
 
 export function scheduleMainWindowAutoUpdaterSetup(
   mainWindow: BrowserWindow,
+  getCurrentMainWindow: () => BrowserWindow | null,
   store: Store,
   options?: UpdaterSetupHooks
 ): void {
@@ -106,7 +111,7 @@ export function scheduleMainWindowAutoUpdaterSetup(
     }
     updaterSetupDone = true
     try {
-      setupAutoUpdater(mainWindow, buildUpdaterSetupOptions(store, options))
+      setupAutoUpdater(getCurrentMainWindow, buildUpdaterSetupOptions(store, options))
       logStartupMilestone('updater-setup-done')
     } finally {
       clearDeferredSetup()

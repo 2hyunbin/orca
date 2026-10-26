@@ -197,6 +197,8 @@ async function fireReadyToShow(mainWindow: MainWindowStub): Promise<void> {
   })
 }
 
+const noWindow = () => null
+
 describe('attachMainWindowServices', () => {
   it('exports the updater handlers exercised by the recovery tests', () => {
     expect(registerUpdaterHandlers).toBe(registerWindowUpdaterHandlers)
@@ -218,7 +220,7 @@ describe('attachMainWindowServices', () => {
     const store = createStore()
 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Stubs provide the window/runtime methods exercised by attachment.
-    attachMainWindowServices(mainWindow as never, store, runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, store, runtime as never)
 
     expect(setRepoRemoteClientNotifierMock).toHaveBeenCalledWith(runtime)
     expect(setWorktreeCatalogRemoteClientNotifierMock).toHaveBeenCalledWith(runtime)
@@ -240,6 +242,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       mainWindow as never,
+      noWindow,
       createStore(),
       createRuntime() as never,
       undefined,
@@ -266,6 +269,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       createMainWindow() as never,
+      noWindow,
       store,
       createRuntime() as never,
       undefined,
@@ -289,6 +293,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       mainWindow as never,
+      () => mainWindow as never,
       store,
       createRuntime() as never,
       undefined,
@@ -305,7 +310,7 @@ describe('attachMainWindowServices', () => {
     await fireReadyToShow(mainWindow)
     expect(setupAutoUpdaterMock).toHaveBeenCalledTimes(1)
     const [updaterWindow, updaterOptions] = setupAutoUpdaterMock.mock.calls[0]
-    expect(updaterWindow).toBe(mainWindow)
+    expect(updaterWindow()).toBe(mainWindow)
     expect(updaterOptions).toMatchObject({
       installMode: 'supervised-headless-serve',
       onBeforeQuitFailure: 'abort'
@@ -320,7 +325,7 @@ describe('attachMainWindowServices', () => {
     const store = createStore()
     const mainWindow = createMainWindow()
 
-    attachMainWindowServices(mainWindow as never, store, createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, store, createRuntime() as never)
 
     await fireReadyToShow(mainWindow)
     await setupAutoUpdaterMock.mock.calls[0][1].onBeforeQuit()
@@ -329,9 +334,19 @@ describe('attachMainWindowServices', () => {
   })
 
   it('replaces the TCC handlers when the main window is reattached', () => {
-    attachMainWindowServices(createMainWindow() as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(
+      createMainWindow() as never,
+      noWindow,
+      createStore(),
+      createRuntime() as never
+    )
     const releaseCount = releasePendingTccPromptNoticeMock.mock.calls.length
-    attachMainWindowServices(createMainWindow() as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(
+      createMainWindow() as never,
+      noWindow,
+      createStore(),
+      createRuntime() as never
+    )
 
     for (const channel of [
       'macosTccPrompts:consumePending',
@@ -348,7 +363,7 @@ describe('attachMainWindowServices', () => {
   it('lets only the current main renderer consume the pending TCC notice', () => {
     const mainWindow = createMainWindow()
     consumePendingTccPromptNoticeMock.mockReturnValue({ claimId: 1, promptCount: 3 })
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
 
     const handler = handleMock.mock.calls.find(
       ([channel]) => channel === 'macosTccPrompts:consumePending'
@@ -361,7 +376,7 @@ describe('attachMainWindowServices', () => {
 
   it('acknowledges a claim only from the current main renderer', () => {
     const mainWindow = createMainWindow()
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
 
     const handler = handleMock.mock.calls.find(
       ([channel]) => channel === 'macosTccPrompts:acknowledgePending'
@@ -376,7 +391,7 @@ describe('attachMainWindowServices', () => {
 
   it('releases a claim only from the current main renderer', () => {
     const mainWindow = createMainWindow()
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
     releasePendingTccPromptNoticeMock.mockClear()
 
     const handler = handleMock.mock.calls.find(
@@ -392,7 +407,7 @@ describe('attachMainWindowServices', () => {
 
   it('releases the owner claim when the main renderer reloads or crashes', () => {
     const mainWindow = createMainWindow()
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
     const handlers = (event: string): (() => void)[] =>
       mainWindow.webContents.on.mock.calls
         .filter(([name]) => name === event)
@@ -420,7 +435,7 @@ describe('attachMainWindowServices', () => {
 
   it('removes the TCC handlers when the owning window closes', () => {
     const mainWindow = createMainWindow()
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
 
     removeHandlerMock.mockClear()
     releasePendingTccPromptNoticeMock.mockClear()
@@ -437,10 +452,10 @@ describe('attachMainWindowServices', () => {
 
   it('keeps newer TCC handlers when an older window closes late', () => {
     const oldWindow = createMainWindow()
-    attachMainWindowServices(oldWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(oldWindow as never, noWindow, createStore(), createRuntime() as never)
     const oldClosedHandlers = getClosedHandlers(oldWindow.on)
     const newWindow = createMainWindow()
-    attachMainWindowServices(newWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(newWindow as never, noWindow, createStore(), createRuntime() as never)
 
     removeHandlerMock.mockClear()
     for (const handler of oldClosedHandlers) {
@@ -466,6 +481,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       mainWindow as never,
+      noWindow,
       createStore(),
       createRuntime() as never,
       undefined,
@@ -487,6 +503,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       mainWindow as never,
+      noWindow,
       createStore(),
       createRuntime() as never,
       undefined,
@@ -514,6 +531,7 @@ describe('attachMainWindowServices', () => {
 
     attachMainWindowServices(
       mainWindow as never,
+      noWindow,
       createStore(),
       createRuntime() as never,
       undefined,
@@ -534,7 +552,7 @@ describe('attachMainWindowServices', () => {
     const mainWindow = createMainWindow()
     mainWindow.on = mainWindowOnMock
 
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
 
     removeHandlerMock.mockClear()
     const closedHandlers = getClosedHandlers(mainWindowOnMock)
@@ -550,13 +568,13 @@ describe('attachMainWindowServices', () => {
     const oldWindowOnMock = vi.fn()
     const oldWindow = createMainWindow()
     oldWindow.on = oldWindowOnMock
-    attachMainWindowServices(oldWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(oldWindow as never, noWindow, createStore(), createRuntime() as never)
     const oldClosedHandlers = getClosedHandlers(oldWindowOnMock)
 
     const newWindowOnMock = vi.fn()
     const newWindow = createMainWindow()
     newWindow.on = newWindowOnMock
-    attachMainWindowServices(newWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(newWindow as never, noWindow, createStore(), createRuntime() as never)
 
     removeHandlerMock.mockClear()
     for (const handler of oldClosedHandlers) {
@@ -572,7 +590,12 @@ describe('attachMainWindowServices', () => {
   })
 
   it('only allows the explicit permission allowlist', async () => {
-    attachMainWindowServices(createMainWindow() as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(
+      createMainWindow() as never,
+      noWindow,
+      createStore(),
+      createRuntime() as never
+    )
 
     expect(setPermissionRequestHandlerMock).toHaveBeenCalledTimes(1)
     const permissionHandler = setPermissionRequestHandlerMock.mock.calls[0][0]
@@ -591,7 +614,12 @@ describe('attachMainWindowServices', () => {
     const platform = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { value: 'darwin' })
     try {
-      attachMainWindowServices(createMainWindow() as never, createStore(), createRuntime() as never)
+      attachMainWindowServices(
+        createMainWindow() as never,
+        noWindow,
+        createStore(),
+        createRuntime() as never
+      )
 
       expect(systemPreferencesAskForMediaAccessMock).not.toHaveBeenCalled()
 
@@ -614,7 +642,7 @@ describe('attachMainWindowServices', () => {
     const mainWindow = createMainWindow()
     mainWindow.on = mainWindowOnMock
 
-    attachMainWindowServices(mainWindow as never, createStore(), createRuntime() as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), createRuntime() as never)
 
     const closedHandler = getClosedHandlers(mainWindowOnMock).at(-1)
     expect(closedHandler).toBeTypeOf('function')
@@ -628,7 +656,7 @@ describe('attachMainWindowServices', () => {
     mainWindow.on = mainWindowOnMock
     const runtime = createRuntime()
 
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), runtime as never)
 
     runtime.setNotifier.mockClear()
     for (const handler of getClosedHandlers(mainWindowOnMock)) {
@@ -644,13 +672,13 @@ describe('attachMainWindowServices', () => {
     const oldWindowOnMock = vi.fn()
     const oldWindow = createMainWindow()
     oldWindow.on = oldWindowOnMock
-    attachMainWindowServices(oldWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(oldWindow as never, noWindow, createStore(), runtime as never)
     const oldClosedHandlers = getClosedHandlers(oldWindowOnMock)
 
     const newWindowOnMock = vi.fn()
     const newWindow = createMainWindow()
     newWindow.on = newWindowOnMock
-    attachMainWindowServices(newWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(newWindow as never, noWindow, createStore(), runtime as never)
 
     runtime.setNotifier.mockClear()
     for (const handler of oldClosedHandlers) {
@@ -674,7 +702,7 @@ describe('attachMainWindowServices', () => {
     mainWindow.on = mainWindowOnMock
     const runtime = createRuntime()
 
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), runtime as never)
 
     expect(runtime.setNotifier).toHaveBeenCalledTimes(1)
     const notifier = runtime.setNotifier.mock.calls[0][0]
@@ -719,7 +747,7 @@ describe('attachMainWindowServices', () => {
   it('marks renderer process loss as a graph reload failure', () => {
     const mainWindow = createMainWindow()
     const runtime = createRuntime()
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), runtime as never)
 
     const handlers = mainWindow.webContents.on.mock.calls
       .filter(([event]) => event === 'render-process-gone')
@@ -736,7 +764,7 @@ describe('attachMainWindowServices', () => {
     const mainWindow = createMainWindow({ send: sendMock })
     const runtime = createRuntime()
 
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), runtime as never)
 
     const notifier = runtime.setNotifier.mock.calls[0][0] as {
       revealTerminalSession: (
@@ -784,7 +812,7 @@ describe('attachMainWindowServices', () => {
     const mainWindow = createMainWindow({ send: sendMock })
     const runtime = createRuntime()
 
-    attachMainWindowServices(mainWindow as never, createStore(), runtime as never)
+    attachMainWindowServices(mainWindow as never, noWindow, createStore(), runtime as never)
 
     const notifier = runtime.setNotifier.mock.calls[0][0] as {
       revealTerminalSession: (
@@ -854,7 +882,7 @@ describe('attachMainWindowServices', () => {
 
     vi.useFakeTimers()
     try {
-      attachMainWindowServices(mainWindow as never, store, createRuntime() as never)
+      attachMainWindowServices(mainWindow as never, noWindow, store, createRuntime() as never)
 
       expect(setWorktreeBaseDirectoryWatcherSyncContextMock).toHaveBeenCalledWith(store, mainWindow)
       expect(scheduleWorktreeBaseDirectoryWatcherSyncMock).toHaveBeenCalledWith(store, mainWindow)

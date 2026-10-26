@@ -213,7 +213,8 @@ describe('updater mac install handoff', () => {
     )
     autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
     const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
-    setupAutoUpdater({ webContents: { send: vi.fn() } } as never)
+    const mainWindow = updaterMainWindow(vi.fn())
+    setupAutoUpdater(() => mainWindow)
     await vi.waitFor(() => expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1))
     autoUpdaterMock.emit('checking-for-update')
     autoUpdaterMock.emit('update-available', { version: '1.0.61' })
@@ -232,13 +233,13 @@ describe('updater mac install handoff', () => {
     async () => {
       vi.useFakeTimers()
       const sendMock = vi.fn()
-      const mainWindow = { webContents: { send: sendMock } }
+      const mainWindow = updaterMainWindow(sendMock)
 
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
 
-      setupAutoUpdater(mainWindow as never)
+      setupAutoUpdater(() => mainWindow as never)
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })
@@ -294,7 +295,8 @@ describe('updater mac install handoff', () => {
         checkForUpdatesFromMenu,
         getUpdateStatus
       } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(send))
+      const mainWindow = updaterMainWindow(send)
+      setupAutoUpdater(() => mainWindow)
       await vi.waitFor(() => expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce())
       autoUpdaterMock.emit('checking-for-update')
       autoUpdaterMock.emit('update-available', { version: '1.0.61' })
@@ -343,12 +345,12 @@ describe('updater mac install handoff', () => {
             finishCleanup = resolve
           })
       )
-      const mainWindow = { webContents: { send: vi.fn() } }
+      const mainWindow = updaterMainWindow(vi.fn())
 
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
 
-      setupAutoUpdater(mainWindow as never, { onBeforeQuit })
+      setupAutoUpdater(() => mainWindow as never, { onBeforeQuit })
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })
@@ -427,12 +429,12 @@ describe('updater mac install handoff', () => {
       vi.useFakeTimers()
 
       const sendMock = vi.fn()
-      const mainWindow = { webContents: { send: sendMock } }
+      const mainWindow = updaterMainWindow(sendMock)
 
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
 
-      setupAutoUpdater(mainWindow as never)
+      setupAutoUpdater(() => mainWindow as never)
       await vi.waitFor(() => {
         expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1)
       })
@@ -471,7 +473,8 @@ describe('updater mac install handoff', () => {
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall, isQuittingForUpdate } =
         await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(send), { onBeforeQuit })
+      const mainWindow = updaterMainWindow(send)
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654, 10718])
       let finishDescription: () => void = () => undefined
@@ -531,7 +534,8 @@ describe('updater mac install handoff', () => {
       const onBeforeQuit = vi.fn()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(send), { onBeforeQuit })
+      const mainWindow = updaterMainWindow(send)
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       recoverBrowserSidecarsMock.mockResolvedValue([])
@@ -554,38 +558,56 @@ describe('updater mac install handoff', () => {
     }
   )
 
-  it.runIf(process.platform === 'darwin')(
-    'keeps the app open when process enumeration fails',
-    async () => {
+  it.runIf(process.platform === 'darwin').each([false, true])(
+    'keeps the app open when process enumeration fails (closed=%s)',
+    async (closed) => {
       vi.useFakeTimers()
       const send = vi.fn()
       const onBeforeQuit = vi.fn()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
-      const { setupAutoUpdater, downloadUpdate, quitAndInstall, isQuittingForUpdate } =
-        await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(send), { onBeforeQuit })
+      const {
+        setupAutoUpdater,
+        downloadUpdate,
+        quitAndInstall,
+        isQuittingForUpdate,
+        getUpdateStatus
+      } = await loadUpdaterModule()
+      let destroyed = false
+      const mainWindow = updaterMainWindow(send, () => destroyed)
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
+      destroyed = closed
+      send.mockClear()
       getMacUpdateRunningInstancesMock.mockRejectedValue(new Error('probe failed'))
       quitAndInstall()
       await vi.advanceTimersByTimeAsync(1000)
       expect(onBeforeQuit).not.toHaveBeenCalled()
       expect(autoUpdaterMock.quitAndInstall).not.toHaveBeenCalled()
       expect(isQuittingForUpdate()).toBe(false)
-      expect(send).toHaveBeenCalledWith('updater:quitAndInstallAborted')
-      expect(send).toHaveBeenCalledWith(
-        'updater:status',
-        expect.objectContaining({
-          state: 'error',
-          message: expect.stringContaining('Could not check'),
-          retryAction: 'install'
-        })
-      )
-      expect(send).toHaveBeenCalledWith(
-        'updater:status',
-        expect.objectContaining({
-          message: expect.stringMatching(/close the other Orca instances.*quit Orca/i)
-        })
-      )
+      expect(getUpdateStatus()).toMatchObject({
+        state: 'error',
+        message: expect.stringContaining('Could not check'),
+        retryAction: 'install'
+      })
+      if (closed) {
+        expect(send).not.toHaveBeenCalled()
+      } else {
+        expect(send).toHaveBeenCalledWith('updater:quitAndInstallAborted')
+        expect(send).toHaveBeenCalledWith(
+          'updater:status',
+          expect.objectContaining({
+            state: 'error',
+            message: expect.stringContaining('Could not check'),
+            retryAction: 'install'
+          })
+        )
+        expect(send).toHaveBeenCalledWith(
+          'updater:status',
+          expect.objectContaining({
+            message: expect.stringMatching(/close the other Orca instances.*quit Orca/i)
+          })
+        )
+      }
     }
   )
 
@@ -596,7 +618,8 @@ describe('updater mac install handoff', () => {
       const onBeforeQuit = vi.fn()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()), { onBeforeQuit })
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
       const preventDefault = vi.fn()
       appMock.emit('before-quit', { preventDefault })
@@ -616,7 +639,8 @@ describe('updater mac install handoff', () => {
       const onBeforeQuit = vi.fn()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()), { onBeforeQuit })
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
 
       let finishProbe: (pids: number[]) => void = () => {}
@@ -646,7 +670,8 @@ describe('updater mac install handoff', () => {
       vi.useFakeTimers()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()))
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow)
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       quitAndInstall()
@@ -674,7 +699,8 @@ describe('updater mac install handoff', () => {
       )
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()), { onBeforeQuit })
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow, { onBeforeQuit })
       await prepareStagedMacUpdate(downloadUpdate)
       quitAndInstall()
       await vi.advanceTimersByTimeAsync(1000)
@@ -698,7 +724,8 @@ describe('updater mac install handoff', () => {
       vi.useFakeTimers()
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()))
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow)
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       quitAndInstall()
@@ -731,7 +758,8 @@ describe('updater mac install handoff', () => {
       autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined)
       const onBeforeQuit = vi.fn().mockRejectedValue(new Error('required cleanup failed'))
       const { setupAutoUpdater, downloadUpdate, quitAndInstall } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()), {
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow, {
         onBeforeQuit,
         onBeforeQuitFailure: 'abort'
       })
@@ -760,7 +788,8 @@ describe('updater mac install handoff', () => {
         checkForUpdatesFromMenu,
         getUpdateStatus
       } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(vi.fn()))
+      const mainWindow = updaterMainWindow(vi.fn())
+      setupAutoUpdater(() => mainWindow)
       await prepareStagedMacUpdate(downloadUpdate)
       getMacUpdateRunningInstancesMock.mockResolvedValue([9654])
       quitAndInstall()

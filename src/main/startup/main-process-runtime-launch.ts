@@ -192,7 +192,7 @@ async function launchServeMode(
   emitServeBrowserIdentityActionLine(getBrowserIdentityModeStatus())
   await printServeReady(serveOptions)
   const store = state.store!
-  setupHeadlessServeAutoUpdater(store, {
+  setupHeadlessServeAutoUpdater(store, () => state.mainWindow, {
     onBeforeUpdateQuit: () =>
       preserveStateBeforeUpdateRestart({ codexRuntimeHome: state.codexRuntimeHome, store }),
     onBeforeUpdateQuitFailure: 'abort',

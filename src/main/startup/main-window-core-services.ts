@@ -123,6 +123,7 @@ export function attachMainWindowCoreServices(
   automations.start()
   attachMainWindowServices(
     window,
+    () => state.mainWindow,
     store,
     runtime,
     prepareCodexRuntimeHomeForLaunch,

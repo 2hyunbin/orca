@@ -5,7 +5,7 @@ import { assertLocalBuildCompatibility } from './local-build-compatibility'
 import { loadLocalBuildCandidate, type LocalBuildCandidate } from './local-build-candidate'
 
 export async function chooseLocalBuild(
-  window: BrowserWindow | null
+  getMainWindow: () => BrowserWindow | null
 ): Promise<LocalBuildCandidate | null> {
   const openDialogOptions: Electron.OpenDialogOptions = {
     title: 'Choose a Local Orca Build',
@@ -13,7 +13,8 @@ export async function chooseLocalBuild(
     properties: ['openFile'],
     filters: [{ name: 'Orca update manifest', extensions: ['yml'] }]
   }
-  const selection = await (window
+  const window = getMainWindow()
+  const selection = await (window && !window.isDestroyed()
     ? dialog.showOpenDialog(window, openDialogOptions)
     : dialog.showOpenDialog(openDialogOptions))
   const manifestPath = selection.filePaths[0]
@@ -44,8 +45,9 @@ export async function chooseLocalBuild(
       cancelId: 1,
       noLink: true
     }
-    const confirmation = await (window
-      ? dialog.showMessageBox(window, messageBoxOptions)
+    const confirmationWindow = getMainWindow()
+    const confirmation = await (confirmationWindow && !confirmationWindow.isDestroyed()
+      ? dialog.showMessageBox(confirmationWindow, messageBoxOptions)
       : dialog.showMessageBox(messageBoxOptions))
     if (confirmation.response === 0) {
       return candidate

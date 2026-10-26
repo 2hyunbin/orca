@@ -30,7 +30,8 @@ describe('updater SQLite downgrade protection', () => {
         appMock.getVersion.mockReturnValue('1.4.221')
         const send = vi.fn()
         const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
-        setupAutoUpdater(updaterMainWindow(send), {
+        const mainWindow = updaterMainWindow(send)
+        setupAutoUpdater(() => mainWindow, {
           getLastUpdateCheckAt: () => Date.now()
         })
         autoUpdaterMock.setFeedURL.mockClear()
@@ -58,7 +59,8 @@ describe('updater SQLite downgrade protection', () => {
       chooseLocalBuildMock.mockResolvedValue({ version: '1.4.213', close })
       const send = vi.fn()
       const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
-      setupAutoUpdater(updaterMainWindow(send), {
+      const mainWindow = updaterMainWindow(send)
+      setupAutoUpdater(() => mainWindow, {
         getLastUpdateCheckAt: () => Date.now()
       })
       checkForUpdatesFromMenu({ localBuild: true })

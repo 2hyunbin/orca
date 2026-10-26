@@ -4,7 +4,7 @@ import type { Store } from '../persistence'
 import type { UpdaterSetupOptions } from '../updater'
 
 const { setupMock } = vi.hoisted(() => ({
-  setupMock: vi.fn<(window: BrowserWindow | null, options?: UpdaterSetupOptions) => void>()
+  setupMock: vi.fn<(getWindow: () => BrowserWindow | null, options?: UpdaterSetupOptions) => void>()
 }))
 
 vi.mock('electron', () => ({ app: {}, ipcMain: {} }))
@@ -32,7 +32,7 @@ describe('setupHeadlessServeAutoUpdater', () => {
   it('initializes the updater without a window, in the serve install mode, after readiness', async () => {
     const { store, persistence } = createStore()
     const beforeQuit = vi.fn()
-    setupHeadlessServeAutoUpdater(persistence, {
+    setupHeadlessServeAutoUpdater(persistence, () => null, {
       onBeforeUpdateQuit: beforeQuit,
       onBeforeUpdateQuitFailure: 'abort',
       updateInstallMode: 'supervised-headless-serve'
@@ -42,7 +42,7 @@ describe('setupHeadlessServeAutoUpdater', () => {
 
     expect(setupMock).toHaveBeenCalledOnce()
     const [window, options] = setupMock.mock.calls[0] ?? []
-    expect(window).toBeNull()
+    expect(window?.()).toBeNull()
     expect(options).toMatchObject({
       installMode: 'supervised-headless-serve',
       onBeforeQuitFailure: 'abort'
@@ -59,7 +59,7 @@ describe('setupHeadlessServeAutoUpdater', () => {
       throw new Error('electron-updater missing')
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-    setupHeadlessServeAutoUpdater(persistence, {})
+    setupHeadlessServeAutoUpdater(persistence, () => null, {})
     await new Promise((resolve) => setImmediate(resolve))
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()

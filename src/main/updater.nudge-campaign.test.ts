@@ -1,3 +1,4 @@
+import { updaterMainWindow } from './updater-test-main-window'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-loader'
 
@@ -31,9 +32,30 @@ describe('updater', () => {
     resetUpdaterMocks()
   })
 
+  it('continues the nudge check after the main window closes', async () => {
+    let closed = false
+    const send = vi.fn()
+    const mainWindow = updaterMainWindow(send, () => closed)
+    let deliverNudge: (nudge: { id: string; minVersion: string }) => void = () => {}
+    fetchNudgeMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deliverNudge = resolve
+        })
+    )
+    shouldApplyNudgeMock.mockReturnValue(true)
+    const updater = await loadUpdaterModule()
+    updater.setupAutoUpdater(() => mainWindow, { getLastUpdateCheckAt: () => Date.now() })
+    closed = true
+    send.mockClear()
+    deliverNudge({ id: 'campaign-closed', minVersion: '1.0.0' })
+    await vi.waitFor(() => expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledOnce())
+    expect(send).not.toHaveBeenCalled()
+  })
+
   it('does not leak a nudge marker into a later ordinary update cycle', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
 
     fetchNudgeMock.mockResolvedValue({ id: 'campaign-1', minVersion: '1.0.0' })
     shouldApplyNudgeMock.mockReturnValue(true)
@@ -45,7 +67,7 @@ describe('updater', () => {
     const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
 
     // Defer startup checks so they cannot block the nudge check.
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now()
     })
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -88,7 +110,7 @@ describe('updater', () => {
 
   it('preserves the pending nudge marker across a later background check', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
 
     autoUpdaterMock.checkForUpdates.mockImplementation(() => {
       autoUpdaterMock.emit('checking-for-update')
@@ -97,7 +119,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => null,
       getPendingUpdateNudgeId: () => 'campaign-1',
       getDismissedUpdateNudgeId: () => null
@@ -119,7 +141,7 @@ describe('updater', () => {
 
   it('does not trigger a nudge check while an updater check is already in progress', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
 
     fetchNudgeMock.mockResolvedValue({ id: 'campaign-1', minVersion: '1.0.0' })
     shouldApplyNudgeMock.mockReturnValue(true)
@@ -130,7 +152,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => null,
       setLastUpdateCheckAt: vi.fn()
     })
@@ -145,7 +167,7 @@ describe('updater', () => {
     vi.setSystemTime(new Date('2026-04-12T12:00:00Z'))
 
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
 
     fetchNudgeMock.mockResolvedValue({ id: 'campaign-1', minVersion: '1.0.0' })
     shouldApplyNudgeMock.mockReturnValue(true)
@@ -153,7 +175,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never)
+    setupAutoUpdater(() => mainWindow as never)
 
     await vi.advanceTimersByTimeAsync(0)
 
@@ -172,7 +194,7 @@ describe('updater', () => {
 
   it('clears pending nudge campaign when the follow-up check ends in not-available', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
     const setPendingUpdateNudgeId = vi.fn()
     const setDismissedUpdateNudgeId = vi.fn()
 
@@ -185,7 +207,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -206,7 +228,7 @@ describe('updater', () => {
   it('clears pending nudge campaign when a silent follow-up check settles not-available', async () => {
     vi.useFakeTimers()
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
     let pendingNudgeId: string | null = null
     const setPendingUpdateNudgeId = vi.fn((id: string | null) => {
       pendingNudgeId = id
@@ -220,7 +242,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => pendingNudgeId,
@@ -243,7 +265,7 @@ describe('updater', () => {
 
   it('auto-dismisses nudge campaign when the follow-up check errors out', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
     const setPendingUpdateNudgeId = vi.fn()
     const setDismissedUpdateNudgeId = vi.fn()
 
@@ -256,7 +278,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -276,7 +298,7 @@ describe('updater', () => {
 
   it('does not preserve a pending nudge for ordinary manifest transition errors', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
     const setPendingUpdateNudgeId = vi.fn()
     const setDismissedUpdateNudgeId = vi.fn()
     const missingManifest = new Error(
@@ -292,7 +314,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => null,
@@ -309,7 +331,7 @@ describe('updater', () => {
 
   it('moves pending nudge to dismissed when dismissNudge is called', async () => {
     const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
+    const mainWindow = updaterMainWindow(sendMock)
     const setPendingUpdateNudgeId = vi.fn()
     const setDismissedUpdateNudgeId = vi.fn()
 
@@ -322,7 +344,7 @@ describe('updater', () => {
 
     const { setupAutoUpdater, dismissNudge } = await loadUpdaterModule()
 
-    setupAutoUpdater(mainWindow as never, {
+    setupAutoUpdater(() => mainWindow as never, {
       getLastUpdateCheckAt: () => Date.now(),
       setPendingUpdateNudgeId,
       getPendingUpdateNudgeId: () => 'campaign-1',
