@@ -4,8 +4,13 @@ import { readString } from '../tool-input-preview'
 
 // Enough for any run of /side chats in one pane; the oldest ended long ago.
 const MAX_FORKS_PER_PANE = 16
-// Codex titles a new thread in a hidden ephemeral one (codex-rs/tui/src/app/thread_title.rs); its hooks run when managed config pins hooks on.
-const CODEX_THREAD_TITLE_PROMPT_PREFIX = 'Generate a concise, single-line task title'
+// Codex's hidden temporary threads (tui/src/temporary_structured_request.rs) run hooks when managed config pins them on.
+const CODEX_HIDDEN_THREAD_PROMPT_PREFIXES = [
+  // tui/src/app/thread_title.rs
+  'Generate a concise, single-line task title',
+  // context-fragments/src/recap_prompt.rs
+  'Write a brief catch-up for a user returning to this task.'
+]
 
 // A /side thread shares the pane/process but cannot change its status; identify it from SessionStart or the persisted pane thread.
 // Persisted identity survives restart and does not depend on parsed rollout availability.
@@ -36,7 +41,7 @@ export function codexHookEventForEphemeralThread(
     return recordFork()
   }
   const row = state.lastStatusByPaneKey.get(paneKey)
-  // Codex's hidden title thread starts like a new conversation; only its prompt tells them apart.
+  // Codex's hidden threads start like a new conversation; only their prompt tells them apart.
   if (source === 'startup' && rowHoldsOtherCodexThread(row, sessionId)) {
     state.codexHeldEphemeralStartByPaneKey.set(paneKey, sessionId)
     return undefined
@@ -48,7 +53,9 @@ export function codexHookEventForEphemeralThread(
     state.codexHeldEphemeralStartByPaneKey.delete(paneKey)
     const prompt = readString(hookPayload, 'prompt')
     // Replay the held start so every receiver lets the new conversation take the pane.
-    return prompt?.startsWith(CODEX_THREAD_TITLE_PROMPT_PREFIX) ? recordFork() : 'SessionStart'
+    return CODEX_HIDDEN_THREAD_PROMPT_PREFIXES.some((prefix) => prompt?.startsWith(prefix))
+      ? recordFork()
+      : 'SessionStart'
   }
   if (source === 'startup' || source === 'clear') {
     return eventName
