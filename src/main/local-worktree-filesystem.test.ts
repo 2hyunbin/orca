@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { runProcessMock, lstatMock, readFileMock, rmMock, readdirMock, rmdirMock } = vi.hoisted(
-  () => ({
-    runProcessMock: vi.fn(),
-    lstatMock: vi.fn(),
-    readFileMock: vi.fn(),
-    rmMock: vi.fn(),
-    readdirMock: vi.fn(),
-    rmdirMock: vi.fn()
-  })
-)
+const { runProcessMock, lstatMock, readFileMock, rmMock } = vi.hoisted(() => ({
+  runProcessMock: vi.fn(),
+  lstatMock: vi.fn(),
+  readFileMock: vi.fn(),
+  rmMock: vi.fn()
+}))
 
 // Process-host tests own encoding, timeouts, and console hiding; assert guest commands here.
 vi.mock('@orca/process-host', () => ({
@@ -19,9 +15,7 @@ vi.mock('@orca/process-host', () => ({
 vi.mock('node:fs/promises', () => ({
   lstat: lstatMock,
   readFile: readFileMock,
-  rm: rmMock,
-  readdir: readdirMock,
-  rmdir: rmdirMock
+  rm: rmMock
 }))
 
 import {
@@ -62,8 +56,6 @@ describe('local worktree filesystem runtime access', () => {
     lstatMock.mockReset()
     readFileMock.mockReset()
     rmMock.mockReset()
-    readdirMock.mockReset()
-    rmdirMock.mockReset()
     completeExecFile()
   })
 
@@ -73,34 +65,34 @@ describe('local worktree filesystem runtime access', () => {
   })
 
   it('uses host filesystem operations when no WSL distro is selected', async () => {
-    await withPlatform('linux', async () => {
-      lstatMock.mockResolvedValue({ type: 'file' })
-      readFileMock.mockResolvedValue('gitdir: ../.git/worktrees/feature')
+    lstatMock.mockResolvedValue({ type: 'file' })
+    readFileMock.mockResolvedValue('gitdir: ../.git/worktrees/feature')
 
-      const access = getLocalWorktreePathAccess()
-      await access.statPath('/repo/.git')
-      await access.readPath('/repo/.git')
-      await removeLocalWorktreePath('/repo/feature')
+    const access = getLocalWorktreePathAccess()
+    await access.statPath('C:\\repo\\.git')
+    await access.readPath('C:\\repo\\.git')
+    await removeLocalWorktreePath('C:\\repo\\feature')
 
-      expect(lstatMock).toHaveBeenCalledWith('/repo/.git')
-      expect(readFileMock).toHaveBeenCalledWith('/repo/.git', 'utf8')
-      expect(rmMock).toHaveBeenCalledWith(
-        '/repo/feature',
-        expect.objectContaining({ recursive: true, force: true })
-      )
-      expect(runProcessMock).not.toHaveBeenCalled()
-    })
+    expect(lstatMock).toHaveBeenCalledWith('C:\\repo\\.git')
+    expect(readFileMock).toHaveBeenCalledWith('C:\\repo\\.git', 'utf8')
+    expect(rmMock).toHaveBeenCalledWith(
+      toHostRemovalPath('C:\\repo\\feature'),
+      expect.objectContaining({
+        recursive: true,
+        force: true
+      })
+    )
+    expect(runProcessMock).not.toHaveBeenCalled()
   })
 
   it('uses a Win32 long-path namespace for host removal on Windows', async () => {
     await withPlatform('win32', async () => {
       const longPath = `C:\\repo\\${'nested\\'.repeat(40)}feature`
-      lstatMock.mockRejectedValue(Object.assign(new Error('missing'), { code: 'ENOENT' }))
 
       await removeLocalWorktreePath(longPath)
 
       expect(toHostRemovalPath(longPath)).toBe(`\\\\?\\${longPath}`)
-      expect(lstatMock).toHaveBeenCalledWith(`\\\\?\\${longPath}`)
+      expect(rmMock).toHaveBeenCalledWith(`\\\\?\\${longPath}`, { recursive: true, force: true })
     })
   })
 
@@ -125,21 +117,44 @@ describe('local worktree filesystem runtime access', () => {
     })
   })
 
-  it('retries transient host removal failures on Windows', async () => {
+  it('retries a transient Windows lock as a whole pass, never per entry', async () => {
     vi.useFakeTimers()
     await withPlatform('win32', async () => {
       const error = Object.assign(new Error('Directory not empty'), { code: 'ENOTEMPTY' })
-      lstatMock.mockResolvedValue({ isDirectory: () => true })
-      readdirMock.mockResolvedValue([])
-      rmdirMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined)
+      rmMock.mockRejectedValueOnce(error).mockResolvedValueOnce(undefined)
 
       const removal = removeLocalWorktreePath('C:\\repo\\feature')
       await vi.advanceTimersByTimeAsync(250)
 
       await expect(removal).resolves.toBeUndefined()
-      expect(rmdirMock).toHaveBeenCalledTimes(2)
-      expect(rmdirMock).toHaveBeenLastCalledWith(toHostRemovalPath('C:\\repo\\feature'))
-      expect(rmMock).not.toHaveBeenCalled()
+      // Async rm's maxRetries multiplies per directory level when a file stays open.
+      expect(rmMock.mock.calls).toEqual([
+        [toHostRemovalPath('C:\\repo\\feature'), { recursive: true, force: true }],
+        [toHostRemovalPath('C:\\repo\\feature'), { recursive: true, force: true }]
+      ])
+    })
+  })
+
+  it('names the file another program holds open once the retries run out', async () => {
+    vi.useFakeTimers()
+    await withPlatform('win32', async () => {
+      const held = toHostRemovalPath('C:\\repo\\feature\\profile\\lockfile')
+      rmMock.mockRejectedValue(
+        Object.assign(new Error(`EBUSY: resource busy or locked, unlink '${held}'`), {
+          code: 'EBUSY',
+          path: held
+        })
+      )
+
+      const removal = removeLocalWorktreePath('C:\\repo\\feature').catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(3_750)
+
+      expect(await removal).toMatchObject({
+        code: 'EBUSY',
+        message:
+          'C:\\repo\\feature\\profile\\lockfile is open in another program. Close that program and delete again.'
+      })
+      expect(rmMock).toHaveBeenCalledTimes(5)
     })
   })
 

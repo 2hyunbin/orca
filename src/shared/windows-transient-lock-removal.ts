@@ -2,11 +2,12 @@
 
 import type { RmOptions } from 'node:fs'
 import { rmSync } from 'node:fs'
-import * as fs from 'node:fs/promises'
-import { removeTreeWithBoundedRetries } from './bounded-tree-removal'
+import { rm as nodeRm } from 'node:fs/promises'
+import { setTimeout as delay } from 'node:timers/promises'
 
 export const WINDOWS_RM_MAX_RETRIES = 8
 export const WINDOWS_RM_RETRY_DELAY_MS = 150
+const WINDOWS_REMOVE_PASS_DELAYS_MS = [250, 500, 1_000, 2_000]
 
 /** For `rmSync` only: its native retry loop is top-level, but async `rm` retries per entry and multiplies. */
 export function transientLockRemovalOptions(): RmOptions {
@@ -52,16 +53,28 @@ export function removeTreeSync(targetPath: string): void {
   }
 }
 
-export async function removeTree(targetPath: string): Promise<void> {
-  if (process.platform !== 'win32') {
-    await fs.rm(targetPath, { recursive: true, force: true })
-    return
+type AsyncRm = (path: string, options: RmOptions) => Promise<void>
+
+/** Recursive async delete; a transient Windows lock repeats the whole pass from one bounded budget. */
+export async function removeTree(
+  targetPath: string,
+  options: { rm?: AsyncRm; signal?: AbortSignal } = {}
+): Promise<void> {
+  const rm = options.rm ?? nodeRm
+  const passDelays = process.platform === 'win32' ? WINDOWS_REMOVE_PASS_DELAYS_MS : []
+  for (let attempt = 0; ; attempt += 1) {
+    options.signal?.throwIfAborted()
+    try {
+      // Never `maxRetries` here: async rm retries each nested entry and never stops siblings,
+      // so one held-open file multiplies the work at every directory level.
+      await rm(targetPath, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (attempt >= passDelays.length || !isTransientWindowsLockError(error)) {
+        throw error
+      }
+    }
+    // A pass in flight cannot be cancelled; abort is honored between passes.
+    await delay(passDelays[attempt], undefined, { signal: options.signal })
   }
-  await removeTreeWithBoundedRetries(targetPath, fs, {
-    // Linear backoff, matching the total wait Node's `maxRetries` allowed each entry.
-    retryDelaysMs: Array.from(
-      { length: WINDOWS_RM_MAX_RETRIES },
-      (_, index) => (index + 1) * WINDOWS_RM_RETRY_DELAY_MS
-    )
-  })
 }

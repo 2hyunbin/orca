@@ -32,7 +32,7 @@ export async function withFileTransactionLock<T>(
     const result = await apply()
     if (compromised) {
       throw new Error(
-        `Lost the lock on ${filePath} during the transaction; another process may have changed it: ${compromised.message}`,
+        `Lost the lock on ${filePath} during the transaction; this change may or may not be saved, and another process may have changed the file.`,
         { cause: compromised }
       )
     }

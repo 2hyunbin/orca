@@ -258,7 +258,6 @@ export function worktreeCreateUnattributedMs(timing: {
 
 export type WorktreeRemoveStage =
   | 'archive_hook'
-  | 'background'
   | 'cache_invalidation'
   | 'git_remove'
   | 'metadata_purge'
