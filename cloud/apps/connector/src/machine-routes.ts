@@ -16,6 +16,7 @@ import type { ConnectorInbox, Unsettled } from './connector-inbox.js'
 import type { ConnectorThreads } from './connector-threads.js'
 import type { InboxWaker } from './inbox-waker.js'
 import type { MachineEnv } from './machine-auth.js'
+import type { SlackEdge } from './slack-edge.js'
 
 class TokenExpiredDuringPoll extends Error {}
 
@@ -31,9 +32,10 @@ export function registerMachineRoutes(
     now: () => number
     holdMs: number
     limitBody: MiddlewareHandler
+    slack?: Pick<SlackEdge, 'onEvents' | 'onAcks'>
   }
 ): void {
-  const { database, inbox, threads, hosts, waker, now, holdMs, limitBody } = deps
+  const { database, inbox, threads, hosts, waker, now, holdMs, limitBody, slack } = deps
 
   // Acks and events apply only under the current hello. Any other is refused with hello_required, so a
   // 204 always means applied: the machine keeps what was refused and sends it again after a new hello.
@@ -143,9 +145,14 @@ export function registerMachineRoutes(
     if (!body.success) {
       return context.json({ error: 'invalid_request' }, 400)
     }
-    return await onCurrentHello(context, body.data.helloRev, (transaction, hostId) =>
-      inbox.acknowledge(transaction, hostId, body.data.acks)
-    )
+    return await onCurrentHello(context, body.data.helloRev, async (transaction, hostId) => {
+      await inbox.acknowledge(transaction, hostId, body.data.acks)
+      await slack?.onAcks(
+        transaction,
+        hostId,
+        body.data.acks.map((ack) => ack.deliveryId)
+      )
+    })
   })
 
   app.post(CONNECTOR_PATHS.events, limitBody, async (context) => {
@@ -156,6 +163,7 @@ export function registerMachineRoutes(
     return await onCurrentHello(context, body.data.helloRev, async (transaction, hostId) => {
       if (await hosts.advanceEventsSeq(transaction, hostId, body.data.seq)) {
         await threads.applyEvents(transaction, hostId, body.data.events)
+        await slack?.onEvents(transaction, hostId, body.data.events)
       }
     })
   })
