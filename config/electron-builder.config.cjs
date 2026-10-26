@@ -112,6 +112,11 @@ const skillFreshnessResources = {
   from: 'resources/skills',
   to: 'skills'
 }
+// The bundled agent-browser binary finds its version-matched catalog via the nearest skills/ above it (Resources/).
+const agentBrowserSkillResources = [
+  { from: 'node_modules/agent-browser/skills/agent-browser', to: 'skills/agent-browser' },
+  { from: 'node_modules/agent-browser/skill-data', to: 'skill-data' }
+]
 // Native agents load plugins by path and cannot read inside app.asar.
 const nativeChatVisualsResource = {
   from: 'resources/native-chat-visuals',
@@ -140,6 +145,7 @@ const commonExtraResources = [
   ...bundledRipgrepExtraResources,
   bundledPluginResources,
   skillFreshnessResources,
+  ...agentBrowserSkillResources,
   nativeChatVisualsResource,
   emojiShortcodeDatasetResource
 ]
@@ -473,6 +479,11 @@ module.exports = {
         'orca-keyboard-layout',
         context.packager
       )
+      await signMacStandaloneHelper(
+        join(resourcesDir, '..', 'MacOS', 'orca-process-footprint'),
+        'orca-process-footprint',
+        context.packager
+      )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
     }
   },
@@ -587,6 +598,10 @@ module.exports = {
       {
         from: 'native/keyboard-layout-macos/.build/release/orca-keyboard-layout',
         to: 'MacOS/orca-keyboard-layout'
+      },
+      {
+        from: 'native/process-footprint-macos/.build/release/orca-process-footprint',
+        to: 'MacOS/orca-process-footprint'
       }
     ],
     target: [
