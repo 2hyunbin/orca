@@ -49,7 +49,7 @@ export function SourceControlActionArguments({
   return (
     <>
       {agent ? (
-        <div className="min-w-0 flex-1 basis-48">
+        <div className="min-w-0 flex-1 basis-48 max-w-sm">
           <AgentPermissionMenu
             agentId={agent}
             label={label}

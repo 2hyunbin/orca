@@ -25,7 +25,6 @@ import {
   getSourceControlAgentArgsPlaceholder
 } from './source-control-action-recipe-options'
 import { translate } from '@/i18n/i18n'
-import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
 import { SourceControlActionOptionField } from './SourceControlActionOptionField'
 import { useSourceControlActionAgent } from './use-source-control-action-agent'
 import { shouldShowSourceControlActionArguments } from './source-control-action-arguments-visibility'
@@ -168,15 +167,6 @@ export function SourceControlActionRecipeRow<ActionId extends AiActionId>({
       <div className="mt-3 grid min-w-0 grid-cols-1 items-start gap-3">
         {isLaunchAction ? (
           <div className="flex min-w-0 flex-wrap items-start gap-3">
-            {onLaunchPreferencesChange ? (
-              <SourceControlActionModelPicker
-                layout="contents"
-                agent={pickerAgent}
-                value={launchPreferences}
-                disabled={actual.status === 'pending'}
-                onChange={(value) => onLaunchPreferencesChange(actionId, value)}
-              />
-            ) : null}
             <SourceControlActionArguments
               showArguments={showArguments}
               agent={pickerAgent}

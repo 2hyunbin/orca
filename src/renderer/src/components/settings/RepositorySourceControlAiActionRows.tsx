@@ -42,7 +42,6 @@ import {
 import { hasOwnActionOverride } from './repository-source-control-ai-draft'
 import { getRepositorySourceControlAiActionRecipeSectionId } from './repository-settings-targets'
 import { translate } from '@/i18n/i18n'
-import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
 import { SourceControlActionOptionField } from './SourceControlActionOptionField'
 import {
   useSourceControlActionAgentInventory,
@@ -256,14 +255,6 @@ export function RepositorySourceControlAiActionRows({
                   <p className="text-[11px] text-destructive">{agentWarningText}</p>
                 ) : agentSupportText ? (
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
-                ) : null}
-                {isLaunchAction ? (
-                  <SourceControlActionModelPicker
-                    agent={pickerAgent}
-                    value={recipe.launchPreferences}
-                    disabled={!hasOverride || actual.status === 'pending'}
-                    onChange={(value) => onActionLaunchPreferencesChange(actionId, value)}
-                  />
                 ) : null}
                 {isLaunchAction ? (
                   <SourceControlActionArguments

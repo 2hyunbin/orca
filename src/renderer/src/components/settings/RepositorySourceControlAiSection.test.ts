@@ -124,12 +124,10 @@ describe('RepositorySourceControlAiActionRows', () => {
       expect(ensure).toHaveBeenCalledTimes(2)
       expect(detectAgents).toHaveBeenCalledTimes(1)
       for (const card of cards) {
-        expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
+        expect(card.textContent).not.toContain('Model')
         expect(card.textContent).toContain('Permissions')
         expect(card.textContent).toContain('Ask')
-        if (agent === 'codex') {
-          expect(card.textContent).toContain('saved')
-        }
+        expect(card.querySelector('button[aria-label="saved"]')).toBeNull()
         const controls = Array.from(
           card.querySelectorAll<HTMLButtonElement>(
             'button[role="combobox"].min-w-0, button[aria-haspopup="menu"]'
@@ -150,7 +148,8 @@ describe('RepositorySourceControlAiActionRows', () => {
         )
         expect(controls.length).toBeGreaterThan(0)
         expect(controls.every((control) => !control.disabled)).toBe(true)
-        expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
+        expect(card.textContent).not.toContain('Model')
+        expect(card.textContent).not.toContain('Effort')
         expect(card.textContent).toContain('Permissions')
         expect(card.textContent).toContain('Arguments')
         expect(

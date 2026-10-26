@@ -88,7 +88,7 @@ it('hides an unresolved launch even with chat off, but always shows text action 
   expect(screen.getByDisplayValue('--saved')).toBeDefined()
 })
 
-it('keeps the draft, chip and picked model/options across hiding and showing Arguments', () => {
+it('keeps the draft and chip while Model/Effort controls stay hidden', () => {
   configure({ experimentalNativeChat: false })
   render(<Row />)
   fireEvent.change(screen.getByRole('textbox', { name: 'Arguments' }), {
@@ -107,8 +107,8 @@ it('keeps the draft, chip and picked model/options across hiding and showing Arg
   expect(
     screen.getByRole('button', { name: /Remove --dangerously-skip-permissions/ })
   ).toBeDefined()
-  expect(screen.getByRole('combobox', { name: 'Sonnet' }).getAttribute('data-size')).toBe('sm')
-  expect(screen.getByRole('combobox', { name: 'High' }).getAttribute('data-size')).toBe('sm')
+  expect(screen.queryByRole('combobox', { name: 'Sonnet' })).toBeNull()
+  expect(screen.queryByRole('combobox', { name: 'High' })).toBeNull()
   expect(unused).not.toHaveBeenCalled()
 })
 
