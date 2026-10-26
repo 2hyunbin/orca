@@ -74,6 +74,7 @@ import { agentSessionOperationOutcomeReceipt } from './agent-session-operation-r
 import { loadAgentSessionStoreRows } from './agent-session-record-rows'
 import { AgentSessionStoreTransactions } from './agent-session-store-transactions'
 import { createAgentSessionFoundingStore } from './agent-session-founding-store'
+import { transactAgentSessionRecords } from './agent-session-record-transaction'
 import {
   compareAndSetAgentSessionRecordName,
   type CompareAndSetConversationName,
@@ -106,6 +107,8 @@ export class AgentSessionRecordStore {
     return new AgentSessionRecordStore(transactions, args.hostId)
   }
 
+  mailLineageScope = (sessionId: string) => this.transactions.mailLineageScope(sessionId)
+
   private get state(): AgentSessionStoreState {
     return this.transactions.state
   }
@@ -120,6 +123,10 @@ export class AgentSessionRecordStore {
 
   getRecord = (sessionId: string): AgentSessionRecord | null =>
     this.state.records.get(sessionId) ?? null
+
+  get lineageRevision(): number {
+    return this.transactions.lineageRevision
+  }
 
   get recordsRevision(): number {
     return this.transactions.recordsRevision
@@ -191,9 +198,16 @@ export class AgentSessionRecordStore {
   isClaimKeyVerifiable = (keyId: string, now: number): boolean =>
     isAgentSessionClaimKeyVerifiable(this.state, keyId, now)
 
-  reserveOwner = (request: AgentSessionReserveRequest): Promise<AgentSessionReserveResult> =>
-    this.transact((draft) =>
-      commitAgentSessionReservation(draft, request, AGENT_SESSION_LEASE_TTL_MS)
+  reserveOwner = (
+    request: AgentSessionReserveRequest,
+    newRoot?: true
+  ): Promise<AgentSessionReserveResult> =>
+    this.transact(
+      (draft) => commitAgentSessionReservation(draft, request, AGENT_SESSION_LEASE_TTL_MS),
+      undefined,
+      newRoot && !request.adoptedHandleLink
+        ? { sessionId: request.sessionId, created: (result) => result.disposition === 'created' }
+        : undefined
     )
 
   readonly founding: ReturnType<typeof createAgentSessionFoundingStore>
@@ -357,34 +371,17 @@ export class AgentSessionRecordStore {
     return () => this.firstRecordListeners.delete(listener)
   }
 
-  /** Serializes every mutation. `apply` changes only the draft it is given; readers see the change
-   *  once its rows have committed. */
-  private transact = async <T>(
+  private transact = <T>(
     apply: (draft: AgentSessionStoreState) => T,
-    options?: { inMemoryWhenReadOnly?: boolean }
-  ): Promise<T> => {
-    let proven: string[] = []
-    let heldBefore = true
-    const result = await this.transactions.transact((draft) => {
-      heldBefore = this.holdsRecords()
-      if (this.deathEvidenceListeners.size === 0) {
-        return apply(draft)
-      }
-      const before = new Map(
-        [...draft.records].map(([id, record]) => [id, record.lease.deathEvidence])
-      )
-      const applied = apply(draft)
-      proven = [...draft.records]
-        .filter(([id, { lease }]) => lease.deathEvidence && lease.deathEvidence !== before.get(id))
-        .map(([id]) => id)
-      return applied
-    }, options)
-    for (const sessionId of proven) {
-      this.deathEvidenceListeners.forEach((listener) => listener(sessionId))
-    }
-    if (!heldBefore && this.holdsRecords()) {
-      this.firstRecordListeners.forEach((listener) => listener())
-    }
-    return result
-  }
+    options?: { inMemoryWhenReadOnly?: boolean },
+    freshRoot?: { sessionId: string; created: (result: T) => boolean }
+  ): Promise<T> =>
+    transactAgentSessionRecords(
+      this.transactions,
+      this.deathEvidenceListeners,
+      this.firstRecordListeners,
+      apply,
+      options,
+      freshRoot
+    )
 }

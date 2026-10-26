@@ -18,7 +18,6 @@ export function createAgentSessionFoundingStore(
   const prepareReceipt = (request: AgentSessionReserveRequest, rejectReplay: boolean) => {
     let result: AgentSessionReserveResult | undefined
     let heldBefore = true
-    let database: Parameters<JournalOperationReceipt['write']>[0] | undefined
     const recordReceipt = transactions.receipt((draft) => {
       heldBefore = draft.records.size > 0 || draft.unreadableRecords.size > 0
       result = commitAgentSessionFounding(draft, request)
@@ -28,19 +27,15 @@ export function createAgentSessionFoundingStore(
         })
       }
     })
+    const witness = freshAgentSessionMailReceipt(
+      recordReceipt,
+      request.sessionId,
+      () => result?.disposition === 'created' && !request.adoptedHandleLink
+    )
     const receipt: JournalOperationReceipt = {
-      write: (db, row) => {
-        recordReceipt.write(db, row)
-        if (result?.disposition === 'created' && !request.adoptedHandleLink) {
-          writeMailHold(db, request.sessionId, { version: 1, status: 'released' }, true)
-          database = db
-        }
-      },
+      ...witness,
       committed: () => {
-        if (database) {
-          mailHoldsCommitted(database)
-        }
-        recordReceipt.committed()
+        witness.committed()
         if (!heldBefore) {
           firstRecordListeners.forEach((listener) => listener())
         }
@@ -66,5 +61,29 @@ export function createAgentSessionFoundingStore(
     },
     receipt: (request: AgentSessionReserveRequest): JournalOperationReceipt =>
       prepareReceipt(request, true).receipt
+  }
+}
+
+export function freshAgentSessionMailReceipt(
+  receipt: JournalOperationReceipt,
+  sessionId: string,
+  created: () => boolean
+): JournalOperationReceipt {
+  let database: Parameters<JournalOperationReceipt['write']>[0] | undefined
+  return {
+    ...receipt,
+    write: (db, row) => {
+      receipt.write(db, row)
+      if (created()) {
+        writeMailHold(db, sessionId, { version: 1, status: 'released' }, true)
+        database = db
+      }
+    },
+    committed: () => {
+      receipt.committed()
+      if (database) {
+        mailHoldsCommitted(database, sessionId)
+      }
+    }
   }
 }

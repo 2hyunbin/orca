@@ -1,5 +1,5 @@
 import { selectTerminalMailHandoff, terminalMailHandoffCanSubmit } from './terminal-mail-settlement'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { OrchestrationDb } from './db'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
@@ -148,7 +148,6 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
     epoch: 'destination-epoch',
     frontier: 'new-host',
     mailHold: { members: new Set(), ambiguous: false, key: 'released' },
-    stopInForce: false,
     submission: undefined,
     owner: null,
     personStopped: false,
@@ -162,7 +161,7 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
     frontier: 'new-host',
     waiters: undefined,
     reservedTypes: undefined,
-    readEvidence: async (reference) =>
+    readEvidence: (reference) =>
       reference.clientMessageId === 'original-failed-notice'
         ? {
             ...evidence,
@@ -199,53 +198,138 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
   expect(readMailHandoff(db.getMessageById(message.id)?.handoff)).toEqual(selected?.reference)
 })
 
-it('holds reserved A and unreserved B, admits fresh C, and releases without spending recovery', async () => {
+it('claims the whole cohort atomically without taking ownership of an outer transaction', () => {
   const db = database()
-  const old = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'old' })
+  db.insertMessage({ from: 'sender', to: 'consumer', subject: 'first' })
   const evidence: StructuredMailEvidence = {
     epoch: 'epoch',
     frontier: JSON.stringify(['host', null, 1]),
     mailHold: { members: new Set(), ambiguous: false, key: 'released' },
-    stopInForce: false,
     submission: undefined,
     owner: null,
     personStopped: false,
     diedTurnId: null
   }
-  const select = () =>
-    selectStructuredMailHandoff({
-      db,
-      mailbox: 'consumer',
-      sessionId: 'session',
-      epoch: evidence.epoch,
-      frontier: evidence.frontier,
-      waiters: undefined,
-      reservedTypes: undefined,
-      readEvidence: async () => evidence,
-      limit: 1
-    })
-  const held = await select()
-  if (!held) {
-    throw new Error('Missing held reservation')
+  const unreserved = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'companion' })
+  const batch = selectStructuredMailHandoff({
+    db,
+    mailbox: 'consumer',
+    sessionId: 'session',
+    epoch: evidence.epoch,
+    frontier: evidence.frontier,
+    waiters: undefined,
+    reservedTypes: undefined,
+    readEvidence: () => evidence,
+    limit: 2
+  })
+  if (!batch) {
+    throw new Error('missing cohort')
   }
-  const unreserved = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'unreserved B' })
-  evidence.mailHold = { members: new Set([old.id, unreserved.id]), ambiguous: false, key: 'stop' }
-  evidence.stopInForce = true
-  evidence.frontier = JSON.stringify(['restarted-host', null, 1])
-  expect(await select()).toBeNull()
-  expect(structuredMailMaySubmit(held.reference, () => evidence, [old.id])).toBe(false)
-  const fresh = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'fresh' })
-  const next = await select()
-  expect(next?.messages.map((m) => m.id)).toEqual([fresh.id])
-  expect(structuredMailMaySubmit(next!.reference, () => evidence)).toBe(true)
-  expect((await select())?.reference).toEqual(next?.reference)
-  db.markAsRead([fresh.id])
-  evidence.stopInForce = false
-  evidence.frontier = JSON.stringify(['restarted-host', null, 1])
-  evidence.mailHold = { members: new Set(), ambiguous: false, key: 'person-release' }
-  const resumed = await select()
-  expect(resumed?.messages.map((m) => m.id)).toEqual([old.id])
-  expect(resumed?.reference.authorizationId).toBe(held.reference.authorizationId)
-  expect(resumed?.reference.operationId).toBe(held.reference.operationId)
-  expect(db.getMessageById(old.id)?.recovery_used).toBe(0)
+  const { nonAdmission: _held, ...issued } = batch.reference
+  const claim = () => db.claimMailHandoff(() => ({ address: 'consumer', batch }))
+  db.db.exec('BEGIN IMMEDIATE')
+  expect(claim()).toBeNull()
+  expect(db.db.isTransaction).toBe(true)
+  db.db.exec('ROLLBACK')
+  db.db.exec(
+    `CREATE TRIGGER partial_claim BEFORE UPDATE ON messages WHEN OLD.id = '${unreserved.id}' BEGIN SELECT RAISE(IGNORE); END`
+  )
+  expect(claim).toThrow('mail claim lost')
+  expect(batch.messages.map((row) => db.getMessageById(row.id)?.handoff)).toEqual(
+    batch.messages.map((row) => row.handoff)
+  )
+  expect(db.db.isTransaction).toBe(false)
+  db.db.exec('DROP TRIGGER partial_claim')
+  expect(claim()).toMatchObject({ address: 'consumer' })
+  expect(
+    batch.messages.every((row) => db.getMessageById(row.id)?.handoff === JSON.stringify(issued))
+  ).toBe(true)
 })
+
+it.each([100, 1000])(
+  'uses canonical indexed source/address debt at %i unrelated issued/held rows, including legacy contracts',
+  (count) => {
+    const db = database()
+    const reference = (sessionId: string, mailbox: string, id: string, held = false) =>
+      JSON.stringify({
+        version: 1,
+        kind: 'structured',
+        sessionId,
+        epoch: 'epoch',
+        frontier: 'frontier',
+        operationId: id,
+        authorizationId: id,
+        clientMessageId: id,
+        phase: 'reserved',
+        authority: mailbox,
+        ...(held ? { nonAdmission: 'held' } : {})
+      })
+    const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
+    for (let index = 0; index < count; index++) {
+      for (const held of [true, false]) {
+        const row = db.insertMessage({ from: 'sender', to: 'other', subject: String(index) })
+        update.run(reference('other-session', row.to_handle, row.id, held), row.id)
+      }
+    }
+    const malformed = db.insertMessage({ from: 'sender', to: 'mine', subject: 'malformed' })
+    update.run('{bad json', malformed.id)
+    db.db.exec('DROP INDEX idx_messages_issued_session; DROP INDEX idx_messages_issued_address')
+    db.createMailboxDeliveryIndexesIfPossible() // Actual one-time construction over the populated corpus.
+    expect(db.getIssuedSessionMail(['session'], ['mine'])).toEqual([])
+    const owned = []
+    for (let index = 0; index < count; index++) {
+      const row = db.insertMessage({
+        from: 'sender',
+        to: index % 2 ? 'mine' : 'former-address',
+        subject: 'own'
+      })
+      update.run(reference('session', row.to_handle, row.id), row.id)
+      owned.push(row.id)
+    }
+    db.db
+      .prepare("UPDATE messages SET delivery_contract = 'legacy_direct' WHERE id = ?")
+      .run(owned[0])
+    const calls: {
+      sql: string
+      args: Parameters<ReturnType<typeof db.db.prepare>['all']>
+      rows: number
+    }[] = []
+    const prepare = db.db.prepare.bind(db.db)
+    const trace = vi.spyOn(db.db, 'prepare').mockImplementation((sql) => {
+      const statement = prepare(sql)
+      if (sql.includes('INDEXED BY idx_messages_issued_')) {
+        const all = statement.all.bind(statement)
+        vi.spyOn(statement, 'all').mockImplementation((...args) => {
+          const rows = all(...args)
+          calls.push({ sql, args, rows: rows.length })
+          return rows
+        })
+      }
+      return statement
+    })
+    expect(
+      db
+        .getIssuedSessionMail(['session'], ['mine'])
+        .map((row) => row.id)
+        .sort()
+    ).toEqual(owned.sort())
+    trace.mockRestore()
+    expect(calls).toHaveLength(2)
+    for (const { sql, args, rows } of calls) {
+      expect(rows).toBeLessThanOrEqual(count)
+      expect(
+        prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .all(...args)
+          .map((row) => row.detail)
+          .join(' ')
+      ).toContain('SEARCH messages USING INDEX idx_messages_issued_')
+      const opcodes = prepare(`EXPLAIN ${sql}`)
+        .all(...args)
+        .map((row) => row.opcode)
+      expect(opcodes).toContain('SeekGE')
+      expect(opcodes).not.toContain('Rewind')
+    }
+    db.markAsRead(owned)
+    expect(db.getIssuedSessionMail(['session'], ['mine'])).toEqual([])
+  }
+)

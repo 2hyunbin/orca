@@ -1,3 +1,4 @@
+import { structuredSessionDebtAddresses } from './structured-session-mail-target'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type { CommandReceiptRead } from '../../native-chat/agent-session-journal/command-receipt-table'
 import type { OrchestrationDb } from './db'
@@ -52,10 +53,11 @@ export type StructuredMailboxPointerHost = {
   currentContextClearOperationId: (sessionId: string) => string | undefined
 }
 
-type ParkedDelivery = {
-  sessionId: string
-  key?: string
-  db?: OrchestrationDb
+export type SessionMailInterest = {
+  db: OrchestrationDb
+  inFlight: boolean
+  parked: Map<string, { key?: string }>
+  pending: Map<string, boolean>
 }
 type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageWaiter> = {
   getDb: () => OrchestrationDb | null
@@ -75,16 +77,19 @@ type StructuredPointerDeliveryDependencies<TWaiter extends OrchestrationMessageW
 export abstract class StructuredMailboxPointerAdmission<
   TWaiter extends OrchestrationMessageWaiter
 > {
-  protected readonly inFlight = new Set<string>()
-  protected readonly parkedUntilJournalEdge = new Map<string, ParkedDelivery>()
-  protected readonly issued = new Map<
-    string,
-    { db: OrchestrationDb; mailbox: string; sessionId: string }
-  >()
-  protected readonly explicitDuringFlight = new Set<string>()
-  protected readonly changedDuringFlight = new Set<string>()
-
+  protected readonly interests = new Map<string, SessionMailInterest>()
   constructor(protected readonly deps: StructuredPointerDeliveryDependencies<TWaiter>) {}
+
+  resetForDatabaseChange(): void {
+    this.interests.clear()
+  }
+  forgetSession(sessionId: string): void {
+    this.interests.delete(sessionId)
+  }
+
+  protected currentInterest(sessionId: string, interest: SessionMailInterest): boolean {
+    return this.interests.get(sessionId) === interest && this.deps.getDb() === interest.db
+  }
 
   deliverForHandle(mailboxHandle: string, reservedTypes?: ReadonlySet<string>): boolean {
     return this.offer(mailboxHandle, reservedTypes, true)
@@ -96,43 +101,43 @@ export abstract class StructuredMailboxPointerAdmission<
     explicit: boolean
   ): boolean {
     const target = this.deps.resolveStructuredTarget(mailboxHandle)
-    if (!target) {
+    const db = this.deps.getDb()
+    if (!target || !db) {
       return false
     }
-    if (this.inFlight.has(target.sessionId)) {
-      if (explicit) {
-        this.changedDuringFlight.add(mailboxHandle)
-        this.explicitDuringFlight.add(mailboxHandle)
-      }
+    let interest = this.interests.get(target.sessionId)
+    if (!interest || interest.db !== db) {
+      interest = { db, inFlight: false, parked: new Map(), pending: new Map() }
+      this.interests.set(target.sessionId, interest)
+    }
+    if (interest.inFlight) {
+      interest.pending.set(mailboxHandle, explicit || interest.pending.get(mailboxHandle) === true)
       return true
     }
-    const parked = this.parkedUntilJournalEdge.get(mailboxHandle)
-    const db = this.deps.getDb()
     const unchanged =
       !explicit &&
-      db &&
-      parked?.db === db &&
-      parked.key === this.admissionKey(db, mailboxHandle, target.sessionId)
-    if (
-      unchanged &&
-      ![...this.issued.values()].some(
-        (debt) => debt.sessionId === target.sessionId && debt.db === db
-      )
-    ) {
-      return true
-    }
-    void this.deliver(mailboxHandle, target, reservedTypes, Boolean(unchanged)).catch(
+      interest.parked.get(mailboxHandle)?.key ===
+        this.admissionKey(db, mailboxHandle, target.sessionId)
+    interest.inFlight = true
+    void this.deliver(mailboxHandle, target, interest, reservedTypes, unchanged).catch(
       () => undefined
     )
     return true
   }
 
   onJournalActivity(sessionId: string): void {
-    const entry = [...this.parkedUntilJournalEdge].find(
-      ([, parked]) => parked.sessionId === sessionId
-    )
-    if (entry) {
-      this.offer(entry[0], undefined, false)
+    const interest = this.interests.get(sessionId)
+    const address = interest?.parked.keys().next().value
+    if (!interest || !address || !this.currentInterest(sessionId, interest)) {
+      return
+    }
+    if (interest.inFlight) {
+      interest.pending.set(address, interest.pending.get(address) === true)
+      return
+    }
+    this.offer(address, undefined, false)
+    if (!interest.inFlight) {
+      interest.parked.delete(address)
     }
   }
 
@@ -158,90 +163,58 @@ export abstract class StructuredMailboxPointerAdmission<
     return Number(db.db.prepare('SELECT total_changes() AS n').get()?.n)
   }
 
-  forgetSession(sessionId: string): void {
-    for (const [id, debt] of this.issued) {
-      if (debt.sessionId === sessionId) {
-        this.issued.delete(id)
-      }
-    }
-    for (const [mailbox, parked] of this.parkedUntilJournalEdge) {
-      if (parked.sessionId === sessionId) {
-        this.parkedUntilJournalEdge.delete(mailbox)
-      }
-    }
-  }
-
-  protected async reconcileIssued(
-    startingDb: OrchestrationDb,
+  protected reconcileIssued(
+    db: OrchestrationDb,
     sessionId: string,
-    settlementOnly: boolean,
-    ownWrite: <T>(write: () => T) => T
-  ): Promise<void> {
-    if (!settlementOnly) {
-      for (const row of startingDb.db
-        .prepare(
-          'SELECT id, to_handle, handoff FROM messages WHERE read = 0 AND handoff IS NOT NULL'
-        )
-        .all()) {
-        const reference = readMailHandoff(String(row.handoff))
-        if (
-          reference?.kind === 'structured' &&
-          (reference.sessionId === sessionId ||
-            this.deps.resolveStructuredTarget(String(row.to_handle))?.sessionId === sessionId) &&
-          !reference.nonAdmission
-        ) {
-          this.issued.set(String(row.id), {
-            db: startingDb,
-            mailbox: String(row.to_handle),
-            sessionId
-          })
-        }
-      }
-    }
-    for (const [id, debt] of this.issued) {
-      if (debt.sessionId !== sessionId || debt.db !== startingDb) {
+    read: StructuredMailboxPointerHost['readHandoffEvidenceNow']
+  ): ReadonlySet<string> {
+    const facts = this.deps.host.readHandoffEvidenceNow({
+      sessionId,
+      clientMessageId: ''
+    })?.mailHold
+    const addresses = structuredSessionDebtAddresses(sessionId, db, facts?.scope)
+    const excluded = new Set<string>()
+    for (const row of db.getIssuedSessionMail(
+      [sessionId, ...(facts?.scope?.aliases ?? [])],
+      addresses
+    )) {
+      const reference = readMailHandoff(row.handoff)
+      if (reference?.kind !== 'structured') {
         continue
       }
-      const row = startingDb.getMessageById(id)
-      const reference = readMailHandoff(row?.handoff)
-      if (
-        !row ||
-        row.read ||
-        row.to_handle !== debt.mailbox ||
-        reference?.kind !== 'structured' ||
-        reference.nonAdmission
-      ) {
-        this.issued.delete(id)
-        continue
-      }
-      ownWrite(() =>
-        reconcileStructuredMailInput(this.deps.host, startingDb, debt.mailbox, [row], reference)
+      const replay = reconcileStructuredMailInput(
+        this.deps.host,
+        db,
+        row.to_handle,
+        [row],
+        reference
       )
-      const current = startingDb.getMessageById(id)
+      const current = db.getMessageById(row.id)
+      if (!replay && reference.phase === 'reserved' && current?.handoff === row.handoff) {
+        excluded.add(reference.operationId)
+      }
       if (current) {
-        await selectStructuredMailHandoff({
-          db: startingDb,
-          mailbox: debt.mailbox,
+        selectStructuredMailHandoff({
+          db,
+          mailbox: row.to_handle,
           sessionId: reference.sessionId,
           epoch: reference.epoch,
           frontier: reference.frontier,
           waiters: undefined,
           reservedTypes: undefined,
-          readEvidence: (r) => this.deps.host.readHandoffEvidence(r),
+          readEvidence: read,
           candidates: [current],
-          settlementOnly: true,
-          ownWrite
+          settlementOnly: true
         })
       }
-      if (startingDb.getMessageById(id)?.read) {
-        this.issued.delete(id)
-      }
     }
+    return excluded
   }
 
   protected abstract deliver(
     mailbox: string,
     target: StructuredPointerTarget,
+    interest: SessionMailInterest,
     reservedTypes?: ReadonlySet<string>,
     settlementOnly?: boolean
   ): Promise<void>

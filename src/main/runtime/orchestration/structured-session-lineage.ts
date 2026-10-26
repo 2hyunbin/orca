@@ -11,6 +11,7 @@ import { structuredWorkerHostScope } from '../structured-worker-identity'
 export type AgentSessionRecordReader = {
   getRecord: (sessionId: string) => AgentSessionRecord | null
   listRecords: () => AgentSessionRecord[]
+  mailLineageScope?: (sessionId: string) => { root: string | null } | null
   /** Absent on a store that predates tab visibility; every session then counts as open. */
   getVisibleSessionTabIndex?: () => { present: boolean; sessionIds: string[] }
 }

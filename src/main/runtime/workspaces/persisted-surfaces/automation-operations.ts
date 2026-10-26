@@ -170,26 +170,34 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
       : null
   }
 
-  captureSessionMail: CaptureSessionMail = (sessionId, records) =>
-    captureSessionMailAtStop(this._orchestrationDb, sessionId, records, (db) => {
-      if (this._orchestrationDb !== db) {
-        return
-      }
-      this.orchestrationFederation.resetForDatabaseChange()
-      this.mailPointerRepointScheduler.clear()
-      this._orchestrationDb = null
-      try {
-        db.close()
-      } catch (error) {
-        console.warn('[mail] failed to retire capture connection', error)
-      }
-    })
+  captureSessionMail: CaptureSessionMail = (sessionId, records, scope) =>
+    captureSessionMailAtStop(
+      this._orchestrationDb,
+      sessionId,
+      records,
+      (db) => {
+        if (this._orchestrationDb !== db) {
+          return
+        }
+        this.orchestrationStructuredMailboxPointerDelivery.resetForDatabaseChange()
+        this.orchestrationFederation.resetForDatabaseChange()
+        this.mailPointerRepointScheduler.clear()
+        this._orchestrationDb = null
+        try {
+          db.close()
+        } catch (error) {
+          console.warn('[mail] failed to retire capture connection', error)
+        }
+      },
+      scope
+    )
 
   private orchestrationDbPath(): string {
     return join(getAppEnvironment().getPath('userData'), 'orchestration.db')
   }
 
   setOrchestrationDb(db: OrchestrationDb): void {
+    this.orchestrationStructuredMailboxPointerDelivery.resetForDatabaseChange()
     this.orchestrationFederation.resetForDatabaseChange()
     this.mailPointerRepointScheduler.clear()
     this._orchestrationDb = db

@@ -1,11 +1,15 @@
 import type { OrchestrationDb } from '../orchestration-db'
 import { MESSAGE_TYPES, type MessageRow } from '../../types'
 import { z } from 'zod'
-import type { AutomaticMailHandoff } from '../../mail-handoff'
+import { readMailHandoff, type AutomaticMailHandoff } from '../../mail-handoff'
 import { exposeMessageListTimestamps } from '../utc-timestamp'
 import { generateId } from '../generated-id'
 import { runLifecycleWriteTransaction } from '../lifecycle-write-transaction-runner'
 import { potentiallyLiveRemoteAttachmentSql } from '../federation/remote-attachment-liveness'
+
+export const ISSUED_MAIL_SQL = `read = 0 AND CASE WHEN json_valid(handoff) THEN
+  json_extract(handoff, '$.kind') = 'structured' AND json_extract(handoff, '$.nonAdmission') IS NULL ELSE 0 END`
+export const MAIL_SESSION_SQL = `CASE WHEN json_valid(handoff) THEN json_extract(handoff, '$.sessionId') END`
 
 const readMessages = z
   .looseObject({
@@ -50,6 +54,68 @@ function currentAuthority(db: OrchestrationDb, mailbox: string, expected: string
 }
 
 const mailHandoffStoreMethods = {
+  claimMailHandoff<
+    T extends {
+      address: string
+      batch: { messages: MessageRow[]; reference: AutomaticMailHandoff }
+    }
+  >(this: OrchestrationDb, select: () => T | null): T | null {
+    if (this.db.isTransaction) {
+      return null
+    }
+    return runLifecycleWriteTransaction(this.db, 'mail_handoff_claim', () => {
+      const choice = select()
+      if (!choice) {
+        return null
+      }
+      const {
+        address: mailbox,
+        batch: { messages, reference }
+      } = choice
+      if (!this.isMailHandoffCurrent(mailbox, messages, reference.authority)) {
+        throw new Error('mail claim lost')
+      }
+      const { nonAdmission: _held, ...issued } = reference
+      const update = this.db.prepare(
+        'UPDATE messages SET handoff = ? WHERE id = ? AND to_handle = ? AND read = 0 AND handoff IS ?'
+      )
+      for (const message of messages) {
+        if (
+          update.run(JSON.stringify(issued), message.id, mailbox, message.handoff ?? null)
+            .changes !== 1
+        ) {
+          throw new Error('mail claim lost')
+        }
+      }
+      return choice
+    })
+  },
+
+  getIssuedSessionMail(
+    this: OrchestrationDb,
+    sessions: readonly string[],
+    addresses: readonly string[]
+  ): MessageRow[] {
+    const found = new Map<string, MessageRow>()
+    for (const [expression, values, index] of [
+      [MAIL_SESSION_SQL, sessions, 'idx_messages_issued_session'],
+      ['to_handle', addresses, 'idx_messages_issued_address']
+    ] as const) {
+      const query = this.db.prepare(
+        `SELECT * FROM messages INDEXED BY ${index} WHERE ${ISSUED_MAIL_SQL} AND ${expression} = ?`
+      )
+      for (const value of new Set(values)) {
+        for (const row of exposeMessageListTimestamps(readMessages(query.all(value)))) {
+          const reference = readMailHandoff(row.handoff)
+          if (reference?.kind === 'structured' && !reference.nonAdmission) {
+            found.set(row.id, row)
+          }
+        }
+      }
+    }
+    return [...found.values()]
+  },
+
   mailboxHandoffAuthority(
     this: OrchestrationDb,
     mailbox: string,
@@ -207,6 +273,8 @@ const mailHandoffStoreMethods = {
 }
 
 export type MailHandoffStoreMethods = {
+  claimMailHandoff: typeof mailHandoffStoreMethods.claimMailHandoff
+  getIssuedSessionMail: typeof mailHandoffStoreMethods.getIssuedSessionMail
   mailboxHandoffAuthority: typeof mailHandoffStoreMethods.mailboxHandoffAuthority
   getAutomaticMailCandidates: typeof mailHandoffStoreMethods.getAutomaticMailCandidates
   reserveMailHandoff: typeof mailHandoffStoreMethods.reserveMailHandoff

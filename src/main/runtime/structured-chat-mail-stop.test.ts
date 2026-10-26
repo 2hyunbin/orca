@@ -1,7 +1,7 @@
+import { selectStructuredMailHandoff } from './orchestration/mailbox-settlement'
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import { readMailHandoff } from './orchestration/mail-handoff'
 import { operationId } from './structured-chat-coordinator-fake-codex-fixture'
 import {
   COORDINATOR,
@@ -61,13 +61,22 @@ it.each([
       ).toMatchObject({ ok: true })
     }
     await finishWorker(taskId)
-    await vi.waitFor(
-      () =>
-        expect(readMailHandoff(db.getUnreadMessages(`run:${runId}`)[0]?.handoff)).toMatchObject({
-          nonAdmission: 'held'
-        }),
-      WAIT
-    )
+    const facts = await host.readMailHandoffEvidence(COORDINATOR, '')
+    if (!facts) {
+      throw new Error('missing journal')
+    }
+    const held = await selectStructuredMailHandoff({
+      db,
+      mailbox: `run:${runId}`,
+      sessionId: COORDINATOR,
+      epoch: facts.epoch,
+      frontier: facts.frontier,
+      waiters: undefined,
+      reservedTypes: undefined,
+      readEvidence: (r) => host.readMailHandoffEvidenceNow(r.sessionId, r.clientMessageId),
+      limit: 1
+    })
+    expect(held?.reference.nonAdmission).toBe('held')
     const unreserved = db.insertMessage({
       from: 'term_worker',
       to: `run:${runId}`,
@@ -107,9 +116,26 @@ it.each([
     })
     await vi.waitFor(() => expect(turns()).toHaveLength(2), WAIT)
     expect(turnText(turns()[1]!)).toContain('fresh after Stop')
-    await settleTurn(COORDINATOR, connectionFor(COORDINATOR).turns.length - 1, 'completed')
-    await edgesAnswered()
-    expect(turns()).toHaveLength(2)
+    const retried = card && release === 'resume'
+    if (retried) {
+      await settleTurn(COORDINATOR, connectionFor(COORDINATOR).turns.length - 1, 'failed')
+      await vi.waitFor(() => expect(turns()).toHaveLength(3), WAIT)
+      await settleTurn(COORDINATOR, connectionFor(COORDINATOR).turns.length - 1, 'failed')
+      await edgesAnswered()
+      expect(turns()).toHaveLength(3)
+      const fresh = db
+        .getUnreadMessages(`run:${runId}`)
+        .find((row) => row.subject === 'fresh after Stop')!
+      expect(fresh.recovery_used).toBe(1)
+      expect(
+        (await call('orchestration.inbox', { id: fresh.id }, { sessionId: COORDINATOR })).messages
+      ).toHaveLength(1)
+      expect(db.getMessageById(unreserved.id)?.read).toBe(0)
+    } else {
+      await settleTurn(COORDINATOR, connectionFor(COORDINATOR).turns.length - 1, 'completed')
+      await edgesAnswered()
+      expect(turns()).toHaveLength(2)
+    }
     const journal = host.collaboratorsForTests().sessions.get(COORDINATOR)!.journal
     expect(journal.queuedMessages.userStopInForce()).not.toBeNull()
     if (card) {
@@ -144,7 +170,11 @@ it.each([
       mailFailure.mockRestore()
       runtime.notifyStructuredSessionJournalActivity(COORDINATOR)
     }
-    for (let index = 2; index < 4 + Number(card) + Number(release === 'send'); index++) {
+    for (
+      let index = 2 + Number(retried);
+      index < 4 + Number(card) + Number(release === 'send') + Number(retried);
+      index++
+    ) {
       await vi.waitFor(() => expect(turns().length).toBeGreaterThan(index), WAIT)
       await settleTurn(COORDINATOR, connectionFor(COORDINATOR).turns.length - 1, 'completed')
     }

@@ -33,7 +33,6 @@ it.each(['accepted', 'rejected', 'missing-membership'] as const)(
         mailHold: { members: new Set(), ambiguous: false, key: 'released' },
         epoch: 'epoch',
         frontier: 'new-host',
-        stopInForce: false,
         submission: {
           clientMessageId: 'legacy-operation',
           fence: 1,
@@ -100,7 +99,7 @@ it.each(['accepted', 'rejected', 'missing-membership'] as const)(
           frontier: 'new-host',
           waiters: undefined,
           reservedTypes: undefined,
-          readEvidence: async () => evidence
+          readEvidence: () => evidence
         })
       const batch = await select()
       expect(batch?.messages.map((row) => row.id)).toEqual(
@@ -210,6 +209,7 @@ it('upgrades N/10N fetched history with one membership traversal and unchanged u
         minted_at_ms: 1
       })
       expect(members.every((row) => db!.getMessageById(row.id)?.delivered_at === null)).toBe(true)
+      db.db.exec('DROP INDEX idx_messages_issued_session; DROP INDEX idx_messages_issued_address')
       db.db.exec('ALTER TABLE messages DROP COLUMN handoff')
       db.db.exec('ALTER TABLE messages DROP COLUMN recovery_used')
       db.db.pragma('user_version = 43')

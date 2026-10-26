@@ -1,15 +1,14 @@
 import { isAdmissibleAgentJournalMessageBody } from '../../../shared/agent-session-journal-schemas'
 import { selectSessionMail } from './structured-session-mail-target'
-import {
-  reconcileStructuredMailInput,
-  recordStructuredMailHandoff as record
-} from './structured-mailbox-pointer-receipt'
+import { currentSessionMail } from './structured-mailbox-pointer-receipt'
+import { recordStructuredMailHandoff as record } from './structured-mailbox-pointer-receipt'
 import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import type { StructuredPointerRetainReason } from './structured-session-pointer-delivery'
 import { readMailHandoff } from './mail-handoff'
-import { structuredMailMaySubmit, mailTransportWasRefused } from './mailbox-settlement'
+import { mailTransportWasRefused } from './mailbox-settlement'
 import {
   StructuredMailboxPointerAdmission,
+  type SessionMailInterest,
   type StructuredPointerTarget
 } from './structured-mailbox-pointer-admission'
 export type {
@@ -25,24 +24,21 @@ export class OrchestrationStructuredMailboxPointerDelivery<
   protected override async deliver(
     mailbox: string,
     target: StructuredPointerTarget,
+    interest: SessionMailInterest,
     reservedTypes?: ReadonlySet<string>,
     settlementOnly = false
   ): Promise<void> {
     const sessionId = target.sessionId
-    this.inFlight.add(sessionId)
-    this.parkedUntilJournalEdge.set(mailbox, { sessionId: target.sessionId })
-    const startingDb = this.deps.getDb()
-    if (!startingDb) {
-      this.inFlight.delete(sessionId)
-      return
-    }
+    const startingDb = interest.db
+    const active = () => this.currentInterest(sessionId, interest)
+    interest.parked.set(mailbox, {})
     let expectedChanges = this.changes(startingDb)
     const externalVersion = startingDb.db.pragma('data_version', { simple: true })
     const startingKeys = new Map<string, string>()
     const ownWrite = <T>(write: () => T): T => {
       const before = this.changes(startingDb)
       if (before !== expectedChanges) {
-        this.changedDuringFlight.add(mailbox)
+        interest.pending.set(mailbox, interest.pending.get(mailbox) === true)
       }
       try {
         return write()
@@ -54,26 +50,19 @@ export class OrchestrationStructuredMailboxPointerDelivery<
       if (!startingKeys.has(address)) {
         startingKeys.set(address, this.admissionKey(startingDb, address, sessionId))
       }
-      this.parkedUntilJournalEdge.set(address, { sessionId })
+      interest.parked.set(address, {})
     }
     park(mailbox)
     const transientExclusions = Boolean(reservedTypes?.size)
     try {
-      await this.reconcileIssued(startingDb, sessionId, settlementOnly, ownWrite)
-      if (settlementOnly) {
-        return
-      }
       const reconciled = new Set<string>()
       const replanned = new Set<string>()
       for (;;) {
         const db = this.deps.getDb()
-        if (!db || db !== startingDb) {
+        if (!active() || !db) {
           return
         }
-        const session = await this.deps.host.readSessionFacts(target.sessionId)
-        const fence = this.deps.host.currentFence(target.sessionId)
-        if (!session || fence === null) {
-          this.retain(mailbox, target.sessionId, 'session-not-attached')
+        if (db.db.isTransaction) {
           return
         }
         const chosen = await selectSessionMail({
@@ -81,18 +70,17 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           db,
           mailbox,
           target,
-          session,
-          fence,
           reservedTypes,
           reconciled,
           park,
           ownWrite,
-          onIssued: (message, address) =>
-            this.issued.set(message.id, { db, mailbox: address, sessionId }),
-          forget: (address) => {
-            this.parkedUntilJournalEdge.delete(address)
-          }
+          current: active,
+          settlementOnly,
+          settle: (read) => this.reconcileIssued(db, sessionId, read)
         })
+        if (!active()) {
+          return
+        }
         if (!chosen) {
           return
         }
@@ -101,73 +89,32 @@ export class OrchestrationStructuredMailboxPointerDelivery<
         const batch = chosen.batch
         let { messages, reference } = batch
         const manifest = reference.manifest
-        if (
-          !manifest ||
-          (!reference.nonAdmission &&
-            !ownWrite(() =>
-              reconcileStructuredMailInput(this.deps.host, db, mailbox, messages, reference)
-            ))
-        ) {
-          reconciled.add(reference.operationId)
-          continue
-        }
-        const current = (): boolean => {
-          const next = this.deps.resolveStructuredTarget(mailbox)
-          return (
-            next?.sessionId === target.sessionId &&
-            next.dispatchId === target.dispatchId &&
-            this.deps.host.currentContextClearOperationId(target.sessionId) === manifest.context &&
-            this.deps.host.currentFence(target.sessionId) === manifest.runtimeFence &&
-            manifest.members.length === messages.length &&
-            manifest.members.every((id, index) => messages[index]?.id === id) &&
-            db.isMailHandoffCurrent(mailbox, messages, reference.authority) &&
-            messages.every((message) => {
-              const reserved = readMailHandoff(message.handoff)
-              return (
-                reserved?.kind === 'structured' &&
-                structuredMailMaySubmit(
-                  reserved,
-                  this.deps.host.readHandoffEvidenceNow,
-                  manifest.members
-                )
-              )
-            })
-          )
-        }
-        if (!current()) {
-          if (reference.nonAdmission && !replanned.has(reference.operationId)) {
-            replanned.add(reference.operationId)
-            ownWrite(() =>
-              record(db, mailbox, messages, (member) => ({ ...member, nonAdmission: 'held' }))
-            )
-          } else {
-            reconciled.add(reference.operationId)
-          }
-          continue
-        }
-        park(mailbox)
-        if (this.deps.host.takesMailNow?.(sessionId) === false) {
-          return
-        }
-        const body: unknown = JSON.parse(manifest.body)
-        if (!isAdmissibleAgentJournalMessageBody(body)) {
+        if (!manifest) {
           return
         }
         const neverAdmitted = Boolean(reference.nonAdmission)
-        ownWrite(() =>
-          record(db, mailbox, messages, ({ nonAdmission: _result, ...member }) => member)
-        )
         messages = messages
           .map((message) => db.getMessageById(message.id))
           .filter((message) => message !== undefined)
-        const attempt = readMailHandoff(messages[0]?.handoff)
-        if (attempt?.kind !== 'structured') {
+        const issued = readMailHandoff(messages[0]?.handoff)
+        if (issued?.kind !== 'structured') {
           return
         }
-        reference = attempt
+        reference = issued
+        const current = () =>
+          active() &&
+          currentSessionMail(
+            { ...this.deps, db },
+            {
+              address: mailbox,
+              target,
+              batch: { messages, reference }
+            }
+          )
         park(mailbox)
-        for (const message of messages) {
-          this.issued.set(message.id, { db, mailbox, sessionId })
+        const body: unknown = JSON.parse(manifest.body)
+        if (!isAdmissibleAgentJournalMessageBody(body)) {
+          return
         }
         const outcome = await this.deps.host.send({
           sessionId: target.sessionId,
@@ -177,6 +124,9 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           body,
           beforeRun: current
         })
+        if (!active()) {
+          return
+        }
         if (outcome.kind === 'held') {
           ownWrite(() =>
             record(db, mailbox, messages, (member) => ({ ...member, nonAdmission: 'held' }))
@@ -212,7 +162,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           const nonAdmission =
             outcome.nonAdmission === 'expired' && !neverAdmitted ? undefined : outcome.nonAdmission
           if (nonAdmission === 'expired') {
-            this.changedDuringFlight.add(mailbox)
+            interest.pending.set(mailbox, interest.pending.get(mailbox) === true)
           }
           const evidence = this.deps.host.readHandoffEvidenceNow(reference)
           if (nonAdmission || (evidence && mailTransportWasRefused(evidence))) {
@@ -245,32 +195,30 @@ export class OrchestrationStructuredMailboxPointerDelivery<
         target = next
       }
     } finally {
-      this.inFlight.delete(sessionId)
-      const changed =
-        this.deps.getDb() !== startingDb ||
-        this.changes(startingDb) !== expectedChanges ||
-        startingDb.db.pragma('data_version', { simple: true }) !== externalVersion
-      for (const [address, key] of startingKeys) {
-        if (this.deps.getDb() !== startingDb) {
-          this.parkedUntilJournalEdge.delete(address)
-          this.changedDuringFlight.add(address)
-          continue
+      if (active()) {
+        interest.inFlight = false
+        const changed =
+          this.changes(startingDb) !== expectedChanges ||
+          startingDb.db.pragma('data_version', { simple: true }) !== externalVersion
+        for (const [address, key] of startingKeys) {
+          const finalKey = this.admissionKey(startingDb, address, sessionId)
+          const before: unknown[] = JSON.parse(key)
+          before[1] = expectedChanges
+          if (transientExclusions || changed || JSON.stringify(before) !== finalKey) {
+            interest.pending.set(address, interest.pending.get(address) === true)
+          } else {
+            interest.parked.set(address, { key: finalKey })
+          }
         }
-        const finalKey = this.admissionKey(startingDb, address, sessionId)
-        const before: unknown[] = JSON.parse(key)
-        const after: unknown[] = JSON.parse(finalKey)
-        before[1] = expectedChanges
-        if (transientExclusions || changed || JSON.stringify(before) !== JSON.stringify(after)) {
-          this.changedDuringFlight.add(address)
-        } else {
-          this.parkedUntilJournalEdge.set(address, { sessionId, db: startingDb, key: finalKey })
-        }
-      }
-      for (const address of this.changedDuringFlight) {
-        if (this.deps.resolveStructuredTarget(address)?.sessionId === sessionId) {
-          this.changedDuringFlight.delete(address)
-          const explicit = this.explicitDuringFlight.delete(address)
-          queueMicrotask(() => this.offer(address, undefined, explicit))
+        const pending = [...interest.pending]
+        interest.pending.clear()
+        for (const [address, explicit] of pending) {
+          interest.parked.delete(address)
+          queueMicrotask(() => {
+            if (active()) {
+              this.offer(address, undefined, explicit)
+            }
+          })
         }
       }
     }

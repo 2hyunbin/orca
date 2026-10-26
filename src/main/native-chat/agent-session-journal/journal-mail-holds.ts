@@ -1,3 +1,6 @@
+import { mailLineageGraph, type MailLineageScope } from './journal-mail-lineage'
+export { mailLineageGraph, mailLineageValue, type MailLineageScope } from './journal-mail-lineage'
+import { createHash } from 'node:crypto'
 import type Database from '../../sqlite/sync-database'
 import {
   isPersistedAgentSessionRecord,
@@ -6,18 +9,30 @@ import {
 import { decodePersistedAgentSessionRecord } from '../../../shared/agent-session-record-stored-form'
 import type { JournalOperationReceipt } from './journal-row-writer'
 
-export type MailHoldFacts = { members: ReadonlySet<string>; ambiguous: boolean; key: string }
+export type MailHoldFacts = {
+  scope?: MailLineageScope
+  members: ReadonlySet<string>
+  ambiguous: boolean
+  key: string
+}
 export type MailStopCapture = { members?: readonly string[]; finished?: () => void }
 export type CaptureSessionMail = (
   sessionId: string,
-  records: readonly AgentSessionRecord[]
+  records: readonly AgentSessionRecord[],
+  scope?: MailLineageScope | null
 ) => MailStopCapture
 export type MailHoldState = { version: 1 } & (
   | { status: 'released' }
   | { status: 'held'; members: string[]; ambiguous: boolean; releasedThrough: number }
 )
-const revisions = new WeakMap<Database.Database, number>()
-const caches = new WeakMap<Database.Database, Map<string, MailHoldFacts>>()
+const caches = new WeakMap<
+  Database.Database,
+  {
+    revision: number
+    graph: Map<string, MailLineageScope | null>
+    facts: Map<MailLineageScope, MailHoldFacts>
+  }
+>()
 
 export function ambiguousMailAfterStopPolicy(): boolean {
   return false // Pending product decision: ambiguous mail waits for actual person Send/Resume.
@@ -39,46 +54,7 @@ export function mailHoldAliases(
   sessionId: string,
   records: readonly AgentSessionRecord[]
 ): string[] | null {
-  const next = new Map(
-    records.map((record) => [
-      record.sessionId,
-      record.conversationCommand?.command === 'clear' &&
-      record.conversationCommand.phase === 'committed'
-        ? record.conversationCommand.replacementSessionId
-        : undefined
-    ])
-  )
-  if (!next.has(sessionId)) {
-    return null
-  }
-  const group = new Set([sessionId])
-  for (let changed = true; changed;) {
-    changed = false
-    for (const [id, successor] of next) {
-      if (successor && (group.has(id) || group.has(successor))) {
-        if (!next.has(successor)) {
-          return null
-        }
-        if (!group.has(id) || !group.has(successor)) {
-          changed = true
-        }
-        group.add(id)
-        group.add(successor)
-      }
-    }
-  }
-  for (const id of group) {
-    const visited = new Set<string>()
-    let at: string | undefined = id
-    while (at) {
-      if (visited.has(at)) {
-        return null
-      }
-      visited.add(at)
-      at = next.get(at)
-    }
-  }
-  return [...group].sort()
+  return mailLineageGraph(records).get(sessionId)?.aliases ?? null
 }
 export function readMailHoldRecords(db: Database.Database): AgentSessionRecord[] {
   return db
@@ -172,27 +148,59 @@ function fold(db: Database.Database, aliases: readonly string[] | null) {
       active.some((hold) => hold.state.ambiguous)
   }
 }
+function mailLineageCache(
+  db: Database.Database,
+  records: () => readonly AgentSessionRecord[],
+  revision: number
+) {
+  let cache = caches.get(db)
+  if (!cache || revision < 0 || cache.revision !== revision) {
+    cache = { revision, graph: mailLineageGraph(records()), facts: new Map() }
+    caches.set(db, cache)
+  }
+  return cache
+}
+export function readMailLineageScope(
+  db: Database.Database,
+  sessionId: string,
+  records: () => readonly AgentSessionRecord[],
+  revision: number
+): MailLineageScope | null {
+  return mailLineageCache(db, records, revision).graph.get(sessionId) ?? null
+}
 export function readMailHoldFacts(
   db: Database.Database,
   sessionId: string,
   records: () => readonly AgentSessionRecord[],
   recordsRevision: number
 ): MailHoldFacts {
-  const key = `${revisions.get(db) ?? 0}:${recordsRevision}`
-  const cache = caches.get(db) ?? new Map<string, MailHoldFacts>()
-  caches.set(db, cache)
-  const prior = cache.get(sessionId)
-  if (recordsRevision >= 0 && prior?.key === key) {
-    return prior
-  }
-  let facts: MailHoldFacts
   try {
-    facts = { ...fold(db, mailHoldAliases(sessionId, records())), key }
+    const cache = mailLineageCache(db, records, recordsRevision)
+    const scope = cache.graph.get(sessionId)
+    if (scope) {
+      const prior = cache.facts.get(scope)
+      if (prior) {
+        return prior
+      }
+    }
+    const facts = fold(db, scope?.aliases ?? null)
+    const result = {
+      ...facts,
+      ...(scope ? { scope } : {}),
+      key: createHash('sha256')
+        .update(
+          JSON.stringify([scope?.aliases, facts.release, facts.ambiguous, [...facts.members]])
+        )
+        .digest('hex')
+    }
+    if (scope) {
+      cache.facts.set(scope, result)
+    }
+    return result
   } catch {
-    facts = { members: new Set(), ambiguous: true, key }
+    caches.delete(db)
+    return { members: new Set(), ambiguous: true, key: 'unreadable' }
   }
-  cache.set(sessionId, facts)
-  return facts
 }
 export function writeMailHold(
   db: Database.Database,
@@ -212,8 +220,14 @@ export function writeMailHold(
     `INSERT INTO agent_session_mail_holds VALUES (?, ?, ?) ON CONFLICT(session_id) DO ${fresh ? 'NOTHING' : 'UPDATE SET intent_order=excluded.intent_order, state_json=excluded.state_json'}`
   ).run(sessionId, order, JSON.stringify(state))
 }
-export function mailHoldsCommitted(db: Database.Database): void {
-  revisions.set(db, (revisions.get(db) ?? 0) + 1)
+export function mailHoldsCommitted(db: Database.Database, sessionId?: string): void {
+  const cache = caches.get(db)
+  const scope = sessionId && cache?.graph.get(sessionId)
+  if (scope) {
+    cache?.facts.delete(scope)
+  } else {
+    cache?.facts.clear()
+  }
 }
 export function mailReleaseReceipt(sessionId: string): JournalOperationReceipt {
   let database: Database.Database | undefined
@@ -224,7 +238,7 @@ export function mailReleaseReceipt(sessionId: string): JournalOperationReceipt {
     },
     committed: () => {
       if (database) {
-        mailHoldsCommitted(database)
+        mailHoldsCommitted(database, sessionId)
       }
     }
   }
@@ -242,8 +256,9 @@ export function mailStopReceipt(
       let result: MailStopCapture = {}
       try {
         const records = readMailHoldRecords(db)
-        prior = fold(db, mailHoldAliases(sessionId, records))
-        result = capture?.(sessionId, records) ?? {}
+        const scope = mailLineageGraph(records).get(sessionId) ?? null
+        prior = fold(db, scope?.aliases ?? null)
+        result = capture?.(sessionId, records, scope) ?? {}
         finished = result.finished
       } catch {
         /* Capture failure cannot refuse personal Stop. */
@@ -258,7 +273,7 @@ export function mailStopReceipt(
     },
     committed: () => {
       if (database) {
-        mailHoldsCommitted(database)
+        mailHoldsCommitted(database, sessionId)
       }
     },
     finished: () => finished?.()

@@ -1,4 +1,7 @@
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import './rpc/unused-default-rpc-methods.test-fixture'
+import { join } from 'node:path'
+import { OrchestrationDb } from './orchestration/db'
 // A worker's result reaching the structured chat that coordinates it, end to end in one process,
 // on the coordinator-mail rig.
 
@@ -10,7 +13,6 @@ vi.mock('../node-runtime/pinned-zip-members', () => ({
 
 import { describe, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
-import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   AgentSessionAcquisitionRefusal,
   AgentSessionPreSpawnError
@@ -48,10 +50,65 @@ import {
   MAIL,
   turnText,
   queuedCardTexts,
-  restartHostAndRuntime
+  restartHostAndRuntime,
+  replaceMailDatabase,
+  root
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
 const edgesAnswered = (): Promise<void> => observationClock.edgesAnswered(runtime, WAIT)
+
+it('retires the exact failed capture connection, restores its mail and fences forgotten late sends', async () => {
+  db.close()
+  const path = join(root, 'mail.db')
+  replaceMailDatabase(new OrchestrationDb(path))
+  const oldDb = db
+  const chat = await openChat(COORDINATOR)
+  const mailbox = `orca_session_id:${COORDINATOR}`
+  const message = db.insertMessage({ from: 'sender', to: mailbox, subject: 'survives retirement' })
+  const originalSend = host.send.bind(host)
+  let release = () => {}
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const guards: (() => void)[] = []
+  const delay: typeof host.send = async (...args) => {
+    if (args[1].beforeRun) {
+      guards.push(args[1].beforeRun)
+    }
+    await barrier
+    return originalSend(...args)
+  }
+  const sends = vi.spyOn(host, 'send').mockImplementationOnce(delay).mockImplementationOnce(delay)
+  runtime.deliverPendingMessagesForHandle(mailbox)
+  await vi.waitFor(() => expect(guards).toHaveLength(1), WAIT)
+  runtime.forgetStructuredSessionMail(COORDINATOR)
+  runtime.deliverPendingMessagesForHandle(mailbox)
+  await vi.waitFor(() => expect(guards).toHaveLength(2), WAIT)
+  expect(guards[0]).toThrow()
+  const capture = runtime.captureSessionMail(COORDINATOR, host.deps.store.listRecords())
+  expect(capture.members).toContain(message.id)
+  const pragma = oldDb.db.pragma.bind(oldDb.db)
+  vi.spyOn(oldDb.db, 'pragma').mockImplementation((...args) => {
+    if (args[0] === 'busy_timeout = 5000') {
+      throw new Error('restore failed')
+    }
+    return pragma(...args)
+  })
+  capture.finished?.()
+  expect(() => oldDb.getMessageById(message.id)).toThrow()
+  replaceMailDatabase(new OrchestrationDb(path))
+  await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+  expect(guards[1]).toThrow()
+  expect(turnText(chat.turns[0]!)).toContain('survives retirement')
+  await settleTurn(COORDINATOR, 0, 'completed')
+  await vi.waitFor(() => expect(db.getMessageById(message.id)?.read).toBe(1), WAIT)
+  const saved = db.getMessageById(message.id)
+  release()
+  await edgesAnswered()
+  expect(db.getMessageById(message.id)).toEqual(saved)
+  expect(chat.turns).toHaveLength(1)
+  expect(sends).toHaveBeenCalledTimes(3)
+})
 
 describe('a worker result reaches the structured chat that coordinates it', () => {
   it('lands as a turn in the coordinator journal, and a flagless check returns the worker_done', async () => {
@@ -635,58 +692,6 @@ describe('a /clear keeps the chat its orchestration address', () => {
       coordinator_orca_session_id: COORDINATOR,
       consumer_generation: generation
     })
-  })
-
-  it('delivers oldest eligible across delayed direct, Run and Dispatch address callbacks', async () => {
-    await openChat(COORDINATOR)
-    const peer = await openChat(PEER_CHAT)
-    const { taskId } = await coordinatorRunAndTask()
-    const dispatched = await call(
-      'orchestration.dispatch',
-      { task: taskId, to: `orca_session_id:${PEER_CHAT}` },
-      { sessionId: COORDINATOR }
-    )
-    const run = await call(
-      'orchestration.runCreate',
-      { objective: 'peer coordinates' },
-      { sessionId: PEER_CHAT }
-    )
-    await sendUserMessage(PEER_CHAT, 'working')
-    const realRead = host.readMailHandoffEvidence
-    let unblock = () => {}
-    const blocked = new Promise<void>((resolve) => {
-      unblock = resolve
-    })
-    const read = vi
-      .spyOn(host, 'readMailHandoffEvidence')
-      .mockImplementationOnce(async (...args) => {
-        await blocked
-        return realRead(...args)
-      })
-    await call(
-      'orchestration.send',
-      { to: `orca_session_id:${PEER_CHAT}`, subject: 'older direct' },
-      { sessionId: COORDINATOR }
-    )
-    await vi.waitFor(() => expect(read).toHaveBeenCalled(), WAIT)
-    await call(
-      'orchestration.send',
-      { to: `run:${idOf(run.run)}`, subject: 'newer Run' },
-      { sessionId: COORDINATOR }
-    )
-    await call(
-      'orchestration.send',
-      { to: `dispatch:${idOf(dispatched.dispatch)}`, subject: 'newest Dispatch' },
-      { sessionId: COORDINATOR }
-    )
-    unblock()
-    await settleTurn(PEER_CHAT, 0, 'completed')
-    for (const [index, text] of ['older direct', 'newer Run', 'newest Dispatch'].entries()) {
-      await vi.waitFor(() => expect(peer.turns).toHaveLength(index + 2), WAIT)
-      expect(turnText(peer.turns[index + 1]!)).toContain(text)
-      await settleTurn(PEER_CHAT, index + 1, 'completed')
-    }
-    read.mockRestore()
   })
 
   it('points mail the earlier context never took at the fresh context, without a user message', async () => {

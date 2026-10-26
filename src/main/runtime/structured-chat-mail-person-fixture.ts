@@ -10,12 +10,12 @@ export function createChatPersonActions(deps: {
   async function settleTurn(
     sessionId: string,
     turnIndex: number,
-    status?: 'completed'
+    status?: 'completed' | 'failed'
   ): Promise<void> {
     const connection = deps.connectionFor(sessionId)
     const host = deps.host()
     const turn = connection.turns[turnIndex]!
-    const turnId = `turn-${turnIndex + 1}`
+    const turnId = turn.turnId ?? `turn-${turnIndex + 1}`
     const notify = (method: string, params: unknown) =>
       connection.handlers.onNotification?.(method, params)
     notify('turn/started', { turn: { id: turnId } })
@@ -27,7 +27,13 @@ export function createChatPersonActions(deps: {
         content: [{ type: 'text', text: 'pointer' }]
       }
     })
-    notify('turn/completed', { turn: { id: turnId, ...(status ? { status } : {}) } })
+    notify('turn/completed', {
+      turn: {
+        id: turnId,
+        ...(status ? { status } : {}),
+        ...(status === 'failed' ? { error: { message: 'connection dropped' } } : {})
+      }
+    })
     await host.flushStreamedEvents(sessionId)
   }
 

@@ -21,7 +21,6 @@ export function mailHandoffWasCut(
     evidence.submission?.dispatchState !== 'rejected' &&
     evidence.epoch === reference.epoch &&
     !evidence.personStopped &&
-    !evidence.stopInForce &&
     (verdict === 'failure' || verdict === 'interruption' || evidence.diedTurnId === turn.turnId)
   )
 }
@@ -46,6 +45,6 @@ export function structuredMailMaySubmit(
     destination &&
     destination.epoch === reference.epoch &&
     mailAdmissionPermission(destination.mailHold, members) &&
-    (!original || (evidence && !destination.stopInForce && mailHandoffWasCut(original, evidence)))
+    (!original || (evidence && mailHandoffWasCut(original, evidence)))
   )
 }

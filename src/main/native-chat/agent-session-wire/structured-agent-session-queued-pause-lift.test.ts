@@ -337,11 +337,10 @@ describe('a pause only over cards Resume could send', () => {
   it('a restart over only a card held by its own failed send publishes no pause', async () => {
     const working = await rig.workingSend()
     const draftId = await queuedDraft('conversion fails once')
-    const append = vi
-      .spyOn(AgentSessionJournal.prototype, 'appendSubmission')
-      .mockImplementationOnce(async () => {
-        throw new Error('disk full')
-      })
+    const journal = rig.host.collaboratorsForTests().sessions.get(HOST_TEST_SESSION)!.journal
+    const append = vi.spyOn(journal, 'appendSubmission').mockImplementationOnce(async () => {
+      throw new Error('disk full')
+    })
     try {
       await rig.settleAccepted(working, 'a')
       await eventually(async () =>

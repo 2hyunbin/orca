@@ -17,6 +17,10 @@ export function canonicalOrcaSessionId(
   if (!store) {
     return orcaSessionId
   }
+  const shared = store.mailLineageScope?.(orcaSessionId)?.root
+  if (isOrcaSessionId(shared)) {
+    return shared
+  }
   const clearedFrom = new Map<string, string>()
   for (const record of store.listRecords()) {
     const next = clearedInto(record)

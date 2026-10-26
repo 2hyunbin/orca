@@ -1,3 +1,7 @@
+import {
+  mailLineageValue,
+  readMailLineageScope
+} from '../native-chat/agent-session-journal/journal-mail-holds'
 // Every agent-session store mutation: draft the published state, apply, check and write exactly the
 // changed rows in one journal transaction, then publish the draft. A throw anywhere discards the
 // draft, so memory never holds a change the database does not.
@@ -91,7 +95,15 @@ export class AgentSessionStoreTransactions {
   private queue: Promise<unknown> = Promise.resolve()
   // Reads/reopens do not admit work; a count survives handle eviction without replaying history.
   private readonly admittedSends = new Map<string, number>()
+  mailLineageScope = (sessionId: string) =>
+    readMailLineageScope(
+      this.journalDatabase.db,
+      sessionId,
+      () => [...this.published.records.values()],
+      this.lineageRevision
+    )
   recordsRevision = 0
+  lineageRevision = 0
   private published: AgentSessionStoreState
   /** What this runtime took over from the runtimes before it, as loaded; never changes after. */
   readonly replacedRuntimes: ReadonlyMap<string, AgentSessionReplacedRuntime>
@@ -240,6 +252,17 @@ export class AgentSessionStoreTransactions {
           this.published = draft
           if (writes.records.upsert.length || writes.records.remove.length) {
             this.recordsRevision++
+            const changed = [...writes.records.upsert.map(([id]) => id), ...writes.records.remove]
+            if (
+              changed.some(
+                (id) =>
+                  mailLineageValue(published.records.get(id)) !==
+                    mailLineageValue(draft.records.get(id)) ||
+                  published.unreadableRecords.has(id) !== draft.unreadableRecords.has(id)
+              )
+            ) {
+              this.lineageRevision++
+            }
           }
         }
       }

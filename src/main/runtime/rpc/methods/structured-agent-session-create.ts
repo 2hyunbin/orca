@@ -40,6 +40,7 @@ export type PreparedStructuredAgentSessionCreate = {
   host: StructuredAgentSessionHost
   attachParams: AgentSessionAttachParams
   hostLaunchDirectory?: string
+  newRoot?: true
   catalogModels?: StructuredAgentSessionCreateOptions['catalogModels']
   /** Null when the caller supplied its own location; only a resolved worktree publishes a tab. */
   tab: { workspaceId: string; agent: StructuredAgentId } | null
@@ -90,6 +91,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
   tabId?: string
   firstMessage?: StructuredAgentSessionFirstMessage
   atRest?: boolean
+  newRoot?: true
 }): Promise<PreparedStructuredAgentSessionCreate> {
   const structuredAgentCliSourceEvidence =
     args.structuredAgentCliSourceEvidence ??
@@ -182,6 +184,7 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
       agent: resolved.agent,
       envelope: { ...args.envelope, payloadFingerprint: hostFingerprint }
     },
+    ...(args.newRoot && !args.resumeFrom ? { newRoot: true as const } : {}),
     ...(atRest ? { atRest: args.firstMessage ? { firstMessage: args.firstMessage } : {} } : {}),
     tab: {
       workspaceId: resolved.location.workspaceId,
@@ -236,6 +239,7 @@ export async function commitStructuredAgentSessionCreate(args: {
     })
   }
   const result = await prepared.host.attach(args.caller, prepared.attachParams, {
+    ...(prepared.newRoot ? { newRoot: prepared.newRoot } : {}),
     ...(prepared.hostLaunchDirectory ? { hostLaunchDirectory: prepared.hostLaunchDirectory } : {}),
     ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {})
   })
@@ -291,6 +295,7 @@ export async function createStructuredAgentSessionForWorktree(args: {
   tabId?: string
   /** Create without starting the agent; its first message starts it. */
   atRest?: true
+  newRoot?: true
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   // An at-rest create's ledger row is keyed by its intent, as a client's create is.
   const envelope = args.atRest

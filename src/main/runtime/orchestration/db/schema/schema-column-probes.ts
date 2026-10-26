@@ -1,3 +1,4 @@
+import { ISSUED_MAIL_SQL, MAIL_SESSION_SQL } from '../messages/mail-handoff-store'
 import type { OrchestrationDb } from '../orchestration-db'
 import { OUTSTANDING_MAILBOX_INDEX_SQL } from './migrate-v41'
 
@@ -9,6 +10,11 @@ export function hasColumn(this: OrchestrationDb, table: string, column: string):
 export function createMailboxDeliveryIndexesIfPossible(this: OrchestrationDb): void {
   if (this.hasColumn('deliveries', 'mailbox_handle')) {
     this.db.exec(OUTSTANDING_MAILBOX_INDEX_SQL)
+  }
+  if (this.hasColumn('messages', 'handoff')) {
+    this.db
+      .exec(`CREATE INDEX IF NOT EXISTS idx_messages_issued_session ON messages(${MAIL_SESSION_SQL}) WHERE ${ISSUED_MAIL_SQL};
+      CREATE INDEX IF NOT EXISTS idx_messages_issued_address ON messages(to_handle) WHERE ${ISSUED_MAIL_SQL};`)
   }
   const hasDeliveredAt = this.hasColumn('messages', 'delivered_at')
   if (hasDeliveredAt) {

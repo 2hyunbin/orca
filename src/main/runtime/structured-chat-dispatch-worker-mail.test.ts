@@ -1,3 +1,17 @@
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
+import { AgentSessionRecordStore } from './agent-session-record-store'
+import { foundAgentSessionRecord } from './agent-session-record-founding'
+import { encodeAgentSessionRecord } from '../../shared/agent-session-record-stored-form'
+import { createStructuredWorkerSessionForWorktree } from './rpc/methods/orchestration/worker/worker-topology'
+import {
+  sendStructuredWorkerPreamble,
+  releaseStructuredWorkerSession
+} from './rpc/methods/orchestration-structured-worker-session'
+import { attachParams, operationId } from './structured-chat-coordinator-fake-codex-fixture'
+import { sealedChildEnv } from './structured-session-child-env.test-support'
+import { dispatchTaskSource } from './orchestration/dispatch-task-source'
+import { StructuredAgentSessionLeaseRenewer } from '../native-chat/agent-session-wire/structured-agent-session-lease-renewer'
+import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import { readMailHandoff } from './orchestration/mail-handoff'
 import './rpc/unused-default-rpc-methods.test-fixture'
 // A chat worker's coordinator mail lands in its Dispatch's mailbox. When the pointer to it was held
@@ -122,71 +136,7 @@ describe('uncertain Dispatch mail remains readable across context changes', () =
   })
 })
 
-it.each([100, 1000])(
-  'busy worker journal batches do no repeated history, SQL selection or send work at %s retained items',
-  async (history) => {
-    await openChat(COORDINATOR)
-    const chat = await openChat(PEER_CHAT)
-    const { taskId } = await coordinatorRunAndTask()
-    const { dispatch } = await call(
-      'orchestration.dispatch',
-      { task: taskId, to: WORKER },
-      { sessionId: COORDINATOR }
-    )
-    const mailbox = `dispatch:${idOf(dispatch)}`
-    expect(await sendUserMessage(PEER_CHAT, 'working')).toMatchObject({ ok: true })
-    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
-    const notify = (id: string) =>
-      chat.handlers.onNotification?.('item/completed', {
-        item: { type: 'agentMessage', id, text: id }
-      })
-    for (let index = 0; index < history; index++) {
-      notify(`history-${index}`)
-      if (index % 100 === 99) {
-        await host.flushStreamedEvents(PEER_CHAT)
-      }
-    }
-    await host.flushStreamedEvents(PEER_CHAT)
-    await call(
-      'orchestration.send',
-      { to: mailbox, subject: 'held report' },
-      { sessionId: COORDINATOR }
-    )
-    await vi.waitFor(
-      () => expect(db.getUnreadMessages(mailbox)[0]?.handoff).toContain('held'),
-      WAIT
-    )
-    const dispose = await subscribeForRedrive(host, PEER_CHAT, (id) =>
-      runtime.notifyStructuredSessionJournalActivity(id)
-    )
-    const snapshots = vi.spyOn(host, 'journalSnapshot')
-    const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
-    const sends = vi.spyOn(host, 'send')
-    const authority = vi.spyOn(db, 'mailboxHandoffAuthority')
-    const receipts = vi.spyOn(host.deps.store, 'readCommandReceipt')
-    try {
-      for (let batch = 0; batch < 3; batch++) {
-        notify(`batch-${batch}`)
-        await host.flushStreamedEvents(PEER_CHAT)
-        await observationClock.observe(350)
-      }
-      expect(snapshots).not.toHaveBeenCalled()
-      expect(candidates).not.toHaveBeenCalled()
-      expect(sends).not.toHaveBeenCalled()
-      expect(authority).not.toHaveBeenCalled()
-      expect(receipts).not.toHaveBeenCalled()
-      expect(chat.turns).toHaveLength(1)
-      await settleTurn(PEER_CHAT, 0)
-      await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
-      expect(turnText(chat.turns[1]!)).toContain('held report')
-      await settleTurn(PEER_CHAT, 1)
-    } finally {
-      dispose()
-    }
-  }
-)
-
-it('autonomously redrives an excluded Dispatch report when its waiter aborts without consuming or changing SQL', async () => {
+async function openWorkerMailbox() {
   await openChat(COORDINATOR)
   const chat = await openChat(PEER_CHAT)
   const { taskId } = await coordinatorRunAndTask()
@@ -195,7 +145,178 @@ it('autonomously redrives an excluded Dispatch report when its waiter aborts wit
     { task: taskId, to: WORKER },
     { sessionId: COORDINATOR }
   )
-  const mailbox = `dispatch:${idOf(dispatch)}`
+  return { chat, mailbox: `dispatch:${idOf(dispatch)}` }
+}
+
+it.each([
+  [100, 0],
+  [1000, 0],
+  [100, 1],
+  [1000, 1],
+  [100, 100],
+  [1000, 1000]
+])(
+  'bounds actual canonical debt and lease/journal work at N=%i, own issued=%i',
+  async (history, ownDebt) => {
+    const { chat, mailbox } = await openWorkerMailbox()
+    expect(await sendUserMessage(PEER_CHAT, 'working')).toMatchObject({ ok: true })
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    const notify = (id: string) =>
+      chat.handlers.onNotification?.('item/completed', {
+        item: { type: 'agentMessage', id, text: id }
+      })
+    const own = host.deps.store.getRecord(PEER_CHAT)!
+    const ids = Array.from(
+      { length: 2 * history },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`
+    )
+    host.deps.journalDatabase.transaction((sql) => {
+      sql.prepare('DELETE FROM agent_session_mail_holds WHERE session_id = ?').run(PEER_CHAT)
+      const insert = sql.prepare('INSERT INTO agent_session_records VALUES (?, ?)')
+      for (const [index, sessionId] of ids.entries()) {
+        const record = foundAgentSessionRecord(
+          {
+            sessionId,
+            provider: own.provider,
+            accountHome: own.accountHome,
+            location: own.location
+          },
+          { now: Date.now(), claimKeyId: 'key-1' }
+        )
+        const linked =
+          index >= history && index + 1 < ids.length
+            ? {
+                ...record,
+                conversationCommand: {
+                  command: 'clear',
+                  state: 'completed',
+                  phase: 'committed',
+                  operationId: `clear-${index}`,
+                  callerKey: 'person',
+                  replacementSessionId: ids[index + 1]
+                } as const
+              }
+            : record
+        insert.run(sessionId, JSON.stringify(encodeAgentSessionRecord(linked)))
+      }
+    })
+    // Load the saved corpus without pretending the still-held fixture transports restarted.
+    const live = [host.deps.store.getRecord(COORDINATOR)!, own]
+    host.deps.store = AgentSessionRecordStore.open({
+      journalDatabase: host.deps.journalDatabase,
+      hostId: 'local'
+    })
+    for (const record of live) {
+      await host.deps.store.transitionHandoff(record.sessionId, () => record)
+    }
+    const reference = (sessionId: string, _id: string, address: string, held = false) => {
+      const operation = operationId()
+      return JSON.stringify({
+        version: 1,
+        kind: 'structured',
+        sessionId,
+        epoch: 'uncertain-corpus',
+        frontier: 'corpus',
+        operationId: operation,
+        authorizationId: operation,
+        clientMessageId: operation,
+        phase: held ? 'reserved' : 'offered',
+        authority: address,
+        ...(held ? { nonAdmission: 'held' } : {})
+      })
+    }
+    const update = db.db.prepare('UPDATE messages SET handoff = ? WHERE id = ?')
+    for (let index = 0; index < history; index++) {
+      const other = db.insertMessage({
+        from: 'sender',
+        to: 'other-recipient',
+        subject: 'issued elsewhere'
+      })
+      update.run(reference('other', other.id, other.to_handle), other.id)
+      const tail = db.insertMessage({
+        from: 'sender',
+        to: mailbox,
+        subject: `tail-${index}`,
+        type: index % 2 ? 'heartbeat' : 'status'
+      })
+      update.run(reference(PEER_CHAT, tail.id, mailbox, true), tail.id)
+    }
+    for (let index = 0; index < ownDebt; index++) {
+      const row = db.insertMessage({ from: 'sender', to: mailbox, subject: 'own exact issued' })
+      update.run(reference(PEER_CHAT, row.id, mailbox), row.id)
+    }
+    await call(
+      'orchestration.send',
+      { to: mailbox, subject: 'fresh report' },
+      { sessionId: COORDINATOR }
+    )
+    await observationClock.observe(350)
+    expect(host.readMailHandoffEvidenceNow(PEER_CHAT, '')?.mailHold?.ambiguous).toBe(true)
+    const dispose = await subscribeForRedrive(host, PEER_CHAT, (id) =>
+      runtime.notifyStructuredSessionJournalActivity(id)
+    )
+    const snapshots = vi.spyOn(host, 'journalSnapshot')
+    const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
+    const sends = vi.spyOn(host, 'send')
+    const authority = vi.spyOn(db, 'mailboxHandoffAuthority')
+    const receipts = vi.spyOn(host.deps.store, 'readCommandReceipt')
+    const records = vi.spyOn(host.deps.store, 'listRecords')
+    const debt = vi.spyOn(db, 'getIssuedSessionMail')
+    try {
+      const lineage = host.deps.store.lineageRevision
+      const broad = host.deps.store.recordsRevision
+      const renewer = new StructuredAgentSessionLeaseRenewer({
+        store: host.deps.store,
+        probe: async () => ({ outcome: 'indeterminate', reason: 'fixture' }),
+        holdsLiveChild: () => true,
+        now: () => Date.now() + 10_000,
+        logger: createStructuredAgentSessionLogger()
+      })
+      await renewer.renewNow()
+      expect(host.deps.store.recordsRevision).toBeGreaterThan(broad)
+      expect(host.deps.store.lineageRevision).toBe(lineage)
+      expect(records).toHaveBeenCalledOnce() // Producer's own population scan, separate from admission.
+      records.mockClear()
+      for (let batch = 0; batch < 3; batch++) {
+        notify(`batch-${batch}`)
+        await host.flushStreamedEvents(PEER_CHAT)
+        await observationClock.observe(350)
+      }
+      expect(snapshots).not.toHaveBeenCalled()
+      expect(candidates).not.toHaveBeenCalled()
+      expect(sends).not.toHaveBeenCalled()
+      expect(records).not.toHaveBeenCalled()
+      expect(debt).toHaveBeenCalled()
+      expect(
+        debt.mock.results.every(
+          (result) => result.type === 'return' && result.value.length === ownDebt
+        )
+      ).toBe(true)
+      expect(receipts.mock.calls.length).toBeLessThanOrEqual(12 * ownDebt)
+      expect(authority.mock.calls.length).toBeLessThanOrEqual(12 * ownDebt)
+      expect(chat.turns).toHaveLength(1)
+      expect(
+        await sendUserMessage(PEER_CHAT, 'release legacy mail', 'queue-if-active')
+      ).toMatchObject({ ok: true })
+      expect(host.readMailHandoffEvidenceNow(PEER_CHAT, '')?.mailHold?.ambiguous).toBe(false)
+      expect(chat.turns).toHaveLength(1)
+      expect(candidates).not.toHaveBeenCalled()
+      await settleTurn(PEER_CHAT, 0)
+      await vi.waitFor(() => expect(chat.turns).toHaveLength(2), WAIT)
+      expect(turnText(chat.turns[1]!)).toBe('release legacy mail')
+      await settleTurn(PEER_CHAT, 1)
+      await vi.waitFor(() => expect(chat.turns).toHaveLength(3), WAIT)
+      expect(turnText(chat.turns[2]!)).toContain('tail-0')
+      expect(sends).toHaveBeenCalledTimes(2) // One person Send and one automatic report.
+      await settleTurn(PEER_CHAT, 2)
+    } finally {
+      dispose()
+    }
+  }
+)
+
+it('autonomously redrives an excluded Dispatch report when its waiter aborts without consuming or changing SQL', async () => {
+  const { chat, mailbox } = await openWorkerMailbox()
   const abort = new AbortController()
   const waiting = runtime.waitForMessage(mailbox, { typeFilter: ['status'], signal: abort.signal })
   const report = db.insertMessage({
@@ -215,3 +336,211 @@ it('autonomously redrives an excluded Dispatch report when its waiter aborts wit
   expect(turnText(chat.turns[0]!)).toContain('excluded report')
   await settleTurn(PEER_CHAT, 0)
 })
+
+it('creates an acquired worker at the production topology owner, completes its automatic task and receives a full follow-up without personal release', async () => {
+  await openChat(COORDINATOR)
+  const { taskId } = await coordinatorRunAndTask()
+  const started = db.createStartingWorkerDispatch({
+    creator: { kind: 'system' },
+    maxDepth: Number.MAX_SAFE_INTEGER,
+    taskId,
+    startOptions: {}
+  })
+  vi.spyOn(runtime, 'resolveStructuredAgentSessionCreateIntent').mockImplementation(async (args) =>
+    attachParams(args.envelope.sessionId)
+  )
+  vi.spyOn(runtime, 'publishStructuredAgentSessionTab').mockImplementation(async (input) => {
+    await host.setSessionTabVisibility(input.sessionId, true)
+  })
+  const acquire = host.deps.adapter.acquire.bind(host.deps.adapter)
+  const spawned = vi.spyOn(host.deps.adapter, 'acquire').mockImplementation(async (input) => {
+    expect(sealedChildEnv(input.identity.sessionId).ORCA_TERMINAL_HANDLE).toMatch(/^structworker_/)
+    expect(host.deps.store.getRecord(input.identity.sessionId)?.lease.runtimeFence).toBe(
+      input.fence
+    )
+    return acquire(input)
+  })
+  const created = await createStructuredWorkerSessionForWorktree({
+    runtime,
+    worktreeId: 'workspace-1',
+    agent: 'codex',
+    dispatchId: started.dispatch.id,
+    effects: []
+  })
+  const { identity } = created
+  try {
+    expect(spawned).toHaveBeenCalledOnce()
+    expect(host.readMailHandoffEvidenceNow(identity.sessionId, '')?.mailHold?.ambiguous).toBe(false)
+    db.prepareStartingWorkerAuthority({
+      dispatchId: started.dispatch.id,
+      handle: identity.handle,
+      paneKey: identity.paneKey,
+      processIncarnation: identity.processIncarnation,
+      worktreeId: 'workspace-1',
+      effects: [],
+      setupState: 'not_applicable'
+    })
+    db.markWorkerDispatchReady(started.dispatch.id)
+    const preamble = sendStructuredWorkerPreamble({
+      host,
+      sessionId: identity.sessionId,
+      dispatchId: started.dispatch.id,
+      preamble: 'automatic first task',
+      from: dispatchTaskSource({
+        db,
+        dispatch: started.dispatch,
+        from: `orca_session_id:${COORDINATOR}`,
+        senderName: () => null
+      })
+    })
+    const chat = connectionFor(identity.sessionId)
+    await vi.waitFor(() => expect(chat.turns).toHaveLength(1), WAIT)
+    await settleTurn(identity.sessionId, 0, 'completed')
+    expect(await preamble).toBe('accepted')
+    expect(host.readMailHandoffEvidenceNow(identity.sessionId, '')?.mailHold?.ambiguous).toBe(false)
+    for (const [index, address] of [identity.handle, `dispatch:${started.dispatch.id}`].entries()) {
+      await call(
+        'orchestration.send',
+        { to: address, subject: `follow-up-${index}` },
+        { sessionId: COORDINATOR }
+      )
+      await vi.waitFor(() => expect(chat.turns).toHaveLength(index + 2), WAIT)
+      expect(turnText(chat.turns[index + 1]!)).toContain(`follow-up-${index}`)
+      expect(turnText(chat.turns[index + 1]!)).toMatch(MAIL)
+      await settleTurn(identity.sessionId, index + 1, 'completed')
+    }
+  } finally {
+    releaseStructuredWorkerSession(started.dispatch.id)
+  }
+})
+
+it.each(['delayed', 'waiter', 'resume', 'person-send', 'unrelated'] as const)(
+  'validates omitted older heads at the committed claim after %s during a newer head await',
+  async (change) => {
+    await openChat(COORDINATOR)
+    const peer = await openChat(PEER_CHAT)
+    const turns = () =>
+      codex.connections
+        .filter((connection) => connection.threadId === peer.threadId)
+        .flatMap((connection) => connection.turns)
+    const ownRun = await call(
+      'orchestration.runCreate',
+      { objective: 'peer' },
+      { sessionId: PEER_CHAT }
+    )
+    const { taskId } = await coordinatorRunAndTask()
+    const dispatched = await call(
+      'orchestration.dispatch',
+      { task: taskId, to: `orca_session_id:${PEER_CHAT}` },
+      { sessionId: COORDINATOR }
+    )
+    const direct = `orca_session_id:${PEER_CHAT}`
+    const abort = new AbortController()
+    const waiting =
+      change === 'waiter' || change === 'unrelated'
+        ? runtime.waitForMessage(direct, { typeFilter: ['status'], signal: abort.signal })
+        : null
+    if (!waiting) {
+      await sendUserMessage(PEER_CHAT, 'work before Stop')
+      await vi.waitFor(() => expect(turns()).toHaveLength(1), WAIT)
+    }
+    const report = async (to: string, subject: string) => {
+      if (change === 'delayed') {
+        const sent = await call('orchestration.send', { to, subject }, { sessionId: COORDINATOR })
+        return db.getMessageById(idOf(sent.message))!
+      }
+      return db.insertMessage({ from: 'coordinator', to, subject })
+    }
+    const older = await report(direct, 'older A')
+    const envelope = (method: string, fields: Record<string, unknown>) => ({
+      sessionId: PEER_CHAT,
+      clientOperationId: operationId(),
+      expectedRuntimeFence: host.deps.store.getRecord(PEER_CHAT)!.lease.runtimeFence,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method,
+        sessionId: PEER_CHAT,
+        fields
+      })
+    })
+    if (!waiting && change !== 'delayed') {
+      expect(
+        await host.cancel(
+          { callerKey: 'test-surface' },
+          { envelope: envelope('agentSession.cancel', { turnId: 'turn-1' }), turnId: 'turn-1' }
+        )
+      ).toMatchObject({ ok: true })
+      peer.handlers.onNotification?.('turn/completed', {
+        turn: { id: 'turn-1', status: 'interrupted' }
+      })
+      await host.flushStreamedEvents(PEER_CHAT)
+    }
+    const newer = await report(`run:${idOf(ownRun.run)}`, 'newer B')
+    const newest = await report(`dispatch:${idOf(dispatched.dispatch)}`, 'newest Dispatch')
+    let release = () => {},
+      reached = false,
+      reads = 0
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const original = host.readMailHandoffEvidence.bind(host)
+    const reader = vi.spyOn(host, 'readMailHandoffEvidence').mockImplementation(async (...args) => {
+      const value = await original(...args)
+      if (++reads === 1) {
+        reached = true
+        await barrier
+      }
+      return value
+    })
+    const settled = change === 'delayed' ? settleTurn(PEER_CHAT, 0, 'completed') : undefined
+    if (change !== 'delayed') {
+      runtime.deliverPendingMessagesForHandle(newest.to_handle)
+    }
+    await vi.waitFor(() => expect(reached).toBe(true), WAIT)
+    if (change === 'waiter') {
+      abort.abort()
+      expect(await waiting).toBe('cancelled')
+    }
+    if (change === 'resume') {
+      expect(
+        await host.queuedMessagesResume(
+          { callerKey: 'test-surface' },
+          { envelope: envelope('agentSession.queuedMessagesResume', {}) }
+        )
+      ).toMatchObject({ ok: true, value: { resumed: true } })
+    }
+    if (change === 'person-send') {
+      expect(
+        await sendUserMessage(PEER_CHAT, 'personal during preparation', 'queue-if-active')
+      ).toMatchObject({ ok: true })
+    }
+    for (let index = 0; index < 3; index++) {
+      db.insertMessage({ from: 'other', to: 'unrelated', subject: String(index) })
+      db.insertMessage({ from: 'other', to: newer.to_handle, subject: `later-${index}` })
+    }
+    const claims = vi.spyOn(db, 'claimMailHandoff')
+    release()
+    await settled
+    if (change === 'person-send') {
+      await vi.waitFor(() => expect(turns()).toHaveLength(2), WAIT)
+      await settleTurn(PEER_CHAT, connectionFor(PEER_CHAT).turns.length - 1, 'completed')
+    }
+    const offset = Number(!waiting) + Number(change === 'person-send')
+    await vi.waitFor(() => expect(turns()).toHaveLength(offset + 1), WAIT)
+    expect(turnText(turns()[offset]!)).toContain(change === 'unrelated' ? 'newer B' : 'older A')
+    expect(db.db.isTransaction).toBe(false)
+    expect(db.getMessageById(older.id)?.recovery_used).toBe(0)
+    if (change === 'unrelated') {
+      expect(claims).toHaveBeenCalledTimes(1)
+      abort.abort()
+      await waiting
+    }
+    await settleTurn(PEER_CHAT, connectionFor(PEER_CHAT).turns.length - 1, 'completed')
+    await vi.waitFor(() => expect(turns()).toHaveLength(offset + 2), WAIT)
+    expect(turnText(turns()[offset + 1]!)).toContain(change === 'unrelated' ? 'older A' : 'newer B')
+    await settleTurn(PEER_CHAT, connectionFor(PEER_CHAT).turns.length - 1, 'completed')
+    await vi.waitFor(() => expect(turns()).toHaveLength(offset + 3), WAIT)
+    expect(turnText(turns()[offset + 2]!)).toContain('newest Dispatch')
+    await settleTurn(PEER_CHAT, connectionFor(PEER_CHAT).turns.length - 1, 'completed')
+    reader.mockRestore()
+  }
+)

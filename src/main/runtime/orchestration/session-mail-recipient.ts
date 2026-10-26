@@ -1,6 +1,9 @@
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { formatOrcaSessionAddress, isOrcaSessionId } from '../../../shared/orca-session-address'
-import { mailHoldAliases } from '../../native-chat/agent-session-journal/journal-mail-holds'
+import {
+  mailLineageGraph,
+  type MailLineageScope
+} from '../../native-chat/agent-session-journal/journal-mail-holds'
 import {
   structuredWorkerIdentityFromRow,
   structuredWorkerProcessIncarnation
@@ -11,23 +14,12 @@ import type { OrchestrationDb } from './db'
 export function sessionMailRecipient(
   db: OrchestrationDb,
   sessionId: string,
-  records: readonly AgentSessionRecord[]
+  records: readonly AgentSessionRecord[],
+  scope: MailLineageScope | null = mailLineageGraph(records).get(sessionId) ?? null
 ) {
-  const aliases = mailHoldAliases(sessionId, records)
-  if (!aliases) {
-    throw new Error('unproven mail lineage')
-  }
-  const roots = aliases.filter(
-    (id) =>
-      !records.some(
-        (record) =>
-          record.conversationCommand?.command === 'clear' &&
-          record.conversationCommand.phase === 'committed' &&
-          record.conversationCommand.replacementSessionId === id
-      )
-  )
-  const root = roots[0]
-  if (roots.length !== 1 || !root || !isOrcaSessionId(root)) {
+  const aliases = scope?.aliases
+  const root = scope?.root
+  if (!aliases || !root || !isOrcaSessionId(root)) {
     throw new Error('unproven mail root')
   }
   const resource = db.getWorkerTerminalResourceByProcessIncarnation(

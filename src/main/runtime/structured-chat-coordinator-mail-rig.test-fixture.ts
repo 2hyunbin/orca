@@ -258,7 +258,8 @@ function createMailHost() {
     ...scriptedCodexTransport(codex.openConnection),
     // The same calls the runtime's own host install makes.
     onRequestFailure: (failure) => runtime.onStructuredRequestFailureForErrorMail(failure),
-    captureSessionMail: (sessionId, records) => runtime.captureSessionMail(sessionId, records),
+    captureSessionMail: (sessionId, records, scope) =>
+      runtime.captureSessionMail(sessionId, records, scope),
     onSessionMailActivity: (sessionId) => runtime.notifyStructuredSessionJournalActivity(sessionId),
     onSessionStatusChanged: (summary) => {
       runtime.onStructuredSessionStatusForMail(summary)
@@ -319,6 +320,11 @@ export function turnText(turn: { text: string }): string {
 export function restartRuntime(): void {
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+}
+
+export function replaceMailDatabase(replacement: OrchestrationDb): void {
+  db = replacement
+  runtime.setOrchestrationDb(db)
 }
 
 /** The text of every card the chat lists in its queue, as the person sees it. */

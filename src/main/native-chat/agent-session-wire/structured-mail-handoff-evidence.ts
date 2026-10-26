@@ -36,10 +36,9 @@ export function readNow(
     const body = submission
       ? journal.itemBody(agentJournalSubmissionKey(submission.clientMessageId))
       : null
-    const stop = journal.queuedMessages.userStopInForce()
     const mailHold = journal.mailHoldFacts(
       () => host.deps.store.listRecords(),
-      host.deps.store.recordsRevision
+      host.deps.store.lineageRevision
     )
     const notice = body?.kind === 'message' ? body.from?.orchestration : null
     return {
@@ -51,7 +50,6 @@ export function readNow(
         journal.mailHandoffs().personSequence
       ]),
       mailHold,
-      stopInForce: stop !== null,
       submission,
       owner,
       personStopped: owner

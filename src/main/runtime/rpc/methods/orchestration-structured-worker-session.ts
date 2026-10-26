@@ -129,6 +129,7 @@ export async function createStructuredWorkerSession(args: {
         // a replayed operation id — there is no such boundary on this in-process call.
         payloadFingerprint: ''
       },
+      newRoot: true,
       worktree: `id:${args.worktreeId}`,
       agent: args.agent,
       // Absent, the host seeds the user's saved selection — the same fallback a chat gets.

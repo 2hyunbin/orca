@@ -29,7 +29,6 @@ export type StructuredMailEvidence = {
   mailHold?: MailHoldFacts
   epoch: string
   frontier: string
-  stopInForce: boolean
   submission: AgentJournalSubmission | undefined
   owner: { itemId: string; turn: AgentJournalTurnLifecycle } | null
   personStopped: boolean
@@ -44,7 +43,7 @@ export {
 
 type SelectedHandoff = { message: MessageRow; reference: StructuredMailHandoff; recovery: boolean }
 
-export async function selectStructuredMailHandoff(input: {
+export function selectStructuredMailHandoff(input: {
   db: OrchestrationDb
   mailbox: string
   sessionId: string
@@ -52,15 +51,14 @@ export async function selectStructuredMailHandoff(input: {
   frontier: string
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined
-  readEvidence: (reference: StructuredMailHandoff) => Promise<StructuredMailEvidence | null>
+  readEvidence: (reference: StructuredMailHandoff) => StructuredMailEvidence | null
   limit?: number
   skipOperations?: ReadonlySet<string>
   ownWrite?: <T>(write: () => T) => T
   candidates?: readonly MessageRow[]
   settlementOnly?: boolean
-  onIssued?: (message: MessageRow) => void
   manifest?: (messages: readonly MessageRow[]) => NonNullable<StructuredMailHandoff['manifest']>
-}): Promise<{ messages: MessageRow[]; reference: StructuredMailHandoff } | null> {
+}): { messages: MessageRow[]; reference: StructuredMailHandoff } | null {
   const write = input.ownWrite ?? ((run) => run())
   if (!input.settlementOnly && hasUnfilteredOrchestrationWaiter(input.waiters)) {
     return null
@@ -77,10 +75,11 @@ export async function selectStructuredMailHandoff(input: {
   }
   const selected: SelectedHandoff[] = []
   const evidenceBySource = new Map<string, StructuredMailEvidence | null>()
-  const read = async (reference: StructuredMailHandoff) => {
+  const read = (reference: StructuredMailHandoff) => {
     const key = JSON.stringify([reference.sessionId, reference.epoch, reference.clientMessageId])
     if (!evidenceBySource.has(key)) {
-      evidenceBySource.set(key, await input.readEvidence(reference).catch(() => null))
+      const evidence = input.readEvidence(reference)
+      evidenceBySource.set(key, evidence)
     }
     return evidenceBySource.get(key) ?? null
   }
@@ -120,22 +119,17 @@ export async function selectStructuredMailHandoff(input: {
       if (!prior) {
         if (
           input.settlementOnly ||
-          !mailAdmissionPermission((await read({ ...fresh, clientMessageId: '' }))?.mailHold, [
-            message.id
-          ])
+          !mailAdmissionPermission(read({ ...fresh, clientMessageId: '' })?.mailHold, [message.id])
         ) {
           continue
         }
         selected.push({ message, reference: fresh, recovery: false })
       } else if (prior.kind === 'structured') {
-        if (!prior.nonAdmission) {
-          input.onIssued?.(message)
-        }
         if (input.skipOperations?.has(prior.operationId)) {
           continue
         }
         const original = structuredRecoverySource(prior)
-        const evidence = await read(
+        const evidence = read(
           prior.nonAdmission && !original
             ? { ...prior, sessionId: input.sessionId, epoch: input.epoch }
             : prior
@@ -163,12 +157,8 @@ export async function selectStructuredMailHandoff(input: {
           continue
         }
         if (original) {
-          const sourceEvidence = await read(original)
-          if (
-            !sourceEvidence ||
-            evidence.stopInForce ||
-            !mailHandoffWasCut(original, sourceEvidence)
-          ) {
+          const sourceEvidence = read(original)
+          if (!sourceEvidence || !mailHandoffWasCut(original, sourceEvidence)) {
             continue
           }
         }

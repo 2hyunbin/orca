@@ -1,9 +1,13 @@
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { afterEach, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { foundAgentSessionRecord } from '../../runtime/agent-session-record-founding'
 import { encodeAgentSessionRecord } from '../../../shared/agent-session-record-stored-form'
+import { OrchestrationDb } from '../../runtime/orchestration/db'
+import { captureSessionMailAtStop } from '../../runtime/orchestration/session-mail-stop-inventory'
+import { testOrcaSessionId } from '../../../shared/orca-session-address-test-fixture'
 import { JournalHostDatabase } from './journal-host-database'
 import { JournalRowWriter, composeJournalOperationReceipts } from './journal-row-writer'
 import { createJournalReducerState } from './journal-reducer'
@@ -18,7 +22,7 @@ import {
 } from './journal-mail-holds'
 
 const roots: string[] = []
-const databases: JournalHostDatabase[] = []
+const databases: { close: () => void }[] = []
 afterEach(() => {
   databases.splice(0).forEach((db) => db.close())
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
@@ -30,7 +34,7 @@ function harness() {
   databases.push(database)
   const record = foundAgentSessionRecord(
     {
-      sessionId: 'recipient',
+      sessionId: testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'),
       provider: 'codex',
       accountHome: { variable: 'CODEX_HOME', path: '/tmp/unused' },
       location: {
@@ -75,6 +79,23 @@ function harness() {
   return { root, database, record, facts, apply, stop, writer, state }
 }
 
+function clearedRecord(
+  record: AgentSessionRecord,
+  replacementSessionId: string
+): AgentSessionRecord {
+  return {
+    ...record,
+    conversationCommand: {
+      command: 'clear',
+      state: 'completed',
+      phase: 'committed',
+      operationId: 'clear',
+      callerKey: 'person',
+      replacementSessionId
+    }
+  }
+}
+
 it('persists exact unreserved obligations across restatement/reopen and repeated same-tuple Stops, releasing only on personal intent', async () => {
   const h = harness()
   expect(mailAdmissionPermission(h.facts(), ['fresh'])).toBe(false)
@@ -107,13 +128,35 @@ it('persists exact unreserved obligations across restatement/reopen and repeated
 it('rolls back Stop, hold and receipt together, cleaning up before any fold/publication even on failed COMMIT', async () => {
   const h = harness()
   h.apply(mailReleaseReceipt(h.record.sessionId))
-  const finished = vi.fn(() => expect(h.database.db.isTransaction).toBe(false))
+  const mail = new OrchestrationDb(join(h.root, 'mail.db'))
+  databases.push(mail)
+  const row = mail.insertMessage({
+    from: 'worker',
+    to: `orca_session_id:${h.record.sessionId}`,
+    subject: 'owed'
+  })
+  const retire = vi.fn()
+  const finished = vi.fn(() => {
+    expect(h.database.db.isTransaction).toBe(false)
+    expect(mail.db.isTransaction).toBe(false)
+    expect(mail.db.pragma('busy_timeout', { simple: true })).toBe(5000)
+  })
   const committed = vi.fn()
   const stop = () =>
     h.writer.append(
       journalStopEventRowBuilder(() => h.state, { reason: 'user-stop' }, 1),
       composeJournalOperationReceipts(
-        mailStopReceipt(h.record.sessionId, () => ({ members: ['A'], finished })),
+        mailStopReceipt(h.record.sessionId, (id, records, scope) => {
+          const captured = captureSessionMailAtStop(mail, id, records, retire, scope)
+          expect(captured.members).toEqual([row.id])
+          return {
+            ...captured,
+            finished: () => {
+              captured.finished?.()
+              finished()
+            }
+          }
+        }),
         {
           write: () => {
             h.database.db.exec('PRAGMA defer_foreign_keys = ON')
@@ -129,6 +172,8 @@ it('rolls back Stop, hold and receipt together, cleaning up before any fold/publ
   await expect(stop()).rejects.toThrow()
   expect(finished).toHaveBeenCalledOnce()
   expect(committed).not.toHaveBeenCalled()
+  expect(retire).not.toHaveBeenCalled()
+  mail.db.exec('BEGIN IMMEDIATE; ROLLBACK')
   expect(h.facts()).toMatchObject({ ambiguous: false, members: new Set() })
   expect(h.database.db.prepare('SELECT count(*) AS n FROM journal_rows').get()?.n).toBe(0)
 })
@@ -140,17 +185,7 @@ it('carries UNKNOWN through a later exact capture until a witnessed release and 
   await h.stop(['A'])
   expect(mailAdmissionPermission(h.facts(), ['C'])).toBe(false)
   const successor = { ...h.record, sessionId: 'successor' }
-  const predecessor = {
-    ...h.record,
-    conversationCommand: {
-      command: 'clear',
-      state: 'completed',
-      phase: 'committed',
-      operationId: 'clear',
-      callerKey: 'person',
-      replacementSessionId: successor.sessionId
-    } as const
-  }
+  const predecessor = clearedRecord(h.record, successor.sessionId)
   const aliases = () => [predecessor, successor]
   h.apply(mailReleaseReceipt(successor.sessionId))
   const released = readMailHoldFacts(h.database.db, successor.sessionId, aliases, 1)
@@ -174,3 +209,44 @@ it('carries UNKNOWN through a later exact capture until a witnessed release and 
   expect([...later.members]).toEqual(['C'])
   expect(later.ambiguous).toBe(false)
 })
+
+it.each([100, 1000])(
+  'shares one linear lineage fold across %i aliases and preserves unrelated component permission tokens',
+  (count) => {
+    const h = harness()
+    let visits = 0
+    const records = Array.from({ length: count }, (_, index) => ({
+      ...h.record,
+      sessionId: `lineage-${index}`,
+      get conversationCommand() {
+        visits++
+        return index + 1 < count
+          ? clearedRecord(h.record, `lineage-${index + 1}`).conversationCommand
+          : undefined
+      }
+    }))
+    const all = [h.record, ...records]
+    h.apply(mailReleaseReceipt(h.record.sessionId))
+    h.apply(mailReleaseReceipt(records[0].sessionId))
+    const read = vi.fn(() => all)
+    const facts = readMailHoldFacts(h.database.db, records.at(-1)!.sessionId, read, 1)
+    expect(facts.scope?.aliases).toHaveLength(count)
+    expect(facts.scope?.root).toBe(records[0].sessionId)
+    expect(visits).toBeLessThanOrEqual(4 * count)
+    expect(readMailHoldFacts(h.database.db, records[0].sessionId, read, 1)).toBe(facts)
+    expect(read).toHaveBeenCalledOnce()
+    const unrelated = readMailHoldFacts(h.database.db, h.record.sessionId, read, 1)
+    h.apply(mailReleaseReceipt(records[0].sessionId))
+    expect(readMailHoldFacts(h.database.db, h.record.sessionId, read, 1)).toBe(unrelated)
+    const changed = readMailHoldFacts(h.database.db, records[0].sessionId, read, 1)
+    expect(changed.key).not.toBe(facts.key)
+    expect(read).toHaveBeenCalledOnce()
+    expect(readMailHoldFacts(h.database.db, h.record.sessionId, read, 2).key).toBe(unrelated.key)
+    const missing = clearedRecord(records[0], 'absent')
+    expect(readMailHoldFacts(h.database.db, missing.sessionId, () => [missing], 3).ambiguous).toBe(
+      true
+    )
+    const cycle = clearedRecord(missing, missing.sessionId)
+    expect(readMailHoldFacts(h.database.db, cycle.sessionId, () => [cycle], 4).ambiguous).toBe(true)
+  }
+)

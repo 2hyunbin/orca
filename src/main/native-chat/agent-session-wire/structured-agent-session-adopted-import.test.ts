@@ -114,7 +114,7 @@ function attachParams(
   }
 }
 
-function adapter(): StructuredAgentSessionAdapter {
+function adapter(origin: 'created' | 'resumed' = 'resumed'): StructuredAgentSessionAdapter {
   return {
     open: async () => ({
       reportedOptions: { model: '' }
@@ -127,7 +127,7 @@ function adapter(): StructuredAgentSessionAdapter {
         link: {
           linkId: 'resumed-link',
           handle: codexProviderHandle(THREAD),
-          origin: 'resumed',
+          origin,
           mintedAtFence: fence,
           observedAt: NOW
         }
@@ -150,6 +150,7 @@ async function attach(
 ) {
   store ??= await openTestAgentSessionRecordStore(root!)
   return performAttach({
+    newRoot: true,
     agents,
     logger: createStructuredAgentSessionLogger(),
     store,
@@ -169,19 +170,28 @@ async function attach(
 }
 
 describe('adopting a provider conversation on create', () => {
-  it('seeds the chain from the adopted handle and fills the journal from its transcript', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-adopt-import-'))
-    const transcriptPath = join(root, 'rollout.jsonl')
-    await writeCodexRollout(transcriptPath, 'token ORCA-ADOPT-1')
-    const sessionAdapter = adapter()
-
-    const result = await attach(transcriptPath, sessionAdapter)
-
-    expect(result).toMatchObject({ ok: true })
-    // The seeded chain must resume the adopted conversation.
-    const page = (result as { value: { page: { items: unknown[] } } }).value.page
-    expect(JSON.stringify(page.items)).toContain('ORCA-ADOPT-1')
-  })
+  it.each([false, true])(
+    'does not seed fresh mail permission for import or providerHandle without adopt (%s)',
+    async (providerOnly) => {
+      root = await mkdtemp(join(tmpdir(), 'orca-adopt-import-'))
+      const transcriptPath = join(root, 'rollout.jsonl')
+      await writeCodexRollout(transcriptPath, 'token ORCA-ADOPT-1')
+      const sessionAdapter = adapter(providerOnly ? 'created' : 'resumed')
+      const params = providerOnly
+        ? attachParams(undefined, { adopt: undefined, providerHandle: codexProviderHandle(THREAD) })
+        : attachParams(transcriptPath)
+      const result = await attach(transcriptPath, sessionAdapter, undefined, params)
+      expect(
+        openTestJournalHostDatabase(root).db.prepare('SELECT * FROM agent_session_mail_holds').all()
+      ).toEqual([])
+      expect(result).toMatchObject({ ok: true })
+      // The seeded chain must resume the adopted conversation.
+      const page = (result as { value: { page: { items: unknown[] } } }).value.page
+      if (!providerOnly) {
+        expect(JSON.stringify(page.items)).toContain('ORCA-ADOPT-1')
+      }
+    }
+  )
 
   it.each([
     {

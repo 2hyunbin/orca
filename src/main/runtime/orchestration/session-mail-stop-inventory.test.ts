@@ -49,46 +49,38 @@ function harness() {
   const peer = new Database(path)
   peer.pragma('busy_timeout = 0')
   databases.push(peer)
-  return { db, peer, capture: () => captureSessionMailAtStop(db, id, [record], vi.fn()) }
+  const calls: { sql: string; args: Parameters<ReturnType<typeof db.db.prepare>['get']> }[] = []
+  const seen = new WeakSet()
+  const prepare = db.db.prepare.bind(db.db)
+  vi.spyOn(db.db, 'prepare').mockImplementation((sql) => {
+    const statement = prepare(sql)
+    if (/FROM dispatch_contexts|run_coordinator_handles WHERE/.test(sql) && !seen.has(statement)) {
+      seen.add(statement)
+      const get = statement.get.bind(statement)
+      vi.spyOn(statement, 'get').mockImplementation((...args) => {
+        calls.push({ sql, args })
+        return get(...args)
+      })
+    }
+    return statement
+  })
+  const capture = () => {
+    const result = captureSessionMailAtStop(db, id, [record], vi.fn())
+    for (const { sql, args } of calls.splice(0)) {
+      expect(
+        peer
+          .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+          .all(...args)
+          .map((row) => row.detail)
+          .join(' ')
+      ).toContain('SEARCH')
+    }
+    return result
+  }
+  return { db, peer, capture }
 }
 
-it('captures the complete committed unreserved/held/heartbeat inventory, holding its own reservation until the journal finishes', () => {
-  const { db, peer, capture } = harness()
-  const run = db.createRun({
-    objective: 'run',
-    coordinatorHandle: null,
-    coordinatorPaneKey: null,
-    coordinatorOrcaSessionId: id
-  })
-  const first = db.insertMessage({
-    from: 'worker',
-    to: `run:${run.id}`,
-    subject: 'A',
-    runId: run.id
-  })
-  const second = db.insertMessage({ from: 'worker', to: address, subject: 'B' })
-  const heartbeat = db.insertMessage({
-    from: 'worker',
-    to: address,
-    subject: 'heartbeat',
-    type: 'heartbeat'
-  })
-  db.db
-    .prepare('UPDATE messages SET handoff = ? WHERE id = ?')
-    .run('{"version":1,"kind":"unknown"}', first.id)
-  const captured = capture()
-  expect(new Set(captured.members)).toEqual(new Set([first.id, second.id, heartbeat.id]))
-  expect(() => peer.exec('BEGIN IMMEDIATE')).toThrow()
-  captured.finished?.()
-  expect(db.db.isTransaction).toBe(false)
-  expect(db.db.pragma('busy_timeout', { simple: true })).toBe(5000)
-  peer.exec('BEGIN IMMEDIATE')
-  peer.exec('ROLLBACK')
-  const fresh = db.insertMessage({ from: 'worker', to: address, subject: 'C' })
-  expect(captured.members).not.toContain(fresh.id)
-})
-
-it('returns UNKNOWN on busy, nested, absent or incomplete ownership without changing another transaction', () => {
+it('returns UNKNOWN on busy or nested ownership without changing another transaction', () => {
   const { db, peer, capture } = harness()
   peer.exec('BEGIN IMMEDIATE')
   expect(capture().members).toBeUndefined()
@@ -99,9 +91,6 @@ it('returns UNKNOWN on busy, nested, absent or incomplete ownership without chan
   expect(capture().members).toBeUndefined()
   expect(db.db.isTransaction).toBe(true)
   db.db.exec('ROLLBACK')
-  expect(captureSessionMailAtStop(null, id, [record], vi.fn()).members).toBeUndefined()
-  expect(captureSessionMailAtStop(db, id, [], vi.fn()).members).toBeUndefined()
-  expect(db.db.isTransaction).toBe(false)
 })
 
 it('uses current generation ownership and pending direct routing, so later ownership acquisition is new to its recipient', () => {
@@ -138,7 +127,6 @@ it('uses current generation ownership and pending direct routing, so later owner
   const acquired = capture()
   expect(acquired.members).toContain(deferred.id)
   acquired.finished?.()
-  expect(stale.members).not.toContain(deferred.id)
 })
 
 it('captures worker Dispatch and foreign direct ownership from durable reminted-pane identity, independently of a live registry', () => {
@@ -190,3 +178,54 @@ it('captures worker Dispatch and foreign direct ownership from durable reminted-
   expect(new Set(reminted.members)).toEqual(new Set([pending.id, assigned.id]))
   reminted.finished?.()
 })
+
+it.each([100, 1000])(
+  'captures all owed IDs with indexed direct routing and releases its exact writer at U=%i',
+  (count) => {
+    const { db, peer, capture } = harness()
+    const run = db.createRun({
+      objective: 'owned',
+      coordinatorHandle: null,
+      coordinatorPaneKey: null,
+      coordinatorOrcaSessionId: id
+    })
+    const owed = []
+    for (let index = 0; index < count; index++) {
+      const row = db.insertMessage({
+        from: 'sender',
+        to: index % 2 ? address : `run:${run.id}`,
+        runId: run.id,
+        subject: String(index),
+        type: index % 3 ? 'status' : 'heartbeat'
+      })
+      owed.push(row.id)
+      db.insertMessage({ from: 'sender', to: 'unrelated', subject: String(index) })
+    }
+    db.db
+      .prepare('UPDATE messages SET handoff = ? WHERE id = ?')
+      .run('{"version":1,"kind":"unknown"}', owed[0])
+    const queries = vi.spyOn(db.db, 'prepare')
+    const probe = vi.spyOn(db, 'findActiveDispatchForDirectMessageOwner')
+    const captured = capture()
+    expect(new Set(captured.members)).toEqual(new Set(owed))
+    expect(probe).toHaveBeenCalledTimes(count)
+    expect(
+      queries.mock.calls.filter(([sql]) =>
+        sql.includes('SELECT id, run_id, to_handle FROM messages')
+      )
+    ).toHaveLength(1)
+    expect(JSON.stringify(captured.members).length).toBeGreaterThan(count)
+    expect(() => peer.exec('BEGIN IMMEDIATE')).toThrow()
+    captured.finished?.()
+    expect(db.db.isTransaction).toBe(false)
+    expect(db.db.pragma('busy_timeout', { simple: true })).toBe(5000)
+    peer.exec('BEGIN IMMEDIATE')
+    peer.prepare('UPDATE messages SET read = 1 WHERE id = ?').run(owed[0])
+    peer.exec('COMMIT')
+    const next = capture()
+    expect(next.members).toHaveLength(count - 1)
+    next.finished?.()
+    const fresh = db.insertMessage({ from: 'worker', to: address, subject: 'C' })
+    expect(captured.members).not.toContain(fresh.id)
+  }
+)

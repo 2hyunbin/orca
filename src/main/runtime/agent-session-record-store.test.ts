@@ -804,40 +804,62 @@ describe('claim keys and unreadable rows', () => {
   })
 })
 
-it('seeds only committed fresh founding, preserving replay results and rolling back receipt markers with their records', async () => {
-  const store = await open()
-  const database = openTestJournalHostDatabase(directory)
-  const rows = () =>
-    database.db
-      .prepare(
-        'SELECT session_id, intent_order FROM agent_session_mail_holds ORDER BY intent_order'
-      )
-      .all()
-  const request = reserveRequest()
-  expect((await store.founding.commit(request)).disposition).toBe('created')
-  const first = rows()
-  const revision = store.recordsRevision
-  expect((await store.founding.commit(request)).disposition).toBe('replayed')
-  expect(rows()).toEqual(first)
-  expect(store.recordsRevision).toBe(revision)
-  const next = reserveRequest({ sessionId: 'session-next' })
-  const receipt = store.founding.receipt(next)
-  expect(() =>
-    database.transaction((db) => {
-      receipt.write(db)
-      throw new Error('rollback')
+it.each(['founding', 'acquired'] as const)(
+  'co-writes only committed fresh %s witnesses, preserving replay, rollback and origin',
+  async (path) => {
+    const store = await open()
+    const database = openTestJournalHostDatabase(directory)
+    const rows = () =>
+      database.db.prepare('SELECT * FROM agent_session_mail_holds ORDER BY intent_order').all()
+    const request = reserveRequest()
+    let first = 0
+    store.onFirstRecord(() => {
+      first++
     })
-  ).toThrow('rollback')
-  expect(store.getRecord(next.sessionId)).toBeNull()
-  expect(rows()).toEqual(first)
-  const accepted = store.founding.receipt(next)
-  database.transaction((db) => accepted.write(db))
-  accepted.committed()
-  expect(rows().map((row) => row.session_id)).toEqual([request.sessionId, next.sessionId])
-  expect(() => database.transaction((db) => store.founding.receipt(next).write(db))).toThrow()
-  expect(rows()).toHaveLength(2)
-  await store.founding.commit(
-    reserveRequest({ sessionId: 'session-import', adoptedHandleLink: handleLink() })
-  )
-  expect(rows()).toHaveLength(2)
-})
+    if (path === 'acquired') {
+      database.db.exec(
+        "CREATE TRIGGER refuse_fresh BEFORE INSERT ON agent_session_mail_holds BEGIN SELECT RAISE(ABORT, 'witness unavailable'); END"
+      )
+      await expect(store.reserveOwner(request, true)).rejects.toThrow('witness unavailable')
+      expect(store.getRecord(request.sessionId)).toBeNull()
+      expect(
+        store.getOperationRow(request.operation.callerKey, request.operation.operationId)
+      ).toBeNull()
+      expect(first).toBe(0)
+      database.db.exec('DROP TRIGGER refuse_fresh')
+    }
+    const commit = (owner: AgentSessionRecordStore) =>
+      path === 'founding' ? owner.founding.commit(request) : owner.reserveOwner(request, true)
+    expect((await commit(store)).disposition).toBe('created')
+    expect(first).toBe(1)
+    const fresh = rows()
+    expect(fresh).toEqual([
+      expect.objectContaining({
+        session_id: request.sessionId,
+        state_json: '{"version":1,"status":"released"}'
+      })
+    ])
+    expect((await commit(store)).disposition).toBe('replayed')
+    expect(rows()).toEqual(fresh)
+    const reopened = await open()
+    expect((await commit(reopened)).disposition).toBe('replayed')
+    expect(rows()).toEqual(fresh)
+    if (path === 'founding') {
+      const next = reserveRequest({ sessionId: 'session-next' })
+      const receipt = store.founding.receipt(next)
+      expect(() =>
+        database.transaction((db) => {
+          receipt.write(db)
+          throw new Error('rollback')
+        })
+      ).toThrow('rollback')
+      expect(store.getRecord(next.sessionId)).toBeNull()
+      expect(rows()).toEqual(fresh)
+      const accepted = store.founding.receipt(next)
+      database.transaction((db) => accepted.write(db))
+      accepted.committed()
+      expect(rows().map((row) => row.session_id)).toEqual([request.sessionId, next.sessionId])
+      expect(() => database.transaction((db) => store.founding.receipt(next).write(db))).toThrow()
+    }
+  }
+)
