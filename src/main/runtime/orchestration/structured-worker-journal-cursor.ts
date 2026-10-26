@@ -2,10 +2,8 @@
  * read from the last write the reader saw. Messages are revised in place while they stream, so catch-up returns
  * every message written since, new or revised, and a reader replaces messages by id. */
 
-import type {
-  AgentJournalCursor,
-  AgentJournalRenderItem
-} from '../../../shared/agent-session-journal-types'
+import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
+import { AGENT_SESSION_HISTORY_MAX_LIMIT } from '../../../shared/agent-session-wire'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import type { NativeChatMessage } from '../../../shared/native-chat-types'
 import { projectStructuredItemsToNativeChat } from '../../../shared/structured-agent-session-projection'
@@ -49,13 +47,14 @@ export function readStructuredJournalTail(
   }
 }
 
-/** Messages written after `cursor`, in transcript order; `limit` bounds the journal writes one page covers. */
+/** Up to `limit` messages written after `cursor`, in transcript order. */
 export async function readStructuredJournalSince(
   sessionId: string,
   cursor: AgentJournalCursor,
   limit: number
 ): Promise<StructuredJournalRead> {
-  for (let writes = limit; ; writes = Math.ceil(writes / 2)) {
+  // Streaming saves a message many times a second, so start wide and narrow by writes until the messages fit.
+  for (let writes = AGENT_SESSION_HISTORY_MAX_LIMIT; ; writes = Math.ceil(writes / 2)) {
     const result = await readStructuredJournalChanges(sessionId, cursor, writes)
     if (!result) {
       throw new OrchestrationError(
@@ -64,23 +63,21 @@ export async function readStructuredJournalSince(
       )
     }
     if (!result.ok) {
-      // A rebuilt or /clear-replaced journal cannot continue the cursor; its reset page is the newest messages.
+      // A journal that cannot continue this cursor answers with its newest messages.
       const tail = readStructuredJournalTail(structuredJournalPage(result.page), limit)
       return {
         ...tail,
         warnings: [
-          'The transcript was rebuilt or cleared since this cursor; this page starts at its newest messages.',
+          `The transcript cannot continue from this cursor (${result.reset}); this page starts at its newest messages.`,
           ...tail.warnings
         ]
       }
     }
     const page = result.page
-    const messages = projectStructuredItemsToNativeChat(
-      page.items.filter(isRootAgentJournalItem).toSorted(byJournalPosition)
-    )
+    const messages = projectStructuredItemsToNativeChat(page.items.filter(isRootAgentJournalItem))
     const bounded = boundWorkerTranscriptMessages(messages)
-    // Cover fewer writes rather than advance the cursor past messages the size limit dropped.
-    if (bounded.messages.length < messages.length && writes > 1) {
+    // Narrow rather than advance the cursor past messages the page cannot hold.
+    if ((messages.length > limit || bounded.messages.length < messages.length) && writes > 1) {
       continue
     }
     return {
@@ -93,13 +90,11 @@ export async function readStructuredJournalSince(
       warnings: [
         ...bounded.warnings,
         ...(page.removedItemIds.length > 0
-          ? ['Messages read earlier were removed from the transcript.']
+          ? [
+              'Some transcript items were removed since this cursor; read without --cursor for the current transcript.'
+            ]
           : [])
       ]
     }
   }
-}
-
-function byJournalPosition(left: AgentJournalRenderItem, right: AgentJournalRenderItem): number {
-  return left.sequence - right.sequence || (left.sequenceIndex ?? 0) - (right.sequenceIndex ?? 0)
 }

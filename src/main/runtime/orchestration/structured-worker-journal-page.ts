@@ -58,7 +58,8 @@ export async function readStructuredJournalChanges(
     return null
   }
   try {
-    return await host.history({ sessionId, direction: 'after', cursor, limit }, 'own-agent')
+    // Replay rows as the renderer's catch-up does; normalized history would reset every read.
+    return await host.history({ sessionId, direction: 'after', cursor, limit }, 'own-agent', false)
   } catch {
     return null
   }

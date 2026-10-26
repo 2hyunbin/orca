@@ -66,8 +66,16 @@ beforeEach(async () => {
       }
     },
     hasSession: () => true,
-    history: async (request: AgentSessionHistoryRequest, scope?: AgentSessionHistoryScope) =>
-      readAgentSessionHistory(journal, request, { scope })
+    // As the host: only an explicit `false` replays rows instead of resetting normalized history.
+    history: async (
+      request: AgentSessionHistoryRequest,
+      scope?: AgentSessionHistoryScope,
+      replaceNormalizedHistory = true
+    ) =>
+      readAgentSessionHistory(journal, request, {
+        scope,
+        rowReplay: replaceNormalizedHistory === false
+      })
   }
 })
 
@@ -136,6 +144,35 @@ describe('the structured worker-read cursor over a live journal', () => {
     expect(textsOf(second)).toEqual(['done: 42', 'next'])
     expect(second.transcript.messages[0]?.id).toBe(first.transcript.messages[0]?.id)
     expect(second.sourceIdentity).toBe(first.sourceIdentity)
+  })
+
+  it('keeps up with a reply saved many times while it streams', async () => {
+    // A page bounded by journal writes covered seconds of streaming and fell behind the worker.
+    await write('reply', say(''))
+    const first = await read()
+    for (let length = 1; length <= 120; length++) {
+      await write('reply', say('x'.repeat(length)))
+    }
+    await write('done', say('done'))
+    const second = await read(first.cursor)
+    expect(textsOf(second)).toEqual(['x'.repeat(120), 'done'])
+    expect(second.contentComplete).toBe(true)
+  })
+
+  it('keeps following a journal whose display history was normalized', async () => {
+    // Normalized history made the host's default catch-up reset on every read.
+    await write('call', say('running…'))
+    await write('note', say('meanwhile'))
+    const first = await read()
+    const publicRead = journal.publicRead.bind(journal)
+    vi.spyOn(journal, 'publicRead').mockImplementation(() => ({
+      ...publicRead(),
+      normalizationKey: 'normalized'
+    }))
+    await write('call', say('done: 42'))
+    const second = await read(first.cursor)
+    expect(textsOf(second)).toEqual(['done: 42'])
+    expect(second.warnings).toEqual([])
   })
 
   it('pages many writes forward exactly once', async () => {
