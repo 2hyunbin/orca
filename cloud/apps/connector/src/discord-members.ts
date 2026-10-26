@@ -40,6 +40,13 @@ export class DiscordMembers {
     return new Map(rows.map((row) => [String(row.user_id), String(row.display_name)]))
   }
 
+  // A name only labels teammate context, so it goes with the context it labels.
+  async prune(database: CloudDatabase, retentionMs: number): Promise<void> {
+    await database.query('DELETE FROM connector_discord_members WHERE seen_at < ?', [
+      this.now() - retentionMs
+    ])
+  }
+
   async linked(database: CloudDatabase, guildId: string, userIds: string[]): Promise<Set<string>> {
     const unique = [...new Set(userIds)]
     if (unique.length === 0) {

@@ -19,7 +19,7 @@ import { ThreadPosts } from './thread-posts.js'
 const POST_INTERVAL_MS = 1_000
 const RETENTION_INTERVAL_MS = 60_000
 const SEEN_RETENTION_MS = 7 * 24 * 60 * 60_000
-const CONTEXT_RETENTION_MS = 24 * 60 * 60_000
+export const CONTEXT_RETENTION_MS = 24 * 60 * 60_000
 // As long as a source's own retries and the inbox's settled rows: a post id that outlives them
 // keeps a retried reply from posting twice.
 const POST_RETENTION_MS = 7 * 24 * 60 * 60_000

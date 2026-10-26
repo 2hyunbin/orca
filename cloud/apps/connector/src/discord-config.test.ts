@@ -7,7 +7,6 @@ describe('parseDiscordConfig', () => {
   const hex = Buffer.from(publicKey.export({ format: 'jwk' }).x ?? '', 'base64url').toString('hex')
   const env = {
     ORCA_CONNECTOR_DISCORD_PUBLIC_KEY: hex,
-    ORCA_CONNECTOR_DISCORD_APPLICATION_ID: '1200000000000000000',
     ORCA_CONNECTOR_DISCORD_BOT_TOKEN: 'bot-token',
     ORCA_CONNECTOR_DISCORD_GUILD_IDS: 'G1, G2'
   }
@@ -16,10 +15,9 @@ describe('parseDiscordConfig', () => {
     expect(parseDiscordConfig({})).toBeUndefined()
   })
 
-  it('reads the app, key, token, allowlist and kill switch', () => {
+  it('reads the key, token, allowlist and kill switch', () => {
     const config = parseDiscordConfig({ ...env, ORCA_CONNECTOR_DISCORD_PAUSED: 'true' })
     expect(config).toMatchObject({
-      applicationId: '1200000000000000000',
       botToken: 'bot-token',
       guildIds: new Set(['G1', 'G2']),
       paused: true
@@ -30,8 +28,6 @@ describe('parseDiscordConfig', () => {
   it.each([
     ['no allowlist', { ORCA_CONNECTOR_DISCORD_GUILD_IDS: undefined }],
     ['no bot token', { ORCA_CONNECTOR_DISCORD_BOT_TOKEN: undefined }],
-    ['no app id', { ORCA_CONNECTOR_DISCORD_APPLICATION_ID: undefined }],
-    ['a non-numeric app id', { ORCA_CONNECTOR_DISCORD_APPLICATION_ID: 'app' }],
     ['a short key', { ORCA_CONNECTOR_DISCORD_PUBLIC_KEY: 'abcd' }]
   ])('refuses %s', (_name, override) => {
     expect(() => parseDiscordConfig({ ...env, ...override })).toThrow()

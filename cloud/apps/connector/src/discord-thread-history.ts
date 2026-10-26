@@ -25,7 +25,7 @@ export class DiscordThreadHistory {
       members: DiscordMembers
       api: DiscordRestApi
       botToken: string
-      botUserId: string
+      botUserId: () => Promise<string | null>
     }
   ) {}
 
@@ -35,8 +35,12 @@ export class DiscordThreadHistory {
 
   // Null when Discord couldn't be read.
   private async threadBefore(start: HeldStart): Promise<{ name: string; text: string }[] | null> {
-    const { api, botToken, botUserId } = this.deps
+    const { api, botToken } = this.deps
     const { workspaceId: guildId, containerId, threadId } = start.place
+    const botUserId = await this.deps.botUserId()
+    if (botUserId === null) {
+      return null
+    }
     const page = await api(
       botToken,
       discordRoutes.messagesBefore(threadId, start.messageId, THREAD_PAGE_SIZE)

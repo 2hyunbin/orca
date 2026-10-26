@@ -3,7 +3,8 @@ import type { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ConnectorAdapter, ThreadPlace } from './connector-adapter.js'
 import { noticeText, statusText } from './connector-copy.js'
-import type { ConnectorCore } from './connector-core.js'
+import { every } from './connector-background.js'
+import { CONTEXT_RETENTION_MS, type ConnectorCore } from './connector-core.js'
 import type { DiscordConfig } from './discord-config.js'
 import type { DiscordGatewayMessage } from './discord-gateway-session.js'
 import { discordInteractionResponse, readDiscordInteraction } from './discord-interactions.js'
@@ -16,12 +17,13 @@ import {
   isOpenDiscordCard,
   settledDiscordCard
 } from './discord-prompt-cards.js'
-import { createDiscordRestApi, type DiscordRestApi } from './discord-rest.js'
+import { createDiscordRestApi, discordRoutes, type DiscordRestApi } from './discord-rest.js'
 import { verifyDiscordSignature } from './discord-signature.js'
 import { discordText } from './discord-text.js'
 import { DiscordThreadHistory } from './discord-thread-history.js'
 import type { MachineEnv } from './machine-auth.js'
 
+const RETENTION_INTERVAL_MS = 60_000
 // Interactions are small; this only bounds what is read before the signature check.
 const MAX_INTERACTION_BYTES = 64 * 1024
 
@@ -39,8 +41,17 @@ export function createDiscordEdge(deps: {
   const { botToken } = config
   const api = deps.api ?? createDiscordRestApi()
   const members = new DiscordMembers(now)
-  // A bot user shares its application's id.
-  const botUserId = config.applicationId
+  // Read once from the API: Discord doesn't promise the bot's user id equals its application's.
+  let botUser: Promise<string | null> | undefined
+  const botUserId = () =>
+    (botUser ??= api(botToken, discordRoutes.currentUser()).then((result) => {
+      const id = result.kind === 'ok' ? result.body.id : undefined
+      if (typeof id === 'string') {
+        return id
+      }
+      botUser = undefined
+      return null
+    }))
   const history = new DiscordThreadHistory({ database, members, api, botToken, botUserId })
   const sender = new DiscordPostSender({ botToken, api, now })
 
@@ -174,5 +185,13 @@ export function createDiscordEdge(deps: {
     )
   }
 
-  return { adapter, routeIn, registerRoutes }
+  return {
+    adapter,
+    routeIn,
+    registerRoutes,
+    startBackground: () =>
+      every('discord_members', RETENTION_INTERVAL_MS, () =>
+        members.prune(database, CONTEXT_RETENTION_MS)
+      )
+  }
 }

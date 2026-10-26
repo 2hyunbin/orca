@@ -36,6 +36,9 @@ function fakeDiscord() {
     if (answer) {
       return answer.result
     }
+    if (route.path === '/users/@me') {
+      return { kind: 'ok', body: { id: BOT } }
+    }
     if (route.method === 'GET') {
       return route.path.includes('?')
         ? { kind: 'ok', body: { items: [] } }
@@ -63,7 +66,6 @@ export async function createDiscordHarness(discord: Partial<DiscordConfig> = {})
   const harness = await createConnectorHarness(
     {
       discord: {
-        applicationId: BOT,
         publicKey: decodeDiscordPublicKey(hex),
         botToken: 'bot-token',
         guildIds: new Set([GUILD]),

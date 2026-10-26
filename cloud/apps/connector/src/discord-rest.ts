@@ -98,6 +98,7 @@ export const discordRoutes = {
     method: 'PUT',
     path: `/channels/${channelId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}/@me`
   }),
+  currentUser: (): DiscordRoute => ({ method: 'GET', path: '/users/@me' }),
   message: (channelId: string, messageId: string): DiscordRoute => ({
     method: 'GET',
     path: `/channels/${channelId}/messages/${messageId}`
