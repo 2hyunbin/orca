@@ -12,9 +12,13 @@ import {
 } from './structured-agent-session-idle-sweep'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { AgentChatPermissionChoice } from '../../../shared/agent-chat-permission-mode'
+import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 
 type OutgrownChildReading = Pick<StructuredAgentSessionHostSession, 'child'> & {
-  journal: Pick<AgentSessionJournal, 'visitItemsWithLinkage' | 'itemFence' | 'newestTurn'> & {
+  journal: Pick<
+    AgentSessionJournal,
+    'visitItemsWithLinkage' | 'itemFence' | 'newestTurn' | 'itemBody'
+  > & {
     submissions(): readonly Pick<AgentJournalSubmission, 'dispatchState' | 'fence' | 'rejection'>[]
   }
 }
@@ -77,6 +81,23 @@ async function launchedWithOtherPermissionMode(
   return mode !== null && mode !== child.permissionMode
 }
 
+/** Orca mail notices are not the user's turn: they keep the running process and its choices. */
+function picksNewLaunchModel(
+  session: OutgrownChildReading,
+  next: AgentJournalSubmission | undefined,
+  requiresModelTransitionRestart: ((next: AgentJournalSubmission) => boolean) | undefined
+): boolean {
+  if (!next || !requiresModelTransitionRestart) {
+    return false
+  }
+  const body = session.journal.itemBody(agentJournalSubmissionKey(next.clientMessageId))
+  return (
+    body?.kind === 'message' &&
+    body.from?.orchestration?.message !== 'mail-notice' &&
+    requiresModelTransitionRestart(next)
+  )
+}
+
 /** Retire under serialization only when no work is owed; failed Stop leaves a close for startup to join. */
 export async function retireOutgrownStructuredAgentSessionChild(
   sessionId: string,
@@ -87,6 +108,9 @@ export async function retireOutgrownStructuredAgentSessionChild(
       childWork: () => readonly AgentChildWorkView[] | undefined
     }
     launchPermission?: () => Promise<AgentChatPermissionChoice | null>
+    /** The send about to be handed over; a new model pick may need the requested approval mode. */
+    next?: AgentJournalSubmission
+    requiresModelTransitionRestart?: (next: AgentJournalSubmission) => boolean
     stopAgent: (sessionId: string) => Promise<void>
     logger: StructuredAgentSessionLogger
   }
@@ -95,6 +119,7 @@ export async function retireOutgrownStructuredAgentSessionChild(
     !session ||
     !(
       structuredAgentSessionChildReportedSignedOut(session) ||
+      picksNewLaunchModel(session, deps.next, deps.requiresModelTransitionRestart) ||
       (await launchedWithOtherPermissionMode(session.child, deps.launchPermission))
     ) ||
     structuredAgentSessionChildHasOpenWork(deps.work) ||

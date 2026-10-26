@@ -12,6 +12,10 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-queued-message-rig.test-fixture'
 import { HOST_TEST_SESSION as SESSION } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 
+/** Claude ends a turn; a message sent before this joins the running turn on its choices. */
+const claudeTurnEnds = (connection: Parameters<typeof claudeFrame>[0]) =>
+  claudeFrame(connection, { type: 'system', subtype: 'session_state_changed', state: 'idle' })
+
 it.each(['low', 'high', undefined])(
   'admits accepted high independently of resolved effort (effective %s)',
   async (effective) => {
@@ -118,6 +122,7 @@ it('retires earlier Fast routing when an effort read reports Fast off', async ()
     })
   try {
     await send('high')
+    claudeTurnEnds(claude.connections[0]!)
     claudeFrame(claude.connections[0]!, {
       type: 'system',
       subtype: 'status',
@@ -125,6 +130,7 @@ it('retires earlier Fast routing when an effort read reports Fast off', async ()
     })
     fastMode = false
     expect(await send('low')).toMatchObject({ state: 'admitted', ranOptions: { effort: 'low' } })
+    claudeTurnEnds(claude.connections[0]!)
     expect(await send('low')).toEqual({ state: 'admitted', ranOptions: { effort: 'low' } })
   } finally {
     await adapter.closeAll()
@@ -152,6 +158,7 @@ it('never pairs an earlier unknown-model low run with the next prepared model', 
     })
     expect(rig.store.getRecord(SESSION)?.options).toBeUndefined()
     await rig.settleAccepted(first.id, 'a')
+    claudeTurnEnds(claude.connections[0]!)
     claude.routes.set_model = async () => {
       claudeFrame(claude.connections[0]!, { type: 'system', subtype: 'init', model: 'B' })
       const report = events.findLast((event) => event.type === 'options-reported')!

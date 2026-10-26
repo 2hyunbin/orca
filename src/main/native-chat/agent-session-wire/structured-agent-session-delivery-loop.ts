@@ -23,6 +23,7 @@ import { holdRestartedStructuredAgentSessionSends } from './structured-agent-ses
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 import { waitsForCodexTurnOptions } from './structured-agent-session-message-options'
 import { sameProviderChild } from './structured-agent-session-provider-child'
+import { StructuredAgentSessionDeliveryProgress } from './structured-agent-session-delivery-progress'
 
 export type { StructuredAgentSessionDeliveryLoopDeps } from './structured-agent-session-delivery-loop-deps'
 
@@ -43,6 +44,7 @@ type StartFailure = NonNullable<ReturnType<typeof startThatFailedWhileQueued>>
 export class StructuredAgentSessionDeliveryLoop {
   private readonly running = new Set<string>()
   private readonly runs = new Map<string, Promise<void>>()
+  private readonly progress = new StructuredAgentSessionDeliveryProgress()
   private disposed = false
 
   constructor(private readonly deps: StructuredAgentSessionDeliveryLoopDeps) {}
@@ -61,6 +63,7 @@ export class StructuredAgentSessionDeliveryLoop {
     if (this.disposed) {
       return Promise.resolve()
     }
+    this.progress.woke(sessionId)
     this.deps.deliveryOrder.reconcile(
       sessionId,
       this.deps.sessions.get(sessionId)?.journal.submissions() ?? []
@@ -80,6 +83,7 @@ export class StructuredAgentSessionDeliveryLoop {
 
   private async run(sessionId: string): Promise<void> {
     try {
+      this.progress.begin(sessionId)
       for (;;) {
         const prepared = await this.deps.trackStart(
           this.deps.serialize(sessionId, () => this.prepare(sessionId))
@@ -173,7 +177,8 @@ export class StructuredAgentSessionDeliveryLoop {
 
   private async prepare(sessionId: string): Promise<Prepared> {
     const session = this.deps.sessions.get(sessionId)
-    if (!session || this.disposed) {
+    // A step that proved no change since the last one would repeat forever; park until a commit or wake.
+    if (!session || this.disposed || !this.progress.advanced(sessionId, this.deps)) {
       return this.stop(sessionId)
     }
     // Retry failed open recovery before delivery; never hand over earlier-process sends.
@@ -199,7 +204,7 @@ export class StructuredAgentSessionDeliveryLoop {
     if (failedStart) {
       return this.fail(sessionId, failedStart, oldest.clientMessageId)
     }
-    await this.deps.retireOutgrownChild(sessionId)
+    await this.deps.retireOutgrownChild(sessionId, oldest)
     const child = this.deps.sessions.get(sessionId)?.child
     if (!child || child.close) {
       return {
@@ -258,7 +263,7 @@ export class StructuredAgentSessionDeliveryLoop {
     }
     if (waited) {
       // Verify awaited-child identity before rechecking launch permissions.
-      await this.deps.retireOutgrownChild(sessionId)
+      await this.deps.retireOutgrownChild(sessionId, next)
       if (session.child !== awaitedChild) {
         return 'continue'
       }

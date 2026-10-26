@@ -13,6 +13,10 @@ import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structur
 import type { ClaudeStructuredSessionEvent } from './claude-structured-session-state'
 import { ClaudeControlRequestError } from './claude-stream-json-connection'
 
+/** Claude ends a turn; a message sent before this joins the running turn on its choices. */
+const claudeTurnEnds = (connection: Parameters<typeof claudeFrame>[0]) =>
+  claudeFrame(connection, { type: 'system', subtype: 'session_state_changed', state: 'idle' })
+
 const MODELS = [
   { value: 'default', resolvedModel: 'claude-sonnet-5' },
   {
@@ -57,6 +61,7 @@ describe('Claude accepted message choices', () => {
             fence: 7
           })
         ).resolves.toMatchObject({ state: 'admitted' })
+        claudeTurnEnds(connection)
         await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
       }
       expect(
@@ -74,6 +79,7 @@ describe('Claude accepted message choices', () => {
             fence: 7
           })
         ).resolves.toMatchObject({ state: 'admitted' })
+        claudeTurnEnds(connection)
       }
       expect(
         connection.calls.filter((call) =>
@@ -204,6 +210,7 @@ describe('Claude accepted message choices', () => {
     release()
     await expect(a).resolves.toMatchObject({ state: 'admitted' })
     expect(order).toEqual(['model:sonnet', 'effort:{"effortLevel":"low"}', 'prompt'])
+    claudeTurnEnds(connection)
 
     order.length = 0
     await expect(
@@ -329,6 +336,7 @@ describe('Claude accepted message choices', () => {
           fence: 7
         })
       ).resolves.toMatchObject({ state: 'admitted' })
+      claudeTurnEnds(connection)
     }
     expect(captured.options.fastMode).toBe('true')
     expect(connection.calls.filter((call) => call.subtype === 'apply_flag_settings')).toEqual(
@@ -371,6 +379,7 @@ describe('Claude accepted message choices', () => {
       fence: 7
     })
     const connection = claude.connections[0]!
+    claudeTurnEnds(connection)
     claudeFrame(connection, { type: 'system', subtype: 'init', model: 'claude-opus-5' })
     connection.calls.length = 0
     await expect(
@@ -389,5 +398,46 @@ describe('Claude accepted message choices', () => {
       { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'high' } } }
     ])
     expect(connection.sent).toHaveLength(2)
+  })
+
+  it('keeps a running turn on its choices and applies new ones at the next turn', async () => {
+    const claude = fakeClaude({ initModels: MODELS, routes: { list_models: () => MODELS } })
+    const adapter = await acquired(claude)
+    const connection = claude.connections[0]!
+    const send = (clientMessageId: string, model: string, body = USER_MESSAGE) =>
+      adapter.dispatch({
+        sessionId: 'session-1',
+        clientMessageId,
+        body,
+        executionOptions: { model },
+        fence: 7
+      })
+    const models = () =>
+      connection.calls.flatMap((call) => (call.subtype === 'set_model' ? [call.params?.model] : []))
+    await expect(send('opens', 'sonnet')).resolves.toMatchObject({ state: 'admitted' })
+    expect(models()).toEqual(['sonnet'])
+    // Typed while that turn runs, after the pick changed: it joins the turn as it is.
+    await expect(send('joins', 'opus')).resolves.toMatchObject({ state: 'admitted' })
+    expect(models()).toEqual(['sonnet'])
+    claudeTurnEnds(connection)
+    const mail = {
+      ...USER_MESSAGE,
+      from: {
+        kind: 'agent' as const,
+        senders: [],
+        orchestration: {
+          message: 'mail-notice' as const,
+          mailbox: 'agent:worker',
+          dispatchId: null,
+          messages: []
+        }
+      }
+    }
+    await expect(send('mail', 'opus', mail)).resolves.toMatchObject({ state: 'admitted' })
+    expect(models()).toEqual(['sonnet'])
+    claudeTurnEnds(connection)
+    await expect(send('next', 'opus')).resolves.toMatchObject({ state: 'admitted' })
+    expect(models()).toEqual(['sonnet', 'opus'])
+    expect(connection.sent).toHaveLength(4)
   })
 })

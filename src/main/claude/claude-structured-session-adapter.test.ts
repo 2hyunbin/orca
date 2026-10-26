@@ -28,6 +28,82 @@ import { claudeProviderHandle } from '../../shared/agent-session-provider-handle
 import { providerRequestTimeoutOf } from '../provider-process/provider-request-timeout'
 
 describe('ClaudeStructuredSessionAdapter.acquire', () => {
+  it('reopens for a newly picked model only when Claude opened in another approval mode', async () => {
+    const claude = fakeClaude()
+    const open = claude.openConnection
+    claude.openConnection = async (launch, handlers) => {
+      const connection = await open(launch, handlers)
+      const frame = { type: 'system', session_id: PROVIDER_SESSION_ID }
+      handlers?.onMessage?.({
+        ...frame,
+        subtype: 'hook_started',
+        hook_name: 'SessionStart:startup'
+      })
+      // A subagent's init says nothing about the process; the root init reports Claude's fallback.
+      handlers?.onMessage?.({
+        ...frame,
+        subtype: 'init',
+        parent_tool_use_id: 'child',
+        permissionMode: 'auto'
+      })
+      handlers?.onMessage?.({
+        ...frame,
+        subtype: 'init',
+        permissionMode: 'default',
+        model: 'claude-haiku-4-5'
+      })
+      return connection
+    }
+    const adapter = adapterFor(claude, {
+      options: { permissionMode: 'auto', extraArgs: { model: 'haiku' } }
+    })
+    await adapter.acquire({ identity: identityFor(), fence: 7, spawnToken: 'spawn-9' })
+    const requiresRestart = (model?: string, fence = 7) =>
+      adapter.requiresModelTransitionRestart({
+        sessionId: 'session-1',
+        fence,
+        executionOptions: model === undefined ? {} : { model }
+      })
+    expect(requiresRestart('haiku')).toBe(false)
+    expect(requiresRestart()).toBe(false)
+    expect(requiresRestart('opus', 6)).toBe(false)
+    expect(requiresRestart('opus')).toBe(true)
+    // Later reports and a live model switch do not change what this process opened with.
+    claude.connections[0].handlers.onMessage?.({
+      type: 'system',
+      subtype: 'status',
+      session_id: PROVIDER_SESSION_ID,
+      permissionMode: 'auto'
+    })
+    await adapter.setOption({ sessionId: 'session-1', fence: 7, key: 'model', value: 'opus' })
+    expect(requiresRestart('opus')).toBe(true)
+    await adapter.closeSession('session-1')
+  })
+
+  it('never reopens a process that opened in the requested mode or did not say', async () => {
+    for (const reported of [{ permissionMode: 'auto' }, {}]) {
+      const claude = fakeClaude()
+      const adapter = adapterFor(claude, { options: { permissionMode: 'auto' } })
+      await adapter.acquire({
+        identity: identityFor(),
+        fence: 7,
+        spawnToken: 'spawn-9',
+        options: { model: 'haiku' }
+      })
+      const frame = { type: 'system', subtype: 'init', session_id: PROVIDER_SESSION_ID }
+      claude.connections[0].handlers.onMessage?.({ ...frame, ...reported })
+      claude.connections[0].handlers.onMessage?.({ ...frame, permissionMode: 'default' })
+      expect(
+        adapter.requiresModelTransitionRestart({
+          sessionId: 'session-1',
+          fence: 7,
+          executionOptions: { model: 'opus' }
+        })
+      ).toBe(false)
+      await adapter.closeSession('session-1')
+    }
+  })
+
   it('ends a stalled initialize at its 60-second deadline with the timed-out step', async () => {
     vi.useFakeTimers()
     try {
