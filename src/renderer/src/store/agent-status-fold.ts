@@ -40,6 +40,8 @@ export type StatusStage = {
   readRetirement: ReturnType<typeof prepareStructuredReadRetirement> | null
   read: AgentStatusReadState | null
 }
+type AgentStatusReadProperties = { [Key in keyof AppState]: AppState[Key] }
+
 function createAgentStatusReadView(
   app: () => AppState,
   statuses: () => AgentStatusSnapshot
@@ -48,14 +50,22 @@ function createAgentStatusReadView(
     if (key === 'agentStatusByPaneKey') {
       return statuses()
     }
-    return Reflect.get(app(), key)
+    const source: AgentStatusReadProperties = app()
+    const properties: Readonly<Record<PropertyKey, unknown>> = source
+    return properties[key]
   }
   const refuse = () => false
   return new Proxy<AgentStatusReadState>(Object.create(Object.prototype), {
-    get: (target, key, receiver) =>
-      key === 'agentStatusByPaneKey' || Object.getOwnPropertyDescriptor(app(), key)?.enumerable
-        ? read(key)
-        : Reflect.get(target, key, receiver),
+    get: (_target, key, receiver) => {
+      if (
+        key === 'agentStatusByPaneKey' ||
+        Object.getOwnPropertyDescriptor(app(), key)?.enumerable
+      ) {
+        return read(key)
+      }
+      const descriptor = Object.getOwnPropertyDescriptor(Object.prototype, key)
+      return descriptor?.get ? descriptor.get.call(receiver) : descriptor?.value
+    },
     has: (_target, key) =>
       key === 'agentStatusByPaneKey' ||
       Object.getOwnPropertyDescriptor(app(), key)?.enumerable === true ||

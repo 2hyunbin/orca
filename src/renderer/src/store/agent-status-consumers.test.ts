@@ -9,6 +9,17 @@ import { createAutomationDispatchCompletion } from '@/hooks/automation-dispatch-
 import { makeRun } from '@/components/automations/automations-page-fixtures'
 import { makeWorktree } from './slices/worktrees-slice-test-fixtures'
 
+type AgentStatusReadProbe = AgentStatusReadState & {
+  readonly [key: symbol]: unknown
+  readonly hidden?: string
+  readonly transient?: string
+  readonly __proto__?: object
+}
+
+type AgentStatusAppProbe = { [Key in keyof AppState]: AppState[Key] } & Readonly<
+  Record<PropertyKey, unknown>
+>
+
 const facet = { state: 'working', progress: 42, observedAt: 1000 } as const
 afterEach(() => vi.useRealTimers())
 
@@ -238,16 +249,16 @@ describe('source-backed canonical read joins', () => {
     const store = createStore(createAppState)
     const owner = getAgentStatusOwner(store)
     const marker = Symbol('data')
-    const data = { ...store.getState() }
+    const data: AgentStatusAppProbe = { ...store.getState() }
     Object.defineProperty(data, marker, { value: 'captured', enumerable: true })
     let reads = 0
     let enumerations = 0
     const source = new Proxy(data, {
-      get(target, key, receiver) {
+      get(target, key) {
         if (key === marker) {
           reads++
         }
-        return Reflect.get(target, key, receiver)
+        return target[key]
       },
       ownKeys(target) {
         enumerations++
@@ -257,12 +268,12 @@ describe('source-backed canonical read joins', () => {
     store.setState(source, true)
     reads = 0
     enumerations = 0
-    const committed = owner.getState()
+    const committed: AgentStatusReadProbe = owner.getState()
     expect(owner.getState()).toBe(committed)
     expect(reads).toBe(0)
     expect(enumerations).toBe(0)
     owner.transact((transaction) => {
-      const staged = transaction.getState()
+      const staged: AgentStatusReadProbe = transaction.getState()
       expect(transaction.getState()).toBe(staged)
       expect(reads).toBe(0)
       expect(enumerations).toBe(0)
@@ -271,12 +282,12 @@ describe('source-backed canonical read joins', () => {
       expect(enumerations).toBe(1)
       expect(transaction.getState()).toBe(staged)
       expect(staged.activeWorktreeId).toBe('prepared')
-      expect(Reflect.get(staged, marker)).toBe('captured')
+      expect(staged[marker]).toBe('captured')
       expect(store.getState()).toBe(source)
     })
     expect(store.getState().activeWorktreeId).toBe('prepared')
     expect(committed.activeWorktreeId).toBeNull()
-    expect(Reflect.get(committed, marker)).toBe('captured')
+    expect(committed[marker]).toBe('captured')
   })
 
   it('reflects own enumerable strings and symbols without letting a read mutate its sources', () => {
@@ -289,7 +300,7 @@ describe('source-backed canonical read joins', () => {
     Object.defineProperty(source, hidden, { value: 99 })
     Object.defineProperty(source, 'hidden', { value: 'hidden' })
     store.setState(source, true)
-    const read = owner.getState()
+    const read: AgentStatusReadProbe = owner.getState()
     expect(Object.keys(read)).toEqual([...Object.keys(source), 'agentStatusByPaneKey'])
     expect(Reflect.ownKeys(read)).toEqual([...Object.keys(source), 'agentStatusByPaneKey', marker])
     expect(Object.getOwnPropertyDescriptor(read, marker)).toEqual({
@@ -298,16 +309,16 @@ describe('source-backed canonical read joins', () => {
       configurable: true,
       writable: false
     })
-    expect(Reflect.get(read, marker)).toBe(42)
-    expect(Reflect.get(read, hidden)).toBeUndefined()
-    expect(Reflect.get(read, 'hidden')).toBeUndefined()
+    expect(read[marker]).toBe(42)
+    expect(read[hidden]).toBeUndefined()
+    expect(read.hidden).toBeUndefined()
     expect(Reflect.has(read, marker)).toBe(true)
     expect(Reflect.has(read, hidden)).toBe(false)
     expect(Reflect.has(read, 'hidden')).toBe(false)
-    expect(Reflect.get(read, 'toString')).toBe(Object.prototype.toString)
-    expect(Reflect.get(read, '__proto__')).toBe(Object.prototype)
-    const spread = { ...read }
-    expect(Reflect.get(spread, marker)).toBe(42)
+    expect(read.toString).toBe(Object.prototype.toString)
+    expect(read.__proto__).toBe(Object.prototype)
+    const spread: AgentStatusReadProbe = { ...read }
+    expect(spread[marker]).toBe(42)
     expect(spread.agentStatusByPaneKey).toBe(owner.getSnapshot())
     expect(Reflect.set(read, 'activeWorktreeId', 'wrong')).toBe(false)
     expect(Reflect.defineProperty(read, 'activeWorktreeId', { value: 'wrong' })).toBe(false)
@@ -328,7 +339,7 @@ describe('source-backed canonical read joins', () => {
     const pairs: AgentStatusTransition[] = []
     owner.subscribeTransitions((pair) => pairs.push(pair))
     owner.transact((transaction) => {
-      const read = transaction.getState()
+      const read: AgentStatusReadProbe = transaction.getState()
       const replacement = {
         ...owner.getAppState(),
         transient: 'remove me',
@@ -336,12 +347,12 @@ describe('source-backed canonical read joins', () => {
       }
       store.setState(replacement, true)
       expect(read.activeWorktreeId).toBe('new')
-      expect(Reflect.get(read, 'transient')).toBe('remove me')
+      expect(read.transient).toBe('remove me')
       Reflect.deleteProperty(replacement, 'transient')
       store.setState(replacement, true)
       expect(transaction.getState()).toBe(read)
       expect(Reflect.has(read, 'transient')).toBe(false)
-      expect(Reflect.get(read, 'transient')).toBeUndefined()
+      expect(read.transient).toBeUndefined()
       expect(Object.keys(read)).not.toContain('transient')
       store.getState().setAgentStatus('history:1', { state: 'done', prompt: 'second' })
       expect(read.agentStatusByPaneKey['history:1'].state).toBe('done')
