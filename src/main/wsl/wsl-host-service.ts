@@ -4,6 +4,7 @@
  * parked: polls and visible work keep it down until the user acts or the distro runs again.
  */
 import { errorMessage } from '../../shared/error-message'
+import { focusReachability } from './wsl-host-focus-reachability'
 import { removeWslHostEnvironment } from '../../shared/runtime-environment-wsl-host-store'
 import {
   readWslHostDeployments,
@@ -28,7 +29,12 @@ import {
 } from './wsl-host-add-admission'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 import { registerWslHost } from './wsl-host-registration'
-import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
+import type { WslOrcadConnectIntent, WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
+import {
+  forgetWslHostToWake,
+  forgetWslHostsToWake,
+  rememberWslHostsToWake
+} from './wsl-host-early-wake'
 
 /** `stopped` and `unreachable` rest on a confirmed running list; `unavailable` could not read it. */
 export type WslHostReachability = 'available' | 'unreachable' | 'stopped' | 'unavailable'
@@ -39,7 +45,7 @@ export type WslHostConnector = {
   /** Runs in the distro, so it boots a stopped one: only after the user chose to. */
   readOrcadPublicKey(distro: string): Promise<string | null>
   /** User-initiated; may boot the distro. An intent retries or forces a skipped update. */
-  connect(distro: string, options?: { intent?: WslHostConnectIntent }): Promise<WslOrcadConnection>
+  connect(distro: string, options?: WslOrcadConnectIntent): Promise<WslOrcadConnection>
   /** Explicit retry must clear pairing-repair failures and spent caps. */
   forgetPairingFailures?(environmentId: string): void
   get(distro: string): WslOrcadConnection | null
@@ -188,6 +194,7 @@ export class WslHostService {
         await connector.releaseHolder(record.distro)
       }
       removeWslHostEnvironment(this.deps.userDataPath(), environmentId)
+      forgetWslHostToWake(this.deps.userDataPath(), record.distro)
       this.visible.delete(environmentId)
       this.parked.delete(environmentId)
     } finally {
@@ -211,6 +218,7 @@ export class WslHostService {
       return
     }
     this.disableGeneration += 1
+    forgetWslHostsToWake(this.deps.userDataPath())
     for (const record of this.records()) {
       await connector.disconnect(record.distro)
       await connector.releaseHolder(record.distro)
@@ -269,21 +277,24 @@ export class WslHostService {
     ) {
       throw new Error(wslHostNotConnectedMessage(record.distro))
     }
-    await connector.connect(record.distro)
+    await connector.connect(record.distro, { noBoot: true })
   }
 
   /**
    * The user switched to a workspace on this host (or launch restored it focused): the one
    * non-explicit act that may boot its distro, and it lifts a park.
    */
-  focusHost(environmentId: string): void {
-    const record = this.recordForEnvironment(environmentId)
-    if (!record || !this.connector || !this.canRun() || this.removing.has(environmentId)) {
+  focusHost(environmentId: string | null): void {
+    const record = environmentId ? this.recordForEnvironment(environmentId) : null
+    const runnable =
+      record && this.connector && this.canRun() && !this.removing.has(record.environmentId)
+    // The next launch starts booting only this distro, early (none when off WSL or not runnable).
+    rememberWslHostsToWake(this.deps.userDataPath(), runnable ? [record.distro] : [])
+    if (!record || !runnable || !this.connector) {
       return
     }
-    this.parked.delete(environmentId)
-    void this.connector
-      .reachability(record.distro, environmentId)
+    this.parked.delete(record.environmentId)
+    void focusReachability(this.connector, record)
       .then((reachability) =>
         reachability === 'available' ? undefined : this.connector?.connect(record.distro)
       )
