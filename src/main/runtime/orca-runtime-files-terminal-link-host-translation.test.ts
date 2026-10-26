@@ -1,4 +1,3 @@
-import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { describe, expect, it, vi } from 'vitest'
 import { realpath } from 'node:fs/promises'
 import { openMock, resolveAuthorizedPathMock, statMock } from './orca-runtime-files-mock-registry'
@@ -180,17 +179,15 @@ describe('RuntimeFileCommands', () => {
 
     it('refuses host-qualified terminal links on an SSH workspace instead of reading this machine', async () => {
       const resolveTerminalFileUriHostname = vi.fn(() => 'remote-host')
-      const hasRecentTerminalOutputPath = vi.fn(() => true)
       const { commands, store } = createRuntimeFileCommands({
         path: '/home/me/repo',
-        resolveTerminalFileUriHostname,
-        hasRecentTerminalOutputPath
+        resolveTerminalFileUriHostname
       })
       store.getRepo.mockReturnValue({ connectionId: 'ssh-1' })
 
       await expect(
         resolveTerminalArtifactPath(commands, '//remote-host/tmp/result.json')
-      ).rejects.toThrow(SshHostNotServedError)
+      ).resolves.not.toHaveProperty('openTarget')
       await expect(
         commands.resolveTerminalPath(
           'id:wt-1',
@@ -199,8 +196,8 @@ describe('RuntimeFileCommands', () => {
           'client-a',
           'term-1'
         )
-      ).rejects.toThrow(SshHostNotServedError)
-      expect(hasRecentTerminalOutputPath).not.toHaveBeenCalled()
+      ).resolves.not.toHaveProperty('openTarget')
+      expect(statMock).not.toHaveBeenCalled()
     })
 
     it('rejects host-qualified remote POSIX terminal links without a verified host match', async () => {

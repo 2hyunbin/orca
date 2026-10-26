@@ -5,7 +5,7 @@ import type {
 import { parseWslPath } from '../../wsl'
 import { relativePathInsideRoot, resolveRuntimePath } from '../../../shared/cross-platform-path'
 import { homedir } from 'node:os'
-import { provenancePathCandidate, resolveTerminalAbsolutePath } from './terminal-file-path'
+import { resolveTerminalAbsolutePath } from './terminal-file-path'
 import { requireRuntimeFileProvider, runtimeFileRouteForTarget } from '../files/file-target'
 import { isSafeMobileRelativePath } from '../files/mobile-file-kind'
 import { isENOENT } from '../../ipc/filesystem/filesystem-path-containment'
@@ -18,17 +18,9 @@ type RuntimeTerminalPathHost = Pick<
   | 'resolveRuntimeFileTarget'
   | 'resolveKnownWorkspaceFileTarget'
   | 'resolveTerminalCwd'
-  | 'resolveTerminalContext'
   | 'resolveTerminalFileUriHostname'
-  | 'hasRecentTerminalOutputPath'
-  | 'hasRecentNativeChatOutputPath'
 >
-type RuntimeTerminalArtifactAuthority = Pick<
-  RuntimeTerminalArtifacts,
-  | 'resolveNativeChatArtifactPath'
-  | 'resolveAbsoluteFileGrant'
-  | 'resolveAllowedTerminalArtifactPath'
->
+type RuntimeTerminalArtifactAuthority = Pick<RuntimeTerminalArtifacts, 'resolveAbsoluteFileGrant'>
 
 export class RuntimeTerminalPathResolver {
   constructor(
@@ -123,61 +115,13 @@ export class RuntimeTerminalPathResolver {
         }
       }
 
-      if (
-        nativeChatContext &&
-        (await this.host.hasRecentNativeChatOutputPath?.(
-          worktree.id,
-          nativeChatContext,
-          pathText,
-          absolutePath
-        ))
-      ) {
-        const artifactPath = await this.artifacts.resolveNativeChatArtifactPath(
-          absolutePath,
-          connectionId
-        )
-        return await this.artifacts.resolveAbsoluteFileGrant({
-          worktreeId: worktree.id,
-          artifactPath,
-          clientId,
-          readOnly: true,
-          provenance: 'native-chat'
-        })
-      }
-
-      // Why: mobile taps may hit agent artifacts outside the worktree; grant the exact path, not arbitrary absolute paths.
-      if (!normalizedTerminalHandle || !terminalCwd) {
-        return { ...empty, relativePath, absolutePath }
-      }
-      const terminalContext = this.host.resolveTerminalContext?.(normalizedTerminalHandle)
-      if (
-        !terminalContext ||
-        terminalContext.worktreeId !== worktree.id ||
-        (terminalContext.connectionId ?? undefined) !== connectionId
-      ) {
-        return { ...empty, relativePath, absolutePath }
-      }
-      const artifactPath = await this.artifacts.resolveAllowedTerminalArtifactPath({
-        absolutePath,
-        connectionId,
-        worktreePath: worktree.path
-      })
-      if (!artifactPath) {
-        return { ...empty, relativePath, absolutePath }
-      }
-      if (
-        !(await this.host.hasRecentTerminalOutputPath?.(
-          normalizedTerminalHandle,
-          provenancePathCandidate(pathText, absolutePath),
-          artifactPath
-        ))
-      ) {
+      // Why: any caller allowed this method can already run commands as this host's user, so no path is off limits.
+      if (connectionId) {
         return { ...empty, relativePath, absolutePath }
       }
       return await this.artifacts.resolveAbsoluteFileGrant({
         worktreeId: worktree.id,
-        artifactPath,
-        rejectedAbsolutePath: absolutePath,
+        absolutePath,
         clientId
       })
     } catch (error) {

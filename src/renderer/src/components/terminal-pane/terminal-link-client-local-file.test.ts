@@ -7,7 +7,10 @@ import {
   createCompatibleRuntimeStatusResponseIfNeeded,
   type RuntimeEnvironmentCallRequest
 } from '@/runtime/runtime-compatibility-test-fixture'
-import { TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY } from '../../../../shared/runtime-file-contracts'
+import {
+  TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY,
+  TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY
+} from '../../../../shared/runtime-file-contracts'
 import {
   flushDoubleRaf,
   installTerminalLinkTestEnvironment
@@ -121,7 +124,7 @@ describe('a link to this computer printed in a paired-server terminal', () => {
     )
   })
 
-  it('keeps the host refusal when this computer does not have the file either', async () => {
+  it('reports a file neither the host nor this computer has as not found', async () => {
     hostDisowns('/etc/orca-missing')
     statMock.mockRejectedValueOnce(new Error('ENOENT: no such file'))
     const onOpenFailure = vi.fn()
@@ -134,8 +137,35 @@ describe('a link to this computer printed in a paired-server terminal', () => {
 
     expect(openFileMock).not.toHaveBeenCalled()
     expect(onOpenFailure).toHaveBeenCalledWith({
+      verdict: 'missing',
+      error: new Error('File not found on its host: /etc/orca-missing')
+    })
+  })
+
+  it('asks for a host update when an older host refuses a file outside its workspaces', async () => {
+    runtimeEnvironmentTransportCallMock.mockImplementation(
+      (args: RuntimeEnvironmentCallRequest) => {
+        const status = createCompatibleRuntimeStatusResponseIfNeeded(args)
+        if (!status?.ok) {
+          return runtimeEnvironmentCallMock(args)
+        }
+        const capabilities = status.result.capabilities?.filter(
+          (capability) => capability !== TERMINAL_PATH_ABSOLUTE_FILES_RUNTIME_CAPABILITY
+        )
+        return { ...status, result: { ...status.result, capabilities } }
+      }
+    )
+    hostDisowns('/tmp/handoff.md')
+    statMock.mockRejectedValueOnce(new Error('ENOENT: no such file'))
+    const onOpenFailure = vi.fn()
+
+    openDetectedFilePath('/tmp/handoff.md', null, null, { ...serverWorkspace, onOpenFailure })
+    await flushDoubleRaf()
+
+    expect(openFileMock).not.toHaveBeenCalled()
+    expect(onOpenFailure).toHaveBeenCalledWith({
       verdict: 'unverifiable',
-      error: new Error('/etc/orca-missing is outside every workspace on its host')
+      error: new Error('Update Orca on env-1 to open files outside its workspaces')
     })
   })
 

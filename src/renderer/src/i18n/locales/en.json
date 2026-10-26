@@ -20293,6 +20293,11 @@
       "stepDownload": "Download",
       "stepUnpack": "Unpack",
       "stepCheck": "Check"
+    },
+    "terminal-pane": {
+      "hostFile": {
+        "updateHostForOutsideFiles": "Update Orca on {{value0}} to open files outside its workspaces"
+      }
     }
   },
   "dashboardPopout": {

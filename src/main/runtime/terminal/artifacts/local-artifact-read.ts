@@ -11,12 +11,10 @@ import {
   assertTerminalArtifactContentUnchanged,
   assertTerminalFileGrantFresh,
   canonicalPathForArtifactComparison,
-  localTerminalArtifactRoots,
   readFileHandleBufferBounded
 } from './artifact-integrity'
 import { isBinaryBuffer } from '../../../../shared/binary-buffer'
 import type { RuntimeFilePreviewResult } from '../../../../shared/runtime-types'
-import { isPathInsideOrEqual } from '../../../../shared/cross-platform-path'
 
 const OPEN_NOFOLLOW = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0
 
@@ -98,13 +96,4 @@ export async function openLocalTerminalArtifactGrant(
     }
     throw error
   }
-}
-
-export async function resolveAllowedLocalTerminalArtifactPath(
-  absolutePath: string,
-  worktreePath: string
-): Promise<string | null> {
-  const roots = await localTerminalArtifactRoots(worktreePath)
-  const canonicalPath = await canonicalPathForArtifactComparison(absolutePath)
-  return roots.some((root) => isPathInsideOrEqual(root, canonicalPath)) ? canonicalPath : null
 }

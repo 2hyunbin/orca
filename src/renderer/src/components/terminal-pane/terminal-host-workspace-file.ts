@@ -13,6 +13,7 @@ import {
   TERMINAL_PATH_CROSS_WORKSPACE_RUNTIME_CAPABILITY,
   type RuntimeTerminalPathResolution
 } from '../../../../shared/runtime-file-contracts'
+import { HostFileRefusal, hostAbsentRefusal } from './host-file-refusal'
 
 export type HostWorkspaceFile = {
   kind: 'host'
@@ -27,7 +28,7 @@ export type HostWorkspaceFile = {
 /** A path the host disowned that this computer has; the user's click here is the only authority to read it. */
 export type ClientLocalFile = { kind: 'client'; isDirectory: boolean }
 
-/** A host file outside every workspace that the host granted because this terminal printed it. */
+/** A host file outside every workspace, readable through the grant the host issued for it. */
 export type HostGrantedFile = {
   kind: 'grant'
   /** The host's canonical path; the grant is bound to it. */
@@ -35,9 +36,6 @@ export type HostGrantedFile = {
   grantId: string
   isDirectory: false
 }
-
-/** The host answered: it has no file there this client may open. Transport failures stay other errors. */
-export class HostFileRefusal extends Error {}
 
 export const CLIENT_LOCAL_FILE_TARGET: RuntimeClientTarget = { kind: 'local' }
 
@@ -80,7 +78,7 @@ async function statClientLocalFile(
   }
 }
 
-/** For paired paths outside the source workspace, ask the server for an owning workspace or terminal grant; only disowned ungranted paths fall to this computer. Null when inapplicable; rejects when neither can open. */
+/** For paired paths outside the source workspace, ask the server for an owning workspace or a file grant; only paths the host lacks fall to this computer. Null when inapplicable; rejects when neither can open. */
 export async function resolveHostWorkspaceFile(
   context: RuntimeFileOperationArgs,
   absolutePath: string,
@@ -101,15 +99,13 @@ export async function resolveHostWorkspaceFile(
       worktree: toRuntimeWorktreeSelector(context.worktreeId),
       pathText: absolutePath,
       crossWorkspace: true,
-      // Why: the host grants a file outside its workspaces only to the terminal that printed it.
+      // Why: older hosts grant a file outside their workspaces only to the terminal that printed it.
       ...(terminalHandle ? { terminal: terminalHandle } : {})
     },
     { timeoutMs: 15_000 }
   )
   const relativePath = resolved.relativePath
   if (relativePath === null || !resolved.absolutePath) {
-    // Why: hosts grant reads only inside their workspaces; servers without crossWorkspace land here too.
-    const refusal = new HostFileRefusal(`${absolutePath} is outside every workspace on its host`)
     const openTarget = resolved.openTarget
     if (openTarget?.kind === 'absolute-file') {
       // Why: a host grant means the host owns the path; it never becomes a read of this computer.
@@ -121,10 +117,14 @@ export async function resolveHostWorkspaceFile(
       }
     }
     if (resolved.exists) {
-      // Why: an ungranted host path (a directory, or one no terminal printed) is still the host's.
-      throw refusal
+      // Why: hosts grant files, not folders; the folder is still the host's, never this computer's.
+      throw new HostFileRefusal(`${absolutePath} is a folder outside every workspace on its host`)
     }
-    return statClientLocalFile(environmentId, absolutePath, refusal)
+    return statClientLocalFile(
+      environmentId,
+      absolutePath,
+      await hostAbsentRefusal(environmentId, absolutePath)
+    )
   }
   if (!resolved.exists) {
     throw new HostFileRefusal(`File not found on its host: ${absolutePath}`)

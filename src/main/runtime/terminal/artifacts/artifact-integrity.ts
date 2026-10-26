@@ -1,6 +1,4 @@
-import { tmpdir } from 'node:os'
 import { createHash } from 'node:crypto'
-import { parseWslPath, toWindowsWslPath } from '../../../wsl'
 import { realpath } from 'node:fs/promises'
 import type { FileHandle } from 'node:fs/promises'
 import type { RuntimeFileStatLike, TerminalFileGrant } from './file-grants'
@@ -8,22 +6,6 @@ import {
   LOCAL_PREVIEWABLE_BINARY_MAX_BYTES,
   MOBILE_FILE_READ_MAX_BYTES
 } from '../../files/file-preview-budget'
-
-export async function localTerminalArtifactRoots(worktreePath: string): Promise<string[]> {
-  const roots = new Set<string>([tmpdir()])
-  if (process.platform !== 'win32') {
-    roots.add('/tmp')
-    roots.add('/private/tmp')
-  }
-  const wsl = parseWslPath(worktreePath)
-  if (wsl) {
-    roots.add(toWindowsWslPath('/tmp', wsl.distro))
-  }
-  const canonicalRoots = await Promise.all(
-    Array.from(roots).map((root) => canonicalPathForArtifactComparison(root))
-  )
-  return Array.from(new Set([...roots, ...canonicalRoots]))
-}
 
 export async function canonicalPathForArtifactComparison(path: string): Promise<string> {
   try {
@@ -96,21 +78,10 @@ export function assertTerminalFileGrantFresh(
   grant: TerminalFileGrant,
   stats: RuntimeFileStatLike
 ): void {
-  assertTerminalArtifactNotHardLinked(stats)
   const nextIdentity = terminalFileStatIdentity(stats)
   if (grant.statIdentity !== null && nextIdentity !== null && grant.statIdentity !== nextIdentity) {
     throw new Error('terminal_file_grant_stale')
   }
-}
-
-export function assertTerminalArtifactNotHardLinked(stats: RuntimeFileStatLike): void {
-  if (isTerminalArtifactHardLinked(stats)) {
-    throw new Error('terminal_file_grant_stale')
-  }
-}
-
-export function isTerminalArtifactHardLinked(stats: RuntimeFileStatLike): boolean {
-  return typeof stats.nlink === 'number' && stats.nlink > 1
 }
 
 export function truncateMobileFilePreview(content: string): {
