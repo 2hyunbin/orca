@@ -1,12 +1,12 @@
 import {
   pairedRuntimeConnectionFromOffer,
   type PairedRuntimeConnection
-} from './paired-runtime-connection'
+} from '../paired-runtime-connection'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
-import { generateKeyPair, publicKeyToBase64 } from './e2ee-crypto'
-import { encodePairingOffer, parsePairingCode } from './pairing'
+import { generateKeyPair, publicKeyToBase64 } from '../e2ee-crypto'
+import { encodePairingOffer, parsePairingCode } from '../pairing'
 import { sendRemoteRuntimeRequest, subscribeRemoteRuntimeRequest } from './remote-runtime-client'
 import {
   REMOTE_RUNTIME_MAX_PENDING_REQUESTS,
@@ -20,10 +20,10 @@ import {
   retainedRemoteRuntimeJsonStringBytes,
   serializeRemoteRuntimeRpcRequest
 } from './remote-runtime-memory-limits'
-import { getRemoteRuntimeRequestAdmissionEvidence } from './remote-runtime/requests/remote-runtime-prepared-request-admission'
-import { RemoteRuntimeRequestConnection } from './remote-runtime/requests/remote-runtime-request-connection'
-import { RemoteRuntimeSharedControlConnection } from './remote-runtime/control/remote-runtime-shared-control-connection'
-import { waitForSharedControlReadyWithTimeout } from './remote-runtime/control/remote-runtime-shared-control-ready'
+import { getRemoteRuntimeRequestAdmissionEvidence } from './requests/remote-runtime-prepared-request-admission'
+import { RemoteRuntimeRequestConnection } from './requests/remote-runtime-request-connection'
+import { RemoteRuntimeSharedControlConnection } from './control/remote-runtime-shared-control-connection'
+import { waitForSharedControlReadyWithTimeout } from './control/remote-runtime-shared-control-ready'
 
 type InspectableRequestConnection = {
   close: () => void

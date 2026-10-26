@@ -1,10 +1,10 @@
 import {
   createPairedE2EEClientHandshake,
   type PairedE2EEClientHandshake
-} from './paired-e2ee-client-handshake'
-import { NODE_PAIRED_E2EE_PRIMITIVES } from './paired-e2ee-node-primitives'
+} from '../paired-e2ee-client-handshake'
+import { NODE_PAIRED_E2EE_PRIMITIVES } from '../paired-e2ee-node-primitives'
 import { serializeRemoteRuntimePayload } from './remote-runtime-memory-limits'
-import { parseRemoteRuntimeJsonText } from './remote-runtime/requests/remote-runtime-request-frames'
+import { parseRemoteRuntimeJsonText } from './requests/remote-runtime-request-frames'
 
 export type RemoteRuntimeHandshakeState = 'awaiting_ready' | 'awaiting_authenticated' | 'ready'
 

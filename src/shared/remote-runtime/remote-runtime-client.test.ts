@@ -1,11 +1,11 @@
 import {
   pairedRuntimeConnectionFromOffer,
   type PairedRuntimeConnection
-} from './paired-runtime-connection'
+} from '../paired-runtime-connection'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocketClient, { WebSocketServer, type WebSocket } from 'ws'
-import { encodePairingOffer, parsePairingCode } from './pairing'
+import { encodePairingOffer, parsePairingCode } from '../pairing'
 import {
   decrypt,
   decryptBytes,
@@ -14,11 +14,11 @@ import {
   generateKeyPair,
   publicKeyFromBase64,
   publicKeyToBase64
-} from './e2ee-crypto'
+} from '../e2ee-crypto'
 import { sendRemoteRuntimeRequest, subscribeRemoteRuntimeRequest } from './remote-runtime-client'
 import { remoteRuntimeClientCapabilities } from './remote-runtime-client-capabilities'
-import { MAX_TIMER_DELAY_MS } from './timer-delay'
-import { BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY } from './protocol-version'
+import { MAX_TIMER_DELAY_MS } from '../timer-delay'
+import { BROWSER_NETWORK_TUNNEL_RUNTIME_CAPABILITY } from '../browser-runtime-capabilities'
 
 const servers: WebSocketServer[] = []
 

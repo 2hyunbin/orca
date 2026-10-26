@@ -1,14 +1,14 @@
-import type { PairedRuntimeConnection } from './paired-runtime-connection'
-import type { RuntimeCapability } from './protocol-version'
+import type { PairedRuntimeConnection } from '../paired-runtime-connection'
+import type { RuntimeCapability } from '../protocol-version'
 import type { RemoteRuntimeClientError } from './remote-runtime-client-error'
-import { sendRemoteRuntimeRequestOnSocket } from './remote-runtime/requests/remote-runtime-request-socket'
-import { subscribeRemoteRuntimeTransport } from './remote-runtime/requests/remote-runtime-subscription-transport'
+import { sendRemoteRuntimeRequestOnSocket } from './requests/remote-runtime-request-socket'
+import { subscribeRemoteRuntimeTransport } from './requests/remote-runtime-subscription-transport'
 import type {
   RemoteRuntimeSubscriptionOptions,
   RemoteRuntimeTransportSubscriptionCallbacks
-} from './remote-runtime/requests/remote-runtime-subscription-contract'
-import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from './runtime-rpc-envelope'
-import type { RuntimeStatus } from './runtime-types'
+} from './requests/remote-runtime-subscription-contract'
+import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from '../runtime-rpc-envelope'
+import type { RuntimeStatus } from '../runtime-session-contracts'
 
 export type RemoteRuntimeSubscription = {
   requestId: string

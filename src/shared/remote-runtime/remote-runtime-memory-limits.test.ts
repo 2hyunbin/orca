@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { encrypt } from './e2ee-crypto'
-import { sealMobileE2EEV2Frame } from './mobile-e2ee-v2-framing'
+import { encrypt } from '../e2ee-crypto'
+import { sealMobileE2EEV2Frame } from '../mobile-e2ee-v2-framing'
 import {
   isRemoteRuntimeBinaryFrameWithinLimit,
   measureRemoteRuntimeSubscriptionParams,

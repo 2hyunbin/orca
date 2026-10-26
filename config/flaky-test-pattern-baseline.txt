@@ -480,7 +480,7 @@
 1 test-no-real-time-wait:src/shared/git-branch-line-total-soft-deadline.test.ts
 1 test-no-real-time-wait:src/shared/osc52-clipboard.test.ts
 4 test-no-real-time-wait:src/shared/pty-reply-echo-shapes.node-pty.test.ts
-1 test-no-real-time-wait:src/shared/remote-runtime-outbound-admission.test.ts
+1 test-no-real-time-wait:src/shared/remote-runtime/remote-runtime-outbound-admission.test.ts
 2 test-no-real-time-wait:src/shared/remote-runtime/control/remote-runtime-shared-control-auth-refusal.test.ts
 1 test-no-real-time-wait:src/shared/remote-runtime/control/remote-runtime-shared-control-standing-intent.test.ts
 1 test-no-real-time-wait:src/shared/secure-file-windows.test.ts

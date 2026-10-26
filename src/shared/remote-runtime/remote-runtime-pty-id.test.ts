@@ -4,7 +4,7 @@ import {
   parseRemoteRuntimePtyId,
   toRemoteRuntimePtyId
 } from './remote-runtime-pty-id'
-import { getPtyExecutionHost } from './terminal-execution-host'
+import { getPtyExecutionHost } from '../terminal-execution-host'
 
 describe('isRemoteRuntimePtyId', () => {
   it('recognizes minted paired-runtime ids, with and without an owner', () => {

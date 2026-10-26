@@ -10,11 +10,11 @@ import {
   isRuntimeRpcQueueOverloadError,
   toRemoteRuntimeClientErrorLike,
   type RemoteRuntimeClientErrorLike
-} from './remote-runtime/remote-runtime-client-error-classification'
+} from './remote-runtime-client-error-classification'
 import {
   WS_HANDSHAKE_TIMEOUT_MESSAGE,
   remoteRuntimeConnectFailureMessage
-} from './remote-runtime/remote-runtime-connect-bound'
+} from './remote-runtime-connect-bound'
 import {
   invalidRemoteRuntimeResponseError,
   parseRemoteRuntimeRpcFrame,
@@ -22,11 +22,11 @@ import {
   remoteRuntimeReadyError,
   remoteRuntimeTimeoutError,
   remoteRuntimeUnavailableError
-} from './remote-runtime/requests/remote-runtime-request-frames'
-import { formatSharedControlCloseMessage } from './remote-runtime/control/remote-runtime-shared-control-protocol'
-import { RuntimeRpcCallQueueOverloadError } from './runtime-rpc-call-queue'
-import { withRemoteRuntimeTailscaleHint } from './remote-runtime/remote-runtime-tailscale-hint'
-import { MAX_TIMER_DELAY_MS } from './timer-delay'
+} from './requests/remote-runtime-request-frames'
+import { formatSharedControlCloseMessage } from './control/remote-runtime-shared-control-protocol'
+import { RuntimeRpcCallQueueOverloadError } from '../runtime-rpc-call-queue'
+import { withRemoteRuntimeTailscaleHint } from './remote-runtime-tailscale-hint'
+import { MAX_TIMER_DELAY_MS } from '../timer-delay'
 
 type TransportErrorPair = RemoteRuntimeClientErrorLike & { producer: string }
 
