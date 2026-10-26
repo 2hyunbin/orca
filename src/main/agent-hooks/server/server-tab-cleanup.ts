@@ -65,7 +65,7 @@ export abstract class AgentHookServerTabCleanup extends AgentHookServerCleanup {
     }
     for (const key of [
       ...this.state.antigravityCompletedTranscriptByPaneKey.keys(),
-      ...this.state.antigravitySubagentRosterByPaneKey.keys()
+      ...this.state.antigravitySubagentParentByPaneKey.keys()
     ]) {
       if (paneCacheKeyMatchesTab(key, tabId)) {
         paneKeysToClear.add(key.split('\0', 1)[0] ?? key)
