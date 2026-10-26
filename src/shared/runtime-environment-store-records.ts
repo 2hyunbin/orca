@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, linkSync, readFileSync, renameSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { readNodeFileSyncWithinLimit } from './node-bounded-file-reader'
@@ -66,21 +66,33 @@ export function readEnvironmentStoreRecords(
   if (!options.requireStoreFile && !existsSync(path)) {
     return { environments: [], unreadable: [] }
   }
-  let records: unknown[]
+  let text: string
   try {
     hardenExistingSecureFile(path)
-    records = StoreEnvelopeSchema.parse(
-      JSON.parse(
-        readNodeFileSyncWithinLimit(path, MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES).buffer.toString(
-          'utf8'
-        )
-      )
-    ).environments
+    text = readNodeFileSyncWithinLimit(
+      path,
+      MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES
+    ).buffer.toString('utf8')
   } catch {
-    throw new RuntimeEnvironmentStoreError(
-      'runtime_error',
-      `Could not read Orca environments at ${path}; the file is invalid.`
-    )
+    throw invalidStoreError(path)
+  }
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    // Non-JSON bytes (e.g. NUL-filled after a crash) hold no server to keep, and failing every
+    // save would strand the user (#18766). Set them aside so the store reads as missing.
+    if (!quarantineCorruptEnvironmentStore(path, text) || options.requireStoreFile) {
+      throw invalidStoreError(path)
+    }
+    return { environments: [], unreadable: [] }
+  }
+  let records: unknown[]
+  try {
+    // Valid JSON in another shape may be a newer build's store, so it fails closed.
+    records = StoreEnvelopeSchema.parse(json).environments
+  } catch {
+    throw invalidStoreError(path)
   }
   const result: EnvironmentStoreRecords = { environments: [], unreadable: [] }
   for (const raw of records) {
@@ -92,6 +104,44 @@ export function readEnvironmentStoreRecords(
     }
   }
   return result
+}
+
+function invalidStoreError(path: string): RuntimeEnvironmentStoreError {
+  return new RuntimeEnvironmentStoreError(
+    'runtime_error',
+    `Could not read Orca environments at ${path}; the file is invalid.`
+  )
+}
+
+/** Returns whether the corrupt file was moved to a backup beside it. */
+function quarantineCorruptEnvironmentStore(path: string, corruptText: string): boolean {
+  const backupPath = `${path}.corrupt-${Date.now()}-${process.pid}`
+  try {
+    renameSync(path, backupPath)
+  } catch (error) {
+    // Another reader already moved it aside.
+    return error instanceof Error && 'code' in error && error.code === 'ENOENT'
+  }
+  // Another process may have published a valid store between our read and the rename.
+  if (readTextOrNull(backupPath) !== corruptText) {
+    try {
+      linkSync(backupPath, path)
+      unlinkSync(backupPath)
+    } catch {
+      // A newer store already took the name; the moved copy stays as a backup.
+    }
+    return false
+  }
+  console.warn(`[runtime-environments] ${path} was not valid JSON; moved it to ${backupPath}.`)
+  return true
+}
+
+function readTextOrNull(path: string): string | null {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
 }
 
 const warned = new Set<string>()

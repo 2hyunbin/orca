@@ -130,7 +130,9 @@ export function writeEnvironmentStore(userDataPath: string, store: RuntimeEnviro
         version: 1,
         environments: [...environments, ...onDisk.unreadable.map((record) => record.raw)]
       },
-      MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES
+      MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES,
+      // Without fsync before the rename, a crash can publish the name over NUL-filled data (#18766).
+      { durable: true }
     )
   } catch (error) {
     if (error instanceof JsonStringifyByteLimitError) {

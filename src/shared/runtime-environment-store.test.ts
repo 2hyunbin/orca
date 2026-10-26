@@ -1,7 +1,14 @@
-import { mkdtempSync, rmSync, truncateSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  truncateSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer } from './pairing'
 import {
   RuntimeEnvironmentStoreError,
@@ -258,6 +265,35 @@ describe('runtime environment store', () => {
     truncateSync(path, MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES + 1)
 
     expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
+  })
+
+  it('backs up a NUL-filled store and saves new servers over it', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-nul-'))
+    tempDirs.push(userDataPath)
+    writeFileSync(getEnvironmentStorePath(userDataPath), Buffer.alloc(640))
+
+    const added = addEnvironmentFromPairingCode(userDataPath, {
+      name: 'dev box',
+      pairingCode: pairingCode()
+    })
+
+    expect(listEnvironments(userDataPath)).toEqual([added])
+    const backups = readdirSync(userDataPath).filter((name) =>
+      name.startsWith('orca-environments.json.corrupt-')
+    )
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(userDataPath, backups[0]))).toEqual(Buffer.alloc(640))
+    vi.restoreAllMocks()
+  })
+
+  it('keeps failing closed on valid JSON it does not understand', () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-newer-'))
+    tempDirs.push(userDataPath)
+    writeFileSync(getEnvironmentStorePath(userDataPath), '{"version":2,"environments":[]}')
+
+    expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
+    expect(readdirSync(userDataPath)).toEqual(['orca-environments.json'])
   })
 
   it('rejects an oversized write without replacing the durable environment list', () => {
