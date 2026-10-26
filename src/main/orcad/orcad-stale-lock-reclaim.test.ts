@@ -298,6 +298,12 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
       'a lock taken a moment ago',
       holderRecord({ acquiredAt: new Date().toISOString() }),
       'minutes old'
+    ],
+    // NFS attribute caching can make a live clone's minute-old heartbeat look this old (#32918).
+    [
+      'a heartbeat three minutes ago',
+      holderRecord({ acquiredAt: new Date(Date.now() - 3 * 60_000).toISOString() }),
+      'minutes old'
     ]
   ])('refuses a lock from %s', async (_case, record, reason) => {
     const root = makeRoot()

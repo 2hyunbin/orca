@@ -13,7 +13,7 @@ import {
 } from './orcad-instance-lock'
 import { readBoundedLockFile } from './orcad-instance-lock-reclaim'
 import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
-import { orcadLockPeer, orcadLockSelf } from './orcad-lock-clone-machine'
+import { ORCAD_LOCK_FRESH_MS, orcadLockPeer, orcadLockSelf } from './orcad-lock-clone-machine'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
 import { hasErrorCode } from '../daemon/daemon-process-inspection'
@@ -31,8 +31,8 @@ import {
   type OrcadStaleLockReclaimStatus
 } from '../../shared/orcad-stale-lock-reclaim'
 
-// A holder that just took the lock may not be listening yet; its silence would prove nothing.
-export const ORCAD_STALE_LOCK_MIN_AGE_MS = 2 * 60_000
+// A new holder may not listen yet, and NFS attribute caching can age a live heartbeat this much.
+export const ORCAD_STALE_LOCK_MIN_AGE_MS = ORCAD_LOCK_FRESH_MS
 const ENDPOINT_PROBE_TIMEOUT_MS = 1_500
 
 /** Silent requires OS-confirmed absence of a listener; errors leave ownership unknown. */
