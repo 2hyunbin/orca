@@ -583,4 +583,18 @@ describe('ClaudeProfileRouter', () => {
     )
     expect(claudeProfileHistoryDirs('projects')).toEqual([join(configDir, 'projects')])
   })
+
+  it('ignores non-transcript paths and keeps at most 32 observed folders', () => {
+    const f = fixture()
+    const dirs = new ClaudeObservedConfigDirs(join(f.root, 'observed.json'), () => ({}))
+    mkdirSync(join(f.root, 'other', 'sessions', '-proj'), { recursive: true })
+    dirs.observeTranscriptPath(join(f.root, 'other', 'sessions', '-proj', 'id.jsonl'))
+    expect(dirs.list()).toEqual([])
+    for (let index = 0; index < 33; index += 1) {
+      mkdirSync(join(f.root, `c${index}`, 'projects', '-proj'), { recursive: true })
+      dirs.observeTranscriptPath(join(f.root, `c${index}`, 'projects', '-proj', 'id.jsonl'))
+    }
+    expect(dirs.list()).toHaveLength(32)
+    expect(dirs.list()[0]).toBe(join(f.root, 'c32'))
+  })
 })

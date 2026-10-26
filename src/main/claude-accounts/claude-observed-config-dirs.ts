@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { basename, dirname, isAbsolute } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import { resolveAbsoluteDirOverride } from '../../shared/absolute-dir-override'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
@@ -10,6 +10,8 @@ const MAX_OBSERVED_CONFIG_DIRS = 32
 /** Claude config folders Orca saw in use but the login shell does not name, e.g. a wrapper's CLAUDE_CONFIG_DIR. */
 export class ClaudeObservedConfigDirs {
   private observed: string[] | undefined
+  // WSL/remote paths name no folder here; skip re-statting them on every hook.
+  private readonly missing = new Set<string>()
 
   constructor(
     private readonly filePath: string,
@@ -28,14 +30,24 @@ export class ClaudeObservedConfigDirs {
 
   /** Claude writes `<config>/projects/<encoded-cwd>/<id>.jsonl`; other shapes are ignored. */
   observeTranscriptPath(transcriptPath: string): void {
-    const projectsDir = dirname(dirname(transcriptPath))
-    if (!isAbsolute(transcriptPath) || basename(projectsDir) !== 'projects') {
+    if (!isAbsolute(transcriptPath)) {
       return
     }
+    const projectsDir = dirname(dirname(resolve(transcriptPath)))
     const configDir = dirname(projectsDir)
     this.observed ??= this.load()
-    // A WSL or remote pane's path does not name a folder on this host.
-    if (this.observed.includes(configDir) || !isDirectory(projectsDir)) {
+    if (
+      basename(projectsDir) !== 'projects' ||
+      this.observed.includes(configDir) ||
+      this.missing.has(configDir)
+    ) {
+      return
+    }
+    if (!isDirectory(projectsDir)) {
+      // A hooked config folder exists locally even before Claude creates `projects`.
+      if (!isDirectory(configDir)) {
+        this.missing.add(configDir)
+      }
       return
     }
     this.observed = [configDir, ...this.observed].slice(0, MAX_OBSERVED_CONFIG_DIRS)
