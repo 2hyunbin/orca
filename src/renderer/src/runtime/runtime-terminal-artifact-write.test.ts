@@ -188,7 +188,7 @@ describe('saving a granted host file outside every workspace', () => {
     runtimeEnvironmentCall.mockImplementation(async ({ method }) => {
       if (method === 'files.writeTerminalArtifact') {
         written = true
-        return refused('Request timed out')
+        throw new Error('Request timed out')
       }
       return read(written ? '# new' : '# old')
     })
@@ -204,7 +204,7 @@ describe('saving a granted host file outside every workspace', () => {
       }
       if (method === 'files.writeTerminalArtifact') {
         written = true
-        return refused('Request timed out')
+        throw new Error('Request timed out')
       }
       if (written && grantIdOf(params) === 'g-1') {
         return refused('terminal_file_grant_expired')
@@ -213,5 +213,18 @@ describe('saving a granted host file outside every workspace', () => {
     })
 
     await expect(save('# new', '# old')).resolves.toEqual({ ok: true })
+  })
+
+  it('keeps a host refusal of the write even when the text on disk already matches', async () => {
+    let attempted = false
+    runtimeEnvironmentCall.mockImplementation(async ({ method }) => {
+      if (method === 'files.writeTerminalArtifact') {
+        attempted = true
+        return refused('EACCES: permission denied')
+      }
+      return read(attempted ? '# new' : '# old')
+    })
+
+    await expect(save('# new', '# old')).rejects.toThrow('EACCES')
   })
 })

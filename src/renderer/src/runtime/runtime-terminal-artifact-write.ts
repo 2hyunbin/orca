@@ -65,8 +65,11 @@ async function hostHoldsContent(
   args: GrantTarget & { content: string },
   grantId: string
 ): Promise<boolean> {
+  // Why: decoded text with U+FFFD can't prove which bytes are on disk.
+  const holds = (text: string | null | undefined): boolean =>
+    text === args.content && !text.includes('\uFFFD')
   try {
-    return (await readGrantedText(args, grantId)) === args.content
+    return holds(await readGrantedText(args, grantId))
   } catch (error) {
     if (!isRenewableGrantError(error)) {
       return false
@@ -75,7 +78,7 @@ async function hostHoldsContent(
   // Why: a dropped connection revokes the client's grants, so read back through a fresh one.
   try {
     const renewed = await renewTerminalArtifactGrant(args)
-    return renewed !== null && (await readGrantedText(args, renewed.grantId)) === args.content
+    return renewed !== null && holds(await readGrantedText(args, renewed.grantId))
   } catch {
     return false
   }
@@ -117,8 +120,8 @@ export async function writeRuntimeTerminalArtifactFile(
     try {
       await sendOnce(grantId)
     } catch (error) {
-      // Why: a lost reply may follow a committed write; read back so the baseline isn't left stale.
-      if (isRenewableGrantError(error) || !(await hostHoldsContent(args, grantId))) {
+      // Why: only an unanswered write may have committed; a host refusal means nothing was written.
+      if (error instanceof RuntimeRpcCallError || !(await hostHoldsContent(args, grantId))) {
         throw error
       }
     }
