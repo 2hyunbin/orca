@@ -8,7 +8,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { encodePairingOffer } from './pairing'
 import {
   RuntimeEnvironmentStoreError,
@@ -268,7 +268,8 @@ describe('runtime environment store', () => {
   })
 
   it('backs up a NUL-filled store and saves new servers over it', () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    onTestFinished(() => warn.mockRestore())
     const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-nul-'))
     tempDirs.push(userDataPath)
     writeFileSync(getEnvironmentStorePath(userDataPath), Buffer.alloc(640))
@@ -284,13 +285,15 @@ describe('runtime environment store', () => {
     )
     expect(backups).toHaveLength(1)
     expect(readFileSync(join(userDataPath, backups[0]))).toEqual(Buffer.alloc(640))
-    vi.restoreAllMocks()
   })
 
-  it('keeps failing closed on valid JSON it does not understand', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-newer-'))
+  it.each([
+    ['a newer format', '{"version":2,"environments":[]}'],
+    ['truncated JSON that may still hold servers', '{"version":1,"environments":[{"id":"a"']
+  ])('keeps failing closed on %s', (_label, contents) => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-invalid-'))
     tempDirs.push(userDataPath)
-    writeFileSync(getEnvironmentStorePath(userDataPath), '{"version":2,"environments":[]}')
+    writeFileSync(getEnvironmentStorePath(userDataPath), contents)
 
     expect(() => listEnvironments(userDataPath)).toThrow(RuntimeEnvironmentStoreError)
     expect(readdirSync(userDataPath)).toEqual(['orca-environments.json'])

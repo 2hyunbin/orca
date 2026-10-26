@@ -80,9 +80,13 @@ export function readEnvironmentStoreRecords(
   try {
     json = JSON.parse(text)
   } catch {
-    // Non-JSON bytes (e.g. NUL-filled after a crash) hold no server to keep, and failing every
-    // save would strand the user (#18766). Set them aside so the store reads as missing.
-    if (!quarantineCorruptEnvironmentStore(path, text) || options.requireStoreFile) {
+    // A crash can publish the name over zeroed data (#18766); those bytes hold no server, and failing
+    // every save would strand the user. Other bad JSON may hold servers, so it still fails closed.
+    if (
+      options.requireStoreFile ||
+      !/^[\s\0]*$/.test(text) ||
+      !quarantineBlankEnvironmentStore(path, text)
+    ) {
       throw invalidStoreError(path)
     }
     return { environments: [], unreadable: [] }
@@ -113,8 +117,8 @@ function invalidStoreError(path: string): RuntimeEnvironmentStoreError {
   )
 }
 
-/** Returns whether the corrupt file was moved to a backup beside it. */
-function quarantineCorruptEnvironmentStore(path: string, corruptText: string): boolean {
+/** Returns whether the blank file was moved to a backup beside it, so the store reads as missing. */
+function quarantineBlankEnvironmentStore(path: string, blankText: string): boolean {
   const backupPath = `${path}.corrupt-${Date.now()}-${process.pid}`
   try {
     renameSync(path, backupPath)
@@ -123,7 +127,7 @@ function quarantineCorruptEnvironmentStore(path: string, corruptText: string): b
     return error instanceof Error && 'code' in error && error.code === 'ENOENT'
   }
   // Another process may have published a valid store between our read and the rename.
-  if (readTextOrNull(backupPath) !== corruptText) {
+  if (readTextOrNull(backupPath) !== blankText) {
     try {
       linkSync(backupPath, path)
       unlinkSync(backupPath)
@@ -132,7 +136,7 @@ function quarantineCorruptEnvironmentStore(path: string, corruptText: string): b
     }
     return false
   }
-  console.warn(`[runtime-environments] ${path} was not valid JSON; moved it to ${backupPath}.`)
+  console.warn(`[runtime-environments] ${path} held no data; moved it to ${backupPath}.`)
   return true
 }
 
