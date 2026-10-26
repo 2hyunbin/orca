@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWorkspaceReviewFacts,
-  prGroupOfReviewFact,
   readWorkspaceReviewFact
 } from './workspace-review-facts'
 
@@ -40,15 +39,6 @@ describe('readWorkspaceReviewFact', () => {
     expect(readWorkspaceReviewFact(row, undefined, cache)).toBeNull()
     expect(readWorkspaceReviewFact({ ...row, branch: '' }, repo, cache)).toBeNull()
     expect(readWorkspaceReviewFact(row, repo, { 'repo-1::a': { data: null } })).toBeNull()
-  })
-})
-
-describe('prGroupOfReviewFact', () => {
-  it('keeps rows without a PR in progress and lanes the rest by state', () => {
-    expect(prGroupOfReviewFact(null)).toBe('in-progress')
-    expect(prGroupOfReviewFact({ provider: 'github', reviewState: 'draft' })).toBe('in-progress')
-    expect(prGroupOfReviewFact({ provider: 'github', reviewState: '' })).toBe('in-review')
-    expect(prGroupOfReviewFact({ provider: 'github', reviewState: 'merged' })).toBe('done')
   })
 })
 
