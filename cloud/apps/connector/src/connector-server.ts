@@ -19,7 +19,6 @@ import { RequestDrain } from './request-drain.js'
 import { createSlackEdge } from './slack-edge.js'
 import type { QueueInTransaction } from './slack-routing.js'
 
-const MAX_BODY_BYTES = 64 * 1024
 const UNAUTHENTICATED_PER_MINUTE_PER_IP = 30
 const AUTHENTICATED_PER_MINUTE_PER_IP = 6_000
 const AUTHENTICATED_PER_MINUTE_PER_HOST = 600
@@ -74,7 +73,7 @@ export function createConnectorServer(
     config.trustedProxyHops
   )
   const limitBody = bodyLimit({
-    maxSize: MAX_BODY_BYTES,
+    maxSize: CONNECTOR_LIMITS.maxRequestBytes,
     onError: (context) => context.json({ error: 'request_too_large' }, 413)
   })
 
