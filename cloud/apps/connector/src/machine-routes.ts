@@ -48,23 +48,26 @@ export function registerMachineRoutes(
     const body = ConnectorPollRequestSchema.safeParse(await context.req.json().catch(() => null))
     if (!body.success) return context.json({ error: 'invalid_request' }, 400)
     const hostId = context.get('hostId')
-    if ((await hostLinks.helloRev(hostId)) !== body.data.helloRev) {
-      return context.json({ error: 'hello_required' }, 409)
-    }
+    const sessionId = context.get('sessionId')
     await hostLinks.touch(hostId)
-    const unsettled = await inbox.firstPollUnsettled(hostId, context.get('sessionId'))
+    const unsettled = await inbox.firstPollUnsettled(hostId, sessionId)
     const holdUntil = Date.now() + holdMs
     let deliveries: ConnectorDelivery[] = []
     for (;;) {
       const waiter = waker.register(hostId)
       try {
+        // Checked on every pass, so a poll held across a newer hello is sent to hello as well.
+        if ((await hostLinks.helloRev(hostId)) !== body.data.helloRev) {
+          return context.json({ error: 'hello_required' }, 409)
+        }
         const claimed = await inbox.claim(hostId)
         deliveries = claimed.deliveries
         // Checked after every claim, so a revoke that lands while the poll is held hands out nothing.
         const refused = await authorize(context)
         if (refused) return refused
         const remaining = holdUntil - Date.now()
-        if (deliveries.length > 0 || unsettled.length > 0 || remaining <= 0 || waker.draining) break
+        const recovering = unsettled !== null && unsettled.length > 0
+        if (deliveries.length > 0 || recovering || remaining <= 0 || waker.draining) break
         // A lease running out sends no notification, so wake for the next one too.
         const leaseDueMs =
           claimed.nextLeaseDueAt === null ? remaining : Math.max(0, claimed.nextLeaseDueAt - now())
@@ -73,11 +76,14 @@ export function registerMachineRoutes(
         waiter.cancel()
       }
     }
+    // A failed poll leaves the session unmarked, so the next one still recovers.
+    const recovered =
+      unsettled !== null && (await inbox.markFirstPoll(hostId, sessionId)) ? unsettled : []
     const response: ConnectorPollResponse = {
       v: 1,
       serverNow: now(),
       holdMs,
-      ...(unsettled.length > 0 ? { unsettled } : {}),
+      ...(recovered.length > 0 ? { unsettled: recovered } : {}),
       deliveries,
       ...(waker.draining ? { control: { reconnect: true as const } } : {})
     }

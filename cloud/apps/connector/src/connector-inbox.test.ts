@@ -4,6 +4,7 @@ import {
   ConnectorPollResponseSchema
 } from '@orca-cloud/connector-contract'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import type { DeliveryBody } from './connector-inbox.js'
 import {
   cleanupConnectorHarnesses,
@@ -16,6 +17,27 @@ afterEach(cleanupConnectorHarnesses)
 
 const START: DeliveryBody = { kind: 'start', agent: 'claude', placeId: 'pl_1', prompt: 'fix it' }
 const SEND: DeliveryBody = { kind: 'send', text: 'and the tests' }
+
+// Fails the first statement starting with `prefix` once armed, as a transient database fault.
+function failOnce(database: CloudDatabase, prefix: string) {
+  let armed = false
+  const wrap = (inner: CloudDatabase): CloudDatabase => ({
+    dialect: inner.dialect,
+    query: async (sql, params) => {
+      if (armed && sql.trimStart().startsWith(prefix)) {
+        armed = false
+        throw new Error('injected')
+      }
+      return await inner.query(sql, params)
+    },
+    transaction: (run) => inner.transaction((transaction) => run(wrap(transaction))),
+    lockQuotaScope: (key) => inner.lockQuotaScope(key),
+    tryLockScope: (key) => inner.tryLockScope(key),
+    tryLockSharedScope: (key) => inner.tryLockSharedScope(key),
+    close: () => inner.close()
+  })
+  return { database: wrap(database), arm: () => (armed = true) }
+}
 
 async function setup(options: Parameters<typeof createConnectorHarness>[1] = {}) {
   const harness = await createConnectorHarness({}, options)
@@ -141,6 +163,39 @@ describe('connector inbox', () => {
       expect(row?.state).toBe('done')
     }
   )
+
+  it('keeps recovery for the next poll when the first one fails', async () => {
+    let fault!: ReturnType<typeof failOnce>
+    const { harness, machine, enqueue, poll } = await setup({
+      wrapDatabase: (database) => {
+        fault = failOnce(database, 'SELECT delivery_id, external_id, seq')
+        return fault.database
+      }
+    })
+    await enqueue('a', 'a1', START)
+    await poll()
+    await machine.ack([{ deliveryId: 'a1', step: 'received' }])
+    const { sessionToken } = ConnectorHostSessionResponseSchema.parse(
+      await (await harness.machineSession(machine.host)).json()
+    )
+    const auth = { authorization: `Bearer ${sessionToken}` }
+    fault.arm()
+    expect((await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)).status).toBe(500)
+    const retry = await harness.json('/v1/connector/poll', { v: 1, helloRev: 1 }, auth)
+    expect(ConnectorPollResponseSchema.parse(await retry.json()).unsettled).toEqual([
+      { deliveryId: 'a1', conversation: { source: 'slack', externalId: 'a' } }
+    ])
+  })
+
+  it('sends a poll held across a newer hello back to hello', async () => {
+    const { machine } = await setup({ pollHoldMs: 10_000 })
+    const held = machine.poll(1)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const startedAt = Date.now()
+    expect((await machine.hello(2)).status).toBe(204)
+    expect((await held).status).toBe(409)
+    expect(Date.now() - startedAt).toBeLessThan(5_000)
+  })
 
   it('keeps the first done', async () => {
     const { harness, machine, enqueue, poll } = await setup()

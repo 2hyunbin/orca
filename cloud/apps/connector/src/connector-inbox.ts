@@ -40,10 +40,6 @@ export class ConnectorInbox {
     await this.wake(transaction, hostId)
   }
 
-  private async wake(transaction: CloudDatabase, hostId: string): Promise<void> {
-    await this.notifications.notify(transaction, INBOX_CHANNEL, hostId)
-  }
-
   async enqueue(input: {
     hostId: string
     externalId: string
@@ -143,14 +139,14 @@ export class ConnectorInbox {
     })
   }
 
-  // Only the first poll of a session lists what an earlier process received but never settled.
-  async firstPollUnsettled(hostId: string, sessionId: string): Promise<Unsettled[]> {
-    const [first] = await this.database.query(
-      `UPDATE connector_sessions SET first_polled_at = ?
-       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
-      [this.now(), sessionId, hostId]
+  // Only a session's first poll lists what an earlier process received but never settled. Read
+  // here; the poll marks the session (markFirstPoll) only once its reply is ready.
+  async firstPollUnsettled(hostId: string, sessionId: string): Promise<Unsettled[] | null> {
+    const [session] = await this.database.query(
+      `SELECT first_polled_at FROM connector_sessions WHERE token_hash = ? AND host_fingerprint = ?`,
+      [sessionId, hostId]
     )
-    if (Number(first?.changes ?? 0) === 0) return []
+    if (!session || session.first_polled_at !== null) return null
     const rows = await this.database.query(
       `SELECT delivery_id, external_id FROM connector_inbox
        WHERE host_id = ? AND state = 'received' ORDER BY seq`,
@@ -160,6 +156,20 @@ export class ConnectorInbox {
       deliveryId: String(row.delivery_id),
       conversation: conversation(String(row.external_id))
     }))
+  }
+
+  // False when a concurrent poll of the same session marked it first.
+  async markFirstPoll(hostId: string, sessionId: string): Promise<boolean> {
+    const [marked] = await this.database.query(
+      `UPDATE connector_sessions SET first_polled_at = ?
+       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
+      [this.now(), sessionId, hostId]
+    )
+    return Number(marked?.changes ?? 0) === 1
+  }
+
+  async wake(transaction: CloudDatabase, hostId: string): Promise<void> {
+    await this.notifications.notify(transaction, INBOX_CHANNEL, hostId)
   }
 
   // A late received is accepted (it did arrive); the first done wins.

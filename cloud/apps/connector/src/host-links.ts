@@ -92,7 +92,7 @@ export class ConnectorHostLinks {
     return row ? String(row.account_id) : null
   }
 
-  // The latest hello wins; a poll naming another revision is told to send hello again.
+  // The latest hello wins; a poll naming another revision, held ones included, is told to send it again.
   async recordHello(hostId: string, hello: ConnectorHelloRequest): Promise<void> {
     const now = this.now()
     await this.database.query(
@@ -110,6 +110,7 @@ export class ConnectorHostLinks {
         hostId
       ]
     )
+    await this.inbox.wake(this.database, hostId)
   }
 
   async helloRev(hostId: string): Promise<number | null> {
