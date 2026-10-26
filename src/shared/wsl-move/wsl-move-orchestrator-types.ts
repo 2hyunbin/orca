@@ -30,6 +30,8 @@ export type WslMoveOrchestratorParkReason =
   | 'declined'
   /** The user's Remove of the host could not prove its server stopped (E11); nothing touches it. */
   | 'removal-pending'
+  /** An earlier move never finished settling for a day; the waits stopped and need the user. */
+  | 'stuck'
 
 export type WslMoveOrchestratorState =
   /** Nothing of the distro left to move. */
@@ -42,9 +44,14 @@ export type WslMoveOrchestratorState =
   | { kind: 'moving' }
   /** The move may have reached the host; it resumes when the host answers. */
   | { kind: 'waiting-for-host'; migrationId: string }
-  | { kind: 'backoff'; nextAttemptAt: number; reason: string }
+  /** `waitingSince`: when uncounted waits (an earlier move still settling) began, for their cap. */
+  | { kind: 'backoff'; nextAttemptAt: number; reason: string; waitingSince?: number }
   | { kind: 'parked'; reason: WslMoveOrchestratorParkReason; until?: number }
-  | { kind: 'done'; migrationId: string }
+  /**
+   * `nextCheckAt` / `waitingSince` while a newer preview waits on this move to finish settling:
+   * new projects may be queued behind it, so the wait is re-checked and capped like a backoff.
+   */
+  | { kind: 'done'; migrationId: string; nextCheckAt?: number; waitingSince?: number }
   /** R38: a finished move's distro is registered under neither its name nor its recorded GUID. */
   | { kind: 'distro-gone' }
   /** R38: the distro was replaced (new GUID) or its host lost the moved projects. */

@@ -27,7 +27,11 @@ import {
 import { moveProjectsToWslHost, previewWslMove } from './wsl-move-driver'
 import { WslMoveOrchestrator } from './wsl-move-orchestrator'
 import type { WslMoveOrchestratorPorts } from './wsl-move-orchestrator-ports'
-import { WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS } from './wsl-move-orchestrator-transitions'
+import {
+  WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS,
+  WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
+} from './wsl-move-orchestrator-transitions'
+import { runWslMoveRetentionPass } from './wsl-move-retention'
 import { bringWslMovedProjectBack } from './wsl-move-use-locally'
 import { resetWslMoveWindowWriteHoldForTests } from './wsl-move-window-write-hold'
 
@@ -164,12 +168,31 @@ describe('the move orchestrator over the real driver', () => {
     expect(stateOf(orchestrator)).toMatchObject({ kind: 'done' })
   })
 
-  it('stays done on a later wake: the driver finds nothing new, and R38 reads the journal', async () => {
-    const { orchestrator } = orchestratorOverDriver()
+  // The driver itself refuses as already in flight until retention marks the move retained.
+  it('waits out the real in-flight refusal while the move is retained, staying done', async () => {
+    const { orchestrator, advance } = orchestratorOverDriver()
     await orchestrator.trigger('Ubuntu', 'connect')
-    const done = stateOf(orchestrator)
+    const migrationId = listWslMoveCutovers(userDataPath)[0]?.migrationId
+    expect(listWslMoveCutovers(userDataPath)[0]?.phase).not.toBe('retained')
+    expect(await previewWslMove(world.deps, { distro: 'Ubuntu' })).toMatchObject({
+      outcome: 'refused',
+      code: 'wsl_move_already_in_flight'
+    })
     await orchestrator.trigger('Ubuntu', 'project-opened')
-    expect(stateOf(orchestrator)).toEqual(done)
+    expect(stateOf(orchestrator)).toMatchObject({ kind: 'done', migrationId, waitingSince: 1_000 })
+    expect(orchestrator.list()[0]?.attempts).toBe(0)
+    await runWslMoveRetentionPass({
+      userDataPath,
+      store: {
+        getRepos: () => world.repos,
+        getFolderWorkspaces: () => [],
+        setWslMoveRetainedMarks: vi.fn(() => 1),
+        flushPendingOrThrowAsync: vi.fn(async () => {})
+      }
+    })
+    expect(listWslMoveCutovers(userDataPath)[0]?.phase).toBe('retained')
+    await advance(WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS)
+    expect(stateOf(orchestrator)).toEqual({ kind: 'done', migrationId })
     expect(listWslMoveCutovers(userDataPath)).toHaveLength(1)
   })
 

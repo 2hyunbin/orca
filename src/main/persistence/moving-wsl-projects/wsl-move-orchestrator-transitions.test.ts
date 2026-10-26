@@ -14,6 +14,8 @@ import {
   WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS,
   WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS,
   WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS,
+  WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS,
+  WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS,
   wslMoveOrchestratorTimerDelay
 } from './wsl-move-orchestrator-transitions'
 import {
@@ -363,15 +365,87 @@ describe('review fixes (#33802)', () => {
 
   // Found by the orchestrator-over-driver test: after a move, until retention marks it retained,
   // the driver refuses new moves as already in flight. That is waiting, not a failed attempt.
-  it('keeps a finished distro done while its move is still being retained', () => {
+  it('keeps a finished distro done while its move is still being retained, and re-checks', () => {
     const done = record({ kind: 'done', migrationId: 'm1' })
     const reason = 'wsl_move_already_in_flight'
-    expect(applyWslMoveOutcome(done, { next: 'transient', reason }, context)).toBe(done)
+    const waiting = applyWslMoveOutcome(done, { next: 'transient', reason }, context)
+    expect(waiting.state).toEqual({
+      kind: 'done',
+      migrationId: 'm1',
+      nextCheckAt: NOW + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS,
+      waitingSince: NOW
+    })
+    expect(wslMoveOrchestratorTimerDelay(waiting, NOW)).toBe(
+      WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
+    )
+    // Retention done: nothing new to move ends the wait.
+    expect(applyWslMoveOutcome(waiting, { next: 'idle' }, context).state).toEqual({
+      kind: 'done',
+      migrationId: 'm1'
+    })
     const pending = applyWslMoveOutcome(
       record({ kind: 'pending' }, 2),
       { next: 'transient', reason },
       context
     )
     expect(pending).toMatchObject({ attempts: 2, state: { kind: 'backoff', reason } })
+  })
+
+  it('keeps a finished distro done when the window cannot be asked', () => {
+    const done = record({ kind: 'done', migrationId: 'm1' })
+    const next = applyWslMoveOutcome(
+      done,
+      { next: 'transient', reason: 'wsl_move_window_unavailable' },
+      context
+    )
+    expect(next).toMatchObject({ attempts: 0, state: { kind: 'done', migrationId: 'm1' } })
+  })
+
+  // An in-flight refusal for an interrupted move whose host could not be asked is a real failure.
+  it('counts an in-flight refusal that carries the reset detail', () => {
+    const outcome = classifyWslMoveOutcome({
+      outcome: 'refused',
+      code: 'wsl_move_already_in_flight',
+      detail: 'destination_unreachable'
+    })
+    expect(outcome).toEqual({
+      next: 'transient',
+      reason: 'wsl_move_already_in_flight_unverifiable'
+    })
+    expect(applyWslMoveOutcome(record({ kind: 'pending' }), outcome, context).attempts).toBe(1)
+  })
+
+  it('parks as stuck once uncounted waits have lasted a day, for a backoff and for a done distro', () => {
+    const reason = 'wsl_move_already_in_flight'
+    const later = { ...context, now: NOW + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS }
+    const waitingBackoff = record({
+      kind: 'backoff',
+      nextAttemptAt: NOW,
+      reason,
+      waitingSince: NOW
+    })
+    expect(
+      applyWslMoveOutcome(
+        waitingBackoff,
+        { next: 'transient', reason },
+        { ...context, now: NOW + 60_000 }
+      ).state
+    ).toMatchObject({ kind: 'backoff', waitingSince: NOW })
+    expect(applyWslMoveOutcome(waitingBackoff, { next: 'transient', reason }, later).state).toEqual(
+      {
+        kind: 'parked',
+        reason: 'stuck'
+      }
+    )
+    const waitingDone = record({
+      kind: 'done',
+      migrationId: 'm1',
+      nextCheckAt: NOW,
+      waitingSince: NOW
+    })
+    const stuck = applyWslMoveOutcome(waitingDone, { next: 'transient', reason }, later)
+    expect(stuck.state).toEqual({ kind: 'parked', reason: 'stuck' })
+    expect(mayStartWslMove(stuck, 'connect', later.now, '1.0.0')).toBe(false)
+    expect(mayStartWslMove(stuck, 'user', later.now, '1.0.0')).toBe(true)
   })
 })

@@ -28,6 +28,10 @@ export const WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS = 7 * 24 * 60 * 60_000
 export const WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS = [60_000, 5 * 60_000, 30 * 60_000] as const
 /** Waiting that is not a failed attempt, retried without costing one. */
 export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS = 5 * 60_000
+/** Uncounted waits that last this long park the distro as stuck, for the user to look at. */
+export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS = 24 * 60 * 60_000
+/** An in-flight refusal whose earlier move could not be checked is a failed attempt after all. */
+const IN_FLIGHT_UNVERIFIABLE = 'wsl_move_already_in_flight_unverifiable'
 
 /**
  * Refusals that say nothing about this move: the window could not be asked for its panes, or an
@@ -67,8 +71,13 @@ function refusalOutcome(
       return { next: 'parked', reason: 'manifest-too-large' }
     case 'wsl_move_cancelled':
       return { next: 'parked', reason: 'not-now' }
-    case 'wsl_move_host_update_required':
     case 'wsl_move_already_in_flight':
+      // With a `detail`, the earlier move was interrupted and its host could not be asked.
+      return {
+        next: 'transient',
+        reason: 'detail' in preview && preview.detail ? IN_FLIGHT_UNVERIFIABLE : code
+      }
+    case 'wsl_move_host_update_required':
     case 'wsl_move_host_unavailable':
     case 'wsl_move_pause_failed':
     case 'wsl_move_scope_changed':
@@ -113,6 +122,7 @@ function parkedMayStart(
     // A new build may carry the fix for whatever kept failing, or the host's update.
     case 'attempts-exhausted':
     case 'host-update-required':
+    case 'stuck':
       return newBuild
     case 'export-incomplete':
     case 'manifest-too-large':
@@ -162,6 +172,9 @@ export function wslMoveOrchestratorTimerDelay(
   if (state.kind === 'backoff') {
     return Math.max(0, state.nextAttemptAt - now)
   }
+  if (state.kind === 'done' && state.nextCheckAt !== undefined) {
+    return Math.max(0, state.nextCheckAt - now)
+  }
   return state.kind === 'deferred'
     ? (WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS[state.rechecks] ?? null)
     : null
@@ -177,6 +190,43 @@ export function withWslMoveOrchestratorState(
   return { ...record, ...changes, state, updatedAt: now }
 }
 
+/** A done distro whose wait (if any) is over; unchanged when it was not waiting. */
+function settledDone(record: WslMoveOrchestratorRecord, now: number): WslMoveOrchestratorRecord {
+  const { state } = record
+  if (
+    state.kind !== 'done' ||
+    (state.nextCheckAt === undefined && state.waitingSince === undefined)
+  ) {
+    return record
+  }
+  return withWslMoveOrchestratorState(record, { kind: 'done', migrationId: state.migrationId }, now)
+}
+
+/** Waiting costs no attempt, but it is re-checked and capped, so a stuck move cannot hide. */
+function uncountedWait(
+  record: WslMoveOrchestratorRecord,
+  reason: string,
+  now: number
+): WslMoveOrchestratorRecord {
+  const { state } = record
+  const since =
+    (state.kind === 'backoff' || state.kind === 'done') && state.waitingSince !== undefined
+      ? state.waitingSince
+      : now
+  if (now - since >= WSL_MOVE_ORCHESTRATOR_UNCOUNTED_WAIT_LIMIT_MS) {
+    return withWslMoveOrchestratorState(record, { kind: 'parked', reason: 'stuck' }, now)
+  }
+  const nextAt = now + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS
+  // A finished distro stays done; new projects behind its settling move are re-checked.
+  return withWslMoveOrchestratorState(
+    record,
+    state.kind === 'done'
+      ? { kind: 'done', migrationId: state.migrationId, nextCheckAt: nextAt, waitingSince: since }
+      : { kind: 'backoff', nextAttemptAt: nextAt, reason, waitingSince: since },
+    now
+  )
+}
+
 function failedAttempt(
   record: WslMoveOrchestratorRecord,
   reason: string,
@@ -184,15 +234,7 @@ function failedAttempt(
   appVersion: string
 ): WslMoveOrchestratorRecord {
   if (UNCOUNTED_FAILURES.has(reason)) {
-    // A finished move whose retention is still settling stays done; nothing is waiting on it.
-    if (record.state.kind === 'done') {
-      return record
-    }
-    return withWslMoveOrchestratorState(
-      record,
-      { kind: 'backoff', nextAttemptAt: now + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS, reason },
-      now
-    )
+    return uncountedWait(record, reason, now)
   }
   // A new build starts a fresh count.
   const attempts = (record.appVersion === appVersion ? record.attempts : 0) + 1
@@ -248,7 +290,7 @@ export function applyWslMoveOutcome(
     case 'idle':
       // A distro moved earlier stays done: nothing new to move is its normal answer.
       return record.state.kind === 'done'
-        ? record
+        ? settledDone(record, now)
         : withWslMoveOrchestratorState(record, { kind: 'idle' }, now)
     case 'deferred': {
       // Only timer re-checks spend the series; a wake or the user starts it again.
