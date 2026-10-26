@@ -1,9 +1,9 @@
-import type { AgentJournalQuestion } from '../../../src/shared/agent-session-journal-types'
-import { encodeAgentSessionQuestionAnswers } from '../../../src/shared/agent-session-question-answer'
+import type { AgentJournalQuestion } from '../../../../../src/shared/agent-session-journal-types'
+import { encodeAgentSessionQuestionAnswers } from '../../../../../src/shared/agent-session-question-answer'
 import {
   structuredQuestionAnswers,
   structuredQuestionCard
-} from '../../../src/shared/structured-agent-question-card'
+} from '../../../../../src/shared/structured-agent-question-card'
 import { MobileNativeChatAsk } from './MobileNativeChatAsk'
 
 /** Grouped structured prompts use the terminal ask card, as on desktop. */

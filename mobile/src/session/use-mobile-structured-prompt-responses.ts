@@ -21,7 +21,7 @@ import type {
   StructuredAgentSessionMutate,
   StructuredAgentSessionMutationResult
 } from './mobile-structured-agent-session-rpc'
-import type { MobileChatQuestion } from './mobile-native-chat-question'
+import type { MobileChatQuestion } from './native-chat/input/mobile-native-chat-question'
 
 export function useMobileStructuredPromptResponses(args: {
   stateRef: { readonly current: StructuredAgentSessionState }
