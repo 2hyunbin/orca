@@ -101,12 +101,21 @@ describe('Run mail follows the terminal that owns its mailbox', () => {
     expect(pointerCount(write)).toBe(0)
     db.close()
   })
+})
 
-  it('points Run mail at a pane-issued handle while the renderer reloads', async () => {
-    const db = new OrchestrationDb(':memory:')
+// Reload start keeps a terminal's waits and identity; a failed graph still ends them, as before.
+describe.each(['pane-issued', 'preallocated'] as const)('a %s handle across a reload', (origin) => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function rendererTerminal() {
     const runtime = new OrcaRuntimeService(null)
     const write = vi.fn(() => true)
-    runtime.setOrchestrationDb(db)
     runtime.setPtyController({
       write,
       writeWithSettlement: settledWriteStub(write),
@@ -118,18 +127,68 @@ describe('Run mail follows the terminal that owns its mailbox', () => {
       leafId: LEAF_ID,
       incarnationId: 'original'
     })
+    if (origin === 'preallocated') {
+      runtime.registerPreAllocatedHandleForPty(RENDERER_PTY_ID, 'term_preallocated')
+    }
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, GRAPH)
     const [terminal] = (await runtime.listTerminals()).terminals
+    return { runtime, write, handle: terminal.handle }
+  }
+
+  it.each(['reload-failed', 'window-unavailable'] as const)(
+    'keeps a wait at reload start and rejects it when %s',
+    async (failure) => {
+      const { runtime, handle } = await rendererTerminal()
+      let outcome: unknown = null
+      void runtime.waitForTerminal(handle, { condition: 'exit' }).then(
+        (result) => (outcome = result),
+        (error: Error) => (outcome = error.message)
+      )
+      runtime.markRendererReloading(1)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(outcome).toBeNull()
+
+      if (failure === 'reload-failed') {
+        runtime.markGraphReloadFailed(1, 'renderer-process-gone')
+      } else {
+        runtime.markGraphUnavailable(1)
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(outcome).toBe('terminal_handle_stale')
+    }
+  )
+
+  it('keeps a wait through a successful reload until the terminal exits', async () => {
+    const { runtime, handle } = await rendererTerminal()
+    let outcome: unknown = null
+    const wait = runtime.waitForTerminal(handle, { condition: 'exit' }).then(
+      (result) => (outcome = result),
+      (error: Error) => (outcome = error.message)
+    )
+    runtime.markRendererReloading(1)
+    runtime.syncWindowGraph(1, GRAPH)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(outcome).toBeNull()
+
+    runtime.onPtyExit(RENDERER_PTY_ID, 0)
+    await wait
+    expect(outcome).toMatchObject({ handle, condition: 'exit', satisfied: true })
+  })
+
+  it('points Run mail at the terminal and submits it while the renderer reloads', async () => {
+    const { runtime, write, handle } = await rendererTerminal()
+    const db = new OrchestrationDb(':memory:')
+    runtime.setOrchestrationDb(db)
     const run = db.createRun({
       objective: 'Reloading coordinator',
-      coordinatorHandle: terminal.handle,
-      coordinatorPaneKey: `${TAB_ID}:${LEAF_ID}`
+      coordinatorHandle: handle,
+      coordinatorPaneKey: PANE_KEY
     })
     runtime.onPtyData(RENDERER_PTY_ID, '\x1b]0;Codex done\x07', 1)
     await runtime.serializeMainTerminalBuffer(RENDERER_PTY_ID)
     runtime.markRendererReloading(1)
-    db.insertMessage({
+    const message = db.insertMessage({
       from: 'term_sender',
       to: `run:${run.id}`,
       subject: 'new mail',
@@ -138,6 +197,13 @@ describe('Run mail follows the terminal that owns its mailbox', () => {
     })
     runtime.notifyMessageArrived(`run:${run.id}`, 'status')
     await vi.advanceTimersByTimeAsync(0)
+    expect(pointerCount(write)).toBe(1)
+    expect(db.getMessageById(message.id)).toMatchObject({ read: 0, pointer_enter_pending: 2 })
+
+    await vi.advanceTimersByTimeAsync(600)
+    expect(write.mock.calls.filter(([, payload]) => payload === '\r')).toHaveLength(1)
+    expect(db.getMessageById(message.id)?.pointer_enter_pending).toBe(0)
+    expect(db.getMessageById(message.id)?.delivered_at).not.toBeNull()
     expect(pointerCount(write)).toBe(1)
     db.close()
   })
