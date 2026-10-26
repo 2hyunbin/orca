@@ -1,7 +1,7 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { CONNECTOR_AGENTS, ConnectorDeliveryResultSchema } from '@orca-cloud/connector-contract'
 import type { DeliveryBody } from './connector-inbox.js'
-import type { queueDelivery } from './queue-delivery.js'
+import type { QueueInTransaction } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
 import { findSlackIdentity } from './slack-identities.js'
@@ -12,12 +12,6 @@ import { keepTeammateContext, withTeammateContext } from './slack-teammate-conte
 import { slackText } from './slack-text.js'
 import { reactSeen, replyToWriter } from './slack-writer-replies.js'
 import { refreshSlackStatus } from './slack-thread-posts.js'
-
-// queueDelivery inside the routing transaction.
-export type QueueInTransaction = (
-  transaction: CloudDatabase,
-  input: Parameters<typeof queueDelivery>[1]
-) => ReturnType<typeof queueDelivery>
 
 export type SlackRoutingDeps = {
   config: SlackConfig

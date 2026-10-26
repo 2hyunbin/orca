@@ -6,8 +6,15 @@ import {
   CHANNEL,
   createSlackHarness,
   OWNER,
+  conversation,
+  EXTERNAL_ID,
   project,
-  TEAM
+  startedThread,
+  TEAM,
+  THREAD,
+  TURN,
+  turnEnded,
+  turnStarted
 } from './slack-harness.test-fixture.js'
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { SlackInstalls } from './slack-installs.js'
@@ -19,61 +26,6 @@ afterEach(async () => {
   await cleanupConnectorHarnesses()
   vi.unstubAllGlobals()
 })
-
-const THREAD = '1800000000.000100'
-const EXTERNAL_ID = `${TEAM}:${CHANNEL}:${THREAD}:${OWNER}`
-const conversation = { source: 'slack', externalId: EXTERNAL_ID }
-const TURN = 1_800_000_001_000
-
-async function startedThread() {
-  const harness = await createSlackHarness()
-  await harness.operator(
-    'link',
-    '--team',
-    TEAM,
-    '--user',
-    OWNER,
-    '--account',
-    'user-1',
-    '--default-project',
-    'orca'
-  )
-  const machine = await harness.machineWith('user-1', [project('orca')])
-  await harness.message({ text: `<@${BOT}> fix it`, ts: THREAD })
-  const [start] = ConnectorPollResponseSchema.parse((await machine.poll()).body).deliveries
-  let seq = 0
-  const events = async (...batch: unknown[]) => {
-    const response = await machine.call(CONNECTOR_PATHS.events, {
-      v: 1,
-      helloRev: 1,
-      seq: ++seq,
-      events: batch
-    })
-    expect(response.status).toBe(204)
-  }
-  const status = async () => {
-    const [row] = await harness.database.query(
-      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
-      [`status:${EXTERNAL_ID}`]
-    )
-    return JSON.parse(String(row?.body)).text
-  }
-  const reply = (replyId: string, text: string, by = machine) =>
-    by.call(CONNECTOR_PATHS.replies, { v: 1, replyId, conversation, turnId: TURN, text })
-  const pass = () => harness.edge.worker.sendDue()
-  return { ...harness, machine, start, events, status, reply, pass }
-}
-
-const turnStarted = { kind: 'turn-started', conversation, paneKey: 'pane-1', at: TURN }
-const turnEnded = {
-  kind: 'turn-ended',
-  conversation,
-  paneKey: 'pane-1',
-  turnId: TURN,
-  at: TURN + 5_000,
-  stopReason: 'end_turn',
-  lastAssistantMessage: 'Fixed <!channel> & done'
-}
 
 describe('Slack thread status and posts', () => {
   it('edits one status message as the turn moves, and posts the last message when the agent didn’t reply', async () => {
@@ -140,9 +92,25 @@ describe('Slack thread status and posts', () => {
         result: { outcome: 'refused', reason: 'no_such_project' }
       }
     ])
-    expect(await harness.status()).toBe(
-      'Your Orca on build-box couldn’t take this (no_such_project).'
-    )
+    // A code with no line of its own reads generically; the code itself stays out of the channel.
+    expect(await harness.status()).toBe('Your Orca on build-box couldn’t take this.')
+  })
+
+  it('records a refusal whose code is an inherited property name, and reads it generically', async () => {
+    for (const reason of ['__proto__', 'toString']) {
+      const harness = await startedThread()
+      const response = await harness.machine.ack([
+        {
+          deliveryId: harness.start?.deliveryId,
+          step: 'done',
+          result: { outcome: 'refused', reason }
+        }
+      ])
+      expect(response.status).toBe(204)
+      const [row] = await harness.database.query('SELECT state FROM connector_inbox')
+      expect(row?.state).toBe('done')
+      expect(await harness.status()).toBe('Your Orca on build-box couldn’t take this.')
+    }
   })
 
   it('shows a turn the machine can no longer vouch for', async () => {
@@ -178,7 +146,11 @@ describe('Slack thread status and posts', () => {
     expect(harness.fake.take()).toEqual([
       {
         method: 'chat.update',
-        args: { channel: CHANNEL, ts: expect.any(String), text: 'Working on build-box…' }
+        args: {
+          channel: CHANNEL,
+          ts: expect.any(String),
+          text: 'Working on build-box…'
+        }
       }
     ])
   })
