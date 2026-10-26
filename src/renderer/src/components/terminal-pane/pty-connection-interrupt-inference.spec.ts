@@ -750,11 +750,8 @@ export function registerPtyConnectionInterruptInferenceTests(): void {
       })
       const terminalTarget = createKeyboardEventTarget()
       const pane = createPane(1)
-      ;(pane.terminal as { element?: unknown; hasSelection: ReturnType<typeof vi.fn> }).element =
-        terminalTarget.target
-      ;(pane.terminal as { hasSelection: ReturnType<typeof vi.fn> }).hasSelection.mockReturnValue(
-        true
-      )
+      pane.terminal.element = terminalTarget.target
+      pane.terminal.hasSelection.mockReturnValue(true)
 
       connectPanePty(pane as never, createManager(1) as never, createDeps() as never)
       terminalTarget.dispatch(keyEvent({ key: 'c', ctrlKey: true }))
