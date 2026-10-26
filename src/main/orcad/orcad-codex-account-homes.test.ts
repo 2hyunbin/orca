@@ -43,7 +43,7 @@ describe('orcadCodexAccountHomes', () => {
     prepareHooks.mockClear()
   })
 
-  it('on a WSL host with hooks off, leaves the bridge-shared entry alone (R42)', async () => {
+  it('on a WSL host with hooks off, leaves the bridge-shared entry alone', async () => {
     wslHost.mockReturnValue(true)
     const homes = orcadCodexAccountHomes(
       () => settings({ agentStatusHooksEnabled: false }),

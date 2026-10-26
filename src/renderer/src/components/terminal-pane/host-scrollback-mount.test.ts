@@ -62,7 +62,7 @@ afterEach(() => {
 
 describe('a moved pane mounting on its host', () => {
   it('reads the host snapshot before mount and hands it to the replay', async () => {
-    // awin verify-4: moved panes opened with only a fresh prompt.
+    // Moved panes opened with only a fresh prompt.
     const layout: TerminalLayoutSnapshot = {
       root: { type: 'leaf', leafId: LEAF },
       activeLeafId: LEAF,

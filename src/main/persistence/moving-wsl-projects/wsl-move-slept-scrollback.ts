@@ -251,7 +251,7 @@ function checkpointOf(
       ? ''
       : info.scrollbackAnsi
   // Why the line break: the screen ends on the old shell's prompt, and the host's new shell would
-  // print its own beside it (`$ $`, verify-7). Not inside an unfinished escape or a TUI's screen.
+  // print its own beside it (`$ $`). Not inside an unfinished escape or a TUI's screen.
   const endsOnNewLine = !info.modes.alternateScreen && !info.pendingEscapeTailAnsi
   return {
     snapshotAnsi: endsOnNewLine ? `${info.snapshotAnsi}\r\n` : info.snapshotAnsi,

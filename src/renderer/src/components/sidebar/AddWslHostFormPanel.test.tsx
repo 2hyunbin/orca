@@ -44,7 +44,7 @@ describe('AddWslHostFormPanel', () => {
   })
 
   it('does not promise bridge projects stay put once they can move to the host', () => {
-    // "Use it for new projects; ... keep working as they are" contradicted the mover (D1b-10 run).
+    // "Use it for new projects; ... keep working as they are" contradicted the mover.
     const html = render()
     expect(html).not.toContain('Use it for new projects')
     expect(html).toContain('until you move them to this host')

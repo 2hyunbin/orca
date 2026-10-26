@@ -8,7 +8,7 @@ import { inspectPtyProviderProcessForRenderer } from '../providers/pty-process-i
 import { isClientOnlyUnverifiableInspection } from '../../shared/terminal-process-inspection'
 import { probePtyRunningWorkWithInspection } from '../../shared/pty-running-work-probe'
 
-// awin verify-6: after a relaunch every WSL bridge pane the window had not reopened read
+// After a relaunch every WSL bridge pane the window had not reopened read
 // `unverifiable`, so no move could pass its terminal gate.
 describe('inspecting a session that survived a relaunch unattached', () => {
   let dir: string

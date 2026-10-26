@@ -27,17 +27,12 @@ import { isPublishedHeld, reopenHeldPanes } from '../../terminal/recovery/held-p
 import { reopenNewerDaemonTerminals } from '../../../daemon/daemon-newer-protocol-hold'
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
-import { collectPersistedTerminalLeafIds } from '../../mobile-session-layout-projection'
 import { getDaemonHistoryDir } from '../../../daemon/daemon-launch-paths'
 import { HistoryReader } from '../../../daemon/history-reader'
 import { movedPaneHistorySessionId } from '../../../persistence/migrating-orcad-catalog/orcad-terminal-history-installer'
 import { makePaneKey, parsePaneKey } from '../../../../shared/stable-pane-id'
 import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
-
-function tabHasSolePane(tab: RuntimeMobileSessionTerminalTab): boolean {
-  return collectPersistedTerminalLeafIds(tab.parentLayout).length <= 1
-}
 
 export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
   protected abstract resolveAgentLaunchRuntime(
@@ -213,20 +208,17 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     let agentStartup: MobileTerminalCommand | MobileTerminalResumeCommand = resumeStartup ?? {}
     const resumeClaim =
       resumeStartup && 'resumeClaim' in resumeStartup ? resumeStartup.resumeClaim : null
-    // Why the sole-pane check: `launchAgent` is tab-wide, so in a split it names no pane; a
-    // sibling shell must come back as a shell, not as a fresh agent.
-    const tabAgent = tabHasSolePane(tab) ? tab.launchAgent : undefined
-    if (resumeStartup === undefined && tabAgent) {
+    if (resumeStartup === undefined && tab.launchAgent) {
       let workspace
       try {
         workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
         agentStartup = await this.resolveMobileSessionTerminalCommand(workspace, {
-          agent: tabAgent
+          agent: tab.launchAgent
         })
       } catch {
         // Disabled/unresolvable agents fall back to a tappable shell; runtime repair errors still refuse rather than hide failure under an agent icon.
         if (workspace) {
-          this.resolveAgentLaunchRuntime(workspace, tabAgent)
+          this.resolveAgentLaunchRuntime(workspace, tab.launchAgent)
         }
       }
     }
@@ -254,7 +246,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           env: agentStartup.env,
           startupCommandDelivery: agentStartup.startupCommandDelivery,
           launchConfig: agentStartup.launchConfig,
-          launchAgent: agentStartup.launchAgent ?? tabAgent,
+          launchAgent: agentStartup.launchAgent ?? tab.launchAgent,
           // Restore admission must authorize resumes too.
           ...('resumeProviderSession' in agentStartup
             ? {

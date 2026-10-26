@@ -33,7 +33,7 @@ function stubApi(result: WslMoveUseLocallyResult): ReturnType<typeof vi.fn> {
 async function refusalShown(): Promise<string | undefined> {
   const confirm = vi.fn(async (_options: ConfirmationDialogOptions) => true)
   await bringWslMovedProjectBack(project, confirm)
-  // awin verify-4: a toast for this sat behind the update notice, so nothing seemed to happen.
+  // A toast for this sat behind the update notice, so nothing seemed to happen.
   expect(confirm).toHaveBeenCalledTimes(2)
   expect(confirm.mock.calls[1]?.[0]).toMatchObject({ acknowledgeOnly: true })
   return confirm.mock.calls[1]?.[0]?.description
@@ -45,7 +45,7 @@ describe('bringWslMovedProjectBack', () => {
     openFiles.length = 0
   })
 
-  // awin verify-8: p6's unsaved README blocked bringing p9 back; only the move's own files count.
+  // P6's unsaved README blocked bringing p9 back; only the move's own files count.
   it("asks for the move's unsaved files to be saved first, naming only those", async () => {
     openFiles.push(
       { id: 'f1', relativePath: 'README.md', worktreeId: 'repo-1::/w', isDirty: true },
@@ -120,7 +120,7 @@ describe('bringWslMovedProjectBack', () => {
   })
 
   it('names the newer move to bring back first', async () => {
-    // awin verify-3: undoing an older move said nothing about which newer one blocked it.
+    // Undoing an older move said nothing about which newer one blocked it.
     movedProjects.splice(0, movedProjects.length, {
       kind: 'repo',
       id: 'repo-9',

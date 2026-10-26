@@ -25,7 +25,7 @@ function deps(shellCwds?: WslMoveDriverDeps['shellCwds']): Parameters<typeof pau
 }
 
 describe('pauseWslMoveScope', () => {
-  // awin verify-5: an open pane's `cd deep/er` was lost, since bash on the bridge reports no folder.
+  // An open pane's `cd deep/er` was lost, since bash on the bridge reports no folder.
   it('reads each live pane its shell folder before Sleep ends the shell', async () => {
     const order: string[] = []
     const d = deps(async () => {
@@ -51,7 +51,7 @@ describe('pauseWslMoveScope', () => {
     expect(paused).toEqual({ panes: [pane] })
   })
 
-  // awin verify-8, 6e: a workspace that failed the first Sleep of a move refused it at once.
+  // A workspace that failed the first Sleep of a move refused it at once.
   it('sleeps a failed workspace again before refusing', async () => {
     const d = deps()
     const asked: string[][] = []

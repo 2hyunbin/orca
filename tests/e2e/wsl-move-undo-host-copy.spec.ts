@@ -1,6 +1,5 @@
 /**
- * "Use on this computer again" while the host still runs its copy of the project (awin verify-7,
- * 6c): undo must stop the host's terminals for the project before the panes wake here, so the
+ * "Use on this computer again" while the host still runs its copy of the project: undo must stop the host's terminals for the project before the panes wake here, so the
  * project's terminal runs in exactly one place. The host is a windowless paired host holding the
  * project under the ids the move gave it; the desktop is a paired client the move journaled.
  *

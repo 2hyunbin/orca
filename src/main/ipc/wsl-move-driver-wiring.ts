@@ -138,19 +138,7 @@ export function createWslMoveDriverDeps(
               console.warn('[wsl-move] Could not list processes in', distro)
               return new Map()
             }
-            return new Map(
-              paneKeys.map((key) => {
-                const verdict = classifyWslGuestPaneForeground(rows, key)
-                if (verdict === 'unverifiable') {
-                  // awin verify-5: a pane stayed "cannot check" after its job was killed elsewhere.
-                  const tagged = rows.filter((row) => row.paneKey === key)
-                  const processes =
-                    tagged.map((row) => `${row.pid}/${row.ppid}/${row.comm}`).join(' ') || 'none'
-                  console.warn(`[wsl-move] No shell found for a pane; its processes: ${processes}`)
-                }
-                return [key, verdict]
-              })
-            )
+            return new Map(paneKeys.map((key) => [key, classifyWslGuestPaneForeground(rows, key)]))
           }
         }
       : {}),

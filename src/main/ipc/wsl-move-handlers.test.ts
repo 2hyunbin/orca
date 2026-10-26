@@ -148,7 +148,7 @@ describe('WSL move IPC', () => {
     setWslMoveReloadableWindow(() => null)
   })
 
-  // awin verify-9, X1: "p5 moved after this project" refused the undo after killing p1's terminals.
+  // "p5 moved after this project" refused the undo after killing p1's terminals.
   it('refuses a superseded undo before it stops anything on the host', async () => {
     const rewritten = { rewrittenStores: ['renderer-a'] }
     invoke('wslMove:recordStoreRewritten', { migrationId: 'move-1', storeId: 'renderer-a' })
@@ -179,7 +179,7 @@ describe('WSL move IPC', () => {
     expect(listWslMoveCutovers(userDataPath)).toHaveLength(2)
   })
 
-  // awin verify-8: p6's unsaved README blocked bringing p9 back.
+  // P6's unsaved README blocked bringing p9 back.
   it("refuses only for unsaved files in the move's own workspaces, before stopping the host", async () => {
     const stopHostCopies = vi.fn(async () => 'stopped' as const)
     registerWslMoveHandlers(
@@ -221,7 +221,7 @@ describe('WSL move IPC', () => {
     expect(listWslMoveCutovers(userDataPath)).toHaveLength(1)
   })
 
-  // awin verify-7, 6c: the host's copy of the agent kept running beside the one resumed here.
+  // The host's copy of the agent kept running beside the one resumed here.
   it.each([
     ['unreachable', 'host-unreachable'],
     ['still-running', 'host-still-running']

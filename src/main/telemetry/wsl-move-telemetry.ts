@@ -1,5 +1,5 @@
 /**
- * Migration-outcome telemetry for a WSL move (R43): started, then finished, reset, refused or
+ * Migration-outcome telemetry for a WSL move: started, then finished, reset, refused or
  * waiting for its host, with the phase it reached, a reason code and duration and size buckets.
  * Every raw code is narrowed onto the schema's enums here; nothing a user or host named leaves.
  */

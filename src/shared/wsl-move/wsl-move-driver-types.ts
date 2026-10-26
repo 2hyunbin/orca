@@ -1,5 +1,5 @@
 /**
- * The IPC contract of a "move projects to the WSL host" run, for the move dialog (D1b-9). Main runs
+ * The IPC contract of a "move projects to the WSL host" run, for the move dialog. Main runs
  * the move; the renderer previews it, starts it, may cancel it before the switch, and follows its
  * progress. Every call refuses with `wsl_move_unavailable` while the internal WSL hosts gate is off.
  */
@@ -108,7 +108,7 @@ export type WslMoveResult =
        * dialog must say they are off on the host for now, never hide it.
        */
       automationsPending?: string[]
-      /** Set by the browser-login copy (D1b-7f) when the host's browser starts signed out. */
+      /** Set by the browser-login copy when the host's browser starts signed out. */
       browserLoginsNotCopiedReason?: string
     }
   | WslMoveRefusal

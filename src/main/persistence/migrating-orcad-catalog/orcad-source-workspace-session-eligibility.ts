@@ -31,10 +31,13 @@ export function collectUnsupportedSessionItems(
   // A WSL move takes some of host `local`'s projects; the others, and rows a past move retained,
   // stay on this desktop untouched, so only the selected projects' rows can refuse it.
   const wholeHost = sourceHostPartition && orcadMigrationScopeOwnsWholeHost(scope)
-  // An unattributable key that may be the selected project's refuses rather than staying behind.
+  // In a WSL move, an unattributable key that may be the selected project's refuses rather than
+  // staying behind; an SSH conversion keeps its own matching.
   const matches = (ownerKey: string): boolean =>
     Boolean(ownerKey) &&
-    (wholeHost || owns(ownerKey) || orcadMigrationOwnerKeyIsAmbiguous(ownerKey, scope))
+    (wholeHost ||
+      owns(ownerKey) ||
+      (scope.kind === 'local-wsl' && orcadMigrationOwnerKeyIsAmbiguous(ownerKey, scope)))
   const items: string[] = []
   // Foreign projects stay behind; unsaved drafts still require preservation.
   if (wholeHost) {

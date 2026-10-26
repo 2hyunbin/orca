@@ -70,7 +70,7 @@ export const PERSISTED_STATE_DISPOSITIONS = {
   workspaceSessionsByHostId: {
     disposition: 'rewrite-desktop',
     item: 22,
-    note: "The desktop seeds the WSL host's session from the moved 'local' rows (D1b-7c)."
+    note: "The desktop seeds the WSL host's session from the moved 'local' rows."
   },
   remoteLayoutSnapshots: {
     disposition: 'rederive',
@@ -86,7 +86,7 @@ export const PERSISTED_STATE_DISPOSITIONS = {
   migrationUnsupportedPtyEntries: { disposition: 'gate', item: 20 },
   legacyPaneKeyAliasEntries: { disposition: 'gate', item: 20 },
   automations: moveDisposition(18, {
-    note: "The host runs the moved copy; the desktop's stays unchanged, and its scheduler only advances it (no rewrite in D1b-7e)."
+    note: "The host runs the moved copy; the desktop's stays unchanged, and its scheduler only advances it."
   }),
   automationRuns: moveDisposition(19, {
     note: "An in-flight run in scope blocks the move. The desktop's history stays as written, beside its automation."

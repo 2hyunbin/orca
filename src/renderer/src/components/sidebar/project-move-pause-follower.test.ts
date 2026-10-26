@@ -164,7 +164,7 @@ describe('project move renderer completion', () => {
     expect(mocks.persist).not.toHaveBeenCalled()
   })
 
-  // awin verify-8, 6e: one workspace of a two-project move failed in main, and its rollback's
+  // One workspace of a two-project move failed in main, and its rollback's
   // error failed the whole pause, so the move's retry never ran; a fresh pause re-sleeps it.
   it('persists the slept workspaces of a partly failed pause, and a new pause re-sleeps the rest', async () => {
     const f = fixture()

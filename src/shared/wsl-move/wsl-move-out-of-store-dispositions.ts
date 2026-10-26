@@ -35,7 +35,7 @@ export const OUT_OF_STORE_DISPOSITIONS: readonly (WslMoveFieldDisposition & {
     store: 'orchestration.db',
     disposition: 'rewrite-desktop',
     item: 53,
-    note: 'Per table in SQLITE_TABLE_DISPOSITIONS (D1b-7e).'
+    note: 'Per table in SQLITE_TABLE_DISPOSITIONS.'
   },
   {
     store: 'codex-pane-accounts.json',

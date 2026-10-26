@@ -62,7 +62,7 @@ export function registerWslMoveDesktopRewriteStore(store: WslMoveDesktopRewriteS
   stores.push(store)
 }
 
-/** The renderer's localStorage stores (D1b-7d); the renderer rewrites and records each. */
+/** The renderer's localStorage stores; the renderer rewrites and records each. */
 export function registerWslMoveRendererRewriteStores(): void {
   for (const id of WSL_MOVE_RENDERER_REWRITE_STORE_IDS) {
     registerWslMoveDesktopRewriteStore({ id, side: 'renderer' })

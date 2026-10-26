@@ -1,5 +1,5 @@
 /**
- * The `browser-cookies` rewrite store (D1b-7f, owner decision 3): a committed WSL move copies the
+ * The `browser-cookies` rewrite store (owner decision 3): a committed WSL move copies the
  * desktop's in-app browser cookies once into the WSL host's route partition, or records why the
  * host starts on a fresh partition instead. Browser profiles are global, not per project, so each
  * profile's whole jar is copied, once per host partition, by the first move into that host.

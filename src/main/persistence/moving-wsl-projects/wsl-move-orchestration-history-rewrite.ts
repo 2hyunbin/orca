@@ -1,5 +1,5 @@
 /**
- * The desktop's orchestration history for a committed WSL move (D1b-7e; owner decision 4: rewrite
+ * The desktop's orchestration history for a committed WSL move (owner decision 4: rewrite
  * in place, the desktop keeps coordinating). A settled local worker dispatch in a moved project,
  * and its worker-terminal row, take the host's worktree id. Everything else in orchestration.db
  * stays as written; `SQLITE_TABLE_DISPOSITIONS` gives each table's reason.

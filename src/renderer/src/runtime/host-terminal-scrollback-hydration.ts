@@ -2,7 +2,11 @@ import type { TerminalLayoutSnapshot } from '../../../shared/terminal-tab-types'
 import type { SessionReadTerminalScrollbackResult } from '../../../shared/rpc-contract/session-terminal-scrollback-params'
 import { SESSION_TERMINAL_SCROLLBACK_READ_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { useAppStore } from '@/store'
-import { runtimeEnvironmentIdForWorkspaceOwner } from '@/lib/resolve-owner'
+import {
+  runtimeEnvironmentIdForWorkspaceOwner,
+  type RuntimeEnvironmentOwnerMatch
+} from '@/lib/resolve-owner'
+import type { OrcadDeploymentLink } from '../../../shared/runtime-environments'
 import {
   callRuntimeRpc,
   peekRuntimeEnvironmentCapability,
@@ -64,11 +68,11 @@ const defaultDeps: HostTerminalScrollbackHydrationDeps = {
     }
   },
   resolveEnvironmentId: (worktreeId) => {
-    const owner = runtimeEnvironmentIdForWorkspaceOwner(useAppStore.getState(), {
-      workspaceId: worktreeId
-    })
-    // Why null for a twin: no single host owns the stored scrollback, so the pane paints locally.
-    return owner.kind === 'resolved' ? owner.environmentId : null
+    const state = useAppStore.getState()
+    return hostScrollbackEnvironmentId(
+      runtimeEnvironmentIdForWorkspaceOwner(state, { workspaceId: worktreeId }),
+      state.runtimeEnvironments
+    )
   },
   hasLocalSnapshot: (ref) => {
     try {
@@ -255,6 +259,23 @@ async function fetchHostScrollback(
  * Decides synchronously and holds unless the host is known not to serve the read; returns null
  * when there is nothing to fetch. The promise never rejects and settles by the hold bound.
  */
+/**
+ * The host to read a pane's stored scrollback from: only a WSL host, whose moved panes keep their
+ * history as host snapshots. SSH and paired-server panes paint as before, with no hold or read.
+ * Null for a twin too: no single host owns the stored scrollback, so the pane paints locally.
+ */
+export function hostScrollbackEnvironmentId(
+  owner: RuntimeEnvironmentOwnerMatch,
+  environments: readonly { id: string; orcadDeployment?: OrcadDeploymentLink | null }[]
+): string | null {
+  if (owner.kind !== 'resolved' || owner.environmentId === null) {
+    return null
+  }
+  const environmentId = owner.environmentId
+  const environment = environments.find((candidate) => candidate.id === environmentId)
+  return environment?.orcadDeployment?.kind === 'wsl' ? environmentId : null
+}
+
 export function startHostTerminalScrollbackHydration(
   tabId: string,
   worktreeId: string,

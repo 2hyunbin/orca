@@ -1,5 +1,5 @@
 /**
- * The main-process stores a committed WSL move rewrites (D1b-7c), in run order: the persisted UI's
+ * The main-process stores a committed WSL move rewrites, in run order: the persisted UI's
  * routing, the local session's focus, then the host partition's seed. Each re-reads the profile,
  * so a run after a crash before its ledger entry finds its own earlier write and changes nothing.
  */

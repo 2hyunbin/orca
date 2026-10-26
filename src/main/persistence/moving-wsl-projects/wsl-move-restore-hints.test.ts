@@ -121,7 +121,7 @@ describe('captureWslMoveRestoreHints', () => {
     expect(capture.staleCwdPaneKeys).toEqual(['t:a'])
   })
 
-  // awin verify-5: bash on the bridge reports no folder, so an open pane's checkpoint kept its
+  // Bash on the bridge reports no folder, so an open pane's checkpoint kept its
   // spawn folder and `cd deep/er` reopened at the project root.
   it('prefers the folder the shell was in before Sleep over the spawn folder', async () => {
     const capture = await captureWslMoveRestoreHints(

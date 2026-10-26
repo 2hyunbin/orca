@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { SSH_RUNTIME_DURATION_BUCKETS } from './telemetry-ssh-runtime-event-schemas'
 
-// Why enum-only: these rows size how WSL moves end (R43). A distro, repo or path name, a migration
+// Why enum-only: these rows size how WSL moves end. A distro, repo or path name, a migration
 // id or a raw error would identify a machine, so none may appear; unknown codes become `other`.
 
 /** A refusal's code without its `wsl_move_` prefix. */

@@ -178,7 +178,7 @@ describe('quiesceWslMove', () => {
     expect(removed).toEqual(['move-1'])
   })
 
-  // awin verify-7, 6e: a just-slept workspace's first stop failed once and the move refused.
+  // A just-slept workspace's first stop failed once and the move refused.
   it('sleeps a workspace again when its first Sleep left a pane awake', async () => {
     const asked: string[][] = []
     const { deps, journal } = harness({

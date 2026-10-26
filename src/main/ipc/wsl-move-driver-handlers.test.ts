@@ -54,7 +54,7 @@ describe('WSL move driver IPC', () => {
       expect.objectContaining({ now: expect.any(Function) }),
       { distro: 'Ubuntu' }
     )
-    // The move's start and outcome are reported (R43).
+    // The move's start and outcome are reported.
     expect(track.mock.calls.map(([, props]) => props.outcome)).toEqual(['started', 'finished'])
   })
 

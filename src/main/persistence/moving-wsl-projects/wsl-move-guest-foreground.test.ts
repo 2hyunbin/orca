@@ -70,7 +70,7 @@ describe('classifyWslGuestPaneForeground', () => {
   })
 
   it('finds the shell under a WSL relay that carries the pane key too', () => {
-    // awin: a live pane read unverifiable because its relay held the key above the shell.
+    // A live pane read unverifiable because its relay held the key above the shell.
     const taggedRelay = { ...relay, paneKey: KEY_A }
     expect(classifyWslGuestPaneForeground([taggedRelay, shellA], KEY_A)).toBe('shell-idle')
     expect(classifyWslGuestPaneForeground([taggedRelay, shellA, child(150, 'vim')], KEY_A)).toBe(
@@ -79,7 +79,7 @@ describe('classifyWslGuestPaneForeground', () => {
   })
 
   it("names an agent that is the shell's one job, with its own children, as the foreground", () => {
-    // awin verify-4: an idle codex at its prompt read as a running program.
+    // An idle codex at its prompt read as a running program.
     const codex = child(150, 'codex', { argc: 3 })
     const hook = child(160, 'sh', { ppid: 150, argc: 2 })
     expect(classifyWslGuestPaneForeground([relay, shellA, codex, hook], KEY_A)).toEqual({
@@ -180,7 +180,7 @@ describe.runIf(process.platform === 'linux')('WSL_GUEST_PANE_PROCESS_SCRIPT on L
 })
 
 describe('collectWslMoveGateInputs with a guest foreground reader', () => {
-  // The Windows host sees `wsl.exe` under every live bridge pane: this is what it reported on awin.
+  // The Windows host sees `wsl.exe` under every live bridge pane: this is what it reported.
   const windowsSaysLive: WslMoveGateFactSources['inspect'] = async () => ({
     foregroundProcess: 'wsl.exe',
     hasChildProcesses: true,
@@ -260,7 +260,7 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
     })
   })
 
-  // awin verify-6: after an app relaunch Windows could no longer observe the reattached wsl.exe's
+  // After an app relaunch Windows could no longer observe the reattached wsl.exe's
   // children, so every live bridge pane read unverifiable for good and blocked every move.
   it('asks the distro when Windows cannot observe a reattached pane after a relaunch', async () => {
     const hostBlind = async (): Promise<TerminalProcessInspection> => ({
@@ -322,7 +322,7 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
   })
 
   it('leaves a slept pane idle without asking the distro, which has no shell of it left', async () => {
-    // awin: every slept pane read unverifiable, so Sleep could no longer quiet a project.
+    // Every slept pane read unverifiable, so Sleep could no longer quiet a project.
     const guestForegrounds = vi.fn(async () => new Map([[KEY_A, 'unverifiable' as const]]))
     const slept = await collectWslMoveGateInputs(
       {

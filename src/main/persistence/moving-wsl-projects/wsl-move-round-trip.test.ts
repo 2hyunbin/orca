@@ -1,5 +1,5 @@
 /**
- * D1b-10 round trip on every mover fixture, through the production code end to end: the real
+ * Round trip on every mover fixture, through the production code end to end: the real
  * export from a desktop profile store, the real driver, the real import into a host profile store,
  * the real retention marks. The host's state must project equal to the source's; then "Use on
  * this computer again" (dropping the retained move, as #29833 does) must give back the desktop's
@@ -299,7 +299,7 @@ describe('WSL move round trip on every fixture', () => {
     }
   )
 
-  // awin verify-7, N1: the project the user had open could not move into a host with its own focus.
+  // The project the user had open could not move into a host with its own focus.
   it('moves the focused project into a host that already has an active project, keeping its focus', async () => {
     const hostFocus = {
       activeRepoId: 'repo-already-on-host',

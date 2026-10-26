@@ -267,7 +267,7 @@ describe('WSL move host session seed', () => {
 })
 
 describe('WSL move carried session focus', () => {
-  // awin verify-7, N1: the focused project could not move into a host that had its own focus.
+  // The focused project could not move into a host that had its own focus.
   it('carries no desktop focus, so a host with its own focus takes the moved project and keeps its focus', () => {
     const desktop: WorkspaceSessionState = {
       ...getDefaultWorkspaceSession(),

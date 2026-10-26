@@ -29,7 +29,7 @@ export async function bringWslMovedProjectBack(
     return
   }
   // The reload brings the move's workspaces back as they were before it, dropping their unsaved
-  // files; main knows which workspaces the move holds (awin verify-5, verify-8).
+  // files; main knows which workspaces the move holds.
   const unsaved = useAppStore.getState().openFiles.filter((file) => file.isDirty)
   const result = await window.api.wslMove.useProjectHereAgain({
     kind: project.kind,
@@ -56,7 +56,7 @@ export async function bringWslMovedProjectBack(
   }
   // On success main reloads the window, which hydrates the whole pre-move session from disk.
   if (!result.released) {
-    // A dialog, not a toast: a toast sat behind the update notice on awin and read as nothing.
+    // A dialog, not a toast: a toast sat behind the update notice and read as nothing.
     await confirm({
       title: translate('sidebar.wslMoved.useHereRefusedTitle', "Can't use {{name}} here yet", {
         name: project.displayName

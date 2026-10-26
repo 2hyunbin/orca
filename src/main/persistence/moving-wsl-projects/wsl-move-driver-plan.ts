@@ -106,7 +106,7 @@ async function settleInterruptedWslMove(
 
 /**
  * A move left waiting on a host whose distro is now unregistered can never hear back: the commit,
- * if any, went with the distro's disk. Back to zero, so the projects are usable here again (R38).
+ * if any, went with the distro's disk. Back to zero, so the projects are usable here again.
  */
 async function resetForUnregisteredDistro(
   deps: WslMoveDriverDeps,

@@ -192,7 +192,7 @@ function registerWslMoveUseHereHandler(
       if (unsavedWorkspaceIds.length > 0) {
         return { released: false, reason: 'unsaved-files', unsavedWorkspaceIds }
       }
-      // Why before the stop: a refused undo must leave the host's copies running (awin verify-9, X1).
+      // Why before the stop: a refused undo must leave the host's copies running.
       const refusal = wslMoveReleaseRefusal(userDataPath, found.move)
       if (refusal) {
         return refusal

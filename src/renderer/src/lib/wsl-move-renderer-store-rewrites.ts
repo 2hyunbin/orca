@@ -1,5 +1,5 @@
 /**
- * The renderer's stores of a committed WSL move (D1b-7d): a moved workspace's quick-open history,
+ * The renderer's stores of a committed WSL move: a moved workspace's quick-open history,
  * CSV and PDF view preferences and notebook interpreter choices gain a copy keyed for the WSL host,
  * beside the local entry a downgrade still reads. Native chats stay local (owner decision C).
  *
@@ -100,7 +100,7 @@ async function rewriteMove(move: WslMovePendingRendererRewrite): Promise<boolean
       if (move.storeIds.includes(storeId)) {
         const result = await recordWslMoveRendererStoreRewritten(move.migrationId, storeId)
         if (!result.recorded && RETRYABLE_RECORD_REASONS.has(result.reason)) {
-          // A refused record left the move stuck until the next app start (D1b-10 run).
+          // A refused record left the move stuck until the next app start.
           console.warn(`[wsl-move] Renderer rewrite ${storeId} not recorded: ${result.reason}`)
           unrecorded = true
         }

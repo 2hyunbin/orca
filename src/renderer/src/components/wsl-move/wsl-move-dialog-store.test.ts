@@ -286,7 +286,7 @@ describe('run', () => {
   })
 
   it('shows how a followed run ended when it did not commit, instead of its last step', () => {
-    // A refused start left the dialog on "Moving… Preparing" until a reload (D1b-10 run on awin).
+    // A refused start left the dialog on "Moving… Preparing" until a reload.
     adoptWslMoveProgress({ distro: 'Ubuntu', step: 'preparing' })
     adoptWslMoveProgress({
       distro: 'Ubuntu',

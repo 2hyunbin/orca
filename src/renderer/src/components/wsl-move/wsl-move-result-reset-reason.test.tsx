@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { WslMoveResultBody } from './WslMoveResultBody'
 
 describe('the reset result', () => {
-  // awin verify-7, N1: "Nothing was moved" with no reason left the user guessing.
+  // "Nothing was moved" with no reason left the user guessing.
   it('says why the move stopped', () => {
     const markup = renderToStaticMarkup(
       <WslMoveResultBody

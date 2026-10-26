@@ -157,7 +157,7 @@ describe('WSL move renderer store rewrites', () => {
   })
 
   it('retries a store main refused to record instead of leaving the move stuck', async () => {
-    // On awin the marker landed but the ledger entry never did, so every later move was refused.
+    // On a real host the marker landed but the ledger entry never did, so every later move was refused.
     vi.useFakeTimers()
     try {
       seedStorage()

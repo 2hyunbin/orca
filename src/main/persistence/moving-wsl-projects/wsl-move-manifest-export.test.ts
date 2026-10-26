@@ -235,7 +235,7 @@ describe('exportWslMoveManifest', () => {
   })
 
   it("is not refused by another project's agent session or unsaved draft", () => {
-    // On awin, any agent or draft anywhere on this desktop refused every WSL move (D1b-10 run).
+    // Any agent or draft anywhere on this desktop refused every WSL move.
     const state = sourceState()
     const elsewhere: SleepingAgentSessionRecord = {
       paneKey: 'windows-shell:missing-leaf',
@@ -312,7 +312,7 @@ describe('exportWslMoveManifest', () => {
   it('signs what the host and the journal will read, even with in-memory dates', () => {
     // A row added this session can still hold a Date the next load would read back as a string. The
     // signature covered "{}" for it while the host hashed the string, so the first move after adding
-    // a project reset with a digest mismatch until a restart (D1b-10 run on awin).
+    // a project reset with a digest mismatch until a restart.
     const state = sourceState()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the in-memory shape the load normalizes.
     ;(state.repos[0] as unknown as Record<string, unknown>).lastSeenAt = new Date(
@@ -421,7 +421,7 @@ describe('exportWslMoveManifest', () => {
   })
 
   it('signs the session as the host parses it, even with a field the parser drops', () => {
-    // The awin run: a move right after sleeping terminals reset with a digest mismatch, because the
+    // On a real host, a move right after sleeping terminals reset with a digest mismatch, because the
     // signature covered session fields the manifest parser does not keep.
     const state = sourceState()
     const sleptTab: Record<string, unknown> = {
@@ -437,7 +437,7 @@ describe('exportWslMoveManifest', () => {
   })
 
   it('carries no desktop PTY binding, so the moved pane reads its history from the host', () => {
-    // awin verify-4: the host's session kept the desktop's PTY ids, so the client took each pane
+    // The host's session kept the desktop's PTY ids, so the client took each pane
     // for a live terminal, skipped the scrollback read, and opened a fresh prompt.
     const state = sourceState()
     const leaf = '11111111-1111-4111-8111-111111111111'
@@ -461,7 +461,7 @@ describe('exportWslMoveManifest', () => {
   })
 
   it("drops a tab's Windows shell choice on purpose, never through the parser", () => {
-    // awin verify-3: every preview and move warned that the parser dropped shellOverride.
+    // Every preview and move warned that the parser dropped shellOverride.
     const state = sourceState()
     const tab = state.workspaceSession.tabsByWorktree[WORKTREE]![0]!
     state.workspaceSession.tabsByWorktree[WORKTREE] = [

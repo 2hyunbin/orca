@@ -110,7 +110,7 @@ describe("a paused pane's daemon history", () => {
     expect(projected.session.terminalLayoutsByTabId[TAB]?.scrollbackRefsByLeafId).toBeUndefined()
   })
 
-  // awin verify-6: a normal-screen restore holds the whole buffer in both fields; carried twice,
+  // A normal-screen restore holds the whole buffer in both fields; carried twice,
   // the per-pane cap then kept only the newest ~half of a 2,000-line pane.
   it('writes a normal-screen buffer once, so a 2,000-line pane arrives whole', async () => {
     const buffer = Array.from({ length: 2_000 }, (_, i) => `line ${i}`).join('\r\n')
@@ -297,7 +297,7 @@ function readMeta(root: string, sessionId: string): Record<string, unknown> {
 
 describe('panes slept before the move', () => {
   it("lists them from the scope's layouts, live panes first", () => {
-    // awin: panes slept earlier in the session had no live terminal, so 0 of 0 were read.
+    // Panes slept earlier in the session had no live terminal, so 0 of 0 were read.
     const session: WorkspaceSessionState = {
       ...sleptSession({ ptyIdsByLeafId: { [LEAF]: 'pty-slept' } }),
       tabsByWorktree: {
@@ -324,7 +324,7 @@ describe('panes slept before the move', () => {
   })
 
   it("takes the window's binding of a pane main retired on Sleep, only for a moved workspace", () => {
-    // awin verify-3: with no reload between Sleep and Move, main's layout had no binding left.
+    // With no reload between Sleep and Move, main's layout had no binding left.
     const tab = {
       id: TAB,
       ptyId: null,

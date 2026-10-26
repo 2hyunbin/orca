@@ -232,7 +232,7 @@ describe('moveProjectsToWslHost', () => {
   })
 
   it('says why when the manifest it signed is not what the journal reads back', async () => {
-    // What the awin run saw as a bare "everything was put back": no journal, no reason.
+    // What a real-host run saw as a bare "everything was put back": no journal, no reason.
     world.exportOverride = (exported, call) =>
       call === 2
         ? { ...exported, manifest: { ...exported.manifest, manifestSha256: '0'.repeat(64) } }
@@ -270,7 +270,7 @@ describe('moveProjectsToWslHost', () => {
   })
 
   it("says in the preview that a slept pane's history can't be read", async () => {
-    // awin verify-4: only Start refused; the preview showed the move as ready.
+    // Only Start refused; the preview showed the move as ready.
     const dispose = vi.fn()
     world.deps.sleptScrollback = async () => ({
       buffers: new Map(),
@@ -551,7 +551,7 @@ describe('moveProjectsToWslHost', () => {
     })
 
     it('gives panes slept before the move their folder, including ones only the window still binds', async () => {
-      // verify-3 on awin: a pane slept earlier lost its `deep/` folder; only its history moved.
+      // A pane slept earlier lost its `deep/` folder; only its history moved.
       const saved = { paneKey: 'tab-0:saved', sessionId: 'saved-session' }
       const reported = { paneKey: 'tab-0:reported', sessionId: 'reported-session' }
       const offered: string[] = []

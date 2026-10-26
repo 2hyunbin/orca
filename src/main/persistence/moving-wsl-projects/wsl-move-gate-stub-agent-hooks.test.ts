@@ -11,7 +11,7 @@ const WT = 'repo-1::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'
 const PANE = makePaneKey('tab-1', '11111111-1111-4111-8111-111111111111')
 const scope = { workspaceIds: [WT], workspaceKeys: new Set([WT]) }
 
-// awin verify-6, item 5d: the D1b-10 stub "codex" posts real hook events from the distro. Its
+// The verify stub "codex" posts real hook events from the distro. Its
 // Stop must let an idle agent pass the gate; only a turn still running may block. (The stub fires
 // SessionStart at launch, which reads as a turn start, so a stub never given a prompt blocks.)
 describe('the WSL move gate with the stub agent hook events', () => {
@@ -98,7 +98,7 @@ describe('the WSL move gate with the stub agent hook events', () => {
     await hook('UserPromptSubmit', 'hello p4')
     await hook('Stop', 'hello p4')
     // Resumed after a move or a wake: Codex posts SessionStart only with the first prompt, so an
-    // idle resumed agent posts nothing and passes. (The awin stub posts it at launch instead.)
+    // idle resumed agent posts nothing and passes. (The real-host stub posts it at launch instead.)
     expect(await gate()).toEqual({ verdict: 'ready', paneKeys: [PANE] })
     await hook('SessionStart')
     await hook('UserPromptSubmit', 'next')

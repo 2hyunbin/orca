@@ -19,7 +19,6 @@ import {
 import type { CreateOrAttachResult, GetSnapshotResult } from './types'
 import type { PtySpawnOptions, PtySpawnResult } from '../providers/pty-provider-contract'
 import { resolveSafePtyDefaultCwd } from '../providers/pty-default-cwd'
-import { logWslSpawnOrigin, probeWslColdRestoreScreen } from './daemon-spawn-origin-log'
 import { isMissingWorkingDirectoryError } from '../providers/working-directory-validation'
 
 /** A daemon kept running across an update trusts `interactive` even for a claimed resume. */
@@ -221,32 +220,6 @@ export abstract class DaemonPtySpawnRequest extends DaemonPtyRuntimeState {
       context.restoreInfo = { ...recovered, cwd: requestedCwd }
       return deliverSeedAndCreate()
     })
-    logWslSpawnOrigin({
-      sessionId: context.sessionId,
-      wslDistro: context.wslDistro,
-      isNew: result.isNew,
-      attachOnly: context.attachOnly,
-      spawnIntent: context.opts.spawnIntent,
-      coldRestore: context.restoreInfo !== null,
-      ...(historySeedSegments
-        ? {
-            seed: {
-              segments: historySeedSegments.length,
-              rows: context.restoreInfo?.rows,
-              tail: JSON.stringify(historySeedSegments.join('').slice(-160)),
-              seeded: result.historySeeded
-            }
-          }
-        : {})
-    })
-    if (context.wslDistro && result.isNew && context.restoreInfo) {
-      probeWslColdRestoreScreen(context.sessionId, async () => {
-        const reply = await this.client.request<GetSnapshotResult>('getSnapshot', {
-          sessionId: context.sessionId
-        })
-        return reply.snapshot
-      })
-    }
     return historySeedUnavailable && result.historySeeded === undefined
       ? { ...result, historySeeded: false }
       : result

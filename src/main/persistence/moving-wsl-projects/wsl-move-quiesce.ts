@@ -33,7 +33,7 @@ export type WslMoveQuiesceDeps = {
   wait?: (ms: number) => Promise<void>
 }
 
-// A Sleep can fail once and succeed when tried again (awin verify-7, 6e); only a repeat refuses.
+// A Sleep can fail once and succeed when tried again; only a repeat refuses.
 const SLEEP_ATTEMPTS = 3
 const SLEEP_RETRY_MS = 1_000
 

@@ -1,5 +1,5 @@
 /**
- * D1b-10: the WSL host changing under a move, against a real orcad profile store.
+ * The WSL host changing under a move, against a real orcad profile store.
  * R41: orcad updated mid-move, by this desktop's next connect or by another desktop on the distro.
  * R38: the distro unregistered (or renamed: by name the two look the same) mid-move or after it.
  */

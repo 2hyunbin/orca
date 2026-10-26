@@ -65,7 +65,7 @@ const flushStorageData = vi.fn()
 const undo = (sender: unknown = { id: MAIN_WINDOW_ID, session: { flushStorageData } }) =>
   handlers.get('wslMove:useProjectHereAgain')?.({ sender }, { kind: 'repo', id: 'repo-1' })
 
-// awin verify-14, 6c: the open host pane resumed its agent on the host 1.6 s after undo stopped it.
+// The open host pane resumed its agent on the host 1.6 s after undo stopped it.
 describe('undo with the host pane open', () => {
   it("refuses the window's host starts from the stop until the reloaded page has loaded", async () => {
     let fencedDuringStop = false

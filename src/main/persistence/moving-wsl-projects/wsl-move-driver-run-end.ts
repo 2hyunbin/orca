@@ -1,7 +1,7 @@
 /**
  * How a run ended, for a window that only follows its progress (it reloaded mid-move, or the move
  * started elsewhere). A committed run says so with `done`; without this, any other end left that
- * window's dialog on its last step until a reload (D1b-10 real-host run).
+ * window's dialog on its last step until a reload.
  */
 import type {
   WslMoveProgressStep,

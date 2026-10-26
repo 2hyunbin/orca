@@ -285,7 +285,7 @@ export function wslMoveBrowserLoginsNotCopied(reason: string): string {
 }
 
 export function formatWslMoveBytes(bytes: number): string {
-  // A small move read "0.0 MB of 0.0 MB" (D1b-10 run on awin).
+  // A small move read "0.0 MB of 0.0 MB".
   if (bytes < 1024) {
     return `${Math.max(0, Math.round(bytes))} B`
   }

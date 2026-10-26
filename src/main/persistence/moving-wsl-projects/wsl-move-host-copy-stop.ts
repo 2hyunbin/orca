@@ -1,7 +1,7 @@
 /**
  * Before "Use on this computer again" resumes the project's agents here, the host's copies of its
  * terminals must have exited: an agent the move resumed on the host would otherwise keep running
- * beside the local one, two writers on one transcript (awin verify-7, 6c). Unverifiable is not
+ * beside the local one, two writers on one transcript. Unverifiable is not
  * exited, so a host that does not answer is reported, never assumed stopped.
  */
 export type WslMoveHostCopyStop = 'stopped' | 'still-running' | 'unreachable'

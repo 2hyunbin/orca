@@ -45,7 +45,7 @@ function temporary(pid: number, ageMs: number): string {
 
 describe('migration journal directory', () => {
   it("removes another process's write that died before its rename", () => {
-    // A killed journal write left `<id>.json.<pid>.<ts>.tmp` behind forever (D1b-10 run on awin).
+    // A killed journal write left `<id>.json.<pid>.<ts>.tmp` behind forever.
     const orphan = temporary(process.pid + 1, 120_000)
     expect(journal.list(userDataPath)).toEqual([])
     expect(existsSync(orphan)).toBe(false)

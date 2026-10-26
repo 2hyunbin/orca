@@ -54,7 +54,7 @@ export type WslMoveResetContext = {
   destination: OrcadMigrationDestinationCatalog | null
   /**
    * The distro is proven unregistered (name and recorded GUID gone): its disk, and any commit on
-   * it, went too. Residual: an unregister then re-import under a new name between two startups (R38).
+   * it, went too. Residual: an unregister then re-import under a new name between two startups.
    */
   destinationUnregistered?: boolean
   now?: () => Date

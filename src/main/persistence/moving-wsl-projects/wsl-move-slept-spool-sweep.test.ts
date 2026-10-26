@@ -22,7 +22,7 @@ function spool(userDataPath: string, migrationId: string): string {
 }
 
 describe('WSL move slept spool sweep', () => {
-  // awin verify-7: a kill at `quiesced` left its 25 KB document behind after the rollback.
+  // A kill at `quiesced` left its 25 KB document behind after the rollback.
   it("removes the spools of moves the journal no longer holds and keeps a live move's", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'wsl-move-spool-sweep-'))
     roots.push(userDataPath)

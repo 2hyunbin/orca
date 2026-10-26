@@ -3,7 +3,7 @@ import type { RuntimeRpcFailure } from '../../../shared/runtime-rpc-envelope'
 /**
  * While "Use on this computer again" stops a project's terminals on its WSL host, this window's
  * host panes must not start them again. An open host pane whose terminal the stop killed resumes
- * its agent on the host; the reloaded window then resumes it here too (awin verify-14, 6c).
+ * its agent on the host; the reloaded window then resumes it here too.
  */
 const HOST_SPAWN_METHODS: ReadonlySet<string> = new Set([
   'terminal.create',

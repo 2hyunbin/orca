@@ -1,6 +1,6 @@
 /**
  * One desktop moving one project into a WSL host backed by a real orcad profile store, with every
- * step a kill point (wsl-move-store-host). Shared by the D1b-10 fault, update, lost-distro and
+ * step a kill point (wsl-move-store-host). Shared by the fault, update, lost-distro and
  * two-desktop tests. A test file mocks the journal itself and points its hook at `rig.at`.
  */
 import { mkdtempSync, rmSync } from 'node:fs'

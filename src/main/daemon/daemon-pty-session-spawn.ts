@@ -12,7 +12,6 @@ import { DaemonPtySpawnResult } from './daemon-pty-spawn-result'
 import type { DaemonPtySpawnContext } from './daemon-pty-spawn-request'
 import type { ColdRestoreInfo } from './history-reader'
 import { mintPtySessionId } from './pty-session-id'
-import { rememberSpawnCaller } from './daemon-spawn-origin-log'
 import { shellPathSupportsPtyStartupBarrier, resolvePtyShellPath } from './shell-ready'
 import { shellReadyMarkerComesFromLineEditor } from '../../shared/shell-ready-marker-timing'
 import { getRecoveredHistorySeedSegments } from './terminal-history-seed-segments'
@@ -38,8 +37,6 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
     this.assertSpawnAdmission()
     const spawnOpts = this.withHistoryIsolation(opts)
     const sessionId = spawnOpts.sessionId ?? mintPtySessionId(spawnOpts.worktreeId)
-    // Here, not the router: the bare adapter is the installed provider unless legacy daemons exist.
-    rememberSpawnCaller(sessionId)
     const operation: PendingDaemonSpawnOperation = {
       exitsBySessionId: new Map(),
       ignoredExitIncarnationIds: new Set<string>(),
@@ -185,7 +182,7 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
       return {
         ...restoreInfo,
         // Why one probe for WSL too: a stat over \\wsl.localhost waits for a stopped distro and
-        // fails for reasons other than absence, which woke panes blank and at the root (verify-7).
+        // fails for reasons other than absence, which woke panes blank and at the root.
         cwd:
           recoveredCwd && (await probeRecoveredStartupCwdDirectory(recoveredCwd)) !== false
             ? recoveredCwd

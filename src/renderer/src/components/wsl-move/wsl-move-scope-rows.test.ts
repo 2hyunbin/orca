@@ -129,7 +129,7 @@ describe('rows, counts and blockers', () => {
   })
 
   it('counts terminal panes, as the blockers do, not terminal tabs', () => {
-    // "Terminals: 5" sat next to "7 terminals are running a program" (D1b-10 run on awin).
+    // "Terminals: 5" sat next to "7 terminals are running a program".
     const split: WslMoveCatalog = {
       ...catalog,
       terminalLayoutsByTabId: {

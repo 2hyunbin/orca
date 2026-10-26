@@ -87,7 +87,7 @@ describe('readWslDistroRegistryIdShared', () => {
   })
 })
 
-describe('isWslDistroRegistered (R38)', () => {
+describe('isWslDistroRegistered', () => {
   const query = async () => ({ code: 0, stdout: REG_OUTPUT })
 
   it('finds the distro by name, case-insensitively', async () => {

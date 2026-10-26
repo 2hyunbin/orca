@@ -1,5 +1,5 @@
 /**
- * The WSL move dialog (D1b-9) against a fake move transport: no wsl.exe or distro in CI. Main's
+ * The WSL move dialog against a fake move transport: no wsl.exe or distro in CI. Main's
  * `wslMove:*` handlers are swapped for a scripted host, so the real dialog runs open preview →
  * blockers → skip → start → progress → refusal → start again → moved → reload. A second test
  * proves that with the internal gate closed none of it shows and main refuses.

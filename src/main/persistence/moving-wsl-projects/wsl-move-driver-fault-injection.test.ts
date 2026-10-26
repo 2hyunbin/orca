@@ -1,5 +1,5 @@
 /**
- * D1b-10 fault injection over the real move driver and a real orcad profile store (#29826's
+ * Fault injection over the real move driver and a real orcad profile store (an earlier
  * pattern): the desktop is killed at every point a clean move passes (each journal write, each
  * host call before it lands and after its reply is lost, each pause step, each desktop rewrite
  * store), optionally with orcad restarted too. After the restart and the reconnect, the move is

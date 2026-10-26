@@ -4,7 +4,7 @@ import { wslMoveCopyBytes } from './wsl-move-driver-transfer'
 
 describe('wslMoveCopyBytes', () => {
   it('counts the terminal history sent while staging, not only the blobs', () => {
-    // awin verify-4: a 262 KB move showed 413 B.
+    // A 262 KB move showed 413 B.
     const cutover = wslMoveCutoverFixture('move-1', 'destination-staged')
     const withHistory = {
       manifest: {
