@@ -385,6 +385,19 @@ describe.runIf(POSIX)('resolveOrcadMachineHome on a home several machines share'
     expect(await resolveOrcadMachineHome(a, true)).toEqual(loginHomeResult())
   })
 
+  it('keeps a clone on the machine home it took before its twin claimed the login home', async () => {
+    const cloned = { linuxMachineId: 'c'.repeat(32), homeSource: 'filer:/export/home' }
+    legacyOwner('dev-a', 'c'.repeat(32))
+    const b = machine('dev-b', 'dev-b', cloned)
+    const bHome = await resolveOrcadMachineHome(b, true)
+    expect(bHome.orcadHome).not.toBe(home)
+    rmSync(join(home, '.orca'), { recursive: true })
+    expect(await resolveOrcadMachineHome(machine('dev-a', 'dev-a', cloned), true)).toEqual(
+      loginHomeResult()
+    )
+    expect(await resolveOrcadMachineHome(b, true)).toEqual(bHome)
+  })
+
   it('keeps a renamed machine on its own install', async () => {
     expect(await resolveOrcadMachineHome(machine('node-a'), true)).toEqual(loginHomeResult())
     expect(await resolveOrcadMachineHome(machine('node-a', 'renamed'), true)).toEqual(

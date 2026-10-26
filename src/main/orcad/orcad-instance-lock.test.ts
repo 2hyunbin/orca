@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
@@ -530,6 +531,26 @@ describe('acquireOrcadInstanceLock', () => {
     )
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
   })
+
+  it.runIf(process.platform === 'linux')(
+    'still starts after this host was renamed within the boot its owner record names',
+    () => {
+      const root = makeRoot()
+      const owners = join(root, '.profile-state-access', 'participants', 'token')
+      mkdirSync(owners, { recursive: true })
+      writeFileSync(
+        join(owners, 'token.owner'),
+        JSON.stringify({
+          pid: 4242,
+          host: 'old-name',
+          machineIdentity: 'machine-a',
+          bootIdentity: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(),
+          pidNamespace: readlinkSync('/proc/self/ns/pid')
+        })
+      )
+      acquireOrcadInstanceLock(root, hooks({ platform: 'linux' })).release()
+    }
+  )
 
   it('never lets a confirmed reclaim take a lock another machine id holds', () => {
     const root = makeRoot()
