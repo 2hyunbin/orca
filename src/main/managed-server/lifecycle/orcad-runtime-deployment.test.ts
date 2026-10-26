@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('../../ssh/targets/ssh-target-registry', () => ({
+  ensureSshConnectionManager: async () => {},
   getSshConnectionManager: () => ({ connect: mocks.connect }),
   getSshTargetRegistryStore: () => mocks.state.store
 }))
