@@ -81,3 +81,13 @@ invalid:
   - "describe('suite', { timeout: 60_000 }, () => {})"
   - test.setTimeout(300_000)
   - test.slow()
+---
+id: test-no-in-test-import-actual
+valid:
+  - "vi.mock('./git', async () => ({ ...(await vi.importActual<typeof Git>('./git')), run: vi.fn() }))"
+  - "beforeAll(async () => { actual = await vi.importActual<typeof Git>('./git') })"
+  - "const actual = await vi.importActual<typeof Git>('./git')"
+invalid:
+  - "it('creates', async () => { const actual = await vi.importActual<typeof Git>('./git') })"
+  - "async function useReal() { return await vi.importActual('./git') }"
+  - "beforeEach(async () => { actual = await vi.importActual('./git') })"
