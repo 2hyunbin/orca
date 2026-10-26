@@ -197,8 +197,7 @@ const stable = {
     {
       id: 'pending',
       text: 'follow up',
-      sentAt: 10,
-      baselineTailMessageId: 'live-user'
+      sentAt: 10
     }
   ],
   imagePreviewsByMessageId: { 'user-0': ['local:preview'] }
