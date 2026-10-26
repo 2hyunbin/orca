@@ -7,40 +7,10 @@ import {
 import { Hono } from 'hono'
 import type { ConnectorConfig } from './config.js'
 import { createConnectorRuntime } from './connector-runtime.js'
-import { startDiscordGatewaySession, type GatewayCheckpoint } from './discord-gateway-session.js'
+import { saveCheckpoint, takeCheckpoint } from './discord-gateway-checkpoint.js'
+import { startDiscordGatewaySession } from './discord-gateway-session.js'
 
 const LEADER_KEY = 'orca-connector-discord-gateway'
-// The one checkpoint row.
-const SLOT = 1
-
-async function loadCheckpoint(database: CloudDatabase): Promise<GatewayCheckpoint | null> {
-  const [row] = await database.query(
-    'SELECT session_id, resume_url, sequence FROM connector_discord_gateway WHERE slot = ?',
-    [SLOT]
-  )
-  return row
-    ? {
-        sessionId: String(row.session_id),
-        resumeURL: String(row.resume_url),
-        sequence: Number(row.sequence)
-      }
-    : null
-}
-
-async function saveCheckpoint(
-  transaction: CloudDatabase,
-  checkpoint: GatewayCheckpoint,
-  now: number
-): Promise<void> {
-  await transaction.query(
-    `INSERT INTO connector_discord_gateway (slot, session_id, resume_url, sequence, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (slot) DO UPDATE SET session_id = excluded.session_id,
-       resume_url = excluded.resume_url, sequence = excluded.sequence,
-       updated_at = excluded.updated_at`,
-    [SLOT, checkpoint.sessionId, checkpoint.resumeURL, checkpoint.sequence, now]
-  )
-}
 
 // The discord-gateway role: one leader across instances holds the gateway session and routes each
 // message in the transaction that commits its checkpoint. Resolves with the exit code.
@@ -70,15 +40,17 @@ export async function runDiscordGatewayWorker(input: {
       signal
     })
     const fatal = Promise.withResolvers<string>()
+    const { epoch, resumeFrom } = await takeCheckpoint(database, now())
     const session = await startDiscordGatewaySession({
       token: config.discord.botToken,
-      resumeFrom: await loadCheckpoint(database),
+      resumeFrom,
+      // The checkpoint moves first, so a fenced leader's routing never runs.
       commit: (step) =>
         database.transaction(async (transaction) => {
+          await saveCheckpoint(transaction, epoch, step.checkpoint, now())
           if (step.message) {
             await discord.routeIn(transaction, runtime.core, step.message)
           }
-          await saveCheckpoint(transaction, step.checkpoint, now())
         }),
       onFatal: fatal.resolve
     })
@@ -91,7 +63,7 @@ export async function runDiscordGatewayWorker(input: {
       stopped
     ])
     console.log(JSON.stringify({ event: 'orca_connector_discord_gateway_stopping', reason }))
-    await session.handOver()
+    await session.close({ drain: reason === 'stopping' })
     await leadership.release()
     return reason === 'stopping' ? 0 : 1
   } finally {

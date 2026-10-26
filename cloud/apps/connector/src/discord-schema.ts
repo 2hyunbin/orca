@@ -2,9 +2,10 @@
 const DISCORD_SCHEMA = `
 CREATE TABLE IF NOT EXISTS connector_discord_gateway (
   slot INTEGER PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  resume_url TEXT NOT NULL,
-  sequence BIGINT NOT NULL,
+  epoch BIGINT NOT NULL,
+  session_id TEXT,
+  resume_url TEXT,
+  sequence BIGINT,
   updated_at BIGINT NOT NULL
 );
 

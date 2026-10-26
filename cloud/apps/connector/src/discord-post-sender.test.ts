@@ -34,7 +34,7 @@ describe('DiscordPostSender', () => {
   it('resends a post left mid-send while its nonce still dedupes, and calls it uncertain after', async () => {
     const within = sender()
     expect(await within.sender.send(post({ stale: true, sentAt: NOW - 60_000 }))).toEqual({
-      kind: 'posted',
+      kind: 'found',
       messageRef: 'M1'
     })
     const past = sender()
@@ -44,8 +44,11 @@ describe('DiscordPostSender', () => {
     expect(past.routes).toEqual([])
   })
 
-  it('retries an unclear send, waits out a rate limit, and gives up on a refusal', async () => {
-    expect(await sender({ kind: 'unknown' }).sender.send(post())).toEqual({ kind: 'retry' })
+  it('calls an unclear create uncertain, retries an unclear edit, and waits out a rate limit', async () => {
+    expect(await sender({ kind: 'unknown' }).sender.send(post())).toEqual({ kind: 'uncertain' })
+    expect(
+      await sender({ kind: 'unknown' }).sender.send(post({ kind: 'status', messageRef: 'M9' }))
+    ).toEqual({ kind: 'retry' })
     expect(await sender({ kind: 'retry', afterMs: 500 }).sender.send(post())).toEqual({
       kind: 'retry',
       afterMs: 500

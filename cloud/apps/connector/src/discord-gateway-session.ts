@@ -27,8 +27,9 @@ export type DiscordGatewayMessage = DiscordMessage & { threadParentId?: string }
 export type GatewayStep = { checkpoint: GatewayCheckpoint; message: DiscordGatewayMessage | null }
 
 export type DiscordGatewaySession = {
-  // Closes resumably; the next leader resumes from the committed checkpoint.
-  handOver(): Promise<void>
+  // Closes resumably; the next leader resumes from the committed checkpoint. A shutdown that still
+  // leads drains what is queued; one that lost leadership drops it.
+  close(options: { drain: boolean }): Promise<void>
 }
 
 // One gateway session (one shard) through @discordjs/ws, which owns identify, heartbeat, resume
@@ -50,7 +51,9 @@ export async function startDiscordGatewaySession(deps: {
   let session: SessionInfo | null = resumeFrom && { ...resumeFrom, shardId: 0, shardCount: 1 }
   let current = resumeFrom
   const parents = new DiscordThreadParents()
-  let failed = false
+  // A dispatch that failed stops the rest of its session; the next leader replays from before it.
+  let failedSession: string | null = null
+  let dropQueued = false
   let committing = Promise.resolve()
 
   // A mention's channel the gateway hasn't described yet is looked up once; null skips it.
@@ -110,14 +113,19 @@ export async function startDiscordGatewaySession(deps: {
     const checkpoint = { ...current, sequence: payload.s }
     current = checkpoint
     const parsed = payload.t === 'MESSAGE_CREATE' ? readDiscordMessage(payload.d, botUserId) : null
+    // A fresh READY ends the older session: what is still queued from it is dropped.
+    const obsolete = () => checkpoint.sessionId !== current?.sessionId
     committing = committing.then(async () => {
-      if (failed) {
+      if (dropQueued || obsolete() || failedSession === checkpoint.sessionId) {
         return
       }
       try {
         await deps.commit({ checkpoint, message: parsed && (await withParent(parsed)) })
       } catch {
-        failed = true
+        if (obsolete()) {
+          return
+        }
+        failedSession = checkpoint.sessionId
         console.warn(JSON.stringify({ event: 'orca_connector_discord_dispatch_failed' }))
         deps.onFatal('dispatch_failed')
       }
@@ -134,7 +142,8 @@ export async function startDiscordGatewaySession(deps: {
   })
   await manager.connect()
   return {
-    handOver: async () => {
+    close: async ({ drain }) => {
+      dropQueued = !drain
       await manager.destroy({ code: CloseCodes.Resuming })
       await committing
     }

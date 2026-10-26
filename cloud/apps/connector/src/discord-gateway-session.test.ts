@@ -67,7 +67,7 @@ afterEach(async () => {
   for (const client of gateway?.clients ?? []) {
     client.close(4004)
   }
-  await (await session?.catch(() => undefined))?.handOver().catch(() => undefined)
+  await (await session?.catch(() => undefined))?.close({ drain: true }).catch(() => undefined)
   for (const client of gateway?.clients ?? []) {
     client.terminate()
   }
@@ -133,7 +133,12 @@ async function fakeDiscord() {
 }
 
 async function start(
-  options: { resumeFrom?: (origin: string) => GatewayCheckpoint; failAt?: number } = {}
+  options: {
+    resumeFrom?: (origin: string) => GatewayCheckpoint
+    failAt?: number
+    // Runs before the commit of the dispatch at `failAt`, which then fails.
+    beforeFailing?: Promise<void>
+  } = {}
 ) {
   const discord = await fakeDiscord()
   const steps: GatewayStep[] = []
@@ -144,6 +149,7 @@ async function start(
     resumeFrom: options.resumeFrom?.(discord.origin) ?? null,
     commit: async (step) => {
       if (step.checkpoint.sequence === options.failAt) {
+        await options.beforeFailing
         throw new Error('database down')
       }
       steps.push(step)
@@ -306,13 +312,43 @@ describe('startDiscordGatewaySession', () => {
     ])
   })
 
+  it('drops what is left of a refused session, even a dispatch failing after the fresh READY', async () => {
+    const failing = Promise.withResolvers<void>()
+    const { origin, nextConnection, steps, fatal } = await start({
+      resumeFrom: (origin) => ({
+        sessionId: 'session-1',
+        sequence: 7,
+        resumeURL: `${origin}/resume`
+      }),
+      failAt: 8,
+      beforeFailing: failing.promise
+    })
+    const resumed = await nextConnection()
+    await resumed.next()
+    resumed.send(messageCreate(8, mention))
+    resumed.send(messageCreate(9, mention))
+    resumed.send({ op: 9, d: false })
+    const fresh = await nextConnection()
+    await fresh.next()
+    fresh.send(ready(origin, 'session-2'))
+    fresh.send(messageCreate(2, mention))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    failing.resolve()
+    await until(() => steps.length === 2)
+    expect(fatal).toEqual([])
+    expect(steps.map((step) => [step.checkpoint.sessionId, step.checkpoint.sequence])).toEqual([
+      ['session-2', 1],
+      ['session-2', 2]
+    ])
+  })
+
   it('hands over by closing resumably', async () => {
     const { origin, nextConnection, steps } = await start()
     const connection = await nextConnection()
     await connection.next()
     connection.send(ready(origin))
     await until(() => steps.length === 1)
-    await (await session)?.handOver()
+    await (await session)?.close({ drain: true })
     session = undefined
     expect(await connection.closed).toBe(4200)
   })

@@ -27,7 +27,8 @@ const ReactionBodySchema = z.object({
 })
 
 // Sends one claimed post to Discord. A new message carries a nonce Discord enforces, so a resend
-// inside its window returns the first copy; past it a post left mid-send is uncertain.
+// inside its window returns the first copy; past it a post left mid-send is uncertain. A create
+// whose outcome is unclear is uncertain too, since a later retry could fall outside the window.
 export class DiscordPostSender {
   constructor(
     private readonly deps: { botToken: string; api: DiscordRestApi; now: () => number }
@@ -77,13 +78,24 @@ export class DiscordPostSender {
       const started =
         thread.kind === 'ok' ||
         (thread.kind === 'failed' && thread.error === THREAD_ALREADY_CREATED)
-      return started ? outcome(await create()) : outcome(thread)
+      return started ? createdOutcome(await create(), post.stale) : outcome(thread)
     }
-    return outcome(created)
+    return createdOutcome(created, post.stale)
   }
 }
 
-// An unclear outcome is retried: a create resent inside its nonce window can't post twice.
+// A resend of a post left mid-send may have found the first copy, which can hold an older status.
+function createdOutcome(result: DiscordResult, stale: boolean): SendOutcome {
+  if (result.kind === 'unknown') {
+    return { kind: 'uncertain' }
+  }
+  const sent = outcome(result)
+  return stale && sent.kind === 'posted' && sent.messageRef !== undefined
+    ? { kind: 'found', messageRef: sent.messageRef }
+    : sent
+}
+
+// Edits, reactions and thread starts are safe to repeat, so an unclear outcome is retried.
 function outcome(result: DiscordResult): SendOutcome {
   switch (result.kind) {
     case 'ok':

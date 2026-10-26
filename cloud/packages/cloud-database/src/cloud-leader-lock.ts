@@ -3,6 +3,8 @@ import pg from 'pg'
 
 const LEADER_CONNECTION_TIMEOUT_MS = 2_000
 const LEADER_STATEMENT_TIMEOUT_MS = 5_000
+// Client-side: a check whose reply never comes (a half-open connection) still ends in time.
+const LEADER_QUERY_TIMEOUT_MS = 10_000
 const LEADER_POLL_MS = 5_000
 // Also keeps the session from idling out; a check that fails ends leadership.
 const LEADER_CHECK_MS = 15_000
@@ -35,6 +37,7 @@ export async function acquireLeadership(input: {
       application_name: input.applicationName ? `${input.applicationName}/leader` : undefined,
       connectionTimeoutMillis: LEADER_CONNECTION_TIMEOUT_MS,
       statement_timeout: LEADER_STATEMENT_TIMEOUT_MS,
+      query_timeout: LEADER_QUERY_TIMEOUT_MS,
       keepAlive: true
     })
     // A dropped connection surfaces through the next query; this keeps it from crashing the process.
@@ -65,25 +68,31 @@ export async function acquireLeadership(input: {
 function holdLeadership(client: pg.Client, checkMs: number): Leadership {
   const { promise: lost, resolve: markLost } = Promise.withResolvers<void>()
   let released = false
+  let timer: NodeJS.Timeout | undefined
   const end = (): void => {
-    clearInterval(check)
+    clearTimeout(timer)
     markLost()
     void client.end().catch(() => undefined)
   }
-  const check = setInterval(() => {
-    client.query('SELECT 1').catch(() => {
-      if (!released) {
-        console.warn(JSON.stringify({ event: 'orca_leader_lock_lost' }))
-      }
-      end()
-    })
-  }, checkMs)
+  // One check at a time: the next is scheduled only after the last came back.
+  const check = (): void => {
+    timer = setTimeout(() => {
+      client.query('SELECT 1').then(check, () => {
+        if (!released) {
+          console.warn(JSON.stringify({ event: 'orca_leader_lock_lost' }))
+        }
+        end()
+      })
+    }, checkMs)
+  }
+  check()
+  client.on('error', end)
   client.on('end', end)
   return {
     lost,
     release: async () => {
       released = true
-      clearInterval(check)
+      clearTimeout(timer)
       // Ending the session releases the lock.
       await client.end().catch(() => undefined)
       markLost()

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { CardNote } from './connector-adapter.js'
 import type { PostBody } from './connector-posts.js'
-import { discordText, MAX_DISCORD_LABEL_CHARS } from './discord-text.js'
+import { discordText, MAX_DISCORD_CONTENT_CHARS, MAX_DISCORD_LABEL_CHARS } from './discord-text.js'
 import type { AnswerablePrompt } from './owner-controls.js'
 
 // https://docs.discord.com/developers/components/reference: five buttons per action row, five
@@ -53,8 +53,13 @@ export function settledDiscordCard(body: unknown, note: CardNote): PostBody {
     note.kind === 'answered'
       ? discordText.promptAnswered(note.ownerUserId, note.label)
       : discordText.promptClosed
-  const asked = CardBodySchema.safeParse(body).data?.content
-  return { content: asked ? `${asked}\n-# ${text}` : text, components: [] }
+  const closing = `-# ${text}`
+  // The note takes its room from what was asked, so the edit stays within Discord's limit.
+  const asked = CardBodySchema.safeParse(body).data?.content.slice(
+    0,
+    MAX_DISCORD_CONTENT_CHARS - closing.length - 1
+  )
+  return { content: asked ? `${asked}\n${closing}` : closing, components: [] }
 }
 
 // A card still showing its buttons; an answered or closed one is final.
