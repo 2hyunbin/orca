@@ -1,9 +1,10 @@
-// #33424: two desktops paired to each other. Each server republishes what it mirrors, so B echoes A's
-// own workspace back to A; A must not adopt that echo or its file reads and closes go to B.
+// #33424: two desktops paired to each other. B's tab on a file in A's workspace must not reach A as B's
+// own tab, or A routes that file's reads and closes to B, which lacks the workspace.
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
+import { RuntimeClient } from '../../src/cli/runtime/client'
 import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { createRuntimeDesktopPairingOffer } from './helpers/paired-electron-client'
@@ -65,6 +66,13 @@ async function addLocalFolder(page: Page, folderPath: string): Promise<string> {
   return worktreeId
 }
 
+function tabIdsIn(page: Page, worktreeId: string): Promise<string[]> {
+  return page.evaluate(
+    (id) => (window.__store!.getState().unifiedTabsByWorktree[id] ?? []).map((tab) => tab.id),
+    worktreeId
+  )
+}
+
 function openFilesIn(page: Page, worktreeId: string) {
   return page.evaluate(
     (id) =>
@@ -79,7 +87,7 @@ function openFilesIn(page: Page, worktreeId: string) {
   )
 }
 
-test('a desktop ignores its own workspace echoed back by a server it serves', async ({
+test('a desktop gets no tab back for its own workspace from a server it serves', async ({
   orcaPage
 }, testInfo) => {
   // Two desktops launch and pair to each other.
@@ -101,6 +109,7 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
     expect(worktree).not.toBeNull()
     const { id: worktreeId, path: worktreePath } = worktree!
     const desktopBWorktreeId = await addLocalFolder(hubB.page, desktopBFolder)
+    const desktopATabIds = await tabIdsIn(orcaPage, worktreeId)
 
     const desktopBOnA = await pairAndSelect(
       orcaPage,
@@ -150,39 +159,24 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
       .poll(() => openFilesIn(hubB.page, worktreeId), { timeout: 30_000 })
       .toEqual([{ relativePath: 'README.md', env: desktopAOnB }])
 
-    // B's server now publishes its mirror of A's workspace, which A subscribes to.
+    // B's runtime holds B's tab in A's workspace; locally it is listed, only other runtimes are spared it.
+    const desktopBRuntime = new RuntimeClient(hubBSession.userDataDir, 30_000, null, null)
     await expect
       .poll(
-        () =>
-          orcaPage.evaluate(
-            async ({ selector, worktreeId }) => {
-              const response = await window.api.runtimeEnvironments.call({
-                selector,
-                method: 'session.tabs.listAll'
-              })
-              const result: unknown = response.ok ? response.result : null
-              const snapshots =
-                result && typeof result === 'object' && 'snapshots' in result
-                  ? result.snapshots
-                  : null
-              if (!Array.isArray(snapshots)) {
-                return false
-              }
-              return snapshots.some(
-                (snapshot: { worktree: string; tabs: { type: string }[] }) =>
-                  snapshot.worktree === worktreeId &&
-                  snapshot.tabs.some((tab) => tab.type === 'markdown')
-              )
-            },
-            { selector: desktopBOnA, worktreeId }
-          ),
-        {
-          timeout: 30_000,
-          message: 'Desktop B never published its mirror of A’s workspace'
-        }
+        async () => {
+          const listed = await desktopBRuntime.call<{
+            snapshots: { worktree: string; tabs: { type: string }[] }[]
+          }>('session.tabs.listAll')
+          return listed.result.snapshots.some(
+            (snapshot) =>
+              snapshot.worktree === worktreeId &&
+              snapshot.tabs.some((tab) => tab.type === 'markdown')
+          )
+        },
+        { timeout: 30_000, message: 'Desktop B never published its tab in A’s workspace' }
       )
       .toBe(true)
-    // A frame B publishes after the echo reaches A after it on the same stream.
+    // A frame B publishes later reaches A after any echo on the same stream.
     await hubB.page.evaluate(
       ({ worktreeId, filePath }) => {
         window.__store!.getState().openFile({
@@ -202,6 +196,7 @@ test('a desktop ignores its own workspace echoed back by a server it serves', as
       })
       .toEqual([{ relativePath: 'note.md', env: desktopBOnA }])
     expect(await openFilesIn(orcaPage, worktreeId)).toEqual([])
+    expect(await tabIdsIn(orcaPage, worktreeId)).toEqual(desktopATabIds)
     expect(await openFilesIn(hubB.page, worktreeId)).toEqual([
       { relativePath: 'README.md', env: desktopAOnB }
     ])

@@ -20,11 +20,6 @@ import { buildWebSessionTabsFinalPatch } from './apply-final-patch'
 import { isFrameDrawnServerWorkspace } from './frame-drawn-server-workspaces'
 import { buildFrameDrawnWorkspaceStatusPatch } from './frame-drawn-workspace-status-patch'
 import { indexMirroredTerminalSurfaces } from './mirrored-terminal-handle-index'
-import {
-  isEchoOfThisAppsWorkspace,
-  recordFencedEcho,
-  withoutEchoedTabs
-} from './mirrored-snapshot-host-fence'
 
 export function applyWebSessionTabsSnapshotWithContext(
   state: WebSessionTabsSyncState,
@@ -43,16 +38,11 @@ export function applyWebSessionTabsSnapshotWithContext(
   ) {
     return state
   }
-  const isEcho = isEchoOfThisAppsWorkspace(state, rawSnapshot.worktree, environmentId)
-  if (isEcho) {
-    recordFencedEcho(environmentId, rawSnapshot.worktree)
-  }
-  const snapshot = isEcho ? withoutEchoedTabs(rawSnapshot) : rawSnapshot
-  const worktreeId = snapshot.worktree
+  const worktreeId = rawSnapshot.worktree
   // Switch point: ORCA_LAYOUT_OWNER_IS_MAIN && — every mirror write (single, batch, operations) passes here.
   const previousSnapshotTabIds =
     ORCA_LAYOUT_OWNER_IS_MAIN && options?.contentScope !== 'agent-session'
-      ? indexMirroredTerminalSurfaces(environmentId, snapshot)
+      ? indexMirroredTerminalSurfaces(environmentId, rawSnapshot)
       : null
   const frameDrawnPreviousTabIds =
     previousSnapshotTabIds && isFrameDrawnServerWorkspace(environmentId, worktreeId)
@@ -62,7 +52,7 @@ export function applyWebSessionTabsSnapshotWithContext(
     // Server frames own tabs/IDs/focus and writes use server IDs; skip mirror intent ledgers for these workspaces.
     return buildFrameDrawnWorkspaceStatusPatch(
       state,
-      snapshot,
+      rawSnapshot,
       environmentId,
       worktreeId,
       frameDrawnPreviousTabIds,
@@ -74,7 +64,7 @@ export function applyWebSessionTabsSnapshotWithContext(
   // Phase 2 server cutoff retires the mirror's tab ids, close and focus intents.
   const base = prepareWebSessionTabsSnapshotBase(
     state,
-    snapshot,
+    rawSnapshot,
     environmentId,
     worktreeId,
     now,

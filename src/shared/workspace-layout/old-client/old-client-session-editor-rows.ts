@@ -21,6 +21,14 @@ type EditorRow = RuntimeMobileSessionMarkdownTab | RuntimeMobileSessionFileTab
 const fileName = (relativePath: string, fallback: string): string =>
   relativePath.split(/[\\/]/).pop() || relativePath || fallback
 
+/** Names the paired server a row's file lives on, for runtimes to keep from other runtimes (#33424). */
+export function editorRowHost(file: {
+  runtimeEnvironmentId?: string | null
+}): Pick<RuntimeMobileSessionFileTab, 'hostRuntimeEnvironmentId'> {
+  const hostRuntimeEnvironmentId = file.runtimeEnvironmentId?.trim()
+  return hostRuntimeEnvironmentId ? { hostRuntimeEnvironmentId } : {}
+}
+
 const tabRowProps = (tab: LayoutContentTab, scope: EditorRowScope) => ({
   color: tab.color ?? null,
   isPinned: tab.isPinned === true,
@@ -54,7 +62,8 @@ export function editorTabRow(tab: LayoutContentTab, scope: EditorRowScope): Edit
     filePath: file.filePath,
     relativePath: file.relativePath,
     isDirty: hasDraft(scope, file),
-    ...tabRowProps(tab, scope)
+    ...tabRowProps(tab, scope),
+    ...editorRowHost(file)
   }
   if (file.language === 'markdown') {
     return {
@@ -106,7 +115,8 @@ function markdownPreviewRow(
     sourceFilePath: sourceFile.filePath,
     sourceRelativePath: sourceFile.relativePath,
     documentVersion: `file:${sourceId}`,
-    ...tabRowProps(tab, scope)
+    ...tabRowProps(tab, scope),
+    ...editorRowHost(preview)
   }
 }
 
@@ -135,7 +145,8 @@ export function diffTabRow(
     ...(diffSource === 'staged' || diffSource === 'unstaged' ? { diffSource } : {}),
     // The model holds no unsaved edit of a diff's modified side; the window's row it lists wins.
     isDirty: false,
-    ...tabRowProps(tab, scope)
+    ...tabRowProps(tab, scope),
+    ...editorRowHost(file)
   }
 }
 
@@ -159,6 +170,7 @@ export function reviewTabRow(
     mode: 'edit',
     // The model holds no unsaved edit of a review; the window's row it lists wins.
     isDirty: false,
-    ...tabRowProps(tab, scope)
+    ...tabRowProps(tab, scope),
+    ...editorRowHost(file)
   }
 }
