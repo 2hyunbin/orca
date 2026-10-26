@@ -1,4 +1,5 @@
 import type * as AgentStatusModule from '@/store/agent-status'
+import { makeTab } from '@/store/slices/store-test-helpers'
 import React from 'react'
 import { toast } from 'sonner'
 import type * as ReactModule from 'react'
@@ -85,6 +86,11 @@ vi.mock('@/store/agent-status', async () => {
 
 vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: unknown) => selector
+}))
+
+vi.mock('@/runtime/structured-chat-name-observation', () => ({
+  useStructuredChatTabNames: () => new Map(),
+  getStructuredChatTabNames: () => new Map()
 }))
 
 vi.mock('@/lib/active-agent-note-send', () => ({
@@ -223,17 +229,7 @@ function agentRow({
 }
 
 function tab(id: string, overrides: Record<string, unknown> = {}) {
-  return {
-    id,
-    worktreeId: 'wt-1',
-    ptyId: null,
-    title: id,
-    customTitle: null,
-    color: null,
-    sortOrder: 0,
-    createdAt: 1,
-    ...overrides
-  }
+  return makeTab({ id, worktreeId: 'wt-1', title: id, createdAt: 1, ...overrides })
 }
 
 function leafLayout(leafId: string, ptyId: string) {
