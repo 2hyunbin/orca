@@ -2,7 +2,6 @@ import type * as React from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectPanePty } from './pty-connection'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { markTerminalShowsReplayedHistory } from './replayed-history-terminals'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import {
   createManager,
@@ -281,9 +280,8 @@ describe('connectPanePty pre-connect input', () => {
     pane.terminal.buffer.active.baseY = 12
     expect(typeof keep === 'function' && keep('connect')).toBe(false)
     expect(typeof keep === 'function' && keep('bind')).toBe(true)
-
-    markTerminalShowsReplayedHistory(pane.terminal)
-    expect(typeof keep === 'function' && keep('bind')).toBe(false)
+    // Replayed history (checked at bind too) is covered through the real restore path in
+    // pty-connection-remote-new-terminal-typeahead.test.ts.
     binding.dispose()
   })
 
