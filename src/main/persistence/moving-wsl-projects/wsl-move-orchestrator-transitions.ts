@@ -26,11 +26,14 @@ export const WSL_MOVE_ORCHESTRATOR_MAX_ATTEMPTS = WSL_MOVE_ORCHESTRATOR_BACKOFF_
 export const WSL_MOVE_ORCHESTRATOR_NOT_NOW_MS = 7 * 24 * 60 * 60_000
 /** Timer re-checks of a deferred move; after the last, it waits for a wake or the user. */
 export const WSL_MOVE_ORCHESTRATOR_DEFERRED_RECHECK_MS = [60_000, 5 * 60_000, 30 * 60_000] as const
-/** A failure of Orca's own plumbing (no window to ask), retried without costing an attempt. */
+/** Waiting that is not a failed attempt, retried without costing one. */
 export const WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS = 5 * 60_000
 
-/** Failures that say nothing about the move: the window could not be asked for its panes. */
-const UNCOUNTED_FAILURES = new Set(['wsl_move_window_unavailable'])
+/**
+ * Refusals that say nothing about this move: the window could not be asked for its panes, or an
+ * earlier move of the distro is still finishing (desktop rewrite, retention, recovery).
+ */
+const UNCOUNTED_FAILURES = new Set(['wsl_move_window_unavailable', 'wsl_move_already_in_flight'])
 
 type Blockers = Extract<WslMoveOrchestratorState, { kind: 'deferred' }>['blockers']
 
@@ -181,6 +184,10 @@ function failedAttempt(
   appVersion: string
 ): WslMoveOrchestratorRecord {
   if (UNCOUNTED_FAILURES.has(reason)) {
+    // A finished move whose retention is still settling stays done; nothing is waiting on it.
+    if (record.state.kind === 'done') {
+      return record
+    }
     return withWslMoveOrchestratorState(
       record,
       { kind: 'backoff', nextAttemptAt: now + WSL_MOVE_ORCHESTRATOR_UNCOUNTED_RETRY_MS, reason },

@@ -360,4 +360,18 @@ describe('review fixes (#33802)', () => {
     const snoozed = record({ kind: 'parked', reason: 'not-now', until: NOW })
     expect(applyWslMoveHostAddedByUser(snoozed, NOW)).toBe(snoozed)
   })
+
+  // Found by the orchestrator-over-driver test: after a move, until retention marks it retained,
+  // the driver refuses new moves as already in flight. That is waiting, not a failed attempt.
+  it('keeps a finished distro done while its move is still being retained', () => {
+    const done = record({ kind: 'done', migrationId: 'm1' })
+    const reason = 'wsl_move_already_in_flight'
+    expect(applyWslMoveOutcome(done, { next: 'transient', reason }, context)).toBe(done)
+    const pending = applyWslMoveOutcome(
+      record({ kind: 'pending' }, 2),
+      { next: 'transient', reason },
+      context
+    )
+    expect(pending).toMatchObject({ attempts: 2, state: { kind: 'backoff', reason } })
+  })
 })
