@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AgentJournalStatusItem } from '../../../src/shared/agent-session-journal-types'
+import { isAdmissibleAgentJournalItemBody } from '../../../src/shared/agent-session-journal-schemas'
 import { projectStructuredItemToNativeChat } from '../../../src/shared/structured-agent-session-projection'
 import {
   NATIVE_CHAT_INTERRUPTED_STATUS_TEXT,
@@ -355,7 +356,11 @@ describe('MobileNativeChatMessage', () => {
           source === 'from an old host'
             ? 'OpenCode hit its usage limit. Send a message once it resets to continue.'
             : host.text
-        const tree = render(statusRow({ kind: 'status', tone: 'warning', ...host, text: hostText }))
+        const body: unknown = { kind: 'status', tone: 'warning', ...host, text: hostText }
+        if (!isAdmissibleAgentJournalItemBody(body) || body.kind !== 'status') {
+          throw new Error('Status fixture was not admitted')
+        }
+        const tree = render(statusRow(body))
         const text = tree.root.find(
           (node) => String(node.type) === 'Text' && node.props.selectable === true
         )
