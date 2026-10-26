@@ -91,6 +91,14 @@ describe('connector turn events', () => {
     })
   })
 
+  it('reads an open turn missing from the snapshot as unverifiable', async () => {
+    const { machine, enqueue, events, thread } = await setup()
+    await enqueue(machine.hostId)
+    await events([{ conversation, paneKey: 'pane-1', kind: 'turn-started', at: 100 }])
+    await events([{ kind: 'snapshot', conversations: [] }])
+    expect(await thread()).toMatchObject({ turn_state: 'unverifiable' })
+  })
+
   it("ignores events for another host's thread", async () => {
     const { harness, machine, enqueue, thread } = await setup()
     await enqueue(machine.hostId)

@@ -52,18 +52,26 @@ export class ConnectorThreads {
     await this.database.transaction(async (transaction) => {
       for (const event of events) {
         if (event.kind === 'snapshot') {
+          // Not working never means done: an open turn the snapshot doesn't show working (or doesn't
+          // list; it lists every linked conversation) is unverifiable.
+          const working = event.conversations
+            .filter((entry) => entry.working)
+            .map((entry) => entry.conversation.externalId)
+          await transaction.query(
+            `UPDATE connector_threads SET turn_state = 'unverifiable'
+             WHERE host_id = ? AND turn_state = 'working'${
+               working.length > 0 ? ` AND external_id NOT IN (${working.map(() => '?').join(', ')})` : ''
+             }`,
+            [hostId, ...working]
+          )
           for (const entry of event.conversations) {
-            // Not working never means done: an open turn the machine no longer shows is unverifiable.
             await transaction.query(
-              `UPDATE connector_threads SET pane_key = ?, agent = ?, pending_prompt = ?,
-                 turn_state = CASE WHEN turn_state = 'working' AND ? = 0 THEN 'unverifiable'
-                   ELSE turn_state END
+              `UPDATE connector_threads SET pane_key = ?, agent = ?, pending_prompt = ?
                WHERE host_id = ? AND external_id = ?`,
               [
                 entry.paneKey,
                 entry.agent,
                 entry.prompt ? JSON.stringify(entry.prompt) : null,
-                entry.working ? 1 : 0,
                 hostId,
                 entry.conversation.externalId
               ]

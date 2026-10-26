@@ -92,7 +92,9 @@ export class ConnectorInbox {
 
   // Each conversation's head goes out; the next waits until the head is received. A cancel skips
   // the queue once its start is received.
-  async claim(hostId: string): Promise<ConnectorDelivery[]> {
+  async claim(
+    hostId: string
+  ): Promise<{ deliveries: ConnectorDelivery[]; nextLeaseDueAt: number | null }> {
     const now = this.now()
     return await this.database.transaction(async (transaction) => {
       await transaction.lockQuotaScope(`orca-connector-inbox:${hostId}`)
@@ -132,7 +134,12 @@ export class ConnectorInbox {
           })
         )
       }
-      return deliveries
+      const [next] = await transaction.query(
+        `SELECT MIN(lease_until) AS due FROM connector_inbox
+         WHERE host_id = ? AND state = 'leased' AND expires_at > ?`,
+        [hostId, now]
+      )
+      return { deliveries, nextLeaseDueAt: next?.due === null ? null : Number(next?.due) }
     })
   }
 

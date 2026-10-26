@@ -57,16 +57,21 @@ export function registerMachineRoutes(
     let deliveries: ConnectorDelivery[] = []
     for (;;) {
       const waiter = waker.register(hostId)
-      deliveries = await inbox.claim(hostId)
-      const remaining = holdUntil - Date.now()
-      if (deliveries.length > 0 || unsettled.length > 0 || remaining <= 0 || waker.draining) {
+      try {
+        const claimed = await inbox.claim(hostId)
+        deliveries = claimed.deliveries
+        // Checked after every claim, so a revoke that lands while the poll is held hands out nothing.
+        const refused = await authorize(context)
+        if (refused) return refused
+        const remaining = holdUntil - Date.now()
+        if (deliveries.length > 0 || unsettled.length > 0 || remaining <= 0 || waker.draining) break
+        // A lease running out sends no notification, so wake for the next one too.
+        const leaseDueMs =
+          claimed.nextLeaseDueAt === null ? remaining : Math.max(0, claimed.nextLeaseDueAt - now())
+        await waiter.wait(Math.min(remaining, leaseDueMs))
+      } finally {
         waiter.cancel()
-        break
       }
-      await waiter.wait(remaining)
-      // A revoke while the poll was held must stop it before anything is handed out.
-      const refused = await authorize(context)
-      if (refused) return refused
     }
     const response: ConnectorPollResponse = {
       v: 1,

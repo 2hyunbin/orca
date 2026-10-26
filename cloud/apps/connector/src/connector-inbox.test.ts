@@ -225,6 +225,38 @@ describe('connector inbox', () => {
     ])
   })
 
+  it('hands out nothing when a revoke lands between the claim and the reply', async () => {
+    let gate!: ReturnType<typeof pauseBefore>
+    const { machine, enqueue } = await setup({
+      // The session lookup runs in the middleware, then again after the claim.
+      wrapDatabase: (database) => {
+        gate = pauseBefore(database, 'SELECT s.host_fingerprint', 1)
+        return gate.database
+      }
+    })
+    await enqueue('a', 'a1', START)
+    const page = await (await machine.owner.get('/machines')).text()
+    const reply = machine.poll()
+    await gate.atStatement
+    await machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
+      csrf: hiddenField(page, 'csrf')
+    })
+    gate.release()
+    expect((await reply).status).toBe(401)
+  })
+
+  it('wakes a held poll when a lease runs out', async () => {
+    const { harness, enqueue, ids, poll } = await setup({ pollHoldMs: 10_000 })
+    await enqueue('a', 'a1', START)
+    expect(await ids()).toEqual(['a1'])
+    harness.advance(CONNECTOR_LIMITS.leaseMs - 100)
+    const startedAt = Date.now()
+    const held = poll()
+    setTimeout(() => harness.advance(100), 50)
+    expect((await held).deliveries.map((delivery) => delivery.deliveryId)).toEqual(['a1'])
+    expect(Date.now() - startedAt).toBeLessThan(5_000)
+  })
+
   it('answers held polls at once with a reconnect when the instance drains', async () => {
     const { harness, machine } = await setup({ pollHoldMs: 10_000 })
     const held = machine.poll()
