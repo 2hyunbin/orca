@@ -1,3 +1,4 @@
+import { registerQuitTask } from '../quit-task-registry'
 import { setLocalPtyProvider } from '../ipc/pty/provider/registry'
 import { DegradedDaemonPtyProvider } from './degraded-daemon-pty-provider'
 import { DaemonPtyRouter } from './daemon-pty-router'
@@ -27,6 +28,9 @@ export function installDaemonProvider(
   newAdapter: DaemonProvider
 ): void {
   spawner = newSpawner
+  registerQuitTask('daemon', 'terminal-daemon', ({ shutdownDaemon: shutdown }) =>
+    shutdown ? shutdownDaemon() : disconnectDaemon()
+  )
   replaceDaemonProvider(newAdapter)
 }
 
