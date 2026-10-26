@@ -9,10 +9,10 @@ import type { queueDelivery } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
 import { findSlackIdentity } from './slack-identities.js'
-import { MEMBERSHIP_TTL_MS } from './slack-members.js'
 import type { SlackInstall, SlackInstalls } from './slack-installs.js'
 import { chooseMachine, type KnownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
+import { keepTeammateContext, withTeammateContext } from './slack-teammate-context.js'
 import { slackText } from './slack-text.js'
 import { refreshSlackStatus } from './slack-thread-posts.js'
 
@@ -99,11 +99,11 @@ export async function routeSlackMessage(
     }
     // Context for every other owner's conversation here, whatever this message does for its author.
     for (const thread of othersThreads) {
-      await transaction.query(
-        `INSERT INTO connector_thread_context
-         (external_id, ts, team_id, author_user_id, text, created_at)
-         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (external_id, ts) DO NOTHING`,
-        [thread.externalId, ts, teamId, userId, text, deps.now()]
+      await keepTeammateContext(
+        transaction,
+        thread.externalId,
+        { ts, teamId, userId, text },
+        deps.now()
       )
     }
     if (!addressed) {
@@ -311,35 +311,6 @@ async function hasLiveStart(transaction: CloudDatabase, thread: ThreadRow): Prom
     )
   }
   return start?.state === 'pending' || start?.state === 'leased' || start?.state === 'received'
-}
-
-// Teammates' messages go along once their author is freshly confirmed a full member of the
-// workspace; the rest wait for the membership check.
-async function withTeammateContext(
-  transaction: CloudDatabase,
-  externalId: string,
-  ownerText: string,
-  now: number
-): Promise<string> {
-  const rows = await transaction.query(
-    `SELECT c.ts, c.text, u.display_name FROM connector_thread_context c
-     JOIN connector_slack_users u
-       ON u.team_id = c.team_id AND u.slack_user_id = c.author_user_id
-     WHERE c.external_id = ? AND u.membership = 'member' AND u.checked_at >= ? ORDER BY c.ts`,
-    [externalId, now - MEMBERSHIP_TTL_MS]
-  )
-  if (rows.length === 0) {
-    return ownerText
-  }
-  await transaction.query(
-    `DELETE FROM connector_thread_context
-     WHERE external_id = ? AND ts IN (${rows.map(() => '?').join(', ')})`,
-    [externalId, ...rows.map((row) => row.ts)]
-  )
-  return slackText.teammateContext(
-    rows.map((row) => ({ name: String(row.display_name), text: String(row.text) })),
-    ownerText
-  )
 }
 
 function knownHost(row: SqlRow): KnownHost | null {
