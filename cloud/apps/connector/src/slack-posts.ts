@@ -23,14 +23,14 @@ const CLAIM_BATCH = 20
 // A post still sending after this was abandoned (crash or a lost reply) and is checked again. It
 // covers the worst send (a bounded history check plus the post), as a claimed batch goes in parallel.
 const SENDING_LEASE_MS = 120_000
-// About one post a second per channel, Slack's posting allowance.
-const CHANNEL_SPACING_MS = 1_000
 const MAX_ATTEMPTS = 5
 const RETRY_BASE_MS = 2_000
 const RETRY_MAX_MS = 60_000
 
 // States: queued -> sending -> posted, or failed / uncertain / cancelled. Each channel sends only its
 // head (oldest queued_at), one at a time, so a head told to wait by Slack holds the whole channel.
+// No other pacing: dogfood volume is small and Slack tolerates bursts; a rare 429 re-establishes the
+// wait, and a head that is cancelled or given up takes its wait with it.
 export class SlackPosts {
   constructor(
     private readonly database: CloudDatabase,
@@ -148,10 +148,8 @@ export class SlackPosts {
              WHERE ahead.channel_id = p.channel_id AND ahead.state IN ('queued', 'sending')
                AND (ahead.queued_at < p.queued_at
                  OR (ahead.queued_at = p.queued_at AND ahead.post_id < p.post_id)))
-           AND NOT EXISTS (SELECT 1 FROM connector_slack_posts sent
-             WHERE sent.channel_id = p.channel_id AND sent.state = 'posted' AND sent.updated_at > ?)
          ORDER BY p.next_at LIMIT ?`,
-        [now, now - CHANNEL_SPACING_MS, CLAIM_BATCH]
+        [now, CLAIM_BATCH]
       )
       const claimed: ClaimedPost[] = []
       for (const row of heads) {

@@ -55,11 +55,7 @@ async function startedThread() {
   }
   const reply = (replyId: string, text: string, by = machine) =>
     by.call(CONNECTOR_PATHS.replies, { v: 1, replyId, conversation, turnId: TURN, text })
-  // One worker pass, then past the channel's one-second spacing.
-  const pass = async () => {
-    await harness.edge.worker.sendDue()
-    harness.advance(1_000)
-  }
+  const pass = () => harness.edge.worker.sendDue()
   return { ...harness, machine, start, events, status, reply, pass }
 }
 
@@ -337,13 +333,6 @@ describe('Slack thread status and posts', () => {
     expect(
       (await harness.posts()).some((post) => String(post.post_id).startsWith('fallback:'))
     ).toBe(false)
-  })
-
-  it('spaces posts in one channel about a second apart', async () => {
-    const harness = await startedThread()
-    await harness.edge.worker.sendDue()
-    await harness.edge.worker.sendDue()
-    expect(harness.fake.take().map((call) => call.method)).toEqual(['reactions.add'])
   })
 
   it('an old claim can’t finish a newer claim of the same post, and sent text is dropped', async () => {
