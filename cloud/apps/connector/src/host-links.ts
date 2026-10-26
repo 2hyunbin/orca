@@ -92,10 +92,13 @@ export class ConnectorHostLinks {
     return row ? String(row.account_id) : null
   }
 
-  // The latest hello wins; a poll naming another revision, held ones included, is told to send it again.
-  async recordHello(hostId: string, hello: ConnectorHelloRequest): Promise<void> {
-    const now = this.now()
-    await this.database.query(
+  // Under the host lock. The latest hello wins, and held polls wake to find their revision stale.
+  async recordHello(
+    transaction: CloudDatabase,
+    hostId: string,
+    hello: ConnectorHelloRequest
+  ): Promise<void> {
+    await transaction.query(
       `UPDATE connector_hosts SET hello_rev = ?, hello = ?, host_name = ?, platform = ?,
          runtime = ?, orca_version = ?, last_seen_at = ?
        WHERE host_id = ?`,
@@ -106,15 +109,15 @@ export class ConnectorHostLinks {
         hello.platform,
         hello.runtime,
         hello.orcaVersion,
-        now,
+        this.now(),
         hostId
       ]
     )
-    await this.inbox.wake(this.database, hostId)
+    await this.inbox.wake(transaction, hostId)
   }
 
-  async helloRev(hostId: string): Promise<number | null> {
-    const [row] = await this.database.query(
+  async helloRev(transaction: CloudDatabase, hostId: string): Promise<number | null> {
+    const [row] = await transaction.query(
       'SELECT hello_rev FROM connector_hosts WHERE host_id = ?',
       [hostId]
     )

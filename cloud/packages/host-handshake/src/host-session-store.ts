@@ -68,10 +68,14 @@ export class HostSessionStore {
     return refusal ?? { sessionToken, expiresAt, hostFingerprint }
   }
 
-  async resolve(sessionToken: string): Promise<HostSessionLookup> {
+  // Pass a transaction to read the session as it stands under that transaction's locks.
+  async resolve(
+    sessionToken: string,
+    database: CloudDatabase = this.database
+  ): Promise<HostSessionLookup> {
     const { table, linkTable } = this.config
     const sessionId = hashSessionToken(sessionToken)
-    const [row] = await this.database.query(
+    const [row] = await database.query(
       linkTable
         ? `SELECT s.host_fingerprint, s.expires_at, l.host_id AS linked_host, l.revoked_at
            FROM ${table} s LEFT JOIN ${linkTable} l ON l.host_id = s.host_fingerprint

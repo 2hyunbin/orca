@@ -10,7 +10,7 @@ import {
   ConnectorSignOutRequestSchema,
   type ConnectorSignInStartResponse
 } from '@orca-cloud/connector-contract'
-import { Hono, type Context, type MiddlewareHandler } from 'hono'
+import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { ConnectorConfig } from './config.js'
 import { createConnectorHandshake } from './connector-host-handshake.js'
@@ -19,7 +19,8 @@ import { ConnectorThreads } from './connector-threads.js'
 import { registerDevEnqueueRoute } from './dev-enqueue-route.js'
 import { ConnectorHostLinks } from './host-links.js'
 import { InboxWaker } from './inbox-waker.js'
-import { registerMachineRoutes, type MachineEnv } from './machine-routes.js'
+import { registerMachineRoutes } from './machine-routes.js'
+import { createMachineSession, type MachineEnv } from './machine-session.js'
 import { limitByClientIp, RateLimiter, readClientIp } from './rate-limiter.js'
 import { RequestDrain } from './request-drain.js'
 import { ConnectorSignInRequests, formatUserCode } from './sign-in-requests.js'
@@ -43,11 +44,6 @@ export type ConnectorServerOptions = {
 
 function isLoopbackOrigin(origin: string): boolean {
   return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(origin).hostname)
-}
-
-function readBearer(header: string | undefined): string | null {
-  const [scheme, token] = header?.split(' ') ?? []
-  return scheme?.toLowerCase() === 'bearer' && token ? token : null
 }
 
 async function readJson(context: Context): Promise<unknown> {
@@ -80,7 +76,6 @@ export function createConnectorServer(
     new RateLimiter(AUTHENTICATED_PER_MINUTE_PER_IP, now),
     config.trustedProxyHops
   )
-  const hostRequests = new RateLimiter(AUTHENTICATED_PER_MINUTE_PER_HOST, now)
   const limitBody = bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (context) => context.json({ error: 'request_too_large' }, 413)
@@ -114,40 +109,21 @@ export function createConnectorServer(
     app.use('*', async (context) => context.json({ error: 'validation_only' }, 503))
   }
 
-  // The session lookup joins the host link, so a revoked machine is refused on every call.
-  const authorize = async (context: Context<MachineEnv>): Promise<Response | null> => {
-    const bearer = readBearer(context.req.header('authorization'))
-    const session = bearer ? await sessions.resolve(bearer) : null
-    if (!session?.ok) {
-      if (session?.reason === 'host_not_linked' || session?.reason === 'host_revoked') {
-        return context.json({ error: session.reason }, 403)
-      }
-      const error = session?.reason === 'session_expired' ? 'session_expired' : 'invalid_token'
-      return context.json({ error }, 401)
-    }
-    context.set('hostId', session.hostFingerprint)
-    context.set('sessionId', session.sessionId)
-    return null
-  }
-  const machineSession: MiddlewareHandler<MachineEnv> = async (context, next) => {
-    const refused = await authorize(context)
-    if (refused) return refused
-    if (!hostRequests.allow(context.get('hostId'))) {
-      return context.json({ error: 'rate_limited' }, 429)
-    }
-    await next()
-    return
-  }
-  app.use(CONNECTOR_PATHS.signOut, limitAuthenticated, machineSession)
-  app.use('/v1/connector/*', limitAuthenticated, machineSession)
+  const machineSession = createMachineSession({
+    database,
+    sessions,
+    hostRequests: new RateLimiter(AUTHENTICATED_PER_MINUTE_PER_HOST, now)
+  })
+  app.use(CONNECTOR_PATHS.signOut, limitAuthenticated, machineSession.middleware)
+  app.use('/v1/connector/*', limitAuthenticated, machineSession.middleware)
   registerMachineRoutes(app, {
     inbox,
     threads,
     hostLinks,
     waker,
+    session: machineSession,
     now,
     holdMs: options.pollHoldMs ?? CONNECTOR_LIMITS.initialPollHoldMs,
-    authorize,
     limitBody
   })
   // Local development only: a stand-in for Slack ingress until it exists.

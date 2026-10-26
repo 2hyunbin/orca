@@ -138,12 +138,12 @@ describe('connector inbox', () => {
     expect(ConnectorPollResponseSchema.parse(await second.json()).unsettled).toBeUndefined()
   })
 
-  // SQLite runs one transaction at a time, so only Postgres can interleave an ack with a claim.
+  // SQLite runs one transaction at a time, so only Postgres can interleave the sweep with a claim.
   it.skipIf(!process.env.ORCA_CONNECTOR_TEST_DATABASE_URL)(
-    'keeps a done that lands while a resend is being claimed',
+    'keeps an expiry that lands while a resend is being claimed',
     async () => {
       let gate!: ReturnType<typeof pauseBefore>
-      const { harness, machine, enqueue, poll } = await setup({
+      const { harness, enqueue, poll } = await setup({
         wrapDatabase: (database) => {
           gate = pauseBefore(database, "UPDATE connector_inbox SET state = 'leased'", 1)
           return gate.database
@@ -154,13 +154,15 @@ describe('connector inbox', () => {
       harness.advance(CONNECTOR_LIMITS.leaseMs)
       const resend = poll()
       await gate.atStatement
-      await machine.ack([{ deliveryId: 'a1', step: 'done', result: { outcome: 'accepted' } }])
+      // The sweep takes no host lock, so it can expire the row between the claim's read and write.
+      harness.advance(CONNECTOR_LIMITS.deliveryTtlMs)
+      expect(await harness.runtime.inbox.expireDue()).toHaveLength(1)
       gate.release()
       expect((await resend).deliveries).toEqual([])
       const [row] = await harness.database.query(
         "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
       )
-      expect(row?.state).toBe('done')
+      expect(row?.state).toBe('expired')
     }
   )
 
@@ -195,6 +197,18 @@ describe('connector inbox', () => {
     expect((await machine.hello(2)).status).toBe(204)
     expect((await held).status).toBe(409)
     expect(Date.now() - startedAt).toBeLessThan(5_000)
+  })
+
+  it('refuses an ack from a session a newer one replaced', async () => {
+    const { harness, machine, enqueue, poll } = await setup()
+    await enqueue('a', 'a1', START)
+    await poll()
+    expect((await harness.machineSession(machine.host)).status).toBe(200)
+    expect((await machine.ack([{ deliveryId: 'a1', step: 'received' }])).status).toBe(401)
+    const [row] = await harness.database.query(
+      "SELECT state FROM connector_inbox WHERE delivery_id = 'a1'"
+    )
+    expect(row?.state).toBe('leased')
   })
 
   it('keeps the first done', async () => {
@@ -280,23 +294,25 @@ describe('connector inbox', () => {
     ])
   })
 
-  it('hands out nothing when a revoke lands between the claim and the reply', async () => {
+  it('refuses a poll whose request was authorized just before a revoke committed', async () => {
     let gate!: ReturnType<typeof pauseBefore>
     const { machine, enqueue } = await setup({
-      // The session lookup runs in the middleware, then again after the claim.
       wrapDatabase: (database) => {
-        gate = pauseBefore(database, 'SELECT s.host_fingerprint', 1)
+        gate = pauseBefore(database, 'UPDATE connector_hosts SET revoked_at')
         return gate.database
       }
     })
     await enqueue('a', 'a1', START)
     const page = await (await machine.owner.get('/machines')).text()
-    const reply = machine.poll()
-    await gate.atStatement
-    await machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
+    const revoke = machine.owner.post(`/v1/account/hosts/${machine.hostId}/revoke`, {
       csrf: hiddenField(page, 'csrf')
     })
+    await gate.atStatement
+    // Holding the host lock, the revoke makes the poll's locked pass wait and then see it.
+    const reply = machine.poll()
+    await new Promise((resolve) => setTimeout(resolve, 200))
     gate.release()
+    expect((await revoke).status).toBe(303)
     expect((await reply).status).toBe(401)
   })
 

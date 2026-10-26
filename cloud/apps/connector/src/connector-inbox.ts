@@ -5,6 +5,7 @@ import {
   type ConnectorAcksRequest,
   type ConnectorDelivery
 } from '@orca-cloud/connector-contract'
+import { lockConnectorHost } from './connector-host-handshake.js'
 
 // NOTIFY channel; the payload is the host id whose inbox changed.
 export const INBOX_CHANNEL = 'connector_inbox'
@@ -49,7 +50,7 @@ export class ConnectorInbox {
     const { hostId, externalId, deliveryId, body } = input
     const now = this.now()
     return await this.database.transaction(async (transaction) => {
-      await transaction.lockQuotaScope(`orca-connector-inbox:${hostId}`)
+      await lockConnectorHost(transaction, hostId)
       if (body.kind === 'cancel') {
         // A start the machine never received is dropped, with everything queued behind it.
         const [dropped] = await transaction.query(
@@ -86,68 +87,71 @@ export class ConnectorInbox {
     })
   }
 
-  // Each conversation's head goes out; the next waits until the head is received. A cancel skips
-  // the queue once its start is received.
+  // Under the host lock (MachineSession.locked). Each conversation's head goes out; the next waits
+  // until the head is received. A cancel skips the queue once its start is received.
   async claim(
+    transaction: CloudDatabase,
     hostId: string
   ): Promise<{ deliveries: ConnectorDelivery[]; nextLeaseDueAt: number | null }> {
     const now = this.now()
-    return await this.database.transaction(async (transaction) => {
-      await transaction.lockQuotaScope(`orca-connector-inbox:${hostId}`)
-      const rows = await transaction.query(
-        `SELECT delivery_id, external_id, seq, kind, payload, expires_at FROM connector_inbox i
-         WHERE i.host_id = ? AND i.expires_at > ?
-           AND (i.state = 'pending' OR (i.state = 'leased' AND i.lease_until <= ?))
-           AND (
-             NOT EXISTS (SELECT 1 FROM connector_inbox e WHERE e.host_id = i.host_id
-               AND e.external_id = i.external_id AND e.seq < i.seq
-               AND e.state IN ('pending', 'leased'))
-             OR (i.kind = 'cancel' AND EXISTS (SELECT 1 FROM connector_inbox s
-               WHERE s.host_id = i.host_id AND s.external_id = i.external_id
-                 AND s.kind = 'start' AND s.state IN ('received', 'done')))
-           )
-         ORDER BY i.seq LIMIT ?`,
-        [hostId, now, now, CONNECTOR_LIMITS.maxDeliveriesPerPoll]
+    const rows = await transaction.query(
+      `SELECT delivery_id, external_id, seq, kind, payload, expires_at FROM connector_inbox i
+       WHERE i.host_id = ? AND i.expires_at > ?
+         AND (i.state = 'pending' OR (i.state = 'leased' AND i.lease_until <= ?))
+         AND (
+           NOT EXISTS (SELECT 1 FROM connector_inbox e WHERE e.host_id = i.host_id
+             AND e.external_id = i.external_id AND e.seq < i.seq
+             AND e.state IN ('pending', 'leased'))
+           OR (i.kind = 'cancel' AND EXISTS (SELECT 1 FROM connector_inbox s
+             WHERE s.host_id = i.host_id AND s.external_id = i.external_id
+               AND s.kind = 'start' AND s.state IN ('received', 'done')))
+         )
+       ORDER BY i.seq LIMIT ?`,
+      [hostId, now, now, CONNECTOR_LIMITS.maxDeliveriesPerPoll]
+    )
+    const deliveries: ConnectorDelivery[] = []
+    for (const row of rows) {
+      // The expiry sweep doesn't take the host lock; the state guard keeps its verdict.
+      const [leased] = await transaction.query(
+        `UPDATE connector_inbox SET state = 'leased', lease_until = ?
+         WHERE host_id = ? AND delivery_id = ?
+           AND (state = 'pending' OR (state = 'leased' AND lease_until <= ?))`,
+        [now + CONNECTOR_LIMITS.leaseMs, hostId, row.delivery_id, now]
       )
-      const deliveries: ConnectorDelivery[] = []
-      for (const row of rows) {
-        // Acks don't take the inbox lock; the state guard keeps a racing received or done.
-        const [leased] = await transaction.query(
-          `UPDATE connector_inbox SET state = 'leased', lease_until = ?
-           WHERE host_id = ? AND delivery_id = ?
-             AND (state = 'pending' OR (state = 'leased' AND lease_until <= ?))`,
-          [now + CONNECTOR_LIMITS.leaseMs, hostId, row.delivery_id, now]
-        )
-        if (Number(leased?.changes ?? 0) === 0) continue
-        deliveries.push(
-          ConnectorDeliverySchema.parse({
-            ...JSON.parse(String(row.payload)),
-            kind: row.kind,
-            deliveryId: row.delivery_id,
-            seq: Number(row.seq),
-            expiresAt: Number(row.expires_at),
-            conversation: conversation(String(row.external_id))
-          })
-        )
-      }
-      const [next] = await transaction.query(
-        `SELECT MIN(lease_until) AS due FROM connector_inbox
-         WHERE host_id = ? AND state = 'leased' AND expires_at > ?`,
-        [hostId, now]
+      if (Number(leased?.changes ?? 0) === 0) continue
+      deliveries.push(
+        ConnectorDeliverySchema.parse({
+          ...JSON.parse(String(row.payload)),
+          kind: row.kind,
+          deliveryId: row.delivery_id,
+          seq: Number(row.seq),
+          expiresAt: Number(row.expires_at),
+          conversation: conversation(String(row.external_id))
+        })
       )
-      return { deliveries, nextLeaseDueAt: next?.due === null ? null : Number(next?.due) }
-    })
+    }
+    const [next] = await transaction.query(
+      `SELECT MIN(lease_until) AS due FROM connector_inbox
+       WHERE host_id = ? AND state = 'leased' AND expires_at > ?`,
+      [hostId, now]
+    )
+    return { deliveries, nextLeaseDueAt: next?.due === null ? null : Number(next?.due) }
   }
 
-  // Only a session's first poll lists what an earlier process received but never settled. Read
-  // here; the poll marks the session (markFirstPoll) only once its reply is ready.
-  async firstPollUnsettled(hostId: string, sessionId: string): Promise<Unsettled[] | null> {
-    const [session] = await this.database.query(
-      `SELECT first_polled_at FROM connector_sessions WHERE token_hash = ? AND host_fingerprint = ?`,
-      [sessionId, hostId]
+  // Under the host lock, in the same transaction as the claim: a session's first poll lists what
+  // an earlier process received but never settled, and marks the session so later polls don't.
+  async takeFirstPollUnsettled(
+    transaction: CloudDatabase,
+    hostId: string,
+    sessionId: string
+  ): Promise<Unsettled[]> {
+    const [first] = await transaction.query(
+      `UPDATE connector_sessions SET first_polled_at = ?
+       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
+      [this.now(), sessionId, hostId]
     )
-    if (!session || session.first_polled_at !== null) return null
-    const rows = await this.database.query(
+    if (Number(first?.changes ?? 0) === 0) return []
+    const rows = await transaction.query(
       `SELECT delivery_id, external_id FROM connector_inbox
        WHERE host_id = ? AND state = 'received' ORDER BY seq`,
       [hostId]
@@ -158,43 +162,36 @@ export class ConnectorInbox {
     }))
   }
 
-  // False when a concurrent poll of the same session marked it first.
-  async markFirstPoll(hostId: string, sessionId: string): Promise<boolean> {
-    const [marked] = await this.database.query(
-      `UPDATE connector_sessions SET first_polled_at = ?
-       WHERE token_hash = ? AND host_fingerprint = ? AND first_polled_at IS NULL`,
-      [this.now(), sessionId, hostId]
-    )
-    return Number(marked?.changes ?? 0) === 1
-  }
-
   async wake(transaction: CloudDatabase, hostId: string): Promise<void> {
     await this.notifications.notify(transaction, INBOX_CHANNEL, hostId)
   }
 
-  // A late received is accepted (it did arrive); the first done wins.
-  async acknowledge(hostId: string, acks: ConnectorAcksRequest['acks']): Promise<void> {
+  // Under the host lock, so an ack from a replaced session can't slip past a new session's
+  // recovery list. A late received is accepted (it did arrive); the first done wins.
+  async acknowledge(
+    transaction: CloudDatabase,
+    hostId: string,
+    acks: ConnectorAcksRequest['acks']
+  ): Promise<void> {
     const now = this.now()
-    await this.database.transaction(async (transaction) => {
-      let changed = 0
-      for (const ack of acks) {
-        const [result] =
-          ack.step === 'received'
-            ? await transaction.query(
-                `UPDATE connector_inbox SET state = 'received'
-                 WHERE host_id = ? AND delivery_id = ? AND state IN ('pending', 'leased', 'expired')`,
-                [hostId, ack.deliveryId]
-              )
-            : await transaction.query(
-                `UPDATE connector_inbox SET state = 'done', result = ?, payload = NULL, settled_at = ?
-                 WHERE host_id = ? AND delivery_id = ? AND state IN ('pending', 'leased', 'received', 'expired')`,
-                [JSON.stringify(ack.result), now, hostId, ack.deliveryId]
-              )
-        changed += Number(result?.changes ?? 0)
-      }
-      // A received head lets the conversation's next delivery go out.
-      if (changed > 0) await this.wake(transaction, hostId)
-    })
+    let changed = 0
+    for (const ack of acks) {
+      const [result] =
+        ack.step === 'received'
+          ? await transaction.query(
+              `UPDATE connector_inbox SET state = 'received'
+               WHERE host_id = ? AND delivery_id = ? AND state IN ('pending', 'leased', 'expired')`,
+              [hostId, ack.deliveryId]
+            )
+          : await transaction.query(
+              `UPDATE connector_inbox SET state = 'done', result = ?, payload = NULL, settled_at = ?
+               WHERE host_id = ? AND delivery_id = ? AND state IN ('pending', 'leased', 'received', 'expired')`,
+              [JSON.stringify(ack.result), now, hostId, ack.deliveryId]
+            )
+      changed += Number(result?.changes ?? 0)
+    }
+    // A received head lets the conversation's next delivery go out.
+    if (changed > 0) await this.wake(transaction, hostId)
   }
 
   // Pending past its deadline, or leased and never received 30 s after it. Returns the threads hit.
