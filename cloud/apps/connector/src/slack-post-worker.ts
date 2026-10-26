@@ -1,6 +1,5 @@
 import type { CloudDatabase } from '@orca-cloud/cloud-database'
 import { z } from 'zod'
-import { MEMBERSHIP_TTL_MS, membershipOf } from './slack-identities.js'
 import type { SlackInstalls } from './slack-installs.js'
 import type { ClaimedPost, SlackPosts } from './slack-posts.js'
 import type { SlackResult, SlackWebApi } from './slack-web-api.js'
@@ -17,16 +16,7 @@ const RepliesSchema = z.object({
   has_more: z.boolean().optional(),
   response_metadata: z.looseObject({ next_cursor: z.string().optional() }).optional()
 })
-// Slack may send absent, null or empty profile names; none of that bears on membership.
-const UserInfoSchema = z.object({ user: z.looseObject({}) })
-const UserNamesSchema = z.object({
-  profile: z
-    .looseObject({ display_name: z.string().nullish(), real_name: z.string().nullish() })
-    .nullish(),
-  name: z.string().nullish()
-})
 const POST_METADATA_TYPE = 'orca_post'
-const MEMBER_CHECKS_PER_PASS = 20
 // A post claimed back after a crash is looked for among replies sent from shortly before it, over
 // a bounded number of pages; past that it can't be ruled out, so it is uncertain.
 const RECONCILE_LOOKBACK_MS = 60_000
@@ -174,38 +164,5 @@ export class SlackPostWorker {
       }
     }
     return undefined
-  }
-
-  // Fills the membership cache for teammates whose messages wait as context (decisions §1).
-  async checkMembers(): Promise<void> {
-    const { database, installs, api, now } = this.deps
-    const authors = await database.query(
-      `SELECT DISTINCT c.team_id, c.author_user_id FROM connector_thread_context c
-       LEFT JOIN connector_slack_users u
-         ON u.team_id = c.team_id AND u.slack_user_id = c.author_user_id
-       WHERE u.slack_user_id IS NULL OR u.checked_at < ? LIMIT ?`,
-      [now() - MEMBERSHIP_TTL_MS, MEMBER_CHECKS_PER_PASS]
-    )
-    for (const author of authors) {
-      const teamId = String(author.team_id)
-      const userId = String(author.author_user_id)
-      const token = await installs.botToken(database, teamId)
-      const result = token === null ? null : await api(token, 'users.info', { user: userId })
-      if (result?.kind !== 'ok' && result?.kind !== 'failed') {
-        continue
-      }
-      const info = result.kind === 'ok' ? UserInfoSchema.safeParse(result.body) : undefined
-      const user = info?.success ? info.data.user : undefined
-      const names = UserNamesSchema.safeParse(user).data
-      const name =
-        names?.profile?.display_name || names?.profile?.real_name || names?.name || userId
-      await database.query(
-        `INSERT INTO connector_slack_users (team_id, slack_user_id, membership, display_name, checked_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (team_id, slack_user_id) DO UPDATE SET membership = excluded.membership,
-           display_name = excluded.display_name, checked_at = excluded.checked_at`,
-        [teamId, userId, user ? membershipOf(user, teamId) : 'other', name, now()]
-      )
-    }
   }
 }

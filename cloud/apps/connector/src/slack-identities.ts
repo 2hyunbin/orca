@@ -12,11 +12,6 @@ export type SlackIdentity = {
 
 const ChannelProjectsSchema = z.record(z.string(), z.string().min(1))
 
-export type SlackMembership = 'member' | 'guest' | 'other'
-
-// A cached membership check is trusted this long before users.info is asked again.
-export const MEMBERSHIP_TTL_MS = 24 * 60 * 60_000
-
 export async function findSlackIdentity(
   database: CloudDatabase,
   teamId: string,
@@ -61,12 +56,4 @@ export async function saveSlackIdentity(
       now
     ]
   )
-}
-
-// users.info → full member of this workspace, guest, or anything else (other company, bot, gone).
-export function membershipOf(user: Record<string, unknown>, teamId: string): SlackMembership {
-  if (user.deleted === true || user.is_bot === true || user.team_id !== teamId) {
-    return 'other'
-  }
-  return user.is_restricted === true || user.is_ultra_restricted === true ? 'guest' : 'member'
 }

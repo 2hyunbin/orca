@@ -31,10 +31,17 @@ export class ConnectorInbox {
     private readonly now: () => number
   ) {}
 
-  // Under the host lock, after the caller found the host and bound the thread (queueDelivery).
+  // Under the host lock, after the caller found the host and bound the thread (queueDelivery). The
+  // 5-minute expiry runs from receivedAt (when the message reached the cloud), default now.
   async enqueue(
     transaction: CloudDatabase,
-    input: { hostId: string; externalId: string; deliveryId: string; body: DeliveryBody }
+    input: {
+      hostId: string
+      externalId: string
+      deliveryId: string
+      body: DeliveryBody
+      receivedAt?: number
+    }
   ): Promise<EnqueueResult> {
     const { hostId, externalId, deliveryId, body } = input
     const now = this.now()
@@ -51,7 +58,7 @@ export class ConnectorInbox {
         externalId,
         kind,
         JSON.stringify(payload),
-        now + CONNECTOR_LIMITS.deliveryTtlMs,
+        (input.receivedAt ?? now) + CONNECTOR_LIMITS.deliveryTtlMs,
         now,
         hostId
       ]

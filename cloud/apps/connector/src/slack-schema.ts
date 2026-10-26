@@ -46,6 +46,24 @@ CREATE TABLE IF NOT EXISTS connector_thread_context (
 CREATE INDEX IF NOT EXISTS connector_thread_context_author
   ON connector_thread_context(team_id, author_user_id);
 
+CREATE TABLE IF NOT EXISTS connector_slack_pending (
+  message_key TEXT PRIMARY KEY,
+  external_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  team_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  thread_ts TEXT NOT NULL,
+  ts TEXT NOT NULL,
+  owner_user_id TEXT NOT NULL,
+  host_id TEXT NOT NULL,
+  place_id TEXT NOT NULL,
+  agent TEXT,
+  text TEXT NOT NULL,
+  received_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS connector_slack_pending_conversation
+  ON connector_slack_pending(external_id, received_at);
+
 CREATE TABLE IF NOT EXISTS connector_slack_posts (
   post_id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL,

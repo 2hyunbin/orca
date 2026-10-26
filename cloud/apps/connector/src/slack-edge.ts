@@ -13,10 +13,12 @@ import type { MachineEnv } from './machine-auth.js'
 import type { SlackConfig } from './slack-config.js'
 import { readSlackEnvelope } from './slack-events.js'
 import { SlackInstalls } from './slack-installs.js'
+import { SlackMembers } from './slack-members.js'
 import { SlackPostWorker } from './slack-post-worker.js'
 import { SlackPosts } from './slack-posts.js'
 import { routeSlackMessage, type QueueInTransaction } from './slack-routing.js'
 import { verifySlackSignature } from './slack-signature.js'
+import { SlackThreadStarts } from './slack-thread-start.js'
 import {
   queueAgentReply,
   queueOfflineNotice,
@@ -38,8 +40,9 @@ const POST_RETENTION_MS = 7 * 24 * 60 * 60_000
 
 export type SlackEdge = ReturnType<typeof createSlackEdge>
 
-// Slack in and out: event ingress, the agent's replies, and the post queue that turns thread state
-// into a reaction, one edited status message and the offline / fallback posts.
+// Slack in and out: event ingress, starts that carry their thread, the agent's replies, and the post
+// queue that turns thread state into a reaction, one edited status message and the offline /
+// fallback posts.
 export function createSlackEdge(deps: {
   config: SlackConfig
   database: CloudDatabase
@@ -50,12 +53,16 @@ export function createSlackEdge(deps: {
   const { config, database, now } = deps
   const installs = new SlackInstalls(config.tokenKey)
   const posts = new SlackPosts(database, now)
-  const worker = new SlackPostWorker({
+  const api = deps.api ?? createSlackWebApi()
+  const worker = new SlackPostWorker({ database, posts, installs, api, now })
+  const members = new SlackMembers({ database, installs, api, now })
+  const starts = new SlackThreadStarts({
     database,
-    posts,
     installs,
-    api: deps.api ?? createSlackWebApi(),
-    now
+    members,
+    posts,
+    queue: deps.queue,
+    api
   })
   const refresh = async (
     transaction: CloudDatabase,
@@ -139,6 +146,8 @@ export function createSlackEdge(deps: {
   return {
     registerRoutes,
     worker,
+    members,
+    starts,
     // In the transaction that applied a machine's events batch; posts go out on the next pass.
     onEvents: async (transaction: CloudDatabase, hostId: string, events: ConnectorEvent[]) => {
       const externalIds = events.flatMap((event) =>
@@ -191,7 +200,8 @@ export function createSlackEdge(deps: {
     startBackground: (): (() => void) => {
       const stops = [
         every('slack_posts', POST_INTERVAL_MS, () => worker.sendDue()),
-        every('slack_members', MEMBER_CHECK_INTERVAL_MS, () => worker.checkMembers()),
+        every('slack_thread_starts', POST_INTERVAL_MS, () => starts.buildDue()),
+        every('slack_members', MEMBER_CHECK_INTERVAL_MS, () => members.checkContextAuthors()),
         every('slack_retention', RETENTION_INTERVAL_MS, async () => {
           await database.query('DELETE FROM connector_slack_seen WHERE seen_at < ?', [
             now() - SEEN_RETENTION_MS

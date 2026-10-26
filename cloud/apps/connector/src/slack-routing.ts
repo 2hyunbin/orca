@@ -8,7 +8,8 @@ import type { DeliveryBody } from './connector-inbox.js'
 import type { queueDelivery } from './queue-delivery.js'
 import type { SlackConfig } from './slack-config.js'
 import { mentionsBot, promptText, type SlackMessage } from './slack-events.js'
-import { findSlackIdentity, MEMBERSHIP_TTL_MS } from './slack-identities.js'
+import { findSlackIdentity } from './slack-identities.js'
+import { MEMBERSHIP_TTL_MS } from './slack-members.js'
 import type { SlackInstall, SlackInstalls } from './slack-installs.js'
 import { chooseMachine, type KnownHost } from './slack-machine-choice.js'
 import type { SlackPlace, SlackPosts } from './slack-posts.js'
@@ -67,7 +68,14 @@ export async function routeSlackMessage(
     const threads = await threadsIn(transaction, { teamId, channelId, threadTs })
     const own = threads.find((thread) => thread.ownerUserId === userId)
     const othersThreads = threads.filter((thread) => thread.ownerUserId !== userId)
-    const addressed = own || message.direct || mentionsBot(message.text, install.botUserId)
+    const externalId = `${teamId}:${channelId}:${threadTs}:${userId}`
+    const [pending] = await transaction.query(
+      `SELECT host_id, place_id FROM connector_slack_pending
+       WHERE external_id = ? AND kind = 'start'`,
+      [externalId]
+    )
+    const addressed =
+      own || pending || message.direct || mentionsBot(message.text, install.botUserId)
     if (!addressed && othersThreads.length === 0) {
       return
     }
@@ -101,8 +109,19 @@ export async function routeSlackMessage(
     if (!addressed) {
       return
     }
-    const route = { deps, transaction, message, messageKey, place, install, text }
-    await (own ? continueConversation(route, own) : startConversation(route))
+    const route = { deps, transaction, message, messageKey, place, install, text, externalId }
+    if (own) {
+      await continueConversation(route, own)
+    } else if (pending) {
+      // Behind a start still reading its thread: goes out right after it, in order.
+      await holdForThreadStart(route, {
+        kind: 'send',
+        hostId: String(pending.host_id),
+        placeId: String(pending.place_id)
+      })
+    } else {
+      await startConversation(route)
+    }
   })
 }
 
@@ -114,6 +133,7 @@ type Route = {
   place: SlackPlace
   install: SlackInstall
   text: string
+  externalId: string
 }
 
 async function startConversation(route: Route): Promise<void> {
@@ -141,12 +161,47 @@ async function startConversation(route: Route): Promise<void> {
     await reply(deps, transaction, place, `ask:${messageKey}`, slackText.askPlace(choice.options))
     return
   }
+  // Partway through a thread, the start carries the thread so far; the start worker reads it.
+  if (message.ts !== message.threadTs) {
+    await holdForThreadStart(route, { ...choice, kind: 'start' })
+    return
+  }
   await deliver(route, {
-    externalId: `${message.teamId}:${message.channelId}:${message.threadTs}:${message.userId}`,
+    externalId: route.externalId,
     hostId: choice.hostId,
     placeId: choice.placeId,
     body: { kind: 'start', agent: choice.agent, placeId: choice.placeId, prompt: route.text }
   })
+}
+
+// Held until the start worker has read the thread; the 5-minute expiry still runs from now.
+async function holdForThreadStart(
+  route: Route,
+  held: { kind: 'start' | 'send'; hostId: string; placeId: string; agent?: string }
+): Promise<void> {
+  const { deps, transaction, message, messageKey, place } = route
+  await transaction.query(
+    `INSERT INTO connector_slack_pending
+     (message_key, external_id, kind, team_id, channel_id, thread_ts, ts, owner_user_id, host_id,
+      place_id, agent, text, received_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      messageKey,
+      route.externalId,
+      held.kind,
+      place.teamId,
+      place.channelId,
+      place.threadTs,
+      message.ts,
+      message.userId,
+      held.hostId,
+      held.placeId,
+      held.agent ?? null,
+      route.text,
+      deps.now()
+    ]
+  )
+  await reactSeen(deps, transaction, place, messageKey, message.ts)
 }
 
 // The owner's next message is a follow-up, or a fresh start on the same machine and project when
@@ -194,13 +249,24 @@ async function deliver(
   if (queued !== 'queued') {
     return
   }
+  await reactSeen(deps, transaction, place, messageKey, message.ts)
+  await refreshSlackStatus(transaction, deps.posts, target.hostId, target.externalId)
+}
+
+// 👀 on a message handed toward a machine.
+async function reactSeen(
+  deps: SlackRoutingDeps,
+  transaction: CloudDatabase,
+  place: SlackPlace,
+  messageKey: string,
+  ts: string
+): Promise<void> {
   await deps.posts.queue(transaction, {
     ...place,
     postId: `eyes:${messageKey}`,
     kind: 'reaction',
-    body: { name: 'eyes', timestamp: message.ts }
+    body: { name: 'eyes', timestamp: ts }
   })
-  await refreshSlackStatus(transaction, deps.posts, target.hostId, target.externalId)
 }
 
 async function reply(
