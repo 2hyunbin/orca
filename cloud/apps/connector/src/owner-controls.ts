@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { CloudDatabase, SqlRow } from '@orca-cloud/cloud-database'
 import {
   ConnectorDeliveryResultSchema,
+  ConnectorHelloRequestSchema,
   ConnectorPendingPromptSchema,
   type ConnectorHelloRequest,
   type ConnectorPendingPrompt
@@ -60,14 +61,15 @@ export function answerablePrompt(
     : null
 }
 
-// The open turn, when its machine takes a stop.
+// The open turn, when its machine refuses a cancel for any other turn (`turnCancel`): an older one
+// would apply a late Stop to whatever turn runs by then.
 export function stoppableTurn(
   thread: SqlRow,
   hello: ConnectorHelloRequest | undefined
 ): number | null {
   return thread.turn_state === 'working' &&
     thread.open_turn_id !== null &&
-    hello?.features.includes('cancel')
+    hello?.features.includes('turnCancel')
     ? Number(thread.open_turn_id)
     : null
 }
@@ -170,7 +172,11 @@ export async function applyOwnerAction(
     placeId: String(thread.place_id)
   }
   if (action.kind === 'stop') {
-    if (thread.turn_state !== 'working' || Number(thread.open_turn_id) !== action.turnId) {
+    const [host] = await transaction.query('SELECT hello FROM connector_hosts WHERE host_id = ?', [
+      hostId
+    ])
+    const hello = ConnectorHelloRequestSchema.safeParse(JSON.parse(String(host?.hello ?? 'null')))
+    if (stoppableTurn(thread, hello.data) !== action.turnId) {
       return { kind: 'moved_on' }
     }
     const queued = await queue(transaction, {

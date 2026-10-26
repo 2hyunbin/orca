@@ -61,8 +61,8 @@ export async function refreshSlackStatus(
     return
   }
   const [latest] = await transaction.query(
-    `SELECT kind, state, result FROM connector_inbox
-     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send', 'answer')
+    `SELECT state, result FROM connector_inbox
+     WHERE host_id = ? AND external_id = ? AND kind IN ('start', 'send')
      ORDER BY seq DESC LIMIT 1`,
     [hostId, externalId]
   )
@@ -80,7 +80,8 @@ export async function refreshSlackStatus(
       ? await ownerActionState(transaction, hostId, answerDeliveryId(externalId, shown.promptId))
       : null
   }
-  const text = statusText(thread.row, latest, thread.hostName, prompt !== null, owner)
+  const offered = await refreshPromptCards(transaction, posts, { ...place, externalId }, prompt)
+  const text = statusText(thread.row, latest, thread.hostName, offered, owner)
   const stoppable = stoppableTurn(thread.row, thread.hello)
   await posts.setStatus(transaction, {
     ...place,
@@ -89,7 +90,6 @@ export async function refreshSlackStatus(
     // One Stop per turn, and none while the machine can't be reached.
     blocks: statusBlocks(text, owner.stop || unreached(latest) ? null : stoppable)
   })
-  await refreshPromptCards(transaction, posts, { ...place, externalId }, prompt)
 }
 
 // A turn's reply and its fallback decide under one lock, so exactly one of them wins.
@@ -171,10 +171,7 @@ function ownerActionText(
     case 'on_its_way':
       return pending
     case 'refused':
-      // An answer or stop the agent no longer had a use for (decision 10).
-      return state.reason === 'prompt_not_pending'
-        ? slackText.alreadyAnswered
-        : slackText.status.refused(hostName, state.reason)
+      return slackText.status.refused(hostName, state.reason)
     case 'unknown':
       return slackText.status.unknown
     case 'unreached':
@@ -213,12 +210,9 @@ function statusText(
   }
   switch (result?.outcome) {
     case 'refused':
-      // An answer to a prompt the agent no longer shows (decision 10).
-      return result.reason === 'prompt_not_pending'
-        ? slackText.alreadyAnswered
-        : slackText.status.refused(hostName, result.reason)
+      return slackText.status.refused(hostName, result.reason)
     case 'unsupported':
-      return slackText.status.refused(hostName, 'unsupported')
+      return slackText.status.unsupported(hostName)
     case 'unknown':
       return slackText.status.unknown
   }

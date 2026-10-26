@@ -138,26 +138,37 @@ describe('Slack prompt cards', () => {
     ])
   })
 
-  it('reads an answer the agent no longer wanted as already answered, and one that never arrived as offline', async () => {
+  it('reads an answer that never arrived as offline, until the agent shows a newer prompt', async () => {
     const harness = await asked()
-    const { ts } = await harness.card()
-    await harness.click({ messageTs: ts, value: 'allow_once' })
-    const [answer] = await harness.deliveries()
+    await harness.click({ messageTs: (await harness.card()).ts, value: 'allow_once' })
+    harness.advance(5 * 60_000 + 1)
+    await harness.runtime.inbox.expireDue(harness.edge.onExpired)
+    expect(await harness.status()).toMatch(/^Couldn’t reach/)
+    await harness.events({ ...approval(), prompt: { ...approval().prompt, promptId: 'p2' } })
+    const [row] = await harness.database.query(
+      'SELECT body FROM connector_slack_posts WHERE post_id = ?',
+      [`status:${EXTERNAL_ID}`]
+    )
+    const status = JSON.parse(String(row?.body))
+    expect(status.text).toBe('Waiting for your answer.')
+    expect(status.blocks.map((block: { type: string }) => block.type)).toEqual([
+      'section',
+      'actions'
+    ])
+  })
+
+  it('says a Stop that reached a finished turn in plain words', async () => {
+    const harness = await asked()
+    await harness.click({ messageTs: await harness.statusTs(), actionId: 'stop', value: String(TURN) })
+    const [stop] = await harness.deliveries()
     await harness.machine.ack([
       {
-        deliveryId: answer?.deliveryId,
+        deliveryId: stop?.deliveryId,
         step: 'done',
-        result: { outcome: 'refused', reason: 'prompt_not_pending' }
+        result: { outcome: 'refused', reason: 'turn_not_running' }
       }
     ])
-    await harness.events(turnEnded)
-    expect(await harness.status()).toBe('Already answered or moved on.')
-
-    const offline = await asked()
-    await offline.click({ messageTs: (await offline.card()).ts, value: 'allow_once' })
-    offline.advance(5 * 60_000 + 1)
-    await offline.runtime.inbox.expireDue(offline.edge.onExpired)
-    expect(await offline.status()).toMatch(/^Couldn’t reach/)
+    expect(await harness.status()).toBe('That turn had already finished.')
   })
 
   it('leaves prompts Slack can’t answer to Orca: no card, the status says where', async () => {

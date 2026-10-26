@@ -163,6 +163,7 @@ export async function handleSlackClick(
             slackText.promptAnswered(outcome.ownerUserId, outcome.label)
           )
         })
+        await refreshSlackStatus(transaction, posts, String(thread.host_id), externalId)
         return
       case 'stopping':
         await refreshSlackStatus(transaction, posts, String(thread.host_id), externalId)

@@ -82,9 +82,8 @@ describe('Slack thread status and posts', () => {
         result: { outcome: 'refused', reason: 'no_such_project' }
       }
     ])
-    expect(await harness.status()).toBe(
-      'Your Orca on build-box couldn’t take this (no_such_project).'
-    )
+    // A code with no line of its own reads generically; the code itself stays out of the channel.
+    expect(await harness.status()).toBe('Your Orca on build-box couldn’t take this.')
   })
 
   it('shows a turn the machine can no longer vouch for', async () => {

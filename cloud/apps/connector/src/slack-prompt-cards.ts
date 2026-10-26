@@ -3,7 +3,7 @@ import type { ConnectorHelloRequest } from '@orca-cloud/connector-contract'
 import { z } from 'zod'
 import { answerablePrompt, type AnswerablePrompt } from './owner-controls.js'
 import type { SlackBlock, SlackPlace, SlackPosts } from './slack-posts.js'
-import { MAX_BUTTON_LABEL_CHARS, slackText } from './slack-text.js'
+import { MAX_BUTTON_LABEL_CHARS, MAX_SECTION_CHARS, slackText } from './slack-text.js'
 
 // Slack's limit on buttons per actions block.
 const MAX_BUTTONS = 25
@@ -34,7 +34,7 @@ export function slackAnswerablePrompt(
 // an edit that drops the button replaces the old blocks.
 export function statusBlocks(text: string, stoppableTurnId: number | null): SlackBlock[] {
   return [
-    { type: 'section', text: { type: 'mrkdwn', text } },
+    { type: 'section', text: { type: 'mrkdwn', text: text.slice(0, MAX_SECTION_CHARS) } },
     ...(stoppableTurnId === null
       ? []
       : [
@@ -92,19 +92,21 @@ export function isOpenCard(body: unknown): boolean {
 }
 
 // The conversation's prompt cards as a projection, beside its status and under the same lock: the
-// shown prompt gets a card once; any other open card closes. A final card is never reopened.
+// shown prompt gets a card once; any other open card closes. A final card is never reopened. True
+// when the shown prompt's card offers its buttons.
 export async function refreshPromptCards(
   transaction: CloudDatabase,
   posts: SlackPosts,
   thread: SlackPlace & { externalId: string },
   prompt: AnswerablePrompt | null
-): Promise<void> {
+): Promise<boolean> {
   const cards = await transaction.query(
     `SELECT post_id, body FROM connector_slack_posts WHERE kind = 'status' AND post_id LIKE ?`,
     [`${promptCardId(thread.externalId, '')}%`]
   )
   const shownId = prompt ? promptCardId(thread.externalId, prompt.promptId) : null
-  if (prompt && shownId && !cards.some((card) => card.post_id === shownId)) {
+  const shown = cards.find((card) => card.post_id === shownId)
+  if (prompt && shownId && !shown) {
     await posts.setStatus(transaction, { ...thread, postId: shownId, ...openCard(prompt) })
   }
   for (const card of cards) {
@@ -117,4 +119,5 @@ export async function refreshPromptCards(
       })
     }
   }
+  return prompt !== null && (!shown || isOpenCard(JSON.parse(String(shown.body))))
 }

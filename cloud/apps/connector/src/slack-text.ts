@@ -10,8 +10,28 @@ export function escapeSlackText(text: string): string {
 
 const MAX_LISTED_OPTIONS = 10
 // Slack's limits on a section's text and a button's label.
-const MAX_SECTION_CHARS = 3_000
+export const MAX_SECTION_CHARS = 3_000
 export const MAX_BUTTON_LABEL_CHARS = 75
+
+// The machine's refusal reasons (its CONNECTOR_REFUSALS, plus turn_not_running for a Stop).
+const REFUSALS: Record<string, (machine: string) => string> = {
+  connectors_disabled: (machine) => `Connectors are turned off in Orca on ${machine}.`,
+  agent_not_reachable: (machine) => `Couldn’t reach the agent in Orca on ${machine}.`,
+  unsupported_agent: (machine) => `Orca on ${machine} can’t run that agent from Slack.`,
+  delivery_id_reused: (machine) => `Your Orca on ${machine} couldn’t take this.`,
+  delivery_backlog_full: (machine) => `Orca on ${machine} is busy. Send again in a moment.`,
+  agent_asleep_in_window: (machine) =>
+    `The agent in Orca on ${machine} is asleep. Wake it in Orca, then send again.`,
+  no_session_to_reopen: (machine) =>
+    `The earlier session in Orca on ${machine} is gone. Mention me to start a new one.`,
+  reopen_refused: (machine) => `Orca on ${machine} couldn’t reopen the earlier session.`,
+  prompt_not_pending: () => 'Already answered or moved on.',
+  prompt_unsupported: (machine) => `Answer this one in Orca on ${machine}.`,
+  option_not_offered: (machine) =>
+    `That option isn’t offered any more. Answer in Orca on ${machine}.`,
+  conversation_cancelled: () => 'Stopped before it reached the agent.',
+  turn_not_running: () => 'That turn had already finished.'
+}
 
 export const slackText = {
   paused: 'Orca for Slack is paused.',
@@ -38,8 +58,18 @@ export const slackText = {
     // Q18, in the public status: the thread sees who it was waiting on (Slack renders <@U…> as a name).
     offline: (ownerUserId: string, hostName: string) =>
       `Couldn’t reach <@${ownerUserId}>’s Orca on ${escapeSlackText(hostName)}. Send again when it’s back.`,
-    refused: (hostName: string, reason: string) =>
-      `Your Orca on ${escapeSlackText(hostName)} couldn’t take this (${escapeSlackText(reason)}).`,
+    // A machine's refusal, in words; a code we don't know shows the generic line and is logged.
+    refused: (hostName: string, reason: string) => {
+      const machine = escapeSlackText(hostName)
+      const line = REFUSALS[reason]?.(machine)
+      if (line === undefined) {
+        console.warn(JSON.stringify({ event: 'orca_connector_slack_unknown_refusal', reason }))
+      }
+      return line ?? `Your Orca on ${machine} couldn’t take this.`
+    },
+    // The machine couldn't read what was sent: it predates that kind of delivery.
+    unsupported: (hostName: string) =>
+      `Your Orca on ${escapeSlackText(hostName)} can’t take this yet. Update Orca.`,
     unknown: 'This may not have reached the agent; check Orca.',
     noUpdate: 'No update from your Orca; check Orca.'
   },
